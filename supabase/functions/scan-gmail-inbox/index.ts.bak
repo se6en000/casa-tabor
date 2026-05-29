@@ -1,0 +1,335 @@
+/**
+ * scan-gmail-inbox
+ *
+ * Polls Gmail for each family member who has gmail_scan_enabled=true.
+ * For each unprocessed email that looks calendar-relevant, uses GPT to
+ * extract event details and auto-creates the event in Supabase + Google Calendar.
+ *
+ * Invocation: POST (no body needed) — call from cron or manually from the UI.
+ * Can also POST { family_member_id } to scan just one member.
+ */
+
+import { createClient } from 'npm:@supabase/supabase-js@2'
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+// Keywords that suggest an email is calendar-worthy
+const CALENDAR_KEYWORDS = [
+  'appointment', 'appt', 'booking', 'reservation', 'confirm', 'invite', 'invitation',
+  'reminder', 'rsvp', 'meeting', 'schedule', 'event', 'registration', 'playdate',
+  'dentist', 'doctor', 'physician', 'clinic', 'hospital', 'therapy', 'checkup',
+  'concert', 'show', 'performance', 'game', 'match', 'tournament', 'practice',
+  'party', 'birthday', 'celebration', 'dinner', 'lunch', 'brunch',
+  'flight', 'hotel', 'check-in', 'checkout', 'itinerary', 'trip',
+  'school', 'class', 'lesson', 'camp', 'workshop', 'conference',
+]
+
+const KEYWORD_REGEX = new RegExp(CALENDAR_KEYWORDS.join('|'), 'i')
+
+// ── Gmail helpers ─────────────────────────────────────────────────
+
+async function gmailFetch(path: string, accessToken: string): Promise<Response> {
+  return fetch(`https://gmail.googleapis.com/gmail/v1${path}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+}
+
+async function getRecentMessages(accessToken: string, historyId: string | null): Promise<{ messages: { id: string }[]; newHistoryId: string | null }> {
+  // Use history API for incremental fetches, or list recent messages on first run
+  if (historyId) {
+    const res = await gmailFetch(`/users/me/history?startHistoryId=${historyId}&historyTypes=messageAdded&labelId=INBOX&maxResults=50`, accessToken)
+    if (res.status === 404) {
+      // History ID expired — fall back to listing recent messages
+      return getRecentMessages(accessToken, null)
+    }
+    if (!res.ok) return { messages: [], newHistoryId: null }
+    const data = await res.json()
+    const messages: { id: string }[] = []
+    for (const h of (data.history ?? [])) {
+      for (const m of (h.messagesAdded ?? [])) {
+        // Only INBOX messages
+        if (m.message?.labelIds?.includes('INBOX')) {
+          messages.push({ id: m.message.id })
+        }
+      }
+    }
+    return { messages, newHistoryId: data.historyId ?? historyId }
+  } else {
+    // First run — fetch last 24h of inbox
+    const after = Math.floor((Date.now() - 48 * 3600 * 1000) / 1000)
+    const res = await gmailFetch(`/users/me/messages?labelIds=INBOX&q=after:${after}&maxResults=50`, accessToken)
+    if (!res.ok) return { messages: [], newHistoryId: null }
+    const data = await res.json()
+    // Also get current historyId for future incremental fetches
+    const profileRes = await gmailFetch('/users/me/profile', accessToken)
+    const profile = profileRes.ok ? await profileRes.json() : {}
+    return { messages: data.messages ?? [], newHistoryId: profile.historyId ?? null }
+  }
+}
+
+async function getMessageDetails(messageId: string, accessToken: string): Promise<{ subject: string; from: string; date: string; snippet: string; body: string } | null> {
+  const res = await gmailFetch(`/users/me/messages/${messageId}?format=full`, accessToken)
+  if (!res.ok) return null
+  const msg = await res.json()
+
+  const headers: { name: string; value: string }[] = msg.payload?.headers ?? []
+  const subject = headers.find(h => h.name.toLowerCase() === 'subject')?.value ?? ''
+  const from    = headers.find(h => h.name.toLowerCase() === 'from')?.value ?? ''
+  const date    = headers.find(h => h.name.toLowerCase() === 'date')?.value ?? ''
+  const snippet = msg.snippet ?? ''
+
+  // Extract plain text body (up to 2000 chars to keep AI tokens low)
+  let body = ''
+  function extractText(part: { mimeType?: string; body?: { data?: string }; parts?: unknown[] }): void {
+    if (part.mimeType === 'text/plain' && part.body?.data) {
+      body += atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'))
+    }
+    for (const sub of (part.parts ?? [])) extractText(sub as typeof part)
+  }
+  extractText(msg.payload ?? {})
+  body = body.slice(0, 2000)
+
+  return { subject, from, date, snippet, body }
+}
+
+// ── Token refresh ────────────────────────────────────────────────
+
+async function refreshToken(refreshToken: string, clientId: string, clientSecret: string): Promise<{ access_token: string; expires_in: number } | null> {
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken, client_id: clientId, client_secret: clientSecret }),
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
+// ── AI extraction ─────────────────────────────────────────────────
+
+interface ExtractedEvent {
+  is_calendar_event: boolean
+  title: string
+  start_datetime: string   // ISO8601 or "unknown"
+  end_datetime: string     // ISO8601 or "unknown"
+  all_day: boolean
+  location: string
+  description: string
+  skip_reason?: string
+}
+
+async function extractEventFromEmail(
+  subject: string,
+  from: string,
+  date: string,
+  snippet: string,
+  body: string,
+  familyMembers: { name: string; role: string }[],
+  llmConfig: { api_key: string; model?: string; provider?: string },
+): Promise<ExtractedEvent | null> {
+  const today = new Date().toISOString()
+  const prompt = `You are a smart assistant for a family calendar app. Today is ${today}.
+
+An email has arrived. Determine if it represents a calendar event that should be added to the family calendar.
+
+EMAIL:
+Subject: ${subject}
+From: ${from}
+Date: ${date}
+Snippet: ${snippet}
+Body excerpt: ${body}
+
+Family members: ${familyMembers.map(m => `${m.name} (${m.role})`).join(', ')}
+
+Reply ONLY with valid JSON matching this schema:
+{
+  "is_calendar_event": boolean,
+  "title": "short event title",
+  "start_datetime": "ISO8601 datetime or 'unknown'",
+  "end_datetime": "ISO8601 datetime or 'unknown'",
+  "all_day": boolean,
+  "location": "location name or empty string",
+  "description": "brief description for the calendar",
+  "skip_reason": "why it's not a calendar event (only if is_calendar_event=false)"
+}
+
+Rules:
+- Set is_calendar_event=true if the email mentions ANY specific date/time for an event, appointment, meeting, or activity — even if the info is brief
+- Be GENEROUS: "Dentist apt Thursday June 5th at 2pm" IS a calendar event
+- Reminders about upcoming appointments ARE calendar events
+- Infer the year if only month/day are given (use upcoming date)
+- If you cannot determine a start time, set all_day=true and use just the date
+- Keep title under 60 chars
+- Only skip if it's purely promotional/marketing, newsletter, shipping confirmation, or has NO date/time at all`
+
+  const model = llmConfig.model ?? 'gemini-2.5-flash'
+  const apiKey = llmConfig.api_key
+
+  try {
+    if (llmConfig.provider === 'openai') {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, temperature: 0.1, max_tokens: 300 }),
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      return JSON.parse(data.choices[0].message.content) as ExtractedEvent
+    } else {
+      // Gemini (default)
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 1000, temperature: 0.1, responseMimeType: 'application/json' },
+        }),
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+      return JSON.parse(text) as ExtractedEvent
+    }
+  } catch { return null }
+}
+
+// ── Main handler ─────────────────────────────────────────────────
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
+
+  const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+  const clientId     = Deno.env.get('GOOGLE_CLIENT_ID')!
+  const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')!
+
+  // Load AI config + family members
+  const [llmRes, familyRes] = await Promise.all([
+    sb.from('settings').select('value').eq('key', 'llm_config').single(),
+    sb.from('family_members').select('id, name, role').order('sort_order'),
+  ])
+  const llm = llmRes.data?.value as { api_key: string; model?: string } | null
+  if (!llm?.api_key) {
+    return new Response(JSON.stringify({ error: 'AI not configured' }), { status: 400, headers: { ...CORS, 'content-type': 'application/json' } })
+  }
+  const aiModel = llm.model ?? 'gpt-4o-mini'
+  const familyMembers = (familyRes.data ?? []) as { id: string; name: string; role: string }[]
+
+  // Which member(s) to scan?
+  const body = await req.json().catch(() => ({}))
+  const targetMemberId: string | null = body.family_member_id ?? null
+
+  let query = sb.from('google_tokens').select('family_member_id, refresh_token, access_token, expires_at, gmail_history_id').eq('gmail_scan_enabled', true)
+  if (targetMemberId) query = query.eq('family_member_id', targetMemberId)
+  const { data: tokens } = await query
+
+  const results: { member_id: string; scanned: number; created: number; skipped: number; error?: string }[] = []
+
+  for (const tok of (tokens ?? [])) {
+    const memberId = tok.family_member_id
+    let accessToken = tok.access_token
+
+    // Refresh if needed
+    if (!accessToken || !tok.expires_at || new Date(tok.expires_at) < new Date(Date.now() + 60_000)) {
+      const refreshed = await refreshToken(tok.refresh_token, clientId, clientSecret)
+      if (!refreshed) { results.push({ member_id: memberId, scanned: 0, created: 0, skipped: 0, error: 'token refresh failed' }); continue }
+      accessToken = refreshed.access_token
+      await sb.from('google_tokens').update({
+        access_token: refreshed.access_token,
+        expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
+      }).eq('family_member_id', memberId)
+    }
+
+    const { messages, newHistoryId } = await getRecentMessages(accessToken, tok.gmail_history_id)
+
+    // Update history ID so next run is incremental
+    if (newHistoryId) {
+      await sb.from('google_tokens').update({ gmail_history_id: newHistoryId }).eq('family_member_id', memberId)
+    }
+
+    let scanned = 0, created = 0, skipped = 0
+
+    for (const { id: msgId } of messages) {
+      // Skip already processed messages
+      const { data: existing } = await sb.from('gmail_processed_messages')
+        .select('id').eq('family_member_id', memberId).eq('gmail_message_id', msgId).maybeSingle()
+      if (existing) continue
+
+      const details = await getMessageDetails(msgId, accessToken)
+      if (!details) continue
+      scanned++
+
+      // Quick keyword pre-filter to avoid AI calls on irrelevant emails
+      const searchText = `${details.subject} ${details.snippet}`
+      if (!KEYWORD_REGEX.test(searchText)) {
+        await sb.from('gmail_processed_messages').insert({ family_member_id: memberId, gmail_message_id: msgId, subject: details.subject, from_email: details.from, received_at: details.date ? new Date(details.date).toISOString() : null, skipped_reason: 'no calendar keywords' })
+        skipped++
+        continue
+      }
+
+      // AI extraction
+      const extracted = await extractEventFromEmail(details.subject, details.from, details.date, details.snippet, details.body, familyMembers, llm)
+
+      if (!extracted || !extracted.is_calendar_event) {
+        await sb.from('gmail_processed_messages').insert({ family_member_id: memberId, gmail_message_id: msgId, subject: details.subject, from_email: details.from, received_at: details.date ? new Date(details.date).toISOString() : null, skipped_reason: extracted?.skip_reason ?? 'AI determined not a calendar event' })
+        skipped++
+        continue
+      }
+
+      // Build start/end times
+      const isUnknown = (v: string) => !v || v === 'unknown'
+      const startIso = isUnknown(extracted.start_datetime) ? null : extracted.start_datetime
+      const endIso   = isUnknown(extracted.end_datetime)   ? null : extracted.end_datetime
+
+      // Default: 1-hour event if no end time
+      const startTime = startIso ? new Date(startIso) : new Date()
+      const endTime   = endIso   ? new Date(endIso)   : new Date(startTime.getTime() + 3600_000)
+
+      // Create event in Supabase
+      const { data: newEvent } = await sb.from('events').insert({
+        title: extracted.title,
+        description: extracted.description || `Imported from email: ${details.subject}`,
+        start_time: startTime.toISOString(),
+        end_time: endTime.toISOString(),
+        all_day: extracted.all_day,
+        location_name: extracted.location || null,
+        source_member_id: memberId,
+      }).select('id').single()
+
+      if (newEvent) {
+        // Link to source member
+        await sb.from('event_members').insert({ event_id: newEvent.id, family_member_id: memberId })
+
+        // Push to Google Calendar
+        const calendarId = familyMembers.find(m => m.id === memberId) ? 'primary' : 'primary'
+        await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            summary: extracted.title,
+            description: extracted.description,
+            location: extracted.location || undefined,
+            start: extracted.all_day ? { date: startTime.toISOString().split('T')[0] } : { dateTime: startTime.toISOString() },
+            end:   extracted.all_day ? { date: endTime.toISOString().split('T')[0] }   : { dateTime: endTime.toISOString() },
+          }),
+        }).catch(console.error)
+
+        // Trigger AI enrichment
+        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/enrich-event`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ event_id: newEvent.id }),
+        }).catch(() => {})
+
+        await sb.from('gmail_processed_messages').insert({ family_member_id: memberId, gmail_message_id: msgId, subject: details.subject, from_email: details.from, received_at: details.date ? new Date(details.date).toISOString() : null, created_event_id: newEvent.id })
+        created++
+      }
+    }
+
+    results.push({ member_id: memberId, scanned, created, skipped })
+  }
+
+  return new Response(JSON.stringify({ ok: true, results }), { headers: { ...CORS, 'content-type': 'application/json' } })
+})

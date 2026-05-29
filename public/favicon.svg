@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- House shape in Casa gold -->
+  <path d="M16 3L3 14h3v13h7v-8h6v8h7V14h3L16 3z" fill="#C9A96E"/>
+  <!-- Door -->
+  <rect x="13" y="19" width="6" height="8" rx="1" fill="#1a2744"/>
+</svg>

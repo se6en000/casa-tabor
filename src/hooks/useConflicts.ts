@@ -1,0 +1,62 @@
+import { useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { supabase } from '../lib/supabase'
+import type { Conflict } from '../types'
+
+export function useWeekConflicts() {
+  const qc = useQueryClient()
+
+  // Realtime — any change to conflicts table pushes instantly to all views
+  useEffect(() => {
+    const channel = supabase
+      .channel('conflicts_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conflicts' }, () => {
+        qc.invalidateQueries({ queryKey: ['conflicts'] })
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [qc])
+
+  return useQuery({
+    queryKey: ['conflicts', 'week'],
+    queryFn: async (): Promise<Conflict[]> => {
+      const now = new Date().toISOString()
+      const { data, error } = await supabase
+        .from('conflicts')
+        .select('*, event_a:events!event_a_id(id, start_time, title)')
+        .eq('resolved', false)
+        .or(`snoozed_until.is.null,snoozed_until.lte.${now}`)
+        .order('severity', { ascending: false })
+      if (error) throw error
+      return data ?? []
+    },
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchInterval: 60_000,
+  })
+}
+
+export function useResolveConflict() {
+  const qc = useQueryClient()
+  return async (id: string, resolution: string) => {
+    await supabase
+      .from('conflicts')
+      .update({ resolved: true, resolution, resolved_at: new Date().toISOString() })
+      .eq('id', id)
+    qc.invalidateQueries({ queryKey: ['conflicts'] })
+  }
+}
+
+export function useSnoozeConflict() {
+  const qc = useQueryClient()
+  return async (id: string) => {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    tomorrow.setHours(6, 0, 0, 0)
+    await supabase
+      .from('conflicts')
+      .update({ snoozed_until: tomorrow.toISOString() })
+      .eq('id', id)
+    qc.invalidateQueries({ queryKey: ['conflicts'] })
+  }
+}

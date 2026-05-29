@@ -1,0 +1,239 @@
+/* ================================================================
+   CASA TABOR — Global Stylesheet + Tailwind v4 Theme
+   ================================================================ */
+
+
+
+/* ── Google Fonts ─────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+/* ================================================================
+   DESIGN TOKENS — Casa Tabor Theme
+   ================================================================ */
+
+@theme {
+
+  /* ── Core Palette ──────────────────────────────────────────── */
+  --color-casa-bg:        #FAF8F5;
+  --color-casa-surface:   #FFFFFF;
+  --color-casa-navy:      #1B2A4A;
+  --color-casa-gold:      #C9A96E;
+  --color-casa-text:      #2D2D2D;
+  --color-casa-muted:     #8C8C8C;
+  --color-casa-border:    #E8E2D9;
+  --color-casa-divider:   #F0EBE3;
+  --color-casa-error:     #C0392B;
+  --color-casa-success:   #27AE60;
+  --color-casa-warning:   #E67E22;
+
+  /* ── Family Member Colors ──────────────────────────────────── */
+  --color-family-jake:    #1B2A4A;
+  --color-family-kelly:   #C4693A;
+  --color-family-liv:     #6A9E7F;
+  --color-family-emme:    #C47A8A;
+  --color-family-owen:    #D4A44C;
+
+  /* ── Night Mode Palette ────────────────────────────────────── */
+  --color-night-bg:       #1A1A2E;
+  --color-night-surface:  #16213E;
+  --color-night-text:     #E0D8CC;
+  --color-night-muted:    #6B6B7B;
+  --color-night-border:   #2A2A3E;
+  --color-night-gold:     #A08050;
+
+  /* ── Typography ────────────────────────────────────────────── */
+  --font-display:         'Cormorant Garamond', Georgia, serif;
+  --font-body:            'DM Sans', system-ui, sans-serif;
+  --font-mono:            'JetBrains Mono', monospace;
+
+  /* ── Font Sizes ────────────────────────────────────────────── */
+  --text-display-xl:      3rem;
+  --text-display-xl--line-height: 1.1;
+  --text-display-lg:      2.25rem;
+  --text-display-lg--line-height: 1.15;
+  --text-display-md:      1.75rem;
+  --text-display-md--line-height: 1.2;
+  --text-heading:         1.25rem;
+  --text-heading--line-height: 1.3;
+  --text-body-lg:         1.0625rem;
+  --text-body-lg--line-height: 1.6;
+  --text-body:            0.9375rem;
+  --text-body--line-height: 1.6;
+  --text-body-sm:         0.8125rem;
+  --text-body-sm--line-height: 1.5;
+  --text-caption:         0.75rem;
+  --text-caption--line-height: 1.4;
+
+  /* ── Border Radius ─────────────────────────────────────────── */
+  --radius-card:          0.75rem;
+  --radius-button:        0.5rem;
+  --radius-pill:          9999px;
+  --radius-modal:         1rem;
+
+  /* ── Shadows ───────────────────────────────────────────────── */
+  --shadow-card:          0 1px 3px rgba(27,42,74,0.06), 0 1px 2px rgba(27,42,74,0.04);
+  --shadow-card-hover:    0 4px 12px rgba(27,42,74,0.08);
+  --shadow-modal:         0 8px 30px rgba(27,42,74,0.12);
+  --shadow-fab:           0 4px 14px rgba(201,169,110,0.3);
+
+  /* ── Spacing ───────────────────────────────────────────────── */
+  --spacing-nav-height:   4.5rem;
+
+  /* ── Transitions ───────────────────────────────────────────── */
+  --transition-room-tone: 2000ms;
+  --transition-ambient:   5000ms;
+
+  /* ── Animations ────────────────────────────────────────────── */
+  --animate-fade-in:      fade-in 0.3s ease-out;
+  --animate-slide-up:     slide-up 0.35s ease-out;
+  --animate-pulse-gold:   pulse-gold 2s ease-in-out infinite;
+  --animate-breathe:      breathe 3s ease-in-out infinite;
+}
+
+/* ── Keyframes ─────────────────────────────────────────────────── */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-gold {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201,169,110,0.4); }
+  50%      { box-shadow: 0 0 0 10px rgba(201,169,110,0); }
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+
+@keyframes ai-glow-border {
+  0%   { box-shadow: 0 0 0 1.5px rgba(201,169,110,0.5),  0 0 12px  4px rgba(201,169,110,0.15); }
+  25%  { box-shadow: 0 0 0 1.5px rgba(167,139,250,0.55), 0 0 20px  8px rgba(167,139,250,0.20); }
+  50%  { box-shadow: 0 0 0 1.5px rgba(99, 202,183,0.55), 0 0 24px 10px rgba(99, 202,183,0.18); }
+  75%  { box-shadow: 0 0 0 1.5px rgba(251,146,60, 0.5),  0 0 18px  7px rgba(251,146,60, 0.15); }
+  100% { box-shadow: 0 0 0 1.5px rgba(201,169,110,0.5),  0 0 12px  4px rgba(201,169,110,0.15); }
+}
+
+.ai-thinking {
+  animation: ai-glow-border 2.4s ease-in-out infinite;
+  border-color: transparent !important;
+}
+
+/* ================================================================
+   BASE STYLES
+   ================================================================ */
+
+html {
+  background-color: var(--color-casa-bg);
+  color: var(--color-casa-text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100dvh;
+}
+
+/* Headings default to display font */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  color: var(--color-casa-navy);
+  font-weight: 700;
+}
+
+/* ── Room Tone CSS Layer ─────────────────────────────────────── */
+/* Applied to #root by useRoomTone hook. Smooth 2s transitions.  */
+/* Software layer — complements DDC/CI hardware control on Pi.   */
+
+#root {
+  /* transition applied when room tone changes */
+  transition:
+    filter 2s ease-in-out,
+    background-color 2s ease-in-out;
+}
+
+/* Day — crisp, no filter */
+html.rt-day #root {
+  filter: none;
+}
+
+/* Late afternoon — faint warmth */
+html.rt-afternoon #root {
+  filter: sepia(0.05) brightness(0.98);
+}
+
+/* Evening — warm amber, reduced blue */
+html.rt-evening #root {
+  filter: sepia(0.18) brightness(0.92) saturate(0.95);
+}
+
+/* Night — deep warm, significant dimming */
+html.rt-night #root {
+  filter: sepia(0.30) brightness(0.70) saturate(0.85);
+}
+
+/* Late night — dark painting mode */
+html.rt-late-night #root {
+  filter: sepia(0.40) brightness(0.45) saturate(0.75);
+}
+
+/* Manual override — user-set warmth via CSS variable */
+html.rt-manual #root {
+  filter: sepia(var(--rt-warmth, 0)) brightness(var(--rt-brightness, 1));
+}
+
+/* Night palette — swap color vars on dark shifts */
+html.rt-night,
+html.rt-late-night {
+  --color-casa-bg:      #1A1A2E;
+  --color-casa-surface: #16213E;
+  --color-casa-text:    #C8C0B8;
+  --color-casa-muted:   #6B6B7B;
+  --color-casa-border:  #2A2A3E;
+  --color-casa-divider: #1E1E30;
+  --color-casa-gold:    #A08050;
+  --color-casa-navy:    #C8C0B8;
+}
+
+/* ── Kiosk Mode Overrides (Pi Chromium) ──────────────────────── */
+/* Prevents pull-to-refresh, overscroll bounce, text selection   */
+
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  html {
+    overscroll-behavior: none;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: pan-y;
+  }
+
+  /* Hide scrollbars in kiosk */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ── Scrollbar Styling (non-kiosk) ───────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-casa-border);
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-casa-muted);
+}
