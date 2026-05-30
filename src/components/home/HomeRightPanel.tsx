@@ -2,7 +2,7 @@
  * HomeRightPanel — shown on tablet (lg:) to the right of today's timeline.
  * Week strip, daily briefing, alerts, recent activity — all collapsible.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { format, startOfWeek, addDays } from 'date-fns'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, Sun, ChevronRight, Bot, CalendarDays, Bell, ChevronDown, Plane, X } from 'lucide-react'
@@ -16,6 +16,7 @@ import TripCard from './TripCard'
 import ConflictAlertsSection from '../shared/ConflictAlertsSection'
 import { useWeekConflicts } from '../../hooks/useConflicts'
 import PrepActionSection from './PrepActionSection'
+import { useCalendarStore } from '../../stores/calendarStore'
 
 interface Props {
   now: Date
@@ -91,12 +92,17 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
   const { data: upcomingTrips } = useUpcomingTrips()
   const [briefing, setBriefing] = useState<Briefing | null>(null)
   const [briefingExpanded, setBriefingExpanded] = useState(false)
+  const setActiveView = useCalendarStore(s => s.setActiveView)
 
   const [openTrips, setOpenTrips] = useState(true)
-  const [openWeek, setOpenWeek] = useState(true)
+  const [openWeek, setOpenWeek] = useState(false)
   const [openBriefing, setOpenBriefing] = useState(true)
   const [openAlerts, setOpenAlerts] = useState(true)
-  const [openActivity, setOpenActivity] = useState(true)
+  const [openActivity, setOpenActivity] = useState(false)
+
+  const handleSeeAllWeek = useCallback(() => {
+    setActiveView('stacked')
+  }, [setActiveView])
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
 
@@ -144,7 +150,11 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
           open={openWeek}
           onToggle={() => setOpenWeek(v => !v)}
           action={
-            <Link to="/calendar" className="text-caption text-casa-gold hover:brightness-110 flex items-center gap-0.5">
+            <Link
+              to="/calendar"
+              onClick={handleSeeAllWeek}
+              className="text-caption text-casa-gold hover:brightness-110 flex items-center gap-0.5"
+            >
               See all <ChevronRight size={11} />
             </Link>
           }
