@@ -33,9 +33,9 @@ interface EventDetailPanelProps {
 }
 
 function useIsMobile() {
-  const [mobile, setMobile] = useState(() => window.innerWidth < 1024)
+  const [mobile, setMobile] = useState(() => window.innerWidth < 768)
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 1023px)')
+    const mq = window.matchMedia('(max-width: 767px)')
     const handler = (e: MediaQueryListEvent) => setMobile(e.matches)
     mq.addEventListener('change', handler)
     return () => mq.removeEventListener('change', handler)
