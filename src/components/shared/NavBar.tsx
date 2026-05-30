@@ -78,15 +78,16 @@ export default function NavBar() {
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 32, stiffness: 320 }}
+              transition={{ type: 'tween', duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
               drag="y"
               dragConstraints={{ top: 0 }}
-              dragElastic={{ top: 0, bottom: 0.25 }}
+              dragElastic={{ top: 0, bottom: 0.15 }}
+              dragMomentum={false}
               onDragEnd={(_: unknown, info: { velocity: { y: number }, offset: { y: number } }) => {
-                if (info.velocity.y > 400 || info.offset.y > 120) setMoreOpen(false)
+                if (info.velocity.y > 300 || info.offset.y > 120) setMoreOpen(false)
               }}
+              style={{ willChange: 'transform', touchAction: 'none', paddingBottom: 'calc(var(--spacing-nav-height) + env(safe-area-inset-bottom))' }}
               className="lg:hidden fixed bottom-0 left-0 right-0 bg-casa-surface rounded-t-2xl z-50 shadow-[0_-8px_32px_rgba(0,0,0,0.15)] cursor-grab active:cursor-grabbing"
-              style={{ paddingBottom: 'calc(var(--spacing-nav-height) + env(safe-area-inset-bottom))' }}
             >
               {/* Handle */}
               <div className="flex justify-center pt-3 pb-1">

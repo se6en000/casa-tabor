@@ -47,30 +47,6 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
   const [showEdit, setShowEdit] = useState(false)
   const isMobile = useIsMobile()
 
-  const mobileSheet = {
-    initial: { y: '100%' },
-    animate: { y: 0 },
-    exit:    { y: '100%' },
-    transition: { type: 'spring' as const, damping: 32, stiffness: 320 },
-    className: 'fixed inset-x-0 bottom-0 top-[5vh] bg-casa-surface rounded-t-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col',
-    drag: 'y' as const,
-    dragConstraints: { top: 0 },
-    dragElastic: { top: 0, bottom: 0.25 },
-    onDragEnd: (_: unknown, info: { velocity: { y: number }, offset: { y: number } }) => {
-      if (info.velocity.y > 400 || info.offset.y > 160) onClose()
-    },
-  }
-
-  const desktopPanel = {
-    initial: { x: '100%' },
-    animate: { x: 0 },
-    exit:    { x: '100%' },
-    transition: { type: 'spring' as const, damping: 28, stiffness: 220 },
-    className: 'fixed top-0 right-0 h-full w-[420px] bg-casa-surface border-l border-casa-border shadow-modal z-[55] flex flex-col',
-  }
-
-  const props = isMobile ? mobileSheet : desktopPanel
-
   return (
     <>
       <AnimatePresence>
@@ -87,20 +63,46 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 onClick={onClose}
               />
             )}
-            <motion.div
-              key="panel"
-              {...props}
-              onClick={e => e.stopPropagation()}
-            >
-              {isMobile && (
-                <div className="flex justify-center pt-3 pb-1 flex-shrink-0 cursor-grab active:cursor-grabbing">
+            {isMobile ? (
+              <motion.div
+                key="panel"
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '100%' }}
+                transition={{ type: 'tween', duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+                drag="y"
+                dragConstraints={{ top: 0 }}
+                dragElastic={{ top: 0, bottom: 0.15 }}
+                dragMomentum={false}
+                onDragEnd={(_e, info) => {
+                  if (info.velocity.y > 300 || info.offset.y > 140) onClose()
+                }}
+                style={{ willChange: 'transform', touchAction: 'none' }}
+                className="fixed inset-x-0 bottom-0 top-[5vh] bg-casa-surface rounded-t-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col cursor-grab active:cursor-grabbing"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
                   <div className="w-9 h-1 bg-casa-divider rounded-full" />
                 </div>
-              )}
-              <PanelHeader event={event} onClose={onClose} />
-              <PanelBody event={event} />
-              <PanelFooter event={event} onEdit={() => setShowEdit(true)} />
-            </motion.div>
+                <PanelHeader event={event} onClose={onClose} />
+                <PanelBody event={event} />
+                <PanelFooter event={event} onEdit={() => setShowEdit(true)} />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="panel"
+                initial={{ x: '100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '100%' }}
+                transition={{ type: 'spring', damping: 28, stiffness: 220 }}
+                className="fixed top-0 right-0 h-full w-[420px] bg-casa-surface border-l border-casa-border shadow-modal z-[55] flex flex-col"
+                onClick={e => e.stopPropagation()}
+              >
+                <PanelHeader event={event} onClose={onClose} />
+                <PanelBody event={event} />
+                <PanelFooter event={event} onEdit={() => setShowEdit(true)} />
+              </motion.div>
+            )}
           </>
         )}
       </AnimatePresence>
