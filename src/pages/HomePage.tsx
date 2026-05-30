@@ -1,6 +1,6 @@
-import { useMemo, useState, useEffect, useCallback } from 'react'
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { format, isAfter, isBefore } from 'date-fns'
+import { format, isAfter, isBefore, addDays } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Cloud, MapPin, Clock, ChevronRight, AlertTriangle, Navigation, Bell, RefreshCw } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -33,9 +33,12 @@ export default function HomePage() {
   const now = useLiveClock(15_000)
   const { data: family } = useFamilyMembers()
   const { data: allTodayEvents, isLoading } = useTodayEvents(now)
+  const tomorrow = useMemo(() => addDays(now, 1), [now.toDateString()])
+  const { data: allTomorrowEvents } = useTodayEvents(tomorrow)
   const { visibleMembers, toggleMember } = useCalendarStore()
   const { data: weather } = useHomeWeather()
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const events = useMemo<EventWithDetails[]>(() => {
     if (!allTodayEvents) return []
@@ -54,6 +57,30 @@ export default function HomePage() {
       visibleMembers.length === 0 || ev.members?.some(m => visibleMembers.includes(m.family_member.id)) || ev.members.length === 0
     return allTodayEvents.filter(ev => isAllDayReminder(ev) && memberOk(ev))
   }, [allTodayEvents, visibleMembers])
+
+  const tomorrowEvents = useMemo<EventWithDetails[]>(() => {
+    if (!allTomorrowEvents) return []
+    const memberOk = (ev: EventWithDetails) =>
+      visibleMembers.length === 0 || ev.members?.some((m) => visibleMembers.includes(m.family_member.id)) || ev.members.length === 0
+    return allTomorrowEvents.filter((ev) => {
+      if (ev.event_type !== 'reminder') return visibleMembers.length === 0 || ev.members?.some(m => visibleMembers.includes(m.family_member.id))
+      return isTimedReminder(ev) && memberOk(ev)
+    })
+  }, [allTomorrowEvents, visibleMembers])
+
+  const allTodayDone = events.length > 0 && events.every(e => isBefore(new Date(e.end_time), now))
+
+  // Scroll-to-top on mount + save scroll position on scroll
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTop = 0
+    const onScroll = () => {
+      sessionStorage.setItem('home-scroll', String(el.scrollTop))
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
 
   const nextEvent = useMemo(
     () => events.find((e) => isAfter(new Date(e.end_time), now)),
@@ -159,7 +186,10 @@ export default function HomePage() {
 
       {/* ── Center content ─────────────────────────────────── */}
       <div
-        ref={ptrRef}
+        ref={(el) => {
+          ;(ptrRef as React.MutableRefObject<HTMLElement | null>).current = el
+          ;(scrollRef as React.MutableRefObject<HTMLDivElement | null>).current = el
+        }}
         className="flex-1 min-w-0 overflow-y-auto px-6 pt-8 pb-12 lg:px-8"
       >
         {/* ── Pull-to-refresh indicator ─────────────────────── */}
@@ -331,7 +361,32 @@ export default function HomePage() {
           )}
         </section>
 
-        {/* ── Event detail panel ────────────────────────────── */}
+        {/* ── Tomorrow's timeline (shown when today is all done) ── */}
+        <AnimatePresence>
+          {allTodayDone && tomorrowEvents.length > 0 && (
+            <motion.section
+              key="tomorrow"
+              className="mt-8"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 16 }}
+              transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div className="flex items-baseline justify-between mb-3">
+                <h2 className="font-display text-heading text-casa-navy">
+                  Tomorrow · {format(tomorrow, 'EEEE, MMM d')}
+                </h2>
+              </div>
+              <ol className="space-y-2">
+                {tomorrowEvents.map((ev, i) => (
+                  <TimelineRow key={ev.id} event={ev} now={tomorrow} index={i} onClick={() => setSelectedEventId(ev.id)} />
+                ))}
+              </ol>
+            </motion.section>
+          )}
+        </AnimatePresence>
+
+
         <div onClick={e => e.stopPropagation()}>
           <EventDetailPanel
             event={selectedEvent}
