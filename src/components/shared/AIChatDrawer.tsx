@@ -294,31 +294,43 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/20 z-[65]"
+            className="fixed inset-0 bg-black/40 z-[65]"
             onClick={onClose}
           />
 
-          {/* Panel — anchored above-left of FAB */}
+          {/* Panel — bottom sheet on mobile, FAB-anchored popup on desktop */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 12 }}
-            transition={{ type: 'spring', damping: 30, stiffness: 280 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ type: 'tween', duration: 0.38, ease: [0.32, 0.72, 0, 1] }}
             className={cn(
-              'fixed z-[70] bg-casa-surface rounded-2xl shadow-modal flex flex-col transition-shadow',
-              'w-[min(520px,calc(100vw-2rem))]',
+              'fixed z-[70] bg-casa-surface shadow-modal flex flex-col transition-shadow',
+              // Mobile: full-width bottom sheet
+              'max-sm:inset-x-0 max-sm:bottom-0 max-sm:rounded-t-2xl max-sm:w-full',
+              // Desktop: floating card anchored to FAB
+              'sm:rounded-2xl sm:w-[min(520px,calc(100vw-2rem))]',
               loading && 'ai-thinking',
             )}
             style={{
-              maxHeight: '65vh',
-              // offset 16px gap from FAB; clamp so it never goes off-screen
-              right: anchor ? Math.max(8, anchor.right - 16) : 20,
-              bottom: anchor ? Math.max(8, anchor.bottom + 16) : 100,
+              // Mobile: tall sheet, leaves ~10% of screen above
+              ...(window.innerWidth < 640 ? {
+                maxHeight: '88vh',
+                paddingBottom: 'env(safe-area-inset-bottom)',
+              } : {
+                maxHeight: '65vh',
+                right: anchor ? Math.max(8, anchor.right - 16) : 20,
+                bottom: anchor ? Math.max(8, anchor.bottom + 16) : 100,
+              })
             }}
             onClick={e => e.stopPropagation()}
             onPaste={handlePaste}
           >
-            {/* Handle + header */}
+            {/* Drag handle — mobile only */}
+            <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0">
+              <div className="w-9 h-1 bg-casa-divider rounded-full" />
+            </div>
+            {/* Header */}
             <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-casa-border">
               <div className="flex items-center gap-2.5">
                 <div className={cn(
