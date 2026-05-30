@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronLeft, Save, CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu } from 'lucide-react'
+import { ChevronLeft, CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
@@ -164,12 +164,15 @@ export default function DisplaySettingsPage() {
   const qc = useQueryClient()
   const { cfg: liveCfg, currentZone } = useRoomTone()
   const [config, setConfig] = useState<DisplayConfig>(DISPLAY_DEFAULTS)
-  const [saved, setSaved] = useState(false)
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [previewZone, setPreviewZone] = useState<RoomToneZone>('day')
+  // Track whether config has been user-modified (vs just loaded from DB)
+  const [dirty, setDirty] = useState(false)
 
   useEffect(() => {
     setConfig({ ...DISPLAY_DEFAULTS, ...liveCfg })
     setPreviewZone(currentZone === 'manual' ? 'evening' : currentZone)
+    setDirty(false)
   }, [liveCfg, currentZone])
 
   const saveMutation = useMutation({
@@ -182,17 +185,30 @@ export default function DisplaySettingsPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings', 'display_config'] })
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
+      setSaveState('saved')
+      setTimeout(() => setSaveState('idle'), 1500)
+      setDirty(false)
     },
   })
 
-  const set = <K extends keyof DisplayConfig>(key: K, value: DisplayConfig[K]) =>
+  // Auto-save: debounce 600ms after any user change
+  useEffect(() => {
+    if (!dirty) return
+    setSaveState('saving')
+    const t = setTimeout(() => { saveMutation.mutate(config) }, 600)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, dirty])
+
+  const set = <K extends keyof DisplayConfig>(key: K, value: DisplayConfig[K]) => {
     setConfig(prev => ({ ...prev, [key]: value }))
+    setDirty(true)
+  }
 
   const enableManualOverride = (on: boolean) => {
     const expires = on ? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() : null
     setConfig(prev => ({ ...prev, manual_override: on, override_expires_at: expires }))
+    setDirty(true)
   }
 
   // Live preview filter
@@ -414,18 +430,19 @@ export default function DisplaySettingsPage() {
 
       </div>
 
-      {/* Save */}
-      <div className="mt-6 flex justify-end">
-        <button
-          onClick={() => saveMutation.mutate(config)}
-          disabled={saveMutation.isPending}
-          className={cn(
-            'inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-body-sm font-semibold transition-colors',
-            saved ? 'bg-green-100 text-green-700' : 'bg-casa-navy text-white hover:bg-casa-navy/90'
-          )}
-        >
-          {saved ? <><CheckCircle size={16} /> Saved</> : <><Save size={16} /> {saveMutation.isPending ? 'Saving…' : 'Save'}</>}
-        </button>
+      {/* Auto-save status */}
+      <div className="mt-6 flex justify-end h-8 items-center">
+        {saveState === 'saving' && (
+          <span className="text-caption text-casa-muted flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-casa-gold animate-pulse" />
+            Saving…
+          </span>
+        )}
+        {saveState === 'saved' && (
+          <span className="text-caption text-emerald-600 flex items-center gap-1.5">
+            <CheckCircle size={13} /> Saved
+          </span>
+        )}
       </div>
     </div>
     </div>
