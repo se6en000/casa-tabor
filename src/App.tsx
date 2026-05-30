@@ -7,6 +7,7 @@ import { useRoomTone } from './hooks/useRoomTone'
 import { useTravelScan } from './hooks/useTravelScan'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { TopBarC } from './components/shared/TopBar'
+import PinGate from './components/shared/PinGate'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,11 +43,13 @@ function AppShell() {
 export default function App() {
   return (
     <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <AppShell />
-        </BrowserRouter>
-      </QueryClientProvider>
+      <PinGate>
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <AppShell />
+          </BrowserRouter>
+        </QueryClientProvider>
+      </PinGate>
     </ThemeProvider>
   )
 }
