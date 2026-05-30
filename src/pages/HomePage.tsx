@@ -187,9 +187,11 @@ export default function HomePage() {
           )}
         </AnimatePresence>
 
-        {/* ── Greeting + live clock ─────────────────────────── */}
-        <header className="flex items-end justify-between mb-8">
-          <div>
+        {/* ── Greeting + Next Up row ────────────────────────── */}
+        {/* Desktop: side by side. Mobile: greeting on top. */}
+        <div className="flex items-start gap-4 lg:gap-6 mb-4 lg:mb-5">
+          {/* Greeting */}
+          <header className="flex-1 min-w-0">
             <motion.h1
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -201,21 +203,26 @@ export default function HomePage() {
             <p className="text-body-lg text-casa-muted mt-2">
               {format(now, 'EEEE, MMMM d')}
             </p>
+            {/* Clock/weather — only on mobile; sidebar shows it on tablet */}
+            <div className="text-left lg:hidden mt-2">
+              <p className="font-display text-display-lg text-casa-navy tabular-nums leading-none">
+                {format(now, 'h:mm')}
+                <span className="text-casa-muted ml-1 text-display-md">{format(now, 'a')}</span>
+              </p>
+              <p className="text-body-sm text-casa-muted mt-1 flex items-center gap-1.5">
+                <Cloud size={14} className="text-casa-gold" />
+                {weather
+                  ? `${weather.temp}° · ${weather.condition} · ${weather.city}`
+                  : '—'}
+              </p>
+            </div>
+          </header>
+
+          {/* Next Up — compact on desktop, inline with greeting */}
+          <div className="hidden lg:block w-[280px] xl:w-[320px] shrink-0 self-center">
+            <NextUpCard event={nextEvent} now={now} onClick={(id) => setSelectedEventId(id)} compact />
           </div>
-          {/* Clock/weather — only on mobile; sidebar shows it on tablet */}
-          <div className="text-right lg:hidden">
-            <p className="font-display text-display-lg text-casa-navy tabular-nums leading-none">
-              {format(now, 'h:mm')}
-              <span className="text-casa-muted ml-1 text-display-md">{format(now, 'a')}</span>
-            </p>
-            <p className="text-body-sm text-casa-muted mt-1 flex items-center justify-end gap-1.5">
-              <Cloud size={14} className="text-casa-gold" />
-              {weather
-                ? `${weather.temp}° · ${weather.condition} · ${weather.city}`
-                : '—'}
-            </p>
-          </div>
-        </header>
+        </div>
 
         {/* ── Family filter pills — mobile only ─────────────── */}
         <div className="lg:hidden flex gap-2 mb-6 flex-wrap">
@@ -245,17 +252,19 @@ export default function HomePage() {
           })}
         </div>
 
-        {/* ── Next-up hero card ─────────────────────────────── */}
-        <NextUpCard event={nextEvent} now={now} onClick={(id) => setSelectedEventId(id)} />
+        {/* ── Next-up hero card — mobile only (desktop shows inline above) */}
+        <div className="lg:hidden">
+          <NextUpCard event={nextEvent} now={now} onClick={(id) => setSelectedEventId(id)} />
+        </div>
 
         {/* ── Music mini player ─────────────────────────────── */}
-        <div className="mt-6" onClick={e => e.stopPropagation()}>
+        <div className="mt-4 lg:mt-3" onClick={e => e.stopPropagation()}>
           <MiniPlayer />
         </div>
 
         {/* ── Today's reminders ─────────────────────────────── */}
         {reminders.length > 0 && (
-          <section className="mt-6">
+          <section className="mt-4">
             <div className="flex flex-wrap gap-2">
               {reminders.map(r => (
                 <SwipeableReminderPill
@@ -273,7 +282,7 @@ export default function HomePage() {
         )}
 
         {/* ── Today's timeline ──────────────────────────────── */}
-        <section className="mt-8">
+        <section className="mt-5">
           <div className="flex items-baseline justify-between mb-3">
             <h2 className="font-display text-heading text-casa-navy">Today</h2>
             <Link
@@ -348,15 +357,15 @@ export default function HomePage() {
 
 /* ── Next-up hero card ────────────────────────────────────────── */
 
-function NextUpCard({ event, now, onClick }: { event: EventWithDetails | undefined; now: Date; onClick: (id: string) => void }) {
+function NextUpCard({ event, now, onClick, compact = false }: { event: EventWithDetails | undefined; now: Date; onClick: (id: string) => void; compact?: boolean }) {
   if (!event) {
     return (
-      <div className="bg-casa-surface rounded-card border border-casa-border p-6 shadow-card">
+      <div className={cn("bg-casa-surface rounded-card border border-casa-border shadow-card", compact ? "p-3" : "p-6")}>
         <p className="text-overline font-body font-semibold text-casa-muted uppercase tracking-wider mb-1">
           Next up
         </p>
-        <p className="font-display text-display-md text-casa-navy">
-          You're all clear for the rest of the day.
+        <p className={cn("font-display text-casa-navy", compact ? "text-body-lg" : "text-display-md")}>
+          All clear for the day.
         </p>
       </div>
     )
@@ -381,10 +390,10 @@ function NextUpCard({ event, now, onClick }: { event: EventWithDetails | undefin
     >
       <div className="flex">
         <div className="w-1.5" style={{ backgroundColor: color }} />
-        <div className="flex-1 p-6">
-          <div className="flex items-center gap-2 mb-1">
+        <div className={cn("flex-1", compact ? "p-3" : "p-6")}>
+          <div className="flex items-center gap-2 mb-0.5">
             <p className="text-overline font-body font-semibold uppercase tracking-wider" style={{ color }}>
-              {happening ? 'Happening now' : minsUntil < 60 ? `In ${minsUntil} min` : 'Next up'}
+              {happening ? 'Now' : minsUntil < 60 ? `In ${minsUntil} min` : 'Next up'}
             </p>
             {event.members && event.members.length > 0 && (
               <div className="flex gap-1">
@@ -400,22 +409,22 @@ function NextUpCard({ event, now, onClick }: { event: EventWithDetails | undefin
             )}
           </div>
 
-          <h3 className="font-display text-display-md text-casa-navy leading-tight">
+          <h3 className={cn("font-display text-casa-navy leading-tight", compact ? "text-body-lg font-semibold" : "text-display-md")}>
             {event.title}
           </h3>
 
-          <div className="flex items-center gap-4 mt-3 text-body-sm text-casa-muted flex-wrap">
+          <div className={cn("flex items-center gap-3 mt-2 text-casa-muted flex-wrap", compact ? "text-caption" : "text-body-sm mt-3 gap-4")}>
             <span className="flex items-center gap-1.5">
-              <Clock size={14} />
+              <Clock size={compact ? 12 : 14} />
               {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
             </span>
             {event.location_name && (
               <span className="flex items-center gap-1.5">
-                <MapPin size={14} />
+                <MapPin size={compact ? 12 : 14} />
                 {event.location_name}
               </span>
             )}
-            {enr?.weather_summary && (
+            {!compact && enr?.weather_summary && (
               <span className="flex items-center gap-1.5">
                 <Cloud size={14} />
                 {enr.weather_summary}
@@ -423,13 +432,19 @@ function NextUpCard({ event, now, onClick }: { event: EventWithDetails | undefin
             )}
           </div>
 
-          {enr?.departure_time && !happening && (
+          {!compact && enr?.departure_time && !happening && (
             <div className="mt-4 flex items-center gap-2 px-3 py-2 rounded-button bg-amber-50 border border-amber-200 text-body-sm">
               <AlertTriangle size={14} className="text-casa-warning shrink-0" />
               <span className="text-casa-text">
                 Leave by <strong>{format(new Date(enr.departure_time), 'h:mm a')}</strong>
                 {enr.drive_time_mins && ` · ${enr.drive_time_mins} min drive`}
               </span>
+            </div>
+          )}
+          {compact && enr?.departure_time && !happening && (
+            <div className="mt-2 flex items-center gap-1.5 text-caption text-amber-700">
+              <AlertTriangle size={11} className="shrink-0" />
+              Leave by <strong>{format(new Date(enr.departure_time), 'h:mm a')}</strong>
             </div>
           )}
         </div>
