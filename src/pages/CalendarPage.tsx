@@ -108,7 +108,7 @@ export default function CalendarPage() {
           </h2>
         </div>
 
-        <div className="flex gap-1 bg-casa-divider rounded-button p-1">
+        <div className="hidden md:flex gap-1 bg-casa-divider rounded-button p-1">
           {views.map((v) => (
             <button
               key={v.key}

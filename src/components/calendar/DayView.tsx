@@ -493,7 +493,9 @@ export default function DayView() {
       </div>
 
       {/* ── Sidecar ─────────────────────────────────── */}
-      <DaySidecar dayEvents={dayEvents} selectedDate={selectedDate} />
+      <div className="hidden md:block">
+        <DaySidecar dayEvents={dayEvents} selectedDate={selectedDate} />
+      </div>
 
       {/* Edit sheet */}
       <AnimatePresence>

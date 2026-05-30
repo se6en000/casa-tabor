@@ -5,6 +5,7 @@ import { cn } from '../../utils/cn'
 import { useNotifications } from '../../hooks/useNotifications'
 import NotificationDrawer from './NotificationDrawer'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useCalendarStore } from '../../stores/calendarStore'
 
 const primaryTabs = [
   { to: '/', icon: Home, label: 'Home' },
@@ -18,6 +19,7 @@ export default function NavBar() {
   const [notifOpen, setNotifOpen] = useState(false)
   const navigate = useNavigate()
   const { unreadCount } = useNotifications()
+  const { setActiveView } = useCalendarStore()
 
   return (
     <>
@@ -27,6 +29,7 @@ export default function NavBar() {
             key={to}
             to={to}
             end={to === '/'}
+            onClick={() => { if (to === '/calendar') setActiveView('today') }}
             className={({ isActive }) =>
               cn(
                 'flex flex-col items-center gap-1 px-3 py-2 rounded-button transition-colors',
