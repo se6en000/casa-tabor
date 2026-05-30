@@ -187,9 +187,8 @@ export default function HomePage() {
           )}
         </AnimatePresence>
 
-        {/* ── Greeting + Next Up row ────────────────────────── */}
-        {/* Desktop: side by side. Mobile: greeting on top. */}
-        <div className="flex items-start gap-4 lg:gap-6 mb-4 lg:mb-5">
+        {/* ── Greeting + Next Up row — hidden on small screens ─ */}
+        <div className="hidden lg:flex items-start gap-4 lg:gap-6 mb-4 lg:mb-5">
           {/* Greeting */}
           <header className="flex-1 min-w-0">
             <motion.h1
@@ -224,8 +223,8 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* ── Family filter pills — mobile only ─────────────── */}
-        <div className="lg:hidden flex gap-2 mb-6 flex-wrap">
+        {/* ── Family filter pills — hidden on small screens ──── */}
+        <div className="hidden md:flex lg:hidden gap-2 mb-6 flex-wrap">
           {family?.map((m) => {
             const active = visibleMembers.length === 0 || visibleMembers.includes(m.id)
             return (
@@ -252,13 +251,13 @@ export default function HomePage() {
           })}
         </div>
 
-        {/* ── Next-up hero card — mobile only (desktop shows inline above) */}
-        <div className="lg:hidden">
+        {/* ── Next-up hero card — mid screens only (desktop shows inline above) */}
+        <div className="hidden md:block lg:hidden">
           <NextUpCard event={nextEvent} now={now} onClick={(id) => setSelectedEventId(id)} />
         </div>
 
         {/* ── Music mini player ─────────────────────────────── */}
-        <div className="mt-4 lg:mt-3" onClick={e => e.stopPropagation()}>
+        <div className="hidden md:block mt-4 lg:mt-3" onClick={e => e.stopPropagation()}>
           <MiniPlayer />
         </div>
 
