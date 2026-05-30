@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { PrepItem } from '../types'
@@ -6,11 +6,14 @@ import type { PrepItem } from '../types'
 /** Returns all undismissed, un-snoozed prep items for upcoming events, ordered by priority desc then event date asc */
 export function usePrepItems() {
   const qc = useQueryClient()
+  // Use a unique channel name per hook instance to avoid "already subscribed" errors
+  // when multiple components using this hook are mounted simultaneously (e.g. during swipe)
+  const channelRef = useRef(`prep_items_realtime_${Math.random().toString(36).slice(2)}`)
 
   // Realtime subscription — any INSERT/UPDATE/DELETE on prep_items invalidates immediately
   useEffect(() => {
     const channel = supabase
-      .channel('prep_items_realtime')
+      .channel(channelRef.current)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'prep_items' }, () => {
         qc.invalidateQueries({ queryKey: ['prep-items'] })
       })
@@ -33,9 +36,9 @@ export function usePrepItems() {
       if (error) throw error
       return data ?? []
     },
-    staleTime: 0,
-    refetchOnMount: true,
-    refetchInterval: 60_000, // re-check every minute so snoozes auto-expire
+    staleTime: 30_000,
+    refetchOnMount: false,
+    refetchInterval: 120_000, // re-check every 2min so snoozes auto-expire
   })
 }
 

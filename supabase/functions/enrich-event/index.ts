@@ -1,5 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
+interface UsageAccum { inputTokens: number; outputTokens: number }
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -33,11 +35,30 @@ Deno.serve(async (req) => {
   const familyMembers = (familyRes.data ?? []) as { id: string; name: string; full_name: string | null; role: string; phone: string | null; email: string | null; is_admin: boolean }[]
   const homeConfig = homeRes.data?.value as { address?: string; city?: string; state?: string; zip?: string } | null
 
+  // ── Content-hash dedup: skip all LLM calls if event hasn't meaningfully changed ──
+  const contentHash = [
+    event.title ?? '',
+    event.description ?? '',
+    event.start_time ?? '',
+    event.end_time ?? '',
+    event.location_name ?? '',
+    event.address ?? '',
+  ].join('|')
+
+  const existingEnrichment = (event.event_enrichments as Record<string, unknown>[] | null)?.[0]
+  if (!extra_context && !locked_category && existingEnrichment?.source_hash === contentHash) {
+    console.log('[enrich-event] skipping — content unchanged, hash matches')
+    // Log cached hit (non-blocking)
+    sb.from('ai_usage_log').insert({ function_name: 'enrich-event', provider: llmConfig.provider, model: llmConfig.model, input_tokens: 0, output_tokens: 0, cached: true }).then(() => {}).catch(() => {})
+    return new Response(JSON.stringify({ ok: true, cached: true }), { headers: { ...CORS, 'content-type': 'application/json' } })
+  }
+
   // Default owner = admin family member (fallback if AI can't identify one)
   const adminMember = familyMembers.find(m => m.is_admin) ?? familyMembers[0]
   const defaultOwnerName = adminMember?.name ?? 'Jake'
 
-  const enrichment = await enrichEvent(llmConfig, event, familyMembers, homeConfig, defaultOwnerName, extra_context, locked_category)
+  const usageAccum: UsageAccum = { inputTokens: 0, outputTokens: 0 }
+  const enrichment = await enrichEvent(llmConfig, event, familyMembers, homeConfig, defaultOwnerName, extra_context, locked_category, usageAccum)
 
   const row = { ...enrichment, event_id, enriched_by: `${llmConfig.provider}/${llmConfig.model}`, enriched_at: new Date().toISOString(), updated_at: new Date().toISOString() }
 
@@ -84,7 +105,7 @@ Deno.serve(async (req) => {
   const finalTitle = `${resolvedPrimary} | ${concisePart}`
 
   const { error: upsertErr } = await sb.from('event_enrichments')
-    .upsert({ ...enrichmentFields, created_at: new Date().toISOString() }, { onConflict: 'event_id' })
+    .upsert({ ...enrichmentFields, source_hash: contentHash, created_at: new Date().toISOString() }, { onConflict: 'event_id' })
   if (upsertErr) return new Response(JSON.stringify({ error: upsertErr.message }), { status: 500, headers: { ...CORS, 'content-type': 'application/json' } })
 
   // Sync event_members with roles
@@ -144,6 +165,7 @@ Deno.serve(async (req) => {
         homeAddress,
         attendeeObjs,
         familyMembers,
+        usageAccum,
       )
 
       if (logisticsSteps.length > 0) {
@@ -186,7 +208,7 @@ User correction: "${extra_context}"
 Extract the new start and end times. Use the same date (${eventDate}) unless user specifies otherwise.
 Reply ONLY with JSON: {"start_time": "ISO8601", "end_time": "ISO8601"}
 Times should be in local Eastern time stored as UTC (EDT = UTC-4 in summer, EST = UTC-5 in winter).`
-        const raw = await callLLM(llmConfig, timeParsePrompt)
+        const raw = await callLLM(llmConfig, timeParsePrompt, usageAccum)
         const parsed = parseJSON(raw)
         if (parsed.start_time && typeof parsed.start_time === 'string') updatedStartTime = parsed.start_time as string
         if (parsed.end_time && typeof parsed.end_time === 'string') updatedEndTime = parsed.end_time as string
@@ -201,6 +223,9 @@ Times should be in local Eastern time stored as UTC (EDT = UTC-4 in summer, EST 
       }
     }
   }
+
+  // Log usage (non-blocking)
+  sb.from('ai_usage_log').insert({ function_name: 'enrich-event', provider: llmConfig.provider, model: llmConfig.model, input_tokens: usageAccum.inputTokens, output_tokens: usageAccum.outputTokens, cached: false }).then(() => {}).catch(() => {})
 
   return new Response(JSON.stringify({
     ok: true,
@@ -252,6 +277,7 @@ async function enrichEvent(
   defaultOwner: string,
   extraContext?: string,
   lockedCategory?: string,
+  accum?: UsageAccum,
 ) {
   const start = new Date(event.start_time as string)
   const timeStr = (event.all_day as boolean)
@@ -290,102 +316,74 @@ Who: ${whoLine}${extraContextLine}`
 
   const nearCity = homeConfig?.city ?? 'West Palm Beach, FL'
 
-  // ── Step 1: Determine category — skip if user manually locked it ──
-  let category: string
-  if (lockedCategory && CATEGORY_FIELDS[lockedCategory]) {
-    category = lockedCategory  // user-locked, skip AI pass
-  } else {
-    const categoryPrompt = `You are a smart family assistant for the Tabor family.
-
-Event:
-${eventBlock}
-
-Categories available: appointment, school, sports, social, errand, travel, work, medical, birthday, holiday, home_maintenance, dining, other
-
-What is the single best category for this event? Reply with ONLY the category word, nothing else.`
-    const categoryRaw = (await callLLM(config, categoryPrompt)).trim().toLowerCase().replace(/[^a-z_]/g, '')
-    category = CATEGORY_FIELDS[categoryRaw] ? categoryRaw : 'other'
-  }
-  const fieldsForCategory = CATEGORY_FIELDS[category]
-
-  // ── Step 2: Fill all fields for that category ──
-  const fieldLines = fieldsForCategory
-    .map(f => FIELD_DESCRIPTIONS[f] ?? `${f}: string or null`)
-    .join('\n  ')
+  // ── Single merged call: detect category + fill all fields at once ──
+  // Build a combined prompt so we go from 2 LLM calls → 1
+  const allCategoryFields = Object.entries(CATEGORY_FIELDS)
+    .map(([cat, fields]) => `  ${cat}: ${fields.join(', ')}`)
+    .join('\n')
 
   const familyNamesList = familyMembers.map(m => m.name).join(', ')
 
-  const fieldJsonTemplate = [
-    `"category": "${category}"`,
-    `"primary_attendee": string — REQUIRED. The ONE person this event is for. Rules in order:
-      1. If a family member name appears before "|", ":", or "@" in the title → use that name
-      2. If the event is at the family home (home maintenance, delivery, repair) → use "${defaultOwner}"
-      3. If a child's school/activity is in the title → use the child's name
-      4. If none of the above → default to "${defaultOwner}"
-      Choose ONLY from: [${familyNamesList}]`,
-    `"concise_description": string — REQUIRED. A short, clear description of what this event is (3-6 words). Do NOT include the person's name. Examples: "AC Service Appointment", "Stuffed Animal Day at Play Pals", "Dentist Checkup", "Soccer Practice". This will be combined as "<primary_attendee> | <concise_description>"`,
-    `"attendees": string[] — Supporting people (drivers, chaperones). Only if clearly involved. Can be []. Choose from: [${familyNamesList}]`,
-    `"location_name": string or null (venue/business name found via search)`,
-    `"address": string or null (full street address of the event, NOT the home address)`,
-    ...fieldsForCategory.map(f => {
-      if (f === 'what_to_bring') return `"what_to_bring": string[] (array of items)`
-      return `"${f}": string or null`
-    }),
-    `"confidence": "low" | "medium" | "high"`,
-  ].join(',\n  ')
+  // If category is locked by user, skip detection and go straight to fill
+  const categoryInstruction = lockedCategory && CATEGORY_FIELDS[lockedCategory]
+    ? `Category is already set to: ${lockedCategory} — do NOT change it.`
+    : `STEP 1 — Detect the best category from: appointment, school, sports, social, errand, travel, work, medical, birthday, holiday, home_maintenance, dining, other
+Category → fields to fill:
+${allCategoryFields}`
 
-  const fillPrompt = `You are a smart family assistant for the Tabor family. You have access to Google Search — USE IT now to find real information about this event.
+  const allFieldDescriptions = Object.entries(FIELD_DESCRIPTIONS)
+    .map(([k, v]) => `  "${k}": ${v.split('—')[1]?.trim() ?? 'string or null'}`)
+    .join('\n')
+
+  const detectedCategoryPlaceholder = (lockedCategory && CATEGORY_FIELDS[lockedCategory]) ? lockedCategory : '<detected>'
+
+  const fillPrompt = `You are a smart family assistant for the Tabor family. You have access to Google Search — USE IT to find real venue, business, and parking information.
 
 ═══ FAMILY CONTEXT ═══
-Home: ${homeAddress ?? 'West Palm Beach, FL'}
-Family members (only these names are valid for attendees):
+Home: ${homeConfig ? [homeConfig.address, homeConfig.city, homeConfig.state, homeConfig.zip].filter(Boolean).join(', ') : 'West Palm Beach, FL'}
+Family members (ONLY these names are valid for attendees):
   ${familyRoster}
 
-═══ EVENT (Category: ${category}) ═══
+═══ EVENT ═══
 ${eventBlock}
 
 ═══ YOUR JOB ═══
-1. PRIMARY ATTENDEE (always required):
-   - Name before "|" or ":" in title → that person
-   - Home service/maintenance → "${defaultOwner}" (the homeowner)
-   - Child's school/activity → the child
-   - Unknown → default to "${defaultOwner}"
+${categoryInstruction}
 
-2. CONCISE DESCRIPTION: 3–6 words describing the event. No person name in it.
+STEP 2 — Fill ALL of these fields:
+• primary_attendee (REQUIRED): The ONE person this event is for.
+    Rules (in order): 1) Name before "|", ":", or "@" in title → use that name; 2) Home service/maintenance → "${defaultOwner}"; 3) Child's school/activity → the child; 4) Unknown → "${defaultOwner}"
+    Choose ONLY from: [${familyNamesList}]
+• concise_description (REQUIRED): 3–6 words describing event. NO person names. E.g. "Soccer Practice", "Dentist Checkup", "AC Service Call"
+• attendees: string[] — supporting people (drivers, chaperones). [] if none obvious. From: [${familyNamesList}]
+• location_name: venue/business name (search Google if needed)
+• address: real full street address (search Google, NOT home address)
+• confidence: "low" | "medium" | "high"
 
-3. SEARCH: Search Google for any business/venue and fill ALL fields with real data.
-
-Fields to fill for a "${category}" event:
-  ${fieldLines}
-
-Also always fill:
-  location_name — venue/business name (search if needed)
-  address — real street address (search if needed, NOT home address)
+Category-specific fields to fill (only those relevant to the detected/locked category):
+${allFieldDescriptions}
 
 Return ONLY this JSON object (no markdown, no prose):
 {
-  ${fieldJsonTemplate}
+  "category": "${detectedCategoryPlaceholder}",
+  "primary_attendee": "<name>",
+  "concise_description": "<3-6 words>",
+  "attendees": [],
+  "location_name": null,
+  "address": null,
+  "confidence": "medium"
+  ... (plus any category-specific fields from the list above)
 }`
 
-  const text = await callLLM(config, fillPrompt)
+  const text = await callLLM(config, fillPrompt, accum)
   const result = parseJSON(text)
 
-  // ── Pass 3: if AI didn't return concise_description, get it with a tiny dedicated call ──
-  if (!result.concise_description || typeof result.concise_description !== 'string' || !result.concise_description.trim()) {
-    const rawConciseTitle = (result.title as string | undefined)?.replace(/^[^|]+\|\s*/, '').trim()
-      || (event.title as string).split('|').slice(1).join('|').trim()
-    if (rawConciseTitle) {
-      // Clean it up with a tiny LLM call (no search needed)
-      const cleanPrompt = `Rewrite this event description in 3-6 professional words. Remove any trailing numbers or typos. No person names. Just the description.
-Event: "${rawConciseTitle}"
-Reply with ONLY the short description, nothing else.`
-      const conciseRaw = (await callLLM(config, cleanPrompt)).trim().replace(/^["']|["']$/g, '')
-      if (conciseRaw) result.concise_description = conciseRaw
-    }
-  }
+  // Ensure category is valid
+  const detectedCategory = (lockedCategory && CATEGORY_FIELDS[lockedCategory])
+    ? lockedCategory
+    : (CATEGORY_FIELDS[result.category as string] ? result.category as string : 'other')
+  result.category = detectedCategory
 
-  // Ensure category is set correctly from step 1
-  result.category = category
   return result
 }
 
@@ -407,7 +405,7 @@ function parseJSON(text: string): Record<string, unknown> {
   }
 }
 
-async function callLLM(config: { provider: string; model: string; api_key: string }, prompt: string): Promise<string> {
+async function callLLM(config: { provider: string; model: string; api_key: string }, prompt: string, accum?: UsageAccum): Promise<string> {
   if (config.provider === 'gemini') {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.api_key}`, {
       method: 'POST',
@@ -419,6 +417,8 @@ async function callLLM(config: { provider: string; model: string; api_key: strin
       }),
     })
     const data = await res.json()
+    if (!res.ok) throw new Error(res.status === 429 ? `quota_exceeded: ${data?.error?.message ?? 'Gemini quota exceeded'}` : (data?.error?.message ?? `Gemini error ${res.status}`))
+    if (accum) { accum.inputTokens += data.usageMetadata?.promptTokenCount ?? 0; accum.outputTokens += data.usageMetadata?.candidatesTokenCount ?? 0 }
     // Search grounding splits response across multiple parts — join text parts only
     const parts = data.candidates?.[0]?.content?.parts ?? []
     return parts.map((p: { text?: string }) => p.text ?? '').join('')
@@ -430,6 +430,8 @@ async function callLLM(config: { provider: string; model: string; api_key: strin
       body: JSON.stringify({ model: config.model, messages: [{ role: 'user', content: prompt }], max_tokens: 1000, temperature: 0.3 }),
     })
     const data = await res.json()
+    if (!res.ok) throw new Error(res.status === 429 ? `quota_exceeded: ${data?.error?.message ?? 'OpenAI quota exceeded'}` : (data?.error?.message ?? `OpenAI error ${res.status}`))
+    if (accum) { accum.inputTokens += data.usage?.prompt_tokens ?? 0; accum.outputTokens += data.usage?.completion_tokens ?? 0 }
     return data.choices?.[0]?.message?.content ?? ''
   }
   if (config.provider === 'anthropic') {
@@ -439,6 +441,8 @@ async function callLLM(config: { provider: string; model: string; api_key: strin
       body: JSON.stringify({ model: config.model, max_tokens: 1000, messages: [{ role: 'user', content: prompt }] }),
     })
     const data = await res.json()
+    if (!res.ok) throw new Error(res.status === 429 ? `quota_exceeded: ${data?.error?.message ?? 'Anthropic quota exceeded'}` : (data?.error?.message ?? `Anthropic error ${res.status}`))
+    if (accum) { accum.inputTokens += data.usage?.input_tokens ?? 0; accum.outputTokens += data.usage?.output_tokens ?? 0 }
     return data.content?.[0]?.text ?? ''
   }
   return ''
@@ -462,6 +466,7 @@ async function generateLogistics(
   homeAddress: string,
   attendees: { name: string; role: string }[],
   allFamily: { name: string; role: string }[],
+  accum?: UsageAccum,
 ): Promise<LogisticsStep[]> {
   const startTime = new Date(event.start_time)
   const endTime = new Date(event.end_time)
@@ -507,7 +512,7 @@ Return ONLY a JSON array (no markdown, no prose):
   }
 ]`
 
-  const raw = await callLLMNoSearch(config, prompt)
+  const raw = await callLLMNoSearch(config, prompt, accum)
 
   // Parse array
   try {
@@ -523,7 +528,7 @@ Return ONLY a JSON array (no markdown, no prose):
 }
 
 // Separate LLM caller without Google Search tool (for structured JSON that must not have grounding prose)
-async function callLLMNoSearch(config: { provider: string; model: string; api_key: string }, prompt: string): Promise<string> {
+async function callLLMNoSearch(config: { provider: string; model: string; api_key: string }, prompt: string, accum?: UsageAccum): Promise<string> {
   if (config.provider === 'gemini') {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.api_key}`, {
       method: 'POST',
@@ -538,6 +543,8 @@ async function callLLMNoSearch(config: { provider: string; model: string; api_ke
       }),
     })
     const data = await res.json()
+    if (!res.ok) throw new Error(res.status === 429 ? `quota_exceeded: ${data?.error?.message ?? 'Gemini quota exceeded'}` : (data?.error?.message ?? `Gemini error ${res.status}`))
+    if (accum) { accum.inputTokens += data.usageMetadata?.promptTokenCount ?? 0; accum.outputTokens += data.usageMetadata?.candidatesTokenCount ?? 0 }
     const parts = (data.candidates?.[0]?.content?.parts ?? []) as { text?: string; thought?: boolean }[]
     return parts.filter(p => !p.thought).map(p => p.text ?? '').join('')
   }
@@ -548,6 +555,8 @@ async function callLLMNoSearch(config: { provider: string; model: string; api_ke
       body: JSON.stringify({ model: config.model, messages: [{ role: 'user', content: prompt }], max_tokens: 1024, temperature: 0.2 }),
     })
     const data = await res.json()
+    if (!res.ok) throw new Error(res.status === 429 ? `quota_exceeded: ${data?.error?.message ?? 'OpenAI quota exceeded'}` : (data?.error?.message ?? `OpenAI error ${res.status}`))
+    if (accum) { accum.inputTokens += data.usage?.prompt_tokens ?? 0; accum.outputTokens += data.usage?.completion_tokens ?? 0 }
     return data.choices?.[0]?.message?.content ?? ''
   }
   if (config.provider === 'anthropic') {
@@ -557,6 +566,8 @@ async function callLLMNoSearch(config: { provider: string; model: string; api_ke
       body: JSON.stringify({ model: config.model, max_tokens: 1024, messages: [{ role: 'user', content: prompt }] }),
     })
     const data = await res.json()
+    if (!res.ok) throw new Error(res.status === 429 ? `quota_exceeded: ${data?.error?.message ?? 'Anthropic quota exceeded'}` : (data?.error?.message ?? `Anthropic error ${res.status}`))
+    if (accum) { accum.inputTokens += data.usage?.input_tokens ?? 0; accum.outputTokens += data.usage?.output_tokens ?? 0 }
     return data.content?.[0]?.text ?? ''
   }
   return ''

@@ -30,6 +30,7 @@ export interface CalendarEvent {
   start_time: string
   end_time: string
   all_day: boolean
+  event_type: 'event' | 'reminder'
   location_name: string | null
   address: string | null
   lat: number | null
@@ -39,6 +40,8 @@ export interface CalendarEvent {
   source_member_id: string | null
   status: EventStatus
   is_enriched: boolean
+  rrule: string | null
+  recurrence_master_id: string | null
   created_at: string
   updated_at: string
   // Joined

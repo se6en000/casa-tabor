@@ -14,6 +14,8 @@ import GmailScanPage from '../../pages/GmailScanPage'
 import TabletPrototypePage from '../../pages/TabletPrototypePage'
 import TripDetailPage from '../../pages/TripDetailPage'
 import ThemeSettingsPage from '../../pages/ThemeSettingsPage'
+import ProfileSettingsPage from '../../pages/ProfileSettingsPage'
+import StatusDashboardPage from '../../pages/StatusDashboardPage'
 import PageTransition from './PageTransition'
 
 export default function AnimatedRoutes() {
@@ -35,6 +37,8 @@ export default function AnimatedRoutes() {
         <Route path="/prototype" element={<TabletPrototypePage />} />
         <Route path="/trips/:id" element={<PageTransition><TripDetailPage /></PageTransition>} />
         <Route path="/settings/theme" element={<PageTransition><ThemeSettingsPage /></PageTransition>} />
+        <Route path="/settings/profile" element={<PageTransition><ProfileSettingsPage /></PageTransition>} />
+        <Route path="/settings/status" element={<PageTransition><StatusDashboardPage /></PageTransition>} />
       </Routes>
     </AnimatePresence>
   )

@@ -6,6 +6,7 @@ import TabletSidebar from './components/layout/TabletSidebar'
 import { useRoomTone } from './hooks/useRoomTone'
 import { useTravelScan } from './hooks/useTravelScan'
 import { ThemeProvider } from './contexts/ThemeContext'
+import { TopBarC } from './components/shared/TopBar'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,14 +20,19 @@ const queryClient = new QueryClient({
 function AppShell() {
   useRoomTone()
   useTravelScan()
+
   return (
-    // Mobile: single column with bottom nav padding
-    // Tablet (lg+): side-by-side with persistent sidebar, no bottom padding
-    <div className="flex min-h-screen bg-casa-bg">
-      <TabletSidebar />
-      <div className="flex-1 min-w-0 pb-[--spacing-nav-height] lg:pb-0">
-        <AnimatedRoutes />
+    <div className="flex flex-col h-screen overflow-hidden bg-casa-bg">
+      {/* Full-width top bar — sticky, never scrolls */}
+      <TopBarC />
+
+      <div className="flex flex-1 min-h-0 pb-[--spacing-nav-height] lg:pb-0">
+        <TabletSidebar />
+        <div className="flex-1 min-w-0 overflow-hidden h-full">
+          <AnimatedRoutes />
+        </div>
       </div>
+
       {/* Bottom nav only visible on mobile */}
       <NavBar />
     </div>
@@ -44,4 +50,3 @@ export default function App() {
     </ThemeProvider>
   )
 }
-

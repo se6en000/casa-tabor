@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { format, startOfWeek, addDays, isToday, isSameDay } from 'date-fns'
+import { useState, useCallback, useRef } from 'react'
+import { format, addDays, isToday, isSameDay, startOfDay } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   MapPin, Clock, DollarSign, Phone, AlertTriangle,
@@ -7,11 +7,17 @@ import {
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useCalendarStore } from '../../stores/calendarStore'
-import { useWeekEvents } from '../../hooks/useCalendarEvents'
+import { useRollingEvents } from '../../hooks/useCalendarEvents'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { CATEGORY_LABEL } from './categoryFields'
 import EventDetailPanel from './EventDetailPanel'
 import EventEditSheet from './EventEditSheet'
+import { isReminder, isAllDayReminder, isTimedReminder } from '../../utils/holidays'
+import SwipeableReminderPill from '../shared/SwipeableReminderPill'
+import EventContextMenu from '../shared/EventContextMenu'
+import { WeatherIcon } from '../shared/WeatherIcon'
+import { supabase } from '../../lib/supabase'
+import { useQueryClient } from '@tanstack/react-query'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -33,103 +39,148 @@ function getSnippet(event: EventWithDetails): { icon: React.ReactNode; text: str
 }
 
 export default function StackedView() {
-  const { selectedDate, visibleMembers } = useCalendarStore()
-  const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 })
-  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
-  const { data: allEvents } = useWeekEvents(selectedDate)
+  const { visibleMembers } = useCalendarStore()
+  const today = startOfDay(new Date())
+  // 8 days: today → today+7
+  const days  = Array.from({ length: 8 }, (_, i) => addDays(today, i))
+  const row1  = days.slice(0, 4)
+  const row2  = days.slice(4, 8)
+
+  const { data: allEvents } = useRollingEvents(today)
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
-  const [editEventId, setEditEventId] = useState<string | null>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const [editEventId,     setEditEventId]     = useState<string | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ event: EventWithDetails; x: number; y: number } | null>(null)
 
   const events = (allEvents ?? []).filter(e =>
-    visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
+    isReminder(e) || visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
   )
 
   const selectedEvent = selectedEventId ? (events.find(e => e.id === selectedEventId) ?? null) : null
-  const editEvent = editEventId ? (events.find(e => e.id === editEventId) ?? null) : null
+  const editEvent     = editEventId     ? (events.find(e => e.id === editEventId)     ?? null) : null
 
-  // Group events by day
-  const byDay = days.map(day => ({
-    day,
-    events: events
-      .filter(e => isSameDay(new Date(e.start_time), day))
-      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
-  }))
+  const qc = useQueryClient()
 
-  const hasAnyEvents = byDay.some(d => d.events.length > 0)
+  const completeReminder = useCallback(async (id: string) => {
+    await supabase.from('events').update({ status: 'cancelled' }).eq('id', id)
+    qc.invalidateQueries({ queryKey: ['events'] })
+  }, [qc])
 
-  // Scroll to today's section when the view mounts or events load
-  useEffect(() => {
-    const todayEl = scrollRef.current?.querySelector('#stacked-today')
-    if (todayEl) {
-      todayEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  }, [allEvents])
+  const dismissReminder = useCallback(async (id: string) => {
+    await supabase.from('events').update({ status: 'cancelled' }).eq('id', id)
+    qc.invalidateQueries({ queryKey: ['events'] })
+  }, [qc])
+
+  const deleteEvent = useCallback(async (ev: EventWithDetails) => {
+    if (!confirm(`Delete "${ev.title}"?`)) return
+    await supabase.from('events').delete().eq('id', ev.id)
+    qc.invalidateQueries({ queryKey: ['events'] })
+  }, [qc])
 
   return (
     <div
-      ref={scrollRef}
-      className="h-full overflow-y-auto px-4 py-4 space-y-6"
+      className="h-full overflow-y-auto px-3 py-4 space-y-4"
       onClick={() => setSelectedEventId(null)}
     >
-      {!hasAnyEvents && (
-        <div className="flex flex-col items-center justify-center h-48 text-casa-muted gap-2">
-          <p className="text-body font-semibold">No events this week</p>
-          <p className="text-caption">Events from Google Calendar will appear here once synced.</p>
-        </div>
-      )}
+      {[row1, row2].map((rowDays, rowIdx) => (
+        <div key={rowIdx} className="grid grid-cols-4 gap-2 min-h-[160px]">
+          {rowDays.map(day => {
+            const dayEvents = events
+              .filter(e => isSameDay(new Date(e.start_time), day))
+              .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
 
-      {byDay.map(({ day, events: dayEvents }) => {
-        if (dayEvents.length === 0) return null
-        const today = isToday(day)
+            const dayAllDay = dayEvents.filter(isAllDayReminder)
+            const dayTimed  = dayEvents.filter(isTimedReminder)
+            const dayNormal = dayEvents.filter(e => !isReminder(e))
+            const today_ = isToday(day)
 
-        return (
-          <section key={format(day, 'yyyy-MM-dd')} id={today ? 'stacked-today' : undefined}>
-            {/* Day header */}
-            <div className="flex items-center gap-3 mb-3">
-              <div className={cn(
-                'flex flex-col items-center justify-center w-12 h-12 rounded-full shrink-0',
-                today ? 'bg-casa-gold text-white' : 'bg-casa-surface border border-casa-border text-casa-navy'
-              )}>
-                <span className="text-[10px] font-semibold uppercase tracking-wide leading-none">
-                  {format(day, 'EEE')}
-                </span>
-                <span className="font-display text-display-md leading-none mt-0.5">
-                  {format(day, 'd')}
-                </span>
+            return (
+              <div
+                key={format(day, 'yyyy-MM-dd')}
+                className="flex flex-col bg-casa-surface/40 rounded-xl border border-casa-border overflow-hidden"
+              >
+                {/* Day header — compact inline layout */}
+                <div className={cn(
+                  'flex items-center justify-center gap-1.5 py-1.5 border-b border-casa-divider shrink-0',
+                  today_ ? 'bg-casa-gold/20' : ''
+                )}>
+                  <span className={cn(
+                    'text-[11px] font-semibold uppercase tracking-wide',
+                    today_ ? 'text-casa-gold' : 'text-casa-muted'
+                  )}>
+                    {format(day, 'EEE')}
+                  </span>
+                  <span className={cn(
+                    'text-[15px] font-bold leading-none',
+                    today_ ? 'text-casa-gold' : 'text-casa-navy'
+                  )}>
+                    {format(day, 'd')}
+                  </span>
+                </div>
+
+                {/* Events */}
+                <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
+                  {/* All-day reminders */}
+                  {dayAllDay.map(r => (
+                    <SwipeableReminderPill
+                      key={r.id}
+                      id={r.id}
+                      title={r.title}
+                      members={r.members}
+                      onClick={() => setSelectedEventId(r.id)}
+                      onComplete={completeReminder}
+                      onDismiss={dismissReminder}
+                    />
+                  ))}
+
+                  {/* Timed reminders + events merged by time */}
+                  <AnimatePresence initial={false}>
+                    {[...dayNormal, ...dayTimed]
+                      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+                      .map(event => isTimedReminder(event) ? (
+                        <motion.div
+                          key={event.id}
+                          layout
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          transition={{ duration: 0.15 }}
+                        >
+                          <SwipeableReminderPill
+                            id={event.id}
+                            title={`${event.title} · ${format(new Date(event.start_time), 'h:mm a')}`}
+                            members={event.members}
+                            onClick={() => setSelectedEventId(event.id)}
+                            onComplete={completeReminder}
+                            onDismiss={dismissReminder}
+                          />
+                        </motion.div>
+                      ) : (
+                        <EventCard
+                          key={event.id}
+                          event={event}
+                          isSelected={selectedEventId === event.id}
+                          onClick={() => setSelectedEventId(event.id)}
+                          onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
+                          onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
+                        />
+                      ))
+                    }
+                  </AnimatePresence>
+
+                  {dayEvents.length === 0 && (
+                    <p className="text-[10px] text-casa-muted/50 text-center pt-2">—</p>
+                  )}
+                </div>
               </div>
-              <div className="h-px flex-1 bg-casa-divider" />
-              <span className="text-caption text-casa-muted shrink-0">
-                {dayEvents.length} event{dayEvents.length !== 1 ? 's' : ''}
-              </span>
-            </div>
-
-            {/* Event cards */}
-            <div className="space-y-3 pl-2">
-              <AnimatePresence initial={false}>
-                {dayEvents.map(event => (
-                  <EventCard
-                    key={event.id}
-                    event={event}
-                    isSelected={selectedEventId === event.id}
-                    onClick={() => setSelectedEventId(event.id)}
-                    onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
-                  />
-                ))}
-              </AnimatePresence>
-            </div>
-          </section>
-        )
-      })}
+            )
+          })}
+        </div>
+      ))}
 
       {/* Detail panel */}
-      <EventDetailPanel
-        event={selectedEvent}
-        onClose={() => setSelectedEventId(null)}
-      />
+      <EventDetailPanel event={selectedEvent} onClose={() => setSelectedEventId(null)} />
 
-      {/* Direct edit sheet (double-click) */}
       {editEvent && (
         <EventEditSheet
           event={editEvent}
@@ -137,6 +188,16 @@ export default function StackedView() {
           onClose={() => setEditEventId(null)}
         />
       )}
+
+      <EventContextMenu
+        event={contextMenu?.event ?? null}
+        x={contextMenu?.x ?? 0}
+        y={contextMenu?.y ?? 0}
+        onClose={() => setContextMenu(null)}
+        onEdit={ev => setEditEventId(ev.id)}
+        onDelete={deleteEvent}
+        onComplete={ev => completeReminder(ev.id)}
+      />
     </div>
   )
 }
@@ -148,9 +209,10 @@ interface EventCardProps {
   isSelected: boolean
   onClick: () => void
   onDoubleClick: () => void
+  onLongPress: (event: EventWithDetails, x: number, y: number) => void
 }
 
-function EventCard({ event, isSelected, onClick, onDoubleClick }: EventCardProps) {
+function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: EventCardProps) {
   const color = getPrimaryColor(event)
   const enr = event.enrichment
   const snippet = getSnippet(event)
@@ -164,6 +226,33 @@ function EventCard({ event, isSelected, onClick, onDoubleClick }: EventCardProps
   const start = new Date(event.start_time)
   const end = new Date(event.end_time)
 
+  // Long-press detection
+  const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lpOrigin = useRef<{ x: number; y: number } | null>(null)
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0]
+    lpOrigin.current = { x: t.clientX, y: t.clientY }
+    lpTimer.current = setTimeout(() => {
+      lpTimer.current = null
+      if (!lpOrigin.current) return
+      navigator.vibrate?.(30)
+      onLongPress(event, lpOrigin.current.x, lpOrigin.current.y)
+      lpOrigin.current = null
+    }, 500)
+  }
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!lpTimer.current || !lpOrigin.current) return
+    const t = e.touches[0]
+    if (Math.hypot(t.clientX - lpOrigin.current.x, t.clientY - lpOrigin.current.y) > 10) {
+      clearTimeout(lpTimer.current); lpTimer.current = null; lpOrigin.current = null
+    }
+  }
+  const handleTouchEnd = () => {
+    if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null }
+    lpOrigin.current = null
+  }
+
   return (
     <motion.div
       layout
@@ -173,93 +262,107 @@ function EventCard({ event, isSelected, onClick, onDoubleClick }: EventCardProps
       transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
       onClick={(e) => { e.stopPropagation(); onClick() }}
       onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick() }}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
       className={cn(
-        'relative rounded-xl border bg-casa-surface cursor-pointer',
+        'relative rounded-lg border bg-casa-surface cursor-pointer touch-pan-y',
         'hover:shadow-card-hover transition-all duration-200',
         isSelected ? 'border-casa-gold shadow-card' : 'border-casa-border'
       )}
     >
       {/* Left color bar */}
       <div
-        className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
+        className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg"
         style={{ backgroundColor: color }}
       />
 
-      <div className="pl-5 pr-4 py-4">
-        {/* Row 1: time + urgent indicator */}
-        <div className="flex items-start justify-between gap-2 mb-1.5">
-          <p className="text-caption font-semibold text-casa-muted tabular-nums">
-            {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
-          </p>
-          {urgentAction && (
-            <span className="flex items-center gap-1 text-caption text-amber-600 font-semibold shrink-0">
-              <AlertTriangle size={12} />
-              Action needed
-            </span>
-          )}
+      {/* ── Compact default view ── */}
+      <div className="pl-3 pr-2 py-1.5">
+        {/* Time + weather + urgent dot */}
+        <div className="flex items-center justify-between gap-1 mb-0.5">
+          <div className="flex items-center gap-1">
+            <p className="text-[11px] font-semibold text-casa-muted tabular-nums leading-none">
+              {format(start, 'h:mm')}–{format(end, 'h:mma')}
+            </p>
+            {event.location_name && (
+              <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
+            )}
+          </div>
+          {urgentAction && <AlertTriangle size={11} className="text-amber-500 shrink-0" />}
         </div>
 
-        {/* Row 2: Title */}
-        <h3 className="font-display text-heading text-casa-navy leading-tight mb-2">
-          {event.title}
-        </h3>
+        {/* Title — 1-line clamp, larger + bolder */}
+        {(() => {
+          const primary = event.members.find(m => m.role === 'primary')
+          const others = event.members.filter(m => m.role !== 'primary')
+          const pipeIdx = event.title.indexOf(' | ')
+          const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
+          return (
+            <>
+              <h3 className="text-[14px] font-bold text-casa-navy leading-snug line-clamp-1 mb-1">
+                {cleanTitle}
+              </h3>
+              {/* Member pills/dots */}
+              <div className="flex items-center gap-1 flex-wrap">
+                {primary && (
+                  <span
+                    className="px-1.5 py-0.5 rounded-full text-white text-[9px] font-bold leading-none whitespace-nowrap"
+                    style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
+                  >
+                    {primary.family_member?.name ?? '?'}
+                  </span>
+                )}
+                {others.slice(0, 3).map(m => (
+                  <span
+                    key={m.id}
+                    title={m.family_member?.name}
+                    className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-[9px] font-bold shrink-0"
+                    style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
+                  >
+                    {m.family_member?.name?.[0] ?? '?'}
+                  </span>
+                ))}
+              </div>
+            </>
+          )
+        })()}
+      </div>
 
-        {/* Row 3: Members — primary first, no role label */}
-        {event.members.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {[...event.members]
-              .sort((a, b) => (a.role === 'primary' ? -1 : b.role === 'primary' ? 1 : 0))
-              .map(m => (
-              <span
-                key={m.id}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-[11px] font-semibold"
-                style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
-              >
-                {m.family_member?.name}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Row 4: Location + Category */}
-        <div className="flex items-center flex-wrap gap-x-4 gap-y-1">
-          {event.location_name && (
-            <span className="flex items-center gap-1 text-caption text-casa-muted">
-              <MapPin size={12} className="text-casa-error shrink-0" />
-              <span className="truncate max-w-[200px]">{event.location_name}</span>
-            </span>
-          )}
-          {category && (
-            <span className="text-caption text-casa-muted px-2 py-0.5 bg-casa-bg rounded-full border border-casa-border">
-              {category}
-            </span>
-          )}
-        </div>
-
-        {/* Row 5: Snippet (most relevant enrichment detail) */}
-        {snippet && (
-          <div className="mt-2 flex items-center gap-1.5 text-caption text-casa-muted">
-            <span className="text-casa-gold">{snippet.icon}</span>
-            <span>{snippet.text}</span>
-          </div>
-        )}
-
-        {/* Row 6: Quick-action buttons (only when selected) */}
-        <AnimatePresence>
-          {isSelected && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.18 }}
-              className="overflow-hidden"
-            >
-              <div className="flex gap-2 mt-3 pt-3 border-t border-casa-divider">
+      {/* ── Expanded details (tap to reveal) ── */}
+      <AnimatePresence>
+        {isSelected && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden"
+          >
+            <div className="pl-3 pr-2 pb-2 space-y-1.5 border-t border-casa-divider pt-2">
+              {event.location_name && (
+                <span className="flex items-center gap-1 text-[10px] text-casa-muted">
+                  <MapPin size={10} className="text-casa-error shrink-0" />
+                  <span className="truncate">{event.location_name}</span>
+                </span>
+              )}
+              {category && (
+                <span className="text-[10px] text-casa-muted px-1.5 py-0.5 bg-casa-bg rounded-full border border-casa-border">
+                  {category}
+                </span>
+              )}
+              {snippet && (
+                <div className="flex items-center gap-1 text-[10px] text-casa-muted">
+                  <span className="text-casa-gold">{snippet.icon}</span>
+                  <span className="line-clamp-2">{snippet.text}</span>
+                </div>
+              )}
+              <div className="flex gap-1.5 pt-1">
                 <button
-                  onClick={(e) => { e.stopPropagation(); onClick() }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-button border border-casa-border text-caption font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
+                  onClick={(e) => { e.stopPropagation(); onDoubleClick() }}
+                  className="flex items-center gap-1 px-2 py-1 rounded border border-casa-border text-[10px] font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
                 >
-                  <Pencil size={13} />
+                  <Pencil size={10} />
                   Edit
                 </button>
                 {mapsUrl && (
@@ -268,21 +371,21 @@ function EventCard({ event, isSelected, onClick, onDoubleClick }: EventCardProps
                     target="_blank"
                     rel="noreferrer"
                     onClick={e => e.stopPropagation()}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-button border border-casa-border text-caption font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
+                    className="flex items-center gap-1 px-2 py-1 rounded border border-casa-border text-[10px] font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
                   >
-                    <Navigation size={13} />
+                    <Navigation size={10} />
                     Directions
                   </a>
                 )}
-                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-button bg-casa-gold text-white text-caption font-semibold hover:brightness-110 transition-all ml-auto">
-                  <Share2 size={13} />
+                <button className="flex items-center gap-1 px-2 py-1 rounded bg-casa-gold text-white text-[10px] font-semibold hover:brightness-110 transition-all ml-auto">
+                  <Share2 size={10} />
                   Share
                 </button>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

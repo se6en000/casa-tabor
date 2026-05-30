@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { format, isSameDay, parseISO } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Clock, MapPin, Users, ChevronRight, Navigation,
-  Calendar, AlertTriangle, ClipboardList,
+  Clock, MapPin, ChevronRight, Navigation,
+  Calendar, AlertTriangle, ClipboardList, Bell,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useCalendarStore } from '../../stores/calendarStore'
@@ -13,7 +13,12 @@ import { usePrepItems, useDismissPrepItem, useSnoozePrepItem } from '../../hooks
 import { useWeekConflicts, useResolveConflict } from '../../hooks/useConflicts'
 import EventDetailPanel from './EventDetailPanel'
 import EventEditSheet from './EventEditSheet'
+import EventContextMenu from '../shared/EventContextMenu'
+import { WeatherIcon } from '../shared/WeatherIcon'
 import { differenceInDays } from 'date-fns'
+import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, isAllDayReminder, isTimedReminder, REMINDER_COLOR } from '../../utils/holidays'
+import { supabase } from '../../lib/supabase'
+import { useQueryClient } from '@tanstack/react-query'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -34,21 +39,121 @@ function DayEventCard({
   selected,
   onSelect,
   onEdit,
+  onLongPress,
 }: {
   event: EventWithDetails
   selected: boolean
   onSelect: () => void
   onEdit: () => void
+  onLongPress: (event: EventWithDetails, x: number, y: number) => void
 }) {
-  const color = getPrimaryColor(event)
+  const holiday = isHoliday(event)
+  const reminder = !holiday && isReminder(event)
+  const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(event)
   const enr = event.enrichment
-  const isAllDay = !event.start_time.includes('T') ||
-    (event.start_time.endsWith('00:00:00+00:00') && event.end_time?.endsWith('23:59:59+00:00'))
+  const d = new Date(event.start_time)
+  const isAllDay = holiday || isAllDayReminder(event) || !event.start_time.includes('T') ||
+    (d.getHours() === 0 && d.getMinutes() === 0 && event.end_time && (() => { const e = new Date(event.end_time!); return e.getHours() === 23 && e.getMinutes() === 59 })())
 
-  const memberNames = event.members
-    .map(m => m.family_member?.name ?? '')
-    .filter(Boolean)
-    .join(', ')
+  const primary = event.members.find(m => m.role === 'primary')
+  const otherMembers = event.members.filter(m => m.role !== 'primary')
+  const pipeIdx = event.title.indexOf(' | ')
+  const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
+
+  // Long-press detection
+  const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lpOrigin = useRef<{ x: number; y: number } | null>(null)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0]
+    lpOrigin.current = { x: t.clientX, y: t.clientY }
+    lpTimer.current = setTimeout(() => {
+      lpTimer.current = null
+      if (!lpOrigin.current) return
+      navigator.vibrate?.(30)
+      onLongPress(event, lpOrigin.current.x, lpOrigin.current.y)
+      lpOrigin.current = null
+    }, 500)
+  }
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!lpTimer.current || !lpOrigin.current) return
+    const t = e.touches[0]
+    if (Math.hypot(t.clientX - lpOrigin.current.x, t.clientY - lpOrigin.current.y) > 10) {
+      clearTimeout(lpTimer.current); lpTimer.current = null; lpOrigin.current = null
+    }
+  }
+  const handleTouchEnd = () => {
+    if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null }
+    lpOrigin.current = null
+  }
+
+  if (holiday) {
+    return (
+      <motion.div
+        layout
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -4 }}
+        transition={{ duration: 0.18 }}
+        className="flex items-center gap-3 px-4 py-2.5 rounded-card border border-red-200 bg-red-50 text-red-800"
+        style={{ borderLeftColor: HOLIDAY_COLOR, borderLeftWidth: 4 }}
+      >
+        <span className="text-lg leading-none">{holidayLabel(event.title).split(' ')[0]}</span>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-body-sm text-red-800 leading-snug">{event.title}</p>
+          <p className="text-[10px] font-semibold text-red-400 uppercase tracking-wide mt-0.5">Federal Holiday</p>
+        </div>
+        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600 shrink-0">
+          All day
+        </span>
+      </motion.div>
+    )
+  }
+
+  if (reminder) {
+    const timed = isTimedReminder(event)
+    if (timed) {
+      // Slim pill for timed reminders in the timeline
+      return (
+        <motion.div
+          layout
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.18 }}
+          onClick={e => { e.stopPropagation(); onSelect() }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer hover:opacity-80 transition-opacity"
+          style={{ border: '1.5px solid #C4893A', backgroundColor: '#FDFAF4' }}
+        >
+          <Bell size={13} style={{ color: '#C4893A' }} className="shrink-0" />
+          <span className="text-[11px] font-semibold" style={{ color: '#7A5520' }}>{event.title}</span>
+          <span className="text-[10px] ml-1" style={{ color: '#C4893A' }}>
+            {format(new Date(event.start_time), 'h:mm a')}
+          </span>
+        </motion.div>
+      )
+    }
+    return (
+      <motion.div
+        layout
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -4 }}
+        transition={{ duration: 0.18 }}
+        onClick={e => { e.stopPropagation(); onSelect() }}
+        className="flex items-center gap-3 px-4 py-2.5 rounded-card border border-amber-200 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors"
+        style={{ borderLeftColor: REMINDER_COLOR, borderLeftWidth: 4 }}
+      >
+        <Bell size={18} className="text-casa-gold shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-body-sm text-amber-800 leading-snug">{cleanTitle}</p>
+          {primary && <p className="text-[10px] text-amber-600 mt-0.5">{primary.family_member?.name}</p>}
+        </div>
+        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 shrink-0">
+          Reminder
+        </span>
+      </motion.div>
+    )
+  }
 
   return (
     <motion.div
@@ -58,8 +163,11 @@ function DayEventCard({
       exit={{ opacity: 0, y: -4 }}
       transition={{ duration: 0.18 }}
       onClick={e => { e.stopPropagation(); onSelect() }}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
       className={cn(
-        'group relative flex gap-3 px-4 py-3.5 rounded-card border cursor-pointer transition-all',
+        'group relative flex gap-3 px-4 py-3.5 rounded-card border cursor-pointer transition-all touch-pan-y',
         'bg-casa-surface border-casa-border hover:shadow-card',
         selected && 'shadow-card-hover border-l-4',
       )}
@@ -71,11 +179,14 @@ function DayEventCard({
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <p className="font-semibold text-body-sm text-casa-navy leading-snug">{event.title}</p>
+          <p className="font-semibold text-body-sm text-casa-navy leading-snug">{cleanTitle}</p>
           {!isAllDay && (
-            <span className="text-caption text-casa-muted shrink-0 tabular-nums">
+            <span className="flex items-center gap-1 text-caption text-casa-muted shrink-0 tabular-nums">
               {formatTime(event.start_time)}
               {event.end_time ? ` – ${formatTime(event.end_time)}` : ''}
+              {event.location_name && (
+                <WeatherIcon condition={enr?.weather_at_event} size={12} />
+              )}
             </span>
           )}
           {isAllDay && (
@@ -85,13 +196,27 @@ function DayEventCard({
           )}
         </div>
 
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-          {memberNames && (
-            <span className="flex items-center gap-1 text-caption text-casa-muted">
-              <Users size={11} />
-              {memberNames}
+        <div className="flex flex-wrap gap-x-2 gap-y-1 mt-1 items-center">
+          {/* Owner as full pill */}
+          {primary && (
+            <span
+              className="px-2 py-0.5 rounded-full text-white text-[10px] font-bold leading-none whitespace-nowrap"
+              style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
+            >
+              {primary.family_member?.name}
             </span>
           )}
+          {/* Other attendees as initials */}
+          {otherMembers.slice(0, 3).map(m => (
+            <span
+              key={m.id}
+              className="w-4 h-4 rounded-full text-white text-[9px] font-bold flex items-center justify-center shrink-0"
+              style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
+              title={m.family_member?.name}
+            >
+              {m.family_member?.name?.[0] ?? '?'}
+            </span>
+          ))}
           {event.location_name && (
             <span className="flex items-center gap-1 text-caption text-casa-muted">
               <MapPin size={11} />
@@ -270,12 +395,14 @@ export default function DayView() {
 
   // Use the week that contains the selected date to get events
   const { data: weekEvents } = useWeekEvents(selectedDate)
+  const qc = useQueryClient()
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [editEventId, setEditEventId] = useState<string | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ event: EventWithDetails; x: number; y: number } | null>(null)
 
   const allEvents = (weekEvents ?? []).filter(e =>
-    visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
+    isHoliday(e) || isReminder(e) || visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
   )
 
   // Events for the currently selected day
@@ -283,12 +410,10 @@ export default function DayView() {
     .filter(e => {
       const start = parseISO(e.start_time)
       const end = e.end_time ? parseISO(e.end_time) : start
-      // Include if event starts on this day OR spans this day
       return isSameDay(start, selectedDate) ||
         (start <= selectedDate && end >= selectedDate)
     })
     .sort((a, b) => {
-      // All-day events first, then by time
       const aAllDay = a.start_time.endsWith('00:00:00+00:00')
       const bAllDay = b.start_time.endsWith('00:00:00+00:00')
       if (aAllDay && !bAllDay) return -1
@@ -298,6 +423,17 @@ export default function DayView() {
 
   const selectedEvent = selectedEventId ? (dayEvents.find(e => e.id === selectedEventId) ?? null) : null
   const editEvent = editEventId ? (allEvents.find(e => e.id === editEventId) ?? null) : null
+
+  const deleteEvent = useCallback(async (ev: EventWithDetails) => {
+    if (!confirm(`Delete "${ev.title}"?`)) return
+    await supabase.from('events').delete().eq('id', ev.id)
+    qc.invalidateQueries({ queryKey: ['events'] })
+  }, [qc])
+
+  const completeEvent = useCallback(async (ev: EventWithDetails) => {
+    await supabase.from('events').update({ status: 'cancelled' }).eq('id', ev.id)
+    qc.invalidateQueries({ queryKey: ['events'] })
+  }, [qc])
 
   return (
     <div className="flex h-full overflow-hidden" onClick={() => setSelectedEventId(null)}>
@@ -328,6 +464,7 @@ export default function DayView() {
                     selected={selectedEventId === event.id}
                     onSelect={() => setSelectedEventId(prev => prev === event.id ? null : event.id)}
                     onEdit={() => setEditEventId(event.id)}
+                    onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
                   />
                 ))}
               </div>
@@ -368,6 +505,17 @@ export default function DayView() {
           />
         )}
       </AnimatePresence>
+
+      {/* Long-press context menu */}
+      <EventContextMenu
+        event={contextMenu?.event ?? null}
+        x={contextMenu?.x ?? 0}
+        y={contextMenu?.y ?? 0}
+        onClose={() => setContextMenu(null)}
+        onEdit={ev => { setContextMenu(null); setEditEventId(ev.id) }}
+        onDelete={deleteEvent}
+        onComplete={completeEvent}
+      />
     </div>
   )
 }

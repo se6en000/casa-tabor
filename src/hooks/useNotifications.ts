@@ -27,7 +27,8 @@ export function useNotifications() {
       if (error) throw error
       return data as Notification[]
     },
-    refetchInterval: 15_000, // poll every 15s — avoids realtime StrictMode issues
+    refetchInterval: 60_000, // poll every 60s — avoids realtime StrictMode issues
+    staleTime: 30_000,
   })
 
   const unreadCount = notifications.filter(n => !n.read).length
@@ -48,7 +49,7 @@ export function useNotifications() {
 
   const clearAll = useMutation({
     mutationFn: async () => {
-      await supabase.from('notifications').delete().eq('read', true)
+      await supabase.from('notifications').delete().gte('created_at', '2000-01-01')
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
   })

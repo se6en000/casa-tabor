@@ -39,7 +39,10 @@ export default function BriefingPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const today = new Date().toISOString().slice(0, 10)
+  const today = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD in local timezone
+  // Compute local-day UTC boundaries (same logic as useTodayEvents)
+  const _dayStart = new Date(); _dayStart.setHours(0, 0, 0, 0)
+  const _dayEnd   = new Date(); _dayEnd.setHours(23, 59, 59, 999)
   const now = useLiveClock(60_000)
   const { data: todayEvents } = useTodayEvents(now)
   const { data: family } = useFamilyMembers()
@@ -70,7 +73,13 @@ export default function BriefingPage() {
     setIsGenerating(true)
     setError(null)
     try {
-      const { data, error: fnErr } = await supabase.functions.invoke('generate-briefing')
+      const { data, error: fnErr } = await supabase.functions.invoke('generate-briefing', {
+        body: {
+          localDate:   today,
+          dayStartUtc: _dayStart.toISOString(),
+          dayEndUtc:   _dayEnd.toISOString(),
+        },
+      })
       console.log('[Briefing] invoke result:', { data, error: fnErr })
       if (fnErr) {
         // FunctionInvokeError sometimes has context.message
@@ -94,6 +103,7 @@ export default function BriefingPage() {
   const emptyMembers = briefing ? Object.values(briefing.member_schedules).filter(m => m.events.length === 0) : []
 
   return (
+    <div className="flex-1 overflow-y-auto">
     <div className="max-w-2xl mx-auto p-6 space-y-6">
       <div className="flex items-start justify-between">
         <div>
@@ -202,6 +212,7 @@ export default function BriefingPage() {
         family={family ?? []}
         homeCity={weather?.city}
       />
+    </div>
     </div>
   )
 }

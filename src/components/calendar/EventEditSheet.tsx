@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Save, Sparkles, Trash2, AlertTriangle,
-  CheckCircle, MapPin, ChevronDown, Users, Lock, Clock, Pencil, Check,
+  CheckCircle, MapPin, ChevronDown, Users, Lock, Clock, Pencil, Check, Repeat,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
@@ -19,6 +19,76 @@ const ALL_CATEGORIES = Object.keys(CATEGORY_LABEL) as string[]
 
 type EnrichStatus = 'idle' | 'loading' | 'success' | 'error'
 
+/** Expand an RRULE into occurrence {start,end} pairs, excluding the master (first) occurrence. */
+function expandRrule(masterStart: string, masterEnd: string, rrule: string): Array<{ start: string; end: string }> {
+  const get = (key: string) => rrule.match(new RegExp(`${key}=([^;]+)`))?.[1] ?? ''
+  const freq = get('FREQ')
+  const interval = Math.max(1, parseInt(get('INTERVAL') || '1', 10))
+  const byDayNames: Record<string, number> = { SU:0, MO:1, TU:2, WE:3, TH:4, FR:5, SA:6 }
+  const byDay = get('BYDAY').split(',').filter(Boolean).map(d => byDayNames[d]).filter(d => d !== undefined) as number[]
+  const untilRaw = get('UNTIL')
+  const countStr = get('COUNT')
+  const until = untilRaw
+    ? new Date(`${untilRaw.slice(0,4)}-${untilRaw.slice(4,6)}-${untilRaw.slice(6,8)}T23:59:59Z`)
+    : null
+  const maxCount = countStr ? parseInt(countStr, 10) : 500
+
+  const origin = new Date(masterStart)
+  const duration = new Date(masterEnd).getTime() - origin.getTime()
+  const results: Array<{ start: string; end: string }> = []
+
+  // Generate all candidate dates, collect all that are > origin (or same date but excluded)
+  // Hard cap: never generate more than 500 instances
+  const addOcc = (d: Date) => {
+    if (results.length >= Math.min(maxCount - 1, 499)) return false
+    if (until && d > until) return false
+    if (d.toDateString() === origin.toDateString()) return true // skip master
+    const s = new Date(d); s.setHours(origin.getHours(), origin.getMinutes(), origin.getSeconds(), 0)
+    results.push({ start: s.toISOString(), end: new Date(s.getTime() + duration).toISOString() })
+    return true
+  }
+
+  if (freq === 'DAILY') {
+    const cur = new Date(origin); cur.setDate(cur.getDate() + interval)
+    while ((until ? cur <= until : results.length < maxCount - 1) && results.length < 499) {
+      if (!addOcc(cur)) break
+      cur.setDate(cur.getDate() + interval)
+    }
+  } else if (freq === 'WEEKLY') {
+    const effectiveByDay = byDay.length > 0 ? byDay : [origin.getDay()]
+    // Start from the Sunday of the origin week and walk forward week-by-week
+    const weekSun = new Date(origin); weekSun.setDate(origin.getDate() - origin.getDay())
+    let weekOffset = 0
+    const maxWeeks = 260 // 5 years safety
+    outer: while (weekOffset < maxWeeks) {
+      const ws = new Date(weekSun); ws.setDate(weekSun.getDate() + weekOffset * 7 * interval)
+      const sorted = [...effectiveByDay].sort((a, b) => a - b)
+      for (const d of sorted) {
+        const day = new Date(ws); day.setDate(ws.getDate() + d)
+        if (day < origin) continue // before master
+        if (until && day > until) break outer
+        if (results.length >= Math.min(maxCount - 1, 499)) break outer
+        addOcc(day)
+      }
+      weekOffset++
+    }
+  } else if (freq === 'MONTHLY') {
+    const cur = new Date(origin); cur.setMonth(cur.getMonth() + interval)
+    while ((until ? cur <= until : results.length < maxCount - 1) && results.length < 499) {
+      if (!addOcc(cur)) break
+      cur.setMonth(cur.getMonth() + interval)
+    }
+  } else if (freq === 'YEARLY') {
+    const cur = new Date(origin); cur.setFullYear(cur.getFullYear() + interval)
+    while ((until ? cur <= until : results.length < maxCount - 1) && results.length < 499) {
+      if (!addOcc(cur)) break
+      cur.setFullYear(cur.getFullYear() + interval)
+    }
+  }
+
+  return results
+}
+
 interface Props {
   event: EventWithDetails
   open: boolean
@@ -32,9 +102,37 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   const qc = useQueryClient()
   const { data: allMembers = [] } = useFamilyMembers()
 
+  // Is this event a recurring instance (not the master)?
+  const isInstance = !!event.recurrence_master_id
+  const [masterData, setMasterData] = useState<{ rrule: string | null; enrichment: typeof enr } | null>(null)
+
+  // Fetch master's rrule + enrichment for instances
+  useEffect(() => {
+    if (!open || !isInstance || !event.recurrence_master_id) { setMasterData(null); return }
+    supabase.from('events').select('rrule, event_enrichments(*)').eq('id', event.recurrence_master_id).single()
+      .then(({ data }) => {
+        if (data) setMasterData({
+          rrule: (data as any).rrule ?? null,
+          enrichment: Array.isArray((data as any).event_enrichments)
+            ? (data as any).event_enrichments[0] ?? null
+            : (data as any).event_enrichments ?? null,
+        })
+      })
+  }, [open, event.id, event.recurrence_master_id, isInstance])
+
+  // Recurring edit scope modal
+  type RecurScope = 'this' | 'future' | 'all'
+  const [showScopeModal, setShowScopeModal] = useState(false)
+  const [_pendingSave, setPendingSave] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'saving' | 'slow'>('saving')
+
+  // The enrichment to use: for instances, prefer master enrichment for rrule/category
+  const effectiveEnr = isInstance ? (masterData?.enrichment ?? enr) : enr
+
   // Local state — category can differ from AI-detected one
-  const [category, setCategory] = useState(enr?.category ?? 'other')
-  const [categoryLocked, setCategoryLocked] = useState(false) // true when user manually picks
+  const [category, setCategory] = useState(effectiveEnr?.category ?? 'other')
+  const [categoryLocked, setCategoryLocked] = useState(false)
   const [form, setForm] = useState<Record<string, string>>({})
   const [location, setLocation] = useState('')
   const [address, setAddress] = useState('')
@@ -45,6 +143,53 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   const [enrichMessage, setEnrichMessage] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [eventType, setEventType] = useState<'event' | 'reminder'>(event.event_type ?? 'event')
+
+  // All-day toggle
+  const [isAllDay, setIsAllDay] = useState(event.all_day ?? false)
+
+  // Recurrence state
+  type RFreq = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
+  const parseRrule = (rrule: string | null): { freq: RFreq; interval: number; byDay: number[]; endType: 'never' | 'date' | 'count'; endDate: string; count: number } => {
+    if (!rrule) return { freq: 'none', interval: 1, byDay: [], endType: 'never', endDate: '', count: 1 }
+    const get = (key: string) => rrule.match(new RegExp(`${key}=([^;]+)`))?.[1] ?? ''
+    const freqMap: Record<string, RFreq> = { DAILY: 'daily', WEEKLY: 'weekly', MONTHLY: 'monthly', YEARLY: 'yearly' }
+    const freq = freqMap[get('FREQ')] ?? 'none'
+    const interval = parseInt(get('INTERVAL') || '1', 10)
+    const byDayMap: Record<string, number> = { SU:0, MO:1, TU:2, WE:3, TH:4, FR:5, SA:6 }
+    const byDay = get('BYDAY').split(',').filter(Boolean).map(d => byDayMap[d] ?? -1).filter(d => d >= 0)
+    const until = get('UNTIL')
+    const countStr = get('COUNT')
+    const endType = countStr ? 'count' : until ? 'date' : 'never'
+    const endDate = until ? until.slice(0, 8).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3') : ''
+    const count = countStr ? parseInt(countStr, 10) : 1
+    return { freq, interval, byDay, endType, endDate, count }
+  }
+  // For instances, use the master's rrule (loaded async); fall back to event.rrule
+  const effectiveRrule = isInstance ? (masterData?.rrule ?? event.rrule ?? null) : (event.rrule ?? null)
+  const [recur, setRecur] = useState(() => parseRrule(effectiveRrule))
+
+  const buildRrule = (): string | null => {
+    if (recur.freq === 'none') return null
+    const dayNames = ['SU','MO','TU','WE','TH','FR','SA']
+    let r = `FREQ=${recur.freq.toUpperCase()}`
+    if (recur.interval > 1) r += `;INTERVAL=${recur.interval}`
+    if (recur.freq === 'weekly' && recur.byDay.length > 0) r += `;BYDAY=${recur.byDay.map(d => dayNames[d]).join(',')}`
+    if (recur.endType === 'date' && recur.endDate) r += `;UNTIL=${recur.endDate.replace(/-/g, '')}T000000Z`
+    if (recur.endType === 'count' && recur.count > 1) r += `;COUNT=${recur.count}`
+    return r
+  }
+
+  const switchToReminder = () => {
+    setEventType('reminder')
+    // Strip time → keep date at local midnight (all-day reminder)
+    const datePart = startDT.slice(0, 10)
+    if (datePart) {
+      setStartDT(`${datePart}T00:00`)
+      setEndDT(`${datePart}T00:00`)
+    }
+  }
+
   // memberRoles: id → 'primary' | 'attendee' | undefined (undefined = not tagged)
   const [memberRoles, setMemberRoles] = useState<Record<string, 'primary' | 'attendee'>>({})
 
@@ -69,10 +214,11 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     return out
   }
 
-  // Reset everything when sheet opens
+  // Reset everything when sheet opens or when masterData loads for instances
   useEffect(() => {
     if (!open) return
-    const cat = enr?.category ?? 'other'
+    const activeEnr = isInstance ? (masterData?.enrichment ?? enr) : enr
+    const cat = activeEnr?.category ?? 'other'
     setCategory(cat)
     setCategoryLocked(false)
     setLocation(event.location_name ?? '')
@@ -81,6 +227,10 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     setExtraContext('')
     setEnrichStatus('idle')
     setShowDeleteConfirm(false)
+    setEventType(event.event_type ?? 'event')
+    setIsAllDay(event.all_day ?? false)
+    const activeRrule = isInstance ? (masterData?.rrule ?? event.rrule ?? null) : (event.rrule ?? null)
+    setRecur(parseRrule(activeRrule))
     // Seed memberRoles from current event.members
     const roles: Record<string, 'primary' | 'attendee'> = {}
     for (const m of event.members ?? []) {
@@ -89,14 +239,14 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     setMemberRoles(roles)
     setStartDT(toLocalDT(event.start_time))
     setEndDT(toLocalDT(event.end_time))
-  }, [open, event.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, event.id, masterData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update form when category changes (keep existing values, populate missing)
   const handleCategoryChange = (cat: string) => {
     setCategory(cat)
     setCategoryLocked(true) // user manually picked — lock it
     const newFields = getFieldsForCategory(cat)
-    setForm(prev => buildForm({ ...enr, ...objectFromForm(prev, fields), category: cat } as typeof enr, newFields))
+    setForm(prev => buildForm({ ...effectiveEnr, ...objectFromForm(prev, fields), category: cat } as typeof enr, newFields))
   }
 
   function objectFromForm(f: Record<string, string>, flds: EnrichmentFieldKey[]) {
@@ -177,38 +327,199 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   }
 
   const handleSave = async () => {
+    // If this is a recurring instance, show scope modal before saving
+    if (isInstance && !showScopeModal) {
+      setShowScopeModal(true)
+      setPendingSave(true)
+      return
+    }
+    await doSave('all')
+  }
+
+  const handleScopeChoice = async (scope: RecurScope) => {
+    setShowScopeModal(false)
+    setPendingSave(false)
+    await doSave(scope)
+  }
+
+  const doSave = async (scope: RecurScope) => {
+    setIsSaving(true)
+    setSaveStatus('saving')
+
+    // Supabase free tier cold-starts can take 15-20s — allow 35s before giving up
+    const saveTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Save timed out. If this is your first action in a while, Supabase may be waking up — please try again in a moment.')), 35000)
+    )
+    // After 5s still saving, update status message to hint at cold start
+    const slowTimer = setTimeout(() => setSaveStatus('slow'), 5000)
+
+    try {
+      await Promise.race([doSaveInner(scope), saveTimeout])
+    } catch (err) {
+      console.error('[EventEditSheet] doSave error:', err)
+      alert((err as Error).message ?? 'Save failed. Please try again.')
+    } finally {
+      clearTimeout(slowTimer)
+      setIsSaving(false)
+      setSaveStatus('saving')
+    }
+  }
+
+  const doSaveInner = async (scope: RecurScope) => {
     // 1. Save enrichment fields (category + all form fields)
     const patch = objectFromForm(form, fields) as Record<string, unknown>
     patch.category = category
-    await save.mutateAsync({ eventId: event.id, fields: patch })
+
+    // Determine which event ID to apply enrichment to
+    const masterIdForEnrichment = isInstance ? (event.recurrence_master_id!) : event.id
+    const enrichmentEventId = scope === 'this' ? event.id : masterIdForEnrichment
+    // Fire-and-forget enrichment — never block the critical save path on this
+    save.mutateAsync({ eventId: enrichmentEventId, fields: patch }).catch(() => {})
 
     // 2. Always save event-level fields (title, location, address, times) unconditionally
-    await supabase.from('events').update({
-      title: displayTitle,
-      location_name: location.trim() || null,
-      address: address.trim() || null,
-      start_time: new Date(startDT).toISOString(),
-      end_time: new Date(endDT).toISOString(),
-      updated_at: new Date().toISOString(),
-    }).eq('id', event.id)
+    const parseDateTime = (dtLocal: string, fallbackISO: string): string => {
+      if (!dtLocal) return fallbackISO
+      const d = new Date(dtLocal)
+      return isNaN(d.getTime()) ? fallbackISO : d.toISOString()
+    }
+    const allDayStart = isAllDay ? `${startDT.slice(0,10)}T00:00:00.000Z` : null
+    const allDayEnd = isAllDay ? `${startDT.slice(0,10)}T23:59:59.000Z` : null
+    const masterStart = allDayStart ?? parseDateTime(startDT, event.start_time)
+    const masterEnd   = allDayEnd   ?? parseDateTime(endDT, event.end_time)
+    const rruleStr = buildRrule()
 
-    // 3. Always sync event_members — delete all, re-insert current roles
-    await supabase.from('event_members').delete().eq('event_id', event.id)
-    const inserts = Object.entries(memberRoles).map(([id, role]) => ({
-      event_id: event.id, family_member_id: id, role, rsvp_status: 'accepted',
-    }))
-    if (inserts.length > 0) await supabase.from('event_members').insert(inserts)
+    if (scope === 'this') {
+      // Only update this single instance
+      const { error } = await supabase.from('events').update({
+        title: displayTitle,
+        location_name: location.trim() || null,
+        address: address.trim() || null,
+        start_time: masterStart,
+        end_time: masterEnd,
+        all_day: isAllDay,
+        event_type: eventType,
+        updated_at: new Date().toISOString(),
+      }).eq('id', event.id)
+      if (error) { alert(`Save failed: ${error.message}`); return }
+      // Update this instance's members
+      await supabase.from('event_members').delete().eq('event_id', event.id)
+      const inserts = Object.entries(memberRoles).map(([id, role]) => ({
+        event_id: event.id, family_member_id: id, role, rsvp_status: 'accepted',
+      }))
+      if (inserts.length > 0) await supabase.from('event_members').insert(inserts)
+
+    } else if (scope === 'future') {
+      // Update this + all future instances by deleting future rows and re-inserting from this date
+      const masterId = event.recurrence_master_id!
+      // Delete this instance + all with same master that start >= this event
+      await supabase.from('events').delete()
+        .eq('recurrence_master_id', masterId)
+        .gte('start_time', event.start_time)
+      // Re-insert from this date with updated data using the existing rrule (truncated to this date)
+      const { data: masterEvent } = await supabase.from('events').select('*').eq('id', masterId).single()
+      if (masterEvent && (masterEvent as any).rrule) {
+        const occurrences = expandRrule(masterStart, masterEnd, (masterEvent as any).rrule)
+          .filter(occ => occ.start >= event.start_time)
+        if (occurrences.length > 0) {
+          const { data: newInstances } = await supabase.from('events').insert(
+            occurrences.map(occ => ({
+              title: displayTitle,
+              description: event.description ?? null,
+              start_time: occ.start,
+              end_time: occ.end,
+              all_day: isAllDay,
+              event_type: eventType,
+              location_name: location.trim() || null,
+              address: address.trim() || null,
+              lat: event.lat ?? null,
+              lng: event.lng ?? null,
+              google_calendar_id: event.google_calendar_id ?? null,
+              source_member_id: event.source_member_id ?? null,
+              status: 'confirmed' as const,
+              is_enriched: false,
+              rrule: null,
+              recurrence_master_id: masterId,
+            }))
+          ).select('id')
+          if (newInstances?.length) {
+            const memberCopies = newInstances.flatMap(ev =>
+              Object.entries(memberRoles).map(([memberId, role]) => ({
+                event_id: ev.id, family_member_id: memberId, role, rsvp_status: 'accepted',
+              }))
+            )
+            if (memberCopies.length > 0) await supabase.from('event_members').insert(memberCopies)
+          }
+        }
+      }
+
+    } else {
+      // 'all' — update master + regenerate all instances
+      const masterIdToUpdate = isInstance ? event.recurrence_master_id! : event.id
+      const { error: updateError } = await supabase.from('events').update({
+        title: displayTitle,
+        location_name: location.trim() || null,
+        address: address.trim() || null,
+        start_time: masterStart,
+        end_time: masterEnd,
+        all_day: isAllDay,
+        event_type: eventType,
+        rrule: rruleStr,
+        updated_at: new Date().toISOString(),
+      }).eq('id', masterIdToUpdate)
+
+      if (updateError) { alert(`Save failed: ${updateError.message}`); return }
+
+      // Sync master event members
+      await supabase.from('event_members').delete().eq('event_id', masterIdToUpdate)
+      const inserts = Object.entries(memberRoles).map(([id, role]) => ({
+        event_id: masterIdToUpdate, family_member_id: id, role, rsvp_status: 'accepted',
+      }))
+      if (inserts.length > 0) await supabase.from('event_members').insert(inserts)
+
+      // Delete all instances and re-expand
+      await supabase.from('events').delete().eq('recurrence_master_id', masterIdToUpdate)
+
+      if (rruleStr) {
+        const occurrences = expandRrule(masterStart, masterEnd, rruleStr)
+        if (occurrences.length > 0) {
+          const eventCopies = occurrences.map(occ => ({
+            title: displayTitle,
+            description: event.description ?? null,
+            start_time: occ.start,
+            end_time: occ.end,
+            all_day: isAllDay,
+            event_type: eventType,
+            location_name: location.trim() || null,
+            address: address.trim() || null,
+            lat: event.lat ?? null,
+            lng: event.lng ?? null,
+            google_calendar_id: event.google_calendar_id ?? null,
+            source_member_id: event.source_member_id ?? null,
+            status: 'confirmed' as const,
+            is_enriched: false,
+            rrule: null,
+            recurrence_master_id: masterIdToUpdate,
+          }))
+          const { data: newEvents, error: insertErr } = await supabase.from('events').insert(eventCopies).select('id')
+          if (!insertErr && newEvents?.length) {
+            const memberCopies = newEvents.flatMap(ev =>
+              Object.entries(memberRoles).map(([memberId, role]) => ({
+                event_id: ev.id, family_member_id: memberId, role, rsvp_status: 'accepted',
+              }))
+            )
+            if (memberCopies.length > 0) await supabase.from('event_members').insert(memberCopies)
+          }
+        }
+      }
+    }
 
     qc.invalidateQueries({ queryKey: ['events'] })
-
-    // 4. Push enrichment back to Google Calendar (fire-and-forget — don't block save)
-    supabase.functions.invoke('push-to-google', { body: { event_id: event.id } })
-      .catch(() => { /* silent — Google push is best-effort */ })
-
-    // 5. Re-analyze conflicts in case times/attendees changed
-    supabase.functions.invoke('analyze-conflicts', {}).catch(() => {})
-    // 6. Re-analyze prep items
-    supabase.functions.invoke('analyze-prep', {}).catch(() => {})
+    supabase.functions.invoke('push-to-google', { body: { event_id: event.id } }).catch(() => {})
+    // Weather is cheap (no LLM) — always fetch for this event
+    supabase.functions.invoke('fetch-event-weather', { body: { event_id: event.id } })
+      .then(() => qc.invalidateQueries({ queryKey: ['events'] }))
+      .catch(() => {})
+    // analyze-conflicts + analyze-prep removed from save — they run on the scheduled HomePage cadence (5x/day)
 
     onClose()
   }
@@ -236,7 +547,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 z-[60]"
-            onClick={onClose}
+            onClick={e => { e.stopPropagation(); onClose(); }}
           />
 
           <motion.div
@@ -245,8 +556,9 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 32, stiffness: 260 }}
-            className="fixed bottom-0 left-0 right-0 z-[70] bg-casa-surface rounded-t-2xl shadow-modal flex flex-col sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-2xl sm:rounded-2xl sm:bottom-8"
+            className="fixed bottom-0 left-0 right-0 z-[70] bg-casa-surface rounded-t-2xl shadow-modal flex flex-col max-h-[90vh] sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-2xl sm:rounded-2xl sm:bottom-8 sm:max-h-[85vh]"
             style={{ maxHeight: '90vh' }}
+            onClick={e => e.stopPropagation()}
           >
             {/* Drag handle */}
             <div className="flex justify-center pt-3 pb-1 shrink-0">
@@ -256,7 +568,15 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 shrink-0 border-b border-casa-border">
               <div>
-                <h3 className="font-display text-display-sm text-casa-navy leading-tight">Edit Details</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-display text-display-sm text-casa-navy leading-tight">Edit Details</h3>
+                  {isInstance && (
+                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-casa-gold/10 text-casa-gold text-[10px] font-semibold uppercase tracking-wide">
+                      <Repeat size={9} />
+                      Recurring
+                    </span>
+                  )}
+                </div>
                 {editingTitle ? (
                   <div className="flex items-center gap-1 mt-0.5">
                     <input
@@ -289,6 +609,36 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
 
             {/* Form */}
             <div className="flex-1 overflow-y-auto">
+
+              {/* ── Event Type Toggle ── */}
+              <div className="px-6 pt-5 pb-4 border-b border-casa-divider">
+                <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">
+                  Type
+                </label>
+                <div className="flex gap-2">
+                  {(['event', 'reminder'] as const).map(t => (
+                    <button
+                      key={t}
+                      onClick={() => t === 'reminder' ? switchToReminder() : setEventType('event')}
+                      className={cn(
+                        'flex items-center gap-1.5 px-4 py-2 rounded-button border text-body-sm font-semibold transition-all',
+                        eventType === t
+                          ? t === 'reminder'
+                            ? 'bg-amber-50 border-amber-300 text-amber-700'
+                            : 'bg-casa-navy text-white border-casa-navy'
+                          : 'bg-casa-surface border-casa-border text-casa-muted hover:border-casa-navy/40'
+                      )}
+                    >
+                      {t === 'reminder' ? '🔔' : '📅'} {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                {eventType === 'reminder' && (
+                  <p className="text-caption text-casa-muted mt-2">
+                    Reminders appear as a banner on the day — no time slot or travel needed.
+                  </p>
+                )}
+              </div>
 
               {/* ── AI Re-enrich (always first) ── */}
               <div className="px-6 pt-5 pb-4 border-b border-casa-divider bg-casa-bg/40">
@@ -397,30 +747,167 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
               )}
 
               {/* ── Date & Time ── */}
-              <div className="px-6 pt-5 pb-4 border-b border-casa-divider">
-                <label className="flex items-center gap-1.5 text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">
-                  <Clock size={12} />
-                  Date & Time
-                </label>
-                <div className="grid grid-cols-2 gap-3">
+              <div className="px-6 pt-5 pb-4 border-b border-casa-divider space-y-4">
+                {/* Header + all-day toggle */}
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-1.5 text-caption font-semibold text-casa-muted uppercase tracking-wide">
+                    <Clock size={12} />
+                    Date &amp; Time
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <span className="text-caption text-casa-muted font-medium">All day</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsAllDay(v => !v)}
+                      className={cn(
+                        'relative w-9 h-5 rounded-full transition-colors duration-200',
+                        isAllDay ? 'bg-casa-gold' : 'bg-casa-border'
+                      )}
+                    >
+                      <span className={cn(
+                        'absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200',
+                        isAllDay ? 'translate-x-4' : 'translate-x-0'
+                      )} />
+                    </button>
+                  </label>
+                </div>
+
+                {/* Date/time pickers — collapse time when all-day */}
+                {isAllDay ? (
                   <div>
-                    <p className="text-caption text-casa-muted mb-1">Start</p>
+                    <p className="text-caption text-casa-muted mb-1">Date</p>
                     <input
-                      type="datetime-local"
-                      value={startDT}
-                      onChange={e => setStartDT(e.target.value)}
+                      type="date"
+                      value={startDT.slice(0, 10)}
+                      onChange={e => { setStartDT(`${e.target.value}T00:00`); setEndDT(`${e.target.value}T23:59`) }}
                       className={inputCls}
                     />
                   </div>
-                  <div>
-                    <p className="text-caption text-casa-muted mb-1">End</p>
-                    <input
-                      type="datetime-local"
-                      value={endDT}
-                      onChange={e => setEndDT(e.target.value)}
-                      className={inputCls}
-                    />
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-caption text-casa-muted mb-1">Start</p>
+                      <input
+                        type="datetime-local"
+                        value={startDT}
+                        onChange={e => setStartDT(e.target.value)}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-caption text-casa-muted mb-1">End</p>
+                      <input
+                        type="datetime-local"
+                        value={endDT}
+                        onChange={e => setEndDT(e.target.value)}
+                        className={inputCls}
+                      />
+                    </div>
                   </div>
+                )}
+
+                {/* Recurrence */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <label className="text-caption text-casa-muted font-medium shrink-0">Repeat</label>
+                    <div className="relative flex-1">
+                      <select
+                        value={recur.freq}
+                        onChange={e => setRecur(r => ({ ...r, freq: e.target.value as typeof r.freq, byDay: [] }))}
+                        className={cn(inputCls, 'pr-8 appearance-none')}
+                      >
+                        <option value="none">Does not repeat</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
+                      </select>
+                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-casa-muted pointer-events-none" />
+                    </div>
+                    {recur.freq !== 'none' && (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-caption text-casa-muted">every</span>
+                        <input
+                          type="number"
+                          min={1} max={99}
+                          value={recur.interval}
+                          onChange={e => setRecur(r => ({ ...r, interval: Math.max(1, parseInt(e.target.value) || 1) }))}
+                          className={cn(inputCls, 'w-14 text-center')}
+                        />
+                        <span className="text-caption text-casa-muted">
+                          {recur.freq === 'daily' ? 'day(s)' : recur.freq === 'weekly' ? 'wk(s)' : recur.freq === 'monthly' ? 'mo(s)' : 'yr(s)'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Day-of-week selector for weekly */}
+                  {recur.freq === 'weekly' && (
+                    <div className="flex gap-1.5 flex-wrap">
+                      {['S','M','T','W','T','F','S'].map((d, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setRecur(r => ({
+                            ...r,
+                            byDay: r.byDay.includes(i) ? r.byDay.filter(x => x !== i) : [...r.byDay, i]
+                          }))}
+                          className={cn(
+                            'w-8 h-8 rounded-full text-caption font-bold transition-colors',
+                            recur.byDay.includes(i)
+                              ? 'bg-casa-gold text-white'
+                              : 'bg-casa-bg text-casa-muted border border-casa-border hover:border-casa-gold'
+                          )}
+                        >
+                          {d}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* End condition */}
+                  {recur.freq !== 'none' && (
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <label className="text-caption text-casa-muted font-medium shrink-0">Ends</label>
+                      <div className="flex gap-2">
+                        {(['never','date','count'] as const).map(opt => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => setRecur(r => ({ ...r, endType: opt }))}
+                            className={cn(
+                              'px-3 py-1 rounded-full text-caption font-medium transition-colors',
+                              recur.endType === opt
+                                ? 'bg-casa-gold text-white'
+                                : 'bg-casa-bg border border-casa-border text-casa-muted hover:border-casa-gold'
+                            )}
+                          >
+                            {opt === 'never' ? 'Never' : opt === 'date' ? 'On date' : 'After'}
+                          </button>
+                        ))}
+                      </div>
+                      {recur.endType === 'date' && (
+                        <input
+                          type="date"
+                          value={recur.endDate}
+                          onChange={e => setRecur(r => ({ ...r, endDate: e.target.value }))}
+                          className={cn(inputCls, 'flex-1 min-w-[130px]')}
+                        />
+                      )}
+                      {recur.endType === 'count' && (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            min={2} max={999}
+                            value={recur.count}
+                            onChange={e => setRecur(r => ({ ...r, count: Math.max(2, parseInt(e.target.value) || 2) }))}
+                            className={cn(inputCls, 'w-16 text-center')}
+                          />
+                          <span className="text-caption text-casa-muted">occurrences</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -556,14 +1043,65 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
               </button>
               <button
                 onClick={handleSave}
-                disabled={save.isPending}
+                disabled={isSaving}
                 className="flex-1 py-3 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
               >
                 <Save size={15} />
-                {save.isPending ? 'Saving…' : 'Save'}
+                {isSaving ? (saveStatus === 'slow' ? 'Waking up…' : 'Saving…') : 'Save'}
               </button>
             </div>
           </motion.div>
+
+          {/* Recurring edit scope modal */}
+          <AnimatePresence>
+            {showScopeModal && (
+              <motion.div
+                key="scope-modal"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[80] flex items-center justify-center p-6"
+                onClick={() => { setShowScopeModal(false); setPendingSave(false) }}
+              >
+                <motion.div
+                  initial={{ scale: 0.92, opacity: 0, y: 16 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0.92, opacity: 0, y: 16 }}
+                  transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                  className="bg-casa-surface rounded-2xl shadow-modal w-full max-w-sm p-6"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <Repeat size={16} className="text-casa-gold" />
+                    <h4 className="font-display text-display-sm text-casa-navy">Edit recurring event</h4>
+                  </div>
+                  <p className="text-caption text-casa-muted mb-5">How would you like to apply your changes?</p>
+                  <div className="space-y-2">
+                    {([
+                      { scope: 'this', label: 'This event', desc: 'Only this occurrence will be updated' },
+                      { scope: 'future', label: 'This and following events', desc: 'This and all future occurrences' },
+                      { scope: 'all', label: 'All events', desc: 'Every occurrence in the series' },
+                    ] as { scope: RecurScope; label: string; desc: string }[]).map(({ scope, label, desc }) => (
+                      <button
+                        key={scope}
+                        onClick={() => handleScopeChoice(scope)}
+                        className="w-full text-left px-4 py-3 rounded-xl border border-casa-border hover:border-casa-gold hover:bg-casa-gold/5 transition-all group"
+                      >
+                        <p className="text-body-sm font-semibold text-casa-navy group-hover:text-casa-gold transition-colors">{label}</p>
+                        <p className="text-caption text-casa-muted mt-0.5">{desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => { setShowScopeModal(false); setPendingSave(false) }}
+                    className="mt-4 w-full py-2.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-muted hover:text-casa-navy transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </>
       )}
     </AnimatePresence>

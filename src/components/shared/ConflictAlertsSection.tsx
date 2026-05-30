@@ -44,12 +44,15 @@ function ConflictGroup({
         <span className={cn('text-[11px] font-bold px-2 py-0.5 rounded-full', cfg.badge)}>
           {conflicts.length}
         </span>
-        <button
+        <span
+          role="button"
+          tabIndex={0}
           onClick={(e) => { e.stopPropagation(); onDismissAll(conflicts.map((c) => c.id)) }}
-          className="text-[11px] text-casa-muted hover:text-casa-navy underline hover:no-underline ml-1"
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onDismissAll(conflicts.map((c) => c.id)) } }}
+          className="text-[11px] text-casa-muted hover:text-casa-navy underline hover:no-underline ml-1 cursor-pointer"
         >
           Dismiss all
-        </button>
+        </span>
         <span className="text-casa-muted ml-1">
           {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </span>
@@ -123,9 +126,12 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
   }
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={handleNavigate}
-      className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-black/5 transition-colors group"
+      onKeyDown={e => { if (e.key === 'Enter') handleNavigate(e as unknown as React.MouseEvent) }}
+      className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-black/5 transition-colors group cursor-pointer"
       title="View in calendar"
     >
       <span className="shrink-0 w-6 h-6 rounded-full bg-white/70 border border-current/15 flex items-center justify-center text-[11px] font-bold text-casa-navy">
@@ -161,7 +167,7 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
           Dismiss
         </button>
       </div>
-    </button>
+    </div>
   )
 }
 

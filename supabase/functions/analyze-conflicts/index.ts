@@ -27,6 +27,22 @@ Deno.serve(async (req) => {
     ? new Date(body.range_end)
     : new Date(rangeStart.getTime() + 14 * 24 * 60 * 60 * 1000)
 
+  // ── Purge conflicts for past events before scanning ──
+  // Any unresolved conflict whose event start_time is before today is stale — auto-resolve it.
+  // This prevents yesterday's conflicts from lingering on the display indefinitely.
+  const { data: pastEvents } = await sb
+    .from('events')
+    .select('id')
+    .lt('start_time', rangeStart.toISOString())
+  const pastEventIds = (pastEvents ?? []).map((e: { id: string }) => e.id)
+  if (pastEventIds.length > 0) {
+    await sb
+      .from('conflicts')
+      .update({ resolved: true, resolution: 'auto-expired', resolved_at: now.toISOString() })
+      .eq('resolved', false)
+      .or(`event_a_id.in.(${pastEventIds.join(',')}),event_b_id.in.(${pastEventIds.join(',')})`)
+  }
+
   // ── Load all family members ──
   const { data: members, error: memErr } = await sb
     .from('family_members')

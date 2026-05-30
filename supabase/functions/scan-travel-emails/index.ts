@@ -501,14 +501,12 @@ async function extractAndUpsertTrip(
     return { ok: false, debug: 'trip ended >90 days ago, skipping' }
   }
 
-  // Load home address — prefer dedicated 'home_address' key, fall back to display_config
-  const [{ data: homeAddrRow }, { data: displayCfg }] = await Promise.all([
-    sb.from('settings').select('value').eq('key', 'home_address').maybeSingle(),
-    sb.from('settings').select('value').eq('key', 'display_config').maybeSingle(),
-  ])
-  const homeAddress: string =
-    (typeof homeAddrRow?.value === 'string' ? homeAddrRow.value : '') ||
-    (displayCfg?.value?.address ?? displayCfg?.value?.city ?? '')
+  // Load home address from home_config (single source of truth)
+  const { data: homeConfigRow } = await sb.from('settings').select('value').eq('key', 'home_config').maybeSingle()
+  const hc = homeConfigRow?.value as { address?: string; city?: string; state?: string; zip?: string } | null
+  const homeAddress: string = hc
+    ? [hc.address, hc.city, hc.state, hc.zip].filter(Boolean).join(', ')
+    : ''
 
   // ── Run all independent async tasks in parallel ──────────────────────────
   const [
@@ -611,12 +609,54 @@ This is a family household. Other family members remain at home.`).catch(() => '
     const { data: updated } = await sb.from('trips').update(tripPayload).eq('id', existingTripId).select('event_id').maybeSingle()
     if (!resolvedEventId && updated?.event_id) resolvedEventId = updated.event_id
   } else {
-    const gmailMsgIds = gmailMessageId ? [gmailMessageId] : []
-    const { data: inserted } = await sb.from('trips').insert({
-      ...tripPayload,
-      gmail_message_ids: gmailMsgIds,
-    }).select('id, event_id').maybeSingle()
-    if (!resolvedEventId && inserted?.event_id) resolvedEventId = inserted.event_id
+    // Post-extraction dedup: check for an existing trip for this member with the same
+    // flight number OR same departure date (±1 day). This prevents duplicates when the
+    // same booking generates multiple emails (confirmation, receipt, itinerary update, etc.)
+    const flightNum = (extracted.outbound_flight_number as string | null)?.replace(/\s/g, '') ?? null
+    let foundDupe: { id: string; event_id: string | null; gmail_message_ids: string[] } | null = null
+
+    if (flightNum) {
+      const { data: byFlight } = await sb.from('trips')
+        .select('id, event_id, gmail_message_ids')
+        .eq('family_member_id', familyMemberId)
+        .ilike('outbound_flight_number', flightNum)
+        .maybeSingle()
+      foundDupe = byFlight ?? null
+    }
+
+    if (!foundDupe && tripStartDate) {
+      const dayBefore = new Date(new Date(tripStartDate).getTime() - 86400000).toISOString().slice(0, 10)
+      const dayAfter  = new Date(new Date(tripStartDate).getTime() + 86400000).toISOString().slice(0, 10)
+      const { data: byDate } = await sb.from('trips')
+        .select('id, event_id, gmail_message_ids')
+        .eq('family_member_id', familyMemberId)
+        .gte('trip_start_date', dayBefore)
+        .lte('trip_start_date', dayAfter)
+        .maybeSingle()
+      foundDupe = byDate ?? null
+    }
+
+    if (foundDupe) {
+      // Merge the new gmail message ID into the existing array, then update
+      const existingIds: string[] = foundDupe.gmail_message_ids ?? []
+      const mergedIds = gmailMessageId && !existingIds.includes(gmailMessageId)
+        ? [...existingIds, gmailMessageId]
+        : existingIds
+      const { data: updated } = await sb.from('trips')
+        .update({ ...tripPayload, gmail_message_ids: mergedIds })
+        .eq('id', foundDupe.id)
+        .select('event_id').maybeSingle()
+      if (!resolvedEventId && (updated?.event_id ?? foundDupe.event_id)) {
+        resolvedEventId = updated?.event_id ?? foundDupe.event_id
+      }
+    } else {
+      const gmailMsgIds = gmailMessageId ? [gmailMessageId] : []
+      const { data: inserted } = await sb.from('trips').insert({
+        ...tripPayload,
+        gmail_message_ids: gmailMsgIds,
+      }).select('id, event_id').maybeSingle()
+      if (!resolvedEventId && inserted?.event_id) resolvedEventId = inserted.event_id
+    }
   }
 
   // Patch the calendar event start/end to match the email's actual dates (email = source of truth)

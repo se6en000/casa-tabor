@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { motion } from 'framer-motion'
-
+import { Repeat } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
@@ -61,7 +61,6 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
   const leftPercent = 2.5 + columnIndex * widthPercent
 
   const isCompact = height < 50
-  const isTall = height > 100
   const confidence = event.enrichment?.confidence
   const confidenceDotColor = confidence ? CONFIDENCE_DOT[confidence] : null
 
@@ -106,6 +105,7 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
 
   return (
       <motion.button
+      data-event-block
       layout
       initial={{ opacity: 0, scale: 0.96 }}
       animate={{ opacity: 1, scale: 1 }}
@@ -131,13 +131,19 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
         backgroundColor: color,
       }}
     >
-      {/* Title */}
-      <p className={cn(
-        'font-body font-semibold truncate leading-tight',
-        isCompact ? 'text-[11px]' : 'text-body-sm'
-      )}>
-        {event.title}
-      </p>
+      {/* Title — strip "Owner | " prefix */}
+      {(() => {
+        const pipeIdx = event.title.indexOf(' | ')
+        const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
+        return (
+          <p className={cn(
+            'font-body font-semibold truncate leading-tight',
+            isCompact ? 'text-[11px]' : 'text-body-sm'
+          )}>
+            {cleanTitle}
+          </p>
+        )
+      })()}
 
       {/* Time range */}
       {!isCompact && (
@@ -146,34 +152,31 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
         </p>
       )}
 
-      {/* Supporting member dots — bottom of block (exclude primary, they ARE the color) */}
-      {isTall && event.members && event.members.length > 1 && (
-        <div className="absolute bottom-2 left-2.5 flex gap-1">
-          {event.members.filter(m => m.role !== 'primary').map((m) => (
+      {/* Member pills — owner named pill + attendee initial dots */}
+      {!isCompact && event.members && event.members.length > 0 && (() => {
+        const primary = event.members.find(m => m.role === 'primary') ?? event.members[0]
+        const others = event.members.filter(m => m !== primary)
+        return (
+          <div className="flex items-center gap-1 flex-wrap mt-1">
             <span
-              key={m.id}
-              className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border-2 border-white/60"
-              style={{ backgroundColor: m.family_member?.color_hex || '#888' }}
-              title={`${m.family_member?.name} (supporting)`}
+              className="px-1.5 py-0.5 rounded-full text-[9px] font-bold leading-none whitespace-nowrap bg-white/90"
+              style={{ color: primary.family_member?.color_hex ?? '#444' }}
             >
-              {m.family_member?.name?.[0]}
+              {primary.family_member?.name ?? '?'}
             </span>
-          ))}
-        </div>
-      )}
-
-      {/* Small dot indicator for short events */}
-      {!isTall && event.members && event.members.length > 1 && (
-        <div className="absolute bottom-1.5 left-2.5 flex gap-0.5">
-          {event.members.filter(m => m.role !== 'primary').slice(0, 4).map((m) => (
-            <span
-              key={m.id}
-              className="w-2.5 h-2.5 rounded-full border border-white/60"
-              style={{ backgroundColor: m.family_member?.color_hex || '#888' }}
-            />
-          ))}
-        </div>
-      )}
+            {others.slice(0, 3).map(m => (
+              <span
+                key={m.id}
+                title={m.family_member?.name}
+                className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold shrink-0 bg-white/80"
+                style={{ color: m.family_member?.color_hex ?? '#444' }}
+              >
+                {m.family_member?.name?.[0] ?? '?'}
+              </span>
+            ))}
+          </div>
+        )
+      })()}
 
       {/* Confidence dot — top right corner */}
       {confidenceDotColor && (
@@ -182,6 +185,12 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
           style={{ backgroundColor: confidenceDotColor }}
           title={`Enrichment confidence: ${confidence}`}
         />
+      )}
+      {/* Repeat indicator for recurring instances */}
+      {(event as any).recurrence_master_id && (
+        <span className="absolute bottom-1 right-1 opacity-60">
+          <Repeat size={9} className="text-white" />
+        </span>
       )}
     </motion.button>
   )

@@ -14,5 +14,6 @@ export function useFamilyMembers() {
       if (error) throw error
       return data || []
     },
+    staleTime: 5 * 60_000, // family members rarely change
   })
 }

@@ -9,15 +9,17 @@ const CORS = {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
-  const sb = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))
+  const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
   const { event_id } = await req.json().catch(() => ({}))
   if (!event_id) return new Response(JSON.stringify({ error: 'event_id required' }), { status: 400, headers: { ...CORS, 'content-type': 'application/json' } })
 
+  try {
+
   // Load event + enrichment
   const { data: event, error: evErr } = await sb
     .from('events')
-    .select('id, title, description, location_name, address, google_event_id, google_calendar_id, source_member_id, event_enrichments(*), event_members(role, family_members(name))')
+    .select('id, title, description, start_time, end_time, all_day, location_name, address, google_event_id, google_calendar_id, source_member_id, event_enrichments(*), event_members(role, family_members(name))')
     .eq('id', event_id)
     .single()
 
@@ -45,9 +47,8 @@ Deno.serve(async (req) => {
   const calendarId = event.google_calendar_id ?? 'primary'
 
   // ── Build Google Calendar patch ──
-
-  // summary = enriched title
-  const summary = event.title ?? undefined
+  // Note: We intentionally do NOT update `summary` (title) — Gmail-auto-created events
+  // reject title changes with 400, and Google's title is the source of truth there.
 
   // location = "Location Name, Address" or whichever we have
   const locationParts = [event.location_name, event.address].filter((p, i, arr) => p && arr.indexOf(p) === i)
@@ -85,18 +86,32 @@ Deno.serve(async (req) => {
   const originalDesc = (event.description as string | null)?.replace(/\n*━━━━━━━━━━━━━━━━━━━━━\n🏠 Casa Tabor Details[\s\S]*$/, '') ?? ''
   const description = originalDesc + enrichmentBlock
 
+  const isAllDay = event.all_day || (!event.start_time?.includes('T') && !event.start_time?.includes(' '))
+  const toISO = (t: string) => new Date(t).toISOString()
+
+  const patch = {
+    ...(location !== undefined ? { location } : {}),
+    description,
+    start: isAllDay
+      ? { date: new Date(event.start_time).toISOString().slice(0, 10) }
+      : { dateTime: toISO(event.start_time) },
+    end: isAllDay
+      ? { date: new Date(event.end_time).toISOString().slice(0, 10) }
+      : { dateTime: toISO(event.end_time) },
+  }
+  console.log('[push-to-google] patch payload:', JSON.stringify(patch))
+
   await patchGoogleEvent({
     accessToken,
     calendarId,
     eventId: event.google_event_id,
-    patch: {
-      ...(summary !== undefined ? { summary } : {}),
-      ...(location !== undefined ? { location } : {}),
-      description,
-      start: { dateTime: event.start_time },
-      end: { dateTime: event.end_time },
-    },
+    patch,
   })
 
   return new Response(JSON.stringify({ ok: true }), { headers: { ...CORS, 'content-type': 'application/json' } })
+  } catch (err) {
+    const msg = (err as Error).message ?? String(err)
+    console.error('[push-to-google] error:', msg)
+    return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { ...CORS, 'content-type': 'application/json' } })
+  }
 })

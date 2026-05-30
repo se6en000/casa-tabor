@@ -9,6 +9,7 @@ import {
   Plane, Loader2, ExternalLink, Paperclip,
   Home, Hotel, Hash, DoorOpen, Armchair, Luggage, Users,
   Sun, CloudRain, CloudSnow, Wind,
+  Crown, Plus,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
@@ -18,6 +19,7 @@ import type { EventChecklistItem } from '../../types'
 import { getFieldsForCategory, CATEGORY_LABEL } from './categoryFields'
 import EventEditSheet from './EventEditSheet'
 import type { Trip } from '../../hooks/useTrips'
+import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 
 const CONFIDENCE_CONFIG = {
   high:   { color: '#22c55e', label: 'High confidence', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
@@ -57,6 +59,152 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
         <EventEditSheet event={event} open={showEdit} onClose={() => setShowEdit(false)} />
       )}
     </>
+  )
+}
+
+/* ── Inline Member Editor ───────────────────────────────────── */
+
+function MemberEditor({ event }: { event: EventWithDetails }) {
+  const queryClient = useQueryClient()
+  const { data: allMembers = [] } = useFamilyMembers()
+  const [showPicker, setShowPicker] = useState(false)
+  const [saving, setSaving] = useState<string | null>(null)
+  const pickerRef = useRef<HTMLDivElement>(null)
+
+  // Close picker on outside tap
+  useEffect(() => {
+    if (!showPicker) return
+    const handler = (e: MouseEvent | TouchEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setShowPicker(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    document.addEventListener('touchstart', handler)
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler) }
+  }, [showPicker])
+
+  const sorted = [...event.members].sort((a, b) => (a.role === 'primary' ? -1 : b.role === 'primary' ? 1 : 0))
+  const assignedIds = new Set(event.members.map(m => m.family_member?.id))
+
+  async function makeOwner(memberId: string) {
+    setSaving(memberId)
+    // Demote current primary, promote new one
+    await supabase.from('event_members').update({ role: 'attendee' }).eq('event_id', event.id).eq('role', 'primary')
+    await supabase.from('event_members').update({ role: 'primary' }).eq('event_id', event.id).eq('family_member_id', memberId)
+    queryClient.invalidateQueries({ queryKey: ['events'] })
+    setSaving(null)
+  }
+
+  async function removeMember(eventMemberId: string) {
+    setSaving(eventMemberId)
+    await supabase.from('event_members').delete().eq('id', eventMemberId)
+    queryClient.invalidateQueries({ queryKey: ['events'] })
+    setSaving(null)
+  }
+
+  async function addMember(familyMemberId: string) {
+    setSaving(familyMemberId)
+    await supabase.from('event_members').upsert(
+      { event_id: event.id, family_member_id: familyMemberId, role: 'attendee' },
+      { onConflict: 'event_id,family_member_id', ignoreDuplicates: true }
+    )
+    queryClient.invalidateQueries({ queryKey: ['events'] })
+    setSaving(null)
+    setShowPicker(false)
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 mt-3 relative">
+      {sorted.map((m) => {
+        const isPrimary = m.role === 'primary'
+        const isLoading = saving === m.id || saving === m.family_member?.id
+        return (
+          <div
+            key={m.id}
+            className="flex items-center gap-1 pl-2 pr-1 py-1 rounded-pill text-white text-caption font-semibold transition-opacity"
+            style={{ backgroundColor: m.family_member?.color_hex ?? '#888', opacity: isLoading ? 0.6 : 1 }}
+          >
+            {/* Initial circle */}
+            <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[9px] font-bold shrink-0">
+              {m.family_member?.name?.[0]}
+            </span>
+            <span>{m.family_member?.name}</span>
+
+            {/* Crown: shown on primary (to indicate), clickable on non-primary to promote */}
+            {!isPrimary && (
+              <button
+                onClick={() => makeOwner(m.family_member!.id)}
+                className="ml-0.5 w-5 h-5 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
+                title="Make primary"
+              >
+                <Crown size={11} />
+              </button>
+            )}
+            {isPrimary && (
+              <span className="ml-0.5 w-5 h-5 flex items-center justify-center opacity-80" title="Primary">
+                <Crown size={11} />
+              </span>
+            )}
+
+            {/* Remove — always available (even primary, just can't remove last person) */}
+            {event.members.length > 1 || !isPrimary ? (
+              <button
+                onClick={() => removeMember(m.id)}
+                className="w-5 h-5 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
+                title="Remove"
+              >
+                <X size={11} />
+              </button>
+            ) : null}
+          </div>
+        )
+      })}
+
+      {/* Add button */}
+      <div className="relative" ref={pickerRef}>
+        <button
+          onClick={() => setShowPicker(p => !p)}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-pill border-2 border-dashed border-casa-border text-casa-muted text-caption font-semibold hover:border-casa-gold hover:text-casa-gold transition-colors"
+        >
+          <Plus size={12} /> Add
+        </button>
+
+        <AnimatePresence>
+          {showPicker && (
+            <motion.div
+              initial={{ opacity: 0, y: -4, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4, scale: 0.96 }}
+              transition={{ duration: 0.15 }}
+              className="absolute top-full mt-1.5 left-0 z-20 bg-casa-surface border border-casa-border rounded-card shadow-modal p-2 flex flex-col gap-1 min-w-[140px]"
+            >
+              {allMembers
+                .filter(fm => !assignedIds.has(fm.id))
+                .map(fm => (
+                  <button
+                    key={fm.id}
+                    onClick={() => addMember(fm.id)}
+                    disabled={saving === fm.id}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-casa-bg transition-colors text-left"
+                  >
+                    <span
+                      className="w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: fm.color_hex ?? '#888' }}
+                    >
+                      {fm.name?.[0]}
+                    </span>
+                    <span className="text-body-sm font-medium text-casa-navy">{fm.name}</span>
+                  </button>
+                ))}
+              {allMembers.filter(fm => !assignedIds.has(fm.id)).length === 0 && (
+                <p className="text-caption text-casa-muted px-2 py-1">Everyone's added</p>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
   )
 }
 
@@ -105,25 +253,8 @@ function PanelHeader({ event, onClose }: { event: EventWithDetails; onClose: () 
           )}
         </div>
 
-        {/* Member pills — primary first, no role label */}
-        {event.members.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-3">
-            {[...event.members]
-              .sort((a, b) => (a.role === 'primary' ? -1 : b.role === 'primary' ? 1 : 0))
-              .map((m) => (
-              <span
-                key={m.id}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-pill text-white text-caption font-semibold"
-                style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
-              >
-                <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[9px] font-bold">
-                  {m.family_member?.name?.[0]}
-                </span>
-                {m.family_member?.name}
-              </span>
-            ))}
-          </div>
-        )}
+        {/* Inline member editor — tap × to remove, crown to promote, + to add */}
+        <MemberEditor event={event} />
 
         {/* Urgent action banner */}
         {urgentAction && (
@@ -722,7 +853,8 @@ function PanelBody({ event, onEventUpdated }: { event: EventWithDetails; onEvent
 
 function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlot?: React.ReactNode }) {
   const enr = event.enrichment
-  const hasLogistics = event.logistics?.length > 0
+  const reminder = event.event_type === 'reminder'
+  const hasLogistics = !reminder && event.logistics?.length > 0
   const hasChecklist = event.checklist?.length > 0
   const hasActions = event.actions?.filter((a) => !a.is_urgent).length > 0
   const activeFields = getFieldsForCategory(enr?.category)
@@ -758,7 +890,7 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
         </section>
       )}
 
-      {!hasLogistics && (event.location_name || enr?.departure_time) && (
+      {!hasLogistics && !reminder && (event.location_name || enr?.departure_time) && (
         <section>
           <SectionLabel>Location & Logistics</SectionLabel>
           <div className="space-y-3">

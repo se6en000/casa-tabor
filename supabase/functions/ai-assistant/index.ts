@@ -1,5 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
+interface UsageAccum { inputTokens: number; outputTokens: number }
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -66,8 +68,11 @@ You can either:
 3. Take an ACTION by responding with ONLY a JSON array (even for a single action) — no prose, no markdown fences:
 
 [
-  {"action":"create_event","title":"<Owner> | <Concise Description>","start":"<ISO with offset>","end":"<ISO with offset>","location":"<place or null>","members":["<name>"],"needs_clarification":"<question or null>"}
+  {"action":"create_event","title":"<Owner> | <Concise Description>","start":"<ISO with offset>","end":"<ISO with offset>","location":"<place or null>","members":["<name>"],"event_type":"event","needs_clarification":"<question or null>"}
 ]
+
+- Set "event_type" to "reminder" when the user uses words like "remind me", "reminder", "don't forget", or describes something that is a notification rather than an activity to attend. All other creations use "event_type":"event".
+- For reminders with a specific time (e.g. "remind me at 3pm"), set start and end to the same time (start = end = that time). For all-day reminders, use midnight (T00:00:00) for both start and end.
 
 For updating: [{"action":"update_event","id":"<event id>","changes":{"title":"...","start":"...","end":"...","location":"..."},"needs_clarification":"<or null>"}]
 For deleting: [{"action":"delete_event","id":"<event id>","title":"<title for confirmation>","needs_clarification":"<or null>"}]
@@ -90,7 +95,20 @@ Rules:
 
   const fullPrompt = `${systemPrompt}\n\nCONVERSATION:\n${conversationHistory}\nAssistant:`
 
-  const raw = await callLLM(config, fullPrompt, image)
+  let raw: string
+  const usageAccum: UsageAccum = { inputTokens: 0, outputTokens: 0 }
+  try {
+    raw = await callLLM(config, fullPrompt, image, usageAccum)
+  } catch (e) {
+    const msg = (e as Error).message ?? 'LLM error'
+    const isQuota = msg.includes('quota') || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')
+    return new Response(
+      JSON.stringify({ type: 'error', code: isQuota ? 'quota_exceeded' : 'llm_error', message: msg }),
+      { status: 200, headers: { ...CORS, 'content-type': 'application/json' } }
+    )
+  }
+  // Log usage (non-blocking)
+  sb.from('ai_usage_log').insert({ function_name: 'ai-assistant', provider: config.provider, model: config.model, input_tokens: usageAccum.inputTokens, output_tokens: usageAccum.outputTokens, cached: false }).then(() => {}).catch(() => {})
   const text = raw.trim()
 
   // Try to detect if response is a JSON action array (or single object)
@@ -129,6 +147,7 @@ async function callLLM(
   config: { provider: string; model: string; api_key: string },
   prompt: string,
   image?: ImagePayload,
+  accum?: UsageAccum,
 ): Promise<string> {
   if (config.provider === 'gemini') {
     // Build parts array — image first (if present) then text
@@ -151,6 +170,11 @@ async function callLLM(
       }),
     })
     const data = await res.json()
+    if (!res.ok) {
+      const errMsg = data?.error?.message ?? `Gemini error ${res.status}`
+      throw new Error(res.status === 429 ? `quota_exceeded: ${errMsg}` : errMsg)
+    }
+    if (accum) { accum.inputTokens += data.usageMetadata?.promptTokenCount ?? 0; accum.outputTokens += data.usageMetadata?.candidatesTokenCount ?? 0 }
     const resParts = (data.candidates?.[0]?.content?.parts ?? []) as { text?: string; thought?: boolean }[]
     return resParts.filter(p => !p.thought).map(p => p.text ?? '').join('')
   }
@@ -171,6 +195,8 @@ async function callLLM(
       body: JSON.stringify({ model: config.model, messages: [{ role: 'user', content }], max_tokens: 600, temperature: 0.5 }),
     })
     const data = await res.json()
+    if (!res.ok) throw new Error(res.status === 429 ? `quota_exceeded: ${data?.error?.message ?? 'OpenAI quota exceeded'}` : (data?.error?.message ?? `OpenAI error ${res.status}`))
+    if (accum) { accum.inputTokens += data.usage?.prompt_tokens ?? 0; accum.outputTokens += data.usage?.completion_tokens ?? 0 }
     return data.choices?.[0]?.message?.content ?? ''
   }
 
@@ -189,6 +215,8 @@ async function callLLM(
       body: JSON.stringify({ model: config.model, max_tokens: 600, messages: [{ role: 'user', content }] }),
     })
     const data = await res.json()
+    if (!res.ok) throw new Error(res.status === 429 ? `quota_exceeded: ${data?.error?.message ?? 'Anthropic quota exceeded'}` : (data?.error?.message ?? `Anthropic error ${res.status}`))
+    if (accum) { accum.inputTokens += data.usage?.input_tokens ?? 0; accum.outputTokens += data.usage?.output_tokens ?? 0 }
     return data.content?.[0]?.text ?? ''
   }
 

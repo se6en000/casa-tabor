@@ -84,7 +84,23 @@ export function useUpcomingTrips() {
         .lte('trip_start_date', in14)
         .order('trip_start_date')
       if (error) throw error
-      return (data ?? []) as Trip[]
+
+      // Dedup: keep the most-recently-created row per (family_member + start_date + flight)
+      const seen = new Map<string, Trip>()
+      for (const trip of (data ?? []) as Trip[]) {
+        const key = [
+          trip.family_member_id ?? '',
+          trip.trip_start_date ?? '',
+          trip.outbound_flight_number ?? trip.trip_title ?? '',
+        ].join('|')
+        const existing = seen.get(key)
+        if (!existing || trip.created_at > existing.created_at) {
+          seen.set(key, trip)
+        }
+      }
+      return Array.from(seen.values()).sort((a, b) =>
+        (a.trip_start_date ?? '').localeCompare(b.trip_start_date ?? '')
+      )
     },
     staleTime: 1000 * 60 * 5,
   })

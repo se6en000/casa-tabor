@@ -7,8 +7,10 @@ import { supabase } from '../../lib/supabase'
 import EventBlock from './EventBlock'
 import EventDetailPanel from './EventDetailPanel'
 import EventEditSheet from './EventEditSheet'
+import QuickCreateSheet from '../shared/QuickCreateSheet'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
+import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, REMINDER_COLOR } from '../../utils/holidays'
 
 const HOUR_HEIGHT = 60
 const START_HOUR = 6
@@ -77,7 +79,7 @@ export default function WeekView() {
     if (!allEvents) return []
     if (visibleMembers.length === 0) return allEvents
     return allEvents.filter((ev) =>
-      ev.members?.some((m) => visibleMembers.includes(m.family_member.id)),
+      isHoliday(ev) || isReminder(ev) || ev.members?.some((m) => visibleMembers.includes(m.family_member.id)),
     )
   }, [allEvents, visibleMembers])
 
@@ -85,6 +87,54 @@ export default function WeekView() {
   const [editEventId, setEditEventId] = useState<string | null>(null)
   const selectedEvent = selectedEventId ? (events?.find(e => e.id === selectedEventId) ?? null) : null
   const editEvent = editEventId ? (events?.find(e => e.id === editEventId) ?? null) : null
+
+  // ── Quick create (long-press empty slot) ─────────────────────
+  const [quickCreate, setQuickCreate] = useState<{ open: boolean; start?: Date }>({ open: false })
+  const slotLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const slotLongPressOrigin = useRef<{ x: number; y: number; day: Date } | null>(null)
+
+  const handleSlotTouchStart = useCallback((e: React.TouchEvent, day: Date) => {
+    // Don't fire if user is touching an event block
+    if ((e.target as Element).closest('[data-event-block]')) return
+    const t = e.touches[0]
+    slotLongPressOrigin.current = { x: t.clientX, y: t.clientY, day }
+    slotLongPressTimer.current = setTimeout(() => {
+      slotLongPressTimer.current = null
+      const origin = slotLongPressOrigin.current
+      if (!origin || !gridScrollRef.current) return
+      slotLongPressOrigin.current = null
+      // Compute the hour from Y position
+      const rect = gridScrollRef.current.getBoundingClientRect()
+      const gridY = origin.y - rect.top + gridScrollRef.current.scrollTop
+      const rawHour = START_HOUR + gridY / HOUR_HEIGHT
+      const snapped = Math.round(rawHour * 2) / 2  // snap to 30-min
+      const hours = Math.floor(Math.max(START_HOUR, Math.min(END_HOUR - 0.5, snapped)))
+      const minutes = snapped % 1 === 0.5 ? 30 : 0
+      const start = new Date(origin.day)
+      start.setHours(hours, minutes, 0, 0)
+      navigator.vibrate?.(30)
+      setQuickCreate({ open: true, start })
+    }, 500)
+  }, [])
+
+  const handleSlotTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!slotLongPressTimer.current || !slotLongPressOrigin.current) return
+    const t = e.touches[0]
+    const dist = Math.hypot(t.clientX - slotLongPressOrigin.current.x, t.clientY - slotLongPressOrigin.current.y)
+    if (dist > 10) {
+      clearTimeout(slotLongPressTimer.current)
+      slotLongPressTimer.current = null
+      slotLongPressOrigin.current = null
+    }
+  }, [])
+
+  const handleSlotTouchEnd = useCallback(() => {
+    if (slotLongPressTimer.current) {
+      clearTimeout(slotLongPressTimer.current)
+      slotLongPressTimer.current = null
+    }
+    slotLongPressOrigin.current = null
+  }, [])
 
   // ── Drag to reschedule ───────────────────────────────────────
   const qc = useQueryClient()
@@ -299,7 +349,9 @@ export default function WeekView() {
             {visibleMultiDay.map((ev, rowIdx) => {
               const span = getMultiDaySpan(ev)
               if (!span) return null
-              const color = getPrimaryColor(ev)
+              const holiday = isHoliday(ev)
+              const reminder = !holiday && isReminder(ev)
+              const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(ev)
               const leftPct = (span.startCol / 7) * 100
               const widthPct = ((span.endCol - span.startCol + 1) / 7) * 100
               const isSelected = selectedEventId === ev.id
@@ -311,7 +363,8 @@ export default function WeekView() {
                   onDoubleClick={(e) => { e.stopPropagation(); setSelectedEventId(null); setEditEventId(ev.id) }}
                   title={`${ev.title} — click to view, double-click to edit`}
                   className={cn(
-                    'absolute flex items-center px-2 rounded text-white text-[11px] font-semibold truncate transition-all',
+                    'absolute flex items-center px-2 rounded text-[11px] font-semibold truncate transition-all',
+                    'text-white',
                     isSelected ? 'brightness-110 ring-2 ring-white/60' : 'hover:brightness-110',
                   )}
                   style={{
@@ -322,7 +375,10 @@ export default function WeekView() {
                     backgroundColor: color,
                   }}
                 >
-                  {ev.title}
+                  {holiday ? holidayLabel(ev.title) : reminder ? `🔔 ${ev.title}` : (() => {
+                    const pipeIdx = ev.title.indexOf(' | ')
+                    return pipeIdx !== -1 ? ev.title.slice(pipeIdx + 3) : ev.title
+                  })()}
                 </button>
               )
             })}
@@ -365,10 +421,13 @@ export default function WeekView() {
               <div
                 key={dayKey}
                 className={cn(
-                  'relative border-l border-casa-divider',
+                  'relative border-l border-casa-divider touch-pan-y',
                   isDropTarget ? 'bg-casa-gold/5' : '',
                 )}
                 onClick={() => setSelectedEventId(null)}
+                onTouchStart={e => handleSlotTouchStart(e, day)}
+                onTouchMove={handleSlotTouchMove}
+                onTouchEnd={handleSlotTouchEnd}
               >
                 {HOURS.map((hour) => (
                   <div
@@ -463,6 +522,13 @@ export default function WeekView() {
           onClose={() => setEditEventId(null)}
         />
       )}
+
+      {/* Quick create (long-press empty slot) */}
+      <QuickCreateSheet
+        open={quickCreate.open}
+        initialStart={quickCreate.start}
+        onClose={() => setQuickCreate({ open: false })}
+      />
     </div>
   )
 }

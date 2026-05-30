@@ -2,7 +2,7 @@
 import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { startOfWeek, endOfWeek, addDays, startOfMonth, endOfMonth } from 'date-fns'
+import { startOfWeek, endOfWeek, addDays, startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns'
 import type {
   CalendarEvent, FamilyMember, EventEnrichment,
   EventLogistic, EventChecklistItem, EventActionItem,
@@ -67,16 +67,42 @@ export function useWeekEvents(selectedDate: Date) {
   return useQuery({
     queryKey: ['events', 'week', weekStart.toISOString()],
     queryFn: () => fetchEventsForRange(weekStart, weekEnd),
+    staleTime: 60_000,
+  })
+}
+
+/** Fetches 8 days starting from `today` (today → today+7) for the stacked rolling view. */
+export function useRollingEvents(today: Date) {
+  const start = startOfDay(today)
+  const end   = endOfDay(addDays(today, 7))
+
+  useRealtimeEventInvalidation()
+
+  return useQuery({
+    queryKey: ['events', 'rolling', start.toISOString()],
+    queryFn: () => fetchEventsForRange(start, end),
+    staleTime: 60_000,
   })
 }
 
 /**
  * Singleton realtime subscription — only one channel regardless of how many
  * components call useWeekEvents/useTodayEvents simultaneously.
+ * Debounced: rapid-fire DB changes (e.g. bulk recurrence inserts) batch into
+ * a single invalidation 600ms after the last event, preventing request storms.
  */
 let _realtimeSubscribers = 0
 let _realtimeChannel: ReturnType<typeof supabase.channel> | null = null
 const _invalidateCallbacks = new Set<() => void>()
+let _debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+function _fireInvalidation() {
+  if (_debounceTimer) clearTimeout(_debounceTimer)
+  _debounceTimer = setTimeout(() => {
+    _debounceTimer = null
+    _invalidateCallbacks.forEach(f => f())
+  }, 600)
+}
 
 function useRealtimeEventInvalidation() {
   const qc = useQueryClient()
@@ -88,15 +114,9 @@ function useRealtimeEventInvalidation() {
     if (_realtimeSubscribers === 1) {
       _realtimeChannel = supabase
         .channel('events-realtime-singleton')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
-          _invalidateCallbacks.forEach(f => f())
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'event_members' }, () => {
-          _invalidateCallbacks.forEach(f => f())
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'event_enrichments' }, () => {
-          _invalidateCallbacks.forEach(f => f())
-        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, _fireInvalidation)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'event_members' }, _fireInvalidation)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'event_enrichments' }, _fireInvalidation)
         .subscribe()
     }
 
@@ -120,6 +140,7 @@ export function useTodayEvents(date: Date) {
   return useQuery({
     queryKey: ['events', 'today', dayStart.toISOString()],
     queryFn: () => fetchEventsForRange(dayStart, dayEnd),
+    staleTime: 60_000,
   })
 }
 
@@ -132,5 +153,6 @@ export function useMonthEvents(selectedDate: Date) {
   return useQuery({
     queryKey: ['events', 'month', monthStart.toISOString()],
     queryFn: () => fetchEventsForRange(monthStart, monthEnd),
+    staleTime: 60_000,
   })
 }

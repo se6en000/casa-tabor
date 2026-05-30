@@ -12,7 +12,7 @@ export interface ChatMessage {
 }
 
 export type AssistantAction =
-  | { action: 'create_event'; title: string; start: string; end: string; location: string | null; members: string[]; needs_clarification: string | null }
+  | { action: 'create_event'; title: string; start: string; end: string; location: string | null; members: string[]; event_type?: 'event' | 'reminder'; needs_clarification: string | null }
   | { action: 'update_event'; id: string; changes: Record<string, string>; needs_clarification: string | null }
   | { action: 'delete_event'; id: string; title: string; needs_clarification: string | null }
 
@@ -81,10 +81,28 @@ export function useAIAssistant(ctx: AssistantContext) {
 
     try {
       const allMsgs = [...messagesRef.current, userMsg].map(m => ({ role: m.role, content: m.content }))
-      const { data, error } = await supabase.functions.invoke('ai-assistant', {
+
+      // 25s timeout — edge functions can be slow on cold start
+      const invokePromise = supabase.functions.invoke('ai-assistant', {
         body: { messages: allMsgs, context: buildContext(ctxRef.current), image: imagePayload },
       })
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('AI request timed out — Supabase may be temporarily unavailable.')), 25000)
+      )
+      const { data, error } = await Promise.race([invokePromise, timeoutPromise]) as Awaited<typeof invokePromise>
       if (error) throw error
+
+      if (data.type === 'error') {
+        const isQuota = data.code === 'quota_exceeded'
+        setMessages(prev => [...prev, {
+          id: genId(),
+          role: 'assistant',
+          content: isQuota
+            ? '⚠️ AI quota reached for today. Your billing limit may need to be raised, or try again tomorrow.'
+            : `Sorry, the AI ran into an error: ${data.message ?? 'unknown error'}`,
+        }])
+        return
+      }
 
       if (data.type === 'action' || data.type === 'multi_action') {
         const actions: AssistantAction[] = data.type === 'multi_action' ? data.actions : [data.action]
@@ -114,7 +132,15 @@ export function useAIAssistant(ctx: AssistantContext) {
         setMessages(prev => [...prev, { id: genId(), role: 'assistant', content: data.text }])
       }
     } catch (e) {
-      setMessages(prev => [...prev, { id: genId(), role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }])
+      const msg = (e as Error).message ?? 'Something went wrong'
+      const isTimeout = msg.includes('timed out') || msg.includes('unavailable')
+      setMessages(prev => [...prev, {
+        id: genId(),
+        role: 'assistant',
+        content: isTimeout
+          ? '⏱ Taking too long to respond — Supabase may be temporarily unavailable. Please try again in a moment.'
+          : 'Sorry, something went wrong. Please try again.',
+      }])
       console.error('[useAIAssistant]', e)
     } finally {
       setLoading(false)

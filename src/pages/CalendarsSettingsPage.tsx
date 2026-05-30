@@ -35,6 +35,7 @@ export default function CalendarsSettingsPage() {
   }, [connected, errorParam, params, refetch, setParams])
 
   return (
+    <div className="flex-1 overflow-y-auto">
     <div className="max-w-2xl mx-auto p-6">
       <Link
         to="/settings"
@@ -95,6 +96,7 @@ export default function CalendarsSettingsPage() {
           Sync all now
         </button>
       </div>
+    </div>
     </div>
   )
 }

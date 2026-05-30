@@ -10,7 +10,20 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const sb = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))
 
-  const today = new Date().toISOString().slice(0, 10)
+  // Client sends UTC ISO strings for local-day boundaries so timezone is always correct.
+  // e.g. for EDT (UTC-4): dayStartUtc = "2026-05-30T04:00:00.000Z", dayEndUtc = "2026-05-31T03:59:59.999Z"
+  let dayStartUtc: string, dayEndUtc: string, localDate: string
+  try {
+    const body = await req.json().catch(() => ({}))
+    dayStartUtc = body.dayStartUtc ?? new Date().toISOString()
+    dayEndUtc   = body.dayEndUtc   ?? new Date().toISOString()
+    localDate   = body.localDate   ?? new Date().toISOString().slice(0, 10)
+  } catch {
+    dayStartUtc = new Date().toISOString()
+    dayEndUtc   = new Date().toISOString()
+    localDate   = new Date().toISOString().slice(0, 10)
+  }
+  const today = localDate
 
   // Load LLM config and weather config from settings
   const { data: settingRow } = await sb.from('settings').select('value').eq('key', 'llm_config').single()
@@ -18,12 +31,12 @@ Deno.serve(async (req) => {
   const { data: weatherSetting } = await sb.from('settings').select('value').eq('key', 'weather').maybeSingle()
   const weatherCity: string = weatherSetting?.value?.city ?? ''
 
-  // Load today's events with member info
+  // Load today's events — use UTC boundaries computed by client for local-day accuracy
   const { data: events, error: evErr } = await sb
     .from('events')
     .select('id, title, start_time, end_time, all_day, location_name, description, event_members(family_member_id, family_members(name, color_hex)), event_enrichments(prep_notes, category, what_to_bring, weather_at_event, outfit_suggestion, cost_estimate, dietary_notes)')
-    .gte('start_time', today + 'T00:00:00Z')
-    .lte('start_time', today + 'T23:59:59Z')
+    .gte('start_time', dayStartUtc)
+    .lte('start_time', dayEndUtc)
     .eq('status', 'confirmed')
     .order('start_time')
 

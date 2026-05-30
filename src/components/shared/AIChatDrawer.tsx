@@ -648,6 +648,7 @@ async function executeAction(action: AssistantAction, family: FamilyMember[], qc
       all_day: false,
       status: 'confirmed',
       is_enriched: false,
+      event_type: action.event_type ?? 'event',
     }).select().single()
 
     if (error || !event) { console.error('[AI create_event]', error); return }
@@ -663,11 +664,9 @@ async function executeAction(action: AssistantAction, family: FamilyMember[], qc
       )
     }
 
-    // Fire-and-forget: create in Google Calendar, then enrich, then analyze conflicts + prep
+    // Fire-and-forget: create in Google Calendar, then enrich (conflicts+prep run on scheduled cadence)
     supabase.functions.invoke('create-google-event', { body: { event_id: event.id } })
       .then(() => supabase.functions.invoke('enrich-event', { body: { event_id: event.id } }))
-      .then(() => supabase.functions.invoke('analyze-conflicts', {}))
-      .then(() => supabase.functions.invoke('analyze-prep', {}))
       .catch(console.error)
     qc.invalidateQueries({ queryKey: ['events'] })
   }

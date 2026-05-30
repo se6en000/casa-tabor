@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Sparkles } from 'lucide-react'
 import { motion } from 'framer-motion'
 import AIChatDrawer from './AIChatDrawer'
@@ -15,6 +15,12 @@ interface Props {
 export default function AIAssistantFab({ page, events, family, homeCity }: Props) {
   const [open, setOpen] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    const handler = () => setOpen(true)
+    document.addEventListener('open-ai-chat', handler)
+    return () => document.removeEventListener('open-ai-chat', handler)
+  }, [])
 
   function getAnchor() {
     if (!btnRef.current) return undefined

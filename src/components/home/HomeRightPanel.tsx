@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react'
 import { format, startOfWeek, addDays } from 'date-fns'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, Sun, ChevronRight, Bot, CalendarDays, Bell, ChevronDown, Plane } from 'lucide-react'
+import { AlertTriangle, Sun, ChevronRight, Bot, CalendarDays, Bell, ChevronDown, Plane, X } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useWeekEvents } from '../../hooks/useCalendarEvents'
@@ -13,6 +13,9 @@ import { supabase } from '../../lib/supabase'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useUpcomingTrips } from '../../hooks/useTrips'
 import TripCard from './TripCard'
+import ConflictAlertsSection from '../shared/ConflictAlertsSection'
+import { useWeekConflicts } from '../../hooks/useConflicts'
+import PrepActionSection from './PrepActionSection'
 
 interface Props {
   now: Date
@@ -26,28 +29,32 @@ interface Briefing {
 
 /** Shared collapsible section header — gold icon + label + chevron */
 function SectionHeader({
-  icon, label, open, onToggle, action,
+  icon, label, open, onToggle, action, badge,
 }: {
   icon: React.ReactNode
   label: string
   open: boolean
   onToggle: () => void
   action?: React.ReactNode
+  badge?: number
 }) {
   return (
-    <button onClick={onToggle} className="w-full flex items-center justify-between">
-      <div className="flex items-center gap-1.5 text-body font-medium text-casa-navy">
+    <div className="w-full flex items-center justify-between">
+      <button onClick={onToggle} className="flex-1 flex items-center gap-1.5 text-body font-medium text-casa-navy text-left">
         {icon}
         {label}
-      </div>
-      <div className="flex items-center gap-2">
-        {action && <span onClick={e => e.stopPropagation()}>{action}</span>}
+        {badge != null && badge > 0 && (
+          <span className="ml-1 text-[11px] font-bold bg-casa-gold/20 text-casa-gold px-1.5 py-0.5 rounded-full">
+            {badge}
+          </span>
+        )}
         <ChevronDown
           size={13}
-          className={cn('text-casa-muted transition-transform duration-200', open ? 'rotate-0' : '-rotate-90')}
+          className={cn('ml-auto text-casa-muted transition-transform duration-200', open ? 'rotate-0' : '-rotate-90')}
         />
-      </div>
-    </button>
+      </button>
+      {action && <div className="ml-2 shrink-0">{action}</div>}
+    </div>
   )
 }
 
@@ -77,7 +84,8 @@ function parseParagraphs(text: string): string[] {
 }
 
 export default function HomeRightPanel({ now, allTodayEvents }: Props) {
-  const { notifications } = useNotifications()
+  const { notifications, markRead, clearAll } = useNotifications()
+  const { data: conflicts = [] } = useWeekConflicts()
   const weekStart = startOfWeek(now, { weekStartsOn: 0 })
   const { data: weekEvents } = useWeekEvents(now)
   const { data: upcomingTrips } = useUpcomingTrips()
@@ -215,28 +223,43 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
         )}
       </div>
 
-      {/* ── Alerts ────────────────────────────────────────────── */}
-      <div className="px-5 py-5 border-b border-casa-border">
-        <SectionHeader
-          icon={<AlertTriangle size={15} className="text-casa-gold" />}
-          label="Alerts"
-          open={openAlerts}
-          onToggle={() => setOpenAlerts(v => !v)}
-        />
-        {openAlerts && (
-          <div className="mt-3 text-caption text-casa-muted bg-amber-50 rounded-xl px-3 py-2.5">
-            No conflicts detected 🎉
-          </div>
-        )}
-      </div>
+      {/* ── Prep & Action ─────────────────────────────────────── */}
+      <PrepActionSection />
+
+      {/* ── Heads Up (only when active conflicts exist) ───────── */}
+      {conflicts.length > 0 && (
+        <div className="px-5 py-5 border-b border-casa-border">
+          <SectionHeader
+            icon={<AlertTriangle size={15} className="text-amber-500" />}
+            label="Heads Up"
+            badge={conflicts.length}
+            open={openAlerts}
+            onToggle={() => setOpenAlerts(v => !v)}
+          />
+          {openAlerts && (
+            <div className="mt-3">
+              <ConflictAlertsSection />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Recent Activity ───────────────────────────────────── */}
       <div className="px-5 py-5 flex-1">
         <SectionHeader
           icon={<Bell size={15} className="text-casa-gold" />}
           label="Recent Activity"
+          badge={notifications.filter(n => !n.read).length || undefined}
           open={openActivity}
           onToggle={() => setOpenActivity(v => !v)}
+          action={notifications.length > 0 ? (
+            <button
+              onClick={() => clearAll.mutate()}
+              className="text-[10px] text-casa-muted hover:text-red-500 transition-colors font-medium"
+            >
+              Clear all
+            </button>
+          ) : undefined}
         />
         {openActivity && (
           <div className="mt-3">
@@ -245,13 +268,22 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
             ) : (
               <div>
                 {notifications.slice(0, 6).map(n => (
-                  <div key={n.id} className="py-2.5 border-b border-casa-divider last:border-0">
-                    <p className={cn('text-caption font-medium leading-snug', n.read ? 'text-casa-muted' : 'text-casa-navy')}>
-                      {n.body ?? n.title}
-                    </p>
-                    <p className="text-caption text-casa-muted/60 mt-0.5">
-                      {format(new Date(n.created_at), 'h:mm a')}
-                    </p>
+                  <div key={n.id} className="py-2.5 border-b border-casa-divider last:border-0 flex items-start gap-2 group">
+                    <div className="flex-1 min-w-0">
+                      <p className={cn('text-caption font-medium leading-snug', n.read ? 'text-casa-muted' : 'text-casa-navy')}>
+                        {n.body ?? n.title}
+                      </p>
+                      <p className="text-caption text-casa-muted/60 mt-0.5">
+                        {format(new Date(n.created_at), 'h:mm a')}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => markRead.mutate(n.id)}
+                      className="shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity text-casa-muted hover:text-red-400"
+                      title="Dismiss"
+                    >
+                      <X size={12} />
+                    </button>
                   </div>
                 ))}
               </div>

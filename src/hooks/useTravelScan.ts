@@ -13,12 +13,12 @@ export function useTravelScan() {
     const lastScan = localStorage.getItem(STORAGE_KEY)
     if (lastScan === today) return
 
+    // Set BEFORE invoking — prevents re-firing on error/timeout
+    localStorage.setItem(STORAGE_KEY, today)
+
     // Fire and forget — runs in background
     supabase.functions
       .invoke('scan-travel-emails', { body: {} })
-      .then(({ error }) => {
-        if (!error) localStorage.setItem(STORAGE_KEY, today)
-      })
       .catch(() => { /* non-fatal */ })
   }, [])
 }

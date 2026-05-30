@@ -133,8 +133,8 @@ export async function patchGoogleEvent(opts: {
     summary?: string
     description?: string
     location?: string
-    start?: { dateTime: string }
-    end?: { dateTime: string }
+    start?: { dateTime?: string; date?: string }
+    end?: { dateTime?: string; date?: string }
   }
 }): Promise<void> {
   const res = await fetch(
@@ -145,7 +145,8 @@ export async function patchGoogleEvent(opts: {
       body: JSON.stringify(opts.patch),
     },
   )
-  if (!res.ok) throw new Error(`Calendar patch failed: ${res.status} ${await res.text()}`)
+  const responseText = await res.text()
+  if (!res.ok) throw new Error(`Calendar patch failed: ${res.status} ${responseText}`)
 }
 
 export async function deleteGoogleEvent(opts: {

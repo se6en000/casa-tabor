@@ -29,11 +29,15 @@ export default function CalendarPage() {
   // Track slide direction: 1 = forward (next), -1 = backward (prev), 0 = today jump
   const [direction, setDirection] = useState(1)
 
-  const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 })
-  const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 0 })
-
   const isDay = activeView === 'today'
   const isMonth = activeView === 'month'
+  const isStacked = activeView === 'stacked'
+
+  // Stacked view always anchors to today — use today as header base so the
+  // label matches what StackedView actually renders (rolling 8-day window).
+  const headerBase = isStacked ? new Date() : selectedDate
+  const weekStart = startOfWeek(headerBase, { weekStartsOn: 0 })
+  const stackedEnd = addDays(new Date(), 7)
 
   const goToToday = () => { setDirection(0); setSelectedDate(new Date()) }
   const goPrev = useCallback(() => {
@@ -53,7 +57,9 @@ export default function CalendarPage() {
     ? format(selectedDate, 'EEEE, MMMM d, yyyy')
     : isMonth
     ? format(selectedDate, 'MMMM yyyy')
-    : `${format(weekStart, 'MMMM d')} – ${format(weekEnd, 'd, yyyy')}`
+    : isStacked
+    ? `${format(new Date(), 'MMM d')} – ${format(stackedEnd, stackedEnd.getMonth() === new Date().getMonth() ? 'd, yyyy' : 'MMM d, yyyy')}`
+    : `${format(weekStart, 'MMMM d')} – ${format(endOfWeek(selectedDate, { weekStartsOn: 0 }), 'd, yyyy')}`
 
   // Touch swipe detection
   const touchStartX = useRef<number | null>(null)
@@ -77,7 +83,7 @@ export default function CalendarPage() {
   const animKey = `${activeView}-${format(selectedDate, 'yyyy-MM-dd')}`
 
   return (
-    <div className="flex flex-col h-[calc(100vh-var(--spacing-nav-height))] lg:h-screen">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Top toolbar */}
       <div className="flex items-center justify-between px-6 py-3 border-b border-casa-border bg-casa-bg">
         <div className="flex items-center gap-3">
@@ -87,12 +93,16 @@ export default function CalendarPage() {
           >
             Today
           </button>
-          <button onClick={goPrev} className="p-1.5 rounded-button hover:bg-casa-divider transition-colors text-casa-muted">
-            <ChevronLeft size={18} />
-          </button>
-          <button onClick={goNext} className="p-1.5 rounded-button hover:bg-casa-divider transition-colors text-casa-muted">
-            <ChevronRight size={18} />
-          </button>
+          {!isStacked && (
+            <>
+              <button onClick={goPrev} className="p-1.5 rounded-button hover:bg-casa-divider transition-colors text-casa-muted">
+                <ChevronLeft size={18} />
+              </button>
+              <button onClick={goNext} className="p-1.5 rounded-button hover:bg-casa-divider transition-colors text-casa-muted">
+                <ChevronRight size={18} />
+              </button>
+            </>
+          )}
           <h2 className="font-display text-heading text-casa-navy ml-2">
             {headerLabel}
           </h2>

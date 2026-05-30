@@ -39,6 +39,19 @@ export const PRESETS: ThemePreset[] = [
     colors: { ...DEFAULTS },
   },
   {
+    id: 'espresso',
+    label: 'Espresso',
+    emoji: '☕',
+    colors: {
+      'casa-gold':    '#B8955A',
+      'casa-navy':    '#3A2812',
+      'casa-bg':      '#EDE5D8',
+      'casa-surface': '#F7F2EA',
+      'casa-text':    '#2C1A0E',
+      'casa-border':  '#D4C8B8',
+    },
+  },
+  {
     id: 'christmas',
     label: 'Christmas',
     emoji: '🎄',

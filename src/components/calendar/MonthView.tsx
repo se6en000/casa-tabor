@@ -9,6 +9,7 @@ import { cn } from '../../utils/cn'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { useMonthEvents } from '../../hooks/useCalendarEvents'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
+import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, REMINDER_COLOR } from '../../utils/holidays'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -75,7 +76,9 @@ function DayPopover({ day, events, onClose, onSelectDay }: DayPopoverProps) {
           <p className="px-4 py-3 text-caption text-casa-muted italic">No events</p>
         )}
         {events.map(event => {
-          const color = getPrimaryColor(event)
+          const holiday = isHoliday(event)
+          const reminder = !holiday && isReminder(event)
+          const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(event)
           const start = parseISO(event.start_time)
           const isAllDay = event.start_time.endsWith('00:00:00+00:00') && event.end_time?.endsWith('00:00:00+00:00')
           return (
@@ -85,9 +88,17 @@ function DayPopover({ day, events, onClose, onSelectDay }: DayPopoverProps) {
                 style={{ backgroundColor: color }}
               />
               <div className="min-w-0 flex-1">
-                <p className="text-body-sm font-semibold text-casa-navy truncate">{event.title}</p>
+                <p className={cn(
+                  'text-body-sm font-semibold truncate',
+                  holiday ? 'text-red-700' : reminder ? 'text-amber-700' : 'text-casa-navy',
+                )}>
+                  {holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : event.title}
+                </p>
+                {reminder && (
+                  <span className="text-[9px] font-semibold text-amber-500 uppercase tracking-wide">Reminder</span>
+                )}
                 <div className="flex items-center gap-3 mt-0.5">
-                  {!isAllDay && (
+                  {!isAllDay && !reminder && (
                     <span className="flex items-center gap-1 text-caption text-casa-muted">
                       <Clock size={10} />
                       {format(start, 'h:mm a')}
@@ -175,18 +186,24 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
         {/* Event dots / pills */}
         <div className="space-y-0.5">
           {visible.map(event => {
-            const color = getPrimaryColor(event)
+            const holiday = isHoliday(event)
+            const reminder = !holiday && isReminder(event)
+            const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(event)
             return (
               <div
                 key={event.id}
-                className="flex items-center gap-1 px-1 py-0.5 rounded text-[9px] font-medium leading-none truncate"
+                className={cn(
+                  'flex items-center gap-1 px-1 py-0.5 rounded text-[9px] font-medium leading-none truncate',
+                  holiday && 'font-semibold tracking-tight',
+                  reminder && 'font-semibold',
+                )}
                 style={{ backgroundColor: color + '22', color }}
               >
                 <span
                   className="w-1.5 h-1.5 rounded-full shrink-0"
                   style={{ backgroundColor: color }}
                 />
-                <span className="truncate">{event.title}</span>
+                <span className="truncate">{holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : event.title}</span>
               </div>
             )
           })}
@@ -221,7 +238,7 @@ export default function MonthView() {
   const grid = buildMonthGrid(selectedDate)
 
   const events = (allEvents ?? []).filter(e =>
-    visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
+    isHoliday(e) || isReminder(e) || visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
   )
 
   function eventsForDay(day: Date): EventWithDetails[] {

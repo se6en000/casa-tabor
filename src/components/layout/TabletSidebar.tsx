@@ -1,10 +1,9 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { format, isAfter, isBefore } from 'date-fns'
-import { Home, Calendar, Sun, Music, Settings, Bell, Sparkles, Cloud } from 'lucide-react'
+import { Home, Calendar, Sun, Music, Settings } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useLiveClock } from '../../hooks/useLiveClock'
-import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
@@ -22,11 +21,9 @@ const NAV = [
 export default function TabletSidebar() {
   const now = useLiveClock(15_000)
   const { data: family } = useFamilyMembers()
-  const { data: weather } = useHomeWeather()
   const { visibleMembers, toggleMember } = useCalendarStore()
-  const { unreadCount } = useNotifications()
+  useNotifications()
   const [notifOpen, setNotifOpen] = useState(false)
-  const navigate = useNavigate()
   const { data: todayEvents } = useTodayEvents(now)
 
   // Infer status per family member
@@ -46,29 +43,8 @@ export default function TabletSidebar() {
     <>
       <aside className="hidden lg:flex w-72 flex-shrink-0 bg-casa-surface border-r border-casa-border flex-col h-screen sticky top-0 overflow-y-auto z-30">
 
-        {/* Brand + clock */}
-        <div className="px-6 pt-8 pb-6 border-b border-casa-border">
-          <button
-            onClick={() => navigate('/')}
-            className="font-display text-display-md text-casa-navy leading-none hover:text-casa-gold transition-colors"
-          >
-            Casa Tabor
-          </button>
-          <div className="font-mono text-display-lg text-casa-navy mt-2 tabular-nums leading-none">
-            {format(now, 'h:mm')}
-            <span className="text-heading ml-1.5 text-casa-muted">{format(now, 'a')}</span>
-          </div>
-          <div className="text-caption text-casa-muted mt-1">{format(now, 'EEEE, MMMM d')}</div>
-          {weather && (
-            <div className="flex items-center gap-1.5 text-caption text-casa-muted mt-2">
-              <Cloud size={12} />
-              <span>{weather.temp}° · {weather.condition}</span>
-            </div>
-          )}
-        </div>
-
         {/* Family — filter + who's home merged */}
-        <div className="px-4 py-5 border-b border-casa-border">
+        <div className="px-4 pt-6 pb-5 border-b border-casa-border">
           <p className="text-caption text-casa-muted uppercase tracking-wider mb-3 px-2">Family</p>
           <div className="flex flex-col gap-0.5">
             {family?.map(m => {
@@ -139,30 +115,6 @@ export default function TabletSidebar() {
             </NavLink>
           ))}
         </nav>
-
-        {/* Bottom: AI + notifications */}
-        <div className="px-4 pb-6 pt-4 border-t border-casa-border flex flex-col gap-2">
-          <button
-            onClick={() => document.dispatchEvent(new CustomEvent('open-ai-chat'))}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl bg-casa-gold/10 hover:bg-casa-gold/20 text-casa-gold transition-colors text-body font-medium"
-          >
-            <Sparkles size={19} strokeWidth={1.8} />
-            Ask AI
-          </button>
-
-          <button
-            onClick={() => setNotifOpen(true)}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-casa-muted hover:text-casa-navy hover:bg-casa-bg transition-colors text-body font-medium"
-          >
-            <Bell size={19} strokeWidth={1.8} />
-            Activity
-            {unreadCount > 0 && (
-              <span className="ml-auto text-caption font-bold bg-red-500 text-white rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            )}
-          </button>
-        </div>
       </aside>
 
       <NotificationDrawer open={notifOpen} onClose={() => setNotifOpen(false)} />
