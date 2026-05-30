@@ -135,7 +135,7 @@ export default function StatusDashboardPage() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-    <div className="max-w-2xl mx-auto p-6 space-y-6">
+    <div className="max-w-5xl mx-auto p-6 space-y-6">
       {/* Header */}
       <div>
         <Link to="/settings" className="inline-flex items-center gap-1 text-body-sm text-casa-muted hover:text-casa-navy mb-4">
@@ -172,10 +172,10 @@ export default function StatusDashboardPage() {
         </div>
       )}
 
-      {/* Today */}
+      {/* Today — 4 stat cards in a row on desktop, 2×2 on mobile */}
       <div>
         <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">Today</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard
             label="AI Calls"
             value={fmt(today.calls)}
@@ -194,7 +194,7 @@ export default function StatusDashboardPage() {
           <StatCard
             label="Est. Cost"
             value={today.calls > 0 ? fmtCost(today.cost) : '—'}
-            sub={isGeminiFree ? 'Gemini free tier — no charge' : undefined}
+            sub={isGeminiFree ? 'Free tier — no charge' : undefined}
             icon={<DollarSign size={16} />}
           />
           <StatCard
@@ -207,100 +207,112 @@ export default function StatusDashboardPage() {
         </div>
       </div>
 
-      {/* This Month */}
-      <div>
-        <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">Last 30 Days</p>
-        <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-3">
-          <div className="flex justify-between text-body-sm">
-            <span className="text-casa-muted">Total AI calls</span>
-            <span className="font-semibold text-casa-navy">{fmt(month.calls)}</span>
-          </div>
-          <div className="flex justify-between text-body-sm">
-            <span className="text-casa-muted">Input tokens</span>
-            <span className="font-semibold text-casa-navy">{fmt(month.inputTokens)}</span>
-          </div>
-          <div className="flex justify-between text-body-sm">
-            <span className="text-casa-muted">Output tokens</span>
-            <span className="font-semibold text-casa-navy">{fmt(month.outputTokens)}</span>
-          </div>
-          <div className="flex justify-between text-body-sm">
-            <span className="text-casa-muted">Cache hits saved</span>
-            <span className="font-semibold text-emerald-700">{fmt(month.cached)} calls</span>
-          </div>
-          <div className="h-px bg-casa-border" />
-          <div className="flex justify-between text-body-sm">
-            <span className="text-casa-muted">Est. cost</span>
-            <span className="font-semibold text-casa-navy">{month.calls > 0 ? fmtCost(month.cost) : '—'}</span>
-          </div>
-          {isGeminiFree && (
-            <p className="text-caption text-casa-muted bg-casa-bg/60 rounded px-2 py-1.5">
-              💡 You're on Gemini free tier — no charges apply. Cost shown is what you'd pay on a paid plan.
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Last 7 days chart */}
-      <div>
-        <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">
-          <BarChart3 size={12} className="inline mr-1.5 mb-0.5" />Calls by Day (last 7)
-        </p>
-        <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card">
-          <div className="flex items-end gap-2 h-24">
-            {last7.map(d => (
-              <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
-                <div
-                  className={cn(
-                    'w-full rounded-sm transition-all',
-                    d.date === new Date().toLocaleDateString('en-US', { weekday: 'short' })
-                      ? 'bg-casa-gold'
-                      : 'bg-casa-navy/20',
-                  )}
-                  style={{ height: `${Math.max(4, (d.calls / maxCalls) * 80)}px` }}
-                  title={`${d.calls} calls`}
-                />
-                <span className="text-caption text-casa-muted" style={{ fontSize: 10 }}>{d.date}</span>
-              </div>
-            ))}
-          </div>
-          <p className="text-caption text-casa-muted mt-2 text-center">
-            {last7.reduce((s, d) => s + d.calls, 0)} total calls this week
-          </p>
-        </div>
-      </div>
-
-      {/* By function */}
-      {Object.keys(byFunction).length > 0 && (
+      {/* Middle row: Last 30 days table + 7-day bar chart side by side on desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* This Month */}
         <div>
-          <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">By Function (30 days)</p>
-          <div className="bg-casa-surface rounded-card border border-casa-border shadow-card divide-y divide-casa-border">
-            {Object.entries(byFunction)
-              .sort((a, b) => b[1].calls - a[1].calls)
-              .map(([fn, stats]) => (
-                <div key={fn} className="flex items-center justify-between px-4 py-3">
-                  <div>
-                    <p className="text-body-sm font-medium text-casa-navy">{fn}</p>
-                    <p className="text-caption text-casa-muted">{fmt(stats.tokens)} tokens</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-body-sm font-semibold text-casa-navy">{stats.calls} calls</p>
-                    <p className="text-caption text-casa-muted">{fmtCost(stats.cost)}</p>
-                  </div>
+          <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">Last 30 Days</p>
+          <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-3 h-full">
+            <div className="flex justify-between text-body-sm">
+              <span className="text-casa-muted">Total AI calls</span>
+              <span className="font-semibold text-casa-navy">{fmt(month.calls)}</span>
+            </div>
+            <div className="flex justify-between text-body-sm">
+              <span className="text-casa-muted">Input tokens</span>
+              <span className="font-semibold text-casa-navy">{fmt(month.inputTokens)}</span>
+            </div>
+            <div className="flex justify-between text-body-sm">
+              <span className="text-casa-muted">Output tokens</span>
+              <span className="font-semibold text-casa-navy">{fmt(month.outputTokens)}</span>
+            </div>
+            <div className="flex justify-between text-body-sm">
+              <span className="text-casa-muted">Cache hits saved</span>
+              <span className="font-semibold text-emerald-700">{fmt(month.cached)} calls</span>
+            </div>
+            <div className="h-px bg-casa-border" />
+            <div className="flex justify-between text-body-sm">
+              <span className="text-casa-muted">Est. cost</span>
+              <span className="font-semibold text-casa-navy">{month.calls > 0 ? fmtCost(month.cost) : '—'}</span>
+            </div>
+            {isGeminiFree && (
+              <p className="text-caption text-casa-muted bg-casa-bg/60 rounded px-2 py-1.5">
+                💡 Gemini free tier — no charges apply. Cost shown is what you'd pay on a paid plan.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Last 7 days chart */}
+        <div>
+          <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">
+            <BarChart3 size={12} className="inline mr-1.5 mb-0.5" />Calls by Day (last 7)
+          </p>
+          <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card h-full flex flex-col justify-between">
+            <div className="flex items-end gap-2 h-32">
+              {last7.map(d => (
+                <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
+                  <div
+                    className={cn(
+                      'w-full rounded-sm transition-all',
+                      d.date === new Date().toLocaleDateString('en-US', { weekday: 'short' })
+                        ? 'bg-casa-gold'
+                        : 'bg-casa-navy/20',
+                    )}
+                    style={{ height: `${Math.max(4, (d.calls / maxCalls) * 100)}px` }}
+                    title={`${d.calls} calls`}
+                  />
+                  <span className="text-casa-muted" style={{ fontSize: 10 }}>{d.date}</span>
                 </div>
               ))}
+            </div>
+            <p className="text-caption text-casa-muted mt-3 text-center">
+              {last7.reduce((s, d) => s + d.calls, 0)} total calls this week
+            </p>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Tips */}
-      <div className="bg-casa-bg/60 rounded-card border border-casa-border/50 p-4 space-y-2">
-        <p className="text-body-sm font-semibold text-casa-navy">💡 Cost control tips</p>
-        <ul className="text-caption text-casa-muted space-y-1.5 list-disc list-inside">
-          <li>Gemini 2.5 Flash is the cheapest capable model (~$0.075/1M input)</li>
-          <li>Cache hits are free — high hit rate means dedup is working well</li>
-          <li>AI chat (ai-assistant) is capped by the 25s timeout; each reply is ~600 tokens</li>
-          <li>Enrichment runs once per event; edits only re-enrich if content changes</li>
-        </ul>
+      {/* Bottom row: By function + Tips side by side on desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* By function */}
+        <div>
+          <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">By Function (30 days)</p>
+          {Object.keys(byFunction).length > 0 ? (
+            <div className="bg-casa-surface rounded-card border border-casa-border shadow-card divide-y divide-casa-border">
+              {Object.entries(byFunction)
+                .sort((a, b) => b[1].calls - a[1].calls)
+                .map(([fn, stats]) => (
+                  <div key={fn} className="flex items-center justify-between px-4 py-3">
+                    <div>
+                      <p className="text-body-sm font-medium text-casa-navy">{fn}</p>
+                      <p className="text-caption text-casa-muted">{fmt(stats.tokens)} tokens</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-body-sm font-semibold text-casa-navy">{stats.calls} calls</p>
+                      <p className="text-caption text-casa-muted">{fmtCost(stats.cost)}</p>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <div className="bg-casa-surface rounded-card border border-casa-border p-6 shadow-card text-center text-casa-muted text-body-sm">
+              No AI calls yet — data appears here after first use.
+            </div>
+          )}
+        </div>
+
+        {/* Tips */}
+        <div>
+          <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">Cost Control Tips</p>
+          <div className="bg-casa-bg/60 rounded-card border border-casa-border/50 p-4 space-y-2">
+            <ul className="text-caption text-casa-muted space-y-2 list-disc list-inside">
+              <li>Gemini 2.5 Flash is the cheapest capable model (~$0.075/1M input)</li>
+              <li>Cache hits are free — high hit rate means dedup is working well</li>
+              <li>AI chat replies are capped at ~600 tokens each</li>
+              <li>Enrichment only re-runs if the event content actually changes</li>
+            </ul>
+          </div>
+        </div>
       </div>
 
       <p className="text-caption text-casa-muted text-center pb-4">
