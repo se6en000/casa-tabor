@@ -139,7 +139,7 @@ export default function CalendarPage() {
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ type: 'spring', stiffness: 300, damping: 35, mass: 0.8 }}
+            transition={{ type: 'tween', duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
             className="absolute inset-0 flex flex-col"
           >
             {activeView === 'week' && <WeekView />}

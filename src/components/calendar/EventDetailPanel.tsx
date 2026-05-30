@@ -69,7 +69,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 initial={{ y: '100%' }}
                 animate={{ y: 0 }}
                 exit={{ y: '100%' }}
-                transition={{ type: 'tween', duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+                transition={{ type: 'tween', duration: 0.38, ease: [0.32, 0.72, 0, 1] }}
                 drag="y"
                 dragConstraints={{ top: 0 }}
                 dragElastic={{ top: 0, bottom: 0.15 }}
@@ -94,7 +94,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 initial={{ x: '100%' }}
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
-                transition={{ type: 'spring', damping: 28, stiffness: 220 }}
+                transition={{ type: 'spring', damping: 30, stiffness: 180 }}
                 className="fixed top-0 right-0 h-full w-[420px] bg-casa-surface border-l border-casa-border shadow-modal z-[55] flex flex-col"
                 onClick={e => e.stopPropagation()}
               >

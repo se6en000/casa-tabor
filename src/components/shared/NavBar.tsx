@@ -81,7 +81,7 @@ export default function NavBar() {
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
-              transition={{ type: 'tween', duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+              transition={{ type: 'tween', duration: 0.38, ease: [0.32, 0.72, 0, 1] }}
               drag="y"
               dragConstraints={{ top: 0 }}
               dragElastic={{ top: 0, bottom: 0.15 }}
