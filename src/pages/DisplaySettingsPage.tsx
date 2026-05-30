@@ -68,7 +68,7 @@ function WarmthPreview({ filter }: { filter: string }) {
   return (
     <div
       className="rounded-xl overflow-hidden border border-casa-border/50 shadow-sm"
-      style={{ filter, transition: 'filter 1.5s ease-in-out' }}
+      style={{ filter, transition: 'filter 0.3s ease-out' }}
     >
       {/* Simulated screen content */}
       <div className="bg-[#FAF8F5] p-4">
