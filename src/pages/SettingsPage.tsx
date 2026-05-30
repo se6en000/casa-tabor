@@ -16,26 +16,28 @@ const sections = [
 
 export default function SettingsPage() {
   return (
-    <div className="flex-1 overflow-y-auto"><div className="max-w-2xl mx-auto p-6">
-      <h1 className="font-display text-display-md text-casa-navy mb-6">Settings</h1>
-      <div className="space-y-2">
-        {sections.map(({ to, icon: Icon, label, desc }) => (
-          <Link
-            key={to}
-            to={to}
-            className="flex items-center gap-4 bg-casa-surface rounded-card border border-casa-border p-4 shadow-card hover:shadow-card-hover transition-shadow"
-          >
-            <span className="w-10 h-10 rounded-full bg-casa-bg flex items-center justify-center text-casa-gold">
-              <Icon size={18} />
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="font-display text-heading text-casa-navy leading-none">{label}</p>
-              <p className="text-caption text-casa-muted mt-1">{desc}</p>
-            </div>
-            <ChevronRight size={18} className="text-casa-muted" />
-          </Link>
-        ))}
+    <div className="flex-1 overflow-y-auto">
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        <h1 className="font-display text-display-md text-casa-navy mb-6">Settings</h1>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {sections.map(({ to, icon: Icon, label, desc }) => (
+            <Link
+              key={to}
+              to={to}
+              className="flex items-center gap-4 bg-casa-surface rounded-card border border-casa-border p-4 shadow-card hover:shadow-card-hover transition-shadow"
+            >
+              <span className="w-10 h-10 rounded-full bg-casa-bg flex items-center justify-center text-casa-gold flex-shrink-0">
+                <Icon size={18} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="font-display text-heading text-casa-navy leading-none">{label}</p>
+                <p className="text-caption text-casa-muted mt-1">{desc}</p>
+              </div>
+              <ChevronRight size={18} className="text-casa-muted flex-shrink-0" />
+            </Link>
+          ))}
+        </div>
       </div>
-    </div></div>
+    </div>
   )
 }

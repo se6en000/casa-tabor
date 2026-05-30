@@ -104,8 +104,10 @@ export default function BriefingPage() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-    <div className="max-w-2xl mx-auto p-6 space-y-6">
-      <div className="flex items-start justify-between">
+    <div className="max-w-6xl mx-auto px-6 py-6">
+
+      {/* Header */}
+      <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="font-display text-display-md text-casa-navy">{dateLabel}</h1>
           <p className="text-caption text-casa-muted mt-1">
@@ -136,75 +138,83 @@ export default function BriefingPage() {
         </div>
       </div>
 
-      {(isLoading || isGenerating) && !briefing && (
-        <div className="ai-thinking bg-casa-surface rounded-card p-8 text-center space-y-3 shadow-card">
-          <Bot size={28} className="mx-auto text-casa-gold animate-pulse" />
-          <p className="text-body text-casa-muted">AI is thinking up your briefing…</p>
-        </div>
-      )}
+      {/* 2-column layout on large screens */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
 
-      {/* ── Conflict alerts (grouped, collapsible) ────────────── */}
-      <ConflictAlertsSection />
+        {/* Left column: alerts + AI summary */}
+        <div className="w-full lg:flex-1 space-y-4">
+          {(isLoading || isGenerating) && !briefing && (
+            <div className="ai-thinking bg-casa-surface rounded-card p-8 text-center space-y-3 shadow-card">
+              <Bot size={28} className="mx-auto text-casa-gold animate-pulse" />
+              <p className="text-body text-casa-muted">AI is thinking up your briefing…</p>
+            </div>
+          )}
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-card p-4 text-body-sm text-casa-error">
-          {error} — <Link to="/settings/ai" className="underline">check AI settings</Link>
-        </div>
-      )}
+          <ConflictAlertsSection />
 
-      {/* ── Prep & Readiness alerts ───────────────────────────── */}
-      <PrepAlertsSection />
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-card p-4 text-body-sm text-casa-error">
+              {error} — <Link to="/settings/ai" className="underline">check AI settings</Link>
+            </div>
+          )}
 
-      {briefing && (
-        <>
-          {briefing.summary_text ? (
-            <div className="bg-casa-surface rounded-card border border-casa-border p-5 shadow-card">
-              <div className="flex items-center gap-2 mb-3">
-                <Bot size={15} className="text-casa-gold" />
-                <span className="text-caption text-casa-muted font-semibold uppercase tracking-wide">Today's Briefing</span>
+          <PrepAlertsSection />
+
+          {briefing && (
+            briefing.summary_text ? (
+              <div className="bg-casa-surface rounded-card border border-casa-border p-5 shadow-card">
+                <div className="flex items-center gap-2 mb-3">
+                  <Bot size={15} className="text-casa-gold" />
+                  <span className="text-caption text-casa-muted font-semibold uppercase tracking-wide">Today's Briefing</span>
+                </div>
+                <p className="text-body text-casa-navy leading-relaxed">{briefing.summary_text}</p>
               </div>
-              <p className="text-body text-casa-navy leading-relaxed">{briefing.summary_text}</p>
-            </div>
-          ) : (
-            <div className="bg-casa-surface rounded-card border border-casa-border p-5 shadow-card text-center">
-              <p className="text-body-sm text-casa-muted">
-                No AI summary — <Link to="/settings/ai" className="text-casa-navy underline">add an API key</Link> to enable briefings.
-              </p>
-            </div>
+            ) : (
+              <div className="bg-casa-surface rounded-card border border-casa-border p-5 shadow-card text-center">
+                <p className="text-body-sm text-casa-muted">
+                  No AI summary — <Link to="/settings/ai" className="text-casa-navy underline">add an API key</Link> to enable briefings.
+                </p>
+              </div>
+            )
           )}
+        </div>
 
-          {memberList.length > 0 && (
-            <div className="space-y-3">
-              <h2 className="font-display text-heading text-casa-navy flex items-center gap-2">
-                <CalendarDays size={16} /> Today's Schedules
-              </h2>
-              {memberList.map(member => (
-                <MemberCard key={member.name} member={member} />
-              ))}
-            </div>
-          )}
+        {/* Right column: today's schedules */}
+        {briefing && (
+          <div className="w-full lg:w-[380px] xl:w-[440px] shrink-0 space-y-4">
+            {memberList.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="font-display text-heading text-casa-navy flex items-center gap-2">
+                  <CalendarDays size={16} /> Today's Schedules
+                </h2>
+                {memberList.map(member => (
+                  <MemberCard key={member.name} member={member} />
+                ))}
+              </div>
+            )}
 
-          {emptyMembers.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {emptyMembers.map(m => (
-                <span
-                  key={m.name}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-caption font-medium border border-casa-border text-casa-muted bg-casa-surface"
-                >
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color_hex }} />
-                  {m.name} — free day
-                </span>
-              ))}
-            </div>
-          )}
+            {emptyMembers.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {emptyMembers.map(m => (
+                  <span
+                    key={m.name}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-caption font-medium border border-casa-border text-casa-muted bg-casa-surface"
+                  >
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color_hex }} />
+                    {m.name} — free day
+                  </span>
+                ))}
+              </div>
+            )}
 
-          {memberList.length === 0 && emptyMembers.length === 0 && (
-            <div className="bg-casa-surface rounded-card border border-casa-border p-8 text-center shadow-card">
-              <p className="text-body text-casa-muted">No events today. Enjoy the quiet! 🌿</p>
-            </div>
-          )}
-        </>
-      )}
+            {memberList.length === 0 && emptyMembers.length === 0 && (
+              <div className="bg-casa-surface rounded-card border border-casa-border p-8 text-center shadow-card">
+                <p className="text-body text-casa-muted">No events today. Enjoy the quiet! 🌿</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <AIAssistantFab
         page="briefing"
