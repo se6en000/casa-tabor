@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
   // Load everything in parallel
   const [eventRes, llmRes, familyRes, homeRes] = await Promise.all([
     sb.from('events')
-      .select('id, title, description, start_time, end_time, all_day, location_name, address, source_member_id, event_members(family_members(id, name, full_name, role)), event_enrichments(*)')
+      .select('id, title, description, start_time, end_time, all_day, location_name, address, source_member_id, leg_type, event_members(family_members(id, name, full_name, role)), event_enrichments(*)')
       .eq('id', event_id)
       .single(),
     sb.from('settings').select('value').eq('key', 'llm_config').single(),
@@ -124,12 +124,19 @@ Deno.serve(async (req) => {
     await sb.from('event_members').insert(memberInserts)
   }
 
-  // Always write title; update location if AI found something
-  const finalLocationName = aiLocationName ?? (event.location_name as string | null)
-  const finalAddress = aiAddress ?? (event.address as string | null)
-  const eventPatch: Record<string, string> = { title: finalTitle }
-  if (aiLocationName) eventPatch.location_name = aiLocationName
-  if (aiAddress) eventPatch.address = aiAddress
+  // For trip leg events (flights, hotels), preserve the structured title and existing location
+  const isTripLeg = !!(event.leg_type as string | null)
+  const finalLocationName = isTripLeg
+    ? (event.location_name as string | null)  // never overwrite leg location
+    : (aiLocationName ?? (event.location_name as string | null))
+  const finalAddress = isTripLeg
+    ? (event.address as string | null)
+    : (aiAddress ?? (event.address as string | null))
+  const eventPatch: Record<string, string> = isTripLeg
+    ? {}  // don't overwrite title or location for leg events
+    : { title: finalTitle }
+  if (!isTripLeg && aiLocationName) eventPatch.location_name = aiLocationName
+  if (!isTripLeg && aiAddress) eventPatch.address = aiAddress
 
   await sb.from('events').update({
     is_enriched: true,
