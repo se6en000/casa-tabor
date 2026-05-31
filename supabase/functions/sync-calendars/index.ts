@@ -63,13 +63,23 @@ async function upsertEvent(sb: SupabaseClient, sourceMemberId: string, ev: Recor
   const endTime = end?.dateTime ?? (end?.date ? end.date + 'T23:59:59Z' : null)
   if (!startTime || !endTime) return
 
-  const { data: existing } = await sb.from('events').select('id, is_enriched').eq('google_event_id', ev.id).maybeSingle()
+  const { data: existing } = await sb.from('events').select('id, is_enriched, updated_at').eq('google_event_id', ev.id).maybeSingle()
   let eventId: string
 
   if (existing) {
     eventId = existing.id
     if (existing.is_enriched) {
-      // Event has been enriched — only sync timing + status, never overwrite title/location/members
+      // Event has been enriched/manually edited — "last writer wins" on times.
+      // If our DB updated_at is newer than Google's updated timestamp, the user has local
+      // changes that either haven't pushed yet or pushed successfully (Google's timestamp
+      // will be >= ours only after a successful patch). Skip overwrite if we're newer.
+      const googleUpdated = ev.updated as string | undefined
+      const dbUpdated = existing.updated_at as string | undefined
+      if (googleUpdated && dbUpdated && new Date(dbUpdated) > new Date(googleUpdated)) {
+        // Our record is newer — don't let Google overwrite the user's saved times
+        return
+      }
+      // Google is newer (or no timestamps) — sync timing + status, never overwrite title/location/members
       await sb.from('events').update({
         start_time: startTime,
         end_time: endTime,

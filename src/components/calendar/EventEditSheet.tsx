@@ -398,6 +398,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
         end_time: masterEnd,
         all_day: isAllDay,
         event_type: eventType,
+        is_enriched: true,
         updated_at: new Date().toISOString(),
       }).eq('id', event.id)
       if (error) { alert(`Save failed: ${error.message}`); return }
@@ -436,9 +437,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
               google_calendar_id: event.google_calendar_id ?? null,
               source_member_id: event.source_member_id ?? null,
               status: 'confirmed' as const,
-              is_enriched: false,
-              rrule: null,
-              recurrence_master_id: masterId,
+              is_enriched: true,
             }))
           ).select('id')
           if (newInstances?.length) {
@@ -464,6 +463,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
         all_day: isAllDay,
         event_type: eventType,
         rrule: rruleStr,
+        is_enriched: true,
         updated_at: new Date().toISOString(),
       }).eq('id', masterIdToUpdate)
 
@@ -514,7 +514,13 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     }
 
     qc.invalidateQueries({ queryKey: ['events'] })
-    supabase.functions.invoke('push-to-google', { body: { event_id: event.id } }).catch(() => {})
+    // Push changes to Google Calendar — awaited so we know if it fails
+    try {
+      const pushRes = await supabase.functions.invoke('push-to-google', { body: { event_id: event.id } })
+      if (pushRes.error) console.warn('[EventEditSheet] push-to-google error:', pushRes.error)
+    } catch (pushErr) {
+      console.warn('[EventEditSheet] push-to-google failed:', pushErr)
+    }
     // Weather is cheap (no LLM) — always fetch for this event
     supabase.functions.invoke('fetch-event-weather', { body: { event_id: event.id } })
       .then(() => qc.invalidateQueries({ queryKey: ['events'] }))
