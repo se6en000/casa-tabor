@@ -81,7 +81,7 @@ export default function HomePage() {
   )
 
   const selectedEvent = selectedEventId
-    ? (events.find(e => e.id === selectedEventId) ?? reminders.find(e => e.id === selectedEventId) ?? null)
+    ? (events.find(e => e.id === selectedEventId) ?? tomorrowEvents.find(e => e.id === selectedEventId) ?? reminders.find(e => e.id === selectedEventId) ?? null)
     : null
   const qc = useQueryClient()
 
