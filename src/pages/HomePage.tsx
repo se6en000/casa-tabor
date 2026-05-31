@@ -38,7 +38,7 @@ export default function HomePage() {
   const { visibleMembers, toggleMember } = useCalendarStore()
   const { data: weather } = useHomeWeather()
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLElement | null>(null)
 
   const events = useMemo<EventWithDetails[]>(() => {
     if (!allTodayEvents) return []
@@ -70,16 +70,9 @@ export default function HomePage() {
 
   const allTodayDone = events.length > 0 && events.every(e => isBefore(new Date(e.end_time), now))
 
-  // Scroll-to-top on mount + save scroll position on scroll
+  // Scroll-to-top on mount
   useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    el.scrollTop = 0
-    const onScroll = () => {
-      sessionStorage.setItem('home-scroll', String(el.scrollTop))
-    }
-    el.addEventListener('scroll', onScroll, { passive: true })
-    return () => el.removeEventListener('scroll', onScroll)
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
   }, [])
 
   const nextEvent = useMemo(
@@ -186,10 +179,7 @@ export default function HomePage() {
 
       {/* ── Center content ─────────────────────────────────── */}
       <div
-        ref={(el) => {
-          ;(ptrRef as React.MutableRefObject<HTMLElement | null>).current = el
-          ;(scrollRef as React.MutableRefObject<HTMLDivElement | null>).current = el
-        }}
+        ref={(el) => { ptrRef(el); scrollRef.current = el }}
         className="flex-1 min-w-0 overflow-y-auto px-6 pt-8 pb-12 lg:px-8"
       >
         {/* ── Pull-to-refresh indicator ─────────────────────── */}
