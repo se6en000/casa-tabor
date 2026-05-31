@@ -68,7 +68,7 @@ export default function HomePage() {
     })
   }, [allTomorrowEvents, visibleMembers])
 
-  const allTodayDone = events.length > 0 && events.every(e => isBefore(new Date(e.end_time), now))
+  // Show tomorrow section always (not just when today is done)
 
   // Scroll-to-top on mount
   useEffect(() => {
@@ -353,7 +353,7 @@ export default function HomePage() {
 
         {/* ── Tomorrow's timeline (shown when today is all done) ── */}
         <AnimatePresence>
-          {allTodayDone && tomorrowEvents.length > 0 && (
+          {tomorrowEvents.length > 0 && (
             <motion.section
               key="tomorrow"
               className="mt-8"
