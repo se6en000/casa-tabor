@@ -90,6 +90,8 @@ Deno.serve(async (req) => {
 
   const isAllDay = event.all_day || (!event.start_time?.includes('T') && !event.start_time?.includes(' '))
   const toISO = (t: string) => new Date(t).toISOString()
+  // Google Calendar requires timeZone when using dateTime (especially when switching from all-day)
+  const TZ = 'America/New_York'
 
   const patch = {
     summary,
@@ -97,10 +99,10 @@ Deno.serve(async (req) => {
     description,
     start: isAllDay
       ? { date: new Date(event.start_time).toISOString().slice(0, 10) }
-      : { dateTime: toISO(event.start_time) },
+      : { dateTime: toISO(event.start_time), timeZone: TZ },
     end: isAllDay
       ? { date: new Date(event.end_time).toISOString().slice(0, 10) }
-      : { dateTime: toISO(event.end_time) },
+      : { dateTime: toISO(event.end_time), timeZone: TZ },
   }
   console.log('[push-to-google] patch payload:', JSON.stringify(patch))
 
