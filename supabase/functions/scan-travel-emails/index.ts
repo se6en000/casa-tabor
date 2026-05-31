@@ -898,8 +898,12 @@ This is a family household. Other family members remain at home.`).catch(() => '
 
       if (legEventId) {
         legEventIds.push(legEventId)
-        // Push to Google Calendar (best-effort)
-        await sb.functions.invoke('push-to-google', { body: { event_id: legEventId } }).catch(() => {})
+        // Create in Google Calendar if new, otherwise push updates (best-effort)
+        if (existingLeg) {
+          await sb.functions.invoke('push-to-google', { body: { event_id: legEventId } }).catch(() => {})
+        } else {
+          await sb.functions.invoke('create-google-event', { body: { event_id: legEventId } }).catch(() => {})
+        }
       }
     }
 
