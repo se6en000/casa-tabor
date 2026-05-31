@@ -26,12 +26,20 @@ Deno.serve(async (req) => {
   if (evErr || !event) return new Response(JSON.stringify({ error: evErr?.message ?? 'event not found' }), { status: 404, headers: { ...CORS, 'content-type': 'application/json' } })
   if (!event.google_event_id) return new Response(JSON.stringify({ ok: true, skipped: 'no google_event_id' }), { headers: { ...CORS, 'content-type': 'application/json' } })
 
-  // Get the token for the source member
-  const memberId = event.source_member_id
-  if (!memberId) return new Response(JSON.stringify({ ok: true, skipped: 'no source_member_id' }), { headers: { ...CORS, 'content-type': 'application/json' } })
-
-  const { data: tok } = await sb.from('google_tokens').select('*').eq('family_member_id', memberId).single()
-  if (!tok) return new Response(JSON.stringify({ ok: true, skipped: 'no google token for member' }), { headers: { ...CORS, 'content-type': 'application/json' } })
+  // Get the token for the source member — fall back to any available token if member has none
+  let memberId = event.source_member_id
+  let tok = memberId
+    ? (await sb.from('google_tokens').select('*').eq('family_member_id', memberId).maybeSingle()).data
+    : null
+  if (!tok) {
+    // Fall back to the first available Google token in the household
+    const { data: anyTok } = await sb.from('google_tokens').select('*').limit(1).maybeSingle()
+    if (anyTok) {
+      tok = anyTok
+      memberId = anyTok.family_member_id
+    }
+  }
+  if (!tok) return new Response(JSON.stringify({ ok: true, skipped: 'no google token available' }), { headers: { ...CORS, 'content-type': 'application/json' } })
 
   // Refresh token if expired
   let accessToken = tok.access_token

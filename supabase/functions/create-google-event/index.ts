@@ -29,12 +29,22 @@ Deno.serve(async (req) => {
   // Find the primary member to use for creating the event
   const primaryMemberId = event.event_members?.find((m: { role: string }) => m.role === 'primary')?.family_member_id
     ?? event.event_members?.[0]?.family_member_id
+    ?? event.source_member_id
 
   if (!primaryMemberId) return new Response(JSON.stringify({ ok: true, skipped: 'no members' }), { headers: { ...CORS, 'content-type': 'application/json' } })
 
-  // Get Google token
-  const { data: tok } = await sb.from('google_tokens').select('*').eq('family_member_id', primaryMemberId).single()
-  if (!tok) return new Response(JSON.stringify({ ok: true, skipped: 'no google token for primary member' }), { headers: { ...CORS, 'content-type': 'application/json' } })
+  // Get Google token — fall back to any available token if primary member has none
+  let tok = (await sb.from('google_tokens').select('*').eq('family_member_id', primaryMemberId).maybeSingle()).data
+  let resolvedMemberId = primaryMemberId
+  if (!tok) {
+    // Fall back to the first available Google token in the household
+    const { data: anyTok } = await sb.from('google_tokens').select('*').limit(1).maybeSingle()
+    if (anyTok) {
+      tok = anyTok
+      resolvedMemberId = anyTok.family_member_id
+    }
+  }
+  if (!tok) return new Response(JSON.stringify({ ok: true, skipped: 'no google token available' }), { headers: { ...CORS, 'content-type': 'application/json' } })
 
   // Refresh token if needed
   let accessToken = tok.access_token
@@ -49,7 +59,7 @@ Deno.serve(async (req) => {
       access_token: t.access_token,
       expires_at: new Date(Date.now() + t.expires_in * 1000).toISOString(),
       updated_at: new Date().toISOString(),
-    }).eq('family_member_id', primaryMemberId)
+    }).eq('family_member_id', resolvedMemberId)
   }
 
   const calendarId = tok.calendar_id ?? 'primary'
@@ -74,7 +84,7 @@ Deno.serve(async (req) => {
   await sb.from('events').update({
     google_event_id: created.id,
     google_calendar_id: calendarId,
-    source_member_id: primaryMemberId,
+    source_member_id: resolvedMemberId,
     updated_at: new Date().toISOString(),
   }).eq('id', event_id)
 
