@@ -47,10 +47,12 @@ Deno.serve(async (req) => {
   const calendarId = event.google_calendar_id ?? 'primary'
 
   // ── Build Google Calendar patch ──
-  // Note: We intentionally do NOT update `summary` (title) — Gmail-auto-created events
-  // reject title changes with 400, and Google's title is the source of truth there.
+  // Send all editable fields: title, times, location, description+enrichment
 
-  // location = "Location Name, Address" or whichever we have
+  // title — strip any "Name | " prefix that Casa adds for display, send the clean title
+  const summary = (event.title as string) ?? undefined
+
+  // location — prefer location_name; append address only if it's different
   const locationParts = [event.location_name, event.address].filter((p, i, arr) => p && arr.indexOf(p) === i)
   const location = locationParts.length > 0 ? locationParts.join(', ') : undefined
 
@@ -90,6 +92,7 @@ Deno.serve(async (req) => {
   const toISO = (t: string) => new Date(t).toISOString()
 
   const patch = {
+    summary,
     ...(location !== undefined ? { location } : {}),
     description,
     start: isAllDay
