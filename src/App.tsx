@@ -29,7 +29,7 @@ function AppShell() {
 
       <div className="flex flex-1 min-h-0 pb-[--spacing-nav-height] lg:pb-0">
         <TabletSidebar />
-        <div className="flex-1 min-w-0 overflow-hidden h-full">
+        <div className="flex-1 min-w-0 overflow-y-auto h-full">
           <AnimatedRoutes />
         </div>
       </div>
