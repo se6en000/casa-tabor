@@ -14,6 +14,19 @@ export interface PackingItem {
   reason: string
 }
 
+export interface TripLeg {
+  id: string
+  leg_type: 'flight_outbound' | 'flight_return' | 'flight_leg' | 'hotel' | 'car_rental'
+  title: string
+  start_time: string
+  end_time: string
+  location_name: string | null
+  flight_number: string | null
+  confirmation_number: string | null
+  all_day: boolean
+  google_event_id: string | null
+}
+
 export interface Trip {
   id: string
   event_id: string | null
@@ -23,6 +36,7 @@ export interface Trip {
   destination_city: string | null
   destination_state: string | null
   destination_country: string | null
+  // Legacy columns (still populated for backward compat during transition)
   outbound_flight_number: string | null
   outbound_airline: string | null
   outbound_origin_airport: string | null
@@ -69,6 +83,8 @@ export interface Trip {
   trip_end_date: string | null
   status: string
   created_at: string
+  // Leg events (new leg-based model)
+  legs?: TripLeg[]
 }
 
 export function useUpcomingTrips() {
@@ -79,7 +95,7 @@ export function useUpcomingTrips() {
       const in14 = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10)
       const { data, error } = await supabase
         .from('trips')
-        .select('*')
+        .select('*, legs:events!trip_id(*)')
         .gte('trip_end_date', today)
         .lte('trip_start_date', in14)
         .order('trip_start_date')
@@ -88,10 +104,11 @@ export function useUpcomingTrips() {
       // Dedup: keep the most-recently-created row per (family_member + start_date + flight)
       const seen = new Map<string, Trip>()
       for (const trip of (data ?? []) as Trip[]) {
+        const outboundFlight = trip.legs?.find(l => l.leg_type === 'flight_outbound')
         const key = [
           trip.family_member_id ?? '',
           trip.trip_start_date ?? '',
-          trip.outbound_flight_number ?? trip.trip_title ?? '',
+          outboundFlight?.flight_number ?? trip.outbound_flight_number ?? trip.trip_title ?? '',
         ].join('|')
         const existing = seen.get(key)
         if (!existing || trip.created_at > existing.created_at) {
@@ -112,7 +129,7 @@ export function useTrip(id: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('trips')
-        .select('*')
+        .select('*, legs:events!trip_id(*)')
         .eq('id', id)
         .single()
       if (error) throw error

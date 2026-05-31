@@ -44,6 +44,11 @@ export interface CalendarEvent {
   recurrence_master_id: string | null
   created_at: string
   updated_at: string
+  // Trip leg fields (new leg-based model)
+  trip_id: string | null
+  leg_type: string | null
+  flight_number: string | null
+  confirmation_number: string | null
   // Joined
   members?: EventMember[]
   enrichment?: EventEnrichment | null

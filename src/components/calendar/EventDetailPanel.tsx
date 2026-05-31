@@ -504,6 +504,42 @@ function TravelIntelligenceBody({ trip }: { trip: Trip }) {
   const weather = (trip.destination_weather ?? []) as { date: string; high: number; low: number; condition: string }[]
   const homeTasks = trip.home_coverage_notes ? trip.home_coverage_notes.split('\n').filter(Boolean) : []
 
+  // Prefer leg events when available, fall back to legacy trip columns
+  const outboundLeg = trip.legs?.find(l => l.leg_type === 'flight_outbound')
+  const hotelLeg = trip.legs?.find(l => l.leg_type === 'hotel')
+  const returnLeg = trip.legs?.find(l => l.leg_type === 'flight_return')
+
+  // Parse "MemberName | Flight UA1972 ORD→PBI" → { origin, dest }
+  function parseLegRoute(title: string): { origin: string | null; dest: string | null } {
+    const m = title.match(/([A-Z]{3})→([A-Z]{3})/)
+    if (m) return { origin: m[1], dest: m[2] }
+    return { origin: null, dest: null }
+  }
+
+  // Derive outbound flight display values
+  const outFlightNum = outboundLeg?.flight_number ?? trip.outbound_flight_number
+  const outDeparts = outboundLeg?.start_time ?? trip.outbound_departs_at
+  const outArrives = outboundLeg?.end_time ?? trip.outbound_arrives_at
+  const outConfirmation = outboundLeg?.confirmation_number ?? trip.outbound_confirmation
+  const outRoute = outboundLeg ? parseLegRoute(outboundLeg.title) : { origin: null, dest: null }
+  const outOrigin = outRoute.origin ?? trip.outbound_origin_airport
+  const outDest = outRoute.dest ?? trip.outbound_dest_airport
+
+  // Derive hotel display values
+  const hotelName = hotelLeg?.location_name ?? hotelLeg?.title.split(' | ').slice(1).join(' | ') ?? trip.hotel_name
+  const hotelConfirmation = hotelLeg?.confirmation_number ?? trip.hotel_confirmation
+
+  // Derive return flight display values
+  const retFlightNum = returnLeg?.flight_number ?? trip.return_flight_number
+  const retDeparts = returnLeg?.start_time ?? trip.return_departs_at
+  const retArrives = returnLeg?.end_time ?? trip.return_arrives_at
+  const retConfirmation = returnLeg?.confirmation_number ?? trip.return_confirmation
+  const retRoute = returnLeg ? parseLegRoute(returnLeg.title) : { origin: null, dest: null }
+  const retOrigin = retRoute.origin ?? trip.return_origin_airport
+  const retDest = retRoute.dest ?? trip.return_dest_airport
+
+  const hasReturnFlight = !!(retFlightNum || retDeparts)
+
   return (
     <div className="space-y-1">
       <TripSectionHead label="Outbound Journey" icon={<Plane size={11} />} />
@@ -516,36 +552,36 @@ function TravelIntelligenceBody({ trip }: { trip: Trip }) {
       />
       <TripTimelineStep
         icon={<Plane size={14} />}
-        title={`${trip.outbound_origin_airport ?? 'Airport'} — Departure`}
-        subtitle={`Arrive at security by ${fmtTripTime(subtractMinutes(trip.outbound_departs_at, 90))}`}
-        time={fmtTripTime(trip.outbound_departs_at)}
+        title={`${outOrigin ?? 'Airport'} — Departure`}
+        subtitle={`Arrive at security by ${fmtTripTime(subtractMinutes(outDeparts, 90))}`}
+        time={fmtTripTime(outDeparts)}
         detail={
           <TripFlightCard
-            airline={trip.outbound_airline} flightNum={trip.outbound_flight_number}
-            seat={trip.outbound_seat} terminal={trip.outbound_terminal} confirmation={trip.outbound_confirmation}
-            departs={trip.outbound_departs_at} arrives={trip.outbound_arrives_at}
-            origin={trip.outbound_origin_airport} dest={trip.outbound_dest_airport}
+            airline={trip.outbound_airline} flightNum={outFlightNum}
+            seat={trip.outbound_seat} terminal={trip.outbound_terminal} confirmation={outConfirmation}
+            departs={outDeparts} arrives={outArrives}
+            origin={outOrigin} dest={outDest}
           />
         }
       />
       <TripTimelineStep
         icon={<MapPin size={14} />}
-        title={`${trip.outbound_dest_airport ?? 'Destination'} — Arrival`}
+        title={`${outDest ?? 'Destination'} — Arrival`}
         subtitle={`~${trip.drive_from_airport_min ?? 30} min to hotel`}
-        time={fmtTripTime(trip.outbound_arrives_at)}
-        connector={!!trip.hotel_name}
+        time={fmtTripTime(outArrives)}
+        connector={!!hotelName}
       />
-      {trip.hotel_name && (
+      {hotelName && (
         <TripTimelineStep
           icon={<Hotel size={14} />}
-          title={trip.hotel_name}
+          title={hotelName}
           subtitle={trip.hotel_address ?? undefined}
           time={trip.hotel_checkin_time ?? '3:00 PM'}
           timeLabel="Check-in"
           connector={false}
           detail={
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-casa-muted mt-1">
-              {trip.hotel_confirmation && <span className="flex items-center gap-1"><Hash size={10} />{trip.hotel_confirmation}</span>}
+              {hotelConfirmation && <span className="flex items-center gap-1"><Hash size={10} />{hotelConfirmation}</span>}
               {trip.hotel_phone && <span className="flex items-center gap-1"><Phone size={10} />{trip.hotel_phone}</span>}
               {trip.hotel_checkout_date && <span className="flex items-center gap-1"><DoorOpen size={10} />Checkout {trip.hotel_checkout_time} · {fmtDateShort(trip.hotel_checkout_date)}</span>}
             </div>
@@ -562,13 +598,13 @@ function TravelIntelligenceBody({ trip }: { trip: Trip }) {
         </div>
       )}
 
-      {(trip.return_flight_number || trip.return_departs_at) && (
+      {hasReturnFlight && (
         <div className="pt-2">
           <TripSectionHead label="Return Journey" icon={<Plane size={11} style={{ transform: 'scaleX(-1)' }} />} />
-          {trip.hotel_name && (
+          {hotelName && (
             <TripTimelineStep
               icon={<Hotel size={14} />}
-              title={`${trip.hotel_name} — Checkout`}
+              title={`${hotelName} — Checkout`}
               subtitle={`Leave by ${fmtTripTime(trip.leave_hotel_by)}`}
               time={trip.hotel_checkout_time ?? '11:00 AM'}
               timeLabel={fmtDateShort(trip.hotel_checkout_date)}
@@ -577,22 +613,22 @@ function TravelIntelligenceBody({ trip }: { trip: Trip }) {
           )}
           <TripTimelineStep
             icon={<Plane size={14} />}
-            title={`${trip.return_origin_airport ?? 'Airport'} — Departure`}
-            subtitle={`Security by ${fmtTripTime(subtractMinutes(trip.return_departs_at, 90))}`}
-            time={fmtTripTime(trip.return_departs_at)}
+            title={`${retOrigin ?? 'Airport'} — Departure`}
+            subtitle={`Security by ${fmtTripTime(subtractMinutes(retDeparts, 90))}`}
+            time={fmtTripTime(retDeparts)}
             detail={
               <TripFlightCard
-                airline={trip.return_airline} flightNum={trip.return_flight_number}
-                seat={trip.return_seat} terminal={trip.return_terminal} confirmation={trip.return_confirmation}
-                departs={trip.return_departs_at} arrives={trip.return_arrives_at}
-                origin={trip.return_origin_airport} dest={trip.return_dest_airport}
+                airline={trip.return_airline} flightNum={retFlightNum}
+                seat={trip.return_seat} terminal={trip.return_terminal} confirmation={retConfirmation}
+                departs={retDeparts} arrives={retArrives}
+                origin={retOrigin} dest={retDest}
               />
             }
           />
           <TripTimelineStep
             icon={<Home size={14} />}
             title="Arrive Home"
-            time={fmtTripTime(trip.return_arrives_at)}
+            time={fmtTripTime(retArrives)}
             connector={false}
           />
         </div>
@@ -652,13 +688,23 @@ function TravelIntelligenceBody({ trip }: { trip: Trip }) {
 
 /* ── Body ───────────────────────────────────────────────────── */
 
-// Find the best-matching trip for an event. Tries exact date overlap first,
-// then falls back to destination keyword match within a 5-day window.
+// Find the best-matching trip for an event. Checks leg trip_id first, then
+// falls back to legacy date/destination matching.
 async function findTrip(memberId: string, eventDate: string, event: EventWithDetails): Promise<Trip | null> {
-  // 1) Best: trip directly linked to this event
+  // 0) New model: event is a leg with trip_id
+  if ((event as EventWithDetails & { trip_id?: string | null }).trip_id) {
+    const tripId = (event as EventWithDetails & { trip_id?: string | null }).trip_id!
+    const { data: byTripId } = await supabase
+      .from('trips').select('*, legs:events!trip_id(*)')
+      .eq('id', tripId)
+      .maybeSingle()
+    if (byTripId) return byTripId as Trip
+  }
+
+  // 1) Best: trip directly linked to this event (legacy event_id link)
   if (event.id) {
     const { data: byEventId } = await supabase
-      .from('trips').select('*')
+      .from('trips').select('*, legs:events!trip_id(*)')
       .eq('event_id', event.id)
       .maybeSingle()
     if (byEventId) return byEventId as Trip
@@ -666,7 +712,7 @@ async function findTrip(memberId: string, eventDate: string, event: EventWithDet
 
   // 2) Exact overlap: trip spans the event date
   const { data: exact } = await supabase
-    .from('trips').select('*')
+    .from('trips').select('*, legs:events!trip_id(*)')
     .eq('family_member_id', memberId)
     .lte('trip_start_date', eventDate)
     .gte('trip_end_date', eventDate)
@@ -678,7 +724,7 @@ async function findTrip(memberId: string, eventDate: string, event: EventWithDet
   const lo = new Date(d); lo.setDate(d.getDate() - 1)
   const hi = new Date(d); hi.setDate(d.getDate() + 3)
   const { data: nearby } = await supabase
-    .from('trips').select('*')
+    .from('trips').select('*, legs:events!trip_id(*)')
     .eq('family_member_id', memberId)
     .gte('trip_start_date', lo.toISOString().slice(0, 10))
     .lte('trip_start_date', hi.toISOString().slice(0, 10))
@@ -812,8 +858,8 @@ function PanelBody({ event, onEventUpdated }: { event: EventWithDetails; onEvent
               {trip.source_type === 'pdf' && <span className="ml-1.5 text-[10px] font-normal text-white/40">PDF</span>}
             </p>
             <p className="text-[11px] text-white/50 truncate">
-              {trip.outbound_flight_number && `${trip.outbound_flight_number} · `}
-              {trip.hotel_name ?? trip.destination_city ?? 'Gmail-sourced trip details below'}
+              {(trip.legs?.find(l => l.leg_type === 'flight_outbound')?.flight_number ?? trip.outbound_flight_number) && `${trip.legs?.find(l => l.leg_type === 'flight_outbound')?.flight_number ?? trip.outbound_flight_number} · `}
+              {trip.legs?.find(l => l.leg_type === 'hotel')?.location_name ?? trip.hotel_name ?? trip.destination_city ?? 'Gmail-sourced trip details below'}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">

@@ -7,7 +7,7 @@ import { format } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
 import { Plane, Clock, MapPin, ChevronRight, Hotel } from 'lucide-react'
 import { cn } from '../../utils/cn'
-import type { Trip } from '../../hooks/useTrips'
+import type { Trip, TripLeg } from '../../hooks/useTrips'
 
 // Read literal time digits — stored times are nominal local (no TZ conversion)
 function fmtTime(iso: string | null): string {
@@ -31,6 +31,36 @@ function daysUntil(iso: string | null): number {
   return Math.ceil((new Date(str).getTime() - Date.now()) / 86400000)
 }
 
+// Derive flight display info from leg events (new model) or trip columns (legacy)
+function getFlightInfo(trip: Trip): {
+  flightNumber: string | null
+  airline: string | null
+  departs: string | null
+  arrives: string | null
+} {
+  const outboundLeg: TripLeg | undefined = trip.legs?.find(l => l.leg_type === 'flight_outbound')
+  if (outboundLeg) {
+    return {
+      flightNumber: outboundLeg.flight_number,
+      airline: null,
+      departs: outboundLeg.start_time,
+      arrives: outboundLeg.end_time,
+    }
+  }
+  return {
+    flightNumber: trip.outbound_flight_number,
+    airline: trip.outbound_airline,
+    departs: trip.outbound_departs_at,
+    arrives: trip.outbound_arrives_at,
+  }
+}
+
+function getHotelName(trip: Trip): string | null {
+  const hotelLeg = trip.legs?.find(l => l.leg_type === 'hotel')
+  if (hotelLeg) return hotelLeg.location_name ?? hotelLeg.title
+  return trip.hotel_name
+}
+
 export default function TripCard({ trip }: { trip: Trip }) {
   const navigate = useNavigate()
   const days = daysUntil(trip.trip_start_date ?? null)
@@ -42,6 +72,9 @@ export default function TripCard({ trip }: { trip: Trip }) {
     : isTomorrow
     ? 'TOMORROW'
     : `IN ${days} DAYS`
+
+  const flight = getFlightInfo(trip)
+  const hotelName = getHotelName(trip)
 
   return (
     <button
@@ -98,16 +131,16 @@ export default function TripCard({ trip }: { trip: Trip }) {
             <div className="flex items-center gap-1.5">
               <Plane size={12} className="text-casa-gold" />
               <span className={cn('text-xs font-bold', isToday ? 'text-white' : 'text-casa-navy')}>
-                {trip.outbound_flight_number ?? 'Flight'}
+                {flight.flightNumber ?? 'Flight'}
               </span>
-              {trip.outbound_airline && (
+              {flight.airline && (
                 <span className={cn('text-[10px]', isToday ? 'text-white/50' : 'text-casa-muted')}>
-                  · {trip.outbound_airline}
+                  · {flight.airline}
                 </span>
               )}
             </div>
             <span className={cn('text-xs font-semibold', isToday ? 'text-white/80' : 'text-casa-text')}>
-              {fmtTime(trip.outbound_departs_at)} → {fmtTime(trip.outbound_arrives_at)}
+              {fmtTime(flight.departs)} → {fmtTime(flight.arrives)}
             </span>
           </div>
 
@@ -120,11 +153,11 @@ export default function TripCard({ trip }: { trip: Trip }) {
             </div>
           )}
 
-          {trip.hotel_name && (
+          {hotelName && (
             <div className="flex items-center gap-1.5 mt-1">
               <Hotel size={11} className={isToday ? 'text-white/40' : 'text-casa-muted'} />
               <span className={cn('text-[10px]', isToday ? 'text-white/50' : 'text-casa-muted')}>
-                {trip.hotel_name}
+                {hotelName}
               </span>
             </div>
           )}

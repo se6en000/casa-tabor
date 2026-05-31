@@ -214,47 +214,63 @@ function toOffsetString(hours: number): string {
   return (hours < 0 ? '-' : '+') + h + ':' + m
 }
 
-const EXTRACT_SYSTEM = `You are a travel data extractor. Extract ALL flight and hotel information from the email.
+const EXTRACT_SYSTEM = `You are a travel data extractor. Extract ALL flight, hotel, and car rental information from the email.
 This may be a corporate travel booking from CWT (Carlson Wagonlit Travel), Concur, Egencia, or an airline directly.
 Look for: flight numbers (e.g. AA2467), IATA airport codes (e.g. DFW, PBI), confirmation codes (e.g. QJRMUD),
 departure/arrival times, hotel names, addresses, check-in/checkout dates.
-Return ONLY valid JSON with these exact fields (null for missing):
+
+Also detect whether this email is a CHANGE notice (flight change, cancellation, itinerary update) vs. a NEW booking.
+Change emails typically have subjects like "Your flight has been changed", "Flight update", "Itinerary change",
+or contain language like "has been modified", "your new flight", "rescheduled".
+
+Return ONLY valid JSON in one of two forms:
+
+Form 1 — New booking:
 {
-  "traveler_name": string|null,
-  "destination_city": string|null,
-  "destination_state": string|null,
-  "destination_country": string|null,
-  "outbound_flight_number": string|null,
-  "outbound_airline": string|null,
-  "outbound_origin_airport": string|null,
-  "outbound_dest_airport": string|null,
-  "outbound_departs_at": string|null,
-  "outbound_arrives_at": string|null,
-  "outbound_seat": string|null,
-  "outbound_terminal": string|null,
-  "outbound_confirmation": string|null,
-  "layover_airport": string|null,
-  "layover_flight_number": string|null,
-  "layover_airline": string|null,
-  "layover_departs_at": string|null,
-  "layover_arrives_at": string|null,
-  "hotel_name": string|null,
-  "hotel_address": string|null,
-  "hotel_checkin_date": string|null,
-  "hotel_checkout_date": string|null,
-  "hotel_checkin_time": string|null,
-  "hotel_checkout_time": string|null,
-  "hotel_confirmation": string|null,
-  "hotel_phone": string|null,
-  "return_flight_number": string|null,
-  "return_airline": string|null,
-  "return_origin_airport": string|null,
-  "return_dest_airport": string|null,
-  "return_departs_at": string|null,
-  "return_arrives_at": string|null,
-  "return_seat": string|null,
-  "return_terminal": string|null,
-  "return_confirmation": string|null
+  "is_change": false,
+  "trip": {
+    "traveler_name": string|null,
+    "destination_city": string|null,
+    "destination_state": string|null,
+    "destination_country": string|null
+  },
+  "legs": [
+    {
+      "leg_type": "flight_outbound" | "flight_return" | "flight_leg" | "hotel" | "car_rental",
+      "flight_number": string|null,
+      "airline": string|null,
+      "origin_airport": string|null,
+      "dest_airport": string|null,
+      "departs_at": string|null,
+      "arrives_at": string|null,
+      "seat": string|null,
+      "terminal": string|null,
+      "confirmation_number": string|null,
+      "hotel_name": string|null,
+      "hotel_address": string|null,
+      "checkin_date": string|null,
+      "checkout_date": string|null,
+      "checkin_time": string|null,
+      "checkout_time": string|null,
+      "hotel_phone": string|null,
+      "rental_company": string|null
+    }
+  ]
+}
+
+Form 2 — Change email:
+{
+  "is_change": true,
+  "changed_leg": {
+    "leg_type": "flight_outbound" | "flight_return" | "flight_leg",
+    "confirmation_number": string|null,
+    "flight_number": string|null,
+    "departs_at": string|null,
+    "arrives_at": string|null,
+    "origin_airport": string|null,
+    "dest_airport": string|null,
+    "seat": string|null
+  }
 }
 
 CRITICAL TIME RULE — READ CAREFULLY:
@@ -272,7 +288,7 @@ WRONG (never do this):
   "2026-06-02T07:04:00Z"   ✗ (Z suffix incorrectly implies UTC)
   "2026-06-02T07:04:00-04:00" ✗ (offset not needed, omit it)
 
-Hotel dates: use "YYYY-MM-DD" format (date only, no time).
+Hotel/car dates: use "YYYY-MM-DD" format (date only, no time).
 Airport codes must be 3-letter IATA (e.g. DFW, PBI, LAX). No explanation, only JSON.`
 
 const PACKING_SYSTEM = `You are a travel assistant. Based on the trip details and weather forecast, generate a practical packing list.
@@ -454,6 +470,48 @@ function nominalToUTCForCalendar(nominal: string, airportCode: string): string {
 
 // ── Shared extraction + upsert pipeline ──────────────────────────────────
 
+interface ExtractedLeg {
+  leg_type: 'flight_outbound' | 'flight_return' | 'flight_leg' | 'hotel' | 'car_rental'
+  flight_number?: string | null
+  airline?: string | null
+  origin_airport?: string | null
+  dest_airport?: string | null
+  departs_at?: string | null
+  arrives_at?: string | null
+  seat?: string | null
+  terminal?: string | null
+  confirmation_number?: string | null
+  hotel_name?: string | null
+  hotel_address?: string | null
+  checkin_date?: string | null
+  checkout_date?: string | null
+  checkin_time?: string | null
+  checkout_time?: string | null
+  hotel_phone?: string | null
+  rental_company?: string | null
+}
+
+interface ExtractedResult {
+  is_change: boolean
+  trip?: {
+    traveler_name?: string | null
+    destination_city?: string | null
+    destination_state?: string | null
+    destination_country?: string | null
+  }
+  legs?: ExtractedLeg[]
+  changed_leg?: {
+    leg_type?: string
+    confirmation_number?: string | null
+    flight_number?: string | null
+    departs_at?: string | null
+    arrives_at?: string | null
+    origin_airport?: string | null
+    dest_airport?: string | null
+    seat?: string | null
+  }
+}
+
 async function extractAndUpsertTrip(
   sb: ReturnType<typeof createClient>,
   llmConfig: { provider: string; model: string; api_key: string },
@@ -472,30 +530,121 @@ async function extractAndUpsertTrip(
 
   // AI extraction
   const truncatedBody = sourceText.slice(0, 6000)
-  let extracted: Record<string, unknown> = {}
+  let extracted: ExtractedResult
   try {
     const raw = await callLLM(llmConfig, EXTRACT_SYSTEM, `Email subject: ${sourceSubject}\n\n${truncatedBody}`)
-    extracted = JSON.parse(raw.replace(/```json\n?|\n?```/g, '').trim())
+    extracted = JSON.parse(raw.replace(/```json\n?|\n?```/g, '').trim()) as ExtractedResult
   } catch (err) {
     return { ok: false, debug: `llm-err: ${String(err).slice(0, 120)}` }
   }
 
-  if (!extracted.outbound_departs_at && !extracted.outbound_flight_number) {
+  // ── CHANGE EMAIL path ──────────────────────────────────────────────────────
+  if (extracted.is_change && extracted.changed_leg) {
+    const leg = extracted.changed_leg
+    const confNum = leg.confirmation_number
+    const flightNum = leg.flight_number
+    const departsAt = leg.departs_at
+
+    if (!confNum && !flightNum) {
+      return { ok: false, debug: 'change email: no confirmation_number or flight_number to match' }
+    }
+
+    // Find the existing leg event
+    let legEvent: { id: string; trip_id: string | null } | null = null
+
+    if (confNum) {
+      const { data } = await sb.from('events')
+        .select('id, trip_id')
+        .eq('confirmation_number', confNum)
+        .maybeSingle()
+      legEvent = data ?? null
+    }
+
+    if (!legEvent && flightNum && departsAt) {
+      const departDate = departsAt.slice(0, 10)
+      const lo = new Date(new Date(departDate).getTime() - 3 * 86400000).toISOString().slice(0, 10)
+      const hi = new Date(new Date(departDate).getTime() + 3 * 86400000).toISOString().slice(0, 10)
+      const { data } = await sb.from('events')
+        .select('id, trip_id')
+        .eq('flight_number', flightNum)
+        .gte('start_time', lo + 'T00:00:00Z')
+        .lte('start_time', hi + 'T23:59:59Z')
+        .maybeSingle()
+      legEvent = data ?? null
+    }
+
+    if (!legEvent) {
+      return { ok: false, debug: `change email: no matching leg event found (conf=${confNum}, flight=${flightNum})` }
+    }
+
+    // Determine airport code for UTC conversion
+    const originCode = (leg.origin_airport ?? '') as string
+    const newStartNominal = leg.departs_at ?? null
+    const newEndNominal = leg.arrives_at ?? null
+    const newStart = newStartNominal
+      ? (originCode ? nominalToUTCForCalendar(newStartNominal, originCode) : newStartNominal + 'Z')
+      : undefined
+    const newEnd = newEndNominal
+      ? (originCode ? nominalToUTCForCalendar(newEndNominal, originCode) : newEndNominal + 'Z')
+      : undefined
+
+    const legUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    if (newStart) legUpdate.start_time = newStart
+    if (newEnd) legUpdate.end_time = newEnd
+    if (leg.flight_number) legUpdate.flight_number = leg.flight_number
+    if (leg.seat) legUpdate.description = `Seat: ${leg.seat}`
+
+    await sb.from('events').update(legUpdate).eq('id', legEvent.id)
+
+    // Also update trip columns for the affected leg (backward compat)
+    if (legEvent.trip_id) {
+      const tripUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() }
+      if (leg.departs_at) {
+        if (leg.leg_type === 'flight_outbound' || leg.leg_type === 'flight_leg') {
+          tripUpdate.outbound_flight_number = leg.flight_number ?? undefined
+          tripUpdate.outbound_departs_at = leg.departs_at
+          tripUpdate.outbound_arrives_at = leg.arrives_at ?? undefined
+          tripUpdate.outbound_seat = leg.seat ?? undefined
+        } else if (leg.leg_type === 'flight_return') {
+          tripUpdate.return_flight_number = leg.flight_number ?? undefined
+          tripUpdate.return_departs_at = leg.departs_at
+          tripUpdate.return_arrives_at = leg.arrives_at ?? undefined
+          tripUpdate.return_seat = leg.seat ?? undefined
+        }
+      }
+      await sb.from('trips').update(tripUpdate).eq('id', legEvent.trip_id)
+    }
+
+    // Sync to Google Calendar
+    await sb.functions.invoke('push-to-google', { body: { event_id: legEvent.id } }).catch(() => {})
+
+    return { ok: true, debug: `change: updated leg ${legEvent.id}` }
+  }
+
+  // ── NEW BOOKING path ───────────────────────────────────────────────────────
+  const legs = extracted.legs ?? []
+  const tripMeta = extracted.trip ?? {}
+
+  const outboundLeg = legs.find(l => l.leg_type === 'flight_outbound') ?? legs.find(l => l.leg_type === 'flight_leg')
+  const returnLeg = legs.find(l => l.leg_type === 'flight_return')
+  const hotelLeg = legs.find(l => l.leg_type === 'hotel')
+
+  if (!outboundLeg?.departs_at && !outboundLeg?.flight_number) {
     return { ok: false, debug: 'no flight data extracted' }
   }
 
-  const travelerName = (extracted.traveler_name as string | null) ?? memberName
-  const destCity = (extracted.destination_city as string | null) ?? ''
-  const destState = (extracted.destination_state as string | null) ?? null
-  const originAirport = (extracted.outbound_origin_airport as string | null) ?? ''
-  const returnAirport = (extracted.return_origin_airport as string | null) ?? ''
+  const travelerName = (tripMeta.traveler_name as string | null) ?? memberName
+  const destCity = (tripMeta.destination_city as string | null) ?? ''
+  const destState = (tripMeta.destination_state as string | null) ?? null
+  const originAirport = outboundLeg?.origin_airport ?? ''
+  const returnAirport = returnLeg?.dest_airport ?? originAirport
 
-  const tripStartDate = extracted.outbound_departs_at
-    ? (extracted.outbound_departs_at as string).slice(0, 10)
-    : (extracted.hotel_checkin_date as string | null)
-  const tripEndDate = extracted.return_arrives_at
-    ? (extracted.return_arrives_at as string).slice(0, 10)
-    : (extracted.hotel_checkout_date as string | null)
+  const tripStartDate = outboundLeg?.departs_at
+    ? outboundLeg.departs_at.slice(0, 10)
+    : hotelLeg?.checkin_date ?? null
+  const tripEndDate = returnLeg?.arrives_at
+    ? returnLeg.arrives_at.slice(0, 10)
+    : hotelLeg?.checkout_date ?? null
 
   if (tripEndDate && new Date(tripEndDate) < new Date(Date.now() - 90 * 86400000)) {
     return { ok: false, debug: 'trip ended >90 days ago, skipping' }
@@ -519,20 +668,18 @@ async function extractAndUpsertTrip(
     homeAddress && originAirport ? getDriveMinutes(homeAddress, originAirport) : Promise.resolve(45),
     homeAddress && returnAirport ? getDriveMinutes(homeAddress, returnAirport) : Promise.resolve(30),
     destCity ? getWeatherForecast(destCity, destState, tripStartDate ?? null) : Promise.resolve([]),
-    // Packing list
     callLLM(llmConfig, PACKING_SYSTEM, `Traveler: ${travelerName}
 Destination: ${destCity}${destState ? `, ${destState}` : ''}
-Trip dates: ${extracted.outbound_departs_at ?? 'unknown'} to ${extracted.return_arrives_at ?? extracted.hotel_checkout_date ?? 'unknown'}
+Trip dates: ${outboundLeg?.departs_at ?? 'unknown'} to ${returnLeg?.arrives_at ?? hotelLeg?.checkout_date ?? 'unknown'}
 Trip type: Work/business trip`).catch(() => '[]'),
-    // Home coverage
     callLLM(llmConfig, HOME_COVERAGE_SYSTEM, `${travelerName} is traveling to ${destCity} for work.
-Departure: ${extracted.outbound_departs_at}
-Return: ${extracted.return_arrives_at ?? extracted.hotel_checkout_date}
+Departure: ${outboundLeg?.departs_at}
+Return: ${returnLeg?.arrives_at ?? hotelLeg?.checkout_date}
 This is a family household. Other family members remain at home.`).catch(() => '{"notes":"","tasks":[]}'),
   ])
 
-  const leaveHomeBy = calcLeaveHomeBy(extracted.outbound_departs_at as string | null, driveToAirport as number)
-  const leaveHotelBy = calcLeaveHotelBy(extracted.return_departs_at as string | null, driveFromAirport as number)
+  const leaveHomeBy = calcLeaveHomeBy(outboundLeg?.departs_at ?? null, driveToAirport as number)
+  const leaveHotelBy = calcLeaveHotelBy(returnLeg?.departs_at ?? null, driveFromAirport as number)
 
   let packingSuggestions: { item: string; reason: string }[] = []
   try { packingSuggestions = JSON.parse((packingRaw as string).replace(/```json\n?|\n?```/g, '').trim()) } catch { /* non-fatal */ }
@@ -547,44 +694,46 @@ This is a family household. Other family members remain at home.`).catch(() => '
 
   const tripTitle = `${travelerName} | ${destCity}${destState ? ` ${destState}` : ''} Work Trip`
 
+  // Parent trip payload — includes legacy columns for backward compat during transition
   const tripPayload = {
     family_member_id: familyMemberId,
     traveler_name: travelerName,
     trip_title: tripTitle,
     destination_city: destCity,
     destination_state: destState,
-    destination_country: (extracted.destination_country as string | null) ?? 'US',
-    outbound_flight_number: extracted.outbound_flight_number,
-    outbound_airline: extracted.outbound_airline,
-    outbound_origin_airport: extracted.outbound_origin_airport,
-    outbound_dest_airport: extracted.outbound_dest_airport,
-    outbound_departs_at: extracted.outbound_departs_at,
-    outbound_arrives_at: extracted.outbound_arrives_at,
-    outbound_seat: extracted.outbound_seat,
-    outbound_terminal: extracted.outbound_terminal,
-    outbound_confirmation: extracted.outbound_confirmation,
-    layover_airport: extracted.layover_airport,
-    layover_flight_number: extracted.layover_flight_number,
-    layover_airline: extracted.layover_airline,
-    layover_departs_at: extracted.layover_departs_at,
-    layover_arrives_at: extracted.layover_arrives_at,
-    hotel_name: extracted.hotel_name,
-    hotel_address: extracted.hotel_address,
-    hotel_checkin_date: extracted.hotel_checkin_date,
-    hotel_checkout_date: extracted.hotel_checkout_date,
-    hotel_checkin_time: (extracted.hotel_checkin_time as string | null) ?? '3:00 PM',
-    hotel_checkout_time: (extracted.hotel_checkout_time as string | null) ?? '11:00 AM',
-    hotel_confirmation: extracted.hotel_confirmation,
-    hotel_phone: extracted.hotel_phone,
-    return_flight_number: extracted.return_flight_number,
-    return_airline: extracted.return_airline,
-    return_origin_airport: extracted.return_origin_airport,
-    return_dest_airport: extracted.return_dest_airport,
-    return_departs_at: extracted.return_departs_at,
-    return_arrives_at: extracted.return_arrives_at,
-    return_seat: extracted.return_seat,
-    return_terminal: extracted.return_terminal,
-    return_confirmation: extracted.return_confirmation,
+    destination_country: (tripMeta.destination_country as string | null) ?? 'US',
+    // Legacy columns (kept for backward compat during transition)
+    outbound_flight_number: outboundLeg?.flight_number ?? null,
+    outbound_airline: outboundLeg?.airline ?? null,
+    outbound_origin_airport: outboundLeg?.origin_airport ?? null,
+    outbound_dest_airport: outboundLeg?.dest_airport ?? null,
+    outbound_departs_at: outboundLeg?.departs_at ?? null,
+    outbound_arrives_at: outboundLeg?.arrives_at ?? null,
+    outbound_seat: outboundLeg?.seat ?? null,
+    outbound_terminal: outboundLeg?.terminal ?? null,
+    outbound_confirmation: outboundLeg?.confirmation_number ?? null,
+    layover_airport: null as string | null,
+    layover_flight_number: null as string | null,
+    layover_airline: null as string | null,
+    layover_departs_at: null as string | null,
+    layover_arrives_at: null as string | null,
+    hotel_name: hotelLeg?.hotel_name ?? null,
+    hotel_address: hotelLeg?.hotel_address ?? null,
+    hotel_checkin_date: hotelLeg?.checkin_date ?? null,
+    hotel_checkout_date: hotelLeg?.checkout_date ?? null,
+    hotel_checkin_time: hotelLeg?.checkin_time ?? '3:00 PM',
+    hotel_checkout_time: hotelLeg?.checkout_time ?? '11:00 AM',
+    hotel_confirmation: hotelLeg?.confirmation_number ?? null,
+    hotel_phone: hotelLeg?.hotel_phone ?? null,
+    return_flight_number: returnLeg?.flight_number ?? null,
+    return_airline: returnLeg?.airline ?? null,
+    return_origin_airport: returnLeg?.origin_airport ?? null,
+    return_dest_airport: returnLeg?.dest_airport ?? null,
+    return_departs_at: returnLeg?.departs_at ?? null,
+    return_arrives_at: returnLeg?.arrives_at ?? null,
+    return_seat: returnLeg?.seat ?? null,
+    return_terminal: returnLeg?.terminal ?? null,
+    return_confirmation: returnLeg?.confirmation_number ?? null,
     leave_home_by: leaveHomeBy,
     leave_hotel_by: leaveHotelBy,
     drive_to_airport_min: driveToAirport,
@@ -602,17 +751,17 @@ This is a family household. Other family members remain at home.`).catch(() => '
     updated_at: new Date().toISOString(),
   }
 
+  let resolvedTripId: string | null = existingTripId ?? null
   let resolvedEventId: string | null | undefined = eventId
 
   if (existingTripId) {
     // UPDATE in place — preserves event_id link
     const { data: updated } = await sb.from('trips').update(tripPayload).eq('id', existingTripId).select('event_id').maybeSingle()
     if (!resolvedEventId && updated?.event_id) resolvedEventId = updated.event_id
+    resolvedTripId = existingTripId
   } else {
-    // Post-extraction dedup: check for an existing trip for this member with the same
-    // flight number OR same departure date (±1 day). This prevents duplicates when the
-    // same booking generates multiple emails (confirmation, receipt, itinerary update, etc.)
-    const flightNum = (extracted.outbound_flight_number as string | null)?.replace(/\s/g, '') ?? null
+    // Post-extraction dedup: check for an existing trip for this member with same flight or date
+    const flightNum = outboundLeg?.flight_number?.replace(/\s/g, '') ?? null
     let foundDupe: { id: string; event_id: string | null; gmail_message_ids: string[] } | null = null
 
     if (flightNum) {
@@ -637,7 +786,6 @@ This is a family household. Other family members remain at home.`).catch(() => '
     }
 
     if (foundDupe) {
-      // Merge the new gmail message ID into the existing array, then update
       const existingIds: string[] = foundDupe.gmail_message_ids ?? []
       const mergedIds = gmailMessageId && !existingIds.includes(gmailMessageId)
         ? [...existingIds, gmailMessageId]
@@ -649,51 +797,153 @@ This is a family household. Other family members remain at home.`).catch(() => '
       if (!resolvedEventId && (updated?.event_id ?? foundDupe.event_id)) {
         resolvedEventId = updated?.event_id ?? foundDupe.event_id
       }
+      resolvedTripId = foundDupe.id
     } else {
       const gmailMsgIds = gmailMessageId ? [gmailMessageId] : []
       const { data: inserted } = await sb.from('trips').insert({
         ...tripPayload,
         gmail_message_ids: gmailMsgIds,
       }).select('id, event_id').maybeSingle()
-      if (!resolvedEventId && inserted?.event_id) resolvedEventId = inserted.event_id
+      if (inserted) {
+        resolvedTripId = inserted.id
+        if (!resolvedEventId && inserted.event_id) resolvedEventId = inserted.event_id
+      }
     }
   }
 
-  // Patch the calendar event start/end to match the email's actual dates (email = source of truth)
-  // Times stored in trips are nominal (local clock digits, no offset).
-  // For the calendar events table we need real UTC timestamps.
-  const originAirportCode = (extracted.outbound_origin_airport as string | null) ?? ''
-  const returnDestAirportCode = (extracted.return_dest_airport as string | null) ?? originAirportCode
+  // ── Create / upsert leg events ────────────────────────────────────────────
+  if (resolvedTripId) {
+    const legEventIds: string[] = []
 
-  const outboundNominal = (extracted.outbound_departs_at as string | null)
-    ?? (tripStartDate ? `${tripStartDate}T06:00:00` : null)
-  const returnNominal   = (extracted.return_arrives_at   as string | null)
-    ?? (tripEndDate   ? `${tripEndDate}T23:59:00`   : null)
+    for (const leg of legs) {
+      let legTitle = ''
+      let startNominal: string | null = null
+      let endNominal: string | null = null
+      let locationName: string | null = null
+      let legOriginAirport = ''
 
-  if (!outboundNominal) {
-    return { ok: false, debug: 'no departure time available for event patching' }
+      if (leg.leg_type === 'flight_outbound' || leg.leg_type === 'flight_return' || leg.leg_type === 'flight_leg') {
+        const arrow = `${leg.origin_airport ?? '???'}→${leg.dest_airport ?? '???'}`
+        legTitle = `${travelerName} | Flight ${leg.flight_number ?? '??'} ${arrow}`
+        startNominal = leg.departs_at ?? null
+        endNominal = leg.arrives_at ?? null
+        locationName = leg.dest_airport ?? null
+        legOriginAirport = leg.origin_airport ?? ''
+      } else if (leg.leg_type === 'hotel') {
+        legTitle = `${travelerName} | ${leg.hotel_name ?? 'Hotel'}`
+        startNominal = leg.checkin_date ? `${leg.checkin_date}T15:00:00` : null
+        endNominal = leg.checkout_date ? `${leg.checkout_date}T11:00:00` : null
+        locationName = leg.hotel_address ?? leg.hotel_name ?? null
+        legOriginAirport = outboundLeg?.dest_airport ?? ''
+      } else if (leg.leg_type === 'car_rental') {
+        legTitle = `${travelerName} | Car Rental ${leg.rental_company ?? ''}`
+        startNominal = leg.checkin_date ? `${leg.checkin_date}T12:00:00` : null
+        endNominal = leg.checkout_date ? `${leg.checkout_date}T12:00:00` : null
+        locationName = null
+        legOriginAirport = outboundLeg?.dest_airport ?? ''
+      }
+
+      if (!startNominal) continue
+
+      const startUTC = legOriginAirport
+        ? nominalToUTCForCalendar(startNominal, legOriginAirport)
+        : startNominal + 'Z'
+      const endUTC = endNominal
+        ? (legOriginAirport
+          ? nominalToUTCForCalendar(endNominal, legOriginAirport)
+          : endNominal + 'Z')
+        : startUTC
+
+      // Upsert: match on trip_id + leg_type (one leg per type per trip)
+      const { data: existingLeg } = await sb.from('events')
+        .select('id')
+        .eq('trip_id', resolvedTripId)
+        .eq('leg_type', leg.leg_type)
+        .maybeSingle()
+
+      const legPayload = {
+        title: legTitle,
+        start_time: startUTC,
+        end_time: endUTC,
+        all_day: false,
+        location_name: locationName,
+        trip_id: resolvedTripId,
+        leg_type: leg.leg_type,
+        flight_number: leg.flight_number ?? null,
+        confirmation_number: leg.confirmation_number ?? null,
+        source_member_id: familyMemberId,
+        updated_at: new Date().toISOString(),
+      }
+
+      let legEventId: string | null = null
+      if (existingLeg) {
+        await sb.from('events').update(legPayload).eq('id', existingLeg.id)
+        legEventId = existingLeg.id
+      } else {
+        const { data: inserted } = await sb.from('events').insert({
+          ...legPayload,
+          event_type: 'event',
+          status: 'confirmed',
+          is_enriched: false,
+        }).select('id').maybeSingle()
+        if (inserted) {
+          legEventId = inserted.id
+          // Link the new leg event's member
+          await sb.from('event_members').upsert(
+            { event_id: inserted.id, family_member_id: familyMemberId, role: 'primary' },
+            { onConflict: 'event_id,family_member_id', ignoreDuplicates: true }
+          )
+        }
+      }
+
+      if (legEventId) {
+        legEventIds.push(legEventId)
+        // Push to Google Calendar (best-effort)
+        await sb.functions.invoke('push-to-google', { body: { event_id: legEventId } }).catch(() => {})
+      }
+    }
+
+    // Use the first leg event as the anchor event_id for the trip (if not already set)
+    if (legEventIds.length > 0 && !resolvedEventId) {
+      resolvedEventId = legEventIds[0]
+      await sb.from('trips').update({ event_id: resolvedEventId }).eq('id', resolvedTripId)
+    }
   }
 
-  const eventStart = originAirportCode
-    ? nominalToUTCForCalendar(outboundNominal, originAirportCode)
-    : outboundNominal + 'Z'
-  const eventEnd = returnNominal
-    ? (returnDestAirportCode
-      ? nominalToUTCForCalendar(returnNominal, returnDestAirportCode)
-      : returnNominal + 'Z')
-    : eventStart
+  // ── Also patch the legacy calendar event if we have one ──────────────────
+  const originAirportCode = outboundLeg?.origin_airport ?? ''
+  const returnDestAirportCode = returnLeg?.dest_airport ?? originAirportCode
 
-  if (resolvedEventId) {
-    await sb.from('events').update({
-      start_time: eventStart,
-      end_time: eventEnd,
-      updated_at: new Date().toISOString(),
-    }).eq('id', resolvedEventId)
+  const outboundNominal = outboundLeg?.departs_at
+    ?? (tripStartDate ? `${tripStartDate}T06:00:00` : null)
+  const returnNominal = returnLeg?.arrives_at
+    ?? (tripEndDate ? `${tripEndDate}T23:59:00` : null)
+
+  if (outboundNominal && resolvedEventId) {
+    const eventStart = originAirportCode
+      ? nominalToUTCForCalendar(outboundNominal, originAirportCode)
+      : outboundNominal + 'Z'
+    const eventEnd = returnNominal
+      ? (returnDestAirportCode
+        ? nominalToUTCForCalendar(returnNominal, returnDestAirportCode)
+        : returnNominal + 'Z')
+      : eventStart
+
+    // Only patch if the eventId is not a leg event we just created
+    const isLegEvent = !!(resolvedTripId && resolvedEventId)
+    if (!isLegEvent) {
+      await sb.from('events').update({
+        start_time: eventStart,
+        end_time: eventEnd,
+        updated_at: new Date().toISOString(),
+      }).eq('id', resolvedEventId)
+    }
+
     // Ensure trip has event_id linked
-    if (existingTripId) {
+    if (existingTripId && resolvedEventId) {
       await sb.from('trips').update({ event_id: resolvedEventId }).eq('id', existingTripId)
     }
-  } else if (tripStartDate && tripEndDate) {
+  } else if (!resolvedEventId && tripStartDate && tripEndDate && resolvedTripId) {
     // No event_id — find by member via event_members join, match on trip start date ±2 days
     const lo = new Date(tripStartDate); lo.setDate(lo.getDate() - 1)
     const hi = new Date(tripStartDate); hi.setDate(hi.getDate() + 2)
@@ -703,25 +953,28 @@ This is a family household. Other family members remain at home.`).catch(() => '
       .eq('family_member_id', familyMemberId)
       .gte('events.start_time', lo.toISOString())
       .lte('events.start_time', hi.toISOString())
+      .is('events.trip_id', null) // skip leg events
       .limit(3)
     if (memberEvents && memberEvents.length > 0) {
       const matchEvt = (memberEvents[0] as { event_id: string; events: { id: string; start_time: string; end_time: string } })?.events
       if (matchEvt) {
-        await sb.from('events').update({
-          start_time: eventStart,
-          end_time: eventEnd,
-          updated_at: new Date().toISOString(),
-        }).eq('id', matchEvt.id)
-        // Link for future rescans
-        const tripIdToLink = existingTripId
-        if (tripIdToLink) {
-          await sb.from('trips').update({ event_id: matchEvt.id }).eq('id', tripIdToLink)
-        } else {
-          // Was an insert — find the newly inserted trip by gmail_message_id
-          if (gmailMessageId) {
-            const { data: newTrip } = await sb.from('trips').select('id').contains('gmail_message_ids', [gmailMessageId]).maybeSingle()
-            if (newTrip) await sb.from('trips').update({ event_id: matchEvt.id }).eq('id', newTrip.id)
-          }
+        if (outboundNominal) {
+          const eventStart = originAirportCode
+            ? nominalToUTCForCalendar(outboundNominal, originAirportCode)
+            : outboundNominal + 'Z'
+          const eventEnd = returnNominal
+            ? (returnDestAirportCode
+              ? nominalToUTCForCalendar(returnNominal, returnDestAirportCode)
+              : returnNominal + 'Z')
+            : eventStart
+          await sb.from('events').update({
+            start_time: eventStart,
+            end_time: eventEnd,
+            updated_at: new Date().toISOString(),
+          }).eq('id', matchEvt.id)
+        }
+        if (resolvedTripId) {
+          await sb.from('trips').update({ event_id: matchEvt.id }).eq('id', resolvedTripId)
         }
       }
     }

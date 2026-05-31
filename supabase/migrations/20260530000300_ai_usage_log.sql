@@ -15,5 +15,11 @@ CREATE INDEX IF NOT EXISTS ai_usage_log_created_at_idx ON ai_usage_log (created_
 
 -- RLS: service role can insert, anon can read
 ALTER TABLE ai_usage_log ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "anon read" ON ai_usage_log FOR SELECT TO anon USING (true);
-CREATE POLICY "service insert" ON ai_usage_log FOR INSERT TO service_role WITH CHECK (true);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'ai_usage_log' AND policyname = 'anon read') THEN
+    CREATE POLICY "anon read" ON ai_usage_log FOR SELECT TO anon USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'ai_usage_log' AND policyname = 'service insert') THEN
+    CREATE POLICY "service insert" ON ai_usage_log FOR INSERT TO service_role WITH CHECK (true);
+  END IF;
+END $$;
