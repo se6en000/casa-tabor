@@ -963,9 +963,21 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
       {topSlot}
 
+      {/* Target location — always at top when available */}
+      {!reminder && (event.location_name || event.address) && (
+        <section>
+          <SectionLabel>Destination</SectionLabel>
+          <LocationBlock
+            locationName={event.location_name}
+            address={event.address}
+            parkingNotes={shows('parking_notes') ? enr?.parking_notes : null}
+          />
+        </section>
+      )}
+
       {hasLogistics && (
         <section>
-          <SectionLabel>Location & Logistics</SectionLabel>
+          <SectionLabel>Logistics</SectionLabel>
           <ol className="space-y-3">
             {event.logistics.map((step, i) => (
               <li key={step.id} className="flex gap-3">
@@ -991,23 +1003,14 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
         </section>
       )}
 
-      {!hasLogistics && !reminder && (event.location_name || event.address || enr?.departure_time) && (
+      {!hasLogistics && !reminder && enr?.departure_time && (
         <section>
-          <SectionLabel>Location & Logistics</SectionLabel>
-          <div className="space-y-3">
-            {enr?.departure_time && (
-              <InfoRow icon={<Clock size={16} className="text-casa-gold" />}>
-                <p className="text-body-sm font-semibold text-casa-navy">Leave by {format(new Date(enr.departure_time), 'h:mm a')}</p>
-                {enr.route_summary && <p className="text-caption text-casa-muted">{enr.route_summary}</p>}
-                {enr.drive_time_mins && <p className="text-caption text-casa-muted">{enr.drive_time_mins} min drive</p>}
-              </InfoRow>
-            )}
-            <LocationBlock
-              locationName={event.location_name}
-              address={event.address}
-              parkingNotes={shows('parking_notes') ? enr?.parking_notes : null}
-            />
-          </div>
+          <SectionLabel>Travel</SectionLabel>
+          <InfoRow icon={<Clock size={16} className="text-casa-gold" />}>
+            <p className="text-body-sm font-semibold text-casa-navy">Leave by {format(new Date(enr.departure_time), 'h:mm a')}</p>
+            {enr.route_summary && <p className="text-caption text-casa-muted">{enr.route_summary}</p>}
+            {enr.drive_time_mins && <p className="text-caption text-casa-muted">{enr.drive_time_mins} min drive</p>}
+          </InfoRow>
         </section>
       )}
 
