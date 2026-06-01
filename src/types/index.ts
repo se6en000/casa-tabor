@@ -145,6 +145,25 @@ export interface Conflict {
   event_a?: { id: string; start_time: string; title: string } | null
 }
 
+export type SavedPlaceCategory = 'restaurant' | 'friends_house' | 'school' | 'sports' | 'work' | 'medical' | 'other'
+
+export interface SavedPlace {
+  id: string
+  name: string
+  aliases: string[]
+  address: string | null
+  city: string | null
+  state: string | null
+  zip: string | null
+  lat: number | null
+  lng: number | null
+  category: SavedPlaceCategory
+  notes: string | null
+  google_place_id: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface PrepItem {
   id: string
   event_id: string

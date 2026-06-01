@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
   if (!event_id) return new Response(JSON.stringify({ error: 'event_id required' }), { status: 400, headers: { ...CORS, 'content-type': 'application/json' } })
 
   // Load everything in parallel
-  const [eventRes, llmRes, familyRes, homeRes] = await Promise.all([
+  const [eventRes, llmRes, familyRes, homeRes, placesRes] = await Promise.all([
     sb.from('events')
       .select('id, title, description, start_time, end_time, all_day, location_name, address, source_member_id, leg_type, event_members(family_members(id, name, full_name, role)), event_enrichments(*)')
       .eq('id', event_id)
@@ -24,6 +24,7 @@ Deno.serve(async (req) => {
     sb.from('settings').select('value').eq('key', 'llm_config').single(),
     sb.from('family_members').select('id, name, full_name, role, phone, email, is_admin').order('sort_order'),
     sb.from('settings').select('value').eq('key', 'home_config').single(),
+    sb.from('saved_places').select('id, name, aliases, address, city, state, zip, category, notes').order('name'),
   ])
 
   const event = eventRes.data
@@ -34,6 +35,7 @@ Deno.serve(async (req) => {
 
   const familyMembers = (familyRes.data ?? []) as { id: string; name: string; full_name: string | null; role: string; phone: string | null; email: string | null; is_admin: boolean }[]
   const homeConfig = homeRes.data?.value as { address?: string; city?: string; state?: string; zip?: string } | null
+  const savedPlaces = (placesRes.data ?? []) as { id: string; name: string; aliases: string[]; address: string | null; city: string | null; state: string | null; zip: string | null; category: string; notes: string | null }[]
 
   // ── Content-hash dedup: skip all LLM calls if event hasn't meaningfully changed ──
   const contentHash = [
@@ -58,7 +60,7 @@ Deno.serve(async (req) => {
   const defaultOwnerName = adminMember?.name ?? 'Jake'
 
   const usageAccum: UsageAccum = { inputTokens: 0, outputTokens: 0 }
-  const enrichment = await enrichEvent(llmConfig, event, familyMembers, homeConfig, defaultOwnerName, extra_context, locked_category, usageAccum)
+  const enrichment = await enrichEvent(llmConfig, event, familyMembers, homeConfig, defaultOwnerName, extra_context, locked_category, usageAccum, savedPlaces)
 
   const row = { ...enrichment, event_id, enriched_by: `${llmConfig.provider}/${llmConfig.model}`, enriched_at: new Date().toISOString(), updated_at: new Date().toISOString() }
 
@@ -285,6 +287,7 @@ async function enrichEvent(
   extraContext?: string,
   lockedCategory?: string,
   accum?: UsageAccum,
+  savedPlaces?: { id: string; name: string; aliases: string[]; address: string | null; city: string | null; state: string | null; zip: string | null; category: string; notes: string | null }[],
 ) {
   const start = new Date(event.start_time as string)
   const timeStr = (event.all_day as boolean)
@@ -323,6 +326,18 @@ Who: ${whoLine}${extraContextLine}`
 
   const nearCity = homeConfig?.city ?? 'West Palm Beach, FL'
 
+  // Build saved places block for the prompt
+  const savedPlacesBlock = savedPlaces && savedPlaces.length > 0
+    ? `\n═══ SAVED PLACES (family address book — use these to resolve place nicknames) ═══\n${
+        savedPlaces.map(p => {
+          const fullAddr = [p.address, p.city, p.state, p.zip].filter(Boolean).join(', ')
+          const aliasList = p.aliases.length > 0 ? ` (also known as: ${p.aliases.join(', ')})` : ''
+          const noteStr = p.notes ? ` — ${p.notes}` : ''
+          return `• ${p.name}${aliasList}: ${fullAddr || 'no address'}${noteStr}`
+        }).join('\n')
+      }\nIf the event title or location matches a saved place name or alias, use that place's address.`
+    : ''
+
   // ── Single merged call: detect category + fill all fields at once ──
   // Build a combined prompt so we go from 2 LLM calls → 1
   const allCategoryFields = Object.entries(CATEGORY_FIELDS)
@@ -350,7 +365,7 @@ ${allCategoryFields}`
 Home: ${homeConfig ? [homeConfig.address, homeConfig.city, homeConfig.state, homeConfig.zip].filter(Boolean).join(', ') : 'West Palm Beach, FL'}
 Family members (ONLY these names are valid for attendees):
   ${familyRoster}
-
+${savedPlacesBlock}
 ═══ EVENT ═══
 ${eventBlock}
 

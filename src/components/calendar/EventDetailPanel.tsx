@@ -9,7 +9,7 @@ import {
   Plane, Loader2, ExternalLink, Paperclip,
   Home, Hotel, Hash, DoorOpen, Armchair, Luggage, Users,
   Sun, CloudRain, CloudSnow, Wind,
-  Crown, Plus,
+  Crown, Plus, Bookmark, BookmarkCheck, Copy, Check, Map,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
@@ -20,6 +20,7 @@ import { getFieldsForCategory, CATEGORY_LABEL } from './categoryFields'
 import EventEditSheet from './EventEditSheet'
 import type { Trip } from '../../hooks/useTrips'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
+import { useSavedPlaces, useSavePlace, findSavedPlace } from '../../hooks/useSavedPlaces'
 
 const CONFIDENCE_CONFIG = {
   high:   { color: '#22c55e', label: 'High confidence', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
@@ -978,8 +979,10 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
                     {step.time && <span className="font-normal text-casa-muted ml-1.5">{format(new Date(step.time), 'h:mm a')}</span>}
                   </p>
                   {step.description && <p className="text-caption text-casa-muted mt-0.5">{step.description}</p>}
-                  {step.location_name && (
-                    <p className="text-caption text-casa-gold mt-0.5 flex items-center gap-1"><MapPin size={11} /> {step.location_name}</p>
+                  {(step.location_name || step.address) && (
+                    <div className="mt-1">
+                      <LocationBlock locationName={step.location_name} address={step.address ?? null} />
+                    </div>
                   )}
                 </div>
               </li>
@@ -988,7 +991,7 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
         </section>
       )}
 
-      {!hasLogistics && !reminder && (event.location_name || enr?.departure_time) && (
+      {!hasLogistics && !reminder && (event.location_name || event.address || enr?.departure_time) && (
         <section>
           <SectionLabel>Location & Logistics</SectionLabel>
           <div className="space-y-3">
@@ -999,13 +1002,11 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
                 {enr.drive_time_mins && <p className="text-caption text-casa-muted">{enr.drive_time_mins} min drive</p>}
               </InfoRow>
             )}
-            {event.location_name && (
-              <InfoRow icon={<MapPin size={16} className="text-casa-error" />}>
-                <p className="text-body-sm font-semibold text-casa-navy">{event.location_name}</p>
-                {event.address && <p className="text-caption text-casa-muted">{event.address}</p>}
-                {shows('parking_notes') && enr?.parking_notes && <p className="text-caption text-casa-muted mt-0.5">{enr.parking_notes}</p>}
-              </InfoRow>
-            )}
+            <LocationBlock
+              locationName={event.location_name}
+              address={event.address}
+              parkingNotes={shows('parking_notes') ? enr?.parking_notes : null}
+            />
           </div>
         </section>
       )}
@@ -1139,6 +1140,130 @@ function ChecklistSection({ items }: { items: EventChecklistItem[]; eventId: str
         )
       })}
     </div>
+  )
+}
+
+/* ── LocationBlock ──────────────────────────────────────────── */
+
+function LocationBlock({ locationName, address, parkingNotes }: {
+  locationName: string | null
+  address: string | null
+  parkingNotes?: string | null
+}) {
+  const [copied, setCopied] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const { data: savedPlaces = [] } = useSavedPlaces()
+  const savePlace = useSavePlace()
+
+  const existingPlace = findSavedPlace(savedPlaces, locationName, address)
+  const isAlreadySaved = !!existingPlace || saved
+
+  const copyText = address ?? locationName ?? ''
+  const googleMapsUrl = address
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
+    : locationName
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationName)}`
+    : null
+  const appleMapsUrl = address
+    ? `http://maps.apple.com/?q=${encodeURIComponent(address)}`
+    : locationName
+    ? `http://maps.apple.com/?q=${encodeURIComponent(locationName)}`
+    : null
+
+  async function handleCopy() {
+    if (!copyText) return
+    try {
+      await navigator.clipboard.writeText(copyText)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* ignore */ }
+  }
+
+  async function handleSave() {
+    if (isAlreadySaved || saving || (!locationName && !address)) return
+    setSaving(true)
+    try {
+      await savePlace.mutateAsync({
+        name: locationName ?? address ?? 'Unknown Place',
+        address: address ?? null,
+        category: 'other',
+      })
+      setSaved(true)
+    } catch { /* non-fatal */ }
+    setSaving(false)
+  }
+
+  if (!locationName && !address) return null
+
+  return (
+    <InfoRow icon={<MapPin size={16} className="text-casa-error" />}>
+      <div className="flex items-start justify-between gap-2 min-w-0">
+        <div className="min-w-0 flex-1">
+          {locationName && (
+            <p className="text-body-sm font-semibold text-casa-navy">{locationName}</p>
+          )}
+          {address && (
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 mt-0.5 text-caption text-casa-muted hover:text-casa-navy transition-colors group text-left"
+              title="Tap to copy address"
+            >
+              <span className="group-hover:underline">{address}</span>
+              {copied
+                ? <Check size={11} className="text-emerald-500 shrink-0" />
+                : <Copy size={11} className="opacity-0 group-hover:opacity-50 shrink-0 transition-opacity" />
+              }
+            </button>
+          )}
+          {copied && (
+            <p className="text-[11px] text-emerald-600 mt-0.5">Copied!</p>
+          )}
+          {parkingNotes && (
+            <p className="text-caption text-casa-muted mt-0.5">{parkingNotes}</p>
+          )}
+          {existingPlace?.notes && (
+            <p className="text-[11px] text-casa-gold/80 mt-1 italic">{existingPlace.notes}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Save to places */}
+          <button
+            onClick={handleSave}
+            disabled={isAlreadySaved || saving}
+            title={isAlreadySaved ? 'Already saved' : 'Save to my places'}
+            className={cn(
+              'p-1 rounded transition-colors',
+              isAlreadySaved
+                ? 'text-casa-gold cursor-default'
+                : 'text-casa-border hover:text-casa-gold'
+            )}
+          >
+            {isAlreadySaved
+              ? <BookmarkCheck size={15} />
+              : saving ? <Loader2 size={15} className="animate-spin" /> : <Bookmark size={15} />
+            }
+          </button>
+          {/* Map links */}
+          {googleMapsUrl && (
+            <a href={googleMapsUrl} target="_blank" rel="noreferrer"
+              title="Open in Google Maps"
+              className="p-1 rounded text-casa-border hover:text-casa-navy transition-colors"
+            >
+              <Map size={15} />
+            </a>
+          )}
+          {appleMapsUrl && (
+            <a href={appleMapsUrl} target="_blank" rel="noreferrer"
+              title="Open in Apple Maps"
+              className="p-1 rounded text-casa-border hover:text-casa-navy transition-colors"
+            >
+              <Navigation size={15} />
+            </a>
+          )}
+        </div>
+      </div>
+    </InfoRow>
   )
 }
 
