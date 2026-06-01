@@ -47,7 +47,7 @@ async function syncOne(sb: SupabaseClient, tok: Record<string, string>) {
     if (!r.ok) { const t = await r.text(); throw new Error('Calendar API ' + r.status + ': ' + t) }
     const page = await r.json()
     pulled += page.items?.length ?? 0
-    for (const ev of page.items ?? []) { await upsertEvent(sb, tok.family_member_id, ev); upserted++ }
+    for (const ev of page.items ?? []) { await upsertEvent(sb, tok.family_member_id, ev, accessToken); upserted++ }
     pageToken = page.nextPageToken
     if (page.nextSyncToken) syncToken = page.nextSyncToken
   } while (pageToken)
@@ -55,7 +55,7 @@ async function syncOne(sb: SupabaseClient, tok: Record<string, string>) {
   return { pulled, upserted }
 }
 
-async function upsertEvent(sb: SupabaseClient, sourceMemberId: string, ev: Record<string, unknown>) {
+async function upsertEvent(sb: SupabaseClient, sourceMemberId: string, ev: Record<string, unknown>, accessToken: string) {
   if (ev.status === 'cancelled') { await sb.from('events').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('google_event_id', ev.id); return }
   const start = ev.start as Record<string, string> | undefined
   const end = ev.end as Record<string, string> | undefined
@@ -69,17 +69,11 @@ async function upsertEvent(sb: SupabaseClient, sourceMemberId: string, ev: Recor
   if (existing) {
     eventId = existing.id
     if (existing.is_enriched) {
-      // Event has been enriched/manually edited — "last writer wins" on times.
-      // If our DB updated_at is newer than Google's updated timestamp, the user has local
-      // changes that either haven't pushed yet or pushed successfully (Google's timestamp
-      // will be >= ours only after a successful patch). Skip overwrite if we're newer.
       const googleUpdated = ev.updated as string | undefined
       const dbUpdated = existing.updated_at as string | undefined
       if (googleUpdated && dbUpdated && new Date(dbUpdated) > new Date(googleUpdated)) {
-        // Our record is newer — don't let Google overwrite the user's saved times
         return
       }
-      // Google is newer (or no timestamps) — sync timing + status, never overwrite title/location/members
       await sb.from('events').update({
         start_time: startTime,
         end_time: endTime,
@@ -88,10 +82,8 @@ async function upsertEvent(sb: SupabaseClient, sourceMemberId: string, ev: Recor
         updated_at: new Date().toISOString(),
       }).eq('id', eventId)
     } else {
-      // Not enriched yet — safe to overwrite everything from Google
       const row = { title: (ev.summary as string) ?? '(untitled)', description: (ev.description as string) ?? null, start_time: startTime, end_time: endTime, all_day: !start?.dateTime, location_name: (ev.location as string) ?? null, address: (ev.location as string) ?? null, google_event_id: ev.id as string, source_member_id: sourceMemberId, status: 'confirmed', updated_at: new Date().toISOString() }
       await sb.from('events').update(row).eq('id', eventId)
-      // Only sync members for un-enriched events
       const attendees = ev.attendees as Array<{ email: string }> | undefined
       const emails = new Set((attendees ?? []).map(a => a.email.toLowerCase()))
       const { data: members } = await sb.from('family_members').select('id,email').not('email', 'is', null)
@@ -102,19 +94,38 @@ async function upsertEvent(sb: SupabaseClient, sourceMemberId: string, ev: Recor
       await sb.from('event_members').insert([...memberIds].map(fm => ({ event_id: eventId, family_member_id: fm, role: 'attendee', rsvp_status: 'accepted' })))
     }
   } else {
-    // New event — before inserting, check for an existing event at this time for this member.
-    // Covers two cases:
-    //   1. A trip leg (flight/hotel) pushed by scan-travel-emails — always prefer that
-    //   2. A regular enriched event — if one already exists at the same start_time, skip to
-    //      avoid duplicating events that appear in multiple Google calendars or were re-sent
+    // New event — check for an existing event at this time for this member.
+    // If one exists and is enriched, patch the incoming Google event with our canonical data
+    // so both calendar entries stay consistent. Then skip the DB insert.
     const { data: existingAtTime } = await sb.from('events')
-      .select('id, is_enriched, leg_type')
+      .select('id, is_enriched, title, location_name, address, event_enrichments(contact_name, contact_phone)')
       .eq('source_member_id', sourceMemberId)
       .eq('start_time', startTime)
       .maybeSingle()
-    if (existingAtTime) return  // already have an event at this time — skip
 
-    // New event — insert with all Google data
+    if (existingAtTime) {
+      if (existingAtTime.is_enriched) {
+        const enr = (existingAtTime.event_enrichments as Record<string, string>[] | null)?.[0]
+        const patch: Record<string, unknown> = { summary: existingAtTime.title }
+        if (existingAtTime.location_name || existingAtTime.address) {
+          patch.location = existingAtTime.location_name ?? existingAtTime.address
+        }
+        if (enr?.contact_phone) {
+          patch.description = [
+            enr.contact_name ? `Contact: ${enr.contact_name}` : null,
+            enr.contact_phone ? `Phone: ${enr.contact_phone}` : null,
+          ].filter(Boolean).join('\n') || undefined
+        }
+        fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${ev.id}`, {
+          method: 'PATCH',
+          headers: { authorization: 'Bearer ' + accessToken, 'content-type': 'application/json' },
+          body: JSON.stringify(patch),
+        }).catch(() => {})
+      }
+      return
+    }
+
+    // Genuinely new event — insert
     const row = { title: (ev.summary as string) ?? '(untitled)', description: (ev.description as string) ?? null, start_time: startTime, end_time: endTime, all_day: !start?.dateTime, location_name: (ev.location as string) ?? null, address: (ev.location as string) ?? null, google_event_id: ev.id as string, source_member_id: sourceMemberId, status: 'confirmed', updated_at: new Date().toISOString() }
     const { data: ins, error } = await sb.from('events').insert({ ...row, is_enriched: false }).select('id').single()
     if (error) throw error
