@@ -10,6 +10,7 @@ import { useCalendarStore } from '../../stores/calendarStore'
 import { useMonthEvents } from '../../hooks/useCalendarEvents'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, REMINDER_COLOR } from '../../utils/holidays'
+import EventDetailPanel from './EventDetailPanel'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -45,9 +46,10 @@ interface DayPopoverProps {
   events: EventWithDetails[]
   onClose: () => void
   onSelectDay: (day: Date) => void
+  onSelectEvent: (event: EventWithDetails) => void
 }
 
-function DayPopover({ day, events, onClose, onSelectDay }: DayPopoverProps) {
+function DayPopover({ day, events, onClose, onSelectDay, onSelectEvent }: DayPopoverProps) {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95, y: 6 }}
@@ -82,7 +84,11 @@ function DayPopover({ day, events, onClose, onSelectDay }: DayPopoverProps) {
           const start = parseISO(event.start_time)
           const isAllDay = event.start_time.endsWith('00:00:00+00:00') && event.end_time?.endsWith('00:00:00+00:00')
           return (
-            <div key={event.id} className="flex items-start gap-3 px-4 py-2.5">
+            <div
+              key={event.id}
+              className="flex items-start gap-3 px-4 py-2.5 hover:bg-casa-surface cursor-pointer transition-colors"
+              onClick={() => { onSelectEvent(event); onClose() }}
+            >
               <div
                 className="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5"
                 style={{ backgroundColor: color }}
@@ -153,9 +159,10 @@ interface DayCellProps {
   onOpen: () => void
   onClose: () => void
   onDrillIn: (day: Date) => void
+  onSelectEvent: (event: EventWithDetails) => void
 }
 
-function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, onDrillIn }: DayCellProps) {
+function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, onDrillIn, onSelectEvent }: DayCellProps) {
   const todayDay = isToday(day)
   const visible = events.slice(0, MAX_VISIBLE_EVENTS)
   const overflow = events.length - MAX_VISIBLE_EVENTS
@@ -193,17 +200,18 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
               <div
                 key={event.id}
                 className={cn(
-                  'flex items-center gap-1 px-1 py-0.5 rounded text-[9px] font-medium leading-none truncate',
+                  'flex items-center gap-1 px-1 py-0.5 rounded text-[9px] font-medium leading-none truncate cursor-pointer hover:brightness-90 transition-all',
                   holiday && 'font-semibold tracking-tight',
                   reminder && 'font-semibold',
                 )}
                 style={{ backgroundColor: color + '22', color }}
+                onClick={e => { e.stopPropagation(); onSelectEvent(event) }}
               >
                 <span
                   className="w-1.5 h-1.5 rounded-full shrink-0"
                   style={{ backgroundColor: color }}
                 />
-                <span className="truncate">{holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : event.title}</span>
+                <span className="truncate">{holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}</span>
               </div>
             )
           })}
@@ -221,6 +229,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
             events={events}
             onClose={onClose}
             onSelectDay={onDrillIn}
+            onSelectEvent={onSelectEvent}
           />
         )}
       </AnimatePresence>
@@ -234,12 +243,15 @@ export default function MonthView() {
   const { selectedDate, setSelectedDate, setActiveView, visibleMembers } = useCalendarStore()
   const { data: allEvents } = useMonthEvents(selectedDate)
   const [openPopoverKey, setOpenPopoverKey] = useState<string | null>(null)
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
 
   const grid = buildMonthGrid(selectedDate)
 
   const events = (allEvents ?? []).filter(e =>
     isHoliday(e) || isReminder(e) || visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
   )
+
+  const selectedEvent = selectedEventId ? (events.find(e => e.id === selectedEventId) ?? null) : null
 
   function eventsForDay(day: Date): EventWithDetails[] {
     return events.filter(e => isSameDay(parseISO(e.start_time), day))
@@ -254,7 +266,7 @@ export default function MonthView() {
   return (
     <div
       className="h-full flex flex-col overflow-hidden"
-      onClick={() => setOpenPopoverKey(null)}
+      onClick={() => { setOpenPopoverKey(null); setSelectedEventId(null) }}
     >
       {/* Day-of-week header */}
       <div className="grid grid-cols-7 border-b border-casa-border shrink-0">
@@ -284,10 +296,19 @@ export default function MonthView() {
                 onOpen={() => setOpenPopoverKey(key)}
                 onClose={() => setOpenPopoverKey(null)}
                 onDrillIn={drillIntoDay}
+                onSelectEvent={ev => { setSelectedEventId(ev.id); setOpenPopoverKey(null) }}
               />
             )
           })}
         </div>
+      </div>
+
+      {/* Detail panel */}
+      <div onClick={e => e.stopPropagation()}>
+        <EventDetailPanel
+          event={selectedEvent}
+          onClose={() => setSelectedEventId(null)}
+        />
       </div>
     </div>
   )

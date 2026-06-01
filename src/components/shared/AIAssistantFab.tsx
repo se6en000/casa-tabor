@@ -25,7 +25,7 @@ export default function AIAssistantFab({ page, events, family, homeCity }: Props
   function getAnchor() {
     if (!btnRef.current) return undefined
     const r = btnRef.current.getBoundingClientRect()
-    return { right: window.innerWidth - r.left, bottom: window.innerHeight - r.top }
+    return { right: window.innerWidth - r.right, top: r.bottom }
   }
 
   return (

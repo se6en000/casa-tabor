@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Save, Sparkles, Trash2, AlertTriangle,
-  CheckCircle, MapPin, ChevronDown, Users, Lock, Clock, Pencil, Check, Repeat,
+  CheckCircle, MapPin, ChevronDown, Users, Lock, Clock, Repeat,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
@@ -14,6 +14,7 @@ import { useSaveEnrichmentBatch, useEnrichEvent } from '../../hooks/useEnrichEve
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
+import { useSavedPlaces } from '../../hooks/useSavedPlaces'
 
 const ALL_CATEGORIES = Object.keys(CATEGORY_LABEL) as string[]
 
@@ -136,8 +137,10 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   const [form, setForm] = useState<Record<string, string>>({})
   const [location, setLocation] = useState('')
   const [address, setAddress] = useState('')
+  const [showLocationSuggest, setShowLocationSuggest] = useState(false)
+  const locationRef = useRef<HTMLDivElement>(null)
+  const { data: savedPlaces = [] } = useSavedPlaces()
   const [displayTitle, setDisplayTitle] = useState(event.title)
-  const [editingTitle, setEditingTitle] = useState(false)
   const [extraContext, setExtraContext] = useState('')
   const [enrichStatus, setEnrichStatus] = useState<EnrichStatus>('idle')
   const [enrichMessage, setEnrichMessage] = useState('')
@@ -239,6 +242,12 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     setMemberRoles(roles)
     setStartDT(toLocalDT(event.start_time))
     setEndDT(toLocalDT(event.end_time))
+    // Pre-populate form fields from existing enrichment so editing doesn't wipe them
+    if (activeEnr) {
+      setForm(buildForm(activeEnr, getFieldsForCategory(cat)))
+    } else {
+      setForm({})
+    }
   }, [open, event.id, masterData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update form when category changes (keep existing values, populate missing)
@@ -583,30 +592,12 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     </span>
                   )}
                 </div>
-                {editingTitle ? (
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <input
-                      autoFocus
-                      value={displayTitle}
-                      onChange={e => setDisplayTitle(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setEditingTitle(false) }}
-                      className="text-caption text-casa-navy bg-transparent border-b border-casa-navy/40 focus:outline-none focus:border-casa-navy w-[240px]"
-                    />
-                    <button onClick={() => setEditingTitle(false)} className="text-casa-navy/50 hover:text-casa-navy transition-colors">
-                      <Check size={13} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 mt-0.5 group/title">
-                    <p className="text-caption text-casa-muted truncate max-w-[260px]">{displayTitle}</p>
-                    <button
-                      onClick={() => setEditingTitle(true)}
-                      className="opacity-0 group-hover/title:opacity-100 transition-opacity text-casa-muted hover:text-casa-navy"
-                    >
-                      <Pencil size={11} />
-                    </button>
-                  </div>
-                )}
+                {/* Always-editable title */}
+                <input
+                  value={displayTitle}
+                  onChange={e => setDisplayTitle(e.target.value)}
+                  className="text-caption text-casa-navy bg-transparent border-b border-casa-navy/20 focus:border-casa-navy focus:outline-none mt-0.5 w-full max-w-[280px] truncate"
+                />
               </div>
               <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-casa-bg text-casa-muted transition-colors shrink-0">
                 <X size={18} />
@@ -616,11 +607,32 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             {/* Form */}
             <div className="flex-1 overflow-y-auto">
 
-              {/* ── Event Type Toggle ── */}
+              {/* ── Event Type Toggle + Delete ── */}
               <div className="px-6 pt-5 pb-4 border-b border-casa-divider">
-                <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">
-                  Type
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide">
+                    Type
+                  </label>
+                  {/* Inline delete */}
+                  {!showDeleteConfirm ? (
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="flex items-center gap-1 text-caption text-red-400 hover:text-red-600 transition-colors"
+                    >
+                      <Trash2 size={12} /> Delete
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-caption text-red-600 font-semibold">Sure?</span>
+                      <button onClick={handleDelete} disabled={deleting} className="px-2 py-0.5 rounded bg-red-500 text-white text-caption font-semibold hover:bg-red-600 disabled:opacity-50 transition-colors">
+                        {deleting ? '…' : 'Yes'}
+                      </button>
+                      <button onClick={() => setShowDeleteConfirm(false)} className="px-2 py-0.5 rounded border border-casa-border text-caption text-casa-muted hover:bg-casa-divider transition-colors">
+                        No
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   {(['event', 'reminder'] as const).map(t => (
                     <button
@@ -953,7 +965,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
 
               {/* ── Location ── */}
               <div className="px-6 pt-5 pb-5 border-b border-casa-divider space-y-4">
-                <div>
+                <div ref={locationRef} className="relative">
                   <label className="flex items-center gap-1.5 text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">
                     <MapPin size={12} />
                     Location Name
@@ -961,10 +973,45 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                   <input
                     type="text"
                     value={location}
-                    onChange={e => setLocation(e.target.value)}
+                    onChange={e => { setLocation(e.target.value); setShowLocationSuggest(true) }}
+                    onFocus={() => setShowLocationSuggest(true)}
+                    onBlur={() => setTimeout(() => setShowLocationSuggest(false), 150)}
                     placeholder="e.g. EDS Air Conditioning, Lincoln Park"
                     className={inputCls}
                   />
+                  {showLocationSuggest && location.length > 0 && (() => {
+                    const needle = location.toLowerCase()
+                    const matches = savedPlaces.filter(p =>
+                      [p.name, ...p.aliases, p.address ?? '', p.city ?? ''].some(s => s.toLowerCase().includes(needle))
+                    ).slice(0, 5)
+                    if (matches.length === 0) return null
+                    return (
+                      <ul className="absolute z-50 top-full left-0 right-0 mt-1 bg-casa-surface border border-casa-border rounded-xl shadow-lg overflow-hidden">
+                        {matches.map(p => {
+                          const fullAddr = [p.address, p.city, p.state, p.zip].filter(Boolean).join(', ')
+                          return (
+                            <li key={p.id}>
+                              <button
+                                type="button"
+                                onMouseDown={() => {
+                                  setLocation(p.name)
+                                  if (fullAddr) setAddress(fullAddr)
+                                  setShowLocationSuggest(false)
+                                }}
+                                className="w-full text-left px-3 py-2.5 hover:bg-casa-divider transition-colors flex items-center gap-2"
+                              >
+                                <MapPin size={12} className="text-casa-gold shrink-0" />
+                                <span>
+                                  <span className="text-body font-semibold text-casa-navy">{p.name}</span>
+                                  {fullAddr && <span className="text-caption text-casa-muted ml-1.5">{fullAddr}</span>}
+                                </span>
+                              </button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )
+                  })()}
                 </div>
                 <div>
                   <label className="flex items-center gap-1.5 text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">
@@ -1011,34 +1058,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                   )
                 })}
 
-                {/* ── Delete ── */}
-                <div className="pt-2 border-t border-casa-divider">
-                  {!showDeleteConfirm ? (
-                    <button
-                      onClick={() => setShowDeleteConfirm(true)}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-button border border-red-200 text-red-500 text-body-sm font-semibold hover:bg-red-50 transition-colors"
-                    >
-                      <Trash2 size={14} />
-                      Delete Event
-                    </button>
-                  ) : (
-                    <div className="bg-red-50 border border-red-200 rounded-card p-4 space-y-3">
-                      <div className="flex items-start gap-2">
-                        <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
-                        <p className="text-body-sm text-red-700 font-semibold">Delete "{event.title}"?</p>
-                      </div>
-                      <p className="text-caption text-red-600">Removes from Casa Tabor only — won't affect Google Calendar.</p>
-                      <div className="flex gap-2">
-                        <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2 rounded-button border border-red-200 text-body-sm font-semibold text-red-500 hover:bg-white transition-colors">
-                          Cancel
-                        </button>
-                        <button onClick={handleDelete} disabled={deleting} className="flex-1 py-2 rounded-button bg-red-500 text-white text-body-sm font-semibold hover:bg-red-600 disabled:opacity-50 transition-colors">
-                          {deleting ? 'Deleting…' : 'Yes, Delete'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                {/* ── Delete (moved to Type row header) ── */}
               </div>
             </div>
 

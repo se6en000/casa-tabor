@@ -16,6 +16,7 @@ import TripDetailPage from '../../pages/TripDetailPage'
 import ThemeSettingsPage from '../../pages/ThemeSettingsPage'
 import ProfileSettingsPage from '../../pages/ProfileSettingsPage'
 import StatusDashboardPage from '../../pages/StatusDashboardPage'
+import SavedPlacesSettingsPage from '../../pages/SavedPlacesSettingsPage'
 import PageTransition from './PageTransition'
 
 export default function AnimatedRoutes() {
@@ -39,6 +40,7 @@ export default function AnimatedRoutes() {
         <Route path="/settings/theme" element={<PageTransition><ThemeSettingsPage /></PageTransition>} />
         <Route path="/settings/profile" element={<PageTransition><ProfileSettingsPage /></PageTransition>} />
         <Route path="/settings/status" element={<PageTransition><StatusDashboardPage /></PageTransition>} />
+        <Route path="/settings/places" element={<PageTransition><SavedPlacesSettingsPage /></PageTransition>} />
       </Routes>
     </AnimatePresence>
   )

@@ -26,6 +26,9 @@ Deno.serve(async (req) => {
   // If it already has a google_event_id, skip creation
   if (event.google_event_id) return new Response(JSON.stringify({ ok: true, skipped: 'already has google_event_id' }), { headers: { ...CORS, 'content-type': 'application/json' } })
 
+  // Reminders stay in Casa only — never push to Google Calendar
+  if (event.event_type === 'reminder') return new Response(JSON.stringify({ ok: true, skipped: 'reminder' }), { headers: { ...CORS, 'content-type': 'application/json' } })
+
   // Find the primary member to use for creating the event
   const primaryMemberId = event.event_members?.find((m: { role: string }) => m.role === 'primary')?.family_member_id
     ?? event.event_members?.[0]?.family_member_id

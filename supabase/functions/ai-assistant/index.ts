@@ -36,8 +36,15 @@ Deno.serve(async (req) => {
 
   const { messages, context, image }: { messages: Message[]; context: Context; image?: ImagePayload } = await req.json()
 
-  // Load LLM config
-  const { data: cfgRow } = await sb.from('settings').select('value').eq('key', 'llm_config').single()
+  // Load LLM config + saved places + contacts in parallel
+  const [{ data: cfgRow }, { data: savedPlaces }, savedContactsResult] = await Promise.all([
+    sb.from('settings').select('value').eq('key', 'llm_config').single(),
+    sb.from('saved_places').select('name, aliases, address, city, state, zip, category, notes, phone').order('name'),
+    sb.from('saved_contacts').select('name, aliases, phone, email, address, relationship, notes').order('name')
+      .then(r => r)
+      .catch(() => ({ data: null as null, error: null })),
+  ])
+  const savedContacts = savedContactsResult?.data ?? null
   const config = cfgRow?.value ?? { provider: 'gemini', model: 'gemini-1.5-flash', api_key: '' }
 
   // Build system context block
@@ -51,6 +58,25 @@ Deno.serve(async (req) => {
         return `- ID:${e.id} | "${e.title}" | ${fmt(start)} – ${fmt(end)}${e.location_name ? ` | ${e.location_name}` : ''}${e.members.length ? ` | Who: ${e.members.join(', ')}` : ''}${e.category ? ` | ${e.category}` : ''}`
       }).join('\n')
 
+  // Build saved places context block
+  const placesBlock = savedPlaces && savedPlaces.length > 0
+    ? savedPlaces.map(p => {
+        const addr = [p.address, p.city, p.state, p.zip].filter(Boolean).join(', ')
+        const aliases = p.aliases?.length ? ` (also: ${p.aliases.join(', ')})` : ''
+        const extra = [addr, p.phone, p.notes].filter(Boolean).join(' | ')
+        return `- ${p.name}${aliases}${extra ? ': ' + extra : ''}`
+      }).join('\n')
+    : null
+
+  // Build contacts context block
+  const contactsBlock = savedContacts && savedContacts.length > 0
+    ? savedContacts.map((c: { name: string; aliases?: string[]; phone?: string | null; email?: string | null; address?: string | null; relationship?: string | null; notes?: string | null }) => {
+        const aliases = c.aliases?.length ? ` (also: ${c.aliases.join(', ')})` : ''
+        const extra = [c.relationship, c.phone, c.email, c.address, c.notes].filter(Boolean).join(' | ')
+        return `- ${c.name}${aliases}${extra ? ': ' + extra : ''}`
+      }).join('\n')
+    : null
+
   const systemPrompt = `You are the Casa Tabor family assistant — a helpful, concise, warm AI for the ${familyNames} family. 
 Current date/time: ${context.currentDate}
 User's local UTC offset: ${context.utcOffset ?? '-04:00'} (IMPORTANT: all times you generate MUST use this offset, e.g. "2026-05-28T20:00:00${context.utcOffset ?? '-04:00'}")
@@ -61,6 +87,8 @@ EVENTS IN VIEW:
 ${eventsBlock}
 
 FAMILY MEMBERS: ${familyNames}
+${placesBlock ? `\nSAVED PLACES (use these to resolve location nicknames and fill in addresses):\n${placesBlock}` : ''}
+${contactsBlock ? `\nSAVED CONTACTS (use these to resolve people's names, numbers, and addresses):\n${contactsBlock}` : ''}
 
 You can either:
 1. Answer questions conversationally about the events, schedule, or family.

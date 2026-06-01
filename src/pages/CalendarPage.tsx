@@ -7,10 +7,6 @@ import WeekView from '../components/calendar/WeekView'
 import StackedView from '../components/calendar/StackedView'
 import DayView from '../components/calendar/DayView'
 import MonthView from '../components/calendar/MonthView'
-import AIAssistantFab from '../components/shared/AIAssistantFab'
-import { useWeekEvents } from '../hooks/useCalendarEvents'
-import { useFamilyMembers } from '../hooks/useFamilyMembers'
-import { useHomeWeather } from '../hooks/useHomeWeather'
 import type { CalendarView } from '../types'
 
 const views: { key: CalendarView; label: string }[] = [
@@ -22,9 +18,7 @@ const views: { key: CalendarView; label: string }[] = [
 
 export default function CalendarPage() {
   const { activeView, setActiveView, selectedDate, setSelectedDate } = useCalendarStore()
-  const { data: weekEvents } = useWeekEvents(selectedDate)
-  const { data: family } = useFamilyMembers()
-  const { data: weather } = useHomeWeather()
+
 
   // Track slide direction: 1 = forward (next), -1 = backward (prev), 0 = today jump
   const [direction, setDirection] = useState(1)
@@ -150,12 +144,6 @@ export default function CalendarPage() {
         </AnimatePresence>
       </div>
 
-      <AIAssistantFab
-        page="calendar"
-        events={weekEvents ?? []}
-        family={family ?? []}
-        homeCity={weather?.city}
-      />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { format, isAfter, isBefore } from 'date-fns'
 import { Cloud, Sparkles } from 'lucide-react'
 import { motion } from 'framer-motion'
@@ -73,7 +73,7 @@ export function TopBarC() {
                     className="flex items-center gap-1.5 bg-white/10 rounded-full px-3 py-1 min-w-0 max-w-[220px]"
                   >
                     {color && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />}
-                    <span className="text-[12px] text-white truncate">{ev.title}</span>
+                    <span className="text-[12px] text-white truncate">{ev.title.includes(' | ') ? ev.title.split(' | ').slice(1).join(' | ') : ev.title}</span>
                   </div>
                 )
               })}
@@ -103,24 +103,36 @@ export function TopBarC() {
         </div>
 
         {/* AI button with subtle breathing ring */}
-        <motion.button
-          onClick={() => document.dispatchEvent(new CustomEvent('open-ai-chat'))}
-          animate={{
-            boxShadow: [
-              '0 0 0 0px rgba(201,169,110,0.5), 0 0 6px rgba(201,169,110,0.3)',
-              '0 0 0 4px rgba(201,169,110,0.0), 0 0 8px rgba(201,169,110,0.4)',
-              '0 0 0 0px rgba(201,169,110,0.5), 0 0 6px rgba(201,169,110,0.3)',
-            ],
-          }}
-          transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
-          className={cn(
-            'w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
-            'bg-casa-gold/20 hover:bg-casa-gold/40 text-casa-gold',
-          )}
-          title="Ask AI"
-        >
-          <Sparkles size={15} strokeWidth={1.8} />
-        </motion.button>
+        {(() => {
+          // eslint-disable-next-line react-hooks/rules-of-hooks
+          const btnRef = useRef<HTMLButtonElement>(null)
+          return (
+            <motion.button
+              ref={btnRef}
+              onClick={() => {
+                const rect = btnRef.current?.getBoundingClientRect()
+                document.dispatchEvent(new CustomEvent('open-ai-chat', {
+                  detail: rect ? { right: window.innerWidth - rect.right, top: rect.bottom } : undefined
+                }))
+              }}
+              animate={{
+                boxShadow: [
+                  '0 0 0 0px rgba(201,169,110,0.5), 0 0 6px rgba(201,169,110,0.3)',
+                  '0 0 0 4px rgba(201,169,110,0.0), 0 0 8px rgba(201,169,110,0.4)',
+                  '0 0 0 0px rgba(201,169,110,0.5), 0 0 6px rgba(201,169,110,0.3)',
+                ],
+              }}
+              transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+              className={cn(
+                'w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
+                'bg-casa-gold/20 hover:bg-casa-gold/40 text-casa-gold',
+              )}
+              title="Ask AI"
+            >
+              <Sparkles size={15} strokeWidth={1.8} />
+            </motion.button>
+          )
+        })()}
       </div>
     </header>
   )

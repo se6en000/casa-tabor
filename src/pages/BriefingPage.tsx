@@ -4,13 +4,8 @@ import { Settings, Bot, CalendarDays, Sparkles } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
-import AIAssistantFab from '../components/shared/AIAssistantFab'
 import PrepAlertsSection from '../components/shared/PrepAlertsSection'
 import ConflictAlertsSection from '../components/shared/ConflictAlertsSection'
-import { useTodayEvents } from '../hooks/useCalendarEvents'
-import { useFamilyMembers } from '../hooks/useFamilyMembers'
-import { useHomeWeather } from '../hooks/useHomeWeather'
-import { useLiveClock } from '../hooks/useLiveClock'
 
 interface MemberEvent {
   title: string
@@ -43,10 +38,8 @@ export default function BriefingPage() {
   // Compute local-day UTC boundaries (same logic as useTodayEvents)
   const _dayStart = new Date(); _dayStart.setHours(0, 0, 0, 0)
   const _dayEnd   = new Date(); _dayEnd.setHours(23, 59, 59, 999)
-  const now = useLiveClock(60_000)
-  const { data: todayEvents } = useTodayEvents(now)
-  const { data: family } = useFamilyMembers()
-  const { data: weather } = useHomeWeather()
+
+
 
   useEffect(() => {
     loadBriefing()
@@ -216,12 +209,7 @@ export default function BriefingPage() {
         )}
       </div>
 
-      <AIAssistantFab
-        page="briefing"
-        events={todayEvents ?? []}
-        family={family ?? []}
-        homeCity={weather?.city}
-      />
+
     </div>
     </div>
   )

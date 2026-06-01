@@ -13,7 +13,6 @@ import { useHomeWeather } from '../hooks/useHomeWeather'
 import { cn } from '../utils/cn'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import EventDetailPanel from '../components/calendar/EventDetailPanel'
-import AIAssistantFab from '../components/shared/AIAssistantFab'
 import MiniPlayer from '../components/music/MiniPlayer'
 import HomeRightPanel from '../components/home/HomeRightPanel'
 import { isAllDayReminder, isTimedReminder } from '../utils/holidays'
@@ -369,7 +368,7 @@ export default function HomePage() {
               </div>
               <ol className="space-y-2">
                 {tomorrowEvents.map((ev, i) => (
-                  <TimelineRow key={ev.id} event={ev} now={tomorrow} index={i} onClick={() => setSelectedEventId(ev.id)} />
+                  <TimelineRow key={ev.id} event={ev} now={now} index={i} onClick={() => setSelectedEventId(ev.id)} />
                 ))}
               </ol>
             </motion.section>
@@ -384,13 +383,7 @@ export default function HomePage() {
           />
         </div>
 
-        {/* ── AI Assistant ──────────────────────────────────── */}
-        <AIAssistantFab
-          page="home"
-          events={events}
-          family={family ?? []}
-          homeCity={weather?.city}
-        />
+
       </div>
 
       {/* ── Right panel (tablet only) ──────────────────────── */}

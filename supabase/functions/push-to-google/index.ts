@@ -26,6 +26,9 @@ Deno.serve(async (req) => {
   if (evErr || !event) return new Response(JSON.stringify({ error: evErr?.message ?? 'event not found' }), { status: 404, headers: { ...CORS, 'content-type': 'application/json' } })
   if (!event.google_event_id) return new Response(JSON.stringify({ ok: true, skipped: 'no google_event_id' }), { headers: { ...CORS, 'content-type': 'application/json' } })
 
+  // Reminders stay in Casa only — never push to Google Calendar
+  if (event.event_type === 'reminder') return new Response(JSON.stringify({ ok: true, skipped: 'reminder' }), { headers: { ...CORS, 'content-type': 'application/json' } })
+
   // Get the token for the source member — fall back to any available token if member has none
   let memberId = event.source_member_id
   let tok = memberId

@@ -145,7 +145,7 @@ function useSpeechInput({
 interface Props {
   open: boolean
   onClose: () => void
-  anchor?: { right: number; bottom: number }
+  anchor?: { right: number; top: number }
   page: string
   events: EventWithDetails[]
   family: FamilyMember[]
@@ -289,38 +289,37 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     <AnimatePresence>
       {open && (
         <>
-          {/* Backdrop */}
+          {/* Backdrop — full dim on mobile, subtle on desktop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/40 z-[65]"
+            className="fixed inset-0 z-[65] max-sm:bg-black/40 sm:bg-transparent"
             onClick={onClose}
           />
 
-          {/* Panel — bottom sheet on mobile, FAB-anchored popup on desktop */}
+          {/* Panel — bottom sheet on mobile, dropdown popup on desktop */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            transition={{ type: 'tween', duration: 0.38, ease: [0.32, 0.72, 0, 1] }}
+            initial={{ opacity: 0, y: -8, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.97 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 260 }}
             className={cn(
-              'fixed z-[70] bg-casa-surface shadow-modal flex flex-col transition-shadow',
+              'fixed z-[70] bg-casa-surface flex flex-col transition-shadow',
               // Mobile: full-width bottom sheet
-              'max-sm:inset-x-0 max-sm:bottom-0 max-sm:rounded-t-2xl max-sm:w-full',
-              // Desktop: floating card anchored to FAB
-              'sm:rounded-2xl sm:w-[min(520px,calc(100vw-2rem))]',
+              'max-sm:inset-x-0 max-sm:bottom-0 max-sm:rounded-t-2xl max-sm:w-full max-sm:shadow-modal',
+              // Desktop: compact dropdown card near sparkle
+              'sm:rounded-2xl sm:w-[380px] sm:shadow-[0_8px_40px_rgba(0,0,0,0.22)] sm:border sm:border-casa-border',
               loading && 'ai-thinking',
             )}
             style={{
-              // Mobile: tall sheet, leaves ~10% of screen above
               ...(window.innerWidth < 640 ? {
                 maxHeight: '88vh',
                 paddingBottom: 'env(safe-area-inset-bottom)',
               } : {
-                maxHeight: '65vh',
-                right: anchor ? Math.max(8, anchor.right - 16) : 20,
-                bottom: anchor ? Math.max(8, anchor.bottom + 16) : 100,
+                maxHeight: '70vh',
+                right: anchor ? Math.max(8, anchor.right) : 16,
+                top: anchor ? anchor.top + 6 : 56,
               })
             }}
             onClick={e => e.stopPropagation()}
@@ -385,8 +384,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                   msg={msg}
                   isLatest={idx === messages.length - 1}
                   onConfirmAction={async (action) => {
-                    await executeAction(action, family, qc)
-                    qc.invalidateQueries({ queryKey: ['events'] })
+                    return await executeAction(action, family, qc)
                   }}
                   registerPendingConfirm={(fn) => { pendingConfirmRef.current = fn }}
                   registerPendingCancel={(fn)  => { pendingCancelRef.current  = fn }}
@@ -534,26 +532,38 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 function MessageBubble({ msg, isLatest, onConfirmAction, registerPendingConfirm, registerPendingCancel }: {
   msg: ChatMessage
   isLatest: boolean
-  onConfirmAction: (action: AssistantAction) => Promise<void>
+  onConfirmAction: (action: AssistantAction) => Promise<{ eventId?: string }>
   registerPendingConfirm: (fn: () => void) => void
   registerPendingCancel:  (fn: () => void) => void
 }) {
-  const [confirmed, setConfirmed] = useState<'idle' | 'loading' | 'done' | 'cancelled'>('idle')
+  const [confirmed, setConfirmed] = useState<'idle' | 'loading' | 'done' | 'error' | 'cancelled'>('idle')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [createdEventId, setCreatedEventId] = useState<string | null>(null)
 
   const isUser = msg.role === 'user'
   const actionDone = confirmed === 'done'
   const actionCancelled = confirmed === 'cancelled'
+  const actionError = confirmed === 'error'
 
   const hasPendingAction = !!msg.action && !msg.action.needs_clarification && confirmed === 'idle'
+
+  async function doConfirm() {
+    setConfirmed('loading')
+    setErrorMsg(null)
+    try {
+      const result = await onConfirmAction(msg.action!)
+      if (result?.eventId) setCreatedEventId(result.eventId)
+      setConfirmed('done')
+    } catch (err) {
+      setErrorMsg((err as Error).message ?? 'Something went wrong')
+      setConfirmed('error')
+    }
+  }
 
   // Register confirm/cancel handlers so voice can trigger them
   useEffect(() => {
     if (isLatest && hasPendingAction) {
-      registerPendingConfirm(async () => {
-        setConfirmed('loading')
-        await onConfirmAction(msg.action!)
-        setConfirmed('done')
-      })
+      registerPendingConfirm(doConfirm)
       registerPendingCancel(() => setConfirmed('cancelled'))
     }
   }, [isLatest, hasPendingAction]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -583,12 +593,34 @@ function MessageBubble({ msg, isLatest, onConfirmAction, registerPendingConfirm,
         {msg.action && !msg.action.needs_clarification && (
           <div className="mt-2.5 pt-2.5 border-t border-casa-divider">
             {actionDone ? (
-              <div className="flex items-center gap-1.5 text-emerald-600 text-caption font-semibold">
-                <Check size={13} /> Done!
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5 text-emerald-600 text-caption font-semibold">
+                  <Check size={13} />
+                  {msg.action.action === 'create_event' ? 'Created & added to calendar ✓' : 'Done!'}
+                </div>
+                {msg.action.action === 'create_event' && createdEventId && (
+                  <p className="text-[10px] text-casa-muted">
+                    ID: {createdEventId.slice(0, 8)}… · visible on your calendar now
+                  </p>
+                )}
               </div>
             ) : actionCancelled ? (
               <div className="flex items-center gap-1.5 text-casa-muted text-caption">
                 <XCircle size={13} /> Cancelled
+              </div>
+            ) : actionError ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-red-600 text-caption font-semibold">
+                  <XCircle size={13} /> Failed — event was NOT created
+                </div>
+                {errorMsg && <p className="text-[10px] text-red-500">{errorMsg}</p>}
+                <button
+                  type="button"
+                  onClick={doConfirm}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-button bg-red-600 text-white text-caption font-semibold hover:brightness-110 transition-all"
+                >
+                  <Loader2 size={12} /> Retry
+                </button>
               </div>
             ) : (
               <>
@@ -597,15 +629,11 @@ function MessageBubble({ msg, isLatest, onConfirmAction, registerPendingConfirm,
                   <button
                     type="button"
                     disabled={confirmed === 'loading'}
-                    onClick={async () => {
-                      setConfirmed('loading')
-                      await onConfirmAction(msg.action!)
-                      setConfirmed('done')
-                    }}
+                    onClick={doConfirm}
                     className="flex items-center gap-1.5 px-3 py-1 rounded-button bg-casa-gold text-white text-caption font-semibold hover:brightness-110 transition-all disabled:opacity-50"
                   >
                     {confirmed === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                    Confirm
+                    {confirmed === 'loading' ? 'Creating…' : 'Confirm'}
                   </button>
                   <button
                     type="button"
@@ -649,9 +677,9 @@ function ActionPreview({ action }: { action: AssistantAction }) {
 
 /* ── Execute confirmed action ───────────────────────────────── */
 
-async function executeAction(action: AssistantAction, family: FamilyMember[], qc: ReturnType<typeof useQueryClient>) {
+async function executeAction(action: AssistantAction, family: FamilyMember[], qc: ReturnType<typeof useQueryClient>): Promise<{ eventId?: string }> {
   if (action.action === 'create_event') {
-    // Insert event
+    // Insert event — throw on error so UI knows it failed
     const { data: event, error } = await supabase.from('events').insert({
       title: action.title,
       start_time: action.start,
@@ -663,7 +691,13 @@ async function executeAction(action: AssistantAction, family: FamilyMember[], qc
       event_type: action.event_type ?? 'event',
     }).select().single()
 
-    if (error || !event) { console.error('[AI create_event]', error); return }
+    if (error) throw new Error(error.message)
+    if (!event) throw new Error('Event insert returned no data')
+
+    // Verify it actually landed in the DB
+    const { data: verify, error: verifyErr } = await supabase
+      .from('events').select('id').eq('id', event.id).single()
+    if (verifyErr || !verify) throw new Error('Event was not found after insert — please try again')
 
     // Resolve member names → ids and insert event_members
     const memberIds = (action.members ?? [])
@@ -671,24 +705,31 @@ async function executeAction(action: AssistantAction, family: FamilyMember[], qc
       .filter((id): id is string => !!id)
 
     if (memberIds.length > 0) {
-      await supabase.from('event_members').insert(
+      const { error: memErr } = await supabase.from('event_members').insert(
         memberIds.map((id, i) => ({ event_id: event.id, family_member_id: id, role: i === 0 ? 'primary' : 'attendee' }))
       )
+      if (memErr) console.warn('[AI create_event] member insert failed:', memErr)
     }
 
-    // Fire-and-forget: create in Google Calendar, then enrich (conflicts+prep run on scheduled cadence)
+    // Push to Google Calendar — fire-and-forget, DB is source of truth
     supabase.functions.invoke('create-google-event', { body: { event_id: event.id } })
-      .then(() => supabase.functions.invoke('enrich-event', { body: { event_id: event.id } }))
+      .then(r => { if (r.error) console.warn('[AI create_event] Google Calendar push failed:', r.error) })
       .catch(console.error)
+
+    // Fire-and-forget enrichment (non-blocking, not critical for confirmation)
+    supabase.functions.invoke('enrich-event', { body: { event_id: event.id } }).catch(console.error)
+
     qc.invalidateQueries({ queryKey: ['events'] })
+    return { eventId: event.id }
   }
 
   if (action.action === 'delete_event') {
-    // Remove from Google Calendar before marking cancelled
     await supabase.functions.invoke('delete-google-event', { body: { event_id: action.id } })
       .catch(() => { /* best-effort */ })
-    await supabase.from('events').update({ status: 'cancelled' }).eq('id', action.id)
+    const { error } = await supabase.from('events').update({ status: 'cancelled' }).eq('id', action.id)
+    if (error) throw new Error(error.message)
     qc.invalidateQueries({ queryKey: ['events'] })
+    return {}
   }
 
   if (action.action === 'update_event') {
@@ -697,12 +738,15 @@ async function executeAction(action: AssistantAction, family: FamilyMember[], qc
     if (action.changes.start) updates.start_time = action.changes.start
     if (action.changes.end) updates.end_time = action.changes.end
     if (action.changes.location) updates.location_name = action.changes.location
-    await supabase.from('events').update(updates).eq('id', action.id)
+    const { error } = await supabase.from('events').update(updates).eq('id', action.id)
+    if (error) throw new Error(error.message)
     qc.invalidateQueries({ queryKey: ['events'] })
-    // Push changes to Google Calendar
     supabase.functions.invoke('push-to-google', { body: { event_id: action.id } })
       .catch(() => { /* best-effort */ })
+    return {}
   }
+
+  return {}
 }
 
 /* ── Contextual suggestions ─────────────────────────────────── */

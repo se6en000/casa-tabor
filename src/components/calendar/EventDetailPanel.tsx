@@ -79,12 +79,18 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   if (info.velocity.y > 300 || info.offset.y > 140) onClose()
                 }}
                 style={{ willChange: 'transform', touchAction: 'none' }}
-                className="fixed inset-x-0 bottom-0 top-[5vh] bg-casa-surface rounded-t-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col cursor-grab active:cursor-grabbing"
+                className="fixed inset-x-0 bottom-0 top-[5vh] bg-casa-surface rounded-t-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col cursor-grab active:cursor-grabbing overflow-hidden"
                 onClick={e => e.stopPropagation()}
               >
-                <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-                  <div className="w-9 h-1 bg-casa-divider rounded-full" />
-                </div>
+                {/* Colored eyebrow with integrated drag pill */}
+                {(() => {
+                  const color = event.members[0]?.family_member?.color_hex ?? '#C9A96E'
+                  return (
+                    <div className="flex-shrink-0 flex flex-col items-center pb-2 pt-3" style={{ borderTop: `4px solid ${color}` }}>
+                      <div className="w-10 h-1 bg-casa-divider rounded-full" />
+                    </div>
+                  )
+                })()}
                 <PanelHeader event={event} onClose={onClose} />
                 <PanelBody event={event} />
                 <PanelFooter event={event} onEdit={() => setShowEdit(true)} />
@@ -272,7 +278,7 @@ function PanelHeader({ event, onClose }: { event: EventWithDetails; onClose: () 
 
   return (
     <div className="border-b border-casa-border">
-      <div className="h-1 w-full" style={{ backgroundColor: primaryColor }} />
+      <div className="hidden sm:block h-1 w-full" style={{ backgroundColor: primaryColor }} />
 
       <div className="p-6 pb-4 relative">
         <button
@@ -283,7 +289,7 @@ function PanelHeader({ event, onClose }: { event: EventWithDetails; onClose: () 
         </button>
 
         <h2 className="font-display text-display-md text-casa-navy pr-8 mb-1 leading-tight">
-          {event.title}
+          {event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}
         </h2>
         <p className="text-body text-casa-muted">
           {format(new Date(event.start_time), 'EEEE, MMMM d')}
