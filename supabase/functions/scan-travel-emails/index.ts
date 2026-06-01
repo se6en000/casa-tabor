@@ -650,6 +650,27 @@ async function extractAndUpsertTrip(
     return { ok: false, debug: 'trip ended >90 days ago, skipping' }
   }
 
+  // ── Guard: skip trips where the destination is the home location (return-home emails) ──
+  // Home airports / cities for the Tabor family (Palm Beach, FL area)
+  const HOME_AIRPORTS = ['PBI', 'FLL', 'MIA']
+  const HOME_CITY_KEYWORDS = ['palm beach', 'west palm beach', 'lake worth', 'boca raton', 'jupiter', 'boynton beach', 'delray beach']
+  const destCityLower = destCity.toLowerCase()
+  const isHomeDestination =
+    HOME_AIRPORTS.includes((outboundLeg?.dest_airport ?? '').toUpperCase()) ||
+    HOME_CITY_KEYWORDS.some(kw => destCityLower.includes(kw))
+  if (isHomeDestination) {
+    return { ok: false, debug: `SKIP(home-destination): destCity="${destCity}" dest_airport="${outboundLeg?.dest_airport ?? ''}"` }
+  }
+
+  // ── Guard: skip trips where the AI extracted an unknown traveler name ──
+  // Must contain at least one token matching a known family member name
+  const KNOWN_NAME_TOKENS = ['jacob', 'jake', 'tabor', 'raymond', 'kelly', 'liv', 'olivia', 'emme', 'emma', 'owen']
+  const travelerTokens = travelerName.toLowerCase().split(/[\s,]+/)
+  const isKnownTraveler = KNOWN_NAME_TOKENS.some(tok => travelerTokens.includes(tok))
+  if (!isKnownTraveler) {
+    return { ok: false, debug: `SKIP(unknown-traveler): travelerName="${travelerName}"` }
+  }
+
   // Load home address from home_config (single source of truth)
   const { data: homeConfigRow } = await sb.from('settings').select('value').eq('key', 'home_config').maybeSingle()
   const hc = homeConfigRow?.value as { address?: string; city?: string; state?: string; zip?: string } | null
@@ -764,7 +785,16 @@ This is a family household. Other family members remain at home.`).catch(() => '
     const flightNum = outboundLeg?.flight_number?.replace(/\s/g, '') ?? null
     let foundDupe: { id: string; event_id: string | null; gmail_message_ids: string[] } | null = null
 
-    if (flightNum) {
+    // First: check by gmail_message_id (strongest match — catches re-scans of same email)
+    if (gmailMessageId) {
+      const { data: byMsgId } = await sb.from('trips')
+        .select('id, event_id, gmail_message_ids')
+        .contains('gmail_message_ids', [gmailMessageId])
+        .maybeSingle()
+      foundDupe = byMsgId ?? null
+    }
+
+    if (!foundDupe && flightNum) {
       const { data: byFlight } = await sb.from('trips')
         .select('id, event_id, gmail_message_ids')
         .eq('family_member_id', familyMemberId)
