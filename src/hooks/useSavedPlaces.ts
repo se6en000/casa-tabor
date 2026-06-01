@@ -30,6 +30,7 @@ export interface SavePlaceInput {
   lng?: number | null
   category?: SavedPlaceCategory
   notes?: string | null
+  phone?: string | null
 }
 
 export function useSavePlace() {

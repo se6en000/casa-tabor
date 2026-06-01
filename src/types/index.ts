@@ -159,6 +159,7 @@ export interface SavedPlace {
   lng: number | null
   category: SavedPlaceCategory
   notes: string | null
+  phone: string | null
   google_place_id: string | null
   created_at: string
   updated_at: string

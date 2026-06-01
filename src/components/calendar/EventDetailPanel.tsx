@@ -971,6 +971,8 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
             locationName={event.location_name}
             address={event.address}
             parkingNotes={shows('parking_notes') ? enr?.parking_notes : null}
+            contactName={shows('contact_name') ? enr?.contact_name : null}
+            contactPhone={shows('contact_name') ? enr?.contact_phone : null}
           />
         </section>
       )}
@@ -1076,7 +1078,14 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
               <SectionLabel>Contact</SectionLabel>
               <InfoRow icon={<Phone size={16} className="text-casa-muted" />}>
                 {enr.contact_name && <p className="text-body-sm font-semibold text-casa-navy">{enr.contact_name}</p>}
-                {enr.contact_phone && <p className="text-caption text-casa-muted">{enr.contact_phone}</p>}
+                {enr.contact_phone && (
+                  <a
+                    href={`tel:${enr.contact_phone.replace(/\D/g, '')}`}
+                    className="text-caption text-casa-gold hover:text-casa-navy transition-colors hover:underline"
+                  >
+                    {enr.contact_phone}
+                  </a>
+                )}
               </InfoRow>
             </section>
           )}
@@ -1148,10 +1157,12 @@ function ChecklistSection({ items }: { items: EventChecklistItem[]; eventId: str
 
 /* ── LocationBlock ──────────────────────────────────────────── */
 
-function LocationBlock({ locationName, address, parkingNotes }: {
+function LocationBlock({ locationName, address, parkingNotes, contactName, contactPhone }: {
   locationName: string | null
   address: string | null
   parkingNotes?: string | null
+  contactName?: string | null
+  contactPhone?: string | null
 }) {
   const [copied, setCopied] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -1190,6 +1201,8 @@ function LocationBlock({ locationName, address, parkingNotes }: {
       await savePlace.mutateAsync({
         name: locationName ?? address ?? 'Unknown Place',
         address: address ?? null,
+        phone: contactPhone ?? null,
+        notes: contactName ? `Contact: ${contactName}` : null,
         category: 'other',
       })
       setSaved(true)
@@ -1224,6 +1237,19 @@ function LocationBlock({ locationName, address, parkingNotes }: {
           )}
           {parkingNotes && (
             <p className="text-caption text-casa-muted mt-0.5">{parkingNotes}</p>
+          )}
+          {/* Phone number from enrichment or saved place */}
+          {(contactPhone || existingPlace?.phone) && (
+            <a
+              href={`tel:${(contactPhone ?? existingPlace?.phone ?? '').replace(/\D/g, '')}`}
+              className="flex items-center gap-1.5 mt-1 text-caption text-casa-gold hover:text-casa-navy transition-colors group"
+            >
+              <Phone size={11} className="shrink-0" />
+              <span className="group-hover:underline">{contactPhone ?? existingPlace?.phone}</span>
+            </a>
+          )}
+          {contactName && !contactPhone && !existingPlace?.phone && (
+            <p className="text-caption text-casa-muted mt-0.5">{contactName}</p>
           )}
           {existingPlace?.notes && (
             <p className="text-[11px] text-casa-gold/80 mt-1 italic">{existingPlace.notes}</p>
