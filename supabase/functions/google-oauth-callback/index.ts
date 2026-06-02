@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
     if (hasGmailScope) tokenRow.gmail_scan_enabled = true
     await sb.from('google_tokens').upsert(tokenRow)
     await sb.from('family_members').update({ email, google_calendar_id: email }).eq('id', familyMemberId)
-    const returnPath = includesGmail ? '/settings/gmail-scan' : '/settings/calendars'
+    const returnPath = '/settings/google'
     return redir(APP.replace(/\/settings\/[^?]*/, returnPath) + '?connected=' + familyMemberId + (includesGmail ? '&gmail=1' : ''))
   } catch (err) {
     console.error(err)

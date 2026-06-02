@@ -1,18 +1,17 @@
 import { Link } from 'react-router-dom'
-import { Calendar, Users, Sun, MessageSquare, Bot, ChevronRight, Mail, Music2, Palette, Home, Activity, BookmarkCheck } from 'lucide-react'
+import { Users, Sun, MessageSquare, Bot, ChevronRight, Music2, Palette, Home, Activity, BookmarkCheck, Layers } from 'lucide-react'
 
 const sections = [
-  { to: '/settings/profile',   icon: Home,           label: 'Profile & Home',        desc: 'Home address used for drive times and travel planning' },
-  { to: '/settings/theme',     icon: Palette,        label: 'Theme & Colors',        desc: 'Accent, background, and custom palettes' },
-  { to: '/settings/calendars', icon: Calendar,       label: 'Google Calendars',      desc: 'Connect each family member\'s account' },
-  { to: '/settings/ai',        icon: Bot,            label: 'AI Settings',           desc: 'Vendor, model, and API key for briefings' },
-  { to: '/settings/family',    icon: Users,          label: 'Family',                desc: 'Members, colors, roles' },
+  { to: '/settings/profile',   icon: Home,           label: 'Profile & Home',          desc: 'Home address used for drive times and travel planning' },
+  { to: '/settings/theme',     icon: Palette,        label: 'Theme & Colors',          desc: 'Accent, background, and custom palettes' },
+  { to: '/settings/google',    icon: Layers,         label: 'Google Services',         desc: 'Calendar sync + Gmail inbox scan — one auth per member' },
+  { to: '/settings/ai',        icon: Bot,            label: 'AI Settings',             desc: 'Vendor, model, and API key for briefings' },
+  { to: '/settings/family',    icon: Users,          label: 'Family',                  desc: 'Members, colors, roles' },
   { to: '/settings/places',    icon: BookmarkCheck,  label: 'Saved Places & Contacts', desc: 'Favorite locations and people the AI can look up by nickname' },
-  { to: '/settings/display',   icon: Sun,            label: 'Display',               desc: 'Room Tone, brightness lock' },
-  { to: '/settings/sms',       icon: MessageSquare,  label: 'Notifications',         desc: 'Twilio SMS, briefing time' },
-  { to: '/settings/gmail-scan',icon: Mail,           label: 'Gmail Inbox Scan',      desc: 'Auto-import appointments from email' },
-  { to: '/music',              icon: Music2,         label: 'Spotify / Music',       desc: 'Connect and control music playback' },
-  { to: '/settings/status',    icon: Activity,       label: 'Status Dashboard',      desc: 'AI usage, tokens, and cost monitoring' },
+  { to: '/settings/display',   icon: Sun,            label: 'Display',                 desc: 'Room Tone, brightness lock' },
+  { to: '/settings/sms',       icon: MessageSquare,  label: 'Notifications',           desc: 'Twilio SMS, briefing time' },
+  { to: '/music',              icon: Music2,         label: 'Spotify / Music',         desc: 'Connect and control music playback' },
+  { to: '/settings/status',    icon: Activity,       label: 'Status Dashboard',        desc: 'AI usage, tokens, and cost monitoring' },
 ]
 
 export default function SettingsPage() {
