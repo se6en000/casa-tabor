@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ChevronLeft, Plus, Trash2, Save, X, MapPin, Phone, Mail,
   Search, BookmarkCheck, Home, Utensils, School, Dumbbell,
-  Briefcase, HeartPulse, Star, Edit2, Users, User,
+  Briefcase, HeartPulse, Star, Edit2, Users, User, Copy, Check,
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
@@ -148,6 +148,11 @@ function PlaceRow({ place, onEdit, onDelete }: { place: SavedPlace; onEdit: () =
   const meta = categoryMeta(place.category)
   const Icon = meta.icon
   const fullAddress = [place.address, place.city, place.state, place.zip].filter(Boolean).join(', ')
+  const [copied, setCopied] = useState(false)
+  const handleCopyAddress = useCallback(async () => {
+    if (!fullAddress) return
+    try { await navigator.clipboard.writeText(fullAddress); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch { /* ignore */ }
+  }, [fullAddress])
   return (
     <div className="flex items-start gap-3 bg-casa-surface border border-casa-border rounded-card p-4 shadow-card hover:shadow-card-hover transition-shadow">
       <div className="w-9 h-9 rounded-full bg-casa-gold/10 flex items-center justify-center text-casa-gold shrink-0 mt-0.5">
@@ -159,7 +164,13 @@ function PlaceRow({ place, onEdit, onDelete }: { place: SavedPlace; onEdit: () =
           <span className="text-[10px] font-semibold text-casa-muted bg-casa-divider px-2 py-0.5 rounded-full">{meta.label}</span>
         </div>
         {place.aliases.length > 0 && <p className="text-caption text-casa-gold mt-0.5 truncate">Also known as: {place.aliases.join(', ')}</p>}
-        {fullAddress && <p className="flex items-center gap-1 text-caption text-casa-muted mt-1"><MapPin size={11} />{fullAddress}</p>}
+        {fullAddress && (
+          <button onClick={handleCopyAddress} className="flex items-center gap-1 text-caption text-casa-muted mt-1 hover:text-casa-navy transition-colors group text-left" title="Tap to copy address">
+            <MapPin size={11} className="shrink-0" />
+            <span className="group-hover:underline">{fullAddress}</span>
+            {copied ? <Check size={11} className="text-emerald-500 shrink-0" /> : <Copy size={11} className="opacity-0 group-hover:opacity-50 shrink-0 transition-opacity" />}
+          </button>
+        )}
         {place.phone && <p className="flex items-center gap-1 text-caption text-casa-muted mt-0.5"><Phone size={11} />{place.phone}</p>}
         {place.notes && <p className="text-caption text-casa-muted mt-1 italic line-clamp-2">{place.notes}</p>}
       </div>
@@ -252,6 +263,11 @@ function ContactForm({ initial, onSave, onCancel, saving }: ContactFormProps) {
 // ── Contact row ───────────────────────────────────────────────────────────────
 
 function ContactRow({ contact, onEdit, onDelete }: { contact: SavedContact; onEdit: () => void; onDelete: () => void }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopyAddress = useCallback(async () => {
+    if (!contact.address) return
+    try { await navigator.clipboard.writeText(contact.address); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch { /* ignore */ }
+  }, [contact.address])
   return (
     <div className="flex items-start gap-3 bg-casa-surface border border-casa-border rounded-card p-4 shadow-card hover:shadow-card-hover transition-shadow">
       <div className="w-9 h-9 rounded-full bg-casa-navy/10 flex items-center justify-center text-casa-navy shrink-0 mt-0.5">
@@ -265,7 +281,13 @@ function ContactRow({ contact, onEdit, onDelete }: { contact: SavedContact; onEd
         {contact.aliases.length > 0 && <p className="text-caption text-casa-gold mt-0.5 truncate">Also known as: {contact.aliases.join(', ')}</p>}
         {contact.phone && <p className="flex items-center gap-1 text-caption text-casa-muted mt-1"><Phone size={11} />{contact.phone}</p>}
         {contact.email && <p className="flex items-center gap-1 text-caption text-casa-muted mt-0.5"><Mail size={11} />{contact.email}</p>}
-        {contact.address && <p className="flex items-center gap-1 text-caption text-casa-muted mt-0.5"><MapPin size={11} />{contact.address}</p>}
+        {contact.address && (
+          <button onClick={handleCopyAddress} className="flex items-center gap-1 text-caption text-casa-muted mt-0.5 hover:text-casa-navy transition-colors group text-left" title="Tap to copy address">
+            <MapPin size={11} className="shrink-0" />
+            <span className="group-hover:underline">{contact.address}</span>
+            {copied ? <Check size={11} className="text-emerald-500 shrink-0" /> : <Copy size={11} className="opacity-0 group-hover:opacity-50 shrink-0 transition-opacity" />}
+          </button>
+        )}
         {contact.notes && <p className="text-caption text-casa-muted mt-1 italic line-clamp-2">{contact.notes}</p>}
       </div>
       <div className="flex items-center gap-1 shrink-0">

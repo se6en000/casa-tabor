@@ -10,14 +10,14 @@
  * - AI travel tips
  */
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
 import {
   Plane, Hotel, Home, MapPin, Clock, ArrowLeft, CheckSquare, Square,
   Sun, Cloud, CloudRain, CloudSnow, Wind,
   ChevronRight, Phone, Hash, Armchair, DoorOpen, RefreshCw, Loader2,
-  Users, Luggage,
+  Users, Luggage, Copy, Check,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useTrip, type WeatherDay, type PackingItem } from '../hooks/useTrips'
@@ -96,17 +96,23 @@ function weatherIcon(condition: string): React.ReactNode {
 // ── Sub-components ─────────────────────────────────────────────────────────
 
 function TimelineStep({
-  icon, title, subtitle, time, timeLabel, detail, accent = false, connector = true,
+  icon, title, subtitle, subtitleCopyable, time, timeLabel, detail, accent = false, connector = true,
 }: {
   icon: React.ReactNode
   title: string
   subtitle?: string
+  subtitleCopyable?: boolean
   time?: string
   timeLabel?: string
   detail?: React.ReactNode
   accent?: boolean
   connector?: boolean
 }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = useCallback(async () => {
+    if (!subtitle) return
+    try { await navigator.clipboard.writeText(subtitle); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch { /* ignore */ }
+  }, [subtitle])
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center">
@@ -122,7 +128,14 @@ function TimelineStep({
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className={cn('font-semibold text-sm', accent ? 'text-casa-navy' : 'text-casa-text')}>{title}</p>
-            {subtitle && <p className="text-caption text-casa-muted mt-0.5">{subtitle}</p>}
+            {subtitle && (subtitleCopyable ? (
+              <button onClick={handleCopy} className="flex items-center gap-1.5 mt-0.5 text-caption text-casa-muted hover:text-casa-navy transition-colors group text-left" title="Tap to copy address">
+                <span className="group-hover:underline">{subtitle}</span>
+                {copied ? <Check size={11} className="text-emerald-500 shrink-0" /> : <Copy size={11} className="opacity-0 group-hover:opacity-50 shrink-0 transition-opacity" />}
+              </button>
+            ) : (
+              <p className="text-caption text-casa-muted mt-0.5">{subtitle}</p>
+            ))}
           </div>
           {time && (
             <div className="text-right flex-shrink-0">
@@ -411,6 +424,7 @@ export default function TripDetailPage() {
               icon={<Hotel size={16} />}
               title={trip.hotel_name}
               subtitle={trip.hotel_address ?? undefined}
+              subtitleCopyable={!!trip.hotel_address}
               time={trip.hotel_checkin_time ?? '3:00 PM'}
               timeLabel="Check-in"
               connector={false}
