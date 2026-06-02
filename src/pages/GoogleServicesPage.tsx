@@ -107,14 +107,14 @@ export default function GoogleServicesPage() {
     },
   })
 
-  // Toggle Gmail scan on/off (no re-auth needed — token already has gmail scope)
+  // Toggle Gmail scan on/off via Edge Function (service role needed to write google_tokens)
   const toggleGmail = useMutation({
     mutationFn: async ({ memberId, enabled }: { memberId: string; enabled: boolean }) => {
-      const { error } = await supabase
-        .from('google_tokens')
-        .update({ gmail_scan_enabled: enabled })
-        .eq('family_member_id', memberId)
+      const { data, error } = await supabase.functions.invoke('toggle-gmail-scan', {
+        body: { family_member_id: memberId, enabled },
+      })
       if (error) throw error
+      if (data?.error) throw new Error(data.error)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['google-services'] })
