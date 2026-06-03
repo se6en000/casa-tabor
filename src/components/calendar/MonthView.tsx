@@ -179,13 +179,13 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
         {/* Date number */}
         <div className="flex items-start justify-end mb-1">
           <span className={cn(
-            'w-8 h-8 flex items-center justify-center rounded-full text-base font-semibold leading-none',
+            'w-8 h-8 flex items-center justify-center rounded-full font-semibold leading-none',
             todayDay
               ? 'bg-casa-gold text-white'
               : isCurrentMonth
               ? 'text-casa-navy group-hover:text-casa-gold'
               : 'text-casa-muted/50',
-          )}>
+          )} style={{ fontSize: '15px' }}>
             {format(day, 'd')}
           </span>
         </div>
@@ -204,7 +204,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
                   holiday && 'font-semibold tracking-tight',
                   reminder && 'font-semibold',
                 )}
-                style={{ backgroundColor: color + '22', color }}
+                style={{ backgroundColor: color + '22', color, fontSize: '13px', lineHeight: '1.4' }}
                 onClick={e => { e.stopPropagation(); onSelectEvent(event) }}
               >
                 <span
@@ -216,7 +216,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
             )
           })}
           {overflow > 0 && (
-            <div className="text-sm text-casa-muted pl-1">+{overflow} more</div>
+            <div className="text-casa-muted pl-1" style={{ fontSize: '13px' }}>+{overflow} more</div>
           )}
         </div>
       </div>
