@@ -171,7 +171,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
     <div className="relative">
       <div
         className={cn(
-          'group min-h-[130px] p-2 border-b border-r border-casa-divider cursor-pointer transition-colors',
+          'group min-h-[150px] p-2 border-b border-r border-casa-divider cursor-pointer transition-colors',
           isCurrentMonth ? 'bg-casa-bg hover:bg-casa-surface' : 'bg-casa-divider/30',
         )}
         onClick={events.length > 0 ? onOpen : () => onDrillIn(day)}
@@ -185,13 +185,13 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
               : isCurrentMonth
               ? 'text-casa-navy group-hover:text-casa-gold'
               : 'text-casa-muted/50',
-          )} style={{ fontSize: '15px' }}>
+          )} style={{ fontSize: '17px' }}>
             {format(day, 'd')}
           </span>
         </div>
 
         {/* Event dots / pills */}
-        <div className="space-y-0.5">
+        <div className="space-y-1">
           {visible.map(event => {
             const holiday = isHoliday(event)
             const reminder = !holiday && isReminder(event)
@@ -204,7 +204,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
                   holiday && 'font-semibold tracking-tight',
                   reminder && 'font-semibold',
                 )}
-                style={{ backgroundColor: color + '22', color, fontSize: '13px', lineHeight: '1.4' }}
+                style={{ backgroundColor: color + '22', color, fontSize: '15px', lineHeight: '1.5' }}
                 onClick={e => { e.stopPropagation(); onSelectEvent(event) }}
               >
                 <span
@@ -216,7 +216,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
             )
           })}
           {overflow > 0 && (
-            <div className="text-casa-muted pl-1" style={{ fontSize: '13px' }}>+{overflow} more</div>
+            <div className="text-casa-muted pl-1" style={{ fontSize: '15px' }}>+{overflow} more</div>
           )}
         </div>
       </div>
