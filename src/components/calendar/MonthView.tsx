@@ -171,7 +171,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
     <div className="relative">
       <div
         className={cn(
-          'group min-h-[110px] p-1.5 border-b border-r border-casa-divider cursor-pointer transition-colors',
+          'group min-h-[130px] p-2 border-b border-r border-casa-divider cursor-pointer transition-colors',
           isCurrentMonth ? 'bg-casa-bg hover:bg-casa-surface' : 'bg-casa-divider/30',
         )}
         onClick={events.length > 0 ? onOpen : () => onDrillIn(day)}
@@ -179,7 +179,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
         {/* Date number */}
         <div className="flex items-start justify-end mb-1">
           <span className={cn(
-            'w-7 h-7 flex items-center justify-center rounded-full text-sm font-semibold leading-none',
+            'w-8 h-8 flex items-center justify-center rounded-full text-base font-semibold leading-none',
             todayDay
               ? 'bg-casa-gold text-white'
               : isCurrentMonth
@@ -200,7 +200,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
               <div
                 key={event.id}
                 className={cn(
-                  'flex items-center gap-1 px-1 py-0.5 rounded text-xs font-medium leading-tight truncate cursor-pointer hover:brightness-90 transition-all',
+                  'flex items-center gap-1 px-1.5 py-0.5 rounded text-sm font-medium leading-tight truncate cursor-pointer hover:brightness-90 transition-all',
                   holiday && 'font-semibold tracking-tight',
                   reminder && 'font-semibold',
                 )}
@@ -216,7 +216,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
             )
           })}
           {overflow > 0 && (
-            <div className="text-xs text-casa-muted pl-1">+{overflow} more</div>
+            <div className="text-sm text-casa-muted pl-1">+{overflow} more</div>
           )}
         </div>
       </div>
@@ -273,7 +273,7 @@ export default function MonthView() {
         {DOW_LABELS.map(label => (
           <div
             key={label}
-            className="py-2 text-center text-xs font-semibold text-casa-muted uppercase tracking-wide border-r border-casa-divider last:border-r-0"
+            className="py-2.5 text-center text-sm font-semibold text-casa-muted uppercase tracking-wide border-r border-casa-divider last:border-r-0"
           >
             {label}
           </div>
