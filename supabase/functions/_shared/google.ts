@@ -133,8 +133,9 @@ export async function patchGoogleEvent(opts: {
     summary?: string
     description?: string
     location?: string
-    start?: { dateTime?: string; date?: string }
-    end?: { dateTime?: string; date?: string }
+    recurrence?: string[]
+    start?: { dateTime?: string; date?: string; timeZone?: string }
+    end?: { dateTime?: string; date?: string; timeZone?: string }
   }
 }): Promise<void> {
   const res = await fetch(
@@ -172,8 +173,9 @@ export async function createGoogleEvent(opts: {
     summary: string
     description?: string
     location?: string
-    start: { dateTime: string }
-    end: { dateTime: string }
+    recurrence?: string[]
+    start: { dateTime?: string; date?: string; timeZone?: string }
+    end: { dateTime?: string; date?: string; timeZone?: string }
   }
 }): Promise<{ id: string }> {
   const res = await fetch(

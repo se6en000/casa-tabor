@@ -71,6 +71,20 @@ Deno.serve(async (req) => {
   const locationParts = [event.location_name, event.address].filter((p: string | null, i: number, arr: (string | null)[]) => p && arr.indexOf(p) === i)
   const location = locationParts.length > 0 ? locationParts.join(', ') : undefined
 
+  const TZ = 'America/New_York'
+  const isAllDay = event.all_day || (!event.start_time?.includes('T') && !event.start_time?.includes(' '))
+  const startField = isAllDay
+    ? { date: new Date(event.start_time).toISOString().slice(0, 10) }
+    : { dateTime: new Date(event.start_time).toISOString(), timeZone: TZ }
+  const endField = isAllDay
+    ? { date: new Date(event.end_time).toISOString().slice(0, 10) }
+    : { dateTime: new Date(event.end_time).toISOString(), timeZone: TZ }
+
+  // If this is a master recurring event, include the RRULE so Google creates it as a series
+  const recurrence: string[] = (event as Record<string, unknown>).rrule
+    ? [`RRULE:${(event as Record<string, unknown>).rrule}`]
+    : []
+
   // Create in Google Calendar
   const created = await createGoogleEvent({
     accessToken,
@@ -78,8 +92,9 @@ Deno.serve(async (req) => {
     event: {
       summary: event.title,
       ...(location ? { location } : {}),
-      start: { dateTime: event.start_time },
-      end: { dateTime: event.end_time },
+      ...(recurrence.length > 0 ? { recurrence } : {}),
+      start: startField,
+      end: endField,
     },
   })
 

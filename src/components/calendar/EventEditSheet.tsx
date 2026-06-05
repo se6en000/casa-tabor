@@ -21,8 +21,7 @@ const ALL_CATEGORIES = Object.keys(CATEGORY_LABEL) as string[]
 type EnrichStatus = 'idle' | 'loading' | 'success' | 'error'
 
 /** Expand an RRULE into occurrence {start,end} pairs, excluding the master (first) occurrence. */
-function expandRrule(masterStart: string, masterEnd: string, rrule: string): Array<{ start: string; end: string }> {
-  const get = (key: string) => rrule.match(new RegExp(`${key}=([^;]+)`))?.[1] ?? ''
+function expandRrule(masterStart: string, masterEnd: string, rrule: string): Array<{ start: string; end: string }> {  const get = (key: string) => rrule.match(new RegExp(`${key}=([^;]+)`))?.[1] ?? ''
   const freq = get('FREQ')
   const interval = Math.max(1, parseInt(get('INTERVAL') || '1', 10))
   const byDayNames: Record<string, number> = { SU:0, MO:1, TU:2, WE:3, TH:4, FR:5, SA:6 }
@@ -88,6 +87,12 @@ function expandRrule(masterStart: string, masterEnd: string, rrule: string): Arr
   }
 
   return results
+}
+
+/** Format a Date as Google Calendar UNTIL value: YYYYMMDDTHHMMSSZ */
+function toGoogleUntil(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}T${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`
 }
 
 interface Props {
@@ -397,6 +402,9 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     const masterEnd   = allDayEnd   ?? parseDateTime(endDT, event.end_time)
     const rruleStr = buildRrule()
 
+    // Track new master ID created during 'future' split (used for Google sync below)
+    let newFutureMasterId: string | null = null
+
     if (scope === 'this') {
       // Only update this single instance
       const { error } = await supabase.from('events').update({
@@ -419,22 +427,69 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
       if (inserts.length > 0) await supabase.from('event_members').insert(inserts)
 
     } else if (scope === 'future') {
-      // Update this + all future instances by deleting future rows and re-inserting from this date
+      // Split the series: original master gets truncated, a NEW master takes over from split point
       const masterId = event.recurrence_master_id!
-      // Delete this instance + all with same master that start >= this event
+
+      // Load master first (need its rrule, source_member_id, etc.)
+      const { data: masterEvent } = await supabase.from('events').select('*').eq('id', masterId).single()
+      if (!masterEvent) { alert('Could not load master event'); return }
+
+      // Step 1: Truncate original master's rrule — add UNTIL 1 second before the split
+      const originalRrule = (masterEvent as any).rrule as string | null
+      if (originalRrule) {
+        const splitMs = new Date(event.start_time).getTime() - 1000
+        const untilStr = toGoogleUntil(new Date(splitMs))
+        const truncatedRrule = originalRrule
+          .replace(/;?UNTIL=[^;]+/g, '')
+          .replace(/;?COUNT=[^;]+/g, '')
+          + `;UNTIL=${untilStr}`
+        await supabase.from('events').update({
+          rrule: truncatedRrule,
+          updated_at: new Date().toISOString(),
+        }).eq('id', masterId)
+      }
+
+      // Step 2: Create a NEW master for the future branch
+      const { data: newMaster, error: newMasterErr } = await supabase.from('events').insert({
+        title: displayTitle,
+        description: (masterEvent as any).description ?? null,
+        location_name: location.trim() || null,
+        address: address.trim() || null,
+        start_time: masterStart,
+        end_time: masterEnd,
+        all_day: isAllDay,
+        event_type: eventType,
+        rrule: rruleStr,
+        google_calendar_id: (masterEvent as any).google_calendar_id ?? null,
+        source_member_id: (masterEvent as any).source_member_id ?? event.source_member_id ?? null,
+        status: 'confirmed' as const,
+        is_enriched: true,
+        updated_at: new Date().toISOString(),
+      }).select('id').single()
+
+      if (newMasterErr || !newMaster) { alert(`Save failed: ${newMasterErr?.message}`); return }
+      newFutureMasterId = newMaster.id
+
+      // Members for new master
+      const masterInserts = Object.entries(memberRoles).map(([id, role]) => ({
+        event_id: newMaster.id, family_member_id: id, role, rsvp_status: 'accepted',
+      }))
+      if (masterInserts.length > 0) await supabase.from('event_members').insert(masterInserts)
+
+      // Step 3: Delete instances from split point forward (under the original master)
       await supabase.from('events').delete()
         .eq('recurrence_master_id', masterId)
         .gte('start_time', event.start_time)
-      // Re-insert from this date with updated data using the existing rrule (truncated to this date)
-      const { data: masterEvent } = await supabase.from('events').select('*').eq('id', masterId).single()
-      if (masterEvent && (masterEvent as any).rrule) {
-        const occurrences = expandRrule(masterStart, masterEnd, (masterEvent as any).rrule)
+
+      // Step 4: Re-expand instances from split point, pointing to the NEW master
+      if (rruleStr) {
+        const occurrences = expandRrule(masterStart, masterEnd, rruleStr)
           .filter(occ => occ.start >= event.start_time)
         if (occurrences.length > 0) {
           const { data: newInstances } = await supabase.from('events').insert(
             occurrences.map(occ => ({
               title: displayTitle,
-              description: event.description ?? null,
+              description: (masterEvent as any).description ?? null,
               start_time: occ.start,
               end_time: occ.end,
               all_day: isAllDay,
@@ -443,10 +498,12 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
               address: address.trim() || null,
               lat: event.lat ?? null,
               lng: event.lng ?? null,
-              google_calendar_id: event.google_calendar_id ?? null,
-              source_member_id: event.source_member_id ?? null,
+              google_calendar_id: (masterEvent as any).google_calendar_id ?? null,
+              source_member_id: (masterEvent as any).source_member_id ?? event.source_member_id ?? null,
               status: 'confirmed' as const,
-              is_enriched: true,
+              is_enriched: false,
+              rrule: null,
+              recurrence_master_id: newMaster.id,
             }))
           ).select('id')
           if (newInstances?.length) {
@@ -524,9 +581,9 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
 
     qc.invalidateQueries({ queryKey: ['events'] })
 
-    // For bulk recurring edits (future/all), the original instance is deleted — skip per-event calls
+    // Google Calendar sync — strategy depends on scope
     if (scope === 'this') {
-      // Push changes to Google Calendar — create if new, patch if already synced
+      // Single instance: push-to-google (patch) or create-google-event (new)
       try {
         if (event.google_event_id) {
           const pushRes = await supabase.functions.invoke('push-to-google', { body: { event_id: event.id } })
@@ -541,6 +598,27 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
       supabase.functions.invoke('fetch-event-weather', { body: { event_id: event.id } })
         .then(() => qc.invalidateQueries({ queryKey: ['events'] }))
         .catch(() => {})
+
+    } else if (scope === 'all') {
+      // All instances: push master event (with full RRULE) to Google
+      const masterIdToSync = isInstance ? event.recurrence_master_id! : event.id
+      supabase.functions.invoke('update-recurring-google', { body: { master_event_id: masterIdToSync } })
+        .then(() => qc.invalidateQueries({ queryKey: ['events'] }))
+        .catch(e => console.warn('[EventEditSheet] update-recurring-google failed:', e))
+
+    } else if (scope === 'future') {
+      // Future split: truncate original series in Google + create new series for future branch
+      if (event.recurrence_master_id) {
+        // Update original master in Google (now has UNTIL in rrule)
+        supabase.functions.invoke('update-recurring-google', { body: { master_event_id: event.recurrence_master_id } })
+          .catch(e => console.warn('[EventEditSheet] update-recurring-google (original) failed:', e))
+      }
+      if (newFutureMasterId) {
+        // Create new Google recurring event for the future branch
+        supabase.functions.invoke('update-recurring-google', { body: { master_event_id: newFutureMasterId } })
+          .then(() => qc.invalidateQueries({ queryKey: ['events'] }))
+          .catch(e => console.warn('[EventEditSheet] update-recurring-google (future) failed:', e))
+      }
     }
     // analyze-conflicts + analyze-prep removed from save — they run on the scheduled HomePage cadence (5x/day)
 
