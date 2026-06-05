@@ -523,10 +523,14 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     }
 
     qc.invalidateQueries({ queryKey: ['events'] })
-    // Push changes to Google Calendar — awaited so we know if it fails
+    // Push changes to Google Calendar — create if new, patch if already synced
     try {
-      const pushRes = await supabase.functions.invoke('push-to-google', { body: { event_id: event.id } })
-      if (pushRes.error) console.warn('[EventEditSheet] push-to-google error:', pushRes.error)
+      if (event.google_event_id) {
+        const pushRes = await supabase.functions.invoke('push-to-google', { body: { event_id: event.id } })
+        if (pushRes.error) console.warn('[EventEditSheet] push-to-google error:', pushRes.error)
+      } else {
+        supabase.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {})
+      }
     } catch (pushErr) {
       console.warn('[EventEditSheet] push-to-google failed:', pushErr)
     }
