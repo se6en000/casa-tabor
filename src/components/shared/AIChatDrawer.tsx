@@ -596,7 +596,7 @@ function MessageBubble({ msg, isLatest, onConfirmAction, registerPendingConfirm,
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-emerald-600 text-caption font-semibold">
                   <Check size={13} />
-                  {msg.action.action === 'create_event' ? 'Created & added to calendar ✓' : 'Done!'}
+                  {msg.action.action === 'create_event' ? 'Created & added to calendar ✓' : msg.action.action === 'update_event' ? 'Updated ✓' : 'Deleted ✓'}
                 </div>
                 {msg.action.action === 'create_event' && createdEventId && (
                   <p className="text-[10px] text-casa-muted">
@@ -611,7 +611,7 @@ function MessageBubble({ msg, isLatest, onConfirmAction, registerPendingConfirm,
             ) : actionError ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5 text-red-600 text-caption font-semibold">
-                  <XCircle size={13} /> Failed — event was NOT created
+                  <XCircle size={13} /> Failed — {msg.action.action === 'update_event' ? 'event was NOT updated' : 'event was NOT created'}
                 </div>
                 {errorMsg && <p className="text-[10px] text-red-500">{errorMsg}</p>}
                 <button
@@ -633,7 +633,9 @@ function MessageBubble({ msg, isLatest, onConfirmAction, registerPendingConfirm,
                     className="flex items-center gap-1.5 px-3 py-1 rounded-button bg-casa-gold text-white text-caption font-semibold hover:brightness-110 transition-all disabled:opacity-50"
                   >
                     {confirmed === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                    {confirmed === 'loading' ? 'Creating…' : 'Confirm'}
+                    {confirmed === 'loading' 
+                      ? (msg.action.action === 'update_event' ? 'Updating…' : msg.action.action === 'delete_event' ? 'Deleting…' : 'Creating…')
+                      : 'Confirm'}
                   </button>
                   <button
                     type="button"
@@ -740,10 +742,21 @@ async function executeAction(action: AssistantAction, family: FamilyMember[], qc
     const locationChanged = !!action.changes.location
     if (locationChanged) {
       updates.location_name = action.changes.location
-      updates.is_enriched = false  // force re-enrichment
+      updates.is_enriched = false
     }
+
+    if (Object.keys(updates).length === 0) {
+      throw new Error('No valid fields to update — nothing was changed.')
+    }
+
     const { error } = await supabase.from('events').update(updates).eq('id', action.id)
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(`DB update failed: ${error.message}`)
+
+    // Verify the update actually landed
+    const { data: check, error: checkErr } = await supabase
+      .from('events').select('id').eq('id', action.id).single()
+    if (checkErr || !check) throw new Error('Event not found — update may have failed')
+
     qc.invalidateQueries({ queryKey: ['events'] })
     supabase.functions.invoke('push-to-google', { body: { event_id: action.id } })
       .catch(() => { /* best-effort */ })

@@ -366,10 +366,13 @@ You can either:
 - Set "event_type" to "reminder" when the user uses words like "remind me", "reminder", "don't forget", or describes something that is a notification rather than an activity to attend. All other creations use "event_type":"event".
 - For reminders with a specific time (e.g. "remind me at 3pm"), set start and end to the same time (start = end = that time). For all-day reminders, use midnight (T00:00:00) for both start and end.
 
-For updating: [{"action":"update_event","id":"<event id>","changes":{"title":"...","start":"...","end":"...","location":"<full street address>"},"needs_clarification":"<or null>"}]
-- When the user asks to update/set/change the address or location of an event, use update_event with "location" set to the full address. This will automatically re-enrich the event (weather, drive times, map) with the new location.
+For updating: [{"action":"update_event","id":"<exact event id from EVENTS IN VIEW>","changes":{"title":"...","start":"...","end":"...","location":"<full street address>"},"needs_clarification":"<or null>"}]
+- The "id" MUST be the exact UUID from the EVENTS IN VIEW list (the ID:xxx value). Never make up or guess an ID.
+- Valid change keys are ONLY: "title", "start", "end", "location". Do not use any other key names like "address", "name", "time", etc.
+- When the user asks to update/set/change the address or location of an event, use "location" key with the full address. This will automatically re-enrich the event (weather, drive times, map) with the new location.
 - If the address is incomplete (e.g. just a business name), use place search to find the full address first.
-For deleting: [{"action":"delete_event","id":"<event id>","title":"<title for confirmation>","needs_clarification":"<or null>"}]
+- NEVER respond in prose saying you "updated" or "changed" something. ALWAYS return the JSON array so the user can confirm. If you say it's done without returning JSON, nothing actually happens.
+For deleting: [{"action":"delete_event","id":"<exact event id>","title":"<title for confirmation>","needs_clarification":"<or null>"}]
 For multiple events: return multiple objects in the same array.
 
 Rules:
