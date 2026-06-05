@@ -523,21 +523,25 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     }
 
     qc.invalidateQueries({ queryKey: ['events'] })
-    // Push changes to Google Calendar — create if new, patch if already synced
-    try {
-      if (event.google_event_id) {
-        const pushRes = await supabase.functions.invoke('push-to-google', { body: { event_id: event.id } })
-        if (pushRes.error) console.warn('[EventEditSheet] push-to-google error:', pushRes.error)
-      } else {
-        supabase.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {})
+
+    // For bulk recurring edits (future/all), the original instance is deleted — skip per-event calls
+    if (scope === 'this') {
+      // Push changes to Google Calendar — create if new, patch if already synced
+      try {
+        if (event.google_event_id) {
+          const pushRes = await supabase.functions.invoke('push-to-google', { body: { event_id: event.id } })
+          if (pushRes.error) console.warn('[EventEditSheet] push-to-google error:', pushRes.error)
+        } else {
+          supabase.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {})
+        }
+      } catch (pushErr) {
+        console.warn('[EventEditSheet] push-to-google failed:', pushErr)
       }
-    } catch (pushErr) {
-      console.warn('[EventEditSheet] push-to-google failed:', pushErr)
+      // Weather fetch for this single instance
+      supabase.functions.invoke('fetch-event-weather', { body: { event_id: event.id } })
+        .then(() => qc.invalidateQueries({ queryKey: ['events'] }))
+        .catch(() => {})
     }
-    // Weather is cheap (no LLM) — always fetch for this event
-    supabase.functions.invoke('fetch-event-weather', { body: { event_id: event.id } })
-      .then(() => qc.invalidateQueries({ queryKey: ['events'] }))
-      .catch(() => {})
     // analyze-conflicts + analyze-prep removed from save — they run on the scheduled HomePage cadence (5x/day)
 
     onClose()
