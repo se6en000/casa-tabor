@@ -21,7 +21,7 @@ const NAV = [
 export default function TabletSidebar() {
   const now = useLiveClock(15_000)
   const { data: family } = useFamilyMembers()
-  const { visibleMembers, toggleMember } = useCalendarStore()
+  const { visibleMembers, toggleMember, setActiveView } = useCalendarStore()
   useNotifications()
   const [notifOpen, setNotifOpen] = useState(false)
   const { data: todayEvents } = useTodayEvents(now)
@@ -97,6 +97,7 @@ export default function TabletSidebar() {
               key={to}
               to={to}
               end={to === '/'}
+              onClick={to === '/calendar' ? () => setActiveView('stacked') : undefined}
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-body font-medium',

@@ -230,7 +230,14 @@ export default function HomePage() {
               <p className="text-body-sm text-casa-muted mt-1 flex items-center gap-1.5">
                 <Cloud size={14} className="text-casa-gold" />
                 {weather
-                  ? `${weather.temp}° · ${weather.condition} · ${weather.city}`
+                  ? (() => {
+                      const highPollen = weather.pollen && ['High', 'Very High'].some(
+                        lvl => weather.pollen!.tree === lvl || weather.pollen!.grass === lvl || weather.pollen!.weed === lvl
+                      )
+                      return `${weather.temp}° · ${weather.condition} · ${weather.city}` +
+                        (weather.airQuality && weather.airQuality.aqi > 50 ? ` · AQI ${weather.airQuality.aqi}` : '') +
+                        (highPollen ? ' · 🌿 Pollen' : '')
+                    })()
                   : '—'}
               </p>
             </div>

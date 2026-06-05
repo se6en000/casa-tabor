@@ -6,48 +6,59 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-function wmoCondition(code: number): string {
-  if (code === 0) return 'Clear'
-  if (code === 1) return 'Mostly Clear'
-  if (code === 2) return 'Partly Cloudy'
-  if (code === 3) return 'Overcast'
-  if (code <= 49) return 'Foggy'
-  if (code <= 59) return 'Drizzle'
-  if (code <= 69) return 'Rain'
-  if (code <= 79) return 'Snow'
-  if (code <= 84) return 'Rain Showers'
-  if (code <= 94) return 'Thunderstorm'
-  return 'Stormy'
-}
-
-function wmoIcon(code: number): string {
-  if (code === 0 || code === 1) return 'sunny'
-  if (code === 2) return 'partly_cloudy'
-  if (code === 3) return 'cloudy'
-  if (code <= 49) return 'fog'
-  if (code <= 59) return 'drizzle'
-  if (code <= 69) return 'rain'
-  if (code <= 79) return 'snow'
-  if (code <= 84) return 'rain'
-  if (code <= 94) return 'thunderstorm'
-  return 'thunderstorm'
-}
-
-async function geocode(query: string): Promise<{ lat: string; lon: string } | null> {
-  await new Promise(r => setTimeout(r, 200))
-  const res = await fetch(
-    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
-    { headers: { 'User-Agent': 'CasaTabor/1.0 (family-command-center)' } }
-  )
+// Google Geocoding: address → lat/lng
+async function geocodeAddress(address: string, apiKey: string): Promise<{ lat: number; lng: number } | null> {
   try {
-    const json = await res.json() as unknown[]
-    return (json?.[0] as { lat: string; lon: string }) ?? null
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`
+    )
+    const data = await res.json()
+    const loc = data.results?.[0]?.geometry?.location
+    if (!loc) return null
+    return { lat: loc.lat, lng: loc.lng }
   } catch { return null }
+}
+
+// Google Weather forecast: get daily forecast
+async function fetchDailyForecast(lat: number, lng: number, apiKey: string) {
+  try {
+    const res = await fetch(
+      `https://weather.googleapis.com/v1/forecast/days:lookup?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ location: { latitude: lat, longitude: lng }, days: 1, unitsSystem: 'IMPERIAL' }),
+      }
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    const day = data.forecastDays?.[0]
+    if (!day) return null
+    const condition = day.daytimeForecast?.weatherCondition?.description?.text
+      ?? day.daytimeForecast?.weatherCondition?.description
+      ?? 'Unknown'
+    const maxTemp = Math.round(day.maxTemperature?.degrees ?? 0)
+    const minTemp = Math.round(day.minTemperature?.degrees ?? 0)
+    return { condition, maxTemp, minTemp }
+  } catch { return null }
+}
+
+function conditionToIcon(condition: string): string {
+  const c = condition.toLowerCase()
+  if (c.includes('thunder') || c.includes('storm')) return 'thunderstorm'
+  if (c.includes('snow') || c.includes('blizzard')) return 'snow'
+  if (c.includes('rain') || c.includes('shower') || c.includes('drizzle')) return 'rain'
+  if (c.includes('fog') || c.includes('mist') || c.includes('haze')) return 'fog'
+  if (c.includes('partly cloudy') || c.includes('mostly clear')) return 'partly_cloudy'
+  if (c.includes('cloudy') || c.includes('overcast')) return 'cloudy'
+  if (c.includes('clear') || c.includes('sunny')) return 'sunny'
+  return 'partly_cloudy'
 }
 
 async function fetchWeatherForEvent(
   sb: ReturnType<typeof createClient>,
-  eventId: string
+  eventId: string,
+  apiKey: string,
 ): Promise<{ ok: boolean; weather?: string; skipped?: string; error?: string }> {
   const { data: event, error: evErr } = await sb
     .from('events')
@@ -70,31 +81,17 @@ async function fetchWeatherForEvent(
     .replace(/^Field\s+\d+[,\s]*/i, '')
     .replace(/\s{2,}/g, ' ')
     .trim()
-  const loc = (await geocode(location)) ?? (cleanLocation !== location ? await geocode(cleanLocation) : null)
+
+  const loc = (await geocodeAddress(location, apiKey))
+    ?? (cleanLocation !== location ? await geocodeAddress(cleanLocation, apiKey) : null)
   if (!loc) return { ok: false, error: `Could not geocode: ${location}` }
 
-  const dateStr = eventDate.toISOString().slice(0, 10)
-  const wxRes = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}` +
-    `&hourly=temperature_2m,weathercode&temperature_unit=fahrenheit&timezone=auto` +
-    `&start_date=${dateStr}&end_date=${dateStr}`
-  )
-  const wxJson = await wxRes.json()
-  if (!wxJson.hourly) return { ok: false, error: 'No forecast data' }
+  const forecast = await fetchDailyForecast(loc.lat, loc.lng, apiKey)
+  if (!forecast) return { ok: false, error: 'No forecast data' }
 
-  const eventHour = eventDate.getHours()
-  const hours: string[] = wxJson.hourly.time
-  const temps: number[] = wxJson.hourly.temperature_2m
-  const codes: number[] = wxJson.hourly.weathercode
-
-  let closestIdx = 0, closestDiff = Infinity
-  for (let i = 0; i < hours.length; i++) {
-    const diff = Math.abs(new Date(hours[i]).getHours() - eventHour)
-    if (diff < closestDiff) { closestDiff = diff; closestIdx = i }
-  }
-
-  const weatherText = `${wmoCondition(codes[closestIdx])}, ${Math.round(temps[closestIdx])}°F`
-  const icon = wmoIcon(codes[closestIdx])
+  const { condition, maxTemp, minTemp } = forecast
+  const icon = conditionToIcon(condition)
+  const weatherText = `${condition}, ${maxTemp}°F / ${minTemp}°F`
 
   const { error: upsertErr } = await sb
     .from('event_enrichments')
@@ -110,6 +107,7 @@ async function fetchWeatherForEvent(
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+  const apiKey = Deno.env.get('GOOGLE_MAPS_API_KEY') ?? ''
 
   const now = new Date()
   const windowEnd = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000)
@@ -137,9 +135,7 @@ Deno.serve(async (req) => {
   let updated = 0, skipped = 0, failed = 0
 
   for (const ev of needsWeather) {
-    // Nominatim rate limit: 1 req/sec — allow up to 2 geocode calls per event
-    await new Promise(r => setTimeout(r, 1200))
-    const d = await fetchWeatherForEvent(sb, ev.id)
+    const d = await fetchWeatherForEvent(sb, ev.id, apiKey)
     if (d.ok && !d.skipped) { results[ev.id] = { ok: true, weather: d.weather }; updated++ }
     else if (d.skipped)     { results[ev.id] = { skipped: d.skipped }; skipped++ }
     else                    { results[ev.id] = { error: d.error }; failed++ }
@@ -150,4 +146,3 @@ Deno.serve(async (req) => {
     { headers: { ...CORS, 'content-type': 'application/json' } }
   )
 })
-

@@ -312,7 +312,7 @@ export default function TripDetailPage() {
     : []
 
   return (
-    <div className="min-h-screen bg-casa-bg">
+    <div className="min-h-screen bg-casa-bg overflow-y-auto">
       {/* ── Header ─────────────────────────────────────── */}
       <div className="bg-casa-navy px-5 pt-12 pb-6 relative overflow-hidden">
         <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 80% 50%, white 0%, transparent 60%)' }} />

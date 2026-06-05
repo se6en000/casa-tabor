@@ -59,6 +59,83 @@ async function searchPlaces(query: string, city?: string): Promise<PlaceResult[]
   } catch { return [] }
 }
 
+// ── Google Maps helpers ───────────────────────────────────────────────────────
+
+async function geocodeAddress(address: string, apiKey: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`
+    )
+    const data = await res.json()
+    const loc = data.results?.[0]?.geometry?.location
+    if (!loc) return null
+    return { lat: loc.lat, lng: loc.lng }
+  } catch { return null }
+}
+
+async function getWeatherForLocation(lat: number, lng: number, apiKey: string) {
+  try {
+    const [wxRes, aqRes] = await Promise.all([
+      fetch(`https://weather.googleapis.com/v1/currentConditions:lookup?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ location: { latitude: lat, longitude: lng }, unitsSystem: 'IMPERIAL' }),
+      }),
+      fetch(`https://airquality.googleapis.com/v1/currentConditions:lookup?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ location: { latitude: lat, longitude: lng } }),
+      }),
+    ])
+    const wx = wxRes.ok ? await wxRes.json() : null
+    const aq = aqRes.ok ? await aqRes.json() : null
+    const condition = wx?.weatherCondition?.description?.text ?? wx?.weatherCondition?.description ?? 'Unknown'
+    const indexes: { code?: string; aqi?: number; category?: string }[] = aq?.indexes ?? []
+    const uaqi = indexes.find(i => i.code === 'uaqi') ?? indexes[0]
+    return {
+      temp: wx ? Math.round(wx.temperature?.degrees ?? 0) : null,
+      condition,
+      feelsLike: wx ? Math.round(wx.feelsLikeTemperature?.degrees ?? 0) : null,
+      uvIndex: wx?.uvIndex ?? null,
+      airQuality: uaqi ? { aqi: uaqi.aqi ?? 0, category: uaqi.category ?? 'Unknown' } : null,
+    }
+  } catch { return null }
+}
+
+async function getDriveTime(origin: string, destination: string, apiKey: string) {
+  try {
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&key=${apiKey}&departure_time=now`
+    )
+    const data = await res.json()
+    const leg = data.routes?.[0]?.legs?.[0]
+    if (!leg) return null
+    return {
+      durationText: leg.duration_in_traffic?.text ?? leg.duration?.text ?? 'Unknown',
+      durationSeconds: leg.duration_in_traffic?.value ?? leg.duration?.value ?? 0,
+      distance: leg.distance?.text ?? 'Unknown',
+    }
+  } catch { return null }
+}
+
+async function getTimezone(lat: number, lng: number, timestamp: number, apiKey: string) {
+  try {
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/timezone/json?location=${lat},${lng}&timestamp=${timestamp}&key=${apiKey}`
+    )
+    const data = await res.json()
+    if (data.status !== 'OK') return null
+    return {
+      timeZoneId: data.timeZoneId ?? '',
+      timeZoneName: data.timeZoneName ?? '',
+      rawOffset: data.rawOffset ?? 0,
+      dstOffset: data.dstOffset ?? 0,
+    }
+  } catch { return null }
+}
+
+// ── Intent detection ──────────────────────────────────────────────────────────
+
 // Detect if the latest user message is asking for a place/address lookup
 function extractPlaceQuery(userMessage: string, homeCity: string): { query: string; city: string } | null {
   const msg = userMessage.toLowerCase()
@@ -68,21 +145,58 @@ function extractPlaceQuery(userMessage: string, homeCity: string): { query: stri
   ]
   if (!locationIntents.some(t => msg.includes(t))) return null
 
-  // Try to extract "X in Y" or "X near Y" pattern
   const inMatch = userMessage.match(/(?:find|where is|address (?:for|of)|look up|locate)\s+(.+?)(?:\s+in\s+|\s+near\s+)(.+?)(?:\?|$)/i)
   if (inMatch) return { query: inMatch[1].trim(), city: inMatch[2].trim() }
 
-  // No city mentioned — use home city
   const queryMatch = userMessage.match(/(?:find|where is|address (?:for|of)|look up|locate)\s+(.+?)(?:\?|$)/i)
   if (queryMatch) return { query: queryMatch[1].trim(), city: homeCity }
 
   return null
 }
 
+function extractContextQueries(msg: string, homeCity: string): {
+  weatherQuery?: string
+  driveTimeQuery?: { origin: string; destination: string }
+  timezoneQuery?: string
+} {
+  const lower = msg.toLowerCase()
+  const result: { weatherQuery?: string; driveTimeQuery?: { origin: string; destination: string }; timezoneQuery?: string } = {}
+
+  // Weather intent
+  const weatherIntents = ['weather', 'will it rain', 'temperature', 'how hot', 'how cold', 'forecast', 'air quality', 'pollen']
+  if (weatherIntents.some(t => lower.includes(t))) {
+    const cityMatch = msg.match(/weather\s+(?:in|for|at)\s+([A-Za-z\s,]+?)(?:\?|$|\.)/i)
+      ?? msg.match(/(?:in|for|at)\s+([A-Za-z\s,]+?)\s+(?:weather|forecast)/i)
+    result.weatherQuery = cityMatch?.[1]?.trim() ?? homeCity
+  }
+
+  // Drive time intent
+  const driveIntents = ['how long', 'drive time', 'leave by', 'how far', 'get to', 'commute', 'directions to']
+  if (driveIntents.some(t => lower.includes(t))) {
+    const toMatch = msg.match(/(?:get to|drive to|directions to|how long to|how far to)\s+(.+?)(?:\?|$|\.| from)/i)
+    const fromMatch = msg.match(/from\s+(.+?)\s+to\s+(.+?)(?:\?|$|\.)/i)
+    if (fromMatch) {
+      result.driveTimeQuery = { origin: fromMatch[1].trim(), destination: fromMatch[2].trim() }
+    } else if (toMatch) {
+      result.driveTimeQuery = { origin: homeCity, destination: toMatch[1].trim() }
+    }
+  }
+
+  // Timezone intent
+  const tzIntents = ['what time in', 'time zone', 'timezone', 'when is it in', 'current time in']
+  if (tzIntents.some(t => lower.includes(t))) {
+    const tzMatch = msg.match(/(?:what time|time zone|timezone|when is it|current time)\s+in\s+([A-Za-z\s,]+?)(?:\?|$|\.)/i)
+    if (tzMatch) result.timezoneQuery = tzMatch[1].trim()
+  }
+
+  return result
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+  const mapsKey = Deno.env.get('GOOGLE_MAPS_API_KEY') ?? ''
 
   const { messages, context, image }: { messages: Message[]; context: Context; image?: ImagePayload } = await req.json()
 
@@ -97,10 +211,23 @@ Deno.serve(async (req) => {
   const savedContacts = savedContactsResult?.data ?? null
   const config = cfgRow?.value ?? { provider: 'gemini', model: 'gemini-1.5-flash', api_key: '' }
 
-  // Check if user is asking for a place/address lookup — run in parallel with LLM if so
   const lastUserMessage = [...messages].reverse().find(m => m.role === 'user')?.content ?? ''
   const placeQuery = extractPlaceQuery(lastUserMessage, context.homeCity ?? '')
-  const placeResults = placeQuery ? await searchPlaces(placeQuery.query, placeQuery.city) : []
+  const contextQueries = extractContextQueries(lastUserMessage, context.homeCity ?? '')
+
+  // Run place search + context queries in parallel
+  const [placeResults, weatherData, driveTimeData, timezoneData] = await Promise.all([
+    placeQuery ? searchPlaces(placeQuery.query, placeQuery.city) : Promise.resolve([]),
+    contextQueries.weatherQuery
+      ? geocodeAddress(contextQueries.weatherQuery, mapsKey).then(loc => loc ? getWeatherForLocation(loc.lat, loc.lng, mapsKey) : null)
+      : Promise.resolve(null),
+    contextQueries.driveTimeQuery
+      ? getDriveTime(contextQueries.driveTimeQuery.origin, contextQueries.driveTimeQuery.destination, mapsKey)
+      : Promise.resolve(null),
+    contextQueries.timezoneQuery
+      ? geocodeAddress(contextQueries.timezoneQuery, mapsKey).then(loc => loc ? getTimezone(loc.lat, loc.lng, Math.floor(Date.now() / 1000), mapsKey) : null)
+      : Promise.resolve(null),
+  ])
 
   // Build system context block
   const familyNames = context.family.map(f => f.name).join(', ')
@@ -137,6 +264,21 @@ Deno.serve(async (req) => {
       placeResults.map((p, i) => `${i + 1}. ${p.name} — ${p.address}${p.phone ? ` | ${p.phone}` : ''}`).join('\n')
     : (placeQuery ? `\nPLACE SEARCH: No results found for "${placeQuery.query}" in ${placeQuery.city}.` : '')
 
+  const weatherBlock = weatherData
+    ? `\nCURRENT WEATHER for ${contextQueries.weatherQuery}: ${weatherData.temp}°F, ${weatherData.condition}` +
+      (weatherData.feelsLike != null ? `, feels like ${weatherData.feelsLike}°F` : '') +
+      (weatherData.uvIndex != null ? `, UV index ${weatherData.uvIndex}` : '') +
+      (weatherData.airQuality ? `, Air Quality: ${weatherData.airQuality.category} (AQI ${weatherData.airQuality.aqi})` : '')
+    : ''
+
+  const driveTimeBlock = driveTimeData
+    ? `\nDRIVE TIME from ${contextQueries.driveTimeQuery?.origin} to ${contextQueries.driveTimeQuery?.destination}: ${driveTimeData.durationText} (${driveTimeData.distance})`
+    : ''
+
+  const timezoneBlock = timezoneData
+    ? `\nTIMEZONE for ${contextQueries.timezoneQuery}: ${timezoneData.timeZoneName} (${timezoneData.timeZoneId}), UTC offset ${(timezoneData.rawOffset + timezoneData.dstOffset) / 3600}h`
+    : ''
+
   const systemPrompt = `You are the Casa Tabor family assistant — a helpful, concise, warm AI for the ${familyNames} family. 
 Current date/time: ${context.currentDate}
 User's local UTC offset: ${context.utcOffset ?? '-04:00'} (IMPORTANT: all times you generate MUST use this offset, e.g. "2026-05-28T20:00:00${context.utcOffset ?? '-04:00'}")
@@ -149,7 +291,7 @@ ${eventsBlock}
 FAMILY MEMBERS: ${familyNames}
 ${placesBlock ? `\nSAVED PLACES (use these to resolve location nicknames and fill in addresses):\n${placesBlock}` : ''}
 ${contactsBlock ? `\nSAVED CONTACTS (use these to resolve people's names, numbers, and addresses):\n${contactsBlock}` : ''}
-${placesSearchBlock}
+${placesSearchBlock}${weatherBlock}${driveTimeBlock}${timezoneBlock}
 
 You can either:
 1. Answer questions conversationally about the events, schedule, or family.
