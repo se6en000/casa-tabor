@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   addDays, isSameMonth, isSameDay, isToday, parseISO,
@@ -11,6 +11,7 @@ import { useMonthEvents } from '../../hooks/useCalendarEvents'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, REMINDER_COLOR } from '../../utils/holidays'
 import EventDetailPanel from './EventDetailPanel'
+import QuickCreateSheet from '../shared/QuickCreateSheet'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -160,9 +161,15 @@ interface DayCellProps {
   onClose: () => void
   onDrillIn: (day: Date) => void
   onSelectEvent: (event: EventWithDetails) => void
+  onTouchStart: (e: React.TouchEvent) => void
+  onTouchMove: (e: React.TouchEvent) => void
+  onTouchEnd: () => void
+  onMouseDown: (e: React.MouseEvent) => void
+  onMouseUp: () => void
+  onContextMenu: (e: React.MouseEvent) => void
 }
 
-function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, onDrillIn, onSelectEvent }: DayCellProps) {
+function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, onDrillIn, onSelectEvent, onTouchStart, onTouchMove, onTouchEnd, onMouseDown, onMouseUp, onContextMenu }: DayCellProps) {
   const todayDay = isToday(day)
   const visible = events.slice(0, MAX_VISIBLE_EVENTS)
   const overflow = events.length - MAX_VISIBLE_EVENTS
@@ -171,10 +178,17 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
     <div className="relative">
       <div
         className={cn(
-          'group min-h-[150px] p-2 border-b border-r border-casa-divider cursor-pointer transition-colors',
+          'group min-h-[150px] p-2 border-b border-r border-casa-divider cursor-pointer transition-colors select-none',
           isCurrentMonth ? 'bg-casa-bg hover:bg-casa-surface' : 'bg-casa-divider/30',
         )}
         onClick={events.length > 0 ? onOpen : () => onDrillIn(day)}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onMouseDown={onMouseDown}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+        onContextMenu={onContextMenu}
       >
         {/* Date number */}
         <div className="flex items-start justify-end mb-1">
@@ -199,6 +213,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
             return (
               <div
                 key={event.id}
+                data-event-pill
                 className={cn(
                   'flex items-center gap-1 px-1.5 py-0.5 rounded text-sm font-medium leading-tight truncate cursor-pointer hover:brightness-90 transition-all',
                   holiday && 'font-semibold tracking-tight',
@@ -244,6 +259,53 @@ export default function MonthView() {
   const { data: allEvents } = useMonthEvents(selectedDate)
   const [openPopoverKey, setOpenPopoverKey] = useState<string | null>(null)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [quickCreate, setQuickCreate] = useState<{ open: boolean; start?: Date }>({ open: false })
+
+  // Long-press to create event — shared timer for both touch and mouse
+  const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lpOrigin = useRef<{ x: number; y: number; day: Date } | null>(null)
+
+  const startLongPress = useCallback((clientX: number, clientY: number, day: Date) => {
+    lpOrigin.current = { x: clientX, y: clientY, day }
+    lpTimer.current = setTimeout(() => {
+      lpTimer.current = null
+      lpOrigin.current = null
+      navigator.vibrate?.(30)
+      // Default to 9 AM for month-view creates (no time slot info available)
+      const start = new Date(day)
+      start.setHours(9, 0, 0, 0)
+      setOpenPopoverKey(null)
+      setQuickCreate({ open: true, start })
+    }, 500)
+  }, [])
+
+  const cancelLongPress = useCallback(() => {
+    if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null }
+    lpOrigin.current = null
+  }, [])
+
+  const handleCellTouchStart = useCallback((e: React.TouchEvent, day: Date) => {
+    if ((e.target as Element).closest('[data-event-pill]')) return
+    const t = e.touches[0]
+    startLongPress(t.clientX, t.clientY, day)
+  }, [startLongPress])
+
+  const handleCellTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!lpOrigin.current) return
+    const t = e.touches[0]
+    if (Math.hypot(t.clientX - lpOrigin.current.x, t.clientY - lpOrigin.current.y) > 10) cancelLongPress()
+  }, [cancelLongPress])
+
+  const handleCellMouseDown = useCallback((e: React.MouseEvent, day: Date) => {
+    if (e.button !== 0) return
+    if ((e.target as Element).closest('[data-event-pill]')) return
+    startLongPress(e.clientX, e.clientY, day)
+  }, [startLongPress])
+
+  const handleCellContextMenu = useCallback((e: React.MouseEvent) => {
+    if ((e.target as Element).closest('[data-event-pill]')) return
+    e.preventDefault()
+  }, [])
 
   const grid = buildMonthGrid(selectedDate)
 
@@ -297,6 +359,12 @@ export default function MonthView() {
                 onClose={() => setOpenPopoverKey(null)}
                 onDrillIn={drillIntoDay}
                 onSelectEvent={ev => { setSelectedEventId(ev.id); setOpenPopoverKey(null) }}
+                onTouchStart={e => handleCellTouchStart(e, day)}
+                onTouchMove={handleCellTouchMove}
+                onTouchEnd={cancelLongPress}
+                onMouseDown={e => handleCellMouseDown(e, day)}
+                onMouseUp={cancelLongPress}
+                onContextMenu={handleCellContextMenu}
               />
             )
           })}
@@ -310,6 +378,13 @@ export default function MonthView() {
           onClose={() => setSelectedEventId(null)}
         />
       </div>
+
+      {/* Quick create (long-press empty cell) */}
+      <QuickCreateSheet
+        open={quickCreate.open}
+        initialStart={quickCreate.start}
+        onClose={() => setQuickCreate({ open: false })}
+      />
     </div>
   )
 }

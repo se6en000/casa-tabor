@@ -136,6 +136,42 @@ export default function WeekView() {
     slotLongPressOrigin.current = null
   }, [])
 
+  // Mouse long-press (desktop / trackpad) — 500ms hold opens QuickCreate
+  const handleSlotMouseDown = useCallback((e: React.MouseEvent, day: Date) => {
+    if (e.button !== 0) return // left button only
+    if ((e.target as Element).closest('[data-event-block]')) return
+    slotLongPressOrigin.current = { x: e.clientX, y: e.clientY, day }
+    slotLongPressTimer.current = setTimeout(() => {
+      slotLongPressTimer.current = null
+      const origin = slotLongPressOrigin.current
+      if (!origin || !gridScrollRef.current) return
+      slotLongPressOrigin.current = null
+      const rect = gridScrollRef.current.getBoundingClientRect()
+      const gridY = origin.y - rect.top + gridScrollRef.current.scrollTop
+      const rawHour = START_HOUR + gridY / HOUR_HEIGHT
+      const snapped = Math.round(rawHour * 2) / 2
+      const hours = Math.floor(Math.max(START_HOUR, Math.min(END_HOUR - 0.5, snapped)))
+      const minutes = snapped % 1 === 0.5 ? 30 : 0
+      const start = new Date(origin.day)
+      start.setHours(hours, minutes, 0, 0)
+      setQuickCreate({ open: true, start })
+    }, 500)
+  }, [])
+
+  const handleSlotMouseUp = useCallback(() => {
+    if (slotLongPressTimer.current) {
+      clearTimeout(slotLongPressTimer.current)
+      slotLongPressTimer.current = null
+    }
+    slotLongPressOrigin.current = null
+  }, [])
+
+  // Prevent browser context menu on right-click over the calendar grid
+  const handleSlotContextMenu = useCallback((e: React.MouseEvent) => {
+    if ((e.target as Element).closest('[data-event-block]')) return
+    e.preventDefault()
+  }, [])
+
   // ── Drag to reschedule ───────────────────────────────────────
   const qc = useQueryClient()
   const [drag, setDrag] = useState<DragState | null>(null)
@@ -425,6 +461,10 @@ export default function WeekView() {
                   isDropTarget ? 'bg-casa-gold/5' : '',
                 )}
                 onClick={() => setSelectedEventId(null)}
+                onMouseDown={e => handleSlotMouseDown(e, day)}
+                onMouseUp={handleSlotMouseUp}
+                onMouseLeave={handleSlotMouseUp}
+                onContextMenu={handleSlotContextMenu}
                 onTouchStart={e => handleSlotTouchStart(e, day)}
                 onTouchMove={handleSlotTouchMove}
                 onTouchEnd={handleSlotTouchEnd}
