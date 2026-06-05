@@ -6,53 +6,67 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Google Geocoding: address → lat/lng
 async function geocodeAddress(address: string, apiKey: string): Promise<{ lat: number; lng: number } | null> {
   try {
-    const res = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`
-    )
+    const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'places.location',
+      },
+      body: JSON.stringify({ textQuery: address, maxResultCount: 1 }),
+    })
     const data = await res.json()
-    const loc = data.results?.[0]?.geometry?.location
+    const loc = data.places?.[0]?.location
     if (!loc) return null
-    return { lat: loc.lat, lng: loc.lng }
+    return { lat: loc.latitude, lng: loc.longitude }
   } catch { return null }
 }
 
-// Google Weather forecast: get daily forecast
-async function fetchDailyForecast(lat: number, lng: number, apiKey: string) {
+async function fetchDailyForecast(lat: number, lng: number, _apiKey: string) {
   try {
     const res = await fetch(
-      `https://weather.googleapis.com/v1/forecast/days:lookup?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ location: { latitude: lat, longitude: lng }, days: 1, unitsSystem: 'IMPERIAL' }),
-      }
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&temperature_unit=fahrenheit&forecast_days=5&timezone=auto`
     )
     if (!res.ok) return null
     const data = await res.json()
-    const day = data.forecastDays?.[0]
+    const day = data.daily
     if (!day) return null
-    const condition = day.daytimeForecast?.weatherCondition?.description?.text
-      ?? day.daytimeForecast?.weatherCondition?.description
-      ?? 'Unknown'
-    const maxTemp = Math.round(day.maxTemperature?.degrees ?? 0)
-    const minTemp = Math.round(day.minTemperature?.degrees ?? 0)
-    return { condition, maxTemp, minTemp }
+    return {
+      weatherCodes: day.weather_code as number[],
+      maxTemps: day.temperature_2m_max as number[],
+      minTemps: day.temperature_2m_min as number[],
+      dates: day.time as string[],
+    }
   } catch { return null }
 }
 
-function conditionToIcon(condition: string): string {
-  const c = condition.toLowerCase()
-  if (c.includes('thunder') || c.includes('storm')) return 'thunderstorm'
-  if (c.includes('snow') || c.includes('blizzard')) return 'snow'
-  if (c.includes('rain') || c.includes('shower') || c.includes('drizzle')) return 'rain'
-  if (c.includes('fog') || c.includes('mist') || c.includes('haze')) return 'fog'
-  if (c.includes('partly cloudy') || c.includes('mostly clear')) return 'partly_cloudy'
-  if (c.includes('cloudy') || c.includes('overcast')) return 'cloudy'
-  if (c.includes('clear') || c.includes('sunny')) return 'sunny'
-  return 'partly_cloudy'
+function wmoCodeToCondition(code: number): string {
+  if (code === 0) return 'Clear sky'
+  if (code === 1) return 'Mainly clear'
+  if (code === 2) return 'Partly cloudy'
+  if (code === 3) return 'Overcast'
+  if (code <= 48) return 'Foggy'
+  if (code <= 55) return 'Drizzle'
+  if (code <= 65) return code <= 63 ? 'Rain' : 'Heavy rain'
+  if (code <= 75) return 'Snow'
+  if (code <= 82) return 'Rain showers'
+  if (code <= 86) return 'Snow showers'
+  if (code === 95) return 'Thunderstorm'
+  return 'Thunderstorm with hail'
+}
+
+function wmoCodeToIcon(code: number): string {
+  if (code === 0) return 'sunny'
+  if (code <= 2) return 'partly_cloudy'
+  if (code === 3) return 'cloudy'
+  if (code <= 48) return 'fog'
+  if (code <= 67) return 'rain'
+  if (code <= 77) return 'snow'
+  if (code <= 82) return 'rain'
+  if (code <= 86) return 'snow'
+  return 'thunderstorm'
 }
 
 async function fetchWeatherForEvent(
@@ -89,8 +103,14 @@ async function fetchWeatherForEvent(
   const forecast = await fetchDailyForecast(loc.lat, loc.lng, apiKey)
   if (!forecast) return { ok: false, error: 'No forecast data' }
 
-  const { condition, maxTemp, minTemp } = forecast
-  const icon = conditionToIcon(condition)
+  const eventDateStr = new Date(event.start_time).toISOString().slice(0, 10)
+  const dayIndex = forecast.dates.indexOf(eventDateStr)
+  const idx = dayIndex >= 0 ? dayIndex : 0
+  const code = forecast.weatherCodes[idx]
+  const maxTemp = Math.round(forecast.maxTemps[idx])
+  const minTemp = Math.round(forecast.minTemps[idx])
+  const condition = wmoCodeToCondition(code)
+  const icon = wmoCodeToIcon(code)
   const weatherText = `${condition}, ${maxTemp}°F / ${minTemp}°F`
 
   const { error: upsertErr } = await sb

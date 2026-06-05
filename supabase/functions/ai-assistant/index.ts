@@ -63,41 +63,51 @@ async function searchPlaces(query: string, city?: string): Promise<PlaceResult[]
 
 async function geocodeAddress(address: string, apiKey: string): Promise<{ lat: number; lng: number } | null> {
   try {
-    const res = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`
-    )
+    const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'places.location',
+      },
+      body: JSON.stringify({ textQuery: address, maxResultCount: 1 }),
+    })
     const data = await res.json()
-    const loc = data.results?.[0]?.geometry?.location
+    const loc = data.places?.[0]?.location
     if (!loc) return null
-    return { lat: loc.lat, lng: loc.lng }
+    return { lat: loc.latitude, lng: loc.longitude }
   } catch { return null }
 }
 
-async function getWeatherForLocation(lat: number, lng: number, apiKey: string) {
+function wmoCodeToCondition(code: number): string {
+  if (code === 0) return 'Clear sky'
+  if (code <= 3) return code === 1 ? 'Mainly clear' : code === 2 ? 'Partly cloudy' : 'Overcast'
+  if (code <= 48) return 'Foggy'
+  if (code <= 55) return 'Drizzle'
+  if (code <= 65) return code <= 63 ? 'Rain' : 'Heavy rain'
+  if (code <= 75) return 'Snow'
+  if (code <= 82) return 'Rain showers'
+  if (code <= 86) return 'Snow showers'
+  if (code === 95) return 'Thunderstorm'
+  return 'Thunderstorm with hail'
+}
+
+async function getWeatherForLocation(lat: number, lng: number, _apiKey: string) {
   try {
-    const [wxRes, aqRes] = await Promise.all([
-      fetch(`https://weather.googleapis.com/v1/currentConditions:lookup?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ location: { latitude: lat, longitude: lng }, unitsSystem: 'IMPERIAL' }),
-      }),
-      fetch(`https://airquality.googleapis.com/v1/currentConditions:lookup?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ location: { latitude: lat, longitude: lng } }),
-      }),
-    ])
-    const wx = wxRes.ok ? await wxRes.json() : null
-    const aq = aqRes.ok ? await aqRes.json() : null
-    const condition = wx?.weatherCondition?.description?.text ?? wx?.weatherCondition?.description ?? 'Unknown'
-    const indexes: { code?: string; aqi?: number; category?: string }[] = aq?.indexes ?? []
-    const uaqi = indexes.find(i => i.code === 'uaqi') ?? indexes[0]
+    const res = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,weather_code,wind_speed_10m,uv_index&daily=precipitation_probability_max,weather_code&temperature_unit=fahrenheit&forecast_days=1&timezone=auto`
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    const c = data.current
     return {
-      temp: wx ? Math.round(wx.temperature?.degrees ?? 0) : null,
-      condition,
-      feelsLike: wx ? Math.round(wx.feelsLikeTemperature?.degrees ?? 0) : null,
-      uvIndex: wx?.uvIndex ?? null,
-      airQuality: uaqi ? { aqi: uaqi.aqi ?? 0, category: uaqi.category ?? 'Unknown' } : null,
+      temp: Math.round(c.temperature_2m),
+      condition: wmoCodeToCondition(c.weather_code),
+      feelsLike: Math.round(c.apparent_temperature),
+      humidity: c.relative_humidity_2m ?? null,
+      uvIndex: c.uv_index != null ? Math.round(c.uv_index) : null,
+      precipProbability: c.precipitation_probability ?? data.daily?.precipitation_probability_max?.[0] ?? null,
+      airQuality: null,
     }
   } catch { return null }
 }
@@ -163,7 +173,9 @@ function extractContextQueries(msg: string, homeCity: string): {
   const result: { weatherQuery?: string; driveTimeQuery?: { origin: string; destination: string }; timezoneQuery?: string } = {}
 
   // Weather intent
-  const weatherIntents = ['weather', 'will it rain', 'temperature', 'how hot', 'how cold', 'forecast', 'air quality', 'pollen']
+  const weatherIntents = ['weather', 'will it rain', 'going to rain', 'gonna rain', 'rain today', 'rain tomorrow',
+    'is it raining', 'chance of rain', 'temperature', 'how hot', 'how cold', 'forecast', 'air quality', 'pollen',
+    'sunny', 'cloudy', 'storm', 'hurricane', 'humidity', 'feels like', 'uv index']
   if (weatherIntents.some(t => lower.includes(t))) {
     const cityMatch = msg.match(/weather\s+(?:in|for|at)\s+([A-Za-z\s,]+?)(?:\?|$|\.)/i)
       ?? msg.match(/(?:in|for|at)\s+([A-Za-z\s,]+?)\s+(?:weather|forecast)/i)
@@ -267,8 +279,9 @@ Deno.serve(async (req) => {
   const weatherBlock = weatherData
     ? `\nCURRENT WEATHER for ${contextQueries.weatherQuery}: ${weatherData.temp}°F, ${weatherData.condition}` +
       (weatherData.feelsLike != null ? `, feels like ${weatherData.feelsLike}°F` : '') +
-      (weatherData.uvIndex != null ? `, UV index ${weatherData.uvIndex}` : '') +
-      (weatherData.airQuality ? `, Air Quality: ${weatherData.airQuality.category} (AQI ${weatherData.airQuality.aqi})` : '')
+      (weatherData.humidity != null ? `, humidity ${weatherData.humidity}%` : '') +
+      (weatherData.precipProbability != null ? `, ${weatherData.precipProbability}% chance of rain` : '') +
+      (weatherData.uvIndex != null ? `, UV index ${weatherData.uvIndex}` : '')
     : ''
 
   const driveTimeBlock = driveTimeData
@@ -296,8 +309,9 @@ ${placesSearchBlock}${weatherBlock}${driveTimeBlock}${timezoneBlock}
 You can either:
 1. Answer questions conversationally about the events, schedule, or family.
 2. Analyze an attached image — describe what you see and relate it to the family calendar if relevant (e.g. a school flyer, game schedule, invitation, or screenshot of a calendar).
-3. Look up addresses: When the user asks to find a business or location, you have already received Google Places results above (if any). Present the numbered list naturally and ask which one they want. Once they confirm, create the event with the full address.
-4. Take an ACTION by responding with ONLY a JSON array (even for a single action) — no prose, no markdown fences:
+3. Answer weather/air quality/pollen questions — if CURRENT WEATHER data is provided above, use it to give a real answer. You DO have access to live weather data when it appears in this context block.
+4. Look up addresses: When the user asks to find a business or location, you have already received Google Places results above (if any). Present the numbered list naturally and ask which one they want. Once they confirm, create the event with the full address.
+5. Take an ACTION by responding with ONLY a JSON array (even for a single action) — no prose, no markdown fences:
 
 [
   {"action":"create_event","title":"<Owner> | <Concise Description>","start":"<ISO with offset>","end":"<ISO with offset>","location":"<full address from Places results>","members":["<name>"],"event_type":"event","needs_clarification":"<question or null>"}
