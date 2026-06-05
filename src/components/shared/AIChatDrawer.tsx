@@ -207,6 +207,15 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Pause voice while AI is thinking, resume when done
+  useEffect(() => {
+    if (loading) {
+      speech.stop()
+    } else if (open) {
+      setTimeout(() => speech.start(), 300)
+    }
+  }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
