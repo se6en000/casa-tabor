@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { format, isAfter, isBefore } from 'date-fns'
-import { Home, Calendar, Sun, Music, Settings } from 'lucide-react'
+import { Home, Calendar, ShoppingCart, Sun, Music } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useLiveClock } from '../../hooks/useLiveClock'
@@ -11,11 +11,11 @@ import NotificationDrawer from '../shared/NotificationDrawer'
 import { useState, useMemo } from 'react'
 
 const NAV = [
-  { to: '/',          icon: Home,     label: 'Home' },
-  { to: '/calendar',  icon: Calendar, label: 'Calendar' },
-  { to: '/briefing',  icon: Sun,      label: 'Briefing' },
-  { to: '/music',     icon: Music,    label: 'Music' },
-  { to: '/settings',  icon: Settings, label: 'Settings' },
+  { to: '/',         icon: Home,         label: 'Home' },
+  { to: '/calendar', icon: Calendar,     label: 'Calendar' },
+  { to: '/grocery',  icon: ShoppingCart, label: 'Grocery' },
+  { to: '/briefing', icon: Sun,          label: 'Briefing' },
+  { to: '/music',    icon: Music,        label: 'Music' },
 ]
 
 export default function TabletSidebar() {

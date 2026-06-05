@@ -2,21 +2,11 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import type { EventWithDetails } from './useCalendarEvents'
 import type { FamilyMember } from '../types'
+import { useAISession, type AIMessage } from './useAISession'
 
-export interface ChatMessage {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  imageDataUrl?: string   // thumbnail shown in user bubble
-  action?: AssistantAction
-}
+export type { AIMessage }
 
-export type AssistantAction =
-  | { action: 'create_event'; title: string; start: string; end: string; location: string | null; members: string[]; event_type?: 'event' | 'reminder'; needs_clarification: string | null }
-  | { action: 'update_event'; id: string; changes: Record<string, string>; needs_clarification: string | null }
-  | { action: 'delete_event'; id: string; title: string; needs_clarification: string | null }
-
-interface AssistantContext {
+export interface AssistantContext {
   page: string
   events: EventWithDetails[]
   family: FamilyMember[]
@@ -28,9 +18,10 @@ const genId = (): string =>
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2) + Date.now().toString(36)
 
+const GOODBYE_PHRASES = /\b(thank you|thanks|goodbye|bye|that'?s all|all done|good night|ciao|close session|new session|start over|end session)\b/i
+
 function buildContext(ctx: AssistantContext) {
   const now = new Date()
-  // Get local UTC offset in ±HH:MM format (e.g. "-04:00" for EDT)
   const offsetMins = -now.getTimezoneOffset()
   const offsetSign = offsetMins >= 0 ? '+' : '-'
   const offsetAbs = Math.abs(offsetMins)
@@ -55,99 +46,148 @@ function buildContext(ctx: AssistantContext) {
 }
 
 export function useAIAssistant(ctx: AssistantContext) {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const { session, loading: sessionLoading, startNewSession, endSession, saveMessages } = useAISession()
+  const [messages, setMessages] = useState<AIMessage[]>([])
   const [loading, setLoading] = useState(false)
-
-  // Keep refs current so `send` never goes stale and never needs to be recreated
-  const messagesRef = useRef(messages)
+  const sessionRef = useRef(session)
   const ctxRef = useRef(ctx)
-  useEffect(() => { messagesRef.current = messages }, [messages])
+  useEffect(() => { sessionRef.current = session }, [session])
   useEffect(() => { ctxRef.current = ctx })
 
-  const send = useCallback(async (text: string, image?: { dataUrl: string; mimeType: string }) => {
-    const userMsg: ChatMessage = {
-      id: genId(),
-      role: 'user',
-      content: text,
-      imageDataUrl: image?.dataUrl,
+  // Sync messages from session when session loads
+  useEffect(() => {
+    if (!sessionLoading && session) {
+      setMessages(session.messages)
+    } else if (!sessionLoading && !session) {
+      setMessages([])
     }
+  }, [sessionLoading, session?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const startFresh = useCallback(async () => {
+    setMessages([])
+    await startNewSession()
+  }, [startNewSession])
+
+  const send = useCallback(async (text: string, image?: { dataUrl: string; mimeType: string }) => {
+    // Check for goodbye phrase → end session
+    if (GOODBYE_PHRASES.test(text)) {
+      const farewell: AIMessage = { id: genId(), role: 'assistant', content: "You're welcome! Session saved. Say hi when you need me 👋" }
+      setMessages(prev => {
+        const updated = [...prev, { id: genId(), role: 'user' as const, content: text }, farewell]
+        if (sessionRef.current) saveMessages(sessionRef.current.id, updated)
+        return updated
+      })
+      await endSession()
+      return
+    }
+
+    const userMsg: AIMessage = { id: genId(), role: 'user', content: text, imageDataUrl: image?.dataUrl }
     setMessages(prev => [...prev, userMsg])
     setLoading(true)
 
-    // Strip dataUrl prefix to get raw base64 for the API
+    let activeSession = sessionRef.current
+    if (!activeSession) {
+      activeSession = await startNewSession()
+    }
+
     const imagePayload = image
       ? { mimeType: image.mimeType, data: image.dataUrl.replace(/^data:[^;]+;base64,/, '') }
       : undefined
 
     try {
-      const allMsgs = [...messagesRef.current, userMsg].map(m => ({ role: m.role, content: m.content }))
+      const currentMessages = [...(activeSession.messages ?? []), userMsg]
+      const allMsgsForApi = currentMessages.map(m => ({ role: m.role, content: m.content }))
 
-      // 25s timeout — edge functions can be slow on cold start
       const invokePromise = supabase.functions.invoke('ai-assistant', {
-        body: { messages: allMsgs, context: buildContext(ctxRef.current), image: imagePayload },
+        body: {
+          messages: allMsgsForApi,
+          context: buildContext(ctxRef.current),
+          image: imagePayload,
+          session_id: activeSession.id,
+        },
       })
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('AI request timed out — Supabase may be temporarily unavailable.')), 25000)
+        setTimeout(() => reject(new Error('AI request timed out')), 30000)
       )
       const { data, error } = await Promise.race([invokePromise, timeoutPromise]) as Awaited<typeof invokePromise>
       if (error) throw error
 
+      let assistantMsg: AIMessage
+
       if (data.type === 'error') {
         const isQuota = data.code === 'quota_exceeded'
-        setMessages(prev => [...prev, {
+        assistantMsg = {
           id: genId(),
           role: 'assistant',
           content: isQuota
-            ? '⚠️ AI quota reached for today. Your billing limit may need to be raised, or try again tomorrow.'
-            : `Sorry, the AI ran into an error: ${data.message ?? 'unknown error'}`,
-        }])
-        return
-      }
-
-      if (data.type === 'action' || data.type === 'multi_action') {
-        const actions: AssistantAction[] = data.type === 'multi_action' ? data.actions : [data.action]
-        
-        // Find first action that needs clarification
-        const needsClarification = actions.find(a => a.needs_clarification)
-        if (needsClarification) {
-          setMessages(prev => [...prev, {
-            id: genId(),
-            role: 'assistant',
-            content: needsClarification.needs_clarification!,
-            action: needsClarification,
-          }])
-        } else {
-          // Queue all actions as separate confirmation cards
-          const newMsgs: ChatMessage[] = actions.map(action => {
-            const label = action.action === 'create_event'
-              ? `Create: **${action.title}**`
-              : action.action === 'update_event'
-              ? `Update event`
-              : `Delete: **${(action as { title: string }).title}**`
-            return { id: genId(), role: 'assistant' as const, content: label, action }
-          })
-          setMessages(prev => [...prev, ...newMsgs])
+            ? '⚠️ AI quota reached for today. Go to Settings → AI to check your billing.'
+            : `Sorry, something went wrong: ${data.message ?? 'unknown error'}`,
+        }
+      } else if (data.type === 'tool_action') {
+        assistantMsg = {
+          id: genId(),
+          role: 'assistant',
+          content: data.display_text as string,
+          toolAction: {
+            tool: data.tool as string,
+            args: data.args as Record<string, unknown>,
+            displayText: data.display_text as string,
+            status: 'pending',
+          },
         }
       } else {
-        setMessages(prev => [...prev, { id: genId(), role: 'assistant', content: data.text }])
+        assistantMsg = { id: genId(), role: 'assistant', content: (data.text ?? '') as string }
       }
+
+      setMessages(prev => {
+        const updated = [...prev, assistantMsg]
+        if (activeSession) saveMessages(activeSession.id, updated)
+        return updated
+      })
     } catch (e) {
       const msg = (e as Error).message ?? 'Something went wrong'
-      const isTimeout = msg.includes('timed out') || msg.includes('unavailable')
-      setMessages(prev => [...prev, {
+      const isTimeout = msg.includes('timed out')
+      const errMsg: AIMessage = {
         id: genId(),
         role: 'assistant',
         content: isTimeout
-          ? '⏱ Taking too long to respond — Supabase may be temporarily unavailable. Please try again in a moment.'
+          ? '⏱ Taking too long to respond. Please try again.'
           : 'Sorry, something went wrong. Please try again.',
-      }])
+      }
+      setMessages(prev => [...prev, errMsg])
       console.error('[useAIAssistant]', e)
     } finally {
       setLoading(false)
     }
-  }, []) // stable — uses refs internally
+  }, [startNewSession, endSession, saveMessages])
 
+  const updateMessageToolStatus = useCallback((
+    messageId: string,
+    status: NonNullable<AIMessage['toolAction']>['status'],
+    extra?: { errorMsg?: string; resultEventId?: string }
+  ) => {
+    setMessages(prev => {
+      const updated = prev.map(m =>
+        m.id === messageId && m.toolAction
+          ? { ...m, toolAction: { ...m.toolAction, status, ...extra } }
+          : m
+      )
+      if (sessionRef.current) saveMessages(sessionRef.current.id, updated)
+      return updated
+    })
+  }, [saveMessages])
+
+  // Backward-compat reset alias
   const reset = useCallback(() => setMessages([]), [])
 
-  return { messages, loading, send, reset }
+  return {
+    messages,
+    loading,
+    sessionLoading,
+    session,
+    send,
+    reset,
+    startFresh,
+    updateMessageToolStatus,
+  }
 }

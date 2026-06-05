@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, MicOff } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, MicOff, RotateCcw } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
-import { useAIAssistant, type ChatMessage, type AssistantAction } from '../../hooks/useAIAssistant'
+import { useAIAssistant, type AIMessage } from '../../hooks/useAIAssistant'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
@@ -51,10 +52,8 @@ function useSpeechInput({
     const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition
     if (!SR) return
 
-    // Request mic permission explicitly — required before SpeechRecognition will work
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      // Stop the stream immediately — we just needed the permission grant
       stream.getTracks().forEach(t => t.stop())
     } catch {
       console.warn('[SpeechRecognition] mic permission denied')
@@ -76,34 +75,30 @@ function useSpeechInput({
         else interim += t
       }
 
-      // Show interim transcript in real-time
       if (interim) onTranscript(interim)
 
       if (finalText) {
-        // Dismiss
         if (DISMISS_PHRASES.test(finalText)) {
           stop()
           onDismiss()
           return
         }
 
-        // Confirm / cancel pending action (short phrases only — don't swallow actual requests)
         const isShortPhrase = finalText.trim().split(/\s+/).length <= 5
         if (isShortPhrase && CONFIRM_PHRASES.test(finalText)) {
           onConfirm()
-          onTranscript('') // clear interim
+          onTranscript('')
           return
         }
         if (isShortPhrase && CANCEL_PHRASES.test(finalText)) {
           onCancel()
-          onTranscript('') // clear interim
+          onTranscript('')
           return
         }
 
         clearSilenceTimer()
         onFinalTranscript(finalText)
 
-        // Auto-send after 1.2s silence
         silenceTimerRef.current = setTimeout(() => {
           onFinalTranscript('__SEND__')
         }, 1200)
@@ -112,7 +107,6 @@ function useSpeechInput({
 
     rec.onend = () => {
       if (listeningRef.current) {
-        // Auto-restart on unexpected end (browser cuts off after ~60s)
         try { rec.start() } catch { /* ignore */ }
       } else {
         setListening(false)
@@ -154,8 +148,7 @@ interface Props {
 
 export default function AIChatDrawer({ open, onClose, anchor, page, events, family, homeCity }: Props) {
   const [input, setInput] = useState('')
-  const interimRef = useRef('')  // current interim transcript (not yet final)
-
+  const interimRef = useRef('')
   const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; mimeType: string } | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -163,13 +156,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
 
-  const { messages, loading, send, reset } = useAIAssistant({ page, events, family, homeCity })
+  const { messages, loading, send, reset, session, sessionLoading, startFresh, updateMessageToolStatus } = useAIAssistant({ page, events, family, homeCity })
 
-  // Ref to the "confirm" callback of the most recent pending action card
   const pendingConfirmRef = useRef<(() => void) | null>(null)
   const pendingCancelRef  = useRef<(() => void) | null>(null)
 
-  // ── Voice send helper ────────────────────────────────────────
   const sendCurrentInput = useCallback((text: string) => {
     const trimmed = text.trim()
     if (!trimmed || loading) return
@@ -194,23 +185,17 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       }
     },
     onDismiss: () => {
-      send('Thank you, talk soon!')
-        .catch(() => {})
+      send('Thank you, talk soon!').catch(() => {})
       setTimeout(onClose, 800)
     },
-    onConfirm: () => {
-      pendingConfirmRef.current?.()
-    },
-    onCancel: () => {
-      pendingCancelRef.current?.()
-    },
+    onConfirm: () => { pendingConfirmRef.current?.() },
+    onCancel:  () => { pendingCancelRef.current?.() },
   })
 
   useEffect(() => {
     if (open) {
       setTimeout(() => {
         textareaRef.current?.focus()
-        // Auto-start listening when drawer opens
         speech.start()
       }, 400)
     } else {
@@ -226,7 +211,6 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  // Auto-grow textarea height whenever input changes
   useEffect(() => {
     const el = textareaRef.current
     if (!el) return
@@ -234,7 +218,6 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     el.style.height = Math.min(el.scrollHeight, 120) + 'px'
   }, [input])
 
-  // Convert a File or Blob → base64 data URL
   const readImageFile = useCallback((file: File | Blob): Promise<{ dataUrl: string; mimeType: string }> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
@@ -244,7 +227,6 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     })
   }, [])
 
-  // Handle paste anywhere in the drawer (catches Ctrl+V screenshots)
   const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
     const items = Array.from(e.clipboardData.items)
     const imageItem = items.find(i => i.type.startsWith('image/'))
@@ -255,7 +237,6 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     }
   }, [readImageFile])
 
-  // Handle file picker
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file && file.type.startsWith('image/')) {
@@ -277,7 +258,6 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   }, [input, attachedImage, loading, send])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Desktop only: Enter sends; mobile uses the Send button
     const isMobile = 'ontouchstart' in window
     if (!isMobile && e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -285,11 +265,12 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     }
   }
 
+  const hasSession = !sessionLoading && !!session && session.messages.length > 0
+
   return (
     <AnimatePresence>
       {open && (
         <>
-          {/* Backdrop — full dim on mobile, subtle on desktop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -298,7 +279,6 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
             onClick={onClose}
           />
 
-          {/* Panel — bottom sheet on mobile, dropdown popup on desktop */}
           <motion.div
             initial={{ opacity: 0, y: -8, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -306,9 +286,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
             transition={{ type: 'spring', damping: 28, stiffness: 260 }}
             className={cn(
               'fixed z-[70] bg-casa-surface flex flex-col transition-shadow',
-              // Mobile: full-width bottom sheet
               'max-sm:inset-x-0 max-sm:bottom-0 max-sm:rounded-t-2xl max-sm:w-full max-sm:shadow-modal',
-              // Desktop: compact dropdown card near sparkle
               'sm:rounded-2xl sm:w-[380px] sm:shadow-[0_8px_40px_rgba(0,0,0,0.22)] sm:border sm:border-casa-border',
               loading && 'ai-thinking',
             )}
@@ -329,6 +307,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
             <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0">
               <div className="w-9 h-1 bg-casa-divider rounded-full" />
             </div>
+
             {/* Header */}
             <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-casa-border">
               <div className="flex items-center gap-2.5">
@@ -349,23 +328,50 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                   )}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-8 h-8 flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-full hover:bg-casa-divider transition-colors"
-              >
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-1">
+                {hasSession && (
+                  <button
+                    type="button"
+                    onClick={startFresh}
+                    title="New conversation"
+                    className="w-7 h-7 flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-full hover:bg-casa-divider transition-colors"
+                  >
+                    <RotateCcw size={14} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-8 h-8 flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-full hover:bg-casa-divider transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 min-h-0">
+              {/* Session resume banner */}
+              {hasSession && messages.length > 0 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-casa-gold/8 border border-casa-gold/20 text-caption text-casa-muted">
+                  <Sparkles size={11} className="text-casa-gold flex-shrink-0" />
+                  <span>Resuming previous conversation</span>
+                  <button
+                    type="button"
+                    onClick={startFresh}
+                    className="ml-auto text-casa-gold font-semibold hover:underline"
+                  >
+                    New chat
+                  </button>
+                </div>
+              )}
+
               {messages.length === 0 && (
                 <div className="flex flex-col items-center gap-3 py-6 text-center">
                   <Sparkles size={28} className="text-casa-gold opacity-60" />
                   <p className="text-body-sm font-semibold text-casa-navy">What can I help with?</p>
                   <div className="flex flex-wrap justify-center gap-2 mt-1">
-                    {SUGGESTIONS[page] ? SUGGESTIONS[page].map(s => (
+                    {SUGGESTIONS[page]?.map(s => (
                       <button
                         key={s}
                         onClick={() => { setInput(s); textareaRef.current?.focus() }}
@@ -373,7 +379,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                       >
                         {s}
                       </button>
-                    )) : null}
+                    ))}
                   </div>
                 </div>
               )}
@@ -383,9 +389,22 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                   key={msg.id}
                   msg={msg}
                   isLatest={idx === messages.length - 1}
-                  onConfirmAction={async (action) => {
-                    return await executeAction(action, family, qc)
+                  onConfirmToolAction={async (messageId, tool, args) => {
+                    updateMessageToolStatus(messageId, 'loading')
+                    try {
+                      const { data, error } = await supabase.functions.invoke('execute-ai-action', {
+                        body: { tool, args },
+                      })
+                      if (error) throw error
+                      if (data?.success === false) throw new Error(data.error ?? 'Action failed')
+                      updateMessageToolStatus(messageId, 'done', { resultEventId: data?.event_id })
+                      qc.invalidateQueries({ queryKey: ['events'] })
+                      qc.invalidateQueries({ queryKey: ['grocery'] })
+                    } catch (err) {
+                      updateMessageToolStatus(messageId, 'error', { errorMsg: (err as Error).message })
+                    }
                   }}
+                  onCancelToolAction={(messageId) => updateMessageToolStatus(messageId, 'cancelled')}
                   registerPendingConfirm={(fn) => { pendingConfirmRef.current = fn }}
                   registerPendingCancel={(fn)  => { pendingCancelRef.current  = fn }}
                 />
@@ -402,7 +421,6 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
             {/* Input */}
             <div className="px-4 pb-5 pt-3 border-t border-casa-border">
-              {/* Image preview */}
               <AnimatePresence>
                 {attachedImage && (
                   <motion.div
@@ -434,24 +452,9 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
               </AnimatePresence>
 
               <div className="flex items-end gap-2 bg-casa-bg rounded-xl border border-casa-border px-3 py-2">
-                {/* Hidden file inputs */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-                <input
-                  ref={cameraInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
+                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
 
-                {/* Attach from library */}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -461,7 +464,6 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                   <Paperclip size={16} />
                 </button>
 
-                {/* Camera capture */}
                 <button
                   type="button"
                   onClick={() => cameraInputRef.current?.click()}
@@ -471,7 +473,6 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                   <Camera size={16} />
                 </button>
 
-                {/* Controlled textarea */}
                 <textarea
                   ref={textareaRef}
                   value={input}
@@ -483,7 +484,6 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                   style={{ minHeight: '24px', maxHeight: '120px' }}
                 />
 
-                {/* Mic toggle */}
                 {speech.supported && (
                   <button
                     type="button"
@@ -529,44 +529,33 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
 /* ── Message Bubble ─────────────────────────────────────────── */
 
-function MessageBubble({ msg, isLatest, onConfirmAction, registerPendingConfirm, registerPendingCancel }: {
-  msg: ChatMessage
+function MessageBubble({ msg, isLatest, onConfirmToolAction, onCancelToolAction, registerPendingConfirm, registerPendingCancel }: {
+  msg: AIMessage
   isLatest: boolean
-  onConfirmAction: (action: AssistantAction) => Promise<{ eventId?: string }>
+  onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<void>
+  onCancelToolAction: (messageId: string) => void
   registerPendingConfirm: (fn: () => void) => void
   registerPendingCancel:  (fn: () => void) => void
 }) {
-  const [confirmed, setConfirmed] = useState<'idle' | 'loading' | 'done' | 'error' | 'cancelled'>('idle')
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [createdEventId, setCreatedEventId] = useState<string | null>(null)
-
   const isUser = msg.role === 'user'
-  const actionDone = confirmed === 'done'
-  const actionCancelled = confirmed === 'cancelled'
-  const actionError = confirmed === 'error'
+  const ta = msg.toolAction
+  const hasPendingAction = !!ta && ta.status === 'pending'
 
-  const hasPendingAction = !!msg.action && !msg.action.needs_clarification && confirmed === 'idle'
+  const doConfirm = useCallback(() => {
+    if (!ta) return
+    onConfirmToolAction(msg.id, ta.tool, ta.args)
+  }, [msg.id, ta, onConfirmToolAction])
 
-  async function doConfirm() {
-    setConfirmed('loading')
-    setErrorMsg(null)
-    try {
-      const result = await onConfirmAction(msg.action!)
-      if (result?.eventId) setCreatedEventId(result.eventId)
-      setConfirmed('done')
-    } catch (err) {
-      setErrorMsg((err as Error).message ?? 'Something went wrong')
-      setConfirmed('error')
-    }
-  }
+  const doCancel = useCallback(() => {
+    onCancelToolAction(msg.id)
+  }, [msg.id, onCancelToolAction])
 
-  // Register confirm/cancel handlers so voice can trigger them
   useEffect(() => {
     if (isLatest && hasPendingAction) {
       registerPendingConfirm(doConfirm)
-      registerPendingCancel(() => setConfirmed('cancelled'))
+      registerPendingCancel(doCancel)
     }
-  }, [isLatest, hasPendingAction]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLatest, hasPendingAction, doConfirm, doCancel]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
@@ -576,44 +565,40 @@ function MessageBubble({ msg, isLatest, onConfirmAction, registerPendingConfirm,
           ? 'bg-casa-navy text-white rounded-br-sm'
           : 'bg-casa-bg border border-casa-border text-casa-navy rounded-bl-sm'
       )}>
-        {/* Image thumbnail in user bubble */}
         {msg.imageDataUrl && (
-          <img
-            src={msg.imageDataUrl}
-            alt="Attached"
-            className="max-h-40 w-auto rounded-lg mb-2 object-cover"
-          />
+          <img src={msg.imageDataUrl} alt="Attached" className="max-h-40 w-auto rounded-lg mb-2 object-cover" />
         )}
-        {/* Render bold markdown minimally */}
         {msg.content !== '(see attached image)' && (
           <p dangerouslySetInnerHTML={{ __html: msg.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
         )}
 
-        {/* Action confirmation card */}
-        {msg.action && !msg.action.needs_clarification && (
+        {/* Tool action confirmation card */}
+        {ta && (
           <div className="mt-2.5 pt-2.5 border-t border-casa-divider">
-            {actionDone ? (
+            {ta.status === 'done' ? (
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-emerald-600 text-caption font-semibold">
                   <Check size={13} />
-                  {msg.action.action === 'create_event' ? 'Created & added to calendar ✓' : msg.action.action === 'update_event' ? 'Updated ✓' : 'Deleted ✓'}
+                  {ta.tool === 'create_event' ? 'Created & added to calendar ✓'
+                    : ta.tool === 'update_event' ? 'Updated ✓'
+                    : ta.tool === 'delete_event' ? 'Deleted ✓'
+                    : ta.tool === 'add_grocery_items' ? 'Added to grocery list ✓'
+                    : 'Done ✓'}
                 </div>
-                {msg.action.action === 'create_event' && createdEventId && (
-                  <p className="text-[10px] text-casa-muted">
-                    ID: {createdEventId.slice(0, 8)}… · visible on your calendar now
-                  </p>
+                {ta.tool === 'create_event' && ta.resultEventId && (
+                  <p className="text-[10px] text-casa-muted">Visible on your calendar now</p>
                 )}
               </div>
-            ) : actionCancelled ? (
+            ) : ta.status === 'cancelled' ? (
               <div className="flex items-center gap-1.5 text-casa-muted text-caption">
                 <XCircle size={13} /> Cancelled
               </div>
-            ) : actionError ? (
+            ) : ta.status === 'error' ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5 text-red-600 text-caption font-semibold">
-                  <XCircle size={13} /> Failed — {msg.action.action === 'update_event' ? 'event was NOT updated' : 'event was NOT created'}
+                  <XCircle size={13} /> Failed
                 </div>
-                {errorMsg && <p className="text-[10px] text-red-500">{errorMsg}</p>}
+                {ta.errorMsg && <p className="text-[10px] text-red-500">{ta.errorMsg}</p>}
                 <button
                   type="button"
                   onClick={doConfirm}
@@ -624,22 +609,20 @@ function MessageBubble({ msg, isLatest, onConfirmAction, registerPendingConfirm,
               </div>
             ) : (
               <>
-                <ActionPreview action={msg.action} />
+                <ToolActionPreview tool={ta.tool} args={ta.args} />
                 <div className="flex gap-2 mt-2">
                   <button
                     type="button"
-                    disabled={confirmed === 'loading'}
+                    disabled={ta.status === 'loading'}
                     onClick={doConfirm}
                     className="flex items-center gap-1.5 px-3 py-1 rounded-button bg-casa-gold text-white text-caption font-semibold hover:brightness-110 transition-all disabled:opacity-50"
                   >
-                    {confirmed === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                    {confirmed === 'loading' 
-                      ? (msg.action.action === 'update_event' ? 'Updating…' : msg.action.action === 'delete_event' ? 'Deleting…' : 'Creating…')
-                      : 'Confirm'}
+                    {ta.status === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                    {ta.status === 'loading' ? 'Working…' : 'Confirm'}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setConfirmed('cancelled')}
+                    onClick={doCancel}
                     className="flex items-center gap-1.5 px-3 py-1 rounded-button border border-casa-border text-caption text-casa-muted hover:bg-casa-divider transition-colors"
                   >
                     <XCircle size={12} /> Cancel
@@ -654,120 +637,50 @@ function MessageBubble({ msg, isLatest, onConfirmAction, registerPendingConfirm,
   )
 }
 
-function ActionPreview({ action }: { action: AssistantAction }) {
-  if (action.action === 'create_event') {
-    const start = new Date(action.start)
-    const end = new Date(action.end)
+function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, unknown> }) {
+  if (tool === 'create_event') {
+    const start = new Date(args.start as string)
+    const end = new Date(args.end as string)
     return (
       <div className="space-y-1 text-caption text-casa-muted">
-        <p className="font-semibold text-casa-navy text-body-sm">{action.title}</p>
+        <p className="font-semibold text-casa-navy text-body-sm">{args.title as string}</p>
         <p>{format(start, 'EEE, MMM d · h:mm a')} – {format(end, 'h:mm a')}</p>
-        {action.location && <p>📍 {action.location}</p>}
-        {action.members?.length > 0 && <p>👤 {action.members.join(', ')}</p>}
+        {!!args.location && <p>📍 {String(args.location)}</p>}
+        {(args.members as string[])?.length > 0 && <p>👤 {(args.members as string[]).join(', ')}</p>}
       </div>
     )
   }
-  if (action.action === 'delete_event') {
-    return <p className="text-caption text-red-600 font-semibold">Delete "{action.title}"?</p>
+  if (tool === 'update_event') {
+    const changes: string[] = []
+    if (args.title) changes.push(`title → "${args.title}"`)
+    if (args.start) changes.push(`start → ${format(new Date(args.start as string), 'MMM d h:mm a')}`)
+    if (args.end) changes.push(`end → ${format(new Date(args.end as string), 'h:mm a')}`)
+    if (args.location) changes.push(`location → "${args.location}"`)
+    if (args.notes) changes.push(`notes → "${args.notes}"`)
+    if ((args.members_add as string[])?.length) changes.push(`add: ${(args.members_add as string[]).join(', ')}`)
+    if ((args.members_remove as string[])?.length) changes.push(`remove: ${(args.members_remove as string[]).join(', ')}`)
+    return <p className="text-caption text-casa-muted">{changes.join(' · ')}</p>
   }
-  if (action.action === 'update_event') {
-    const changes = Object.entries(action.changes).map(([k, v]) => `${k}: ${v}`).join(' · ')
-    return <p className="text-caption text-casa-muted">Update: {changes}</p>
+  if (tool === 'delete_event') {
+    return <p className="text-caption text-red-600 font-semibold">Delete "{args.title as string}"?</p>
   }
-  return null
-}
-
-/* ── Execute confirmed action ───────────────────────────────── */
-
-async function executeAction(action: AssistantAction, family: FamilyMember[], qc: ReturnType<typeof useQueryClient>): Promise<{ eventId?: string }> {
-  if (action.action === 'create_event') {
-    // Insert event — throw on error so UI knows it failed
-    const { data: event, error } = await supabase.from('events').insert({
-      title: action.title,
-      start_time: action.start,
-      end_time: action.end,
-      location_name: action.location ?? null,
-      all_day: false,
-      status: 'confirmed',
-      is_enriched: false,
-      event_type: action.event_type ?? 'event',
-    }).select().single()
-
-    if (error) throw new Error(error.message)
-    if (!event) throw new Error('Event insert returned no data')
-
-    // Verify it actually landed in the DB
-    const { data: verify, error: verifyErr } = await supabase
-      .from('events').select('id').eq('id', event.id).single()
-    if (verifyErr || !verify) throw new Error('Event was not found after insert — please try again')
-
-    // Resolve member names → ids and insert event_members
-    const memberIds = (action.members ?? [])
-      .map(name => family.find(f => f.name.toLowerCase() === name.toLowerCase())?.id)
-      .filter((id): id is string => !!id)
-
-    if (memberIds.length > 0) {
-      const { error: memErr } = await supabase.from('event_members').insert(
-        memberIds.map((id, i) => ({ event_id: event.id, family_member_id: id, role: i === 0 ? 'primary' : 'attendee' }))
-      )
-      if (memErr) console.warn('[AI create_event] member insert failed:', memErr)
-    }
-
-    // Push to Google Calendar — fire-and-forget, DB is source of truth
-    supabase.functions.invoke('create-google-event', { body: { event_id: event.id } })
-      .then(r => { if (r.error) console.warn('[AI create_event] Google Calendar push failed:', r.error) })
-      .catch(console.error)
-
-    // Fire-and-forget enrichment (non-blocking, not critical for confirmation)
-    supabase.functions.invoke('enrich-event', { body: { event_id: event.id } }).catch(console.error)
-
-    qc.invalidateQueries({ queryKey: ['events'] })
-    return { eventId: event.id }
+  if (tool === 'add_grocery_items') {
+    const items = args.items as { name: string; quantity?: string }[]
+    return (
+      <div className="space-y-0.5 text-caption text-casa-muted">
+        {items.map((i, idx) => (
+          <p key={idx}>+ {i.name}{i.quantity ? ` (${i.quantity})` : ''}</p>
+        ))}
+      </div>
+    )
   }
-
-  if (action.action === 'delete_event') {
-    await supabase.functions.invoke('delete-google-event', { body: { event_id: action.id } })
-      .catch(() => { /* best-effort */ })
-    const { error } = await supabase.from('events').update({ status: 'cancelled' }).eq('id', action.id)
-    if (error) throw new Error(error.message)
-    qc.invalidateQueries({ queryKey: ['events'] })
-    return {}
+  if (tool === 'check_grocery_item') {
+    return <p className="text-caption text-casa-muted">Mark item as {args.checked ? 'done ✓' : 'undone'}</p>
   }
-
-  if (action.action === 'update_event') {
-    const updates: Record<string, unknown> = {}
-    if (action.changes.title) updates.title = action.changes.title
-    if (action.changes.start) updates.start_time = action.changes.start
-    if (action.changes.end) updates.end_time = action.changes.end
-    const locationChanged = !!action.changes.location
-    if (locationChanged) {
-      updates.location_name = action.changes.location
-      updates.is_enriched = false
-    }
-
-    if (Object.keys(updates).length === 0) {
-      throw new Error('No valid fields to update — nothing was changed.')
-    }
-
-    const { error } = await supabase.from('events').update(updates).eq('id', action.id)
-    if (error) throw new Error(`DB update failed: ${error.message}`)
-
-    // Verify the update actually landed
-    const { data: check, error: checkErr } = await supabase
-      .from('events').select('id').eq('id', action.id).single()
-    if (checkErr || !check) throw new Error('Event not found — update may have failed')
-
-    qc.invalidateQueries({ queryKey: ['events'] })
-    supabase.functions.invoke('push-to-google', { body: { event_id: action.id } })
-      .catch(() => { /* best-effort */ })
-    if (locationChanged) {
-      supabase.functions.invoke('enrich-event', { body: { event_id: action.id } })
-        .catch(console.error)
-    }
-    return {}
+  if (tool === 'clear_checked_grocery_items') {
+    return <p className="text-caption text-casa-muted">Clear all checked grocery items</p>
   }
-
-  return {}
+  return <p className="text-caption text-casa-muted">{tool}</p>
 }
 
 /* ── Contextual suggestions ─────────────────────────────────── */
@@ -776,4 +689,5 @@ const SUGGESTIONS: Record<string, string[]> = {
   home: ["What's next up today?", "Add an event tonight", "Any conflicts this week?"],
   calendar: ["What does tomorrow look like?", "Add a new appointment", "Who's busiest this week?"],
   briefing: ["Summarize today for me", "Add an event", "Any prep needed today?"],
+  grocery: ["Add milk and eggs", "What's on the list?", "Clear checked items"],
 }

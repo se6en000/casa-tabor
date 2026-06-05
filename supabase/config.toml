@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.toggle-gmail-scan]
 verify_jwt = false
+
+[functions.execute-ai-action]
+verify_jwt = false

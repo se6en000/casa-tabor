@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Home, Calendar, Sun, Settings, Music, MoreHorizontal, Bell } from 'lucide-react'
+import { Home, Calendar, ShoppingCart, Sun, Settings, Music, MoreHorizontal, Bell } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useNotifications } from '../../hooks/useNotifications'
 import NotificationDrawer from './NotificationDrawer'
@@ -10,6 +10,7 @@ import { useCalendarStore } from '../../stores/calendarStore'
 const primaryTabs = [
   { to: '/', icon: Home, label: 'Home' },
   { to: '/calendar', icon: Calendar, label: 'Calendar' },
+  { to: '/grocery', icon: ShoppingCart, label: 'Grocery' },
   { to: '/briefing', icon: Sun, label: 'Briefing' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]

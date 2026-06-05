@@ -3,6 +3,7 @@ import { AnimatePresence } from 'framer-motion'
 import HomePage from '../../pages/HomePage'
 import CalendarPage from '../../pages/CalendarPage'
 import BriefingPage from '../../pages/BriefingPage'
+import GroceryPage from '../../pages/GroceryPage'
 import SettingsPage from '../../pages/SettingsPage'
 import GoogleServicesPage from '../../pages/GoogleServicesPage'
 import AISettingsPage from '../../pages/AISettingsPage'
@@ -25,6 +26,7 @@ export default function AnimatedRoutes() {
       <Routes location={location} key={location.pathname}>
         <Route path="/" element={<PageTransition><HomePage /></PageTransition>} />
         <Route path="/calendar" element={<PageTransition><CalendarPage /></PageTransition>} />
+        <Route path="/grocery" element={<PageTransition><GroceryPage /></PageTransition>} />
         <Route path="/music" element={<PageTransition><MusicPage /></PageTransition>} />
         <Route path="/briefing" element={<PageTransition><BriefingPage /></PageTransition>} />
         <Route path="/settings" element={<PageTransition><SettingsPage /></PageTransition>} />
