@@ -568,7 +568,7 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onCancelToolAction,
         {msg.imageDataUrl && (
           <img src={msg.imageDataUrl} alt="Attached" className="max-h-40 w-auto rounded-lg mb-2 object-cover" />
         )}
-        {msg.content !== '(see attached image)' && (
+        {msg.content !== '(see attached image)' && msg.content && (
           <p dangerouslySetInnerHTML={{ __html: msg.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
         )}
 

@@ -124,14 +124,15 @@ export function useAIAssistant(ctx: AssistantContext) {
             : `Sorry, something went wrong: ${data.message ?? 'unknown error'}`,
         }
       } else if (data.type === 'tool_action') {
+        const displayText = (data.display_text as string) ?? `Action: ${data.tool}`
         assistantMsg = {
           id: genId(),
           role: 'assistant',
-          content: data.display_text as string,
+          content: displayText,
           toolAction: {
-            tool: data.tool as string,
-            args: data.args as Record<string, unknown>,
-            displayText: data.display_text as string,
+            tool: (data.tool as string) ?? '',
+            args: (data.args as Record<string, unknown>) ?? {},
+            displayText,
             status: 'pending',
           },
         }

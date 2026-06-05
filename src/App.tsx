@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Component, type ReactNode } from 'react'
 import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import NavBar from './components/shared/NavBar'
@@ -15,6 +15,29 @@ import { useRollingEvents } from './hooks/useCalendarEvents'
 import { useFamilyMembers } from './hooks/useFamilyMembers'
 import { useHomeWeather } from './hooks/useHomeWeather'
 import { useLiveClock } from './hooks/useLiveClock'
+
+class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex flex-col items-center justify-center h-screen bg-casa-bg gap-4 px-8 text-center">
+          <p className="text-2xl">😞</p>
+          <p className="font-semibold text-casa-navy">Something went wrong</p>
+          <p className="text-casa-muted text-sm">{(this.state.error as Error).message}</p>
+          <button
+            onClick={() => { this.setState({ error: null }); window.location.reload() }}
+            className="mt-2 px-4 py-2 bg-casa-gold text-white rounded-button text-sm font-medium"
+          >
+            Reload app
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -84,14 +107,18 @@ function AppShell() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <PinGate>
-        <QueryClientProvider client={queryClient}>
-          <BrowserRouter>
-            <AppShell />
-          </BrowserRouter>
-        </QueryClientProvider>
-      </PinGate>
-    </ThemeProvider>
+    <AppErrorBoundary>
+      <ThemeProvider>
+        <PinGate>
+          <QueryClientProvider client={queryClient}>
+            <BrowserRouter>
+              <AppErrorBoundary>
+                <AppShell />
+              </AppErrorBoundary>
+            </BrowserRouter>
+          </QueryClientProvider>
+        </PinGate>
+      </ThemeProvider>
+    </AppErrorBoundary>
   )
 }
