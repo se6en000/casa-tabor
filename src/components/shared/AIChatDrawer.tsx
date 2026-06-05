@@ -733,16 +733,24 @@ async function executeAction(action: AssistantAction, family: FamilyMember[], qc
   }
 
   if (action.action === 'update_event') {
-    const updates: Record<string, string> = {}
+    const updates: Record<string, unknown> = {}
     if (action.changes.title) updates.title = action.changes.title
     if (action.changes.start) updates.start_time = action.changes.start
     if (action.changes.end) updates.end_time = action.changes.end
-    if (action.changes.location) updates.location_name = action.changes.location
+    const locationChanged = !!action.changes.location
+    if (locationChanged) {
+      updates.location_name = action.changes.location
+      updates.is_enriched = false  // force re-enrichment
+    }
     const { error } = await supabase.from('events').update(updates).eq('id', action.id)
     if (error) throw new Error(error.message)
     qc.invalidateQueries({ queryKey: ['events'] })
     supabase.functions.invoke('push-to-google', { body: { event_id: action.id } })
       .catch(() => { /* best-effort */ })
+    if (locationChanged) {
+      supabase.functions.invoke('enrich-event', { body: { event_id: action.id } })
+        .catch(console.error)
+    }
     return {}
   }
 

@@ -280,10 +280,7 @@ Deno.serve(async (req) => {
   const eventsBlock = context.events.length === 0
     ? 'No events.'
     : context.events.map(e => {
-        const start = new Date(e.start_time)
-        const end = new Date(e.end_time)
-        const fmt = (d: Date) => d.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-        return `- ID:${e.id} | "${e.title}" | ${fmt(start)} – ${fmt(end)}${e.location_name ? ` | ${e.location_name}` : ''}${e.members.length ? ` | Who: ${e.members.join(', ')}` : ''}${e.category ? ` | ${e.category}` : ''}`
+        return `- ID:${e.id} | "${e.title}" | ${e.start_time} – ${e.end_time}${e.location_name ? ` | ${e.location_name}` : ''}${e.members.length ? ` | Who: ${e.members.join(', ')}` : ''}${e.category ? ` | ${e.category}` : ''}`
       }).join('\n')
 
   // Build saved places context block
@@ -356,7 +353,9 @@ You can either:
 - Set "event_type" to "reminder" when the user uses words like "remind me", "reminder", "don't forget", or describes something that is a notification rather than an activity to attend. All other creations use "event_type":"event".
 - For reminders with a specific time (e.g. "remind me at 3pm"), set start and end to the same time (start = end = that time). For all-day reminders, use midnight (T00:00:00) for both start and end.
 
-For updating: [{"action":"update_event","id":"<event id>","changes":{"title":"...","start":"...","end":"...","location":"..."},"needs_clarification":"<or null>"}]
+For updating: [{"action":"update_event","id":"<event id>","changes":{"title":"...","start":"...","end":"...","location":"<full street address>"},"needs_clarification":"<or null>"}]
+- When the user asks to update/set/change the address or location of an event, use update_event with "location" set to the full address. This will automatically re-enrich the event (weather, drive times, map) with the new location.
+- If the address is incomplete (e.g. just a business name), use place search to find the full address first.
 For deleting: [{"action":"delete_event","id":"<event id>","title":"<title for confirmation>","needs_clarification":"<or null>"}]
 For multiple events: return multiple objects in the same array.
 
