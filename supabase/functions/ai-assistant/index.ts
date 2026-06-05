@@ -368,7 +368,12 @@ Rules:
 - For times, use the current date as the base if the user says "tonight" or "today".
 - When place search results are shown above, ALWAYS present them as a numbered list and ask the user to pick one before creating an event.
 - Otherwise answer conversationally, be brief (1-3 sentences max), warm, and smart.
-- Never make up events that aren't in the list.`
+- Never make up events that aren't in the list.
+
+FUZZY EVENT MATCHING — very important:
+- Event timestamps are ISO strings with UTC offset (e.g. "2026-06-09T22:30:00+00:00"). Use the user's UTC offset (${context.utcOffset ?? '-04:00'}) to convert to local time when matching days/times the user mentions.
+- If you can't find an exact match for what the user describes, scan the EVENTS IN VIEW list for the closest match by: (1) day of week match, (2) partial title match, (3) family member match. Then say something like "I found 'Softball Practice' on Tuesday June 9 (6:30–9 PM, Liv) — is that the one you mean?" and ask for confirmation before acting.
+- Never flatly say "I don't see it." Always try fuzzy matching and suggest the closest candidate.`
 
   // Build conversation prompt
   const conversationHistory = messages

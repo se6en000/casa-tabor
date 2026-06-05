@@ -11,7 +11,7 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import { TopBarC } from './components/shared/TopBar'
 import PinGate from './components/shared/PinGate'
 import AIChatDrawer from './components/shared/AIChatDrawer'
-import { useTodayEvents } from './hooks/useCalendarEvents'
+import { useTodayEvents, useRollingEvents } from './hooks/useCalendarEvents'
 import { useFamilyMembers } from './hooks/useFamilyMembers'
 import { useHomeWeather } from './hooks/useHomeWeather'
 import { useLiveClock } from './hooks/useLiveClock'
@@ -29,7 +29,7 @@ function GlobalAIDrawer() {
   const [open, setOpen] = useState(false)
   const [anchor, setAnchor] = useState<{ right: number; top: number } | undefined>()
   const now = useLiveClock(60_000)
-  const { data: events = [] } = useTodayEvents(now)
+  const { data: events = [] } = useRollingEvents(now)
   const { data: family = [] } = useFamilyMembers()
   const { data: weather } = useHomeWeather()
 

@@ -71,10 +71,10 @@ export function useWeekEvents(selectedDate: Date) {
   })
 }
 
-/** Fetches 8 days starting from `today` (today → today+7) for the stacked rolling view. */
+/** Fetches 14 days starting from `today` for AI context and rolling views. */
 export function useRollingEvents(today: Date) {
   const start = startOfDay(today)
-  const end   = endOfDay(addDays(today, 7))
+  const end   = endOfDay(addDays(today, 14))
 
   useRealtimeEventInvalidation()
 
