@@ -66,44 +66,52 @@ function useSpeechInput({
     rec.continuous = true
     rec.interimResults = true
     rec.lang = 'en-US'
+    rec.maxAlternatives = 1
     recognitionRef.current = rec
 
     rec.onresult = (event: SpeechRecognitionEvent) => {
-      let interim = ''
-      let finalText = ''
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      // Build full accumulated display text (all results, final + interim)
+      let displayText = ''
+      let newFinalText = ''
+      for (let i = 0; i < event.results.length; i++) {
         const t = event.results[i][0].transcript
-        if (event.results[i].isFinal) finalText += t
-        else interim += t
+        displayText += t
+        // Only treat newly-finalized segments for action detection
+        if (event.results[i].isFinal && i >= event.resultIndex) {
+          newFinalText += t
+        }
       }
 
-      if (interim) onTranscript(interim)
+      // Always update display with full running text so pauses don't erase prior words
+      onTranscript(displayText)
 
-      if (finalText) {
-        if (DISMISS_PHRASES.test(finalText)) {
+      if (newFinalText) {
+        if (DISMISS_PHRASES.test(newFinalText)) {
           stop()
           onDismiss()
           return
         }
 
-        const isShortPhrase = finalText.trim().split(/\s+/).length <= 5
-        if (isShortPhrase && hasPendingAction && CONFIRM_PHRASES.test(finalText)) {
+        const isShortPhrase = displayText.trim().split(/\s+/).length <= 5
+        if (isShortPhrase && hasPendingAction && CONFIRM_PHRASES.test(newFinalText)) {
           onConfirm()
           onTranscript('')
           return
         }
-        if (isShortPhrase && hasPendingAction && CANCEL_PHRASES.test(finalText)) {
+        if (isShortPhrase && hasPendingAction && CANCEL_PHRASES.test(newFinalText)) {
           onCancel()
           onTranscript('')
           return
         }
 
         clearSilenceTimer()
-        onFinalTranscript(finalText)
+        // Pass full accumulated text so the parent always knows the whole phrase
+        onFinalTranscript(displayText)
 
+        // Wait 2s of silence before auto-sending (more forgiving for natural speech)
         silenceTimerRef.current = setTimeout(() => {
           onFinalTranscript('__SEND__')
-        }, 1200)
+        }, 2000)
       }
     }
 
@@ -273,8 +281,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   }, [input, attachedImage, loading, send])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const isMobile = 'ontouchstart' in window
-    if (!isMobile && e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
     }
