@@ -29,6 +29,56 @@ interface EventSummary {
 }
 interface FamilyMember { id: string; name: string }
 
+// ── Place search helper ───────────────────────────────────────────────────────
+
+interface PlaceResult { name: string; address: string; lat: number | null; lng: number | null; phone: string | null }
+
+async function searchPlaces(query: string, city?: string): Promise<PlaceResult[]> {
+  const apiKey = Deno.env.get('GOOGLE_MAPS_API_KEY')
+  if (!apiKey) return []
+  const textQuery = city ? `${query} in ${city}` : query
+  try {
+    const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location,places.nationalPhoneNumber',
+      },
+      body: JSON.stringify({ textQuery, maxResultCount: 5 }),
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    return (data.places ?? []).map((p: { displayName?: { text: string }; formattedAddress?: string; location?: { latitude: number; longitude: number }; nationalPhoneNumber?: string }) => ({
+      name: p.displayName?.text ?? '',
+      address: p.formattedAddress ?? '',
+      lat: p.location?.latitude ?? null,
+      lng: p.location?.longitude ?? null,
+      phone: p.nationalPhoneNumber ?? null,
+    }))
+  } catch { return [] }
+}
+
+// Detect if the latest user message is asking for a place/address lookup
+function extractPlaceQuery(userMessage: string, homeCity: string): { query: string; city: string } | null {
+  const msg = userMessage.toLowerCase()
+  const locationIntents = [
+    'address', 'where is', 'find ', 'look up', 'locate', 'location of',
+    'phone number', 'number for', 'directions to', 'how do i get to',
+  ]
+  if (!locationIntents.some(t => msg.includes(t))) return null
+
+  // Try to extract "X in Y" or "X near Y" pattern
+  const inMatch = userMessage.match(/(?:find|where is|address (?:for|of)|look up|locate)\s+(.+?)(?:\s+in\s+|\s+near\s+)(.+?)(?:\?|$)/i)
+  if (inMatch) return { query: inMatch[1].trim(), city: inMatch[2].trim() }
+
+  // No city mentioned — use home city
+  const queryMatch = userMessage.match(/(?:find|where is|address (?:for|of)|look up|locate)\s+(.+?)(?:\?|$)/i)
+  if (queryMatch) return { query: queryMatch[1].trim(), city: homeCity }
+
+  return null
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
@@ -46,6 +96,11 @@ Deno.serve(async (req) => {
   ])
   const savedContacts = savedContactsResult?.data ?? null
   const config = cfgRow?.value ?? { provider: 'gemini', model: 'gemini-1.5-flash', api_key: '' }
+
+  // Check if user is asking for a place/address lookup — run in parallel with LLM if so
+  const lastUserMessage = [...messages].reverse().find(m => m.role === 'user')?.content ?? ''
+  const placeQuery = extractPlaceQuery(lastUserMessage, context.homeCity ?? '')
+  const placeResults = placeQuery ? await searchPlaces(placeQuery.query, placeQuery.city) : []
 
   // Build system context block
   const familyNames = context.family.map(f => f.name).join(', ')
@@ -77,6 +132,11 @@ Deno.serve(async (req) => {
       }).join('\n')
     : null
 
+  const placesSearchBlock = placeResults.length > 0
+    ? `\nPLACE SEARCH RESULTS for "${placeQuery?.query}" (from Google Places — these are REAL addresses, use them):\n` +
+      placeResults.map((p, i) => `${i + 1}. ${p.name} — ${p.address}${p.phone ? ` | ${p.phone}` : ''}`).join('\n')
+    : (placeQuery ? `\nPLACE SEARCH: No results found for "${placeQuery.query}" in ${placeQuery.city}.` : '')
+
   const systemPrompt = `You are the Casa Tabor family assistant — a helpful, concise, warm AI for the ${familyNames} family. 
 Current date/time: ${context.currentDate}
 User's local UTC offset: ${context.utcOffset ?? '-04:00'} (IMPORTANT: all times you generate MUST use this offset, e.g. "2026-05-28T20:00:00${context.utcOffset ?? '-04:00'}")
@@ -89,14 +149,16 @@ ${eventsBlock}
 FAMILY MEMBERS: ${familyNames}
 ${placesBlock ? `\nSAVED PLACES (use these to resolve location nicknames and fill in addresses):\n${placesBlock}` : ''}
 ${contactsBlock ? `\nSAVED CONTACTS (use these to resolve people's names, numbers, and addresses):\n${contactsBlock}` : ''}
+${placesSearchBlock}
 
 You can either:
 1. Answer questions conversationally about the events, schedule, or family.
 2. Analyze an attached image — describe what you see and relate it to the family calendar if relevant (e.g. a school flyer, game schedule, invitation, or screenshot of a calendar).
-3. Take an ACTION by responding with ONLY a JSON array (even for a single action) — no prose, no markdown fences:
+3. Look up addresses: When the user asks to find a business or location, you have already received Google Places results above (if any). Present the numbered list naturally and ask which one they want. Once they confirm, create the event with the full address.
+4. Take an ACTION by responding with ONLY a JSON array (even for a single action) — no prose, no markdown fences:
 
 [
-  {"action":"create_event","title":"<Owner> | <Concise Description>","start":"<ISO with offset>","end":"<ISO with offset>","location":"<place or null>","members":["<name>"],"event_type":"event","needs_clarification":"<question or null>"}
+  {"action":"create_event","title":"<Owner> | <Concise Description>","start":"<ISO with offset>","end":"<ISO with offset>","location":"<full address from Places results>","members":["<name>"],"event_type":"event","needs_clarification":"<question or null>"}
 ]
 
 - Set "event_type" to "reminder" when the user uses words like "remind me", "reminder", "don't forget", or describes something that is a notification rather than an activity to attend. All other creations use "event_type":"event".
@@ -113,6 +175,7 @@ Rules:
 - For event titles use the format: <Owner First Name> | <Concise Description in Title Case>
 - Default the owner to the first family member (${context.family[0]?.name ?? 'Jake'}) if not specified.
 - For times, use the current date as the base if the user says "tonight" or "today".
+- When place search results are shown above, ALWAYS present them as a numbered list and ask the user to pick one before creating an event.
 - Otherwise answer conversationally, be brief (1-3 sentences max), warm, and smart.
 - Never make up events that aren't in the list.`
 
