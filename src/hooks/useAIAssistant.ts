@@ -63,9 +63,9 @@ export function useAIAssistant(ctx: AssistantContext) {
     }
   }, [sessionLoading, session?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const startFresh = useCallback(async () => {
+  const startFresh = useCallback(() => {
     setMessages([])
-    await startNewSession()
+    startNewSession()
   }, [startNewSession])
 
   const send = useCallback(async (text: string, image?: { dataUrl: string; mimeType: string }) => {
@@ -77,7 +77,7 @@ export function useAIAssistant(ctx: AssistantContext) {
         if (sessionRef.current) saveMessages(sessionRef.current.id, updated)
         return updated
       })
-      await endSession()
+      endSession()
       return
     }
 
@@ -87,7 +87,7 @@ export function useAIAssistant(ctx: AssistantContext) {
 
     let activeSession = sessionRef.current
     if (!activeSession) {
-      activeSession = await startNewSession()
+      activeSession = startNewSession()
     }
 
     const imagePayload = image

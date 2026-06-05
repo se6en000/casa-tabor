@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
 
 export interface AIMessage {
   id: string
@@ -19,68 +18,89 @@ export interface AIMessage {
 export interface AISession {
   id: string
   created_at: string
+  ended_at?: string
   messages: AIMessage[]
 }
 
+const STORAGE_KEY = 'casa_tabor_ai_session'
 const IDLE_TIMEOUT_MS = 12 * 60 * 60 * 1000 // 12 hours
 
+function readStorage(): AISession | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as AISession
+  } catch { return null }
+}
+
+function writeStorage(session: AISession | null) {
+  try {
+    if (session) localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
+    else localStorage.removeItem(STORAGE_KEY)
+  } catch { /* storage full */ }
+}
+
+function genId() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)
+}
+
 export function useAISession() {
-  const [session, setSession] = useState<AISession | null>(null)
+  const [session, setSessionState] = useState<AISession | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    loadSession()
+  // Write-through helper
+  const setSession = useCallback((s: AISession | null) => {
+    writeStorage(s)
+    setSessionState(s)
   }, [])
 
-  async function loadSession() {
-    setLoading(true)
-    try {
-      const { data } = await supabase
-        .from('ai_sessions')
-        .select('id, created_at, messages')
-        .is('ended_at', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single()
-
-      if (data) {
-        const age = Date.now() - new Date(data.created_at).getTime()
-        if (age > IDLE_TIMEOUT_MS) {
-          await supabase.from('ai_sessions').update({ ended_at: new Date().toISOString() }).eq('id', data.id)
-          setSession(null)
-        } else {
-          setSession({ id: data.id, created_at: data.created_at, messages: (data.messages as AIMessage[]) ?? [] })
-        }
+  useEffect(() => {
+    const stored = readStorage()
+    if (stored && !stored.ended_at) {
+      const age = Date.now() - new Date(stored.created_at).getTime()
+      if (age > IDLE_TIMEOUT_MS) {
+        writeStorage(null)
+        setSessionState(null)
       } else {
-        setSession(null)
+        setSessionState(stored)
       }
-    } catch {
-      setSession(null)
+    } else {
+      setSessionState(null)
     }
     setLoading(false)
-  }
+  }, [])
 
-  async function startNewSession(): Promise<AISession> {
-    await supabase.from('ai_sessions').update({ ended_at: new Date().toISOString() }).is('ended_at', null)
-    const { data } = await supabase.from('ai_sessions').insert({ messages: [] }).select('id, created_at, messages').single()
-    const newSession: AISession = { id: data!.id, created_at: data!.created_at, messages: [] }
+  const startNewSession = useCallback((): AISession => {
+    const newSession: AISession = {
+      id: genId(),
+      created_at: new Date().toISOString(),
+      messages: [],
+    }
     setSession(newSession)
     return newSession
-  }
+  }, [setSession])
 
-  async function endSession() {
-    if (!session) return
-    await supabase.from('ai_sessions').update({ ended_at: new Date().toISOString() }).eq('id', session.id)
-    setSession(null)
-  }
+  const endSession = useCallback(() => {
+    writeStorage(null)
+    setSessionState(null)
+  }, [])
 
-  const saveMessages = useCallback(async (sessionId: string, messages: AIMessage[]) => {
-    const toSave = messages.map(m => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-    }))
-    await supabase.from('ai_sessions').update({ messages: toSave }).eq('id', sessionId)
+  const saveMessages = useCallback((_sessionId: string, messages: AIMessage[]) => {
+    setSessionState(prev => {
+      if (!prev) return prev
+      // Strip large image data before saving to avoid localStorage quota issues
+      const toSave = messages.map(m => ({
+        ...m,
+        imageDataUrl: undefined, // don't persist images
+        toolAction: m.toolAction ? {
+          ...m.toolAction,
+          // keep tool action state so user can see history of what was done
+        } : undefined,
+      }))
+      const updated = { ...prev, messages: toSave }
+      writeStorage(updated)
+      return updated
+    })
   }, [])
 
   return { session, loading, startNewSession, endSession, saveMessages, setSession }
