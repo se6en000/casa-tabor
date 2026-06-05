@@ -51,6 +51,34 @@ function wmoCodeToIcon(code: number): string {
   return 'thunderstorm'
 }
 
+async function fetchAirQuality(lat: number, lng: number, apiKey: string): Promise<{ aqi: number; category: string; dominantPollutant: string } | null> {
+  try {
+    const res = await fetch(`https://airquality.googleapis.com/v1/currentConditions:lookup?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ location: { latitude: lat, longitude: lng } }),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    const idx = data.indexes?.find((i: { code: string }) => i.code === 'uaqi') ?? data.indexes?.[0]
+    if (!idx) return null
+    return { aqi: idx.aqi, category: idx.category, dominantPollutant: idx.dominantPollutant ?? '' }
+  } catch { return null }
+}
+
+async function fetchPollen(lat: number, lng: number, apiKey: string): Promise<{ tree: string; grass: string; weed: string } | null> {
+  try {
+    const res = await fetch(
+      `https://pollen.googleapis.com/v1/forecast:lookup?key=${apiKey}&location.longitude=${lng}&location.latitude=${lat}&days=1`
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    const types: { code: string; indexInfo?: { category?: string } }[] = data.dailyInfo?.[0]?.pollenTypeInfo ?? []
+    const get = (code: string) => types.find(t => t.code === code)?.indexInfo?.category ?? 'None'
+    return { tree: get('TREE'), grass: get('GRASS'), weed: get('WEED') }
+  } catch { return null }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
@@ -79,16 +107,21 @@ Deno.serve(async (req) => {
     })
   }
 
-  const res = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,weather_code,wind_speed_10m,uv_index&daily=precipitation_probability_max,weather_code,temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&forecast_days=3&timezone=auto`
-  )
-  if (!res.ok) {
+  const [wxRes, airQuality, pollen] = await Promise.all([
+    fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,weather_code,wind_speed_10m,uv_index&daily=precipitation_probability_max,weather_code,temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&forecast_days=3&timezone=auto`
+    ),
+    fetchAirQuality(loc.lat, loc.lng, apiKey),
+    fetchPollen(loc.lat, loc.lng, apiKey),
+  ])
+
+  if (!wxRes.ok) {
     return new Response(JSON.stringify({ error: 'Weather fetch failed' }), {
       status: 502,
       headers: { ...CORS, 'content-type': 'application/json' },
     })
   }
-  const wx = await res.json()
+  const wx = await wxRes.json()
   const c = wx.current
 
   const result = {
@@ -99,71 +132,6 @@ Deno.serve(async (req) => {
     precipProbability: c.precipitation_probability ?? null,
     condition: wmoCodeToCondition(c.weather_code),
     icon: wmoCodeToIcon(c.weather_code),
-    city,
-  }
-
-  return new Response(JSON.stringify(result), {
-    headers: { ...CORS, 'content-type': 'application/json' },
-  })
-})
-
-// Map Google Weather icon URI or condition string to a simple icon keyword
-function deriveIcon(condition: string): string {
-  const c = condition.toLowerCase()
-  if (c.includes('thunder') || c.includes('storm')) return 'thunderstorm'
-  if (c.includes('snow') || c.includes('blizzard')) return 'snow'
-  if (c.includes('rain') || c.includes('shower') || c.includes('drizzle')) return 'rain'
-  if (c.includes('fog') || c.includes('mist') || c.includes('haze')) return 'fog'
-  if (c.includes('partly cloudy') || c.includes('mostly clear')) return 'partly_cloudy'
-  if (c.includes('cloudy') || c.includes('overcast')) return 'cloudy'
-  if (c.includes('clear') || c.includes('sunny')) return 'sunny'
-  return 'partly_cloudy'
-}
-
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
-
-  const apiKey = Deno.env.get('GOOGLE_MAPS_API_KEY') ?? ''
-  const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-
-  // Load home city from settings
-  const { data: settingsRow } = await sb
-    .from('settings')
-    .select('value')
-    .eq('key', 'home_config')
-    .single()
-
-  const city: string = settingsRow?.value?.city || settingsRow?.value?.address || ''
-  if (!city) {
-    return new Response(JSON.stringify({ error: 'No home city configured' }), {
-      status: 400,
-      headers: { ...CORS, 'content-type': 'application/json' },
-    })
-  }
-
-  const loc = await geocodeCity(city, apiKey)
-  if (!loc) {
-    return new Response(JSON.stringify({ error: `Could not geocode: ${city}` }), {
-      status: 400,
-      headers: { ...CORS, 'content-type': 'application/json' },
-    })
-  }
-
-  // Fetch all three in parallel
-  const [weatherData, airQuality, pollen] = await Promise.all([
-    fetchCurrentWeather(loc.lat, loc.lng, apiKey),
-    fetchAirQuality(loc.lat, loc.lng, apiKey),
-    fetchPollen(loc.lat, loc.lng, apiKey),
-  ])
-
-  const condition = weatherData?.condition ?? 'Unknown'
-  const result = {
-    temp: weatherData?.temp ?? 0,
-    condition,
-    icon: deriveIcon(condition),
-    humidity: weatherData?.humidity ?? undefined,
-    feelsLike: weatherData?.feelsLike ?? undefined,
-    uvIndex: weatherData?.uvIndex ?? undefined,
     airQuality: airQuality ?? undefined,
     pollen: pollen ?? undefined,
     city,

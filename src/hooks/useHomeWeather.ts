@@ -8,6 +8,7 @@ interface WeatherResult {
   humidity?: number
   feelsLike?: number
   uvIndex?: number
+  precipProbability?: number
   airQuality?: { aqi: number; category: string; dominantPollutant: string }
   pollen?: { tree: string; grass: string; weed: string }
   city: string

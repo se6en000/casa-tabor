@@ -92,13 +92,45 @@ function wmoCodeToCondition(code: number): string {
   return 'Thunderstorm with hail'
 }
 
-async function getWeatherForLocation(lat: number, lng: number, _apiKey: string) {
+async function fetchAirQuality(lat: number, lng: number, apiKey: string): Promise<{ aqi: number; category: string; dominantPollutant: string } | null> {
+  try {
+    const res = await fetch(`https://airquality.googleapis.com/v1/currentConditions:lookup?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ location: { latitude: lat, longitude: lng } }),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    const idx = data.indexes?.find((i: { code: string }) => i.code === 'uaqi') ?? data.indexes?.[0]
+    if (!idx) return null
+    return { aqi: idx.aqi, category: idx.category, dominantPollutant: idx.dominantPollutant ?? '' }
+  } catch { return null }
+}
+
+async function fetchPollen(lat: number, lng: number, apiKey: string): Promise<{ tree: string; grass: string; weed: string } | null> {
   try {
     const res = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,weather_code,wind_speed_10m,uv_index&daily=precipitation_probability_max,weather_code&temperature_unit=fahrenheit&forecast_days=1&timezone=auto`
+      `https://pollen.googleapis.com/v1/forecast:lookup?key=${apiKey}&location.longitude=${lng}&location.latitude=${lat}&days=1`
     )
     if (!res.ok) return null
     const data = await res.json()
+    const types: { code: string; indexInfo?: { category?: string } }[] = data.dailyInfo?.[0]?.pollenTypeInfo ?? []
+    const get = (code: string) => types.find(t => t.code === code)?.indexInfo?.category ?? 'None'
+    return { tree: get('TREE'), grass: get('GRASS'), weed: get('WEED') }
+  } catch { return null }
+}
+
+async function getWeatherForLocation(lat: number, lng: number, apiKey: string) {
+  try {
+    const [wxRes, airQuality, pollen] = await Promise.all([
+      fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,weather_code,wind_speed_10m,uv_index&daily=precipitation_probability_max,weather_code&temperature_unit=fahrenheit&forecast_days=1&timezone=auto`
+      ),
+      fetchAirQuality(lat, lng, apiKey),
+      fetchPollen(lat, lng, apiKey),
+    ])
+    if (!wxRes.ok) return null
+    const data = await wxRes.json()
     const c = data.current
     return {
       temp: Math.round(c.temperature_2m),
@@ -107,7 +139,8 @@ async function getWeatherForLocation(lat: number, lng: number, _apiKey: string) 
       humidity: c.relative_humidity_2m ?? null,
       uvIndex: c.uv_index != null ? Math.round(c.uv_index) : null,
       precipProbability: c.precipitation_probability ?? data.daily?.precipitation_probability_max?.[0] ?? null,
-      airQuality: null,
+      airQuality,
+      pollen,
     }
   } catch { return null }
 }
@@ -177,8 +210,9 @@ function extractContextQueries(msg: string, homeCity: string): {
     'is it raining', 'chance of rain', 'temperature', 'how hot', 'how cold', 'forecast', 'air quality', 'pollen',
     'sunny', 'cloudy', 'storm', 'hurricane', 'humidity', 'feels like', 'uv index']
   if (weatherIntents.some(t => lower.includes(t))) {
-    const cityMatch = msg.match(/weather\s+(?:in|for|at)\s+([A-Za-z\s,]+?)(?:\?|$|\.)/i)
+    const cityMatch = msg.match(/weather\s+(?:like\s+)?(?:in|for|at)\s+([A-Za-z\s,]+?)(?:\s+right\s+now|\s+today|\s+tomorrow|\?|$|\.)/i)
       ?? msg.match(/(?:in|for|at)\s+([A-Za-z\s,]+?)\s+(?:weather|forecast)/i)
+      ?? msg.match(/weather\s+(?:in|for|at)\s+([A-Za-z\s,]+?)(?:\?|$|\.)/i)
     result.weatherQuery = cityMatch?.[1]?.trim() ?? homeCity
   }
 
@@ -281,7 +315,9 @@ Deno.serve(async (req) => {
       (weatherData.feelsLike != null ? `, feels like ${weatherData.feelsLike}°F` : '') +
       (weatherData.humidity != null ? `, humidity ${weatherData.humidity}%` : '') +
       (weatherData.precipProbability != null ? `, ${weatherData.precipProbability}% chance of rain` : '') +
-      (weatherData.uvIndex != null ? `, UV index ${weatherData.uvIndex}` : '')
+      (weatherData.uvIndex != null ? `, UV index ${weatherData.uvIndex}` : '') +
+      (weatherData.airQuality != null ? `. Air Quality: AQI ${weatherData.airQuality.aqi} (${weatherData.airQuality.category})` : '') +
+      (weatherData.pollen != null ? `. Pollen — Tree: ${weatherData.pollen.tree}, Grass: ${weatherData.pollen.grass}, Weed: ${weatherData.pollen.weed}` : '')
     : ''
 
   const driveTimeBlock = driveTimeData
