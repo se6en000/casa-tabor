@@ -246,13 +246,22 @@ Deno.serve(async (req) => {
 
   const { messages, context, image }: { messages: Message[]; context: Context; image?: ImagePayload } = await req.json()
 
-  // Load LLM config + saved places + contacts in parallel
-  const [{ data: cfgRow }, { data: savedPlaces }, savedContactsResult] = await Promise.all([
+  // Load LLM config + saved places + contacts + all events for the year in parallel
+  const yearStart = new Date(); yearStart.setMonth(0, 1); yearStart.setHours(0,0,0,0)
+  const yearEnd = new Date(); yearEnd.setFullYear(yearEnd.getFullYear() + 1, 11, 31); yearEnd.setHours(23,59,59,999)
+
+  const [{ data: cfgRow }, { data: savedPlaces }, savedContactsResult, { data: allEvents }] = await Promise.all([
     sb.from('settings').select('value').eq('key', 'llm_config').single(),
     sb.from('saved_places').select('name, aliases, address, city, state, zip, category, notes, phone').order('name'),
     sb.from('saved_contacts').select('name, aliases, phone, email, address, relationship, notes').order('name')
       .then(r => r)
       .catch(() => ({ data: null as null, error: null })),
+    sb.from('events')
+      .select('id, title, start_time, end_time, location_name, event_members(family_members(name)), enrichments(category)')
+      .eq('status', 'confirmed')
+      .gte('start_time', yearStart.toISOString())
+      .lte('start_time', yearEnd.toISOString())
+      .order('start_time'),
   ])
   const savedContacts = savedContactsResult?.data ?? null
   const config = cfgRow?.value ?? { provider: 'gemini', model: 'gemini-1.5-flash', api_key: '' }
@@ -277,10 +286,14 @@ Deno.serve(async (req) => {
 
   // Build system context block
   const familyNames = context.family.map(f => f.name).join(', ')
-  const eventsBlock = context.events.length === 0
+
+  type DbEvent = { id: string; title: string; start_time: string; end_time: string; location_name: string | null; event_members: { family_members: { name: string } | null }[]; enrichments: { category: string | null }[] }
+  const eventsBlock = !allEvents || allEvents.length === 0
     ? 'No events.'
-    : context.events.map(e => {
-        return `- ID:${e.id} | "${e.title}" | ${e.start_time} – ${e.end_time}${e.location_name ? ` | ${e.location_name}` : ''}${e.members.length ? ` | Who: ${e.members.join(', ')}` : ''}${e.category ? ` | ${e.category}` : ''}`
+    : (allEvents as DbEvent[]).map(e => {
+        const members = e.event_members?.map(m => m.family_members?.name).filter(Boolean).join(', ') ?? ''
+        const category = e.enrichments?.[0]?.category ?? ''
+        return `- ID:${e.id} | "${e.title}" | ${e.start_time} – ${e.end_time}${e.location_name ? ` | ${e.location_name}` : ''}${members ? ` | Who: ${members}` : ''}${category ? ` | ${category}` : ''}`
       }).join('\n')
 
   // Build saved places context block
