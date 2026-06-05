@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
     { data: cfgRow },
     { data: savedPlaces },
     savedContactsResult,
-    { data: allEvents },
+    eventsResult,
     { data: groceryLists },
     { data: groceryItems },
   ] = await Promise.all([
@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
     sb.from('saved_places').select('name, aliases, address, city, state, zip, category, notes, phone').order('name'),
     sb.from('saved_contacts').select('name, aliases, phone, email, address, relationship, notes').order('name').then(r => r).catch(() => ({ data: null, error: null })),
     sb.from('events')
-      .select('id, title, start_time, end_time, location_name, all_day, event_type, notes, event_members(family_members(id, name)), enrichments(category, drive_time_minutes, drive_time_text, weather_temp, weather_condition)')
+      .select('id, title, start_time, end_time, location_name, address, all_day, event_type, description, event_members(family_members(id, name))')
       .eq('status', 'confirmed')
       .gte('start_time', yearStart.toISOString())
       .lte('start_time', yearEnd.toISOString())
@@ -40,6 +40,15 @@ Deno.serve(async (req) => {
     sb.from('grocery_lists').select('id, name').order('created_at').limit(5),
     sb.from('grocery_items').select('id, list_id, name, quantity, unit, category, checked, notes').eq('checked', false).order('category').order('name'),
   ])
+
+  if (eventsResult.error) {
+    console.error('[ai-assistant] events query error:', JSON.stringify(eventsResult.error))
+    return new Response(JSON.stringify({ type: 'debug', error: eventsResult.error, yearStart: yearStart.toISOString(), yearEnd: yearEnd.toISOString() }), {
+      status: 200, headers: { ...CORS, 'content-type': 'application/json' }
+    })
+  }
+  const allEvents = eventsResult.data
+  console.log('[ai-assistant] events loaded:', allEvents?.length ?? 0)
 
   const savedContacts = (savedContactsResult as { data: unknown }).data
 
@@ -58,18 +67,16 @@ Deno.serve(async (req) => {
 
   type DbEvent = {
     id: string; title: string; start_time: string; end_time: string;
-    location_name: string | null; all_day: boolean; event_type: string; notes: string | null;
+    location_name: string | null; address: string | null; all_day: boolean; event_type: string; description: string | null;
     event_members: { family_members: { id: string; name: string } | null }[];
-    enrichments: { category: string | null; drive_time_minutes: number | null; drive_time_text: string | null; weather_temp: number | null; weather_condition: string | null }[];
   }
 
   const eventsText = !allEvents || allEvents.length === 0
     ? 'No upcoming events.'
     : (allEvents as DbEvent[]).map(e => {
         const members = e.event_members?.map(m => m.family_members?.name).filter(Boolean).join(', ') ?? ''
-        const category = e.enrichments?.[0]?.category ?? ''
-        const driveTime = e.enrichments?.[0]?.drive_time_text ?? ''
-        return `- ID:${e.id} | "${e.title}" | ${e.start_time} – ${e.end_time}${e.all_day ? ' (all-day)' : ''}${e.location_name ? ` | 📍${e.location_name}` : ''}${members ? ` | 👤${members}` : ''}${category ? ` | ${category}` : ''}${driveTime ? ` | 🚗${driveTime}` : ''}`
+        const loc = e.address ?? e.location_name ?? ''
+        return `- ID:${e.id} | "${e.title}" | ${e.start_time} – ${e.end_time}${e.all_day ? ' (all-day)' : ''}${loc ? ` | 📍${loc}` : ''}${members ? ` | 👤${members}` : ''}`
       }).join('\n')
 
   const placesText = savedPlaces && savedPlaces.length > 0

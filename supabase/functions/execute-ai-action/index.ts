@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
         end_time: args.end,
         location_name: args.location ?? null,
         all_day: args.all_day ?? false,
-        notes: args.notes ?? null,
+        description: args.notes ?? null,
         status: 'confirmed',
         is_enriched: false,
         event_type: args.event_type ?? 'event',
@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
       if (args.end !== undefined) updates.end_time = args.end
       const locationChanged = args.location !== undefined
       if (locationChanged) { updates.location_name = args.location; updates.is_enriched = false }
-      if (args.notes !== undefined) updates.notes = args.notes
+      if (args.notes !== undefined) updates.description = args.notes
       if (args.all_day !== undefined) updates.all_day = args.all_day
 
       if (Object.keys(updates).length > 0) {
