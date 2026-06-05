@@ -10,7 +10,8 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const sb = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))
 
-  // Find all un-enriched events from the last 90 days + next 90 days
+  // Find all un-enriched events from the last 7 days + next 90 days
+  // Skip recurring instances (recurrence_master_id IS NOT NULL) — they inherit enrichment from the master
   const now = new Date()
   const timeMin = new Date(now.getTime() - 7 * 86400000).toISOString()
   const timeMax = new Date(now.getTime() + 90 * 86400000).toISOString()
@@ -20,6 +21,7 @@ Deno.serve(async (req) => {
     .select('id, title')
     .eq('is_enriched', false)
     .eq('status', 'confirmed')
+    .is('recurrence_master_id', null)
     .gte('start_time', timeMin)
     .lte('start_time', timeMax)
     .order('start_time')

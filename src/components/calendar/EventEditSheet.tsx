@@ -501,7 +501,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
               google_calendar_id: (masterEvent as any).google_calendar_id ?? null,
               source_member_id: (masterEvent as any).source_member_id ?? event.source_member_id ?? null,
               status: 'confirmed' as const,
-              is_enriched: false,
+              is_enriched: true, // instances inherit from master — skip per-instance AI enrichment
               rrule: null,
               recurrence_master_id: newMaster.id,
             }))
@@ -562,7 +562,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             google_calendar_id: event.google_calendar_id ?? null,
             source_member_id: event.source_member_id ?? null,
             status: 'confirmed' as const,
-            is_enriched: false,
+            is_enriched: true, // instances inherit from master — skip per-instance AI enrichment
             rrule: null,
             recurrence_master_id: masterIdToUpdate,
           }))
