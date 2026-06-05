@@ -41,9 +41,10 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Fire enrichment and Google Calendar sync (non-blocking)
+      // Fire enrichment async (slow — Gemini AI, don't block)
       sb.functions.invoke('enrich-event', { body: { event_id: event.id } }).catch(() => {})
-      sb.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {})
+      // Await Google sync — fire-and-forget can be killed before completion in Deno Deploy
+      await sb.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {})
 
       return new Response(JSON.stringify({ success: true, event_id: event.id }), {
         headers: { ...CORS, 'content-type': 'application/json' },
@@ -90,11 +91,12 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Re-enrich if location changed
+      // Re-enrich if location changed (slow — don't block)
       if (locationChanged) {
         sb.functions.invoke('enrich-event', { body: { event_id: args.id } }).catch(() => {})
       }
-      sb.functions.invoke('push-to-google', { body: { event_id: args.id } }).catch(() => {})
+      // Await Google sync to ensure it completes before Deno terminates the function
+      await sb.functions.invoke('push-to-google', { body: { event_id: args.id } }).catch(() => {})
 
       return new Response(JSON.stringify({ success: true, event_id: args.id }), {
         headers: { ...CORS, 'content-type': 'application/json' },
