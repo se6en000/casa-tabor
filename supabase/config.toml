@@ -8,3 +8,15 @@ verify_jwt = false
 
 [functions.sync-calendars]
 verify_jwt = true
+
+[functions.ai-assistant]
+verify_jwt = false
+
+[functions.place-search]
+verify_jwt = false
+
+[functions.home-weather]
+verify_jwt = false
+
+[functions.toggle-gmail-scan]
+verify_jwt = false
