@@ -21,12 +21,14 @@ function useSpeechInput({
   onDismiss,
   onConfirm,
   onCancel,
+  hasPendingAction,
 }: {
   onTranscript: (text: string) => void
   onFinalTranscript: (text: string) => void
   onDismiss: () => void
   onConfirm: () => void
   onCancel: () => void
+  hasPendingAction: boolean
 }) {
   const recognitionRef = useRef<{ stop: () => void; start: () => void } | null>(null)
   const listeningRef = useRef(false)
@@ -85,12 +87,12 @@ function useSpeechInput({
         }
 
         const isShortPhrase = finalText.trim().split(/\s+/).length <= 5
-        if (isShortPhrase && CONFIRM_PHRASES.test(finalText)) {
+        if (isShortPhrase && hasPendingAction && CONFIRM_PHRASES.test(finalText)) {
           onConfirm()
           onTranscript('')
           return
         }
-        if (isShortPhrase && CANCEL_PHRASES.test(finalText)) {
+        if (isShortPhrase && hasPendingAction && CANCEL_PHRASES.test(finalText)) {
           onCancel()
           onTranscript('')
           return
@@ -161,6 +163,9 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   const pendingConfirmRef = useRef<(() => void) | null>(null)
   const pendingCancelRef  = useRef<(() => void) | null>(null)
 
+  // True when the latest assistant message has a pending tool action awaiting confirmation
+  const hasPendingToolAction = messages.some(m => m.toolAction?.status === 'pending')
+
   const sendCurrentInput = useCallback((text: string) => {
     const trimmed = text.trim()
     if (!trimmed || loading) return
@@ -190,6 +195,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     },
     onConfirm: () => { pendingConfirmRef.current?.() },
     onCancel:  () => { pendingCancelRef.current?.() },
+    hasPendingAction: hasPendingToolAction,
   })
 
   useEffect(() => {

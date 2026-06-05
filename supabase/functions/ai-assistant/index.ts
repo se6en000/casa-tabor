@@ -371,6 +371,12 @@ INSTRUCTIONS:
     const candidate = data.candidates?.[0]
     if (!candidate) return { type: 'error', code: 'llm_error', message: 'No response from AI' }
 
+    // Check for safety/finish reason blocks
+    const finishReason = candidate.finishReason
+    if (finishReason && finishReason !== 'STOP' && finishReason !== 'TOOL_USE' && !candidate.content) {
+      return { type: 'text', text: `I had trouble processing that (${finishReason}). Could you rephrase?` }
+    }
+
     const parts = candidate.content?.parts ?? []
     const funcCallPart = parts.find((p: { functionCall?: { name: string; args: Record<string, unknown> } }) => p.functionCall)
     const textPart = parts.find((p: { text?: string }) => p.text)
@@ -401,7 +407,7 @@ INSTRUCTIONS:
         if (!res2.ok) return { type: 'error', code: 'llm_error', message: 'Second LLM call failed' }
         const data2 = await res2.json()
         const finalText = data2.candidates?.[0]?.content?.parts?.find((p: { text?: string }) => p.text)?.text ?? ''
-        return { type: 'text', text: finalText }
+        return { type: 'text', text: finalText || 'Done!' }
       }
 
       // Write tools: return to frontend for confirmation
@@ -413,7 +419,9 @@ INSTRUCTIONS:
       }
     }
 
-    return { type: 'text', text: textPart ? (textPart as { text: string }).text : 'Sorry, I did not understand that.' }
+    // Neither text nor function call — Gemini returned empty parts
+    console.error('[ai-assistant] Empty Gemini response. finishReason:', finishReason, 'parts:', JSON.stringify(parts))
+    return { type: 'text', text: "I'm not sure I caught that. Could you say it again?" }
   }
 
   function buildDisplayText(name: string, args: Record<string, unknown>): string {
