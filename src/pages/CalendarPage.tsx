@@ -121,7 +121,7 @@ export default function CalendarPage() {
 
       {/* View content — animated slide + swipe */}
       <div
-        className="flex-1 overflow-hidden relative"
+        className="flex-1 overflow-hidden relative touch-pan-y"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >

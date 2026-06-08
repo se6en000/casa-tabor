@@ -202,36 +202,43 @@ html.rt-late-night {
   --color-casa-navy:    #C8C0B8;
 }
 
-/* ── Kiosk Mode Overrides (Pi Chromium) ──────────────────────── */
-/* Prevents pull-to-refresh, overscroll bounce, text selection   */
+/* ── Kiosk / Touch Mode (Pi Chromium + any touch device) ─────── */
+/* Applied unconditionally — this is a touch-first app           */
 
-@media (display-mode: standalone), (display-mode: fullscreen) {
-  html {
-    overscroll-behavior: none;
-    -webkit-user-select: none;
-    user-select: none;
-    /* Allow both axes — individual components control their own touch-action */
-    touch-action: manipulation;
-  }
-
-  /* Hide scrollbars in kiosk */
-  ::-webkit-scrollbar {
-    display: none;
-  }
+html {
+  /* Prevent pull-to-refresh and overscroll bounce on touch */
+  overscroll-behavior: none;
+  /* Don't block scroll/swipe — let individual elements define touch-action */
+  touch-action: auto;
 }
 
-/* ── Global touch UX (all display modes) ─────────────────────── */
-
-/* Remove 300ms tap delay + blue flash on all interactive elements */
-button, a, [role="button"], label, select {
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
+/* Disable text selection everywhere except inputs */
+body {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Inputs / textareas always need text selection */
 input, textarea, [contenteditable] {
   -webkit-user-select: text !important;
   user-select: text !important;
+}
+
+/* Remove tap highlight flash on interactive elements */
+button, a, [role="button"], label, select, input, textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Buttons/links: manipulation removes 300ms tap delay without breaking scroll */
+button, a, [role="button"], label, select {
+  touch-action: manipulation;
+}
+
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  /* Hide scrollbars in kiosk */
+  ::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* ── Scrollbar Styling (non-kiosk) ───────────────────────────── */
