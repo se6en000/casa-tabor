@@ -71,8 +71,9 @@ def _is_push_enabled() -> bool:
         rows = res.json()
         if rows and isinstance(rows, list):
             _push_enabled = bool(rows[0].get("value", {}).get("sensor_push_enabled", False))
-    except Exception:
-        pass  # keep cached value on error
+        log.info("Push config refreshed — sensor_push_enabled=%s", _push_enabled)
+    except Exception as exc:
+        log.warning("Push config check failed: %s", exc)
     _push_checked_at = now
     return _push_enabled
 
@@ -84,7 +85,7 @@ def _push_to_supabase(cct, lux, zone, brightness, rgb):
     if not _is_push_enabled():
         return
     try:
-        _requests.post(
+        res = _requests.post(
             f"{SUPABASE_URL}/rest/v1/sensor_readings",
             headers={
                 "apikey": SUPABASE_SERVICE_KEY,
@@ -99,9 +100,14 @@ def _push_to_supabase(cct, lux, zone, brightness, rgb):
                 "zone": zone,
                 "brightness": brightness,
                 "rgb": rgb,
+                "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             },
             timeout=3,
         )
+        if res.status_code >= 400:
+            log.warning("Supabase push HTTP %s: %s", res.status_code, res.text[:200])
+        else:
+            log.info("Pushed to Supabase: cct=%d lux=%.1f zone=%s", cct, lux, zone)
     except Exception as exc:
         log.warning("Supabase push failed: %s", exc)
 
