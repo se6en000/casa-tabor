@@ -39,22 +39,10 @@ function useIsMobile() {
 
 export default function EventDetailPanel({ event, onClose }: EventDetailPanelProps) {
   const [showEdit, setShowEdit] = useState(false)
-  const [showDebug, setShowDebug] = useState(true)
   const isMobile = useIsMobile()
-
-  useEffect(() => {
-    const t = setTimeout(() => setShowDebug(false), 6000)
-    return () => clearTimeout(t)
-  }, [])
 
   return (
     <>
-      {/* DEBUG — remove after verifying on Pi */}
-      {showDebug && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[999] bg-black/80 text-white text-sm px-4 py-2 rounded-full pointer-events-none">
-          isMobile={String(isMobile)} · touch={String(navigator.maxTouchPoints > 0)} · w={window.innerWidth}
-        </div>
-      )}
       <AnimatePresence>
         {event && (
           <>
@@ -72,6 +60,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
             {isMobile ? (
               <motion.div
                 key="panel"
+                data-native-drag
                 initial={{ y: '100%' }}
                 animate={{ y: 0 }}
                 exit={{ y: '100%' }}
@@ -103,6 +92,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
             ) : (
               <motion.div
                 key="panel"
+                data-native-drag
                 initial={{ x: '100%' }}
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}

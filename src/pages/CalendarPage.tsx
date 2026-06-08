@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useCalendarStore } from '../stores/calendarStore'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays, subDays, addMonths, subMonths } from 'date-fns'
@@ -67,6 +67,22 @@ export default function CalendarPage() {
     else goPrev()             // swipe right → prev
   }
 
+  // Mouse/pointer-drag swipe (kiosk touchscreens that deliver touch as mouse).
+  // The global pointer-gesture fallback dispatches `casa:swipe` on the
+  // [data-swipe-nav] container; translate it into calendar navigation.
+  const swipeRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = swipeRef.current
+    if (!el) return
+    const handler = (e: Event) => {
+      const dir = (e as CustomEvent<{ dir: 'next' | 'prev' }>).detail?.dir
+      if (dir === 'next') goNext()
+      else if (dir === 'prev') goPrev()
+    }
+    el.addEventListener('casa:swipe', handler)
+    return () => el.removeEventListener('casa:swipe', handler)
+  }, [goNext, goPrev])
+
   // Slide animation variants
   const variants = {
     enter: (d: number) => ({ x: d === 0 ? 0 : d > 0 ? '100%' : '-100%', opacity: d === 0 ? 0 : 1 }),
@@ -121,6 +137,8 @@ export default function CalendarPage() {
 
       {/* View content — animated slide + swipe */}
       <div
+        ref={swipeRef}
+        data-swipe-nav
         className="flex-1 overflow-hidden relative touch-pan-y"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
