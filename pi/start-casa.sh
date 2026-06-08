@@ -40,6 +40,7 @@ sleep 3
 # Launch Chromium in kiosk mode with full touch support
 chromium-browser \
   --kiosk \
+  --force-device-scale-factor=2 \
   --touch-events=enabled \
   --enable-touch-drag-drop \
   --disable-pinch \
