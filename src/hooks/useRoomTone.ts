@@ -126,8 +126,8 @@ function sensorDataToZone(cct: number, lux: number): RoomToneZone {
   return 'day'
 }
 
-const SENSOR_BRIDGE_URL = 'http://127.0.0.1:8765/room-tone'
-const SENSOR_POLL_MS    = 3_000
+const SENSOR_POLL_MS    = 5_000
+const SENSOR_ROW_ID     = '00000000-0000-0000-0000-000000000001'
 
 export function useRoomTone() {
   const { data } = useQuery<DisplayConfig | null>({
@@ -144,7 +144,7 @@ export function useRoomTone() {
     [data]
   )
 
-  // Poll the Pi sensor bridge; null means unreachable → fall back to time-of-day
+  // Read sensor data from Supabase (Pi bridge pushes here every ~3s)
   const { data: sensorData } = useQuery<{
     cct: number; lux: number; zone: string
     brightness: number | null; rgb: [number, number, number] | null
@@ -152,13 +152,18 @@ export function useRoomTone() {
     queryKey: ['sensor', 'room-tone'],
     queryFn: async () => {
       try {
-        const res = await fetch(SENSOR_BRIDGE_URL, { signal: AbortSignal.timeout(2000) })
-        if (!res.ok) return null
-        const json = await res.json()
-        if (json.error || json.cct == null) return null
-        return json
+        const { data: row, error } = await supabase
+          .from('sensor_readings')
+          .select('cct, lux, zone, brightness, rgb, updated_at')
+          .eq('id', SENSOR_ROW_ID)
+          .single()
+        if (error || !row?.cct) return null
+        // Stale if not updated in last 30s
+        const age = Date.now() - new Date(row.updated_at).getTime()
+        if (age > 30_000) return null
+        return row as { cct: number; lux: number; zone: string; brightness: number | null; rgb: [number, number, number] | null }
       } catch {
-        return null // bridge not running — silent fallback
+        return null
       }
     },
     refetchInterval: SENSOR_POLL_MS,

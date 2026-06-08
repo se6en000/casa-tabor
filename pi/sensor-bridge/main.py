@@ -28,6 +28,12 @@ import subprocess
 from contextlib import asynccontextmanager
 
 try:
+    import requests as _requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
+
+try:
     import smbus2
     I2C_AVAILABLE = True
 except ImportError:
@@ -40,6 +46,36 @@ import uvicorn
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("sensor-bridge")
+
+SUPABASE_URL = "https://sjiejymuuuqzqukyeagk.supabase.co"
+SUPABASE_SERVICE_KEY = "sb_secret_HpkjyskE55sDH_hLNKEK1g_BVrA7f2U"
+SUPABASE_SENSOR_ID  = "00000000-0000-0000-0000-000000000001"  # fixed row for latest reading
+
+def _push_to_supabase(cct, lux, zone, brightness, rgb):
+    """Upsert the latest sensor reading to Supabase so any device can see it."""
+    if not REQUESTS_AVAILABLE:
+        return
+    try:
+        _requests.post(
+            f"{SUPABASE_URL}/rest/v1/sensor_readings",
+            headers={
+                "apikey": SUPABASE_SERVICE_KEY,
+                "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+                "Content-Type": "application/json",
+                "Prefer": "resolution=merge-duplicates",
+            },
+            json={
+                "id": SUPABASE_SENSOR_ID,
+                "cct": cct,
+                "lux": lux,
+                "zone": zone,
+                "brightness": brightness,
+                "rgb": rgb,
+            },
+            timeout=3,
+        )
+    except Exception as exc:
+        log.warning("Supabase push failed: %s", exc)
 
 # ── AS7343 I²C config ────────────────────────────────────────────────────────
 I2C_BUS      = 1
@@ -438,6 +474,15 @@ def _poll_loop(reader):
             # Layer 1: update DDC targets for brightness and color temperature
             set_brightness_target(data["zone"])
             set_color_target(data["cct"])
+            # Push to Supabase so any device (not just localhost) can read it
+            with _ddc_lock:
+                brightness_now = _current_brightness
+                rgb_now = list(_current_rgb) if _current_rgb else None
+            threading.Thread(
+                target=_push_to_supabase,
+                args=(data["cct"], data["lux"], data["zone"], brightness_now, rgb_now),
+                daemon=True,
+            ).start()
         except Exception as exc:
             log.error("Sensor read error: %s", exc)
             with _lock:
