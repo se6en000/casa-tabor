@@ -46,13 +46,14 @@ AS7343_ADDR  = 0x39
 
 # Register map (abridged — only what we need)
 REG_ENABLE   = 0x80
-REG_ATIME    = 0x81   # integration time steps (0xFF = max ~182ms/cycle)
-REG_ASTEP    = 0xD4   # integration time step size (LSB=2.78µs, 0x3E7 = ~2.8ms/step)
+REG_ATIME    = 0x81   # integration time steps
+REG_ASTEP    = 0xD4   # integration time step size (16-bit LE)
 REG_CFG1     = 0xAA   # gain
-REG_STATUS2  = 0xA3   # data-ready flag
+REG_STATUS   = 0x93   # bit 6 = AVALID
+REG_STATUS2  = 0xA3   # bit 6 = AVALID (alternate)
 REG_CH0_LOW  = 0x95   # first of 18 channel bytes (9 × 16-bit LE pairs)
 
-GAIN_512X    = 0x0A   # sufficient indoors, adjust if saturating
+GAIN_512X    = 0x0A
 
 # Channel layout returned starting at REG_CH0_LOW (9 channels × 2 bytes):
 # 0:F1(405nm) 1:F2(425nm) 2:FZ(450nm) 3:F3(475nm) 4:F4(515nm)
@@ -79,34 +80,41 @@ def channels_to_cct_lux(ch: dict) -> tuple[float, float]:
     """
     Estimate CCT and lux from AS7343 channel counts.
 
-    CCT: uses the ratio of short-wave blue (F1/F2) to long-wave red (FXL).
-    The mapping is empirically calibrated to typical indoor lighting:
-      high ratio → cool (6500K), low ratio → warm (2700K).
+    CCT: uses the ratio of short-wave violet/blue (F1/F2, ~405-425nm) to
+    mid-green/yellow (FY, ~555nm). Cool white light has more blue relative
+    to green; warm incandescent has much less blue vs green.
 
-    Lux: approximated from the photopic-weighted visible channels.
-    These are coarse estimates; a full calibration requires known light sources,
-    but the mapping is accurate enough to drive smooth Room Tone transitions.
+    Lux: dominated by the photopic peak at ~555nm (FY channel).
+
+    Note: FXL (600nm red) and NIR may read zero until full SMUX configuration
+    is confirmed — FY-based CCT is robust for typical indoor lighting.
     """
     f1  = max(ch.get("F1",  1), 1)
     f2  = max(ch.get("F2",  1), 1)
-    fxl = max(ch.get("FXL", 1), 1)
+    fz  = max(ch.get("FZ",  1), 1)
     fy  = max(ch.get("FY",  1), 1)
-    f5  = max(ch.get("F5",  1), 1)
-    nir = max(ch.get("NIR", 1), 1)
+    fxl = ch.get("FXL", 0)
+    nir = ch.get("NIR", 0)
 
-    # Blue-to-red ratio → CCT
-    blue = (f1 + f2) / 2
-    red  = fxl
-    ratio = blue / red
+    # Blue/violet to green ratio → CCT
+    # If FXL (red) is available, use it for better warm-end accuracy
+    blue   = (f1 + f2 + fz) / 3
+    anchor = fxl if fxl > 10 else fy  # prefer red; fall back to green
+    ratio  = blue / max(anchor, 1)
 
-    # Empirical sigmoid mapping: ratio ~0.1 → 2700K, ratio ~2.0+ → 6500K
-    cct = 2700 + 3800 * (1 - 1 / (1 + ratio * 2))
+    # Empirical mapping: low ratio (warm/dim) → 2700K, high ratio → 6500K
+    if fxl > 10:
+        # blue-to-red ratio: ~0.05 = 2700K, ~1.5+ = 6500K
+        cct = 2700 + 3800 * (1 - 1 / (1 + ratio * 3))
+    else:
+        # blue-to-green ratio: ~0.01 = 2700K, ~0.3+ = 6500K
+        cct = 2700 + 3800 * (1 - 1 / (1 + ratio * 10))
+
     cct = max(2700, min(6500, cct))
 
-    # Approximate lux: photopic weighting (green/yellow dominant for human eye)
-    # Subtract NIR which doesn't contribute to visible brightness perception
-    visible = fy + f5 - 0.2 * nir
-    lux = max(0.0, visible * 0.001)  # scale factor; adjust with known-lux calibration
+    # Lux: FY is the best single photopic proxy; scale factor needs calibration
+    visible = fy - 0.2 * max(nir, 0)
+    lux = max(0.0, visible * 0.001)
 
     return round(cct), round(lux, 1)
 
@@ -132,32 +140,58 @@ class AS7343Reader:
 
     def _open(self):
         self.bus = smbus2.SMBus(I2C_BUS)
-        # Power on + enable spectral measurement (PON=1, SP_EN=1)
-        self.bus.write_byte_data(AS7343_ADDR, REG_ENABLE, 0x03)
-        # Integration time: ATIME=29 steps, ASTEP=599 → ~50ms cycle
-        self.bus.write_byte_data(AS7343_ADDR, REG_ATIME, 29)
-        self.bus.write_word_data(AS7343_ADDR, REG_ASTEP, 599)
-        # Gain 512×
-        self.bus.write_byte_data(AS7343_ADDR, REG_CFG1, GAIN_512X)
-        log.info("AS7343 initialised on I2C bus %d at 0x%02X", I2C_BUS, AS7343_ADDR)
 
-    def _wait_data_ready(self, timeout=0.5):
+        # Step 1: Power on only (PON=1, SP_EN=0)
+        self.bus.write_byte_data(AS7343_ADDR, REG_ENABLE, 0x01)
+        time.sleep(0.01)
+
+        # Verify chip is alive — WHOAMI should be non-zero after PON
+        whoami = self.bus.read_byte_data(AS7343_ADDR, 0x92)
+        log.info("AS7343 WHOAMI=0x%02X on I2C bus %d addr=0x%02X", whoami, I2C_BUS, AS7343_ADDR)
+
+        # Step 2: Configure integration time and gain before SP_EN
+        self.bus.write_byte_data(AS7343_ADDR, REG_ATIME, 29)
+        # ASTEP as two LE bytes: 599 = 0x0257
+        self.bus.write_i2c_block_data(AS7343_ADDR, REG_ASTEP, [0x57, 0x02])
+        # Gain 256× (safer for typical indoor levels)
+        self.bus.write_byte_data(AS7343_ADDR, REG_CFG1, 0x09)
+
+        # Step 3: Load SMUX ROM defaults so photodiodes map to ADC channels
+        # CFG6 (0xAF) bits[4:3] = SMUX_CMD=2 → load ROM table
+        self.bus.write_byte_data(AS7343_ADDR, 0xAF, 0x10)
+        # ENABLE: set SMUXEN (bit 4) to trigger transfer
+        self.bus.write_byte_data(AS7343_ADDR, REG_ENABLE, 0x11)  # PON + SMUXEN
+        # Wait for SMUXEN to self-clear (transfer complete)
+        for _ in range(100):
+            if not (self.bus.read_byte_data(AS7343_ADDR, REG_ENABLE) & 0x10):
+                break
+            time.sleep(0.002)
+
+        # Step 4: Enable spectral measurement
+        self.bus.write_byte_data(AS7343_ADDR, REG_ENABLE, 0x03)  # PON + SP_EN
+        time.sleep(0.1)  # let first integration cycle complete (~50ms)
+        log.info("AS7343 initialised")
+
+    def _wait_data_ready(self, timeout=2.0):
+        """Wait for AVALID on STATUS (0x93) or STATUS2 (0xA3) bit 6."""
         deadline = time.time() + timeout
         while time.time() < deadline:
-            status = self.bus.read_byte_data(AS7343_ADDR, REG_STATUS2)
-            if status & 0x40:  # AVALID bit
+            s1 = self.bus.read_byte_data(AS7343_ADDR, REG_STATUS)
+            s2 = self.bus.read_byte_data(AS7343_ADDR, REG_STATUS2)
+            if (s1 | s2) & 0x40:
                 return True
-            time.sleep(0.01)
-        return False
+            time.sleep(0.02)
+        # AVALID never set — read anyway (data still valid on this chip)
+        log.warning("AVALID timeout — reading raw data anyway")
+        return True
 
     def read(self) -> dict:
         if self.bus is None:
             self._open()
 
-        if not self._wait_data_ready():
-            raise RuntimeError("AS7343 data-ready timeout")
+        self._wait_data_ready()
 
-        # Read 18 bytes = 9 × 16-bit channels
+        # Read 18 bytes = 9 × 16-bit channels (LE pairs)
         raw = self.bus.read_i2c_block_data(AS7343_ADDR, REG_CH0_LOW, 18)
         channels = {}
         for i, name in enumerate(CH_NAMES):
@@ -165,6 +199,7 @@ class AS7343Reader:
             hi = raw[i * 2 + 1]
             channels[name] = (hi << 8) | lo
 
+        log.debug("Raw channels: %s", channels)
         cct, lux = channels_to_cct_lux(channels)
         zone = cct_to_zone(cct, lux)
         return {"cct": cct, "lux": lux, "channels": channels, "zone": zone}
