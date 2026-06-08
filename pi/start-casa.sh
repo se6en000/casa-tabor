@@ -1,17 +1,30 @@
 #!/bin/bash
 # Casa Tabor — Chromium kiosk launcher for Raspberry Pi 5
-# Place this at: /home/pi/start-casa.sh
-# chmod +x /home/pi/start-casa.sh
+# Place this at: /home/jake/start-casa.sh
+# chmod +x /home/jake/start-casa.sh
 #
-# Add to autostart:
+# ⚠️ CRITICAL: This Pi MUST run an X11/Xorg session, NOT Wayland.
+# Chromium on Wayland (labwc/wayfire) SILENTLY DROPS touch events — a finger
+# drag arrives as a mouse drag, so scrolling and swipe gestures break. On X11
+# (Openbox), Chromium receives native XInput2 touch and everything works.
+# Set X11 once with:   sudo raspi-config nonint do_wayland W1   (then reboot)
+# Verify with:         echo $XDG_SESSION_TYPE   # must print: x11
+#
+# Add to autostart (X11/LXDE):
 #   mkdir -p ~/.config/autostart
 #   nano ~/.config/autostart/casa-tabor.desktop
 #
 # [Desktop Entry]
 # Type=Application
 # Name=Casa Tabor
-# Exec=/home/pi/start-casa.sh
+# Exec=/home/jake/start-casa.sh
 # X-GNOME-Autostart-enabled=true
+
+# Bail out loudly if we somehow booted into Wayland — touch will not work.
+if [ "${XDG_SESSION_TYPE:-x11}" = "wayland" ]; then
+  echo "Casa Tabor: WARNING — running under Wayland; touch gestures will break." >&2
+  echo "Run: sudo raspi-config nonint do_wayland W1 && sudo reboot" >&2
+fi
 
 # Disable screen blanking and power management
 xset s off
@@ -41,3 +54,4 @@ chromium-browser \
   --start-maximized \
   --window-position=0,0 \
   https://casa-tabor.vercel.app
+
