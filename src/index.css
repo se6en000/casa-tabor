@@ -210,13 +210,28 @@ html.rt-late-night {
     overscroll-behavior: none;
     -webkit-user-select: none;
     user-select: none;
-    touch-action: pan-y;
+    /* Allow both axes — individual components control their own touch-action */
+    touch-action: manipulation;
   }
 
   /* Hide scrollbars in kiosk */
   ::-webkit-scrollbar {
     display: none;
   }
+}
+
+/* ── Global touch UX (all display modes) ─────────────────────── */
+
+/* Remove 300ms tap delay + blue flash on all interactive elements */
+button, a, [role="button"], label, select {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Inputs / textareas always need text selection */
+input, textarea, [contenteditable] {
+  -webkit-user-select: text !important;
+  user-select: text !important;
 }
 
 /* ── Scrollbar Styling (non-kiosk) ───────────────────────────── */
