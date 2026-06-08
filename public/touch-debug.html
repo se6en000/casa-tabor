@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Casa Tabor — Touch Diagnostic</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; font-family: system-ui, sans-serif; background: #1B2A4A; color: #fff; }
+    body { display: flex; flex-direction: column; }
+    header { padding: 16px; background: #0f1a30; }
+    h1 { font-size: 20px; margin-bottom: 8px; }
+    .caps { font-size: 14px; line-height: 1.6; color: #C9A96E; font-family: monospace; }
+    .verdict { margin-top: 10px; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 16px; }
+    .verdict.touch { background: #1d5e3a; }
+    .verdict.mouse { background: #7a2222; }
+    .verdict.unknown { background: #555; }
+    #pad {
+      flex: 1; margin: 16px; border: 3px dashed #C9A96E; border-radius: 16px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; text-align: center; touch-action: auto;
+      overflow-y: auto;
+    }
+    #padInner { padding: 40px; }
+    #scrollTest { height: 1500px; background: linear-gradient(#243b66, #0f1a30); border-radius: 12px; padding: 20px; }
+    #log {
+      height: 38%; overflow-y: scroll; background: #000; color: #0f0;
+      font-family: monospace; font-size: 13px; padding: 12px; line-height: 1.5;
+      border-top: 2px solid #C9A96E;
+    }
+    .t { color: #4ade80; }   /* touch = green */
+    .p { color: #60a5fa; }   /* pointer = blue */
+    .m { color: #f87171; }   /* mouse = red */
+    button { margin-top: 8px; padding: 8px 16px; font-size: 14px; border-radius: 8px; border: none; background: #C9A96E; color: #1B2A4A; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Casa Tabor — Touch Diagnostic</h1>
+    <div class="caps" id="caps"></div>
+    <div class="verdict unknown" id="verdict">Drag a finger across the dashed box below…</div>
+    <button onclick="document.getElementById('log').innerHTML=''">Clear log</button>
+  </header>
+
+  <div id="pad">
+    <div id="padInner">
+      Drag your FINGER here (left/right and up/down).<br/>
+      Then try to SCROLL this box.
+      <div id="scrollTest">⬇ Scroll me with your finger ⬇<br/><br/>If this box scrolls by finger-drag,<br/>native touch scrolling works.<br/><br/><br/>...keep scrolling...<br/><br/><br/>🎯 You reached the bottom by touch!</div>
+    </div>
+  </div>
+
+  <div id="log"></div>
+
+  <script>
+    var log = document.getElementById('log');
+    var counts = { touch: 0, pointerTouch: 0, pointerMouse: 0, mouse: 0 };
+    function line(cls, msg) {
+      var d = document.createElement('div');
+      d.className = cls;
+      d.textContent = msg;
+      log.appendChild(d);
+      log.scrollTop = log.scrollHeight;
+      if (log.childNodes.length > 200) log.removeChild(log.firstChild);
+    }
+
+    // Capabilities
+    var maxTP = navigator.maxTouchPoints || 0;
+    var hasOnTouch = ('ontouchstart' in window);
+    var pointerCoarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    var anyCoarse = window.matchMedia && window.matchMedia('(any-pointer: coarse)').matches;
+    document.getElementById('caps').innerHTML =
+      'navigator.maxTouchPoints = <b>' + maxTP + '</b><br/>' +
+      "'ontouchstart' in window = <b>" + hasOnTouch + '</b><br/>' +
+      '(pointer: coarse) = <b>' + pointerCoarse + '</b><br/>' +
+      '(any-pointer: coarse) = <b>' + anyCoarse + '</b><br/>' +
+      'window = <b>' + window.innerWidth + '×' + window.innerHeight + '</b> · UA touch=' +
+      '<b>' + (/Mobile|Android/i.test(navigator.userAgent)) + '</b>';
+
+    var pad = document.getElementById('pad');
+
+    // Touch events
+    ['touchstart','touchmove','touchend'].forEach(function(ev){
+      pad.addEventListener(ev, function(e){
+        counts.touch++;
+        var t = e.touches[0] || e.changedTouches[0];
+        line('t', '✅ TOUCH ' + ev + '  x=' + Math.round(t ? t.clientX : 0) + ' y=' + Math.round(t ? t.clientY : 0) + '  pts=' + e.touches.length);
+        updateVerdict();
+      }, { passive: true });
+    });
+
+    // Pointer events (distinguish touch vs mouse)
+    ['pointerdown','pointermove','pointerup'].forEach(function(ev){
+      pad.addEventListener(ev, function(e){
+        if (e.pointerType === 'touch') counts.pointerTouch++;
+        else if (e.pointerType === 'mouse') counts.pointerMouse++;
+        line('p', '🔵 POINTER ' + ev + '  type=' + e.pointerType + '  x=' + Math.round(e.clientX) + ' y=' + Math.round(e.clientY));
+        updateVerdict();
+      }, { passive: true });
+    });
+
+    // Mouse events
+    ['mousedown','mouseup'].forEach(function(ev){
+      pad.addEventListener(ev, function(e){
+        counts.mouse++;
+        line('m', '🔴 MOUSE ' + ev + '  x=' + Math.round(e.clientX) + ' y=' + Math.round(e.clientY));
+        updateVerdict();
+      });
+    });
+
+    function updateVerdict() {
+      var v = document.getElementById('verdict');
+      var gotTouch = counts.touch > 0 || counts.pointerTouch > 0;
+      var gotMouseOnly = !gotTouch && (counts.mouse > 0 || counts.pointerMouse > 0);
+      if (gotTouch) {
+        v.className = 'verdict touch';
+        v.textContent = '✅ REAL TOUCH EVENTS detected — the OS IS sending touch. (touch=' + counts.touch + ', pointer-touch=' + counts.pointerTouch + ')';
+      } else if (gotMouseOnly) {
+        v.className = 'verdict mouse';
+        v.textContent = '🔴 ONLY MOUSE EVENTS — your touchscreen is enumerated as a MOUSE. This is the bug. (mouse=' + counts.mouse + ', pointer-mouse=' + counts.pointerMouse + ')';
+      }
+    }
+  </script>
+</body>
+</html>
