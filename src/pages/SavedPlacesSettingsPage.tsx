@@ -175,8 +175,8 @@ function PlaceRow({ place, onEdit, onDelete }: { place: SavedPlace; onEdit: () =
         {place.notes && <p className="text-caption text-casa-muted mt-1 italic line-clamp-2">{place.notes}</p>}
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        <button onClick={onEdit} className="p-1.5 rounded hover:bg-casa-divider transition-colors text-casa-muted hover:text-casa-navy" title="Edit"><Edit2 size={14} /></button>
-        <button onClick={onDelete} className="p-1.5 rounded hover:bg-red-50 transition-colors text-casa-muted hover:text-red-600" title="Delete"><Trash2 size={14} /></button>
+        <button onClick={onEdit} className="p-3 rounded hover:bg-casa-divider transition-colors text-casa-muted hover:text-casa-navy" title="Edit"><Edit2 size={16} /></button>
+        <button onClick={onDelete} className="p-3 rounded hover:bg-red-50 transition-colors text-casa-muted hover:text-red-600" title="Delete"><Trash2 size={16} /></button>
       </div>
     </div>
   )
@@ -291,8 +291,8 @@ function ContactRow({ contact, onEdit, onDelete }: { contact: SavedContact; onEd
         {contact.notes && <p className="text-caption text-casa-muted mt-1 italic line-clamp-2">{contact.notes}</p>}
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        <button onClick={onEdit} className="p-1.5 rounded hover:bg-casa-divider transition-colors text-casa-muted hover:text-casa-navy" title="Edit"><Edit2 size={14} /></button>
-        <button onClick={onDelete} className="p-1.5 rounded hover:bg-red-50 transition-colors text-casa-muted hover:text-red-600" title="Delete"><Trash2 size={14} /></button>
+        <button onClick={onEdit} className="p-3 rounded hover:bg-casa-divider transition-colors text-casa-muted hover:text-casa-navy" title="Edit"><Edit2 size={16} /></button>
+        <button onClick={onDelete} className="p-3 rounded hover:bg-red-50 transition-colors text-casa-muted hover:text-red-600" title="Delete"><Trash2 size={16} /></button>
       </div>
     </div>
   )

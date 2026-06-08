@@ -7,6 +7,11 @@
 /* ── Google Fonts ─────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
+
+/* ── Touch-first: hover only on devices that support it ───────── */
+/* Redefines hover: variant so it NEVER fires on touchscreens.    */
+/* On mouse devices it works normally. Zero component changes.    */
+@custom-variant hover (@media (hover: hover) { &:hover });
 /* ================================================================
    DESIGN TOKENS — Casa Tabor Theme
    ================================================================ */
@@ -232,6 +237,23 @@ button, a, [role="button"], label, select, input, textarea {
 /* Buttons/links: manipulation removes 300ms tap delay without breaking scroll */
 button, a, [role="button"], label, select {
   touch-action: manipulation;
+  /* Cursors are meaningless on touch — suppress on touch devices */
+  cursor: default;
+}
+
+/* On real mouse/pointer devices, restore pointer cursor */
+@media (hover: hover) {
+  button, a, [role="button"], [onClick] {
+    cursor: pointer;
+  }
+}
+
+/* ── Active press feedback (replaces hover on touch) ─────────── */
+/* Gives instant visual confirmation when a user taps a button.  */
+button:active, a:active, [role="button"]:active {
+  opacity: 0.75;
+  transform: scale(0.97);
+  transition: opacity 60ms, transform 60ms;
 }
 
 @media (display-mode: standalone), (display-mode: fullscreen) {
