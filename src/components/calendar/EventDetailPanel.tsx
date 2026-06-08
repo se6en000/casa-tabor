@@ -102,9 +102,21 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
                 transition={{ type: 'spring', damping: 30, stiffness: 180 }}
+                drag="y"
+                dragConstraints={{ top: 0 }}
+                dragElastic={{ top: 0, bottom: 0.15 }}
+                dragMomentum={false}
+                onDragEnd={(_e, info) => {
+                  if (info.velocity.y > 300 || info.offset.y > 140) onClose()
+                }}
+                style={{ willChange: 'transform', touchAction: 'none' }}
                 className="fixed top-0 right-0 h-full w-[420px] bg-casa-surface border-l border-casa-border shadow-modal z-[55] flex flex-col"
                 onClick={e => e.stopPropagation()}
               >
+                {/* Drag-to-dismiss handle */}
+                <div className="flex-shrink-0 flex justify-center pt-2 pb-1">
+                  <div className="w-10 h-1 bg-casa-divider rounded-full" />
+                </div>
                 <PanelHeader event={event} onClose={onClose} />
                 <PanelBody event={event} />
                 <PanelFooter event={event} onEdit={() => setShowEdit(true)} />
@@ -966,7 +978,7 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
   const shows = (field: string) => activeFields.includes(field as ReturnType<typeof getFieldsForCategory>[number])
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+    <div className="flex-1 overflow-y-auto overscroll-contain touch-pan-y p-6 space-y-6">
       {topSlot}
 
       {/* Target location — always at top when available */}

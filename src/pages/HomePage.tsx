@@ -179,7 +179,7 @@ export default function HomePage() {
       {/* ── Center content ─────────────────────────────────── */}
       <div
         ref={(el) => { ptrRef(el); scrollRef.current = el }}
-        className="flex-1 min-w-0 overflow-y-auto touch-pan-y px-6 pt-8 pb-12 lg:px-8"
+        className="flex-1 min-w-0 overflow-y-auto overscroll-contain touch-pan-y px-6 pt-8 pb-12 lg:px-8"
       >
         {/* ── Pull-to-refresh indicator ─────────────────────── */}
         <AnimatePresence>

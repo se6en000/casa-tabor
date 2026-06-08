@@ -54,7 +54,6 @@ export function usePullToRefresh({ threshold = 64, onRefresh, onPull, onReset }:
     lastTravel.current = travel
     active.current = true
     onPullRef.current?.(travel)
-    if (travel > 4 && e.cancelable) e.preventDefault()   // only cancel if browser allows it
   }, [threshold])
 
   const handleTouchEnd = useCallback(async () => {
@@ -79,7 +78,7 @@ export function usePullToRefresh({ threshold = 64, onRefresh, onPull, onReset }:
     elRef.current = el
     if (el) {
       el.addEventListener('touchstart', handleTouchStart, { passive: true })
-      el.addEventListener('touchmove',  handleTouchMove,  { passive: false })
+      el.addEventListener('touchmove',  handleTouchMove,  { passive: true })
       el.addEventListener('touchend',   handleTouchEnd,   { passive: true })
     }
   }, [handleTouchStart, handleTouchMove, handleTouchEnd])
