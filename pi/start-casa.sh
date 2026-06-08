@@ -20,6 +20,13 @@
 # Exec=/home/jake/start-casa.sh
 # X-GNOME-Autostart-enabled=true
 
+# ── Kiosk toggle ──────────────────────────────────────────────────────────
+# Set to "1" for locked-down fullscreen kiosk (production on the wall).
+# Set to "0" for a normal windowed browser while testing/building (tabs,
+# address bar, and access to the rest of the desktop). Override at launch:
+#   KIOSK=0 /home/jake/start-casa.sh
+KIOSK="${KIOSK:-0}"
+
 # Bail out loudly if we somehow booted into Wayland — touch will not work.
 if [ "${XDG_SESSION_TYPE:-x11}" = "wayland" ]; then
   echo "Casa Tabor: WARNING — running under Wayland; touch gestures will break." >&2
@@ -37,9 +44,15 @@ unclutter -idle 1 -root &
 # Wait for network
 sleep 3
 
-# Launch Chromium in kiosk mode with full touch support
+# Launch Chromium with full touch support.
+# Kiosk flag is added only when KIOSK=1; otherwise launch a normal window.
+KIOSK_FLAG=""
+if [ "$KIOSK" = "1" ]; then
+  KIOSK_FLAG="--kiosk"
+fi
+
 chromium-browser \
-  --kiosk \
+  $KIOSK_FLAG \
   --force-device-scale-factor=2 \
   --touch-events=enabled \
   --enable-touch-drag-drop \
