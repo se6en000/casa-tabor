@@ -16,7 +16,7 @@ const sections = [
 
 export default function SettingsPage() {
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto touch-pan-y">
       <div className="max-w-5xl mx-auto px-6 py-8">
         <h1 className="font-display text-display-md text-casa-navy mb-6">Settings</h1>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

@@ -22,7 +22,7 @@ export default function ThemeSettingsPage() {
   const { colors, setColor, applyPreset, resetToDefaults, isDefault } = useTheme()
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto touch-pan-y">
     <div className="max-w-2xl mx-auto p-6 pb-20">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">

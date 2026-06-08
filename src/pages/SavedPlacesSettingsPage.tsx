@@ -390,7 +390,7 @@ export default function SavedPlacesSettingsPage() {
   const isAdding = tab === 'places' ? placeMode.type !== 'list' : contactMode.type !== 'list'
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto touch-pan-y">
       <div className="max-w-3xl mx-auto px-6 py-8">
 
         {/* Header */}

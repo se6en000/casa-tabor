@@ -134,7 +134,7 @@ export default function StatusDashboardPage() {
   if (loading) return <div className="p-6 text-casa-muted animate-breathe">Loading…</div>
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto touch-pan-y">
     <div className="max-w-5xl mx-auto p-6 space-y-6">
       {/* Header */}
       <div>

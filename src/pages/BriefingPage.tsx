@@ -96,7 +96,7 @@ export default function BriefingPage() {
   const emptyMembers = briefing ? Object.values(briefing.member_schedules).filter(m => m.events.length === 0) : []
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto touch-pan-y">
     <div className="max-w-6xl mx-auto px-6 py-6">
 
       {/* Header */}

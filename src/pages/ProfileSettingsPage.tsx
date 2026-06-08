@@ -38,7 +38,7 @@ export default function ProfileSettingsPage() {
   if (isLoading) return <div className="p-6 text-casa-muted animate-breathe">Loading…</div>
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto touch-pan-y">
     <div className="max-w-2xl mx-auto p-6">
       <Link to="/settings" className="inline-flex items-center gap-1 text-body-sm text-casa-muted hover:text-casa-navy mb-4">
         <ChevronLeft size={16} /> Settings

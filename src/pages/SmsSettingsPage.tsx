@@ -144,7 +144,7 @@ export default function SmsSettingsPage() {
   if (isLoading) return <div className="max-w-2xl mx-auto p-6 text-casa-muted text-body-sm">Loading…</div>
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto touch-pan-y">
     <div className="max-w-2xl mx-auto p-6">
       <Link to="/settings" className="inline-flex items-center gap-1.5 text-caption text-casa-muted hover:text-casa-navy mb-6 transition-colors">
         <ChevronLeft size={15} /> Settings
