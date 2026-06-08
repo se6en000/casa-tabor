@@ -362,8 +362,16 @@ export default function DisplaySettingsPage() {
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
           <SectionHeader icon={Cpu} label="Sensor Array" />
 
-          {sensorData ? (
-            <>
+          {/* Push toggle — always visible */}
+          <Toggle
+            checked={config.sensor_push_enabled}
+            onChange={v => set('sensor_push_enabled', v)}
+            label="Live sensor push"
+            desc="Pi bridge streams readings to Supabase. Turn off to stop recording when not needed."
+          />
+
+          {config.sensor_push_enabled && sensorData ? (
+            <div className="mt-3 pt-3 border-t border-casa-divider">
               {/* Live readings grid */}
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div className="rounded-xl bg-casa-bg border border-casa-divider px-3 py-2.5">
@@ -383,9 +391,7 @@ export default function DisplaySettingsPage() {
                 {sensorData.brightness != null && (
                   <div className="rounded-xl bg-casa-bg border border-casa-divider px-3 py-2.5">
                     <p className="text-[10px] font-semibold text-casa-muted uppercase tracking-wide mb-0.5">DDC Brightness</p>
-                    <div className="flex items-end gap-1.5 mb-1">
-                      <p className="text-body-sm font-semibold text-casa-navy tabular-nums">{sensorData.brightness}%</p>
-                    </div>
+                    <p className="text-body-sm font-semibold text-casa-navy tabular-nums mb-1">{sensorData.brightness}%</p>
                     <div className="h-1.5 w-full rounded-full bg-casa-border overflow-hidden">
                       <div className="h-full rounded-full bg-casa-gold transition-all duration-700" style={{ width: `${sensorData.brightness}%` }} />
                     </div>
@@ -430,20 +436,13 @@ export default function DisplaySettingsPage() {
                 ))}
               </div>
               <p className="text-caption text-casa-muted">
-                Sensor is active — overriding time-of-day schedule with real-time readings.
+                Sensor active — real-time readings overriding time-of-day schedule.
               </p>
-            </>
-          ) : (
-            <>
-              <p className="text-caption text-casa-muted mb-3">
-                When the Pi sensor array is connected, it will replace the time schedule with real-time lux + color temperature readings.
-              </p>
+            </div>
+          ) : config.sensor_push_enabled ? (
+            <div className="mt-3 pt-3 border-t border-casa-divider">
               <div className="space-y-2">
-                {[
-                  'AS7343 — 14-channel spectral (color temp)',
-                  'LTR390 — Precision lux + UV index',
-                  'APDS9960 — Proximity wake detection',
-                ].map(name => (
+                {['AS7343 — 14-channel spectral (color temp)', 'LTR390 — Precision lux + UV index', 'APDS9960 — Proximity wake detection'].map(name => (
                   <div key={name} className="flex items-center justify-between px-3 py-2 rounded-lg bg-casa-bg border border-casa-divider">
                     <span className="text-caption text-casa-navy">{name}</span>
                     <span className="text-caption text-casa-muted italic">not connected</span>
@@ -451,9 +450,13 @@ export default function DisplaySettingsPage() {
                 ))}
               </div>
               <p className="text-caption text-casa-muted mt-3">
-                Using <span className="font-medium text-casa-navy">time-of-day schedule</span> as proxy until sensors are wired.
+                Push enabled — waiting for Pi bridge. Using <span className="font-medium text-casa-navy">time-of-day schedule</span> as proxy.
               </p>
-            </>
+            </div>
+          ) : (
+            <p className="text-caption text-casa-muted mt-2">
+              Push off — using <span className="font-medium text-casa-navy">time-of-day schedule</span>.
+            </p>
           )}
         </div>
 

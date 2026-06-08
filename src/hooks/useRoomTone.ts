@@ -44,6 +44,9 @@ export interface DisplayConfig {
   manual_warmth: number     // 0–1  (sepia amount)
   manual_brightness: number // 0–1  (css brightness multiplier, 0.2–1.0)
   override_expires_at: string | null // ISO string — auto-clears after 2h
+
+  // Sensor
+  sensor_push_enabled: boolean // whether Pi bridge pushes live readings to Supabase
 }
 
 export const DISPLAY_DEFAULTS: DisplayConfig = {
@@ -65,6 +68,8 @@ export const DISPLAY_DEFAULTS: DisplayConfig = {
   manual_warmth: 0.15,
   manual_brightness: 0.75,
   override_expires_at: null,
+
+  sensor_push_enabled: false,
 }
 
 /** Returns the Room Tone zone for a given hour (0-23) */

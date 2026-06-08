@@ -51,9 +51,37 @@ SUPABASE_URL = "https://sjiejymuuuqzqukyeagk.supabase.co"
 SUPABASE_SERVICE_KEY = "sb_secret_HpkjyskE55sDH_hLNKEK1g_BVrA7f2U"
 SUPABASE_SENSOR_ID  = "00000000-0000-0000-0000-000000000001"  # fixed row for latest reading
 
+_push_enabled       = False   # cached value of display_config.sensor_push_enabled
+_push_checked_at    = 0.0     # epoch time of last config check
+PUSH_CHECK_INTERVAL = 15      # re-read Supabase config every 15s
+
+def _is_push_enabled() -> bool:
+    """Return True if sensor_push_enabled is set in display_config. Caches for 15s."""
+    global _push_enabled, _push_checked_at
+    now = time.time()
+    if now - _push_checked_at < PUSH_CHECK_INTERVAL:
+        return _push_enabled
+    try:
+        res = _requests.get(
+            f"{SUPABASE_URL}/rest/v1/settings",
+            params={"key": "eq.display_config", "select": "value"},
+            headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"},
+            timeout=3,
+        )
+        rows = res.json()
+        if rows and isinstance(rows, list):
+            _push_enabled = bool(rows[0].get("value", {}).get("sensor_push_enabled", False))
+    except Exception:
+        pass  # keep cached value on error
+    _push_checked_at = now
+    return _push_enabled
+
+
 def _push_to_supabase(cct, lux, zone, brightness, rgb):
     """Upsert the latest sensor reading to Supabase so any device can see it."""
     if not REQUESTS_AVAILABLE:
+        return
+    if not _is_push_enabled():
         return
     try:
         _requests.post(
