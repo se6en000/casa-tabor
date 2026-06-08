@@ -73,6 +73,54 @@ _latest      = {
 
 POLL_INTERVAL = 3.0  # seconds between readings
 
+# ── Layer 1: DDC/CI monitor brightness ───────────────────────────────────────
+# Target brightness (0-100) per zone — applied via ddcutil to the physical
+# monitor backlight. Transitions feel smooth because we step ±2 per poll.
+
+ZONE_BRIGHTNESS = {
+    "day":        80,
+    "afternoon":  65,
+    "evening":    45,
+    "night":      25,
+    "late-night": 10,
+}
+
+_ddc_lock           = threading.Lock()
+_current_brightness = None   # last value we set; None = unknown
+
+
+def _ddc_set_brightness(target: int):
+    """Set monitor brightness via ddcutil. Runs in background thread."""
+    global _current_brightness
+    with _ddc_lock:
+        if _current_brightness == target:
+            return
+        try:
+            import subprocess
+            subprocess.run(
+                ["sudo", "ddcutil", "setvcp", "10", str(target)],
+                timeout=5, capture_output=True
+            )
+            _current_brightness = target
+            log.info("DDC brightness → %d", target)
+        except Exception as exc:
+            log.warning("DDC set failed: %s", exc)
+
+
+def _smooth_brightness(zone: str):
+    """Step toward target brightness by at most 5 points per poll."""
+    global _current_brightness
+    target = ZONE_BRIGHTNESS.get(zone)
+    if target is None:
+        return
+    if _current_brightness is None:
+        _current_brightness = target
+        _ddc_set_brightness(target)
+        return
+    step = max(-5, min(5, target - _current_brightness))
+    if step != 0:
+        _ddc_set_brightness(_current_brightness + step)
+
 
 # ── CCT + lux math ──────────────────────────────────────────────────────────
 
@@ -243,6 +291,8 @@ def _poll_loop(reader):
                     "error": None,
                     "timestamp": time.time(),
                 })
+            # Layer 1: adjust monitor backlight to match zone
+            _smooth_brightness(data["zone"])
         except Exception as exc:
             log.error("Sensor read error: %s", exc)
             with _lock:
