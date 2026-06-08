@@ -74,8 +74,9 @@ _latest      = {
 POLL_INTERVAL = 3.0  # seconds between readings
 
 # ── Layer 1: DDC/CI monitor brightness ───────────────────────────────────────
-# Target brightness (0-100) per zone — applied via ddcutil to the physical
-# monitor backlight. Transitions feel smooth because we step ±2 per poll.
+# A dedicated DDC loop runs every 0.25 s and steps toward _target_brightness
+# by DDC_STEP points per tick — full range (80→10) in ~3.5 seconds.
+# The sensor poll just updates the target; the DDC loop does the actual work.
 
 ZONE_BRIGHTNESS = {
     "day":        80,
@@ -85,41 +86,70 @@ ZONE_BRIGHTNESS = {
     "late-night": 10,
 }
 
+DDC_INTERVAL    = 0.25   # seconds between DDC ticks
+DDC_STEP        = 2      # brightness points per tick (70 pts / 2 / 4hz ≈ 8.75 s full range feels natural)
+
 _ddc_lock           = threading.Lock()
-_current_brightness = None   # last value we set; None = unknown
+_current_brightness = None   # last value written to monitor
+_target_brightness  = None   # desired value based on current zone
 
 
-def _ddc_set_brightness(target: int):
-    """Set monitor brightness via ddcutil. Runs in background thread."""
-    global _current_brightness
-    with _ddc_lock:
-        if _current_brightness == target:
-            return
-        try:
-            import subprocess
-            subprocess.run(
-                ["sudo", "ddcutil", "setvcp", "10", str(target)],
-                timeout=5, capture_output=True
-            )
-            _current_brightness = target
-            log.info("DDC brightness → %d", target)
-        except Exception as exc:
-            log.warning("DDC set failed: %s", exc)
+def _ddc_write(value: int):
+    """Write brightness to monitor via ddcutil (blocking ~200 ms)."""
+    import subprocess
+    subprocess.run(
+        ["sudo", "ddcutil", "setvcp", "10", str(value)],
+        timeout=5, capture_output=True
+    )
 
 
-def _smooth_brightness(zone: str):
-    """Step toward target brightness by at most 5 points per poll."""
-    global _current_brightness
+def set_brightness_target(zone: str):
+    """Called by sensor poll — just updates the target, doesn't block."""
+    global _target_brightness
     target = ZONE_BRIGHTNESS.get(zone)
-    if target is None:
-        return
-    if _current_brightness is None:
-        _current_brightness = target
-        _ddc_set_brightness(target)
-        return
-    step = max(-5, min(5, target - _current_brightness))
-    if step != 0:
-        _ddc_set_brightness(_current_brightness + step)
+    if target is not None:
+        _target_brightness = target
+
+
+def _ddc_loop():
+    """Dedicated thread: steps _current_brightness toward _target_brightness."""
+    global _current_brightness, _target_brightness
+    while True:
+        time.sleep(DDC_INTERVAL)
+        with _ddc_lock:
+            target = _target_brightness
+            current = _current_brightness
+
+        if target is None:
+            continue
+
+        if current is None:
+            # First run — snap to target immediately
+            try:
+                _ddc_write(target)
+                with _ddc_lock:
+                    _current_brightness = target
+                log.info("DDC init → %d", target)
+            except Exception as exc:
+                log.warning("DDC init failed: %s", exc)
+            continue
+
+        if current == target:
+            continue
+
+        step = DDC_STEP if target > current else -DDC_STEP
+        next_val = current + step
+        # Don't overshoot
+        if (step > 0 and next_val > target) or (step < 0 and next_val < target):
+            next_val = target
+
+        try:
+            _ddc_write(next_val)
+            with _ddc_lock:
+                _current_brightness = next_val
+            log.debug("DDC %d → %d (target %d)", current, next_val, target)
+        except Exception as exc:
+            log.warning("DDC step failed: %s", exc)
 
 
 # ── CCT + lux math ──────────────────────────────────────────────────────────
@@ -291,8 +321,8 @@ def _poll_loop(reader):
                     "error": None,
                     "timestamp": time.time(),
                 })
-            # Layer 1: adjust monitor backlight to match zone
-            _smooth_brightness(data["zone"])
+            # Layer 1: update target brightness for dedicated DDC loop
+            set_brightness_target(data["zone"])
         except Exception as exc:
             log.error("Sensor read error: %s", exc)
             with _lock:
@@ -307,6 +337,8 @@ async def lifespan(app: FastAPI):
     reader = AS7343Reader() if I2C_AVAILABLE else SimulatedReader()
     thread = threading.Thread(target=_poll_loop, args=(reader,), daemon=True)
     thread.start()
+    ddc_thread = threading.Thread(target=_ddc_loop, daemon=True)
+    ddc_thread.start()
     log.info("Sensor bridge started — http://127.0.0.1:8765")
     yield
     reader.close()
