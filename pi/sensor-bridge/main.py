@@ -24,6 +24,7 @@ import math
 import time
 import threading
 import logging
+import subprocess
 from contextlib import asynccontextmanager
 
 try:
@@ -75,7 +76,7 @@ POLL_INTERVAL = 3.0  # seconds between readings
 
 # ── Layer 1: DDC/CI monitor brightness ───────────────────────────────────────
 # A dedicated DDC loop runs every 0.25 s and steps toward _target_brightness
-# by DDC_STEP points per tick — full range (80→10) in ~3.5 seconds.
+# by DDC_STEP points per tick — full range (80→10) in ~8.75 seconds.
 # The sensor poll just updates the target; the DDC loop does the actual work.
 
 ZONE_BRIGHTNESS = {
@@ -87,69 +88,182 @@ ZONE_BRIGHTNESS = {
 }
 
 DDC_INTERVAL    = 0.25   # seconds between DDC ticks
-DDC_STEP        = 2      # brightness points per tick (70 pts / 2 / 4hz ≈ 8.75 s full range feels natural)
+DDC_STEP        = 2      # brightness points per tick (70 pts / 2 / 4hz ≈ 8.75 s full range)
+COLOR_STEP      = 1      # gain points per tick — color transitions slower/gentler than brightness
 
 _ddc_lock           = threading.Lock()
-_current_brightness = None   # last value written to monitor
-_target_brightness  = None   # desired value based on current zone
+_current_brightness = None   # last brightness value written to monitor
+_target_brightness  = None   # desired brightness based on current zone
+
+# RGB gain state (VCP 0x16=R, 0x18=G, 0x1A=B; range 0–100, neutral=50)
+_current_rgb = None            # (r, g, b) last written
+_target_rgb  = None            # (r, g, b) desired
 
 
-def _ddc_write(value: int):
-    """Write brightness to monitor via ddcutil (blocking ~200 ms)."""
-    import subprocess
+def cct_to_rgb_gains(cct: float) -> tuple[int, int, int]:
+    """
+    Convert color temperature (K) to DDC RGB gain values (0–100 scale, neutral=50).
+
+    Uses Tanner Helland's blackbody approximation to get relative R:G:B ratios,
+    then maps them so the dominant channel sits at 50 (neutral factory point).
+    Effect range: 2700 K → warm amber tint; 6500 K → near-neutral cool white.
+
+    We keep all gains ≤ 50 to avoid clipping / brightness creep.
+    """
+    t = max(1000, min(40000, cct)) / 100.0
+
+    # Red
+    if t <= 66:
+        r = 255.0
+    else:
+        r = 329.698727446 * ((t - 60) ** -0.1332047592)
+
+    # Green
+    if t <= 66:
+        g = 99.4708025861 * math.log(t) - 161.1195681661
+    else:
+        g = 288.1221695283 * ((t - 60) ** -0.0755148492)
+
+    # Blue
+    if t >= 66:
+        b = 255.0
+    elif t <= 19:
+        b = 0.0
+    else:
+        b = 138.5177312231 * math.log(t - 10) - 305.0447927307
+
+    r = max(0.0, min(255.0, r))
+    g = max(0.0, min(255.0, g))
+    b = max(0.0, min(255.0, b))
+
+    # Normalize so max channel = 50 (DDC neutral midpoint), scale others proportionally.
+    # Blending 40% toward neutral (50,50,50) softens the effect for a tasteful display shift.
+    peak = max(r, g, b)
+    scale = 50.0 / peak
+    r_gain = round(r * scale * 0.6 + 50 * 0.4)
+    g_gain = round(g * scale * 0.6 + 50 * 0.4)
+    b_gain = round(b * scale * 0.6 + 50 * 0.4)
+
+    return (
+        max(0, min(100, r_gain)),
+        max(0, min(100, g_gain)),
+        max(0, min(100, b_gain)),
+    )
+
+
+def _ddc_write_single(vcp: str, value: int):
+    """Write one VCP code via ddcutil (blocking ~200 ms)."""
     subprocess.run(
-        ["sudo", "ddcutil", "setvcp", "10", str(value)],
+        ["sudo", "ddcutil", "setvcp", vcp, str(value)],
         timeout=5, capture_output=True
     )
 
 
+def _ddc_write(value: int):
+    """Write brightness (VCP 0x10) to monitor."""
+    _ddc_write_single("10", value)
+
+
+def _ddc_write_rgb(r: int, g: int, b: int):
+    """Write RGB gains to monitor (3 sequential DDC calls ~600 ms total)."""
+    _ddc_write_single("16", r)
+    _ddc_write_single("18", g)
+    _ddc_write_single("1a", b)
+
+
 def set_brightness_target(zone: str):
-    """Called by sensor poll — just updates the target, doesn't block."""
+    """Called by sensor poll — just updates the brightness target, doesn't block."""
     global _target_brightness
     target = ZONE_BRIGHTNESS.get(zone)
     if target is not None:
         _target_brightness = target
 
 
+def set_color_target(cct: float):
+    """Called by sensor poll — converts CCT to RGB gains and updates target."""
+    global _target_rgb
+    if cct is not None:
+        _target_rgb = cct_to_rgb_gains(cct)
+
+
 def _ddc_loop():
-    """Dedicated thread: steps _current_brightness toward _target_brightness."""
-    global _current_brightness, _target_brightness
+    """Dedicated thread: steps brightness and RGB gains toward their targets."""
+    global _current_brightness, _target_brightness, _current_rgb, _target_rgb
     while True:
         time.sleep(DDC_INTERVAL)
+
+        # ── Brightness ──────────────────────────────────────────────────────
         with _ddc_lock:
-            target = _target_brightness
-            current = _current_brightness
+            b_target  = _target_brightness
+            b_current = _current_brightness
 
-        if target is None:
+        if b_target is not None:
+            if b_current is None:
+                try:
+                    _ddc_write(b_target)
+                    with _ddc_lock:
+                        _current_brightness = b_target
+                    log.info("DDC brightness init → %d", b_target)
+                except Exception as exc:
+                    log.warning("DDC brightness init failed: %s", exc)
+            elif b_current != b_target:
+                step = DDC_STEP if b_target > b_current else -DDC_STEP
+                next_val = b_current + step
+                if (step > 0 and next_val > b_target) or (step < 0 and next_val < b_target):
+                    next_val = b_target
+                try:
+                    _ddc_write(next_val)
+                    with _ddc_lock:
+                        _current_brightness = next_val
+                    log.debug("DDC brightness %d → %d (target %d)", b_current, next_val, b_target)
+                except Exception as exc:
+                    log.warning("DDC brightness step failed: %s", exc)
+
+        # ── Color temperature (RGB gains) ────────────────────────────────────
+        with _ddc_lock:
+            c_target  = _target_rgb
+            c_current = _current_rgb
+
+        if c_target is None:
             continue
 
-        if current is None:
-            # First run — snap to target immediately
+        if c_current is None:
+            # First run — snap directly to target
             try:
-                _ddc_write(target)
+                _ddc_write_rgb(*c_target)
                 with _ddc_lock:
-                    _current_brightness = target
-                log.info("DDC init → %d", target)
+                    _current_rgb = c_target
+                log.info("DDC color init → R=%d G=%d B=%d", *c_target)
             except Exception as exc:
-                log.warning("DDC init failed: %s", exc)
+                log.warning("DDC color init failed: %s", exc)
             continue
 
-        if current == target:
+        if c_current == c_target:
             continue
 
-        step = DDC_STEP if target > current else -DDC_STEP
-        next_val = current + step
-        # Don't overshoot
-        if (step > 0 and next_val > target) or (step < 0 and next_val < target):
-            next_val = target
+        # Step each channel independently toward target
+        def _step(cur, tgt):
+            if cur == tgt:
+                return cur
+            s = COLOR_STEP if tgt > cur else -COLOR_STEP
+            nxt = cur + s
+            return tgt if (s > 0 and nxt > tgt) or (s < 0 and nxt < tgt) else nxt
+
+        next_rgb = (
+            _step(c_current[0], c_target[0]),
+            _step(c_current[1], c_target[1]),
+            _step(c_current[2], c_target[2]),
+        )
 
         try:
-            _ddc_write(next_val)
+            _ddc_write_rgb(*next_rgb)
             with _ddc_lock:
-                _current_brightness = next_val
-            log.debug("DDC %d → %d (target %d)", current, next_val, target)
+                _current_rgb = next_rgb
+            log.debug("DDC color → R=%d G=%d B=%d (target R=%d G=%d B=%d)",
+                      *next_rgb, *c_target)
         except Exception as exc:
-            log.warning("DDC step failed: %s", exc)
+            log.warning("DDC color step failed: %s", exc)
+
 
 
 # ── CCT + lux math ──────────────────────────────────────────────────────────
@@ -321,8 +435,9 @@ def _poll_loop(reader):
                     "error": None,
                     "timestamp": time.time(),
                 })
-            # Layer 1: update target brightness for dedicated DDC loop
+            # Layer 1: update DDC targets for brightness and color temperature
             set_brightness_target(data["zone"])
+            set_color_target(data["cct"])
         except Exception as exc:
             log.error("Sensor read error: %s", exc)
             with _lock:
