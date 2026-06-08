@@ -34,22 +34,28 @@ interface EventDetailPanelProps {
 }
 
 function useIsMobile() {
-  const [mobile, setMobile] = useState(() => window.innerWidth < 768)
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)')
-    const handler = (e: MediaQueryListEvent) => setMobile(e.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [])
-  return mobile
+  // Use touch capability, not viewport width — Pi kiosk is 2560px but has a touchscreen
+  return 'ontouchstart' in window || navigator.maxTouchPoints > 0
 }
 
 export default function EventDetailPanel({ event, onClose }: EventDetailPanelProps) {
   const [showEdit, setShowEdit] = useState(false)
+  const [showDebug, setShowDebug] = useState(true)
   const isMobile = useIsMobile()
+
+  useEffect(() => {
+    const t = setTimeout(() => setShowDebug(false), 6000)
+    return () => clearTimeout(t)
+  }, [])
 
   return (
     <>
+      {/* DEBUG — remove after verifying on Pi */}
+      {showDebug && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[999] bg-black/80 text-white text-sm px-4 py-2 rounded-full pointer-events-none">
+          isMobile={String(isMobile)} · touch={String(navigator.maxTouchPoints > 0)} · w={window.innerWidth}
+        </div>
+      )}
       <AnimatePresence>
         {event && (
           <>
