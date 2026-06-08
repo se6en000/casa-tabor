@@ -34,8 +34,7 @@ interface EventDetailPanelProps {
 }
 
 function useIsMobile() {
-  // Use touch capability, not viewport width — Pi kiosk is 2560px but has a touchscreen
-  return 'ontouchstart' in window || navigator.maxTouchPoints > 0
+  return true // Pi kiosk: always treat as touch/mobile
 }
 
 export default function EventDetailPanel({ event, onClose }: EventDetailPanelProps) {
