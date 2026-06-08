@@ -63,6 +63,7 @@ fi
 
 chromium-browser \
   $KIOSK_FLAG \
+  --password-store=basic \
   --force-device-scale-factor=2 \
   --touch-events=enabled \
   --enable-touch-drag-drop \
