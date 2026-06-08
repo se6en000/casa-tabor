@@ -44,6 +44,16 @@ unclutter -idle 1 -root &
 # Wait for network
 sleep 3
 
+# ── Sensor bridge ──────────────────────────────────────────────────────────
+# Reads AS7343 via I²C and serves Room Tone data on 127.0.0.1:8765.
+# Starts in background; Chromium polls it for CCT/lux. Safe to run even if
+# sensor isn't wired yet — bridge starts in simulation mode.
+BRIDGE_DIR="$HOME/sensor-bridge"
+if [ -f "$BRIDGE_DIR/main.py" ]; then
+  cd "$BRIDGE_DIR" && python3 main.py &>> "$HOME/sensor-bridge.log" &
+  cd "$HOME"
+fi
+
 # Launch Chromium with full touch support.
 # Kiosk flag is added only when KIOSK=1; otherwise launch a normal window.
 KIOSK_FLAG=""

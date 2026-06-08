@@ -2,12 +2,13 @@
  * useRoomTone
  *
  * Implements the Room Tone adaptive display system.
- * When the Pi sensor array is wired, this hook will receive real-time
- * lux + CCT readings and apply them directly. Until then, it uses a
- * time-of-day schedule as a proxy for ambient light conditions.
+ * Polls the Pi sensor bridge (127.0.0.1:8765) for real AS7343 CCT + lux
+ * readings every 3 seconds. Falls back to a time-of-day schedule when the
+ * bridge is unreachable (browser dev, sensor not yet wired, etc.).
  *
  * Two layers of control (matching spec):
  *   Layer 1 — Hardware (DDC/CI): ddcutil on Pi — brightness + RGB gains
+ *                                (handled by sensor-bridge/main.py)
  *   Layer 2 — Software (CSS): filter: sepia/brightness on #root
  *
  * This hook owns Layer 2. It also exposes the computed state so the
@@ -116,6 +117,18 @@ function applyZone(zone: RoomToneZone, cfg: DisplayConfig) {
   }
 }
 
+/** Maps sensor CCT + lux to a zone (mirrors logic in sensor-bridge/main.py) */
+function sensorDataToZone(cct: number, lux: number): RoomToneZone {
+  if (lux < 5)         return 'late-night'
+  if (lux < 30)        return 'night'
+  if (cct < 3200)      return 'evening'
+  if (cct < 4500)      return 'afternoon'
+  return 'day'
+}
+
+const SENSOR_BRIDGE_URL = 'http://127.0.0.1:8765/room-tone'
+const SENSOR_POLL_MS    = 3_000
+
 export function useRoomTone() {
   const { data } = useQuery<DisplayConfig | null>({
     queryKey: ['settings', 'display_config'],
@@ -123,7 +136,7 @@ export function useRoomTone() {
       const { data } = await supabase.from('settings').select('value').eq('key', 'display_config').single()
       return data?.value as DisplayConfig | null
     },
-    refetchInterval: 60_000, // re-check every minute for schedule changes
+    refetchInterval: 60_000,
   })
 
   const cfg: DisplayConfig = useMemo(
@@ -131,30 +144,60 @@ export function useRoomTone() {
     [data]
   )
 
+  // Poll the Pi sensor bridge; null means unreachable → fall back to time-of-day
+  const { data: sensorData } = useQuery<{ cct: number; lux: number; zone: string } | null>({
+    queryKey: ['sensor', 'room-tone'],
+    queryFn: async () => {
+      try {
+        const res = await fetch(SENSOR_BRIDGE_URL, { signal: AbortSignal.timeout(2000) })
+        if (!res.ok) return null
+        const json = await res.json()
+        if (json.error || json.cct == null) return null
+        return json as { cct: number; lux: number; zone: string }
+      } catch {
+        return null // bridge not running — silent fallback
+      }
+    },
+    refetchInterval: SENSOR_POLL_MS,
+    staleTime: SENSOR_POLL_MS,
+  })
+
   const tick = useCallback(() => {
     const now = new Date()
     const hour = now.getHours() + now.getMinutes() / 60
 
-    // Auto-expire manual override after 2 hours
     if (cfg.manual_override && cfg.override_expires_at) {
       if (new Date(cfg.override_expires_at) < now) {
         // Silently fall through — settings page handles DB write
       }
     }
 
-    const zone = getZoneForHour(Math.floor(hour), cfg)
+    let zone: RoomToneZone
+    if (cfg.manual_override) {
+      zone = 'manual'
+    } else if (sensorData?.cct != null && sensorData?.lux != null) {
+      // Real sensor reading available
+      zone = sensorDataToZone(sensorData.cct, sensorData.lux)
+    } else {
+      // Sensor bridge unreachable — time-of-day proxy fallback
+      zone = getZoneForHour(Math.floor(hour), cfg)
+    }
+
     applyZone(zone, cfg)
-  }, [cfg])
+  }, [cfg, sensorData])
 
   useEffect(() => {
-    tick() // apply immediately
-    const interval = setInterval(tick, 60_000) // re-evaluate every minute
+    tick()
+    const interval = setInterval(tick, 60_000)
     return () => clearInterval(interval)
   }, [tick])
 
-  // Return current zone for the preview in settings
   const currentHour = new Date().getHours()
-  const currentZone = getZoneForHour(currentHour, cfg)
+  const currentZone: RoomToneZone = cfg.manual_override
+    ? 'manual'
+    : sensorData?.cct != null && sensorData?.lux != null
+      ? sensorDataToZone(sensorData.cct, sensorData.lux)
+      : getZoneForHour(currentHour, cfg)
 
-  return { cfg, currentZone }
+  return { cfg, currentZone, sensorData: sensorData ?? null }
 }
