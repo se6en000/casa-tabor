@@ -473,12 +473,17 @@ app.add_middleware(
 def room_tone():
     with _lock:
         data = dict(_latest)
+    with _ddc_lock:
+        brightness = _current_brightness
+        rgb        = list(_current_rgb) if _current_rgb else None
     return {
-        "cct":       data["cct"],
-        "lux":       data["lux"],
-        "zone":      data["zone"],
-        "error":     data["error"],
-        "timestamp": data["timestamp"],
+        "cct":        data["cct"],
+        "lux":        data["lux"],
+        "zone":       data["zone"],
+        "error":      data["error"],
+        "timestamp":  data["timestamp"],
+        "brightness": brightness,
+        "rgb":        rgb,
     }
 
 

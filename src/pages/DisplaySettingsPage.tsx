@@ -162,7 +162,7 @@ function DayTimeline({ cfg }: { cfg: DisplayConfig }) {
 
 export default function DisplaySettingsPage() {
   const qc = useQueryClient()
-  const { cfg: liveCfg, currentZone } = useRoomTone()
+  const { cfg: liveCfg, currentZone, sensorData } = useRoomTone()
   const [config, setConfig] = useState<DisplayConfig>(DISPLAY_DEFAULTS)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [previewZone, setPreviewZone] = useState<RoomToneZone>('day')
@@ -361,24 +361,100 @@ export default function DisplaySettingsPage() {
         {/* ── Sensor Status ─────────────────────────────── */}
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
           <SectionHeader icon={Cpu} label="Sensor Array" />
-          <p className="text-caption text-casa-muted mb-3">
-            When the Pi sensor array is connected, it will replace the time schedule with real-time lux + color temperature readings.
-          </p>
-          <div className="space-y-2">
-            {[
-              { name: 'AS7343 — 14-channel spectral (color temp)', status: 'not connected' },
-              { name: 'LTR390 — Precision lux + UV index',         status: 'not connected' },
-              { name: 'APDS9960 — Proximity wake detection',       status: 'not connected' },
-            ].map(s => (
-              <div key={s.name} className="flex items-center justify-between px-3 py-2 rounded-lg bg-casa-bg border border-casa-divider">
-                <span className="text-caption text-casa-navy">{s.name}</span>
-                <span className="text-caption text-casa-muted italic">{s.status}</span>
+
+          {sensorData ? (
+            <>
+              {/* Live readings grid */}
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="rounded-xl bg-casa-bg border border-casa-divider px-3 py-2.5">
+                  <p className="text-[10px] font-semibold text-casa-muted uppercase tracking-wide mb-0.5">Color Temp</p>
+                  <p className="text-body-sm font-semibold text-casa-navy tabular-nums">{Math.round(sensorData.cct).toLocaleString()} K</p>
+                  <p className="text-[10px] text-casa-muted mt-0.5">
+                    {sensorData.cct < 3000 ? 'Warm candlelight' : sensorData.cct < 4000 ? 'Warm white' : sensorData.cct < 5500 ? 'Natural daylight' : 'Cool daylight'}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-casa-bg border border-casa-divider px-3 py-2.5">
+                  <p className="text-[10px] font-semibold text-casa-muted uppercase tracking-wide mb-0.5">Illuminance</p>
+                  <p className="text-body-sm font-semibold text-casa-navy tabular-nums">{sensorData.lux.toFixed(1)} lux</p>
+                  <p className="text-[10px] text-casa-muted mt-0.5">
+                    {sensorData.lux < 5 ? 'Very dark' : sensorData.lux < 30 ? 'Dim room' : sensorData.lux < 200 ? 'Indoor lit' : 'Bright / daylight'}
+                  </p>
+                </div>
+                {sensorData.brightness != null && (
+                  <div className="rounded-xl bg-casa-bg border border-casa-divider px-3 py-2.5">
+                    <p className="text-[10px] font-semibold text-casa-muted uppercase tracking-wide mb-0.5">DDC Brightness</p>
+                    <div className="flex items-end gap-1.5 mb-1">
+                      <p className="text-body-sm font-semibold text-casa-navy tabular-nums">{sensorData.brightness}%</p>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-casa-border overflow-hidden">
+                      <div className="h-full rounded-full bg-casa-gold transition-all duration-700" style={{ width: `${sensorData.brightness}%` }} />
+                    </div>
+                  </div>
+                )}
+                {sensorData.rgb && (
+                  <div className="rounded-xl bg-casa-bg border border-casa-divider px-3 py-2.5">
+                    <p className="text-[10px] font-semibold text-casa-muted uppercase tracking-wide mb-0.5">Monitor RGB Gains</p>
+                    <div className="flex gap-2 mt-1">
+                      {(['R', 'G', 'B'] as const).map((ch, i) => {
+                        const val = sensorData.rgb![i]
+                        const color = ch === 'R' ? '#E05050' : ch === 'G' ? '#4CAF72' : '#5080E0'
+                        return (
+                          <div key={ch} className="flex-1 text-center">
+                            <div className="text-[10px] font-bold mb-0.5" style={{ color }}>{ch}</div>
+                            <div className="text-body-sm font-semibold text-casa-navy tabular-nums">{val}</div>
+                            <div className="h-1 rounded-full bg-casa-border overflow-hidden mt-1">
+                              <div className="h-full rounded-full transition-all duration-700" style={{ width: `${val}%`, background: color }} />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
-          <p className="text-caption text-casa-muted mt-3">
-            Using <span className="font-medium text-casa-navy">time-of-day schedule</span> as proxy until sensors are wired.
-          </p>
+
+              {/* Sensor rows */}
+              <div className="space-y-2 mb-3">
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-casa-bg border border-casa-divider">
+                  <span className="text-caption text-casa-navy">AS7343 — 14-channel spectral (color temp)</span>
+                  <span className="flex items-center gap-1.5 text-caption text-emerald-600 font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    live
+                  </span>
+                </div>
+                {(['LTR390 — Precision lux + UV index', 'APDS9960 — Proximity wake detection'] as const).map(name => (
+                  <div key={name} className="flex items-center justify-between px-3 py-2 rounded-lg bg-casa-bg border border-casa-divider">
+                    <span className="text-caption text-casa-navy">{name}</span>
+                    <span className="text-caption text-casa-muted italic">not connected</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-caption text-casa-muted">
+                Sensor is active — overriding time-of-day schedule with real-time readings.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-caption text-casa-muted mb-3">
+                When the Pi sensor array is connected, it will replace the time schedule with real-time lux + color temperature readings.
+              </p>
+              <div className="space-y-2">
+                {[
+                  'AS7343 — 14-channel spectral (color temp)',
+                  'LTR390 — Precision lux + UV index',
+                  'APDS9960 — Proximity wake detection',
+                ].map(name => (
+                  <div key={name} className="flex items-center justify-between px-3 py-2 rounded-lg bg-casa-bg border border-casa-divider">
+                    <span className="text-caption text-casa-navy">{name}</span>
+                    <span className="text-caption text-casa-muted italic">not connected</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-caption text-casa-muted mt-3">
+                Using <span className="font-medium text-casa-navy">time-of-day schedule</span> as proxy until sensors are wired.
+              </p>
+            </>
+          )}
         </div>
 
         {/* ── Home Screen visibility ───────────────────── */}

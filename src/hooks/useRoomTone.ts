@@ -145,7 +145,10 @@ export function useRoomTone() {
   )
 
   // Poll the Pi sensor bridge; null means unreachable → fall back to time-of-day
-  const { data: sensorData } = useQuery<{ cct: number; lux: number; zone: string } | null>({
+  const { data: sensorData } = useQuery<{
+    cct: number; lux: number; zone: string
+    brightness: number | null; rgb: [number, number, number] | null
+  } | null>({
     queryKey: ['sensor', 'room-tone'],
     queryFn: async () => {
       try {
@@ -153,7 +156,7 @@ export function useRoomTone() {
         if (!res.ok) return null
         const json = await res.json()
         if (json.error || json.cct == null) return null
-        return json as { cct: number; lux: number; zone: string }
+        return json
       } catch {
         return null // bridge not running — silent fallback
       }
