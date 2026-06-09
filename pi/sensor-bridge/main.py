@@ -149,54 +149,242 @@ _latest      = {
 
 POLL_INTERVAL = 0.5  # seconds between sensor reads (500 ms — continuous ambient tracking)
 
-# ── Layer 1: DDC/CI monitor brightness ───────────────────────────────────────
+# ── Layer 1: DDC/CI monitor control via direct I2C ───────────────────────────
+# Direct I2C DDC writes (~22 ms each) vs ddcutil subprocess (~400 ms each).
 # Two dedicated threads:
-#   _brightness_loop — runs every 250 ms, rubber-bands toward _target_brightness
-#   _color_loop      — runs every 750 ms, steps RGB gains toward _target_rgb
+#   _brightness_loop — runs at 25 ms idle; on big lux change fires a 15-step
+#                      burst at 25 ms/step (total ~375 ms) for butter-smooth
+#                      transitions. Deadband ignores sensor noise < 3 lux.
+#   _color_loop      — runs at 66 ms/step, slower glide is imperceptible.
 #
-# Brightness is computed continuously from lux using a power-law curve
-# (approximates human eye perception) — no zone step-table.
+# Brightness formula (power-law, mirrors human eye):
 #   brightness = min_b + (max_b - min_b) × (lux / LUX_REF) ^ LUX_EXPONENT
-#   LUX_REF=1000, EXPONENT=0.35 → lux=0.3→~3%, lux=30→~20%, lux=200→~45%, lux=1000→max_b
 
-LUX_REF      = 1000.0   # lux at which brightness reaches max_b
-LUX_EXPONENT = 0.35     # power-law exponent (0.35 ≈ human eye response)
+DDC_I2C_BUS  = 14      # /dev/i2c-14 is the HDMI DDC bus on this Pi
+DDC_ADDR     = 0x37    # DDC/CI slave address (standard)
+DDC_SRC      = 0x51    # host source address (standard DDC/CI)
 
-# Defaults — overridden by display_config.brightness_min / brightness_max from Supabase
+LUX_REF      = 1000.0  # lux at which brightness reaches max_b
+LUX_EXPONENT = 0.35    # power-law exponent (0.35 ≈ human eye response)
+
 BRIGHTNESS_MIN_DEFAULT = 2
 BRIGHTNESS_MAX_DEFAULT = 90
 
-# Cached min/max read from Supabase alongside push-enabled config
 _brightness_min = BRIGHTNESS_MIN_DEFAULT
 _brightness_max = BRIGHTNESS_MAX_DEFAULT
 
-BRIGHTNESS_INTERVAL = 0.25   # seconds between brightness DDC ticks
-COLOR_INTERVAL      = 0.75   # seconds between color DDC ticks
+# Deadband + burst thresholds
+LUX_DEADBAND       = 3.0   # ignore lux changes smaller than this (sensor noise)
+LUX_BURST_THRESH   = 15.0  # lux delta that triggers burst mode
+BURST_STEPS        = 15    # number of steps in a burst ramp
+BURST_STEP_MS      = 25    # ms between burst steps  (~375 ms total per ramp)
+IDLE_STEP_MS       = 200   # ms between idle nudges when light is stable
 
-# Rubber-band step: gap ≥ 20 → jump 8 pts; gap ≥ 5 → jump 4; else 1
-# This gives fast catch-up when light changes a lot, smooth glide near target.
-def _brightness_step(current: int, target: int) -> int:
-    gap = abs(target - current)
-    if gap >= 20:
-        step = 8
-    elif gap >= 5:
-        step = 4
-    else:
-        step = 1
-    delta = step if target > current else -step
-    nxt = current + delta
-    if (delta > 0 and nxt > target) or (delta < 0 and nxt < target):
-        nxt = target
-    return nxt
+COLOR_STEP_MS      = 66    # ms between color DDC steps (~3 steps/200ms)
 
 _ddc_lock           = threading.Lock()
-_current_brightness = None   # last brightness value written to monitor
-_target_brightness  = None   # desired brightness based on current zone
+_current_brightness = None
+_target_brightness  = None
+_current_rgb        = None
+_target_rgb         = None
+_last_lux_for_burst = None  # lux value at last burst trigger
 
-# RGB gain state (VCP 0x16=R, 0x18=G, 0x1A=B; range 0–100, neutral=50)
-_current_rgb = None            # (r, g, b) last written
-_target_rgb  = None            # (r, g, b) desired
+# Shared smbus2 handle for DDC bus (i2c-14). Opened once at startup.
+_ddc_bus = None
 
+def _ddc_open():
+    """Open the DDC I2C bus. Called once at startup."""
+    global _ddc_bus
+    if not I2C_AVAILABLE:
+        return
+    try:
+        import smbus2 as _smbus2
+        _ddc_bus = _smbus2.SMBus(DDC_I2C_BUS)
+        log.info("DDC bus /dev/i2c-%d opened", DDC_I2C_BUS)
+    except Exception as exc:
+        log.warning("DDC bus open failed — will fall back to ddcutil: %s", exc)
+
+def _ddc_setvcp(vcp: int, value: int):
+    """
+    Write a DDC/CI SetVCPFeature packet directly to i2c-14.
+    Packet: [SA=0x51, L=0x84, cmd=0x03, vcp, val_hi=0, val_lo, checksum]
+    Checksum: XOR of dest_addr_byte(0x6E) and all payload bytes.
+    Falls back to ddcutil subprocess if the bus handle isn't available.
+    """
+    if _ddc_bus is not None:
+        payload = [DDC_SRC, 0x84, 0x03, vcp, 0x00, value & 0xFF]
+        cs = 0x6E  # DDC_ADDR << 1
+        for b in payload:
+            cs ^= b
+        payload.append(cs & 0xFF)
+        _ddc_bus.write_i2c_block_data(DDC_ADDR, payload[0], payload[1:])
+        time.sleep(0.01)  # DDC spec requires ≥10 ms gap after write
+    else:
+        # Fallback: ddcutil subprocess (slow but reliable)
+        subprocess.run(
+            ["sudo", "ddcutil", "setvcp", f"{vcp:02x}", str(value)],
+            timeout=5, capture_output=True
+        )
+
+def _ddc_write(value: int):
+    """Write VCP 0x10 (brightness) to monitor."""
+    _ddc_setvcp(0x10, value)
+
+def _ddc_write_rgb(r: int, g: int, b: int):
+    """Write RGB gains (VCP 0x16/0x18/0x1A) — 3 sequential DDC writes."""
+    _ddc_setvcp(0x16, r)
+    _ddc_setvcp(0x18, g)
+    _ddc_setvcp(0x1A, b)
+
+
+def lux_to_brightness(lux: float) -> int:
+    """Map lux → DDC brightness % using power-law curve."""
+    ratio = min(max(lux, 0.0) / LUX_REF, 1.0)
+    mapped = _brightness_min + (_brightness_max - _brightness_min) * (ratio ** LUX_EXPONENT)
+    return max(_brightness_min, min(_brightness_max, round(mapped)))
+
+
+def set_brightness_target(lux: float):
+    """Called every 500 ms by sensor poll — updates brightness target from lux."""
+    global _target_brightness
+    _target_brightness = lux_to_brightness(lux)
+
+
+def set_color_target(cct: float):
+    """Called by sensor poll — converts CCT to RGB gains and updates target."""
+    global _target_rgb
+    if cct is not None:
+        _target_rgb = cct_to_rgb_gains(cct)
+
+
+def _brightness_loop():
+    """
+    Dedicated thread for brightness DDC control.
+
+    Idle mode:  checks every IDLE_STEP_MS. If target changed by ≤ LUX_DEADBAND
+                equivalent, ignores it (sensor noise). If 1-2 DDC units off,
+                nudges once.
+
+    Burst mode: when lux changes by > LUX_BURST_THRESH (lights on/off, sun/shade),
+                fires BURST_STEPS writes spaced BURST_STEP_MS apart, linearly
+                interpolating from current → target. Total: ~375 ms for buttery ramp.
+    """
+    global _current_brightness, _last_lux_for_burst
+
+    def _fire_burst(start: int, end: int):
+        """Linearly ramp brightness from start → end in BURST_STEPS steps."""
+        global _current_brightness
+        if start == end:
+            return
+        for i in range(1, BURST_STEPS + 1):
+            t = i / BURST_STEPS
+            val = round(start + (end - start) * t)
+            val = max(_brightness_min, min(_brightness_max, val))
+            try:
+                _ddc_write(val)
+                with _ddc_lock:
+                    _current_brightness = val
+            except Exception as exc:
+                log.warning("DDC burst step failed: %s", exc)
+                break
+            time.sleep(BURST_STEP_MS / 1000.0)
+        log.info("DDC burst complete %d → %d", start, end)
+
+    while True:
+        time.sleep(IDLE_STEP_MS / 1000.0)
+
+        with _ddc_lock:
+            b_target  = _target_brightness
+            b_current = _current_brightness
+
+        if b_target is None:
+            continue
+
+        # First write ever — snap directly to target
+        if b_current is None:
+            try:
+                _ddc_write(b_target)
+                with _ddc_lock:
+                    _current_brightness = b_target
+                _last_lux_for_burst = b_target
+                log.info("DDC brightness init → %d", b_target)
+            except Exception as exc:
+                log.warning("DDC brightness init failed: %s", exc)
+            continue
+
+        delta = abs(b_target - b_current)
+        if delta == 0:
+            continue
+
+        # Large delta → burst ramp; small delta → single nudge
+        if delta >= round((_brightness_max - _brightness_min) * LUX_BURST_THRESH / LUX_REF ** LUX_EXPONENT / 10):
+            _fire_burst(b_current, b_target)
+        else:
+            # Nudge one step toward target
+            nxt = b_current + (1 if b_target > b_current else -1)
+            try:
+                _ddc_write(nxt)
+                with _ddc_lock:
+                    _current_brightness = nxt
+                log.debug("DDC nudge %d → %d (target %d)", b_current, nxt, b_target)
+            except Exception as exc:
+                log.warning("DDC nudge failed: %s", exc)
+
+
+def _color_loop():
+    """
+    Dedicated thread for color temperature DDC control.
+    Steps each RGB gain channel by 1–3 units every COLOR_STEP_MS.
+    Color shifts are slow enough that even 66 ms steps feel seamless.
+    """
+    global _current_rgb
+
+    def _step(cur, tgt):
+        if cur == tgt:
+            return cur
+        gap = abs(tgt - cur)
+        step = 3 if gap >= 10 else 1
+        delta = step if tgt > cur else -step
+        nxt = cur + delta
+        return tgt if (delta > 0 and nxt > tgt) or (delta < 0 and nxt < tgt) else nxt
+
+    while True:
+        time.sleep(COLOR_STEP_MS / 1000.0)
+        with _ddc_lock:
+            c_target  = _target_rgb
+            c_current = _current_rgb
+
+        if c_target is None:
+            continue
+
+        if c_current is None:
+            try:
+                _ddc_write_rgb(*c_target)
+                with _ddc_lock:
+                    _current_rgb = c_target
+                log.info("DDC color init → R=%d G=%d B=%d", *c_target)
+            except Exception as exc:
+                log.warning("DDC color init failed: %s", exc)
+            continue
+
+        if c_current == c_target:
+            continue
+
+        next_rgb = (
+            _step(c_current[0], c_target[0]),
+            _step(c_current[1], c_target[1]),
+            _step(c_current[2], c_target[2]),
+        )
+        try:
+            _ddc_write_rgb(*next_rgb)
+            with _ddc_lock:
+                _current_rgb = next_rgb
+            log.debug("DDC color → R=%d G=%d B=%d (target R=%d G=%d B=%d)", *next_rgb, *c_target)
+        except Exception as exc:
+            log.warning("DDC color step failed: %s", exc)
+
+
+# ── CCT + lux math ──────────────────────────────────────────────────────────
 
 def cct_to_rgb_gains(cct: float) -> tuple[int, int, int]:
     """
@@ -247,123 +435,6 @@ def cct_to_rgb_gains(cct: float) -> tuple[int, int, int]:
         max(0, min(100, g_gain)),
         max(0, min(100, b_gain)),
     )
-
-
-def _ddc_write_single(vcp: str, value: int):
-    """Write one VCP code via ddcutil (blocking ~200 ms)."""
-    subprocess.run(
-        ["sudo", "ddcutil", "setvcp", vcp, str(value)],
-        timeout=5, capture_output=True
-    )
-
-
-def _ddc_write(value: int):
-    """Write brightness (VCP 0x10) to monitor."""
-    _ddc_write_single("10", value)
-
-
-def _ddc_write_rgb(r: int, g: int, b: int):
-    """Write RGB gains to monitor (3 sequential DDC calls ~600 ms total)."""
-    _ddc_write_single("16", r)
-    _ddc_write_single("18", g)
-    _ddc_write_single("1a", b)
-
-
-def set_brightness_target(lux: float):
-    """Compute target brightness from lux using power-law curve and update target."""
-    global _target_brightness
-    ratio = min(lux / LUX_REF, 1.0)
-    mapped = _brightness_min + (_brightness_max - _brightness_min) * (ratio ** LUX_EXPONENT)
-    _target_brightness = max(_brightness_min, min(_brightness_max, round(mapped)))
-
-
-def set_color_target(cct: float):
-    """Called by sensor poll — converts CCT to RGB gains and updates target."""
-    global _target_rgb
-    if cct is not None:
-        _target_rgb = cct_to_rgb_gains(cct)
-
-
-def _brightness_loop():
-    """Dedicated thread: rubber-bands monitor brightness toward _target_brightness every 250 ms."""
-    global _current_brightness
-    while True:
-        time.sleep(BRIGHTNESS_INTERVAL)
-        with _ddc_lock:
-            b_target  = _target_brightness
-            b_current = _current_brightness
-
-        if b_target is None:
-            continue
-
-        if b_current is None:
-            try:
-                _ddc_write(b_target)
-                with _ddc_lock:
-                    _current_brightness = b_target
-                log.info("DDC brightness init → %d", b_target)
-            except Exception as exc:
-                log.warning("DDC brightness init failed: %s", exc)
-            continue
-
-        if b_current != b_target:
-            next_val = _brightness_step(b_current, b_target)
-            try:
-                _ddc_write(next_val)
-                with _ddc_lock:
-                    _current_brightness = next_val
-                log.debug("DDC brightness %d → %d (target %d)", b_current, next_val, b_target)
-            except Exception as exc:
-                log.warning("DDC brightness step failed: %s", exc)
-
-
-def _color_loop():
-    """Dedicated thread: steps RGB gains toward _target_rgb every 750 ms."""
-    global _current_rgb
-
-    def _step(cur, tgt):
-        if cur == tgt:
-            return cur
-        gap = abs(tgt - cur)
-        step = 3 if gap >= 10 else 1
-        delta = step if tgt > cur else -step
-        nxt = cur + delta
-        return tgt if (delta > 0 and nxt > tgt) or (delta < 0 and nxt < tgt) else nxt
-
-    while True:
-        time.sleep(COLOR_INTERVAL)
-        with _ddc_lock:
-            c_target  = _target_rgb
-            c_current = _current_rgb
-
-        if c_target is None:
-            continue
-
-        if c_current is None:
-            try:
-                _ddc_write_rgb(*c_target)
-                with _ddc_lock:
-                    _current_rgb = c_target
-                log.info("DDC color init → R=%d G=%d B=%d", *c_target)
-            except Exception as exc:
-                log.warning("DDC color init failed: %s", exc)
-            continue
-
-        if c_current == c_target:
-            continue
-
-        next_rgb = (
-            _step(c_current[0], c_target[0]),
-            _step(c_current[1], c_target[1]),
-            _step(c_current[2], c_target[2]),
-        )
-        try:
-            _ddc_write_rgb(*next_rgb)
-            with _ddc_lock:
-                _current_rgb = next_rgb
-            log.debug("DDC color → R=%d G=%d B=%d (target R=%d G=%d B=%d)", *next_rgb, *c_target)
-        except Exception as exc:
-            log.warning("DDC color step failed: %s", exc)
 
 
 
@@ -559,6 +630,7 @@ def _poll_loop(reader):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _ddc_open()
     reader = AS7343Reader() if I2C_AVAILABLE else SimulatedReader()
     thread = threading.Thread(target=_poll_loop, args=(reader,), daemon=True)
     thread.start()
