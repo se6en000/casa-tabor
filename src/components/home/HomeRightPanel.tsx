@@ -17,6 +17,7 @@ import ConflictAlertsSection from '../shared/ConflictAlertsSection'
 import { useWeekConflicts } from '../../hooks/useConflicts'
 import PrepActionSection from './PrepActionSection'
 import { useCalendarStore } from '../../stores/calendarStore'
+import BounceScroll from '../shared/BounceScroll'
 
 interface Props {
   now: Date
@@ -121,7 +122,8 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
   const hasMore = rest.length > 0
 
   return (
-    <aside className="hidden lg:flex w-72 flex-shrink-0 flex-col border-l border-casa-border bg-casa-surface self-stretch overflow-y-auto">
+    <aside className="hidden lg:flex w-72 flex-shrink-0 flex-col border-l border-casa-border bg-casa-surface self-stretch overflow-hidden">
+      <BounceScroll className="flex-1 min-h-0">
 
       {/* ── Upcoming Trips ────────────────────────────────────── */}
       {upcomingTrips && upcomingTrips.length > 0 && (
@@ -301,6 +303,7 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
           </div>
         )}
       </div>
+      </BounceScroll>
     </aside>
   )
 }

@@ -21,6 +21,7 @@ import EventEditSheet from './EventEditSheet'
 import type { Trip } from '../../hooks/useTrips'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useSavedPlaces, useSavePlace, findSavedPlace } from '../../hooks/useSavedPlaces'
+import BounceScroll from '../shared/BounceScroll'
 
 const CONFIDENCE_CONFIG = {
   high:   { color: '#22c55e', label: 'High confidence', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
@@ -910,7 +911,7 @@ function PanelBody({ event, onEventUpdated }: { event: EventWithDetails; onEvent
   // ── Travel event with trip data: show full inline travel intelligence ──
   if (isTravel && trip) {
     return (
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <BounceScroll className="flex-1" innerClassName="p-6 space-y-4">
         {/* "Travel Intelligence Ready" badge */}
         <div className="flex items-center gap-3 px-3 py-2.5 bg-casa-navy rounded-xl">
           <div className="w-7 h-7 rounded-full bg-casa-gold/20 flex items-center justify-center flex-shrink-0">
@@ -957,7 +958,7 @@ function PanelBody({ event, onEventUpdated }: { event: EventWithDetails; onEvent
         />
 
         <TravelIntelligenceBody trip={trip} />
-      </div>
+      </BounceScroll>
     )
   }
 
@@ -1023,7 +1024,7 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
   const shows = (field: string) => activeFields.includes(field as ReturnType<typeof getFieldsForCategory>[number])
 
   return (
-    <div className="flex-1 overflow-y-auto overscroll-contain touch-pan-y p-6 space-y-6">
+    <BounceScroll className="flex-1" innerClassName="p-6 space-y-6">
       {topSlot}
 
       {/* Target location — always at top when available */}
@@ -1180,7 +1181,7 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
           <p className="text-caption text-casa-muted">Tap Re-enrich above to generate details for this event.</p>
         </div>
       )}
-    </div>
+    </BounceScroll>
   )
 }
 
