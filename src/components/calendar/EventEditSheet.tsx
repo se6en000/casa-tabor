@@ -719,7 +719,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 32, stiffness: 260 }}
-            className="fixed bottom-0 left-0 right-0 z-[70] bg-casa-surface rounded-t-2xl shadow-modal flex flex-col max-h-[90vh] sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-2xl sm:rounded-2xl sm:bottom-8 sm:max-h-[85vh]"
+            className="fixed bottom-0 left-0 right-0 z-[70] bg-casa-surface rounded-t-2xl shadow-modal flex flex-col max-h-[90vh] overflow-hidden sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-2xl sm:rounded-2xl sm:bottom-8 sm:max-h-[85vh]"
             style={{ maxHeight: '90vh' }}
             onClick={e => e.stopPropagation()}
           >
