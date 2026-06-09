@@ -20,6 +20,8 @@ const BRIDGE = 'http://127.0.0.1:8766'
 
 type VoicePhase = 'idle' | 'listening' | 'processing'
 
+const SILENCE_MS = 2000  // auto-send after 2s of no new words
+
 function useSpeechInput({
   onInterim,
   onFinalTranscript,
@@ -35,8 +37,10 @@ function useSpeechInput({
   onCancel: () => void
   hasPendingAction: boolean
 }) {
-  const pollRef   = useRef<ReturnType<typeof setInterval> | null>(null)
-  const activeRef = useRef(false)
+  const pollRef           = useRef<ReturnType<typeof setInterval> | null>(null)
+  const activeRef         = useRef(false)
+  const lastInterimRef    = useRef('')
+  const lastInterimTimeRef = useRef(0)
   const [phase, setPhase] = useState<VoicePhase>('idle')
   const [volume, setVolume] = useState(0)
   const supported = true
@@ -52,17 +56,29 @@ function useSpeechInput({
     else { onFinalTranscript(transcript.trim()); onFinalTranscript('__SEND__') }
   }, [onInterim, onFinalTranscript, onDismiss, onConfirm, onCancel, hasPendingAction])
 
+  const triggerFinal = useCallback((text: string) => {
+    stopPoll()
+    setPhase('processing')
+    lastInterimRef.current = ''
+    lastInterimTimeRef.current = 0
+    handleFinalTranscript(text)
+  }, [handleFinalTranscript])
+
   const stop = useCallback(async () => {
     activeRef.current = false
     stopPoll()
     setPhase('idle')
     setVolume(0)
+    lastInterimRef.current = ''
+    lastInterimTimeRef.current = 0
     onInterim('')
     try { await fetch(`${BRIDGE}/stop`, { method: 'POST' }) } catch { /* ignore */ }
   }, [onInterim])
 
   const startListening = useCallback(async () => {
     if (!activeRef.current) return
+    lastInterimRef.current = ''
+    lastInterimTimeRef.current = 0
     setPhase('listening')
     try {
       await fetch(`${BRIDGE}/start`, { method: 'POST' })
@@ -80,12 +96,29 @@ function useSpeechInput({
         const data = await res.json()
         setVolume(data.volume ?? 0)
 
-        if (data.interim_transcript) onInterim(data.interim_transcript)
+        const interim = data.interim_transcript ?? ''
 
+        if (interim) {
+          if (interim !== lastInterimRef.current) {
+            // New words arrived — update display and reset silence timer
+            lastInterimRef.current = interim
+            lastInterimTimeRef.current = Date.now()
+            onInterim(interim)
+          } else {
+            // Same interim — check if we've been silent long enough
+            const silenceMs = Date.now() - lastInterimTimeRef.current
+            if (lastInterimTimeRef.current > 0 && silenceMs >= SILENCE_MS) {
+              triggerFinal(interim)
+              if (activeRef.current) setTimeout(() => startListening(), 400)
+            }
+          }
+        }
+
+        // DeepGram speech_final fired — also trigger send
         if (!data.recording && data.transcript) {
-          stopPoll()
-          setPhase('processing')
-          handleFinalTranscript(data.transcript)
+          if (lastInterimRef.current || data.transcript) {
+            triggerFinal(data.transcript || lastInterimRef.current)
+          }
           if (activeRef.current) setTimeout(() => startListening(), 400)
         } else if (!data.recording && data.error) {
           stopPoll()
@@ -93,7 +126,7 @@ function useSpeechInput({
         }
       } catch { /* bridge momentarily busy */ }
     }, 100)
-  }, [handleFinalTranscript, onInterim])
+  }, [handleFinalTranscript, onInterim, triggerFinal])
 
   const start = useCallback(async () => {
     if (activeRef.current) return
