@@ -44,9 +44,19 @@ function useIsMobile() {
   return mobile
 }
 
+const stopTouch = (e: React.TouchEvent | React.PointerEvent) => e.stopPropagation()
+
 export default function EventDetailPanel({ event, onClose }: EventDetailPanelProps) {
   const [showEdit, setShowEdit] = useState(false)
   const isMobile = useIsMobile()
+
+  // Lock body scroll while panel is open so the calendar can't scroll behind it
+  useEffect(() => {
+    if (!event) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [event])
 
   return (
     <>
@@ -62,6 +72,10 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
               transition={{ duration: 0.2 }}
               className="fixed inset-0 bg-black/40 z-[54]"
               onClick={onClose}
+              onTouchStart={stopTouch}
+              onTouchMove={stopTouch}
+              onTouchEnd={stopTouch}
+              onPointerDown={stopTouch}
             />
 
             {isMobile ? (
@@ -83,6 +97,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 style={{ willChange: 'transform', touchAction: 'none' }}
                 className="fixed inset-x-0 bottom-0 top-[5vh] bg-casa-surface rounded-t-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col cursor-grab active:cursor-grabbing overflow-hidden"
                 onClick={e => e.stopPropagation()}
+                onPointerDown={stopTouch}
               >
                 {(() => {
                   const color = event.members[0]?.family_member?.color_hex ?? '#C9A96E'
@@ -117,6 +132,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 style={{ willChange: 'transform', touchAction: 'none' }}
                 className="fixed top-0 right-0 h-full w-[960px] bg-casa-surface border-l border-casa-border shadow-[−4px_0_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col cursor-grab active:cursor-grabbing overflow-hidden"
                 onClick={e => e.stopPropagation()}
+                onPointerDown={stopTouch}
               >
                 {/* Color accent bar + drag handle */}
                 {(() => {

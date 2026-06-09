@@ -108,6 +108,14 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   const qc = useQueryClient()
   const { data: allMembers = [] } = useFamilyMembers()
 
+  // Lock body scroll while edit sheet is open
+  useEffect(() => {
+    if (!open) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [open])
+
   // Is this event a recurring instance (not the master)?
   const isInstance = !!event.recurrence_master_id
   const [masterData, setMasterData] = useState<{ rrule: string | null; enrichment: typeof enr } | null>(null)
@@ -649,6 +657,10 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 z-[60]"
             onClick={e => { e.stopPropagation(); onClose(); }}
+            onTouchStart={e => e.stopPropagation()}
+            onTouchMove={e => e.stopPropagation()}
+            onTouchEnd={e => e.stopPropagation()}
+            onPointerDown={e => e.stopPropagation()}
           />
 
           <motion.div
