@@ -61,11 +61,14 @@ if [ "$KIOSK" = "1" ]; then
   KIOSK_FLAG="--kiosk"
 fi
 
+# Ensure X11 auth is available when script is called from SSH or autostart
+export DISPLAY="${DISPLAY:-:0}"
+export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
+
 chromium-browser \
   $KIOSK_FLAG \
   --password-store=basic \
   --no-sandbox \
-  --disable-gpu-sandbox \
   --touch-events=enabled \
   --enable-touch-drag-drop \
   --disable-pinch \
