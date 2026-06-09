@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, MicOff, RotateCcw } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, RotateCcw } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { useAIAssistant, type AIMessage } from '../../hooks/useAIAssistant'
@@ -114,54 +114,7 @@ function useSpeechInput({
   return { phase, volume, supported, start, stop, toggle, listening: phase !== 'idle' }
 }
 
-/* ── Voice Mode Overlay ─────────────────────────────────────── */
-function VoiceOverlay({ phase, volume, onStop }: { phase: 'listening' | 'processing', volume: number, onStop: () => void }) {
-  const bars = [0.6, 0.8, 1.0, 0.8, 0.6, 0.9, 0.7, 1.0, 0.5, 0.8]
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 12 }}
-      className="absolute inset-x-0 bottom-0 z-10 mx-3 mb-3 rounded-2xl bg-casa-navy overflow-hidden"
-      style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.35)' }}
-    >
-      <div className="flex flex-col items-center gap-3 px-6 py-5">
-        {/* Waveform / spinner */}
-        <div className="flex items-center justify-center gap-1 h-10">
-          {phase === 'listening' ? (
-            bars.map((mult, i) => (
-              <motion.div
-                key={i}
-                className="w-1 rounded-full bg-casa-gold"
-                animate={{ height: Math.max(4, (volume / 100) * 36 * mult + 4) }}
-                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-              />
-            ))
-          ) : (
-            <Loader2 size={28} className="animate-spin text-casa-gold" />
-          )}
-        </div>
 
-        {/* Label */}
-        <p className="text-white text-sm font-medium tracking-wide">
-          {phase === 'listening' ? 'Listening…' : 'Processing…'}
-        </p>
-        {phase === 'listening' && (
-          <p className="text-white/40 text-xs -mt-1">Speak freely — pausing sends</p>
-        )}
-
-        {/* Stop button */}
-        <button
-          type="button"
-          onClick={onStop}
-          className="mt-1 flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/10 text-white/60 text-xs hover:bg-white/20 transition-colors"
-        >
-          <MicOff size={12} /> Stop listening
-        </button>
-      </div>
-    </motion.div>
-  )
-}
 
 interface Props {
   open: boolean
@@ -556,12 +509,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                   : 'Tap ➤ to send · 📎 gallery · 📷 camera'}
               </p>
 
-              {/* Voice mode overlay */}
-              <AnimatePresence>
-                {(speech.phase === 'listening' || speech.phase === 'processing') && (
-                  <VoiceOverlay phase={speech.phase} volume={speech.volume} onStop={speech.stop} />
-                )}
-              </AnimatePresence>
+
             </div>
           </motion.div>
         </>
