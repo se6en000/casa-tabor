@@ -192,9 +192,16 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Pause voice while AI is thinking; don't auto-resume (user taps mic intentionally)
+  // Pause voice while AI is thinking; auto-resume when response arrives
+  const prevLoadingRef = useRef(false)
   useEffect(() => {
-    if (loading) speech.stop()
+    if (loading) {
+      speech.stop()
+    } else if (prevLoadingRef.current && !loading && open) {
+      // AI just finished — restart mic for continuous listening
+      setTimeout(() => speech.start(), 400)
+    }
+    prevLoadingRef.current = loading
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
