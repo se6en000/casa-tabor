@@ -244,7 +244,7 @@ export default function HomePage() {
           </header>
 
           {/* Next Up — compact on desktop, inline with greeting */}
-          <div className="hidden lg:block w-[560px] xl:w-[640px] shrink-0 self-center">
+          <div className="hidden lg:block w-72 shrink-0 self-center">
             <NextUpCard event={nextEvent} now={now} onClick={(id) => setSelectedEventId(id)} compact />
           </div>
         </div>
