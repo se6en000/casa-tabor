@@ -115,7 +115,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   if (swipedRight || swipedDown) onClose()
                 }}
                 style={{ willChange: 'transform', touchAction: 'none' }}
-                className="fixed top-0 right-0 h-full w-[480px] bg-casa-surface border-l border-casa-border shadow-[−4px_0_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col cursor-grab active:cursor-grabbing overflow-hidden"
+                className="fixed top-0 right-0 h-full w-[960px] bg-casa-surface border-l border-casa-border shadow-[−4px_0_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col cursor-grab active:cursor-grabbing overflow-hidden"
                 onClick={e => e.stopPropagation()}
               >
                 {/* Color accent bar + drag handle */}
