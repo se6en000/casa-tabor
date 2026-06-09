@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Save, Sparkles, Trash2, AlertTriangle,
-  CheckCircle, MapPin, ChevronDown, Users, Lock, Clock, Repeat, Loader2,
+  CheckCircle, MapPin, ChevronDown, Users, Lock, Clock, Repeat,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
@@ -163,7 +163,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   const [eventType, setEventType] = useState<'event' | 'reminder'>(event.event_type ?? 'event')
 
   // Autosave state
-  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'scheduled' | 'saving' | 'saved'>('idle')
+  const [_autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'scheduled' | 'saving' | 'saved'>('idle')
   const isDirtyRef = useRef(false)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -746,9 +746,19 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                   className="text-caption text-casa-navy bg-transparent border-b border-casa-navy/20 focus:border-casa-navy focus:outline-none mt-0.5 w-full max-w-[280px] truncate"
                 />
               </div>
-              <button onClick={handleClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-casa-bg text-casa-muted transition-colors shrink-0">
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-button bg-casa-gold text-white text-caption font-semibold hover:brightness-110 disabled:opacity-50 transition-all"
+                >
+                  <Save size={12} />
+                  {isSaving ? (saveStatus === 'slow' ? 'Waking…' : '…') : 'Save'}
+                </button>
+                <button onClick={handleClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-casa-bg text-casa-muted transition-colors shrink-0">
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             {/* Form */}
@@ -1212,31 +1222,14 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
               <button onClick={handleClose} className="flex-1 py-3 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-bg transition-colors">
                 Close
               </button>
-              {isInstance ? (
-                <button
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="flex-1 py-3 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-                >
-                  <Save size={15} />
-                  {isSaving ? (saveStatus === 'slow' ? 'Waking up…' : 'Saving…') : 'Save'}
-                </button>
-              ) : (
-                <div className="flex items-center gap-1.5 text-caption px-3 min-w-[90px] justify-end">
-                  {(autoSaveStatus === 'saving' || isSaving) ? (
-                    <span className="flex items-center gap-1.5 text-casa-muted">
-                      <Loader2 size={12} className="animate-spin" />
-                      {saveStatus === 'slow' ? 'Waking up…' : 'Saving…'}
-                    </span>
-                  ) : autoSaveStatus === 'saved' ? (
-                    <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
-                      <CheckCircle size={12} /> Saved
-                    </span>
-                  ) : autoSaveStatus === 'scheduled' ? (
-                    <span className="text-casa-muted/60">Saving soon…</span>
-                  ) : null}
-                </div>
-              )}
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="flex-1 py-3 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+              >
+                <Save size={15} />
+                {isSaving ? (saveStatus === 'slow' ? 'Waking up…' : 'Saving…') : 'Save'}
+              </button>
             </div>
           </motion.div>
 
