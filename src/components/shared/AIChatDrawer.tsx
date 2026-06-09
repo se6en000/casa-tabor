@@ -35,7 +35,6 @@ function useSpeechInput({
   hasPendingAction: boolean
 }) {
   const streamRef = useRef<MediaStream | null>(null)
-  const chunkTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const listeningRef = useRef(false)
   const accumulatedRef = useRef('')  // running transcript across chunks
@@ -76,8 +75,6 @@ function useSpeechInput({
     clearSilenceTimer()
     listeningRef.current = false
     setListening(false)
-    if (chunkTimerRef.current) clearInterval(chunkTimerRef.current)
-    chunkTimerRef.current = null
     streamRef.current?.getTracks().forEach(t => t.stop())
     streamRef.current = null
     accumulatedRef.current = ''
@@ -92,25 +89,29 @@ function useSpeechInput({
       listeningRef.current = true
       setListening(true)
 
-      // Use timeslice to get data every CHUNK_MS ms automatically
-      const recorder = new MediaRecorder(stream)
-      const pendingChunks: Blob[] = []
+      const record = () => {
+        if (!listeningRef.current) return
+        const recorder = new MediaRecorder(stream)
+        const chunks: Blob[] = []
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) pendingChunks.push(e.data)
+        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data) }
+        recorder.onstop = async () => {
+          if (chunks.length > 0) {
+            const blob = new Blob(chunks, { type: 'audio/webm' })
+            accumulatedRef.current = await processChunk(blob, accumulatedRef.current)
+          }
+          // Immediately start next chunk if still listening
+          if (listeningRef.current) record()
+        }
+
+        recorder.start()
+        // Stop after CHUNK_MS to flush a complete valid webm
+        setTimeout(() => {
+          if (recorder.state === 'recording') recorder.stop()
+        }, CHUNK_MS)
       }
 
-      recorder.start(CHUNK_MS)
-
-      // Every CHUNK_MS, grab accumulated data and send to Whisper
-      chunkTimerRef.current = setInterval(async () => {
-        if (!listeningRef.current || pendingChunks.length === 0) return
-        const blob = new Blob([...pendingChunks], { type: 'audio/webm' })
-        pendingChunks.length = 0
-        accumulatedRef.current = await processChunk(blob, accumulatedRef.current)
-      }, CHUNK_MS)
-
-      // Clean up when mic button is toggled off
+      record()
       stream.getAudioTracks()[0].addEventListener('ended', stop)
     } catch (e) {
       console.warn('[Whisper] mic access failed', e)
