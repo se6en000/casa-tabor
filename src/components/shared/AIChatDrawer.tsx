@@ -19,9 +19,23 @@ const CANCEL_PHRASES  = /\b(no|nope|cancel|don't|do not|stop|abort|never mind|ne
 const BRIDGE = 'http://127.0.0.1:8766'
 
 type VoicePhase = 'idle' | 'connecting' | 'listening' | 'processing'
+type STTMode = 'unknown' | 'bridge' | 'webspeech'
 
-const SILENCE_MS = 1500  // auto-send after 1.5s of no new words
-const CONNECT_TIMEOUT_MS = 5000 // give up connecting after 5s
+const SILENCE_MS = 1500
+const CONNECT_TIMEOUT_MS = 5000
+
+/** Quick probe — resolves true if bridge is reachable within 800ms */
+async function probeBridge(): Promise<boolean> {
+  try {
+    const ctrl = new AbortController()
+    const tid = setTimeout(() => ctrl.abort(), 800)
+    const res = await fetch(`${BRIDGE}/status`, { signal: ctrl.signal })
+    clearTimeout(tid)
+    return res.ok
+  } catch {
+    return false
+  }
+}
 
 function useSpeechInput({
   onInterim,
@@ -40,6 +54,10 @@ function useSpeechInput({
 }) {
   const pollRef            = useRef<ReturnType<typeof setInterval> | null>(null)
   const activeRef          = useRef(false)
+  const modeRef            = useRef<STTMode>('unknown')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef     = useRef<any>(null)
+  const silenceTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastInterimRef     = useRef('')
   const lastInterimTimeRef = useRef(0)
   const connectStartRef    = useRef(0)
@@ -47,7 +65,14 @@ function useSpeechInput({
   const [volume, setVolume] = useState(0)
   const supported = true
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const WebSpeech: any = (typeof window !== 'undefined')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? ((window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition ?? null)
+    : null
+
   const stopPoll = () => { if (pollRef.current) clearInterval(pollRef.current); pollRef.current = null }
+  const stopSilenceTimer = () => { if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
 
   const handleFinalTranscript = useCallback((transcript: string) => {
     if (!transcript.trim()) return
@@ -60,30 +85,80 @@ function useSpeechInput({
 
   const triggerFinal = useCallback((text: string) => {
     stopPoll()
+    stopSilenceTimer()
     setPhase('processing')
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     handleFinalTranscript(text)
   }, [handleFinalTranscript])
 
-  const stop = useCallback(async () => {
-    activeRef.current = false
-    stopPoll()
-    setPhase('idle')
-    setVolume(0)
-    lastInterimRef.current = ''
-    lastInterimTimeRef.current = 0
-    connectStartRef.current = 0
-    onInterim('')
-    try { await fetch(`${BRIDGE}/stop`, { method: 'POST' }) } catch { /* ignore */ }
-  }, [onInterim])
+  // ── Web Speech API path (Safari / iOS) ──────────────────────────────────
+  const startWebSpeech = useCallback(() => {
+    if (!WebSpeech || !activeRef.current) return
+    setPhase('listening')
 
-  const startListening = useCallback(async () => {
+    const recognition = new WebSpeech()
+    recognitionRef.current = recognition
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = 'en-US'
+
+    recognition.onresult = (event: any) => {
+      let interim = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript
+        if (!event.results[i].isFinal) interim += t
+      }
+      const display = interim.trim()
+      if (!display) return
+
+      onInterim(display)
+      lastInterimRef.current = display
+
+      // Reset silence timer on every word arrival
+      stopSilenceTimer()
+      silenceTimerRef.current = setTimeout(() => {
+        if (lastInterimRef.current && activeRef.current) {
+          const toSend = lastInterimRef.current
+          lastInterimRef.current = ''
+          try { recognition.stop() } catch { /* ignore */ }
+          triggerFinal(toSend)
+          if (activeRef.current) setTimeout(() => startWebSpeech(), 300)
+        }
+      }, SILENCE_MS)
+    }
+
+    recognition.onerror = (e: any) => {
+      if (e.error === 'no-speech') return
+      console.warn('[WebSpeech] error', e.error)
+      if (activeRef.current) setTimeout(() => startWebSpeech(), 500)
+    }
+
+    recognition.onend = () => {
+      // continuous=true can still stop on silence — restart transparently
+      if (activeRef.current && phase !== 'processing') {
+        setTimeout(() => startWebSpeech(), 150)
+      }
+    }
+
+    recognition.start()
+  }, [WebSpeech, onInterim, triggerFinal, phase])
+
+  const stopWebSpeech = useCallback(() => {
+    stopSilenceTimer()
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch { /* ignore */ }
+      recognitionRef.current = null
+    }
+  }, [])
+
+  // ── Bridge path (Pi / Chromium) ─────────────────────────────────────────
+  const startBridge = useCallback(async () => {
     if (!activeRef.current) return
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     connectStartRef.current = Date.now()
-    setPhase('connecting')   // show spinner until bridge reports ready=true
+    setPhase('connecting')
     try {
       await fetch(`${BRIDGE}/start`, { method: 'POST' })
     } catch (e) {
@@ -100,54 +175,73 @@ function useSpeechInput({
         const data = await res.json()
         setVolume(data.volume ?? 0)
 
-        // Advance to 'listening' only once bridge confirms WS is open
-        if (data.ready && phase !== 'listening') {
-          setPhase('listening')
-        }
+        if (data.ready) setPhase('listening')
 
-        // Abort if connect takes too long
-        if (!data.ready && connectStartRef.current > 0) {
-          if (Date.now() - connectStartRef.current > CONNECT_TIMEOUT_MS) {
-            console.warn('[STT] connect timeout, retrying')
-            stopPoll()
-            if (activeRef.current) setTimeout(() => startListening(), 500)
-            return
-          }
+        if (!data.ready && connectStartRef.current > 0 &&
+            Date.now() - connectStartRef.current > CONNECT_TIMEOUT_MS) {
+          console.warn('[STT] connect timeout, retrying')
+          stopPoll()
+          if (activeRef.current) setTimeout(() => startBridge(), 500)
+          return
         }
 
         const interim = data.interim_transcript ?? ''
-
         if (interim) {
           if (interim !== lastInterimRef.current) {
             lastInterimRef.current = interim
             lastInterimTimeRef.current = Date.now()
             onInterim(interim)
-          } else {
-            const silenceMs = Date.now() - lastInterimTimeRef.current
-            if (lastInterimTimeRef.current > 0 && silenceMs >= SILENCE_MS) {
-              triggerFinal(interim)
-              if (activeRef.current) setTimeout(() => startListening(), 300)
-            }
+          } else if (lastInterimTimeRef.current > 0 &&
+                     Date.now() - lastInterimTimeRef.current >= SILENCE_MS) {
+            triggerFinal(interim)
+            if (activeRef.current) setTimeout(() => startBridge(), 300)
           }
         }
 
-        // DeepGram speech_final or UtteranceEnd fired
         if (!data.recording && data.transcript) {
           triggerFinal(data.transcript || lastInterimRef.current)
-          if (activeRef.current) setTimeout(() => startListening(), 300)
+          if (activeRef.current) setTimeout(() => startBridge(), 300)
         } else if (!data.recording && data.error) {
           stopPoll()
-          if (activeRef.current) setTimeout(() => startListening(), 500)
+          if (activeRef.current) setTimeout(() => startBridge(), 500)
         }
       } catch { /* bridge momentarily busy */ }
     }, 100)
-  }, [handleFinalTranscript, onInterim, triggerFinal, phase])
+  }, [onInterim, triggerFinal])
+
+  const stopBridge = useCallback(async () => {
+    stopPoll()
+    try { await fetch(`${BRIDGE}/stop`, { method: 'POST' }) } catch { /* ignore */ }
+  }, [])
+
+  // ── Unified start / stop ─────────────────────────────────────────────────
+  const stop = useCallback(async () => {
+    activeRef.current = false
+    lastInterimRef.current = ''
+    lastInterimTimeRef.current = 0
+    connectStartRef.current = 0
+    setPhase('idle')
+    setVolume(0)
+    onInterim('')
+    if (modeRef.current === 'webspeech') stopWebSpeech()
+    else stopBridge()
+  }, [onInterim, stopWebSpeech, stopBridge])
 
   const start = useCallback(async () => {
     if (activeRef.current) return
     activeRef.current = true
-    startListening()
-  }, [startListening])
+    setPhase('connecting')
+
+    // Auto-detect once per drawer session: bridge → Pi, else → Web Speech API
+    if (modeRef.current === 'unknown') {
+      const hasBridge = await probeBridge()
+      modeRef.current = hasBridge ? 'bridge' : (WebSpeech ? 'webspeech' : 'bridge')
+      console.log(`[STT] mode: ${modeRef.current}`)
+    }
+
+    if (modeRef.current === 'webspeech') startWebSpeech()
+    else startBridge()
+  }, [startWebSpeech, startBridge, WebSpeech])
 
   const toggle = useCallback(() => {
     if (activeRef.current) stop()
