@@ -121,7 +121,7 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
   const hasMore = rest.length > 0
 
   return (
-    <aside className="hidden lg:flex w-[300px] xl:w-[340px] flex-shrink-0 flex-col border-l border-casa-border bg-casa-surface self-stretch overflow-y-auto">
+    <aside className="hidden lg:flex w-[600px] xl:w-[680px] flex-shrink-0 flex-col border-l border-casa-border bg-casa-surface self-stretch overflow-y-auto">
 
       {/* ── Upcoming Trips ────────────────────────────────────── */}
       {upcomingTrips && upcomingTrips.length > 0 && (
