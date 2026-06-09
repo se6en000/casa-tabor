@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { format } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useDragControls } from 'framer-motion'
 import {
   X, MapPin, Clock, Cloud, AlertTriangle,
   Pencil, Navigation, Share2, CheckSquare, Square,
@@ -49,6 +49,8 @@ const stopTouch = (e: React.TouchEvent | React.PointerEvent) => e.stopPropagatio
 export default function EventDetailPanel({ event, onClose }: EventDetailPanelProps) {
   const [showEdit, setShowEdit] = useState(false)
   const isMobile = useIsMobile()
+  const mobileDragControls = useDragControls()
+  const desktopDragControls = useDragControls()
 
   // Lock body scroll while panel is open so the calendar can't scroll behind it
   useEffect(() => {
@@ -79,30 +81,35 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
             />
 
             {isMobile ? (
-              /* ── Mobile: bottom sheet, swipe-down to dismiss ── */
+              /* ── Mobile: bottom sheet, swipe-down from handle only ── */
               <motion.div
                 key="panel"
-                data-native-drag
                 initial={{ y: '100%' }}
                 animate={{ y: 0 }}
                 exit={{ y: '100%' }}
                 transition={{ type: 'tween', duration: 0.38, ease: [0.32, 0.72, 0, 1] }}
                 drag="y"
+                dragControls={mobileDragControls}
+                dragListener={false}
                 dragConstraints={{ top: 0 }}
                 dragElastic={{ top: 0, bottom: 0.15 }}
                 dragMomentum={false}
                 onDragEnd={(_e, info) => {
-                  if (info.velocity.y > 300 || info.offset.y > 140) onClose()
+                  if (info.velocity.y > 500 || info.offset.y > 200) onClose()
                 }}
-                style={{ willChange: 'transform', touchAction: 'none' }}
-                className="fixed inset-x-0 bottom-0 top-[5vh] bg-casa-surface rounded-t-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col cursor-grab active:cursor-grabbing overflow-hidden"
+                style={{ willChange: 'transform' }}
+                className="fixed inset-x-0 bottom-0 top-[5vh] bg-casa-surface rounded-t-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col overflow-hidden"
                 onClick={e => e.stopPropagation()}
                 onPointerDown={stopTouch}
               >
                 {(() => {
                   const color = event.members[0]?.family_member?.color_hex ?? '#C9A96E'
                   return (
-                    <div className="flex-shrink-0 flex flex-col items-center pb-2 pt-3" style={{ borderTop: `4px solid ${color}` }}>
+                    <div
+                      className="flex-shrink-0 flex flex-col items-center pb-3 pt-3 cursor-grab active:cursor-grabbing"
+                      style={{ borderTop: `4px solid ${color}`, touchAction: 'none' }}
+                      onPointerDown={e => mobileDragControls.start(e)}
+                    >
                       <div className="w-10 h-1 bg-casa-divider rounded-full" />
                     </div>
                   )
@@ -112,33 +119,36 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 <PanelFooter event={event} onEdit={() => setShowEdit(true)} />
               </motion.div>
             ) : (
-              /* ── Desktop: right side panel, swipe-right or swipe-down to dismiss ── */
+              /* ── Desktop: right side panel, swipe-right from handle only ── */
               <motion.div
                 key="panel"
-                data-native-drag
                 initial={{ x: '100%' }}
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
                 transition={{ type: 'spring', damping: 32, stiffness: 200 }}
-                drag
-                dragConstraints={{ top: 0, left: 0 }}
-                dragElastic={{ top: 0, bottom: 0.08, left: 0, right: 0.15 }}
+                drag="x"
+                dragControls={desktopDragControls}
+                dragListener={false}
+                dragConstraints={{ left: 0 }}
+                dragElastic={{ left: 0, right: 0.15 }}
                 dragMomentum={false}
                 onDragEnd={(_e, info) => {
-                  const swipedRight = info.velocity.x > 300 || info.offset.x > 120
-                  const swipedDown = info.velocity.y > 300 || info.offset.y > 140
-                  if (swipedRight || swipedDown) onClose()
+                  if (info.velocity.x > 500 || info.offset.x > 200) onClose()
                 }}
-                style={{ willChange: 'transform', touchAction: 'none' }}
-                className="fixed top-0 right-0 h-full w-[960px] bg-casa-surface border-l border-casa-border shadow-[−4px_0_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col cursor-grab active:cursor-grabbing overflow-hidden"
+                style={{ willChange: 'transform' }}
+                className="fixed top-0 right-0 h-full w-[960px] bg-casa-surface border-l border-casa-border shadow-[−4px_0_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col overflow-hidden"
                 onClick={e => e.stopPropagation()}
                 onPointerDown={stopTouch}
               >
-                {/* Color accent bar + drag handle */}
+                {/* Color accent bar + drag handle (touch here to drag-dismiss) */}
                 {(() => {
                   const color = event.members[0]?.family_member?.color_hex ?? '#C9A96E'
                   return (
-                    <div className="flex-shrink-0 flex flex-col items-center pb-2 pt-3" style={{ borderTop: `4px solid ${color}` }}>
+                    <div
+                      className="flex-shrink-0 flex flex-col items-center pb-3 pt-3 cursor-grab active:cursor-grabbing"
+                      style={{ borderTop: `4px solid ${color}`, touchAction: 'none' }}
+                      onPointerDown={e => desktopDragControls.start(e)}
+                    >
                       <div className="w-10 h-1 bg-casa-divider rounded-full" />
                     </div>
                   )
