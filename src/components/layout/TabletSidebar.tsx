@@ -42,10 +42,10 @@ export default function TabletSidebar() {
 
   return (
     <>
-      <aside className="hidden lg:flex w-72 flex-shrink-0 bg-casa-surface border-r border-casa-border flex-col h-screen sticky top-0 overflow-y-auto z-30">
+      <aside className="hidden lg:flex w-72 flex-shrink-0 bg-casa-surface border-r border-casa-border flex-col h-screen sticky top-0 overflow-hidden z-30">
 
         {/* Family — filter + who's home merged */}
-        <div className="px-4 pt-6 pb-5 border-b border-casa-border">
+        <div className="flex-shrink-0 px-4 pt-6 pb-5 border-b border-casa-border">
           <p className="text-caption text-casa-muted uppercase tracking-wider mb-3 px-2">Family</p>
           <div className="flex flex-col gap-0.5">
             {family?.map(m => {
@@ -92,7 +92,7 @@ export default function TabletSidebar() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-4 py-4 flex flex-col gap-0.5">
+        <nav className="flex-1 min-h-0 overflow-y-auto px-4 py-4 flex flex-col gap-0.5">
           {NAV.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}

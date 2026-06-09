@@ -66,7 +66,6 @@ chromium-browser \
   --password-store=basic \
   --no-sandbox \
   --disable-gpu-sandbox \
-  --force-device-scale-factor=2 \
   --touch-events=enabled \
   --enable-touch-drag-drop \
   --disable-pinch \

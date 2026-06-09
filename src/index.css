@@ -140,6 +140,10 @@ html {
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Fluid typography: 16px on mobile → 28px on 1920px kiosk (~1.75×).
+     All rem-based tokens, spacing, and components scale proportionally.
+     clamp(min, preferred, max) — preferred is a linear vw interpolation. */
+  font-size: clamp(1rem, calc(0.818rem + 0.777vw), 1.75rem);
 }
 
 body {
