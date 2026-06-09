@@ -17,6 +17,7 @@ const CANCEL_PHRASES  = /\b(no|nope|cancel|don't|do not|stop|abort|never mind|ne
 
 /** Whisper-based speech input hook — records via MediaRecorder, transcribes via local Whisper bridge */
 const WHISPER_URL = 'http://127.0.0.1:8766/transcribe'
+const CHUNK_MS = 1500  // how often to flush audio to Whisper
 
 function useSpeechInput({
   onTranscript,
@@ -33,11 +34,11 @@ function useSpeechInput({
   onCancel: () => void
   hasPendingAction: boolean
 }) {
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const chunksRef = useRef<Blob[]>([])
+  const chunkTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const listeningRef = useRef(false)
+  const accumulatedRef = useRef('')  // running transcript across chunks
   const [listening, setListening] = useState(false)
   const supported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
 
@@ -45,40 +46,29 @@ function useSpeechInput({
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
   }, [])
 
-  const transcribeChunks = useCallback(async (chunks: Blob[]) => {
-    if (chunks.length === 0) return
-    const blob = new Blob(chunks, { type: 'audio/webm' })
+  const processChunk = useCallback(async (blob: Blob, accumulated: string) => {
+    if (blob.size < 1000) return accumulated  // skip near-silent chunks
     try {
       const res = await fetch(WHISPER_URL, { method: 'POST', body: blob, headers: { 'Content-Type': 'audio/webm' } })
       const { transcript } = await res.json()
-      if (!transcript) return
+      if (!transcript?.trim()) return accumulated
 
-      onTranscript(transcript)
+      const newAccumulated = accumulated ? `${accumulated} ${transcript.trim()}` : transcript.trim()
+      accumulatedRef.current = newAccumulated
+      onTranscript(newAccumulated)
 
-      if (DISMISS_PHRASES.test(transcript)) {
-        onDismiss()
-        return
-      }
-      const isShortPhrase = transcript.trim().split(/\s+/).length <= 5
-      if (isShortPhrase && hasPendingAction && CONFIRM_PHRASES.test(transcript)) {
-        onConfirm()
-        onTranscript('')
-        return
-      }
-      if (isShortPhrase && hasPendingAction && CANCEL_PHRASES.test(transcript)) {
-        onCancel()
-        onTranscript('')
-        return
-      }
+      if (DISMISS_PHRASES.test(transcript)) { onDismiss(); return '' }
+      const isShort = newAccumulated.trim().split(/\s+/).length <= 5
+      if (isShort && hasPendingAction && CONFIRM_PHRASES.test(transcript)) { onConfirm(); onTranscript(''); return '' }
+      if (isShort && hasPendingAction && CANCEL_PHRASES.test(transcript)) { onCancel(); onTranscript(''); return '' }
 
       clearSilenceTimer()
-      onFinalTranscript(transcript)
-      // Auto-send after 2s of no new speech
-      silenceTimerRef.current = setTimeout(() => {
-        onFinalTranscript('__SEND__')
-      }, 2000)
+      onFinalTranscript(newAccumulated)
+      silenceTimerRef.current = setTimeout(() => onFinalTranscript('__SEND__'), 2000)
+      return newAccumulated
     } catch (e) {
       console.warn('[Whisper] transcription failed', e)
+      return accumulated
     }
   }, [onTranscript, onFinalTranscript, onDismiss, onConfirm, onCancel, hasPendingAction, clearSilenceTimer])
 
@@ -86,12 +76,11 @@ function useSpeechInput({
     clearSilenceTimer()
     listeningRef.current = false
     setListening(false)
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop()
-    }
+    if (chunkTimerRef.current) clearInterval(chunkTimerRef.current)
+    chunkTimerRef.current = null
     streamRef.current?.getTracks().forEach(t => t.stop())
     streamRef.current = null
-    mediaRecorderRef.current = null
+    accumulatedRef.current = ''
   }, [clearSilenceTimer])
 
   const start = useCallback(async () => {
@@ -99,56 +88,36 @@ function useSpeechInput({
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
-      chunksRef.current = []
-
-      const recorder = new MediaRecorder(stream)
-      mediaRecorderRef.current = recorder
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data)
-      }
-
-      recorder.onstop = () => {
-        const chunks = [...chunksRef.current]
-        chunksRef.current = []
-        transcribeChunks(chunks)
-      }
-
+      accumulatedRef.current = ''
       listeningRef.current = true
       setListening(true)
-      // Collect audio in 5s chunks — stop/restart to get rolling transcription
-      recorder.start()
 
-      const rollChunk = () => {
-        if (!listeningRef.current) return
-        if (recorder.state === 'recording') {
-          chunksRef.current = []
-          recorder.stop()
-          // Brief gap then restart
-          setTimeout(() => {
-            if (!listeningRef.current) return
-            const newRecorder = new MediaRecorder(stream)
-            mediaRecorderRef.current = newRecorder
-            newRecorder.ondataavailable = (e) => {
-              if (e.data.size > 0) chunksRef.current.push(e.data)
-            }
-            newRecorder.onstop = () => {
-              const c = [...chunksRef.current]
-              chunksRef.current = []
-              transcribeChunks(c)
-            }
-            newRecorder.start()
-            setTimeout(rollChunk, 5000)
-          }, 100)
-        }
+      // Use timeslice to get data every CHUNK_MS ms automatically
+      const recorder = new MediaRecorder(stream)
+      const pendingChunks: Blob[] = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) pendingChunks.push(e.data)
       }
-      setTimeout(rollChunk, 5000)
+
+      recorder.start(CHUNK_MS)
+
+      // Every CHUNK_MS, grab accumulated data and send to Whisper
+      chunkTimerRef.current = setInterval(async () => {
+        if (!listeningRef.current || pendingChunks.length === 0) return
+        const blob = new Blob([...pendingChunks], { type: 'audio/webm' })
+        pendingChunks.length = 0
+        accumulatedRef.current = await processChunk(blob, accumulatedRef.current)
+      }, CHUNK_MS)
+
+      // Clean up when mic button is toggled off
+      stream.getAudioTracks()[0].addEventListener('ended', stop)
     } catch (e) {
       console.warn('[Whisper] mic access failed', e)
       listeningRef.current = false
       setListening(false)
     }
-  }, [supported, transcribeChunks])
+  }, [supported, processChunk, stop])
 
   const toggle = useCallback(() => {
     if (listeningRef.current) stop()
