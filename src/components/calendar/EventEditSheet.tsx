@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Save, Sparkles, Trash2, AlertTriangle,
-  CheckCircle, MapPin, ChevronDown, Users, Lock, Clock, Repeat,
+  CheckCircle, MapPin, ChevronDown, Users, Lock, Clock, Repeat, Loader2,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
@@ -162,6 +162,11 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   const [deleting, setDeleting] = useState(false)
   const [eventType, setEventType] = useState<'event' | 'reminder'>(event.event_type ?? 'event')
 
+  // Autosave state
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'scheduled' | 'saving' | 'saved'>('idle')
+  const isDirtyRef = useRef(false)
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // All-day toggle
   const [isAllDay, setIsAllDay] = useState(event.all_day ?? false)
 
@@ -234,6 +239,9 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   // Reset everything when sheet opens or when masterData loads for instances
   useEffect(() => {
     if (!open) return
+    isDirtyRef.current = false
+    setAutoSaveStatus('idle')
+    if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null }
     const activeEnr = isInstance ? (masterData?.enrichment ?? enr) : enr
     const cat = activeEnr?.category ?? 'other'
     setCategory(cat)
@@ -270,6 +278,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     setCategoryLocked(true) // user manually picked — lock it
     const newFields = getFieldsForCategory(cat)
     setForm(prev => buildForm({ ...effectiveEnr, ...objectFromForm(prev, fields), category: cat } as typeof enr, newFields))
+    markDirty()
   }
 
   function objectFromForm(f: Record<string, string>, flds: EnrichmentFieldKey[]) {
@@ -282,7 +291,47 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     return out
   }
 
-  const set = (field: string, value: string) => setForm(f => ({ ...f, [field]: value }))
+  const set = (field: string, value: string) => { setForm(f => ({ ...f, [field]: value })); markDirty() }
+
+  // Autosave: schedule a debounced save 1.5s after last change (non-recurring only)
+  const markDirty = () => {
+    isDirtyRef.current = true
+    if (isInstance) return  // recurring: use manual Save for scope control
+    setAutoSaveStatus('scheduled')
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    autoSaveTimerRef.current = setTimeout(() => runAutoSave(), 1500)
+  }
+
+  const runAutoSave = async () => {
+    isDirtyRef.current = false
+    if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null }
+    setAutoSaveStatus('saving')
+    setIsSaving(true)
+    setSaveStatus('saving')
+    const slowTimer = setTimeout(() => setSaveStatus('slow'), 5000)
+    try {
+      await doSaveInner('all', true)
+      setAutoSaveStatus('saved')
+      setTimeout(() => setAutoSaveStatus('idle'), 2000)
+    } catch (err) {
+      console.error('[autosave] failed:', err)
+      setAutoSaveStatus('idle')
+    } finally {
+      clearTimeout(slowTimer)
+      setIsSaving(false)
+      setSaveStatus('saving')
+    }
+  }
+
+  const handleClose = () => {
+    if (isSaving) { onClose(); return }
+    if (isDirtyRef.current && !isInstance) {
+      if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null }
+      runAutoSave().finally(() => onClose())
+    } else {
+      onClose()
+    }
+  }
 
   const handleReenrich = async () => {
     setEnrichStatus('loading')
@@ -388,7 +437,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     }
   }
 
-  const doSaveInner = async (scope: RecurScope) => {
+  const doSaveInner = async (scope: RecurScope, autoSave = false) => {
     // 1. Save enrichment fields (category + all form fields)
     const patch = objectFromForm(form, fields) as Record<string, unknown>
     patch.category = category
@@ -631,7 +680,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     }
     // analyze-conflicts + analyze-prep removed from save — they run on the scheduled HomePage cadence (5x/day)
 
-    onClose()
+    if (!autoSave) onClose()
   }
 
   const handleDelete = async () => {
@@ -694,17 +743,17 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                 {/* Always-editable title */}
                 <input
                   value={displayTitle}
-                  onChange={e => setDisplayTitle(e.target.value)}
+                  onChange={e => { setDisplayTitle(e.target.value); markDirty() }}
                   className="text-caption text-casa-navy bg-transparent border-b border-casa-navy/20 focus:border-casa-navy focus:outline-none mt-0.5 w-full max-w-[280px] truncate"
                 />
               </div>
-              <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-casa-bg text-casa-muted transition-colors shrink-0">
+              <button onClick={handleClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-casa-bg text-casa-muted transition-colors shrink-0">
                 <X size={18} />
               </button>
             </div>
 
             {/* Form */}
-            <BounceScroll className="flex-1">
+            <BounceScroll className="flex-1 min-h-0">
 
               {/* ── Event Type Toggle + Delete ── */}
               <div className="px-6 pt-5 pb-4 border-b border-casa-divider">
@@ -736,7 +785,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                   {(['event', 'reminder'] as const).map(t => (
                     <button
                       key={t}
-                      onClick={() => t === 'reminder' ? switchToReminder() : setEventType('event')}
+                      onClick={() => { t === 'reminder' ? switchToReminder() : setEventType('event'); markDirty() }}
                       className={cn(
                         'flex items-center gap-1.5 px-4 py-2 rounded-button border text-body-sm font-semibold transition-all',
                         eventType === t
@@ -826,21 +875,18 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                       return (
                         <button
                           key={member.id}
-                          onClick={() => setMemberRoles(prev => {
+                          onClick={() => { setMemberRoles(prev => {
                             const next = { ...prev }
                             if (!prev[member.id]) {
-                              // Not tagged → supporting
                               next[member.id] = 'attendee'
                             } else if (prev[member.id] === 'attendee') {
-                              // Supporting → primary (demote any existing primary first)
                               Object.keys(next).forEach(id => { if (next[id] === 'primary') next[id] = 'attendee' })
                               next[member.id] = 'primary'
                             } else {
-                              // Primary → remove
                               delete next[member.id]
                             }
                             return next
-                          })}
+                          }); markDirty() }}
                           className={cn(
                             'flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-body-sm font-medium transition-all',
                             isPrimary && 'text-white border-transparent shadow-md ring-2 ring-offset-1',
@@ -875,7 +921,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     <span className="text-caption text-casa-muted font-medium">All day</span>
                     <button
                       type="button"
-                      onClick={() => setIsAllDay(v => !v)}
+                      onClick={() => { setIsAllDay(v => !v); markDirty() }}
                       className={cn(
                         'relative w-9 h-5 rounded-full transition-colors duration-200',
                         isAllDay ? 'bg-casa-gold' : 'bg-casa-border'
@@ -896,7 +942,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     <input
                       type="date"
                       value={startDT.slice(0, 10)}
-                      onChange={e => { setStartDT(`${e.target.value}T00:00`); setEndDT(`${e.target.value}T23:59`) }}
+                      onChange={e => { setStartDT(`${e.target.value}T00:00`); setEndDT(`${e.target.value}T23:59`); markDirty() }}
                       className={inputCls}
                     />
                   </div>
@@ -907,7 +953,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                       <input
                         type="datetime-local"
                         value={startDT}
-                        onChange={e => setStartDT(e.target.value)}
+                        onChange={e => { setStartDT(e.target.value); markDirty() }}
                         className={inputCls}
                       />
                     </div>
@@ -916,7 +962,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                       <input
                         type="datetime-local"
                         value={endDT}
-                        onChange={e => setEndDT(e.target.value)}
+                        onChange={e => { setEndDT(e.target.value); markDirty() }}
                         className={inputCls}
                       />
                     </div>
@@ -930,7 +976,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     <div className="relative flex-1">
                       <select
                         value={recur.freq}
-                        onChange={e => setRecur(r => ({ ...r, freq: e.target.value as typeof r.freq, byDay: [] }))}
+                        onChange={e => { setRecur(r => ({ ...r, freq: e.target.value as typeof r.freq, byDay: [] })); markDirty() }}
                         className={cn(inputCls, 'pr-8 appearance-none')}
                       >
                         <option value="none">Does not repeat</option>
@@ -948,7 +994,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                           type="number"
                           min={1} max={99}
                           value={recur.interval}
-                          onChange={e => setRecur(r => ({ ...r, interval: Math.max(1, parseInt(e.target.value) || 1) }))}
+                          onChange={e => { setRecur(r => ({ ...r, interval: Math.max(1, parseInt(e.target.value) || 1) })); markDirty() }}
                           className={cn(inputCls, 'w-14 text-center')}
                         />
                         <span className="text-caption text-casa-muted">
@@ -965,10 +1011,10 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                         <button
                           key={i}
                           type="button"
-                          onClick={() => setRecur(r => ({
+                          onClick={() => { setRecur(r => ({
                             ...r,
                             byDay: r.byDay.includes(i) ? r.byDay.filter(x => x !== i) : [...r.byDay, i]
-                          }))}
+                          })); markDirty() }}
                           className={cn(
                             'w-8 h-8 rounded-full text-caption font-bold transition-colors',
                             recur.byDay.includes(i)
@@ -991,7 +1037,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                           <button
                             key={opt}
                             type="button"
-                            onClick={() => setRecur(r => ({ ...r, endType: opt }))}
+                            onClick={() => { setRecur(r => ({ ...r, endType: opt })); markDirty() }}
                             className={cn(
                               'px-3 py-1 rounded-full text-caption font-medium transition-colors',
                               recur.endType === opt
@@ -1007,7 +1053,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                         <input
                           type="date"
                           value={recur.endDate}
-                          onChange={e => setRecur(r => ({ ...r, endDate: e.target.value }))}
+                          onChange={e => { setRecur(r => ({ ...r, endDate: e.target.value })); markDirty() }}
                           className={cn(inputCls, 'flex-1 min-w-[130px]')}
                         />
                       )}
@@ -1017,7 +1063,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                             type="number"
                             min={2} max={999}
                             value={recur.count}
-                            onChange={e => setRecur(r => ({ ...r, count: Math.max(2, parseInt(e.target.value) || 2) }))}
+                            onChange={e => { setRecur(r => ({ ...r, count: Math.max(2, parseInt(e.target.value) || 2) })); markDirty() }}
                             className={cn(inputCls, 'w-16 text-center')}
                           />
                           <span className="text-caption text-casa-muted">occurrences</span>
@@ -1072,7 +1118,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                   <input
                     type="text"
                     value={location}
-                    onChange={e => { setLocation(e.target.value); setShowLocationSuggest(true) }}
+                    onChange={e => { setLocation(e.target.value); setShowLocationSuggest(true); markDirty() }}
                     onFocus={() => setShowLocationSuggest(true)}
                     onBlur={() => setTimeout(() => setShowLocationSuggest(false), 150)}
                     placeholder="e.g. EDS Air Conditioning, Lincoln Park"
@@ -1096,6 +1142,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                                   setLocation(p.name)
                                   if (fullAddr) setAddress(fullAddr)
                                   setShowLocationSuggest(false)
+                                  markDirty()
                                 }}
                                 className="w-full text-left px-3 py-2.5 hover:bg-casa-divider transition-colors flex items-center gap-2"
                               >
@@ -1120,7 +1167,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                   <input
                     type="text"
                     value={address}
-                    onChange={e => setAddress(e.target.value)}
+                    onChange={e => { setAddress(e.target.value); markDirty() }}
                     placeholder="e.g. 3209 Washington Rd., West Palm Beach, FL"
                     className={inputCls}
                   />
@@ -1162,18 +1209,35 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             </BounceScroll>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-casa-border flex gap-3 shrink-0">
-              <button onClick={onClose} className="flex-1 py-3 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-bg transition-colors">
-                Cancel
+            <div className="px-6 py-4 border-t border-casa-border flex items-center gap-3 shrink-0">
+              <button onClick={handleClose} className="flex-1 py-3 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-bg transition-colors">
+                Close
               </button>
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="flex-1 py-3 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-              >
-                <Save size={15} />
-                {isSaving ? (saveStatus === 'slow' ? 'Waking up…' : 'Saving…') : 'Save'}
-              </button>
+              {isInstance ? (
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="flex-1 py-3 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                >
+                  <Save size={15} />
+                  {isSaving ? (saveStatus === 'slow' ? 'Waking up…' : 'Saving…') : 'Save'}
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5 text-caption px-3 min-w-[90px] justify-end">
+                  {(autoSaveStatus === 'saving' || isSaving) ? (
+                    <span className="flex items-center gap-1.5 text-casa-muted">
+                      <Loader2 size={12} className="animate-spin" />
+                      {saveStatus === 'slow' ? 'Waking up…' : 'Saving…'}
+                    </span>
+                  ) : autoSaveStatus === 'saved' ? (
+                    <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
+                      <CheckCircle size={12} /> Saved
+                    </span>
+                  ) : autoSaveStatus === 'scheduled' ? (
+                    <span className="text-casa-muted/60">Saving soon…</span>
+                  ) : null}
+                </div>
+              )}
             </div>
           </motion.div>
 
