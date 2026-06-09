@@ -46,9 +46,13 @@ export interface DisplayConfig {
   override_expires_at: string | null // ISO string — auto-clears after 2h
 
   // Sensor
-  sensor_push_enabled: boolean // whether Pi bridge pushes live readings to Supabase
-  brightness_min: number       // DDC floor (0–50), default 2
-  brightness_max: number       // DDC ceiling (50–100), default 90
+  sensor_push_enabled: boolean
+  brightness_min: number
+  brightness_max: number
+  auto_sleep_enabled: boolean   // blank display when room is very dark
+  sleep_lux_threshold: number   // lux floor before sleep (default 0.5)
+  wake_lux_threshold: number    // lux to wake from sleep (default 3.0)
+  sleep_delay_s: number         // seconds in darkness before sleeping (default 30)
 }
 
 export const DISPLAY_DEFAULTS: DisplayConfig = {
@@ -74,6 +78,10 @@ export const DISPLAY_DEFAULTS: DisplayConfig = {
   sensor_push_enabled: false,
   brightness_min: 2,
   brightness_max: 90,
+  auto_sleep_enabled: true,
+  sleep_lux_threshold: 0.5,
+  wake_lux_threshold: 3.0,
+  sleep_delay_s: 30,
 }
 
 /** Returns the Room Tone zone for a given hour (0-23) */

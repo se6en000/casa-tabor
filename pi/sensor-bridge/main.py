@@ -51,14 +51,21 @@ SUPABASE_URL = "https://sjiejymuuuqzqukyeagk.supabase.co"
 SUPABASE_SERVICE_KEY = "sb_secret_HpkjyskE55sDH_hLNKEK1g_BVrA7f2U"
 SUPABASE_SENSOR_ID  = "00000000-0000-0000-0000-000000000001"  # fixed row for latest reading
 
-_push_enabled       = False   # cached value of display_config.sensor_push_enabled
-_push_checked_at    = 0.0     # epoch time of last config check
-PUSH_CHECK_INTERVAL = 15      # re-read Supabase config every 15s
+_push_enabled           = False
+_push_checked_at        = 0.0
+PUSH_CHECK_INTERVAL     = 15
+
+# Auto-sleep config (overridden from Supabase display_config)
+_auto_sleep_enabled     = True
+_sleep_lux_threshold    = 0.5   # lux below which display sleeps
+_wake_lux_threshold     = 3.0   # lux above which display wakes
+_sleep_delay_s          = 30    # seconds in darkness before sleeping
 
 def _is_push_enabled() -> bool:
     """Return True if sensor_push_enabled is set in display_config. Caches for 15s.
-    Also refreshes brightness_min/brightness_max from config."""
+    Also refreshes brightness_min/brightness_max and auto-sleep config."""
     global _push_enabled, _push_checked_at, _brightness_min, _brightness_max
+    global _auto_sleep_enabled, _sleep_lux_threshold, _wake_lux_threshold, _sleep_delay_s
     now = time.time()
     if now - _push_checked_at < PUSH_CHECK_INTERVAL:
         return _push_enabled
@@ -72,14 +79,19 @@ def _is_push_enabled() -> bool:
         rows = res.json()
         if rows and isinstance(rows, list):
             cfg = rows[0].get("value", {})
-            _push_enabled   = bool(cfg.get("sensor_push_enabled", False))
-            _brightness_min = int(cfg.get("brightness_min", BRIGHTNESS_MIN_DEFAULT))
-            _brightness_max = int(cfg.get("brightness_max", BRIGHTNESS_MAX_DEFAULT))
-        log.info("Push config refreshed — sensor_push_enabled=%s min=%d max=%d",
-                 _push_enabled, _brightness_min, _brightness_max)
+            _push_enabled        = bool(cfg.get("sensor_push_enabled", False))
+            _brightness_min      = int(cfg.get("brightness_min", BRIGHTNESS_MIN_DEFAULT))
+            _brightness_max      = int(cfg.get("brightness_max", BRIGHTNESS_MAX_DEFAULT))
+            _auto_sleep_enabled  = bool(cfg.get("auto_sleep_enabled", True))
+            _sleep_lux_threshold = float(cfg.get("sleep_lux_threshold", 0.5))
+            _wake_lux_threshold  = float(cfg.get("wake_lux_threshold", 3.0))
+            _sleep_delay_s       = int(cfg.get("sleep_delay_s", 30))
+        log.info("Push config refreshed — sensor_push_enabled=%s min=%d max=%d auto_sleep=%s",
+                 _push_enabled, _brightness_min, _brightness_max, _auto_sleep_enabled)
     except Exception as exc:
         log.warning("Push config check failed: %s", exc)
     _push_checked_at = now
+    return _push_enabled
     return _push_enabled
 
 
@@ -187,7 +199,8 @@ _current_brightness = None
 _target_brightness  = None
 _current_rgb        = None
 _target_rgb         = None
-_last_lux_for_burst = None  # lux value at last burst trigger
+_last_lux_for_burst = None
+_display_on         = True   # tracks whether monitor is powered on via VCP 0xD6
 
 # Shared smbus2 handle for DDC bus (i2c-14). Opened once at startup.
 _ddc_bus = None
@@ -236,6 +249,43 @@ def _ddc_write_rgb(r: int, g: int, b: int):
     _ddc_setvcp(0x18, g)
     _ddc_setvcp(0x1A, b)
 
+def _display_sleep():
+    """Power off monitor via VCP 0xD6 = 0x04."""
+    global _display_on, _current_brightness
+    _ddc_setvcp(0xD6, 0x04)
+    with _ddc_lock:
+        _display_on = False
+        _current_brightness = None  # force re-init on wake
+    log.info("Display slept (VCP 0xD6=off)")
+
+def _display_wake(target_brightness: int):
+    """
+    Power on monitor then burst-ramp brightness from 0 → target.
+    Sequence: VCP 0xD6=on → set brightness=0 → burst to target.
+    Monitor fades in from black to ambient level.
+    """
+    global _display_on, _current_brightness
+    _ddc_setvcp(0xD6, 0x01)
+    time.sleep(0.15)  # brief pause for monitor to accept commands after power-on
+    _ddc_write(0)     # start from black
+    with _ddc_lock:
+        _display_on = True
+        _current_brightness = 0
+    log.info("Display woke — bursting 0 → %d", target_brightness)
+    # Burst ramp from 0 to target
+    for i in range(1, BURST_STEPS + 1):
+        val = round(target_brightness * i / BURST_STEPS)
+        val = max(_brightness_min, min(_brightness_max, val))
+        try:
+            _ddc_write(val)
+            with _ddc_lock:
+                _current_brightness = val
+        except Exception as exc:
+            log.warning("Wake burst step failed: %s", exc)
+            break
+        time.sleep(BURST_STEP_MS / 1000.0)
+    log.info("Wake burst complete → %d", target_brightness)
+
 
 def lux_to_brightness(lux: float) -> int:
     """Map lux → DDC brightness % using power-law curve."""
@@ -259,20 +309,21 @@ def set_color_target(cct: float):
 
 def _brightness_loop():
     """
-    Dedicated thread for brightness DDC control.
+    Dedicated thread for brightness DDC control + auto-sleep.
 
-    Idle mode:  checks every IDLE_STEP_MS. If target changed by ≤ LUX_DEADBAND
-                equivalent, ignores it (sensor noise). If 1-2 DDC units off,
-                nudges once.
+    Auto-sleep: if lux stays below _sleep_lux_threshold for _sleep_delay_s seconds,
+    powers off the monitor (VCP 0xD6=off). Keeps polling; when lux rises above
+    _wake_lux_threshold, wakes monitor with a burst ramp from 0 → ambient.
 
-    Burst mode: when lux changes by > LUX_BURST_THRESH (lights on/off, sun/shade),
-                fires BURST_STEPS writes spaced BURST_STEP_MS apart, linearly
-                interpolating from current → target. Total: ~375 ms for buttery ramp.
+    Idle mode:  checks every IDLE_STEP_MS. Nudges 1 DDC unit toward target.
+
+    Burst mode: large brightness delta fires a 15-step linear ramp at 25ms/step.
     """
     global _current_brightness, _last_lux_for_burst
 
+    _dark_since = None  # time.time() when lux first dropped below sleep threshold
+
     def _fire_burst(start: int, end: int):
-        """Linearly ramp brightness from start → end in BURST_STEPS steps."""
         global _current_brightness
         if start == end:
             return
@@ -294,19 +345,46 @@ def _brightness_loop():
         time.sleep(IDLE_STEP_MS / 1000.0)
 
         with _ddc_lock:
-            b_target  = _target_brightness
-            b_current = _current_brightness
+            b_target    = _target_brightness
+            b_current   = _current_brightness
+            disp_on     = _display_on
 
         if b_target is None:
             continue
 
-        # First write ever — snap directly to target
+        # ── Auto-sleep logic ────────────────────────────────────────────────
+        if _auto_sleep_enabled:
+            # Derive current lux estimate from target brightness (inverse power law)
+            # Just use raw target: if target == _brightness_min, we're in darkness
+            current_lux = None
+            with _lock:
+                current_lux = _latest.get("lux")
+
+            if current_lux is not None:
+                if not disp_on:
+                    # Display is sleeping — watch for light or motion wake
+                    if current_lux >= _wake_lux_threshold:
+                        _dark_since = None
+                        _display_wake(b_target)
+                    continue  # keep polling while asleep, skip brightness adjust
+
+                # Display is on — track darkness duration
+                if current_lux < _sleep_lux_threshold:
+                    if _dark_since is None:
+                        _dark_since = time.time()
+                    elif time.time() - _dark_since >= _sleep_delay_s:
+                        _display_sleep()
+                        _dark_since = None
+                        continue
+                else:
+                    _dark_since = None  # light came back, reset timer
+
+        # ── Brightness control (display is on) ──────────────────────────────
         if b_current is None:
             try:
                 _ddc_write(b_target)
                 with _ddc_lock:
                     _current_brightness = b_target
-                _last_lux_for_burst = b_target
                 log.info("DDC brightness init → %d", b_target)
             except Exception as exc:
                 log.warning("DDC brightness init failed: %s", exc)
@@ -316,11 +394,9 @@ def _brightness_loop():
         if delta == 0:
             continue
 
-        # Large delta → burst ramp; small delta → single nudge
         if delta >= round((_brightness_max - _brightness_min) * LUX_BURST_THRESH / LUX_REF ** LUX_EXPONENT / 10):
             _fire_burst(b_current, b_target)
         else:
-            # Nudge one step toward target
             nxt = b_current + (1 if b_target > b_current else -1)
             try:
                 _ddc_write(nxt)
@@ -660,6 +736,7 @@ def room_tone():
     with _ddc_lock:
         brightness = _current_brightness
         rgb        = list(_current_rgb) if _current_rgb else None
+        disp_on    = _display_on
     return {
         "cct":        data["cct"],
         "lux":        data["lux"],
@@ -668,6 +745,7 @@ def room_tone():
         "timestamp":  data["timestamp"],
         "brightness": brightness,
         "rgb":        rgb,
+        "display_on": disp_on,
     }
 
 

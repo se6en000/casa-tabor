@@ -160,9 +160,9 @@ function DayTimeline({ cfg }: { cfg: DisplayConfig }) {
 
 // ── Main page ──────────────────────────────────────────────────────
 
-function SliderRow({ label, desc, value, min, max, onChange }: {
+function SliderRow({ label, desc, value, min, max, onChange, unit = '%' }: {
   label: string; desc: string; value: number; min: number; max: number
-  onChange: (v: number) => void
+  onChange: (v: number) => void; unit?: string
 }) {
   return (
     <div className="py-3 border-t border-casa-divider">
@@ -171,7 +171,7 @@ function SliderRow({ label, desc, value, min, max, onChange }: {
           <p className="text-body-sm font-semibold text-casa-navy">{label}</p>
           <p className="text-caption text-casa-muted">{desc}</p>
         </div>
-        <span className="text-body-sm font-semibold text-casa-navy tabular-nums w-10 text-right">{value}%</span>
+        <span className="text-body-sm font-semibold text-casa-navy tabular-nums w-14 text-right">{value}{unit}</span>
       </div>
       <input
         type="range" min={min} max={max} value={value}
@@ -407,6 +407,42 @@ export default function DisplaySettingsPage() {
             min={50} max={100}
             onChange={v => set('brightness_max', v)}
           />
+
+          {/* Auto-sleep */}
+          <Toggle
+            checked={config.auto_sleep_enabled}
+            onChange={v => set('auto_sleep_enabled', v)}
+            label="Auto-sleep display"
+            desc="Blanks the monitor when the room is very dark. Wakes on ambient light."
+          />
+          {config.auto_sleep_enabled && (
+            <>
+              <SliderRow
+                label="Sleep threshold"
+                desc={`Room must drop below ${(config.sleep_lux_threshold).toFixed(1)} lux for ${config.sleep_delay_s}s to sleep.`}
+                value={Math.round(config.sleep_lux_threshold * 10)}
+                min={1} max={30}
+                unit=" ×0.1lux"
+                onChange={v => set('sleep_lux_threshold', v / 10)}
+              />
+              <SliderRow
+                label="Wake threshold"
+                desc={`Wakes when lux rises above ${(config.wake_lux_threshold).toFixed(1)}.`}
+                value={Math.round(config.wake_lux_threshold * 10)}
+                min={5} max={100}
+                unit=" ×0.1lux"
+                onChange={v => set('wake_lux_threshold', v / 10)}
+              />
+              <SliderRow
+                label="Sleep delay"
+                desc="Seconds in darkness before sleeping."
+                value={config.sleep_delay_s}
+                min={5} max={120}
+                unit="s"
+                onChange={v => set('sleep_delay_s', v)}
+              />
+            </>
+          )}
 
           {config.sensor_push_enabled && sensorData ? (
             <div className="mt-3 pt-3 border-t border-casa-divider">
