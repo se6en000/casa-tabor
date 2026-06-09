@@ -15,20 +15,20 @@ const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s a
 const CONFIRM_PHRASES = /\b(yes|yeah|yep|confirm|ok|okay|go ahead|do it|sounds good|correct|right|affirmative|absolutely|sure|proceed)\b/i
 const CANCEL_PHRASES  = /\b(no|nope|cancel|don't|do not|stop|abort|never mind|nevermind|undo)\b/i
 
-/** Whisper VAD hook — bridge records from ALSA directly, browser polls for status/transcript */
+/** GCP STT bridge — ALSA-direct recording, browser polls for real-time interim words + final transcript */
 const BRIDGE = 'http://127.0.0.1:8766'
 
 type VoicePhase = 'idle' | 'listening' | 'processing'
 
 function useSpeechInput({
-  onTranscript,
+  onInterim,
   onFinalTranscript,
   onDismiss,
   onConfirm,
   onCancel,
   hasPendingAction,
 }: {
-  onTranscript: (text: string) => void
+  onInterim: (text: string) => void
   onFinalTranscript: (text: string) => void
   onDismiss: () => void
   onConfirm: () => void
@@ -40,19 +40,18 @@ function useSpeechInput({
 
   const [phase, setPhase] = useState<VoicePhase>('idle')
   const [volume, setVolume] = useState(0)
-  const supported = true  // bridge is always available on Pi
+  const supported = true
 
   const stopPoll = () => { if (pollRef.current) clearInterval(pollRef.current); pollRef.current = null }
 
-  const handleTranscript = useCallback((transcript: string) => {
+  const handleFinalTranscript = useCallback((transcript: string) => {
     if (!transcript.trim()) return
-    onTranscript(transcript.trim())
     if (DISMISS_PHRASES.test(transcript)) { onDismiss(); return }
     const isShort = transcript.trim().split(/\s+/).length <= 5
-    if (isShort && hasPendingAction && CONFIRM_PHRASES.test(transcript)) { onConfirm(); onTranscript('') }
-    else if (isShort && hasPendingAction && CANCEL_PHRASES.test(transcript)) { onCancel(); onTranscript('') }
+    if (isShort && hasPendingAction && CONFIRM_PHRASES.test(transcript)) { onConfirm(); onInterim('') }
+    else if (isShort && hasPendingAction && CANCEL_PHRASES.test(transcript)) { onCancel(); onInterim('') }
     else { onFinalTranscript(transcript.trim()); onFinalTranscript('__SEND__') }
-  }, [onTranscript, onFinalTranscript, onDismiss, onConfirm, onCancel, hasPendingAction])
+  }, [onInterim, onFinalTranscript, onDismiss, onConfirm, onCancel, hasPendingAction])
 
   const stop = useCallback(async () => {
     activeRef.current = false
@@ -68,13 +67,12 @@ function useSpeechInput({
     try {
       await fetch(`${BRIDGE}/start`, { method: 'POST' })
     } catch (e) {
-      console.warn('[Whisper] bridge unreachable', e)
+      console.warn('[STT] bridge unreachable', e)
       activeRef.current = false
       setPhase('idle')
       return
     }
 
-    // Poll bridge for volume + transcript
     pollRef.current = setInterval(async () => {
       if (!activeRef.current) { stopPoll(); return }
       try {
@@ -82,14 +80,17 @@ function useSpeechInput({
         const data = await res.json()
         setVolume(data.volume ?? 0)
 
+        // Show interim words in real-time as they arrive from Google STT
+        if (data.interim_transcript) {
+          onInterim(data.interim_transcript)
+        }
+
         if (!data.recording && data.transcript !== null) {
-          // Bridge finished transcribing
           stopPoll()
           if (data.transcript) {
             setPhase('processing')
-            handleTranscript(data.transcript)
+            handleFinalTranscript(data.transcript)
           }
-          // Loop back to listening
           if (activeRef.current) setTimeout(() => startListening(), 400)
         } else if (!data.recording && data.error) {
           stopPoll()
@@ -97,7 +98,7 @@ function useSpeechInput({
         }
       } catch { /* bridge momentarily busy */ }
     }, 100)
-  }, [handleTranscript])
+  }, [handleFinalTranscript, onInterim])
 
   const start = useCallback(async () => {
     if (activeRef.current) return
@@ -200,7 +201,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   }, [loading, send])
 
   const speech = useSpeechInput({
-    onTranscript: (interim) => {
+    onInterim: (interim) => {
       interimRef.current = interim
       setInput(interim)
     },
@@ -318,7 +319,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
             className={cn(
               'fixed z-[70] bg-casa-surface flex flex-col transition-shadow',
               'max-sm:inset-x-0 max-sm:bottom-0 max-sm:rounded-t-2xl max-sm:w-full max-sm:shadow-modal',
-              'sm:rounded-2xl sm:w-[380px] sm:shadow-[0_8px_40px_rgba(0,0,0,0.22)] sm:border sm:border-casa-border',
+              'sm:rounded-2xl sm:w-[760px] sm:shadow-[0_8px_40px_rgba(0,0,0,0.22)] sm:border sm:border-casa-border',
               loading && 'ai-thinking',
             )}
             style={{
@@ -326,7 +327,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                 maxHeight: '88vh',
                 paddingBottom: 'env(safe-area-inset-bottom)',
               } : {
-                maxHeight: '70vh',
+                height: '72vh',
                 right: anchor ? Math.max(8, anchor.right) : 16,
                 top: anchor ? anchor.top + 6 : 56,
               })
