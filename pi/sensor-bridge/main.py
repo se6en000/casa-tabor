@@ -56,8 +56,9 @@ _push_checked_at    = 0.0     # epoch time of last config check
 PUSH_CHECK_INTERVAL = 15      # re-read Supabase config every 15s
 
 def _is_push_enabled() -> bool:
-    """Return True if sensor_push_enabled is set in display_config. Caches for 15s."""
-    global _push_enabled, _push_checked_at
+    """Return True if sensor_push_enabled is set in display_config. Caches for 15s.
+    Also refreshes brightness_min/brightness_max from config."""
+    global _push_enabled, _push_checked_at, _brightness_min, _brightness_max
     now = time.time()
     if now - _push_checked_at < PUSH_CHECK_INTERVAL:
         return _push_enabled
@@ -70,8 +71,12 @@ def _is_push_enabled() -> bool:
         )
         rows = res.json()
         if rows and isinstance(rows, list):
-            _push_enabled = bool(rows[0].get("value", {}).get("sensor_push_enabled", False))
-        log.info("Push config refreshed — sensor_push_enabled=%s", _push_enabled)
+            cfg = rows[0].get("value", {})
+            _push_enabled   = bool(cfg.get("sensor_push_enabled", False))
+            _brightness_min = int(cfg.get("brightness_min", BRIGHTNESS_MIN_DEFAULT))
+            _brightness_max = int(cfg.get("brightness_max", BRIGHTNESS_MAX_DEFAULT))
+        log.info("Push config refreshed — sensor_push_enabled=%s min=%d max=%d",
+                 _push_enabled, _brightness_min, _brightness_max)
     except Exception as exc:
         log.warning("Push config check failed: %s", exc)
     _push_checked_at = now
@@ -142,24 +147,47 @@ _latest      = {
     "timestamp": None,
 }
 
-POLL_INTERVAL = 3.0  # seconds between readings
+POLL_INTERVAL = 0.5  # seconds between sensor reads (500 ms — continuous ambient tracking)
 
 # ── Layer 1: DDC/CI monitor brightness ───────────────────────────────────────
-# A dedicated DDC loop runs every 0.25 s and steps toward _target_brightness
-# by DDC_STEP points per tick — full range (80→10) in ~8.75 seconds.
-# The sensor poll just updates the target; the DDC loop does the actual work.
+# Two dedicated threads:
+#   _brightness_loop — runs every 250 ms, rubber-bands toward _target_brightness
+#   _color_loop      — runs every 750 ms, steps RGB gains toward _target_rgb
+#
+# Brightness is computed continuously from lux using a power-law curve
+# (approximates human eye perception) — no zone step-table.
+#   brightness = min_b + (max_b - min_b) × (lux / LUX_REF) ^ LUX_EXPONENT
+#   LUX_REF=1000, EXPONENT=0.35 → lux=0.3→~3%, lux=30→~20%, lux=200→~45%, lux=1000→max_b
 
-ZONE_BRIGHTNESS = {
-    "day":        80,
-    "afternoon":  65,
-    "evening":    45,
-    "night":      25,
-    "late-night": 10,
-}
+LUX_REF      = 1000.0   # lux at which brightness reaches max_b
+LUX_EXPONENT = 0.35     # power-law exponent (0.35 ≈ human eye response)
 
-DDC_INTERVAL    = 0.25   # seconds between DDC ticks
-DDC_STEP        = 2      # brightness points per tick (70 pts / 2 / 4hz ≈ 8.75 s full range)
-COLOR_STEP      = 1      # gain points per tick — color transitions slower/gentler than brightness
+# Defaults — overridden by display_config.brightness_min / brightness_max from Supabase
+BRIGHTNESS_MIN_DEFAULT = 2
+BRIGHTNESS_MAX_DEFAULT = 90
+
+# Cached min/max read from Supabase alongside push-enabled config
+_brightness_min = BRIGHTNESS_MIN_DEFAULT
+_brightness_max = BRIGHTNESS_MAX_DEFAULT
+
+BRIGHTNESS_INTERVAL = 0.25   # seconds between brightness DDC ticks
+COLOR_INTERVAL      = 0.75   # seconds between color DDC ticks
+
+# Rubber-band step: gap ≥ 20 → jump 8 pts; gap ≥ 5 → jump 4; else 1
+# This gives fast catch-up when light changes a lot, smooth glide near target.
+def _brightness_step(current: int, target: int) -> int:
+    gap = abs(target - current)
+    if gap >= 20:
+        step = 8
+    elif gap >= 5:
+        step = 4
+    else:
+        step = 1
+    delta = step if target > current else -step
+    nxt = current + delta
+    if (delta > 0 and nxt > target) or (delta < 0 and nxt < target):
+        nxt = target
+    return nxt
 
 _ddc_lock           = threading.Lock()
 _current_brightness = None   # last brightness value written to monitor
@@ -241,12 +269,12 @@ def _ddc_write_rgb(r: int, g: int, b: int):
     _ddc_write_single("1a", b)
 
 
-def set_brightness_target(zone: str):
-    """Called by sensor poll — just updates the brightness target, doesn't block."""
+def set_brightness_target(lux: float):
+    """Compute target brightness from lux using power-law curve and update target."""
     global _target_brightness
-    target = ZONE_BRIGHTNESS.get(zone)
-    if target is not None:
-        _target_brightness = target
+    ratio = min(lux / LUX_REF, 1.0)
+    mapped = _brightness_min + (_brightness_max - _brightness_min) * (ratio ** LUX_EXPONENT)
+    _target_brightness = max(_brightness_min, min(_brightness_max, round(mapped)))
 
 
 def set_color_target(cct: float):
@@ -256,40 +284,54 @@ def set_color_target(cct: float):
         _target_rgb = cct_to_rgb_gains(cct)
 
 
-def _ddc_loop():
-    """Dedicated thread: steps brightness and RGB gains toward their targets."""
-    global _current_brightness, _target_brightness, _current_rgb, _target_rgb
+def _brightness_loop():
+    """Dedicated thread: rubber-bands monitor brightness toward _target_brightness every 250 ms."""
+    global _current_brightness
     while True:
-        time.sleep(DDC_INTERVAL)
-
-        # ── Brightness ──────────────────────────────────────────────────────
+        time.sleep(BRIGHTNESS_INTERVAL)
         with _ddc_lock:
             b_target  = _target_brightness
             b_current = _current_brightness
 
-        if b_target is not None:
-            if b_current is None:
-                try:
-                    _ddc_write(b_target)
-                    with _ddc_lock:
-                        _current_brightness = b_target
-                    log.info("DDC brightness init → %d", b_target)
-                except Exception as exc:
-                    log.warning("DDC brightness init failed: %s", exc)
-            elif b_current != b_target:
-                step = DDC_STEP if b_target > b_current else -DDC_STEP
-                next_val = b_current + step
-                if (step > 0 and next_val > b_target) or (step < 0 and next_val < b_target):
-                    next_val = b_target
-                try:
-                    _ddc_write(next_val)
-                    with _ddc_lock:
-                        _current_brightness = next_val
-                    log.debug("DDC brightness %d → %d (target %d)", b_current, next_val, b_target)
-                except Exception as exc:
-                    log.warning("DDC brightness step failed: %s", exc)
+        if b_target is None:
+            continue
 
-        # ── Color temperature (RGB gains) ────────────────────────────────────
+        if b_current is None:
+            try:
+                _ddc_write(b_target)
+                with _ddc_lock:
+                    _current_brightness = b_target
+                log.info("DDC brightness init → %d", b_target)
+            except Exception as exc:
+                log.warning("DDC brightness init failed: %s", exc)
+            continue
+
+        if b_current != b_target:
+            next_val = _brightness_step(b_current, b_target)
+            try:
+                _ddc_write(next_val)
+                with _ddc_lock:
+                    _current_brightness = next_val
+                log.debug("DDC brightness %d → %d (target %d)", b_current, next_val, b_target)
+            except Exception as exc:
+                log.warning("DDC brightness step failed: %s", exc)
+
+
+def _color_loop():
+    """Dedicated thread: steps RGB gains toward _target_rgb every 750 ms."""
+    global _current_rgb
+
+    def _step(cur, tgt):
+        if cur == tgt:
+            return cur
+        gap = abs(tgt - cur)
+        step = 3 if gap >= 10 else 1
+        delta = step if tgt > cur else -step
+        nxt = cur + delta
+        return tgt if (delta > 0 and nxt > tgt) or (delta < 0 and nxt < tgt) else nxt
+
+    while True:
+        time.sleep(COLOR_INTERVAL)
         with _ddc_lock:
             c_target  = _target_rgb
             c_current = _current_rgb
@@ -298,7 +340,6 @@ def _ddc_loop():
             continue
 
         if c_current is None:
-            # First run — snap directly to target
             try:
                 _ddc_write_rgb(*c_target)
                 with _ddc_lock:
@@ -311,26 +352,16 @@ def _ddc_loop():
         if c_current == c_target:
             continue
 
-        # Step each channel independently toward target
-        def _step(cur, tgt):
-            if cur == tgt:
-                return cur
-            s = COLOR_STEP if tgt > cur else -COLOR_STEP
-            nxt = cur + s
-            return tgt if (s > 0 and nxt > tgt) or (s < 0 and nxt < tgt) else nxt
-
         next_rgb = (
             _step(c_current[0], c_target[0]),
             _step(c_current[1], c_target[1]),
             _step(c_current[2], c_target[2]),
         )
-
         try:
             _ddc_write_rgb(*next_rgb)
             with _ddc_lock:
                 _current_rgb = next_rgb
-            log.debug("DDC color → R=%d G=%d B=%d (target R=%d G=%d B=%d)",
-                      *next_rgb, *c_target)
+            log.debug("DDC color → R=%d G=%d B=%d (target R=%d G=%d B=%d)", *next_rgb, *c_target)
         except Exception as exc:
             log.warning("DDC color step failed: %s", exc)
 
@@ -506,7 +537,7 @@ def _poll_loop(reader):
                     "timestamp": time.time(),
                 })
             # Layer 1: update DDC targets for brightness and color temperature
-            set_brightness_target(data["zone"])
+            set_brightness_target(data["lux"])
             set_color_target(data["cct"])
             # Push to Supabase so any device (not just localhost) can read it
             with _ddc_lock:
@@ -531,8 +562,10 @@ async def lifespan(app: FastAPI):
     reader = AS7343Reader() if I2C_AVAILABLE else SimulatedReader()
     thread = threading.Thread(target=_poll_loop, args=(reader,), daemon=True)
     thread.start()
-    ddc_thread = threading.Thread(target=_ddc_loop, daemon=True)
-    ddc_thread.start()
+    brightness_thread = threading.Thread(target=_brightness_loop, daemon=True)
+    brightness_thread.start()
+    color_thread = threading.Thread(target=_color_loop, daemon=True)
+    color_thread.start()
     log.info("Sensor bridge started — http://127.0.0.1:8765")
     yield
     reader.close()

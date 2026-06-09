@@ -47,6 +47,8 @@ export interface DisplayConfig {
 
   // Sensor
   sensor_push_enabled: boolean // whether Pi bridge pushes live readings to Supabase
+  brightness_min: number       // DDC floor (0–50), default 2
+  brightness_max: number       // DDC ceiling (50–100), default 90
 }
 
 export const DISPLAY_DEFAULTS: DisplayConfig = {
@@ -70,6 +72,8 @@ export const DISPLAY_DEFAULTS: DisplayConfig = {
   override_expires_at: null,
 
   sensor_push_enabled: false,
+  brightness_min: 2,
+  brightness_max: 90,
 }
 
 /** Returns the Room Tone zone for a given hour (0-23) */

@@ -160,6 +160,28 @@ function DayTimeline({ cfg }: { cfg: DisplayConfig }) {
 
 // ── Main page ──────────────────────────────────────────────────────
 
+function SliderRow({ label, desc, value, min, max, onChange }: {
+  label: string; desc: string; value: number; min: number; max: number
+  onChange: (v: number) => void
+}) {
+  return (
+    <div className="py-3 border-t border-casa-divider">
+      <div className="flex items-center justify-between mb-1.5">
+        <div>
+          <p className="text-body-sm font-semibold text-casa-navy">{label}</p>
+          <p className="text-caption text-casa-muted">{desc}</p>
+        </div>
+        <span className="text-body-sm font-semibold text-casa-navy tabular-nums w-10 text-right">{value}%</span>
+      </div>
+      <input
+        type="range" min={min} max={max} value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        className="w-full accent-casa-gold"
+      />
+    </div>
+  )
+}
+
 export default function DisplaySettingsPage() {
   const qc = useQueryClient()
   const { cfg: liveCfg, currentZone, sensorData } = useRoomTone()
@@ -368,6 +390,22 @@ export default function DisplaySettingsPage() {
             onChange={v => set('sensor_push_enabled', v)}
             label="Live sensor push"
             desc="Pi bridge streams readings to Supabase. Turn off to stop recording when not needed."
+          />
+
+          {/* Brightness range */}
+          <SliderRow
+            label="Min Brightness"
+            desc="Floor when room is very dark (lux < 1). DDC scale 0–100."
+            value={config.brightness_min}
+            min={0} max={40}
+            onChange={v => set('brightness_min', v)}
+          />
+          <SliderRow
+            label="Max Brightness"
+            desc="Ceiling for full daylight. DDC scale 0–100."
+            value={config.brightness_max}
+            min={50} max={100}
+            onChange={v => set('brightness_max', v)}
           />
 
           {config.sensor_push_enabled && sensorData ? (
