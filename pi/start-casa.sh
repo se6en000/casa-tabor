@@ -54,6 +54,13 @@ if [ -f "$BRIDGE_DIR/main.py" ]; then
   cd "$HOME"
 fi
 
+# ── Whisper speech-to-text bridge ─────────────────────────────────────────
+# Listens on 127.0.0.1:8766; Chromium POSTs audio blobs, gets transcript back.
+WHISPER_DIR="$HOME/whisper-bridge"
+if [ -f "$WHISPER_DIR/main.py" ]; then
+  PATH="$HOME/.local/bin:$PATH" python3 "$WHISPER_DIR/main.py" &>> "$HOME/whisper-bridge.log" &
+fi
+
 # Launch Chromium with full touch support.
 # Kiosk flag is added only when KIOSK=1; otherwise launch a normal window.
 KIOSK_FLAG=""

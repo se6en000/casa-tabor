@@ -15,7 +15,9 @@ const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s a
 const CONFIRM_PHRASES = /\b(yes|yeah|yep|confirm|ok|okay|go ahead|do it|sounds good|correct|right|affirmative|absolutely|sure|proceed)\b/i
 const CANCEL_PHRASES  = /\b(no|nope|cancel|don't|do not|stop|abort|never mind|nevermind|undo)\b/i
 
-/** Web Speech API hook — returns null if unsupported */
+/** Whisper-based speech input hook — records via MediaRecorder, transcribes via local Whisper bridge */
+const WHISPER_URL = 'http://127.0.0.1:8766/transcribe'
+
 function useSpeechInput({
   onTranscript,
   onFinalTranscript,
@@ -31,113 +33,122 @@ function useSpeechInput({
   onCancel: () => void
   hasPendingAction: boolean
 }) {
-  const recognitionRef = useRef<{ stop: () => void; start: () => void } | null>(null)
-  const listeningRef = useRef(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const chunksRef = useRef<Blob[]>([])
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const listeningRef = useRef(false)
   const [listening, setListening] = useState(false)
-  const supported = typeof window !== 'undefined' &&
-    ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
+  const supported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
 
   const clearSilenceTimer = useCallback(() => {
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
   }, [])
 
+  const transcribeChunks = useCallback(async (chunks: Blob[]) => {
+    if (chunks.length === 0) return
+    const blob = new Blob(chunks, { type: 'audio/webm' })
+    try {
+      const res = await fetch(WHISPER_URL, { method: 'POST', body: blob, headers: { 'Content-Type': 'audio/webm' } })
+      const { transcript } = await res.json()
+      if (!transcript) return
+
+      onTranscript(transcript)
+
+      if (DISMISS_PHRASES.test(transcript)) {
+        onDismiss()
+        return
+      }
+      const isShortPhrase = transcript.trim().split(/\s+/).length <= 5
+      if (isShortPhrase && hasPendingAction && CONFIRM_PHRASES.test(transcript)) {
+        onConfirm()
+        onTranscript('')
+        return
+      }
+      if (isShortPhrase && hasPendingAction && CANCEL_PHRASES.test(transcript)) {
+        onCancel()
+        onTranscript('')
+        return
+      }
+
+      clearSilenceTimer()
+      onFinalTranscript(transcript)
+      // Auto-send after 2s of no new speech
+      silenceTimerRef.current = setTimeout(() => {
+        onFinalTranscript('__SEND__')
+      }, 2000)
+    } catch (e) {
+      console.warn('[Whisper] transcription failed', e)
+    }
+  }, [onTranscript, onFinalTranscript, onDismiss, onConfirm, onCancel, hasPendingAction, clearSilenceTimer])
+
   const stop = useCallback(() => {
     clearSilenceTimer()
     listeningRef.current = false
     setListening(false)
-    recognitionRef.current?.stop()
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+    }
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    streamRef.current = null
+    mediaRecorderRef.current = null
   }, [clearSilenceTimer])
 
   const start = useCallback(async () => {
     if (!supported || listeningRef.current) return
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition
-    if (!SR) return
-
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      stream.getTracks().forEach(t => t.stop())
-    } catch {
-      console.warn('[SpeechRecognition] mic permission denied')
-      return
-    }
+      streamRef.current = stream
+      chunksRef.current = []
 
-    const rec = new SR()
-    rec.continuous = true
-    rec.interimResults = true
-    rec.lang = 'en-US'
-    rec.maxAlternatives = 1
-    recognitionRef.current = rec
+      const recorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = recorder
 
-    rec.onresult = (event: SpeechRecognitionEvent) => {
-      // Build full accumulated display text (all results, final + interim)
-      let displayText = ''
-      let newFinalText = ''
-      for (let i = 0; i < event.results.length; i++) {
-        const t = event.results[i][0].transcript
-        displayText += t
-        // Only treat newly-finalized segments for action detection
-        if (event.results[i].isFinal && i >= event.resultIndex) {
-          newFinalText += t
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data)
+      }
+
+      recorder.onstop = () => {
+        const chunks = [...chunksRef.current]
+        chunksRef.current = []
+        transcribeChunks(chunks)
+      }
+
+      listeningRef.current = true
+      setListening(true)
+      // Collect audio in 5s chunks — stop/restart to get rolling transcription
+      recorder.start()
+
+      const rollChunk = () => {
+        if (!listeningRef.current) return
+        if (recorder.state === 'recording') {
+          chunksRef.current = []
+          recorder.stop()
+          // Brief gap then restart
+          setTimeout(() => {
+            if (!listeningRef.current) return
+            const newRecorder = new MediaRecorder(stream)
+            mediaRecorderRef.current = newRecorder
+            newRecorder.ondataavailable = (e) => {
+              if (e.data.size > 0) chunksRef.current.push(e.data)
+            }
+            newRecorder.onstop = () => {
+              const c = [...chunksRef.current]
+              chunksRef.current = []
+              transcribeChunks(c)
+            }
+            newRecorder.start()
+            setTimeout(rollChunk, 5000)
+          }, 100)
         }
       }
-
-      // Always update display with full running text so pauses don't erase prior words
-      onTranscript(displayText)
-
-      if (newFinalText) {
-        if (DISMISS_PHRASES.test(newFinalText)) {
-          stop()
-          onDismiss()
-          return
-        }
-
-        const isShortPhrase = displayText.trim().split(/\s+/).length <= 5
-        if (isShortPhrase && hasPendingAction && CONFIRM_PHRASES.test(newFinalText)) {
-          onConfirm()
-          onTranscript('')
-          return
-        }
-        if (isShortPhrase && hasPendingAction && CANCEL_PHRASES.test(newFinalText)) {
-          onCancel()
-          onTranscript('')
-          return
-        }
-
-        clearSilenceTimer()
-        // Pass full accumulated text so the parent always knows the whole phrase
-        onFinalTranscript(displayText)
-
-        // Wait 2s of silence before auto-sending (more forgiving for natural speech)
-        silenceTimerRef.current = setTimeout(() => {
-          onFinalTranscript('__SEND__')
-        }, 2000)
-      }
+      setTimeout(rollChunk, 5000)
+    } catch (e) {
+      console.warn('[Whisper] mic access failed', e)
+      listeningRef.current = false
+      setListening(false)
     }
-
-    rec.onend = () => {
-      if (listeningRef.current) {
-        try { rec.start() } catch { /* ignore */ }
-      } else {
-        setListening(false)
-      }
-    }
-
-    rec.onerror = (e: SpeechRecognitionErrorEvent) => {
-      if (e.error === 'not-allowed') {
-        console.warn('[SpeechRecognition] mic not allowed — check browser permissions')
-      }
-      if (e.error !== 'no-speech' && e.error !== 'aborted') {
-        listeningRef.current = false
-        setListening(false)
-      }
-    }
-
-    listeningRef.current = true
-    setListening(true)
-    rec.start()
-  }, [supported, stop, clearSilenceTimer, onTranscript, onFinalTranscript, onDismiss, onConfirm, onCancel])
+  }, [supported, transcribeChunks])
 
   const toggle = useCallback(() => {
     if (listeningRef.current) stop()
