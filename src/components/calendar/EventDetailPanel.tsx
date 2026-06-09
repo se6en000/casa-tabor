@@ -112,11 +112,14 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   const color = event.members[0]?.family_member?.color_hex ?? '#C9A96E'
                   return (
                     <div
-                      className="flex-shrink-0 flex flex-col items-center pb-3 pt-3 cursor-grab active:cursor-grabbing"
-                      style={{ borderTop: `4px solid ${color}`, touchAction: 'none' }}
+                      className="flex-shrink-0 flex flex-col items-center justify-end pb-3 pt-5 cursor-grab active:cursor-grabbing min-h-[52px]"
+                      style={{
+                        background: `linear-gradient(to bottom, ${color}45 0%, transparent 100%)`,
+                        touchAction: 'none',
+                      }}
                       onPointerDown={e => mobileDragControls.start(e)}
                     >
-                      <div className="w-10 h-1 bg-casa-divider rounded-full" />
+                      <div className="w-12 h-[5px] rounded-full opacity-60" style={{ backgroundColor: color }} />
                     </div>
                   )
                 })()}
@@ -150,16 +153,19 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 onTouchMove={stopTouch}
                 onTouchEnd={stopTouch}
               >
-                {/* Color accent bar + drag handle (touch here to drag-dismiss) */}
+                {/* Gradient eyebrow + drag handle */}
                 {(() => {
                   const color = event.members[0]?.family_member?.color_hex ?? '#C9A96E'
                   return (
                     <div
-                      className="flex-shrink-0 flex flex-col items-center pb-3 pt-3 cursor-grab active:cursor-grabbing"
-                      style={{ borderTop: `4px solid ${color}`, touchAction: 'none' }}
+                      className="flex-shrink-0 flex flex-col items-center justify-end pb-3 pt-5 cursor-grab active:cursor-grabbing min-h-[52px]"
+                      style={{
+                        background: `linear-gradient(to bottom, ${color}45 0%, transparent 100%)`,
+                        touchAction: 'none',
+                      }}
                       onPointerDown={e => desktopDragControls.start(e)}
                     >
-                      <div className="w-10 h-1 bg-casa-divider rounded-full" />
+                      <div className="w-12 h-[5px] rounded-full opacity-60" style={{ backgroundColor: color }} />
                     </div>
                   )
                 })()}
@@ -328,7 +334,6 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
 /* ── Header ─────────────────────────────────────────────────── */
 
 function PanelHeader({ event, onClose }: { event: EventWithDetails; onClose: () => void }) {
-  const primaryColor = event.members[0]?.family_member?.color_hex ?? '#C9A96E'
   const urgentAction = event.actions?.find((a) => a.is_urgent && !a.completed)
   const confidence = event.enrichment?.confidence as keyof typeof CONFIDENCE_CONFIG | undefined
   const conf = confidence ? CONFIDENCE_CONFIG[confidence] : null
@@ -336,8 +341,6 @@ function PanelHeader({ event, onClose }: { event: EventWithDetails; onClose: () 
 
   return (
     <div className="border-b border-casa-border">
-      <div className="hidden sm:block h-1 w-full" style={{ backgroundColor: primaryColor }} />
-
       <div className="p-6 pb-4 relative">
         <button
           onClick={onClose}
