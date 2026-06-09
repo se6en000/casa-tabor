@@ -15,10 +15,26 @@ const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s a
 const CONFIRM_PHRASES = /\b(yes|yeah|yep|confirm|ok|okay|go ahead|do it|sounds good|correct|right|affirmative|absolutely|sure|proceed)\b/i
 const CANCEL_PHRASES  = /\b(no|nope|cancel|don't|do not|stop|abort|never mind|nevermind|undo)\b/i
 
-/** GCP STT bridge — ALSA-direct recording, browser polls for real-time interim words + final transcript */
-const BRIDGE = 'http://127.0.0.1:8766'
-
 type VoicePhase = 'idle' | 'listening' | 'processing'
+
+// Web Speech API types
+interface ISpeechRecognition extends EventTarget {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  start(): void
+  stop(): void
+  onstart: (() => void) | null
+  onend: (() => void) | null
+  onerror: ((e: { error: string }) => void) | null
+  onresult: ((e: SpeechRecognitionEvent) => void) | null
+}
+declare global {
+  interface Window {
+    SpeechRecognition: new () => ISpeechRecognition
+    webkitSpeechRecognition: new () => ISpeechRecognition
+  }
+}
 
 function useSpeechInput({
   onInterim,
@@ -35,14 +51,10 @@ function useSpeechInput({
   onCancel: () => void
   hasPendingAction: boolean
 }) {
-  const pollRef   = useRef<ReturnType<typeof setInterval> | null>(null)
+  const recogRef  = useRef<ISpeechRecognition | null>(null)
   const activeRef = useRef(false)
-
   const [phase, setPhase] = useState<VoicePhase>('idle')
-  const [volume, setVolume] = useState(0)
-  const supported = true
-
-  const stopPoll = () => { if (pollRef.current) clearInterval(pollRef.current); pollRef.current = null }
+  const supported = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
 
   const handleFinalTranscript = useCallback((transcript: string) => {
     if (!transcript.trim()) return
@@ -53,65 +65,70 @@ function useSpeechInput({
     else { onFinalTranscript(transcript.trim()); onFinalTranscript('__SEND__') }
   }, [onInterim, onFinalTranscript, onDismiss, onConfirm, onCancel, hasPendingAction])
 
-  const stop = useCallback(async () => {
+  const stop = useCallback(() => {
     activeRef.current = false
-    stopPoll()
+    recogRef.current?.stop()
+    recogRef.current = null
     setPhase('idle')
-    setVolume(0)
-    try { await fetch(`${BRIDGE}/stop`, { method: 'POST' }) } catch { /* ignore */ }
-  }, [])
+    onInterim('')
+  }, [onInterim])
 
-  const startListening = useCallback(async () => {
-    if (!activeRef.current) return
-    setPhase('listening')
-    try {
-      await fetch(`${BRIDGE}/start`, { method: 'POST' })
-    } catch (e) {
-      console.warn('[STT] bridge unreachable', e)
-      activeRef.current = false
-      setPhase('idle')
-      return
+  const start = useCallback(() => {
+    if (!supported || activeRef.current) return
+    activeRef.current = true
+
+    const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition
+    const recog = new SR()
+    recog.continuous = true        // keep listening after pauses
+    recog.interimResults = true    // word-by-word as you speak
+    recog.lang = 'en-US'
+    recogRef.current = recog
+
+    recog.onstart = () => setPhase('listening')
+
+    recog.onresult = (e: SpeechRecognitionEvent) => {
+      let interim = ''
+      let finalText = ''
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript
+        if (e.results[i].isFinal) finalText += t
+        else interim += t
+      }
+      if (interim) onInterim(interim)
+      if (finalText) {
+        setPhase('processing')
+        handleFinalTranscript(finalText)
+      }
     }
 
-    pollRef.current = setInterval(async () => {
-      if (!activeRef.current) { stopPoll(); return }
-      try {
-        const res = await fetch(`${BRIDGE}/status`)
-        const data = await res.json()
-        setVolume(data.volume ?? 0)
+    // Auto-restart on end (browser stops after silence by default)
+    recog.onend = () => {
+      if (activeRef.current) {
+        setPhase('listening')
+        try { recog.start() } catch { /* already starting */ }
+      } else {
+        setPhase('idle')
+      }
+    }
 
-        // Show interim words in real-time as they arrive from Google STT
-        if (data.interim_transcript) {
-          onInterim(data.interim_transcript)
-        }
+    recog.onerror = (e: { error: string }) => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        console.error('[STT] mic permission denied')
+        activeRef.current = false
+        setPhase('idle')
+      }
+      // 'no-speech', 'network', etc. — onend will restart
+    }
 
-        if (!data.recording && data.transcript !== null) {
-          stopPoll()
-          if (data.transcript) {
-            setPhase('processing')
-            handleFinalTranscript(data.transcript)
-          }
-          if (activeRef.current) setTimeout(() => startListening(), 400)
-        } else if (!data.recording && data.error) {
-          stopPoll()
-          if (activeRef.current) setTimeout(() => startListening(), 400)
-        }
-      } catch { /* bridge momentarily busy */ }
-    }, 100)
-  }, [handleFinalTranscript, onInterim])
-
-  const start = useCallback(async () => {
-    if (activeRef.current) return
-    activeRef.current = true
-    startListening()
-  }, [startListening])
+    recog.start()
+  }, [supported, handleFinalTranscript, onInterim])
 
   const toggle = useCallback(() => {
     if (activeRef.current) stop()
     else start()
   }, [start, stop])
 
-  return { phase, volume, supported, start, stop, toggle, listening: phase !== 'idle' }
+  return { phase, volume: 0, supported, start, stop, toggle, listening: phase !== 'idle' }
 }
 
 
