@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ChevronLeft, Save, FlaskConical, CheckCircle, AlertCircle, Home } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
+import BounceScroll from '../components/shared/BounceScroll'
 
 interface LLMConfig {
   provider: string
@@ -101,7 +102,7 @@ export default function AISettingsPage() {
   if (isLoading) return <div className="p-6 text-casa-muted animate-breathe">Loading…</div>
 
   return (
-    <div className="flex-1 overflow-y-auto touch-pan-y">
+    <BounceScroll className="flex-1">
     <div className="max-w-2xl mx-auto p-6">
       <Link to="/settings" className="inline-flex items-center gap-1 text-body-sm text-casa-muted hover:text-casa-navy mb-4">
         <ChevronLeft size={16} /> Settings
@@ -221,6 +222,6 @@ export default function AISettingsPage() {
         </div>
       </div>
     </div>
-    </div>
+    </BounceScroll>
   )
 }

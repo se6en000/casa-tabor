@@ -10,6 +10,7 @@ import {
   type MemberWithConnection,
 } from '../hooks/useCalendarConnections'
 import { cn } from '../utils/cn'
+import BounceScroll from '../components/shared/BounceScroll'
 
 export default function CalendarsSettingsPage() {
   const { data: members, isLoading, refetch } = useCalendarConnections()
@@ -35,7 +36,7 @@ export default function CalendarsSettingsPage() {
   }, [connected, errorParam, params, refetch, setParams])
 
   return (
-    <div className="flex-1 overflow-y-auto touch-pan-y">
+    <BounceScroll className="flex-1">
     <div className="max-w-2xl mx-auto p-6">
       <Link
         to="/settings"
@@ -97,7 +98,7 @@ export default function CalendarsSettingsPage() {
         </button>
       </div>
     </div>
-    </div>
+    </BounceScroll>
   )
 }
 

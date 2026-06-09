@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import PrepAlertsSection from '../components/shared/PrepAlertsSection'
 import ConflictAlertsSection from '../components/shared/ConflictAlertsSection'
+import BounceScroll from '../components/shared/BounceScroll'
 
 interface MemberEvent {
   title: string
@@ -96,7 +97,7 @@ export default function BriefingPage() {
   const emptyMembers = briefing ? Object.values(briefing.member_schedules).filter(m => m.events.length === 0) : []
 
   return (
-    <div className="flex-1 overflow-y-auto touch-pan-y">
+    <BounceScroll className="flex-1">
     <div className="max-w-6xl mx-auto px-6 py-6">
 
       {/* Header */}
@@ -211,7 +212,7 @@ export default function BriefingPage() {
 
 
     </div>
-    </div>
+    </BounceScroll>
   )
 }
 

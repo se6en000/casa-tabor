@@ -13,6 +13,7 @@ import {
   type DisplayConfig,
   type RoomToneZone,
 } from '../hooks/useRoomTone'
+import BounceScroll from '../components/shared/BounceScroll'
 
 // ── Shared sub-components ──────────────────────────────────────────
 
@@ -239,7 +240,7 @@ export default function DisplaySettingsPage() {
     : ZONE_FILTER[previewZone]
 
   return (
-    <div className="flex-1 overflow-y-auto touch-pan-y">
+    <BounceScroll className="flex-1">
     <div className="max-w-2xl mx-auto p-6">
       <Link to="/settings" className="inline-flex items-center gap-1.5 text-caption text-casa-muted hover:text-casa-navy mb-6 transition-colors">
         <ChevronLeft size={15} /> Settings
@@ -598,6 +599,6 @@ export default function DisplaySettingsPage() {
         )}
       </div>
     </div>
-    </div>
+    </BounceScroll>
   )
 }

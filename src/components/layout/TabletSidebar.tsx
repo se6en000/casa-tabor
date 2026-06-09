@@ -9,6 +9,7 @@ import { useNotifications } from '../../hooks/useNotifications'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import NotificationDrawer from '../shared/NotificationDrawer'
 import { useState, useMemo } from 'react'
+import BounceScroll from '../shared/BounceScroll'
 
 const NAV = [
   { to: '/',         icon: Home,         label: 'Home' },
@@ -92,7 +93,7 @@ export default function TabletSidebar() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 min-h-0 overflow-y-auto px-4 py-4 flex flex-col gap-0.5">
+        <BounceScroll className="flex-1 min-h-0" innerClassName="px-4 py-4 flex flex-col gap-0.5">
           {NAV.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
@@ -116,7 +117,7 @@ export default function TabletSidebar() {
               )}
             </NavLink>
           ))}
-        </nav>
+        </BounceScroll>
       </aside>
 
       <NotificationDrawer open={notifOpen} onClose={() => setNotifOpen(false)} />

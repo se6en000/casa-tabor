@@ -10,6 +10,8 @@ interface BounceScrollProps {
   innerClassName?: string
   /** Max rubber-band distance in px (default 72) */
   maxBounce?: number
+  /** Passed to the outer wrapper div */
+  onClick?: React.MouseEventHandler<HTMLDivElement>
 }
 
 /**
@@ -21,7 +23,7 @@ interface BounceScrollProps {
  *     {content}
  *   </BounceScroll>
  */
-export default function BounceScroll({ children, className, innerClassName, maxBounce = 72 }: BounceScrollProps) {
+export default function BounceScroll({ children, className, innerClassName, maxBounce = 72, onClick }: BounceScrollProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const y = useMotionValue(0)
   const springY = useSpring(y, { stiffness: 380, damping: 38, mass: 0.5 })
@@ -64,7 +66,7 @@ export default function BounceScroll({ children, className, innerClassName, maxB
   }, [y])
 
   return (
-    <div className={cn('relative overflow-hidden', className)}>
+    <div className={cn('relative overflow-hidden', className)} onClick={onClick}>
       <motion.div style={{ y: springY }} className="h-full w-full">
         <div
           ref={scrollRef}

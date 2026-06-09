@@ -7,6 +7,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { useNotifications, type Notification } from '../../hooks/useNotifications'
 import { cn } from '../../utils/cn'
+import BounceScroll from './BounceScroll'
 
 const TYPE_CONFIG: Record<Notification['type'], { icon: React.ElementType; color: string; bg: string }> = {
   event_added:    { icon: CalendarPlus,  color: 'text-emerald-600',  bg: 'bg-emerald-50' },
@@ -108,7 +109,7 @@ export default function NotificationDrawer({ open, onClose }: Props) {
             </div>
 
             {/* Feed */}
-            <div className="overflow-y-auto flex-1">
+            <BounceScroll className="overflow-hidden flex-1">
               {notifications.length === 0 ? (
                 <div className="py-12 text-center text-casa-muted text-body">
                   No notifications yet
@@ -166,7 +167,7 @@ export default function NotificationDrawer({ open, onClose }: Props) {
                   })}
                 </ul>
               )}
-            </div>
+            </BounceScroll>
           </motion.div>
         </>
       )}

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ChevronLeft, Activity, Zap, DollarSign, BarChart3, RefreshCw, Bot, TrendingUp } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
+import BounceScroll from '../components/shared/BounceScroll'
 
 interface UsageRow {
   function_name: string
@@ -134,7 +135,7 @@ export default function StatusDashboardPage() {
   if (loading) return <div className="p-6 text-casa-muted animate-breathe">Loading…</div>
 
   return (
-    <div className="flex-1 overflow-y-auto touch-pan-y">
+    <BounceScroll className="flex-1">
     <div className="max-w-5xl mx-auto p-6 space-y-6">
       {/* Header */}
       <div>
@@ -319,6 +320,6 @@ export default function StatusDashboardPage() {
         Last refreshed {lastRefresh.toLocaleTimeString()}
       </p>
     </div>
-    </div>
+    </BounceScroll>
   )
 }

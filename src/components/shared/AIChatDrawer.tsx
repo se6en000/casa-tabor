@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../types'
+import BounceScroll from '../shared/BounceScroll'
 
 const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s all|all done|never mind|nevermind|stop)\b/i
 const CONFIRM_PHRASES = /\b(yes|yeah|yep|confirm|ok|okay|go ahead|do it|sounds good|correct|right|affirmative|absolutely|sure|proceed)\b/i
@@ -372,7 +373,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 min-h-0">
+            <BounceScroll className="flex-1 min-h-0" innerClassName="px-4 py-4 space-y-3">
               {/* Session resume banner */}
               {hasSession && messages.length > 0 && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-casa-gold/8 border border-casa-gold/20 text-caption text-casa-muted">
@@ -439,7 +440,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                 </div>
               )}
               <div ref={bottomRef} />
-            </div>
+            </BounceScroll>
 
             {/* Input */}
             <div className="px-4 pb-5 pt-3 border-t border-casa-border">

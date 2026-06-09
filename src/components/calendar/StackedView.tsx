@@ -18,6 +18,7 @@ import EventContextMenu from '../shared/EventContextMenu'
 import { WeatherIcon } from '../shared/WeatherIcon'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
+import BounceScroll from '../shared/BounceScroll'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -78,8 +79,9 @@ export default function StackedView() {
   }, [qc])
 
   return (
-    <div
-      className="h-full overflow-y-auto px-3 py-4 space-y-4"
+    <BounceScroll
+      className="h-full"
+      innerClassName="px-3 py-4 space-y-4"
       onClick={() => setSelectedEventId(null)}
     >
       {[row1, row2].map((rowDays, rowIdx) => (
@@ -198,7 +200,7 @@ export default function StackedView() {
         onDelete={deleteEvent}
         onComplete={ev => completeReminder(ev.id)}
       />
-    </div>
+    </BounceScroll>
   )
 }
 

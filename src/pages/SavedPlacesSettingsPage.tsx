@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import type { SavedPlace, SavedPlaceCategory } from '../types'
+import BounceScroll from '../components/shared/BounceScroll'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -390,7 +391,7 @@ export default function SavedPlacesSettingsPage() {
   const isAdding = tab === 'places' ? placeMode.type !== 'list' : contactMode.type !== 'list'
 
   return (
-    <div className="flex-1 overflow-y-auto touch-pan-y">
+    <BounceScroll className="flex-1">
       <div className="max-w-3xl mx-auto px-6 py-8">
 
         {/* Header */}
@@ -556,6 +557,6 @@ export default function SavedPlacesSettingsPage() {
           </>
         )}
       </div>
-    </div>
+    </BounceScroll>
   )
 }

@@ -15,6 +15,7 @@ import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useSavedPlaces } from '../../hooks/useSavedPlaces'
+import BounceScroll from '../shared/BounceScroll'
 
 const ALL_CATEGORIES = Object.keys(CATEGORY_LABEL) as string[]
 
@@ -703,7 +704,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             </div>
 
             {/* Form */}
-            <div className="flex-1 overflow-y-auto">
+            <BounceScroll className="flex-1">
 
               {/* ── Event Type Toggle + Delete ── */}
               <div className="px-6 pt-5 pb-4 border-b border-casa-divider">
@@ -1158,7 +1159,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
 
                 {/* ── Delete (moved to Type row header) ── */}
               </div>
-            </div>
+            </BounceScroll>
 
             {/* Footer */}
             <div className="px-6 py-4 border-t border-casa-border flex gap-3 shrink-0">

@@ -19,6 +19,7 @@ import { differenceInDays } from 'date-fns'
 import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, isAllDayReminder, isTimedReminder, REMINDER_COLOR } from '../../utils/holidays'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
+import BounceScroll from '../shared/BounceScroll'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -274,8 +275,8 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
   const hasAnything = dayPrep.length > 0 || dayConflicts.length > 0 || awayEvents.length > 0
 
   return (
-    <div className="w-80 shrink-0 border-l border-casa-border bg-casa-bg overflow-y-auto">
-      <div className="p-4 space-y-4">
+    <div className="w-80 shrink-0 border-l border-casa-border bg-casa-bg overflow-hidden">
+      <BounceScroll className="h-full" innerClassName="p-4 space-y-4">
 
         {/* Logistics */}
         {awayEvents.length > 0 && (
@@ -383,7 +384,7 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
             <p className="text-caption text-casa-muted mt-1">No conflicts or prep needed for this day</p>
           </div>
         )}
-      </div>
+      </BounceScroll>
     </div>
   )
 }
@@ -442,8 +443,9 @@ export default function DayView() {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Events list */}
-        <div
-          className="flex-1 overflow-y-auto px-5 py-4"
+        <BounceScroll
+          className="flex-1"
+          innerClassName="px-5 py-4"
           onClick={() => setSelectedEventId(null)}
         >
           {dayEvents.length === 0 ? (
@@ -489,7 +491,7 @@ export default function DayView() {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+        </BounceScroll>
       </div>
 
       {/* ── Sidecar ─────────────────────────────────── */}

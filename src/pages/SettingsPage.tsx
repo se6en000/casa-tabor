@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Users, Sun, MessageSquare, Bot, ChevronRight, Music2, Palette, Home, Activity, BookmarkCheck, Layers } from 'lucide-react'
+import BounceScroll from '../components/shared/BounceScroll'
 
 const sections = [
   { to: '/settings/profile',   icon: Home,           label: 'Profile & Home',          desc: 'Home address used for drive times and travel planning' },
@@ -16,7 +17,7 @@ const sections = [
 
 export default function SettingsPage() {
   return (
-    <div className="flex-1 overflow-y-auto touch-pan-y">
+    <BounceScroll className="flex-1">
       <div className="max-w-5xl mx-auto px-6 py-8">
         <h1 className="font-display text-display-md text-casa-navy mb-6">Settings</h1>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -38,6 +39,6 @@ export default function SettingsPage() {
           ))}
         </div>
       </div>
-    </div>
+    </BounceScroll>
   )
 }

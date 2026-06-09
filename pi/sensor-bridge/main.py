@@ -40,6 +40,13 @@ except ImportError:
     I2C_AVAILABLE = False
     logging.warning("smbus2 not installed — running in simulation mode")
 
+try:
+    import evdev
+    EVDEV_AVAILABLE = True
+except ImportError:
+    EVDEV_AVAILABLE = False
+    logging.warning("evdev not installed — touch-to-wake disabled")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -305,6 +312,86 @@ def set_color_target(cct: float):
     global _target_rgb
     if cct is not None:
         _target_rgb = cct_to_rgb_gains(cct)
+
+
+def _touch_wake_loop():
+    """
+    Watches all /dev/input/event* devices for touch/key events.
+    If the display is sleeping, any touch immediately wakes it via _display_wake().
+    Uses evdev; silently exits if evdev is unavailable.
+    """
+    if not EVDEV_AVAILABLE:
+        log.info("Touch-to-wake disabled (evdev not installed)")
+        return
+
+    import select
+
+    def _open_devices():
+        devs = []
+        for path in evdev.list_devices():
+            try:
+                d = evdev.InputDevice(path)
+                caps = d.capabilities()
+                # Keep touchscreens (EV_ABS) and keyboards/buttons (EV_KEY)
+                if evdev.ecodes.EV_ABS in caps or evdev.ecodes.EV_KEY in caps:
+                    devs.append(d)
+                    log.info("Touch-wake watching: %s (%s)", path, d.name)
+            except Exception:
+                pass
+        return devs
+
+    devices = _open_devices()
+    if not devices:
+        log.warning("Touch-to-wake: no input devices found — will retry")
+
+    RETRY_INTERVAL = 10  # re-scan for devices every 10s if none found
+
+    last_scan = time.time()
+    while True:
+        if not devices:
+            time.sleep(RETRY_INTERVAL)
+            devices = _open_devices()
+            continue
+
+        # select() on all device fds with a timeout so we can re-check periodically
+        fds = {d.fd: d for d in devices}
+        try:
+            r, _, _ = select.select(fds.keys(), [], [], RETRY_INTERVAL)
+        except Exception as exc:
+            log.warning("Touch-wake select error: %s", exc)
+            devices = _open_devices()
+            continue
+
+        for fd in r:
+            dev = fds[fd]
+            try:
+                for event in dev.read():
+                    # Any real input event (not SYN) wakes the display
+                    if event.type != evdev.ecodes.EV_SYN:
+                        with _ddc_lock:
+                            disp_on = _display_on
+                            b_target = _target_brightness
+                        if not disp_on:
+                            log.info("Touch event on %s — waking display", dev.name)
+                            wake_target = b_target if b_target is not None else _brightness_min
+                            _display_wake(wake_target)
+                        break  # one wake per batch of events is enough
+            except Exception as exc:
+                log.warning("Touch-wake read error on %s: %s", dev.name, exc)
+                devices = [d for d in devices if d.fd != fd]
+                try:
+                    dev.close()
+                except Exception:
+                    pass
+
+        # Periodically re-scan in case a device was added (e.g. USB reconnect)
+        if time.time() - last_scan > 30:
+            last_scan = time.time()
+            new_devs = _open_devices()
+            existing_paths = {d.path for d in devices}
+            for d in new_devs:
+                if d.path not in existing_paths:
+                    devices.append(d)
 
 
 def _brightness_loop():
@@ -629,10 +716,18 @@ class AS7343Reader:
         if self.bus is None:
             self._open()
 
-        self._wait_data_ready()
+        try:
+            self._wait_data_ready()
 
-        # Read 18 bytes = 9 × 16-bit channels (LE pairs)
-        raw = self.bus.read_i2c_block_data(AS7343_ADDR, REG_CH0_LOW, 18)
+            # Read 18 bytes = 9 × 16-bit channels (LE pairs)
+            raw = self.bus.read_i2c_block_data(AS7343_ADDR, REG_CH0_LOW, 18)
+        except Exception as exc:
+            # I2C bus hung (e.g. kernel timeout under CPU load) — close and
+            # force a full reopen on the next poll cycle rather than spinning.
+            log.warning("AS7343 I2C read failed, resetting bus: %s", exc)
+            self.close()
+            raise
+
         channels = {}
         for i, name in enumerate(CH_NAMES):
             lo = raw[i * 2]
@@ -646,7 +741,10 @@ class AS7343Reader:
 
     def close(self):
         if self.bus:
-            self.bus.close()
+            try:
+                self.bus.close()
+            except Exception:
+                pass
             self.bus = None
 
 
@@ -674,9 +772,11 @@ class SimulatedReader:
 # ── Background polling loop ──────────────────────────────────────────────────
 
 def _poll_loop(reader):
+    consecutive_errors = 0
     while True:
         try:
             data = reader.read()
+            consecutive_errors = 0
             with _lock:
                 _latest.update({
                     **data,
@@ -696,9 +796,14 @@ def _poll_loop(reader):
                 daemon=True,
             ).start()
         except Exception as exc:
-            log.error("Sensor read error: %s", exc)
+            consecutive_errors += 1
+            log.error("Sensor read error #%d: %s", consecutive_errors, exc)
             with _lock:
                 _latest["error"] = str(exc)
+            # Exponential backoff up to 30s so a jammed I2C bus doesn't spin hot
+            backoff = min(30, 2 ** min(consecutive_errors - 1, 4))
+            time.sleep(backoff)
+            continue
         time.sleep(POLL_INTERVAL)
 
 
@@ -714,6 +819,8 @@ async def lifespan(app: FastAPI):
     brightness_thread.start()
     color_thread = threading.Thread(target=_color_loop, daemon=True)
     color_thread.start()
+    touch_wake_thread = threading.Thread(target=_touch_wake_loop, daemon=True)
+    touch_wake_thread.start()
     log.info("Sensor bridge started — http://127.0.0.1:8765")
     yield
     reader.close()

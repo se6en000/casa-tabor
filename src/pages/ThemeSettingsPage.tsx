@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, RotateCcw, Palette } from 'lucide-react'
 import { useTheme, PRESETS, DEFAULTS, type ThemeColors } from '../contexts/ThemeContext'
 import { cn } from '../utils/cn'
+import BounceScroll from '../components/shared/BounceScroll'
 
 const COLOR_FIELDS: { key: keyof ThemeColors; label: string; desc: string }[] = [
   { key: 'casa-gold',    label: 'Accent Color',       desc: 'Icons, highlights, buttons, badges' },
@@ -22,7 +23,7 @@ export default function ThemeSettingsPage() {
   const { colors, setColor, applyPreset, resetToDefaults, isDefault } = useTheme()
 
   return (
-    <div className="flex-1 overflow-y-auto touch-pan-y">
+    <BounceScroll className="flex-1">
     <div className="max-w-2xl mx-auto p-6 pb-20">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
@@ -163,6 +164,6 @@ export default function ThemeSettingsPage() {
         </div>
       )}
     </div>
-    </div>
+    </BounceScroll>
   )
 }
