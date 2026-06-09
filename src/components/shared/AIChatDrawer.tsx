@@ -15,10 +15,8 @@ const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s a
 const CONFIRM_PHRASES = /\b(yes|yeah|yep|confirm|ok|okay|go ahead|do it|sounds good|correct|right|affirmative|absolutely|sure|proceed)\b/i
 const CANCEL_PHRASES  = /\b(no|nope|cancel|don't|do not|stop|abort|never mind|nevermind|undo)\b/i
 
-/** Whisper VAD hook — silence-detection recording, full-sentence transcription */
-const WHISPER_URL = 'http://127.0.0.1:8766/transcribe'
-const SILENCE_THRESHOLD = 12   // RMS below this = silence (0–255 scale)
-const SILENCE_DURATION_MS = 1000  // 1s of silence triggers transcription
+/** Whisper VAD hook — bridge records from ALSA directly, browser polls for status/transcript */
+const BRIDGE = 'http://127.0.0.1:8766'
 
 type VoicePhase = 'idle' | 'listening' | 'processing'
 
@@ -37,129 +35,75 @@ function useSpeechInput({
   onCancel: () => void
   hasPendingAction: boolean
 }) {
-  const streamRef    = useRef<MediaStream | null>(null)
-  const recorderRef  = useRef<MediaRecorder | null>(null)
-  const chunksRef    = useRef<Blob[]>([])
-  const analyserRef  = useRef<AnalyserNode | null>(null)
-  const rafRef       = useRef<number>(0)
-  const silenceRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const activeRef    = useRef(false)  // true = voice mode on (even while processing)
+  const pollRef   = useRef<ReturnType<typeof setInterval> | null>(null)
+  const activeRef = useRef(false)
 
   const [phase, setPhase] = useState<VoicePhase>('idle')
-  const [volume, setVolume] = useState(0)  // 0–100 for waveform bars
-  const supported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+  const [volume, setVolume] = useState(0)
+  const supported = true  // bridge is always available on Pi
 
-  const clearSilence = () => { if (silenceRef.current) clearTimeout(silenceRef.current) }
+  const stopPoll = () => { if (pollRef.current) clearInterval(pollRef.current); pollRef.current = null }
 
-  const startRecording = useCallback((stream: MediaStream) => {
-    const recorder = new MediaRecorder(stream)
-    chunksRef.current = []
-    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
-    recorder.start()
-    recorderRef.current = recorder
+  const handleTranscript = useCallback((transcript: string) => {
+    if (!transcript.trim()) return
+    onTranscript(transcript.trim())
+    if (DISMISS_PHRASES.test(transcript)) { onDismiss(); return }
+    const isShort = transcript.trim().split(/\s+/).length <= 5
+    if (isShort && hasPendingAction && CONFIRM_PHRASES.test(transcript)) { onConfirm(); onTranscript('') }
+    else if (isShort && hasPendingAction && CANCEL_PHRASES.test(transcript)) { onCancel(); onTranscript('') }
+    else { onFinalTranscript(transcript.trim()); onFinalTranscript('__SEND__') }
+  }, [onTranscript, onFinalTranscript, onDismiss, onConfirm, onCancel, hasPendingAction])
+
+  const stop = useCallback(async () => {
+    activeRef.current = false
+    stopPoll()
+    setPhase('idle')
+    setVolume(0)
+    try { await fetch(`${BRIDGE}/stop`, { method: 'POST' }) } catch { /* ignore */ }
   }, [])
 
-  const transcribe = useCallback(async (stream: MediaStream) => {
+  const startListening = useCallback(async () => {
     if (!activeRef.current) return
-    // Stop current recording and grab blob
-    const recorder = recorderRef.current
-    if (recorder && recorder.state === 'recording') {
-      recorder.stop()
-      await new Promise<void>(res => { recorder.onstop = () => res() })
-    }
-    const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-    chunksRef.current = []
-
-    if (blob.size < 3000) {
-      // Too short / silence — just restart listening
-      if (activeRef.current) { setPhase('listening'); startRecording(stream) }
+    setPhase('listening')
+    try {
+      await fetch(`${BRIDGE}/start`, { method: 'POST' })
+    } catch (e) {
+      console.warn('[Whisper] bridge unreachable', e)
+      activeRef.current = false
+      setPhase('idle')
       return
     }
 
-    setPhase('processing')
-    try {
-      const res = await fetch(WHISPER_URL, { method: 'POST', body: blob, headers: { 'Content-Type': 'audio/webm' } })
-      const { transcript } = await res.json()
-      if (transcript?.trim()) {
-        onTranscript(transcript.trim())
-        if (DISMISS_PHRASES.test(transcript)) { onDismiss(); return }
-        const isShort = transcript.trim().split(/\s+/).length <= 5
-        if (isShort && hasPendingAction && CONFIRM_PHRASES.test(transcript)) { onConfirm(); onTranscript(''); }
-        else if (isShort && hasPendingAction && CANCEL_PHRASES.test(transcript)) { onCancel(); onTranscript(''); }
-        else { onFinalTranscript(transcript.trim()); onFinalTranscript('__SEND__') }
-      }
-    } catch (e) {
-      console.warn('[Whisper] transcription failed', e)
-    }
+    // Poll bridge for volume + transcript
+    pollRef.current = setInterval(async () => {
+      if (!activeRef.current) { stopPoll(); return }
+      try {
+        const res = await fetch(`${BRIDGE}/status`)
+        const data = await res.json()
+        setVolume(data.volume ?? 0)
 
-    // Loop back to listening
-    if (activeRef.current) { setPhase('listening'); startRecording(stream) }
-  }, [startRecording, onTranscript, onFinalTranscript, onDismiss, onConfirm, onCancel, hasPendingAction])
-
-  const stop = useCallback(() => {
-    activeRef.current = false
-    clearSilence()
-    cancelAnimationFrame(rafRef.current)
-    recorderRef.current?.state === 'recording' && recorderRef.current.stop()
-    streamRef.current?.getTracks().forEach(t => t.stop())
-    streamRef.current = null
-    analyserRef.current = null
-    recorderRef.current = null
-    chunksRef.current = []
-    setPhase('idle')
-    setVolume(0)
-  }, [])
+        if (!data.recording && data.transcript !== null) {
+          // Bridge finished transcribing
+          stopPoll()
+          if (data.transcript) {
+            setPhase('processing')
+            handleTranscript(data.transcript)
+          }
+          // Loop back to listening
+          if (activeRef.current) setTimeout(() => startListening(), 400)
+        } else if (!data.recording && data.error) {
+          stopPoll()
+          if (activeRef.current) setTimeout(() => startListening(), 400)
+        }
+      } catch { /* bridge momentarily busy */ }
+    }, 100)
+  }, [handleTranscript])
 
   const start = useCallback(async () => {
-    if (!supported || activeRef.current) return
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      streamRef.current = stream
-      activeRef.current = true
-      setPhase('listening')
-
-      // Set up Web Audio analyser for volume + silence detection
-      const ctx = new AudioContext()
-      const source = ctx.createMediaStreamSource(stream)
-      const analyser = ctx.createAnalyser()
-      analyser.fftSize = 256
-      source.connect(analyser)
-      analyserRef.current = analyser
-      const buf = new Uint8Array(analyser.frequencyBinCount)
-
-      startRecording(stream)
-
-      let silenceStart: number | null = null
-      const tick = () => {
-        if (!activeRef.current) return
-        analyser.getByteFrequencyData(buf)
-        const rms = Math.sqrt(buf.reduce((s, v) => s + v * v, 0) / buf.length)
-        setVolume(Math.min(100, (rms / 128) * 100))
-
-        if (rms < SILENCE_THRESHOLD) {
-          if (silenceStart === null) silenceStart = Date.now()
-          else if (Date.now() - silenceStart >= SILENCE_DURATION_MS) {
-            silenceStart = null
-            // Only trigger if we've recorded something meaningful
-            if (chunksRef.current.length > 0) {
-              transcribe(stream)
-              return  // don't re-schedule RAF — transcribe loops back
-            }
-          }
-        } else {
-          silenceStart = null
-        }
-        rafRef.current = requestAnimationFrame(tick)
-      }
-      rafRef.current = requestAnimationFrame(tick)
-
-      stream.getAudioTracks()[0].addEventListener('ended', stop)
-    } catch (e) {
-      console.warn('[Whisper] mic access failed', e)
-      activeRef.current = false
-      setPhase('idle')
-    }
-  }, [supported, startRecording, transcribe, stop])
+    if (activeRef.current) return
+    activeRef.current = true
+    startListening()
+  }, [startListening])
 
   const toggle = useCallback(() => {
     if (activeRef.current) stop()
