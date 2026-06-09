@@ -15,9 +15,12 @@ const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s a
 const CONFIRM_PHRASES = /\b(yes|yeah|yep|confirm|ok|okay|go ahead|do it|sounds good|correct|right|affirmative|absolutely|sure|proceed)\b/i
 const CANCEL_PHRASES  = /\b(no|nope|cancel|don't|do not|stop|abort|never mind|nevermind|undo)\b/i
 
-/** Whisper-based speech input hook — records via MediaRecorder, transcribes via local Whisper bridge */
+/** Whisper VAD hook — silence-detection recording, full-sentence transcription */
 const WHISPER_URL = 'http://127.0.0.1:8766/transcribe'
-const CHUNK_MS = 1500  // how often to flush audio to Whisper
+const SILENCE_THRESHOLD = 12   // RMS below this = silence (0–255 scale)
+const SILENCE_DURATION_MS = 1000  // 1s of silence triggers transcription
+
+type VoicePhase = 'idle' | 'listening' | 'processing'
 
 function useSpeechInput({
   onTranscript,
@@ -34,98 +37,185 @@ function useSpeechInput({
   onCancel: () => void
   hasPendingAction: boolean
 }) {
-  const streamRef = useRef<MediaStream | null>(null)
-  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const listeningRef = useRef(false)
-  const accumulatedRef = useRef('')  // running transcript across chunks
-  const [listening, setListening] = useState(false)
+  const streamRef    = useRef<MediaStream | null>(null)
+  const recorderRef  = useRef<MediaRecorder | null>(null)
+  const chunksRef    = useRef<Blob[]>([])
+  const analyserRef  = useRef<AnalyserNode | null>(null)
+  const rafRef       = useRef<number>(0)
+  const silenceRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const activeRef    = useRef(false)  // true = voice mode on (even while processing)
+
+  const [phase, setPhase] = useState<VoicePhase>('idle')
+  const [volume, setVolume] = useState(0)  // 0–100 for waveform bars
   const supported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
 
-  const clearSilenceTimer = useCallback(() => {
-    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+  const clearSilence = () => { if (silenceRef.current) clearTimeout(silenceRef.current) }
+
+  const startRecording = useCallback((stream: MediaStream) => {
+    const recorder = new MediaRecorder(stream)
+    chunksRef.current = []
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+    recorder.start()
+    recorderRef.current = recorder
   }, [])
 
-  const processChunk = useCallback(async (blob: Blob, accumulated: string) => {
-    if (blob.size < 1000) return accumulated  // skip near-silent chunks
+  const transcribe = useCallback(async (stream: MediaStream) => {
+    if (!activeRef.current) return
+    // Stop current recording and grab blob
+    const recorder = recorderRef.current
+    if (recorder && recorder.state === 'recording') {
+      recorder.stop()
+      await new Promise<void>(res => { recorder.onstop = () => res() })
+    }
+    const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+    chunksRef.current = []
+
+    if (blob.size < 3000) {
+      // Too short / silence — just restart listening
+      if (activeRef.current) { setPhase('listening'); startRecording(stream) }
+      return
+    }
+
+    setPhase('processing')
     try {
       const res = await fetch(WHISPER_URL, { method: 'POST', body: blob, headers: { 'Content-Type': 'audio/webm' } })
       const { transcript } = await res.json()
-      if (!transcript?.trim()) return accumulated
-
-      const newAccumulated = accumulated ? `${accumulated} ${transcript.trim()}` : transcript.trim()
-      accumulatedRef.current = newAccumulated
-      onTranscript(newAccumulated)
-
-      if (DISMISS_PHRASES.test(transcript)) { onDismiss(); return '' }
-      const isShort = newAccumulated.trim().split(/\s+/).length <= 5
-      if (isShort && hasPendingAction && CONFIRM_PHRASES.test(transcript)) { onConfirm(); onTranscript(''); return '' }
-      if (isShort && hasPendingAction && CANCEL_PHRASES.test(transcript)) { onCancel(); onTranscript(''); return '' }
-
-      clearSilenceTimer()
-      onFinalTranscript(newAccumulated)
-      silenceTimerRef.current = setTimeout(() => onFinalTranscript('__SEND__'), 2000)
-      return newAccumulated
+      if (transcript?.trim()) {
+        onTranscript(transcript.trim())
+        if (DISMISS_PHRASES.test(transcript)) { onDismiss(); return }
+        const isShort = transcript.trim().split(/\s+/).length <= 5
+        if (isShort && hasPendingAction && CONFIRM_PHRASES.test(transcript)) { onConfirm(); onTranscript(''); }
+        else if (isShort && hasPendingAction && CANCEL_PHRASES.test(transcript)) { onCancel(); onTranscript(''); }
+        else { onFinalTranscript(transcript.trim()); onFinalTranscript('__SEND__') }
+      }
     } catch (e) {
       console.warn('[Whisper] transcription failed', e)
-      return accumulated
     }
-  }, [onTranscript, onFinalTranscript, onDismiss, onConfirm, onCancel, hasPendingAction, clearSilenceTimer])
+
+    // Loop back to listening
+    if (activeRef.current) { setPhase('listening'); startRecording(stream) }
+  }, [startRecording, onTranscript, onFinalTranscript, onDismiss, onConfirm, onCancel, hasPendingAction])
 
   const stop = useCallback(() => {
-    clearSilenceTimer()
-    listeningRef.current = false
-    setListening(false)
+    activeRef.current = false
+    clearSilence()
+    cancelAnimationFrame(rafRef.current)
+    recorderRef.current?.state === 'recording' && recorderRef.current.stop()
     streamRef.current?.getTracks().forEach(t => t.stop())
     streamRef.current = null
-    accumulatedRef.current = ''
-  }, [clearSilenceTimer])
+    analyserRef.current = null
+    recorderRef.current = null
+    chunksRef.current = []
+    setPhase('idle')
+    setVolume(0)
+  }, [])
 
   const start = useCallback(async () => {
-    if (!supported || listeningRef.current) return
+    if (!supported || activeRef.current) return
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
-      accumulatedRef.current = ''
-      listeningRef.current = true
-      setListening(true)
+      activeRef.current = true
+      setPhase('listening')
 
-      const record = () => {
-        if (!listeningRef.current) return
-        const recorder = new MediaRecorder(stream)
-        const chunks: Blob[] = []
+      // Set up Web Audio analyser for volume + silence detection
+      const ctx = new AudioContext()
+      const source = ctx.createMediaStreamSource(stream)
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 256
+      source.connect(analyser)
+      analyserRef.current = analyser
+      const buf = new Uint8Array(analyser.frequencyBinCount)
 
-        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data) }
-        recorder.onstop = async () => {
-          if (chunks.length > 0) {
-            const blob = new Blob(chunks, { type: 'audio/webm' })
-            accumulatedRef.current = await processChunk(blob, accumulatedRef.current)
+      startRecording(stream)
+
+      let silenceStart: number | null = null
+      const tick = () => {
+        if (!activeRef.current) return
+        analyser.getByteFrequencyData(buf)
+        const rms = Math.sqrt(buf.reduce((s, v) => s + v * v, 0) / buf.length)
+        setVolume(Math.min(100, (rms / 128) * 100))
+
+        if (rms < SILENCE_THRESHOLD) {
+          if (silenceStart === null) silenceStart = Date.now()
+          else if (Date.now() - silenceStart >= SILENCE_DURATION_MS) {
+            silenceStart = null
+            // Only trigger if we've recorded something meaningful
+            if (chunksRef.current.length > 0) {
+              transcribe(stream)
+              return  // don't re-schedule RAF — transcribe loops back
+            }
           }
-          // Immediately start next chunk if still listening
-          if (listeningRef.current) record()
+        } else {
+          silenceStart = null
         }
-
-        recorder.start()
-        // Stop after CHUNK_MS to flush a complete valid webm
-        setTimeout(() => {
-          if (recorder.state === 'recording') recorder.stop()
-        }, CHUNK_MS)
+        rafRef.current = requestAnimationFrame(tick)
       }
+      rafRef.current = requestAnimationFrame(tick)
 
-      record()
       stream.getAudioTracks()[0].addEventListener('ended', stop)
     } catch (e) {
       console.warn('[Whisper] mic access failed', e)
-      listeningRef.current = false
-      setListening(false)
+      activeRef.current = false
+      setPhase('idle')
     }
-  }, [supported, processChunk, stop])
+  }, [supported, startRecording, transcribe, stop])
 
   const toggle = useCallback(() => {
-    if (listeningRef.current) stop()
+    if (activeRef.current) stop()
     else start()
   }, [start, stop])
 
-  return { listening, supported, start, stop, toggle }
+  return { phase, volume, supported, start, stop, toggle, listening: phase !== 'idle' }
+}
+
+/* ── Voice Mode Overlay ─────────────────────────────────────── */
+function VoiceOverlay({ phase, volume, onStop }: { phase: 'listening' | 'processing', volume: number, onStop: () => void }) {
+  const bars = [0.6, 0.8, 1.0, 0.8, 0.6, 0.9, 0.7, 1.0, 0.5, 0.8]
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 12 }}
+      className="absolute inset-x-0 bottom-0 z-10 mx-3 mb-3 rounded-2xl bg-casa-navy overflow-hidden"
+      style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.35)' }}
+    >
+      <div className="flex flex-col items-center gap-3 px-6 py-5">
+        {/* Waveform / spinner */}
+        <div className="flex items-center justify-center gap-1 h-10">
+          {phase === 'listening' ? (
+            bars.map((mult, i) => (
+              <motion.div
+                key={i}
+                className="w-1 rounded-full bg-casa-gold"
+                animate={{ height: Math.max(4, (volume / 100) * 36 * mult + 4) }}
+                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              />
+            ))
+          ) : (
+            <Loader2 size={28} className="animate-spin text-casa-gold" />
+          )}
+        </div>
+
+        {/* Label */}
+        <p className="text-white text-sm font-medium tracking-wide">
+          {phase === 'listening' ? 'Listening…' : 'Processing…'}
+        </p>
+        {phase === 'listening' && (
+          <p className="text-white/40 text-xs -mt-1">Speak freely — pausing sends</p>
+        )}
+
+        {/* Stop button */}
+        <button
+          type="button"
+          onClick={onStop}
+          className="mt-1 flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/10 text-white/60 text-xs hover:bg-white/20 transition-colors"
+        >
+          <MicOff size={12} /> Stop listening
+        </button>
+      </div>
+    </motion.div>
+  )
 }
 
 interface Props {
@@ -190,10 +280,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
   useEffect(() => {
     if (open) {
-      setTimeout(() => {
-        textareaRef.current?.focus()
-        speech.start()
-      }, 400)
+      setTimeout(() => textareaRef.current?.focus(), 400)
     } else {
       speech.stop()
       reset()
@@ -203,13 +290,9 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Pause voice while AI is thinking, resume when done
+  // Pause voice while AI is thinking; don't auto-resume (user taps mic intentionally)
   useEffect(() => {
-    if (loading) {
-      speech.stop()
-    } else if (open) {
-      setTimeout(() => speech.start(), 300)
-    }
+    if (loading) speech.stop()
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -424,7 +507,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
             </BounceScroll>
 
             {/* Input */}
-            <div className="px-4 pb-5 pt-3 border-t border-casa-border">
+            <div className="relative px-4 pb-5 pt-3 border-t border-casa-border">
               <AnimatePresence>
                 {attachedImage && (
                   <motion.div
@@ -496,11 +579,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                     className={cn(
                       'w-8 h-8 rounded-full flex items-center justify-center transition-all shrink-0 mb-0.5',
                       speech.listening
-                        ? 'bg-red-500 text-white animate-pulse'
+                        ? 'bg-casa-navy text-casa-gold'
                         : 'bg-casa-divider text-casa-muted hover:text-casa-gold'
                     )}
                   >
-                    {speech.listening ? <Mic size={14} /> : <MicOff size={14} />}
+                    <Mic size={14} />
                   </button>
                 )}
 
@@ -520,9 +603,16 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
               </div>
               <p className="text-[10px] text-casa-muted mt-1.5 text-center opacity-60">
                 {speech.supported
-                  ? 'Tap 🎙 to toggle voice · say "thank you" to close'
+                  ? 'Tap 🎙 to start voice · pause to send'
                   : 'Tap ➤ to send · 📎 gallery · 📷 camera'}
               </p>
+
+              {/* Voice mode overlay */}
+              <AnimatePresence>
+                {(speech.phase === 'listening' || speech.phase === 'processing') && (
+                  <VoiceOverlay phase={speech.phase} volume={speech.volume} onStop={speech.stop} />
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
         </>
