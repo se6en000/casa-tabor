@@ -34,7 +34,14 @@ interface EventDetailPanelProps {
 }
 
 function useIsMobile() {
-  return true // Pi kiosk: always treat as touch/mobile
+  const [mobile, setMobile] = useState(() => window.innerWidth < 1024)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)')
+    const handler = (e: MediaQueryListEvent) => setMobile(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+  return mobile
 }
 
 export default function EventDetailPanel({ event, onClose }: EventDetailPanelProps) {
@@ -46,18 +53,19 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
       <AnimatePresence>
         {event && (
           <>
-            {isMobile && (
-              <motion.div
-                key="backdrop"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="fixed inset-0 bg-black/40 z-[54]"
-                onClick={onClose}
-              />
-            )}
+            {/* Backdrop — both mobile and desktop */}
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 bg-black/40 z-[54]"
+              onClick={onClose}
+            />
+
             {isMobile ? (
+              /* ── Mobile: bottom sheet, swipe-down to dismiss ── */
               <motion.div
                 key="panel"
                 data-native-drag
@@ -76,7 +84,6 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 className="fixed inset-x-0 bottom-0 top-[5vh] bg-casa-surface rounded-t-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col cursor-grab active:cursor-grabbing overflow-hidden"
                 onClick={e => e.stopPropagation()}
               >
-                {/* Colored eyebrow with integrated drag pill */}
                 {(() => {
                   const color = event.members[0]?.family_member?.color_hex ?? '#C9A96E'
                   return (
@@ -90,28 +97,36 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 <PanelFooter event={event} onEdit={() => setShowEdit(true)} />
               </motion.div>
             ) : (
+              /* ── Desktop: right side panel, swipe-right or swipe-down to dismiss ── */
               <motion.div
                 key="panel"
                 data-native-drag
                 initial={{ x: '100%' }}
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
-                transition={{ type: 'spring', damping: 30, stiffness: 180 }}
-                drag="y"
-                dragConstraints={{ top: 0 }}
-                dragElastic={{ top: 0, bottom: 0.15 }}
+                transition={{ type: 'spring', damping: 32, stiffness: 200 }}
+                drag
+                dragConstraints={{ top: 0, left: 0 }}
+                dragElastic={{ top: 0, bottom: 0.08, left: 0, right: 0.15 }}
                 dragMomentum={false}
                 onDragEnd={(_e, info) => {
-                  if (info.velocity.y > 300 || info.offset.y > 140) onClose()
+                  const swipedRight = info.velocity.x > 300 || info.offset.x > 120
+                  const swipedDown = info.velocity.y > 300 || info.offset.y > 140
+                  if (swipedRight || swipedDown) onClose()
                 }}
                 style={{ willChange: 'transform', touchAction: 'none' }}
-                className="fixed top-0 right-0 h-full w-[420px] bg-casa-surface border-l border-casa-border shadow-modal z-[55] flex flex-col"
+                className="fixed top-0 right-0 h-full w-[480px] bg-casa-surface border-l border-casa-border shadow-[−4px_0_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col cursor-grab active:cursor-grabbing overflow-hidden"
                 onClick={e => e.stopPropagation()}
               >
-                {/* Drag-to-dismiss handle */}
-                <div className="flex-shrink-0 flex justify-center pt-2 pb-1">
-                  <div className="w-10 h-1 bg-casa-divider rounded-full" />
-                </div>
+                {/* Color accent bar + drag handle */}
+                {(() => {
+                  const color = event.members[0]?.family_member?.color_hex ?? '#C9A96E'
+                  return (
+                    <div className="flex-shrink-0 flex flex-col items-center pb-2 pt-3" style={{ borderTop: `4px solid ${color}` }}>
+                      <div className="w-10 h-1 bg-casa-divider rounded-full" />
+                    </div>
+                  )
+                })()}
                 <PanelHeader event={event} onClose={onClose} />
                 <PanelBody event={event} />
                 <PanelFooter event={event} onEdit={() => setShowEdit(true)} />
