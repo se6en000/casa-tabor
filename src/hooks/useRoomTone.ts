@@ -104,23 +104,7 @@ export const ZONE_COLORS: Record<RoomToneZone, string> = {
   'manual':     '#E8D5B0',
 }
 
-const ALL_ZONES: RoomToneZone[] = ['day', 'afternoon', 'evening', 'night', 'late-night', 'manual']
-
-function applyZone(zone: RoomToneZone, cfg: DisplayConfig) {
-  const html = document.documentElement
-  // Remove all zone classes
-  ALL_ZONES.forEach(z => html.classList.remove(`rt-${z}`))
-  html.classList.add(`rt-${zone}`)
-
-  // For manual mode, push CSS variables
-  if (zone === 'manual') {
-    html.style.setProperty('--rt-warmth',     String(cfg.manual_warmth))
-    html.style.setProperty('--rt-brightness', String(cfg.manual_brightness))
-  } else {
-    html.style.removeProperty('--rt-warmth')
-    html.style.removeProperty('--rt-brightness')
-  }
-}
+// CSS filter layer removed — hardware DDC/CI handles brightness and CCT via sensor bridge
 
 /** Maps sensor CCT + lux to a zone (mirrors logic in sensor-bridge/main.py) */
 function sensorDataToZone(cct: number, lux: number): RoomToneZone {
@@ -185,18 +169,16 @@ export function useRoomTone() {
       }
     }
 
-    let zone: RoomToneZone
+    // Zone computed for display purposes only — CSS layer is disabled
+    let _zone: RoomToneZone
     if (cfg.manual_override) {
-      zone = 'manual'
+      _zone = 'manual'
     } else if (sensorData?.cct != null && sensorData?.lux != null) {
-      // Real sensor reading available
-      zone = sensorDataToZone(sensorData.cct, sensorData.lux)
+      _zone = sensorDataToZone(sensorData.cct, sensorData.lux)
     } else {
-      // Sensor bridge unreachable — time-of-day proxy fallback
-      zone = getZoneForHour(Math.floor(hour), cfg)
+      _zone = getZoneForHour(Math.floor(hour), cfg)
     }
-
-    applyZone(zone, cfg)
+    void _zone // zone used for UI display in DisplaySettingsPage only
   }, [cfg, sensorData])
 
   useEffect(() => {

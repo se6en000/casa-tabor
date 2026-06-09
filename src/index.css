@@ -154,58 +154,9 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* ── Room Tone CSS Layer ─────────────────────────────────────── */
-/* Applied to #root by useRoomTone hook. Smooth 2s transitions.  */
-/* Software layer — complements DDC/CI hardware control on Pi.   */
-
-#root {
-  /* transition applied when room tone changes */
-  transition:
-    filter 2s ease-in-out,
-    background-color 2s ease-in-out;
-}
-
-/* Day — crisp, no filter */
-html.rt-day #root {
-  filter: none;
-}
-
-/* Late afternoon — faint warmth */
-html.rt-afternoon #root {
-  filter: sepia(0.05) brightness(0.98);
-}
-
-/* Evening — warm amber, reduced blue */
-html.rt-evening #root {
-  filter: sepia(0.18) brightness(0.92) saturate(0.95);
-}
-
-/* Night — deep warm, significant dimming */
-html.rt-night #root {
-  filter: sepia(0.30) brightness(0.70) saturate(0.85);
-}
-
-/* Late night — dark painting mode */
-html.rt-late-night #root {
-  filter: sepia(0.40) brightness(0.45) saturate(0.75);
-}
-
-/* Manual override — user-set warmth via CSS variable */
-html.rt-manual #root {
-  filter: sepia(var(--rt-warmth, 0)) brightness(var(--rt-brightness, 1));
-}
-
-/* Night palette — swap color vars on dark shifts */
-html.rt-night,
-html.rt-late-night {
-  --color-casa-bg:      #1A1A2E;
-  --color-casa-surface: #16213E;
-  --color-casa-text:    #C8C0B8;
-  --color-casa-muted:   #6B6B7B;
-  --color-casa-border:  #2A2A3E;
-  --color-casa-divider: #1E1E30;
-  --color-casa-gold:    #A08050;
-  --color-casa-navy:    #C8C0B8;
-}
+/* CSS filter layer disabled — hardware DDC/CI handles all       */
+/* brightness and color temperature adjustments via the sensor   */
+/* bridge (pi/sensor-bridge/main.py). No software overlay needed. */
 
 /* ── Kiosk / Touch Mode (Pi Chromium + any touch device) ─────── */
 /* Applied unconditionally — this is a touch-first app           */
