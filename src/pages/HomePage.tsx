@@ -2,14 +2,13 @@ import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { format, isAfter, isBefore, addDays } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Cloud, MapPin, Clock, ChevronRight, AlertTriangle, Navigation, Bell, RefreshCw } from 'lucide-react'
+import { ChevronRight, RefreshCw, MapPin, Clock, Navigation, Bell } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { useTodayEvents } from '../hooks/useCalendarEvents'
-import { useLiveClock, greetingFor } from '../hooks/useLiveClock'
+import { useLiveClock } from '../hooks/useLiveClock'
 import { useCalendarStore } from '../stores/calendarStore'
-import { useHomeWeather } from '../hooks/useHomeWeather'
 import { cn } from '../utils/cn'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import EventDetailPanel from '../components/calendar/EventDetailPanel'
@@ -35,9 +34,9 @@ export default function HomePage() {
   const tomorrow = useMemo(() => addDays(now, 1), [now.toDateString()])
   const { data: allTomorrowEvents } = useTodayEvents(tomorrow)
   const { visibleMembers, toggleMember } = useCalendarStore()
-  const { data: weather } = useHomeWeather()
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLElement | null>(null)
+  const nowLineRef = useRef<HTMLLIElement | null>(null)
 
   const events = useMemo<EventWithDetails[]>(() => {
     if (!allTodayEvents) return []
@@ -69,15 +68,14 @@ export default function HomePage() {
 
   // Show tomorrow section always (not just when today is done)
 
-  // Scroll-to-top on mount
+  // Scroll so the "now" line is near the top of the viewport (with some breathing room above)
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = 0
-  }, [])
-
-  const nextEvent = useMemo(
-    () => events.find((e) => isAfter(new Date(e.end_time), now)),
-    [events, now],
-  )
+    const container = scrollRef.current
+    const nowLine = nowLineRef.current
+    if (!container || !nowLine) return
+    const offset = nowLine.offsetTop - 80  // 80px of context above the now line
+    container.scrollTop = Math.max(0, offset)
+  }, [isLoading])
 
   const selectedEvent = selectedEventId
     ? (events.find(e => e.id === selectedEventId) ?? tomorrowEvents.find(e => e.id === selectedEventId) ?? reminders.find(e => e.id === selectedEventId) ?? null)
@@ -206,108 +204,8 @@ export default function HomePage() {
           )}
         </AnimatePresence>
 
-        {/* ── Greeting + Next Up row — hidden on small screens ─ */}
-        <div className="hidden lg:flex items-start gap-4 lg:gap-6 mb-4 lg:mb-5">
-          {/* Greeting */}
-          <header className="flex-1 min-w-0">
-            <motion.h1
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="font-display text-display-xl text-casa-navy leading-none"
-            >
-              {greetingFor(now)}
-            </motion.h1>
-            <p className="text-body-lg text-casa-muted mt-2">
-              {format(now, 'EEEE, MMMM d')}
-            </p>
-            {/* Clock/weather — only on mobile; sidebar shows it on tablet */}
-            <div className="text-left lg:hidden mt-2">
-              <p className="font-display text-display-lg text-casa-navy tabular-nums leading-none">
-                {format(now, 'h:mm')}
-                <span className="text-casa-muted ml-1 text-display-md">{format(now, 'a')}</span>
-              </p>
-              <p className="text-body-sm text-casa-muted mt-1 flex items-center gap-1.5">
-                <Cloud size={14} className="text-casa-gold" />
-                {weather
-                  ? (() => {
-                      const highPollen = weather.pollen && ['High', 'Very High'].some(
-                        lvl => weather.pollen!.tree === lvl || weather.pollen!.grass === lvl || weather.pollen!.weed === lvl
-                      )
-                      return `${weather.temp}° · ${weather.condition} · ${weather.city}` +
-                        (weather.airQuality && weather.airQuality.aqi > 50 ? ` · AQI ${weather.airQuality.aqi}` : '') +
-                        (highPollen ? ' · 🌿 Pollen' : '')
-                    })()
-                  : '—'}
-              </p>
-            </div>
-          </header>
-
-          {/* Next Up — compact on desktop, inline with greeting */}
-          <div className="hidden lg:block w-72 shrink-0 self-center">
-            <NextUpCard event={nextEvent} now={now} onClick={(id) => setSelectedEventId(id)} compact />
-          </div>
-        </div>
-
-        {/* ── Family filter pills — hidden on small screens ──── */}
-        <div className="hidden md:flex lg:hidden gap-2 mb-6 flex-wrap">
-          {family?.map((m) => {
-            const active = visibleMembers.length === 0 || visibleMembers.includes(m.id)
-            return (
-              <button
-                key={m.id}
-                onClick={() => toggleMember(m.id)}
-                className={cn(
-                  'flex items-center gap-2 px-3 py-1.5 rounded-pill border text-body-sm font-medium transition-all',
-                  active
-                    ? 'bg-casa-surface border-casa-border shadow-card'
-                    : 'bg-transparent border-casa-divider text-casa-muted opacity-60',
-                )}
-              >
-                <span
-                  className="w-3 h-3 rounded-full transition-opacity"
-                  style={{
-                    backgroundColor: m.color_hex,
-                    opacity: active ? 1 : 0.4,
-                  }}
-                />
-                {m.name}
-              </button>
-            )
-          })}
-        </div>
-
-        {/* ── Next-up hero card — mid screens only (desktop shows inline above) */}
-        <div className="hidden md:block lg:hidden">
-          <NextUpCard event={nextEvent} now={now} onClick={(id) => setSelectedEventId(id)} />
-        </div>
-
-        {/* ── Music mini player ─────────────────────────────── */}
-        <div className="hidden md:block mt-4 lg:mt-3" onClick={e => e.stopPropagation()}>
-          <MiniPlayer />
-        </div>
-
-        {/* ── Today's reminders ─────────────────────────────── */}
-        {reminders.length > 0 && (
-          <section className="mt-4">
-            <div className="flex flex-wrap gap-2">
-              {reminders.map(r => (
-                <SwipeableReminderPill
-                  key={r.id}
-                  id={r.id}
-                  title={r.title}
-                  members={r.members}
-                  onClick={() => { setSelectedEventId(r.id) }}
-                  onComplete={completeReminder}
-                  onDismiss={dismissReminder}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ── Today's timeline ──────────────────────────────── */}
-        <section className="mt-5">
+        {/* ── Today's timeline — first, front and center ──── */}
+        <section className="mt-2">
           <div className="flex items-baseline justify-between mb-3">
             <h2 className="font-display text-heading text-casa-navy">Today</h2>
             <Link
@@ -335,7 +233,7 @@ export default function HomePage() {
 
               {/* ── Now line ── */}
               {events.some(e => isAfter(new Date(e.end_time), now)) && (
-                <li className="flex items-center gap-3 py-0.5 select-none pointer-events-none" aria-hidden>
+                <li ref={nowLineRef} className="flex items-center gap-3 py-0.5 select-none pointer-events-none" aria-hidden>
                   <div className="w-16 shrink-0" />
                   <span className="w-2 shrink-0" />
                   <div className="flex-1 flex items-center gap-2">
@@ -357,7 +255,7 @@ export default function HomePage() {
           )}
         </section>
 
-        {/* ── Tomorrow's timeline (shown when today is all done) ── */}
+        {/* ── Tomorrow's timeline ─────────────────────────── */}
         <AnimatePresence>
           {tomorrowEvents.length > 0 && (
             <motion.section
@@ -382,6 +280,55 @@ export default function HomePage() {
           )}
         </AnimatePresence>
 
+        {/* ── Reminders ────────────────────────────────────── */}
+        {reminders.length > 0 && (
+          <section className="mt-6">
+            <div className="flex flex-wrap gap-2">
+              {reminders.map(r => (
+                <SwipeableReminderPill
+                  key={r.id}
+                  id={r.id}
+                  title={r.title}
+                  members={r.members}
+                  onClick={() => { setSelectedEventId(r.id) }}
+                  onComplete={completeReminder}
+                  onDismiss={dismissReminder}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── Family filter + music player ─────────────────── */}
+        <div className="mt-6 space-y-4">
+          <div className="flex gap-2 flex-wrap">
+            {family?.map((m) => {
+              const active = visibleMembers.length === 0 || visibleMembers.includes(m.id)
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => toggleMember(m.id)}
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-1.5 rounded-pill border text-body-sm font-medium transition-all',
+                    active
+                      ? 'bg-casa-surface border-casa-border shadow-card'
+                      : 'bg-transparent border-casa-divider text-casa-muted opacity-60',
+                  )}
+                >
+                  <span
+                    className="w-3 h-3 rounded-full transition-opacity"
+                    style={{ backgroundColor: m.color_hex, opacity: active ? 1 : 0.4 }}
+                  />
+                  {m.name}
+                </button>
+              )
+            })}
+          </div>
+          <div onClick={e => e.stopPropagation()}>
+            <MiniPlayer />
+          </div>
+        </div>
+
 
         <div onClick={e => e.stopPropagation()}>
           <EventDetailPanel
@@ -396,104 +343,6 @@ export default function HomePage() {
       {/* ── Right panel (tablet only) ──────────────────────── */}
       <HomeRightPanel now={now} allTodayEvents={allTodayEvents ?? []} />
     </div>
-  )
-}
-
-/* ── Next-up hero card ────────────────────────────────────────── */
-
-function NextUpCard({ event, now, onClick, compact = false }: { event: EventWithDetails | undefined; now: Date; onClick: (id: string) => void; compact?: boolean }) {
-  if (!event) {
-    return (
-      <div className={cn("bg-casa-surface rounded-card border border-casa-border shadow-card", compact ? "p-3" : "p-6")}>
-        <p className="text-overline font-body font-semibold text-casa-muted uppercase tracking-wider mb-1">
-          Next up
-        </p>
-        <p className={cn("font-display text-casa-navy", compact ? "text-body-lg" : "text-display-md")}>
-          All clear for the day.
-        </p>
-      </div>
-    )
-  }
-
-  const start = new Date(event.start_time)
-  const end = new Date(event.end_time)
-  const happening = isBefore(start, now) && isAfter(end, now)
-  const color = eventColor(event)
-  const minsUntil = Math.round((start.getTime() - now.getTime()) / 60_000)
-  const enr = event.enrichment
-
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-      className="rounded-card shadow-card overflow-hidden border border-casa-border cursor-pointer hover:shadow-card-hover transition-shadow"
-      style={{ backgroundColor: 'var(--color-casa-surface)' }}
-      onClick={e => { e.stopPropagation(); onClick(event.id) }}
-    >
-      <div className="flex">
-        <div className="w-1.5" style={{ backgroundColor: color }} />
-        <div className={cn("flex-1", compact ? "p-3" : "p-6")}>
-          <div className="flex items-center gap-2 mb-0.5">
-            <p className="text-overline font-body font-semibold uppercase tracking-wider" style={{ color }}>
-              {happening ? 'Now' : minsUntil < 60 ? `In ${minsUntil} min` : 'Next up'}
-            </p>
-            {event.members && event.members.length > 0 && (
-              <div className="flex gap-1">
-                {event.members.map((m) => (
-                  <span
-                    key={m.id}
-                    className="w-4 h-4 rounded-full border-2 border-white"
-                    style={{ backgroundColor: m.family_member?.color_hex }}
-                    title={m.family_member?.name}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          <h3 className={cn("font-display text-casa-navy leading-tight", compact ? "text-body-lg font-semibold" : "text-display-md")}>
-            {event.title}
-          </h3>
-
-          <div className={cn("flex items-center gap-3 mt-2 text-casa-muted flex-wrap", compact ? "text-caption" : "text-body-sm mt-3 gap-4")}>
-            <span className="flex items-center gap-1.5">
-              <Clock size={compact ? 12 : 14} />
-              {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
-            </span>
-            {event.location_name && (
-              <span className="flex items-center gap-1.5">
-                <MapPin size={compact ? 12 : 14} />
-                {event.location_name}
-              </span>
-            )}
-            {!compact && enr?.weather_summary && (
-              <span className="flex items-center gap-1.5">
-                <Cloud size={14} />
-                {enr.weather_summary}
-              </span>
-            )}
-          </div>
-
-          {!compact && enr?.departure_time && !happening && (
-            <div className="mt-4 flex items-center gap-2 px-3 py-2 rounded-button bg-amber-50 border border-amber-200 text-body-sm">
-              <AlertTriangle size={14} className="text-casa-warning shrink-0" />
-              <span className="text-casa-text">
-                Leave by <strong>{format(new Date(enr.departure_time), 'h:mm a')}</strong>
-                {enr.drive_time_mins && ` · ${enr.drive_time_mins} min drive`}
-              </span>
-            </div>
-          )}
-          {compact && enr?.departure_time && !happening && (
-            <div className="mt-2 flex items-center gap-1.5 text-caption text-amber-700">
-              <AlertTriangle size={11} className="shrink-0" />
-              Leave by <strong>{format(new Date(enr.departure_time), 'h:mm a')}</strong>
-            </div>
-          )}
-        </div>
-      </div>
-    </motion.div>
   )
 }
 

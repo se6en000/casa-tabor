@@ -2,7 +2,7 @@ import { useMemo, useRef } from 'react'
 import { format, isAfter, isBefore } from 'date-fns'
 import { Cloud, Sparkles } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { useLiveClock } from '../../hooks/useLiveClock'
+import { useLiveClock, greetingFor } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
@@ -35,7 +35,7 @@ export function TopBarC() {
       className="w-full flex items-center gap-4 px-4 h-12 flex-shrink-0 z-40"
       style={{ backgroundColor: 'var(--color-casa-navy, #1E1A14)' }}
     >
-      {/* ── Left: brand ─────────────────────────────── */}
+      {/* ── Left: brand + greeting ──────────────────────── */}
       <div className="flex items-center gap-2.5 flex-shrink-0">
         <span className="w-8 h-8 rounded-lg bg-casa-gold flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">
           CT
@@ -43,6 +43,11 @@ export function TopBarC() {
         <span className="font-display text-heading text-white hidden sm:block tracking-wide">
           Casa Tabor
         </span>
+        {/* Greeting + date — shown when there's enough width */}
+        <div className="hidden md:flex flex-col justify-center ml-1 border-l border-white/15 pl-3">
+          <span className="text-[13px] font-semibold text-white/90 leading-tight">{greetingFor(now)}</span>
+          <span className="text-[11px] text-white/45 leading-tight">{format(now, 'EEEE, MMMM d')}</span>
+        </div>
       </div>
 
       {/* ── Center: current / next events ────────────── */}
