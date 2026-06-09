@@ -73,6 +73,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               className="fixed inset-0 bg-black/40 z-[54]"
+              data-panel-overlay
               onClick={onClose}
               onTouchStart={stopTouch}
               onTouchMove={stopTouch}
@@ -99,8 +100,12 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 }}
                 style={{ willChange: 'transform' }}
                 className="fixed inset-x-0 bottom-0 top-[5vh] bg-casa-surface rounded-t-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col overflow-hidden"
+                data-panel-overlay
                 onClick={e => e.stopPropagation()}
                 onPointerDown={stopTouch}
+                onTouchStart={stopTouch}
+                onTouchMove={stopTouch}
+                onTouchEnd={stopTouch}
               >
                 {(() => {
                   const color = event.members[0]?.family_member?.color_hex ?? '#C9A96E'
@@ -137,8 +142,12 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 }}
                 style={{ willChange: 'transform' }}
                 className="fixed top-0 right-0 h-full w-[960px] bg-casa-surface border-l border-casa-border shadow-[−4px_0_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col overflow-hidden"
+                data-panel-overlay
                 onClick={e => e.stopPropagation()}
                 onPointerDown={stopTouch}
+                onTouchStart={stopTouch}
+                onTouchMove={stopTouch}
+                onTouchEnd={stopTouch}
               >
                 {/* Color accent bar + drag handle (touch here to drag-dismiss) */}
                 {(() => {

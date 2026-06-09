@@ -55,9 +55,12 @@ export default function CalendarPage() {
     ? `${format(new Date(), 'MMM d')} – ${format(stackedEnd, stackedEnd.getMonth() === new Date().getMonth() ? 'd, yyyy' : 'MMM d, yyyy')}`
     : `${format(weekStart, 'MMMM d')} – ${format(endOfWeek(selectedDate, { weekStartsOn: 0 }), 'd, yyyy')}`
 
-  // Touch swipe detection
+  // Touch swipe detection — skip if a modal/panel is open (z-index overlay)
   const touchStartX = useRef<number | null>(null)
-  const onTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX }
+  const onTouchStart = (e: React.TouchEvent) => {
+    if ((e.target as HTMLElement).closest('[data-panel-overlay]')) return
+    touchStartX.current = e.touches[0].clientX
+  }
   const onTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX.current === null) return
     const delta = e.changedTouches[0].clientX - touchStartX.current
