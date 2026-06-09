@@ -126,14 +126,14 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
                 transition={{ type: 'spring', damping: 32, stiffness: 200 }}
-                drag="x"
+                drag="y"
                 dragControls={desktopDragControls}
                 dragListener={false}
-                dragConstraints={{ left: 0 }}
-                dragElastic={{ left: 0, right: 0.15 }}
+                dragConstraints={{ top: 0 }}
+                dragElastic={{ top: 0, bottom: 0.15 }}
                 dragMomentum={false}
                 onDragEnd={(_e, info) => {
-                  if (info.velocity.x > 500 || info.offset.x > 200) onClose()
+                  if (info.velocity.y > 500 || info.offset.y > 200) onClose()
                 }}
                 style={{ willChange: 'transform' }}
                 className="fixed top-0 right-0 h-full w-[960px] bg-casa-surface border-l border-casa-border shadow-[−4px_0_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col overflow-hidden"
