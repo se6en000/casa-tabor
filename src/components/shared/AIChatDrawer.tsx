@@ -225,7 +225,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
   useEffect(() => {
     if (open) {
-      setTimeout(() => textareaRef.current?.focus(), 400)
+      // Auto-start mic when drawer opens — like macOS dictation
+      setTimeout(() => {
+        textareaRef.current?.focus()
+        speech.start()
+      }, 500)
     } else {
       speech.stop()
       reset()
