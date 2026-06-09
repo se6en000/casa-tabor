@@ -18,9 +18,10 @@ const CANCEL_PHRASES  = /\b(no|nope|cancel|don't|do not|stop|abort|never mind|ne
 /** DeepGram STT bridge — streams ALSA mic audio to DeepGram WebSocket, returns real-time words */
 const BRIDGE = 'http://127.0.0.1:8766'
 
-type VoicePhase = 'idle' | 'listening' | 'processing'
+type VoicePhase = 'idle' | 'connecting' | 'listening' | 'processing'
 
-const SILENCE_MS = 2000  // auto-send after 2s of no new words
+const SILENCE_MS = 1500  // auto-send after 1.5s of no new words
+const CONNECT_TIMEOUT_MS = 5000 // give up connecting after 5s
 
 function useSpeechInput({
   onInterim,
@@ -37,11 +38,12 @@ function useSpeechInput({
   onCancel: () => void
   hasPendingAction: boolean
 }) {
-  const pollRef           = useRef<ReturnType<typeof setInterval> | null>(null)
-  const activeRef         = useRef(false)
-  const lastInterimRef    = useRef('')
+  const pollRef            = useRef<ReturnType<typeof setInterval> | null>(null)
+  const activeRef          = useRef(false)
+  const lastInterimRef     = useRef('')
   const lastInterimTimeRef = useRef(0)
-  const [phase, setPhase] = useState<VoicePhase>('idle')
+  const connectStartRef    = useRef(0)
+  const [phase, setPhase]  = useState<VoicePhase>('idle')
   const [volume, setVolume] = useState(0)
   const supported = true
 
@@ -71,6 +73,7 @@ function useSpeechInput({
     setVolume(0)
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
+    connectStartRef.current = 0
     onInterim('')
     try { await fetch(`${BRIDGE}/stop`, { method: 'POST' }) } catch { /* ignore */ }
   }, [onInterim])
@@ -79,7 +82,8 @@ function useSpeechInput({
     if (!activeRef.current) return
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
-    setPhase('listening')
+    connectStartRef.current = Date.now()
+    setPhase('connecting')   // show spinner until bridge reports ready=true
     try {
       await fetch(`${BRIDGE}/start`, { method: 'POST' })
     } catch (e) {
@@ -96,37 +100,48 @@ function useSpeechInput({
         const data = await res.json()
         setVolume(data.volume ?? 0)
 
+        // Advance to 'listening' only once bridge confirms WS is open
+        if (data.ready && phase !== 'listening') {
+          setPhase('listening')
+        }
+
+        // Abort if connect takes too long
+        if (!data.ready && connectStartRef.current > 0) {
+          if (Date.now() - connectStartRef.current > CONNECT_TIMEOUT_MS) {
+            console.warn('[STT] connect timeout, retrying')
+            stopPoll()
+            if (activeRef.current) setTimeout(() => startListening(), 500)
+            return
+          }
+        }
+
         const interim = data.interim_transcript ?? ''
 
         if (interim) {
           if (interim !== lastInterimRef.current) {
-            // New words arrived — update display and reset silence timer
             lastInterimRef.current = interim
             lastInterimTimeRef.current = Date.now()
             onInterim(interim)
           } else {
-            // Same interim — check if we've been silent long enough
             const silenceMs = Date.now() - lastInterimTimeRef.current
             if (lastInterimTimeRef.current > 0 && silenceMs >= SILENCE_MS) {
               triggerFinal(interim)
-              if (activeRef.current) setTimeout(() => startListening(), 400)
+              if (activeRef.current) setTimeout(() => startListening(), 300)
             }
           }
         }
 
-        // DeepGram speech_final fired — also trigger send
+        // DeepGram speech_final or UtteranceEnd fired
         if (!data.recording && data.transcript) {
-          if (lastInterimRef.current || data.transcript) {
-            triggerFinal(data.transcript || lastInterimRef.current)
-          }
-          if (activeRef.current) setTimeout(() => startListening(), 400)
+          triggerFinal(data.transcript || lastInterimRef.current)
+          if (activeRef.current) setTimeout(() => startListening(), 300)
         } else if (!data.recording && data.error) {
           stopPoll()
-          if (activeRef.current) setTimeout(() => startListening(), 400)
+          if (activeRef.current) setTimeout(() => startListening(), 500)
         }
       } catch { /* bridge momentarily busy */ }
     }, 100)
-  }, [handleFinalTranscript, onInterim, triggerFinal])
+  }, [handleFinalTranscript, onInterim, triggerFinal, phase])
 
   const start = useCallback(async () => {
     if (activeRef.current) return
@@ -139,7 +154,7 @@ function useSpeechInput({
     else start()
   }, [start, stop])
 
-  return { phase, volume, supported, start, stop, toggle, listening: phase !== 'idle' }
+  return { phase, volume, supported, start, stop, toggle, listening: phase === 'listening', connecting: phase === 'connecting' }
 }
 
 
@@ -512,15 +527,19 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                   <button
                     type="button"
                     onClick={speech.toggle}
-                    title={speech.listening ? 'Stop listening' : 'Start voice input'}
+                    title={speech.listening ? 'Stop listening' : speech.connecting ? 'Connecting…' : 'Start voice input'}
                     className={cn(
                       'w-8 h-8 rounded-full flex items-center justify-center transition-all shrink-0 mb-0.5',
                       speech.listening
-                        ? 'bg-casa-navy text-casa-gold'
-                        : 'bg-casa-divider text-casa-muted hover:text-casa-gold'
+                        ? 'bg-casa-navy text-casa-gold animate-pulse'
+                        : speech.connecting
+                          ? 'bg-casa-navy/60 text-casa-gold/60'
+                          : 'bg-casa-divider text-casa-muted hover:text-casa-gold'
                     )}
                   >
-                    <Mic size={14} />
+                    {speech.connecting
+                      ? <Loader2 size={14} className="animate-spin" />
+                      : <Mic size={14} />}
                   </button>
                 )}
 
@@ -540,7 +559,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
               </div>
               <p className="text-[10px] text-casa-muted mt-1.5 text-center opacity-60">
                 {speech.supported
-                  ? 'Tap 🎙 to start voice · pause to send'
+                  ? speech.connecting
+                    ? 'Connecting to mic…'
+                    : speech.listening
+                      ? 'Listening — pause to send · say "goodbye" to close'
+                      : 'Tap 🎙 to start voice · pause to send'
                   : 'Tap ➤ to send · 📎 gallery · 📷 camera'}
               </p>
 
