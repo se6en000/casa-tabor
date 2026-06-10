@@ -728,8 +728,9 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             </div>
 
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 shrink-0 border-b border-casa-border">
-              <div>
+            <div className="px-6 py-4 shrink-0 border-b border-casa-border">
+              {/* Title row: label + save/close */}
+              <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <h3 className="font-display text-display-sm text-casa-navy leading-tight">Edit Details</h3>
                   {isInstance && (
@@ -739,26 +740,29 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     </span>
                   )}
                 </div>
-                {/* Always-editable title */}
-                <input
-                  value={displayTitle}
-                  onChange={e => { setDisplayTitle(e.target.value); markDirty() }}
-                  className="text-caption text-casa-navy bg-transparent border-b border-casa-navy/20 focus:border-casa-navy focus:outline-none mt-0.5 w-full max-w-[280px] truncate"
-                />
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-button bg-casa-gold text-white text-caption font-semibold hover:brightness-110 disabled:opacity-50 transition-all"
+                  >
+                    <Save size={12} />
+                    {isSaving ? (saveStatus === 'slow' ? 'Waking…' : '…') : 'Save'}
+                  </button>
+                  <button onClick={handleClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-casa-bg text-casa-muted transition-colors shrink-0">
+                    <X size={18} />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-button bg-casa-gold text-white text-caption font-semibold hover:brightness-110 disabled:opacity-50 transition-all"
-                >
-                  <Save size={12} />
-                  {isSaving ? (saveStatus === 'slow' ? 'Waking…' : '…') : 'Save'}
-                </button>
-                <button onClick={handleClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-casa-bg text-casa-muted transition-colors shrink-0">
-                  <X size={18} />
-                </button>
-              </div>
+              {/* Full-width touch-friendly title input */}
+              <textarea
+                value={displayTitle}
+                onChange={e => { setDisplayTitle(e.target.value); markDirty() }}
+                rows={2}
+                className="w-full bg-casa-bg border-2 border-casa-border focus:border-casa-gold rounded-xl px-4 py-3 font-display text-[22px] leading-snug text-casa-navy placeholder-casa-muted/40 outline-none transition-colors resize-none"
+                placeholder="Event title…"
+                style={{ touchAction: 'manipulation' }}
+              />
             </div>
 
             {/* Form */}
