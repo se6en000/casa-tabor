@@ -51,7 +51,12 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
         className="relative w-full h-full flex items-center justify-center"
         style={{
           backgroundColor: '#F5F0E8',
-          boxShadow: 'inset 0 0 80px 20px rgba(0,0,0,0.45)',
+          boxShadow: [
+            'inset 0 60px 80px -20px rgba(0,0,0,0.50)',   // top — strongest, light comes from above
+            'inset 60px 0 80px -20px rgba(0,0,0,0.38)',   // left — medium
+            'inset -60px 0 80px -20px rgba(0,0,0,0.32)',  // right — slightly lighter
+            'inset 0 -60px 80px -20px rgba(0,0,0,0.25)',  // bottom — 50% lighter than top
+          ].join(', '),
           padding: '3.5vw',
         }}
       >
