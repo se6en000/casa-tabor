@@ -983,8 +983,18 @@ def windowed():
 NUM_LEDS      = 60
 LED_MAX_BRIGHT = 128   # hard cap to protect Pi 5V rail (50% = ~1.8A max)
 _led_lock     = threading.Lock()
-_led_stop     = threading.Event()
+_led_stop     = threading.Event()        # signals the comet loop to exit
+_burst_active = threading.Event()        # comet pauses while a burst plays
 _led_thread: threading.Thread | None = None
+_burst_thread: threading.Thread | None = None
+
+# Live colour state — comet loop interpolates _led_current → _led_target
+_led_target   = [0, 0, 0]
+_led_current  = [0.0, 0.0, 0.0]
+_color_lock   = threading.Lock()
+
+LISTENING_RGB  = (0,  0,  70)   # blue
+PROCESSING_RGB = (80, 35, 0)    # amber
 
 def _spi_open():
     spi = _spidev.SpiDev()
@@ -1014,89 +1024,91 @@ def _write_pixels(spi, pixels: list[tuple[int, int, int]]):
 def _clamp(val: int) -> int:
     return max(0, min(LED_MAX_BRIGHT, val))
 
-def _stop_led_animation():
+def _set_target(r: int, g: int, b: int):
+    """Update the comet target colour. The comet loop will smoothly fade to it."""
+    with _color_lock:
+        _led_target[0], _led_target[1], _led_target[2] = r, g, b
+
+def _comet_loop():
+    """Single persistent bouncing comet. Colour interpolates toward _led_target.
+    While _burst_active is set, the loop pauses drawing so a burst thread can
+    take over the strip."""
+    if not SPI_AVAILABLE:
+        return
+    try:
+        spi = _spi_open()
+        pos = 0.0
+        direction = 1
+        speed = 1.1
+        tail = 12
+        FADE = 0.08   # per-frame interpolation factor (~12 frames to converge)
+        while not _led_stop.is_set():
+            if _burst_active.is_set():
+                # Burst thread is drawing — sleep until it's done
+                _led_stop.wait(0.03)
+                continue
+            # Smoothly fade current colour toward target
+            with _color_lock:
+                tr, tg, tb = _led_target[0], _led_target[1], _led_target[2]
+            _led_current[0] += (tr - _led_current[0]) * FADE
+            _led_current[1] += (tg - _led_current[1]) * FADE
+            _led_current[2] += (tb - _led_current[2]) * FADE
+            cr, cg, cb = _led_current
+
+            pixels = []
+            for i in range(NUM_LEDS):
+                dist = (pos - i) if direction == 1 else (i - pos)
+                if 0 <= dist < tail:
+                    frac = 1 - dist / tail
+                    pixels.append((_clamp(int(cr * frac)),
+                                   _clamp(int(cg * frac)),
+                                   _clamp(int(cb * frac))))
+                else:
+                    pixels.append((0, 0, 0))
+            _write_pixels(spi, pixels)
+            pos += speed * direction
+            if pos >= NUM_LEDS - 1:
+                pos = NUM_LEDS - 1
+                direction = -1
+            elif pos <= 0:
+                pos = 0
+                direction = 1
+            _led_stop.wait(0.03)
+        _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
+        spi.close()
+    except Exception as e:
+        log.warning(f"LED comet error: {e}")
+
+def _ensure_comet_running():
+    """Start the comet loop if it's not already running."""
+    global _led_thread
+    if _led_thread is not None and _led_thread.is_alive():
+        return
+    _led_stop.clear()
+    _burst_active.clear()
+    # Reset current colour so first run fades in from black
+    _led_current[0] = _led_current[1] = _led_current[2] = 0.0
+    _led_thread = threading.Thread(target=_comet_loop, daemon=True)
+    _led_thread.start()
+
+def _stop_comet():
     global _led_thread
     _led_stop.set()
     if _led_thread and _led_thread.is_alive():
-        _led_thread.join(timeout=1.0)
+        _led_thread.join(timeout=1.5)
+    _led_thread = None
     _led_stop.clear()
+    _burst_active.clear()
 
-def _comet(spi, stop_event, r: int, g: int, b: int, speed: float = 1.2, tail: int = 12):
-    """Bouncing comet — travels from one end to the other and back."""
-    pos = 0.0
-    direction = 1
-    while not stop_event.is_set():
-        pixels = []
-        for i in range(NUM_LEDS):
-            dist = (pos - i) if direction == 1 else (i - pos)
-            if 0 <= dist < tail:
-                frac = 1 - dist / tail
-                pixels.append((_clamp(int(r * frac)), _clamp(int(g * frac)), _clamp(int(b * frac))))
-            else:
-                pixels.append((0, 0, 0))
-        _write_pixels(spi, pixels)
-        pos += speed * direction
-        if pos >= NUM_LEDS - 1:
-            pos = NUM_LEDS - 1
-            direction = -1
-        elif pos <= 0:
-            pos = 0
-            direction = 1
-        stop_event.wait(0.03)
-
-def _run_listening():
-    """Rolling blue comet."""
-    if not SPI_AVAILABLE:
-        return
-    try:
-        spi = _spi_open()
-        _comet(spi, _led_stop, r=0, g=0, b=70)
-        _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
-        spi.close()
-    except Exception as e:
-        log.warning(f"LED listening error: {e}")
-
-def _run_processing():
-    """Rolling amber comet while AI is thinking."""
-    if not SPI_AVAILABLE:
-        return
-    try:
-        spi = _spi_open()
-        _comet(spi, _led_stop, r=80, g=35, b=0, speed=1.0)
-        _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
-        spi.close()
-    except Exception as e:
-        log.warning(f"LED processing error: {e}")
-
-def _run_confirm():
-    """Green burst: dim→bright→dim over ~2s, then return to listening."""
+def _run_burst(r: int, g: int, b: int, duration: float = 2.0):
+    """Sine-envelope full-strip burst (used for confirm/cancel).
+    Pauses the comet loop, draws the burst, then resumes the comet — which
+    will smoothly fade back toward the current target colour."""
     if not SPI_AVAILABLE:
         return
     import math
-    try:
-        spi = _spi_open()
-        steps = 60
-        for i in range(steps):
-            if _led_stop.is_set():
-                break
-            # sine envelope: 0→1→0 over the burst
-            frac = math.sin(math.pi * i / steps)
-            brightness = _clamp(int(100 * frac))
-            _write_pixels(spi, [(0, brightness, 0)] * NUM_LEDS)
-            _led_stop.wait(2.0 / steps)
-        _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
-        spi.close()
-    except Exception as e:
-        log.warning(f"LED confirm error: {e}")
-    # Chain back to listening unless something else stopped us
-    if not _led_stop.is_set():
-        _start_led_nowait(_run_listening)
-
-def _run_cancel():
-    """Red sine burst dim→bright→dim over 2s, then return to listening."""
-    if not SPI_AVAILABLE:
-        return
-    import math
+    _burst_active.set()
+    time.sleep(0.05)  # let comet loop see the flag
     try:
         spi = _spi_open()
         steps = 60
@@ -1104,66 +1116,65 @@ def _run_cancel():
             if _led_stop.is_set():
                 break
             frac = math.sin(math.pi * i / steps)
-            brightness = _clamp(int(100 * frac))
-            _write_pixels(spi, [(brightness, 0, 0)] * NUM_LEDS)
-            _led_stop.wait(2.0 / steps)
-        _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
+            color = (_clamp(int(r * frac)), _clamp(int(g * frac)), _clamp(int(b * frac)))
+            _write_pixels(spi, [color] * NUM_LEDS)
+            _led_stop.wait(duration / steps)
         spi.close()
     except Exception as e:
-        log.warning(f"LED cancel error: {e}")
-    if not _led_stop.is_set():
-        _start_led_nowait(_run_listening)
+        log.warning(f"LED burst error: {e}")
+    finally:
+        _burst_active.clear()
 
-def _start_led_nowait(target, *args):
-    """Start a new LED animation from within an animation thread (no lock, no join)."""
-    global _led_thread, _led_stop
-    _led_stop = threading.Event()
-    t = threading.Thread(target=target, args=args, daemon=True)
-    _led_thread = t
-    t.start()
-
-def _start_led(target, *args):
-    global _led_thread
-    with _led_lock:
-        _stop_led_animation()
-        _led_thread = threading.Thread(target=target, args=args, daemon=True)
-        _led_thread.start()
+def _start_burst(r: int, g: int, b: int):
+    global _burst_thread
+    # Make sure comet is running so we have something to fade back to
+    _ensure_comet_running()
+    if _burst_thread and _burst_thread.is_alive():
+        # Let the previous burst finish naturally; ignore overlapping requests
+        return
+    _burst_thread = threading.Thread(target=_run_burst, args=(r, g, b, 2.0), daemon=True)
+    _burst_thread.start()
 
 @app.post("/led/listening")
 def led_listening():
-    """Start rolling blue comet — AI is listening."""
-    _start_led(_run_listening)
+    """Smoothly transition comet to blue (listening). Comet keeps flowing."""
+    with _led_lock:
+        _set_target(*LISTENING_RGB)
+        _ensure_comet_running()
     return {"ok": True, "mode": "listening"}
 
 @app.post("/led/processing")
 def led_processing():
-    """Rolling amber comet — AI is thinking."""
-    _start_led(_run_processing)
+    """Smoothly transition comet to amber (thinking). Comet keeps flowing."""
+    with _led_lock:
+        _set_target(*PROCESSING_RGB)
+        _ensure_comet_running()
     return {"ok": True, "mode": "processing"}
 
 @app.post("/led/confirm")
 def led_confirm():
-    """Green burst dim→bright→dim, then back to listening."""
-    _start_led(_run_confirm)
+    """Green burst overlays the comet, then comet resumes with current target."""
+    _start_burst(0, 100, 0)
     return {"ok": True, "mode": "confirm"}
 
 @app.post("/led/cancel")
 def led_cancel():
-    """Red flash, then back to listening."""
-    _start_led(_run_cancel)
+    """Red burst overlays the comet, then comet resumes with current target."""
+    _start_burst(100, 0, 0)
     return {"ok": True, "mode": "cancel"}
 
 @app.post("/led/off")
 def led_off():
-    """Turn all LEDs off."""
-    _stop_led_animation()
-    if SPI_AVAILABLE:
-        try:
-            spi = _spi_open()
-            _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
-            spi.close()
-        except Exception as e:
-            log.warning(f"LED off error: {e}")
+    """Stop the comet and turn all LEDs off."""
+    with _led_lock:
+        _stop_comet()
+        if SPI_AVAILABLE:
+            try:
+                spi = _spi_open()
+                _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
+                spi.close()
+            except Exception as e:
+                log.warning(f"LED off error: {e}")
     return {"ok": True, "mode": "off"}
 
 
