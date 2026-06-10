@@ -24,7 +24,9 @@ Deno.serve(async (req) => {
 
 async function refreshToken(tok: Record<string, string>) {
   const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ refresh_token: tok.refresh_token, client_id: Deno.env.get('GOOGLE_CLIENT_ID')!, client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET')!, grant_type: 'refresh_token' }) })
-  return r.json()
+  const t = await r.json()
+  if (!r.ok || !t.access_token) throw new Error(`Token refresh failed: ${t.error_description ?? t.error ?? r.status}`)
+  return t
 }
 
 async function syncOne(sb: SupabaseClient, tok: Record<string, string>) {
@@ -32,18 +34,28 @@ async function syncOne(sb: SupabaseClient, tok: Record<string, string>) {
   if (!accessToken || new Date(tok.expires_at).getTime() - Date.now() < 60000) {
     const t = await refreshToken(tok)
     accessToken = t.access_token
-    await sb.from('google_tokens').update({ access_token: t.access_token, expires_at: new Date(Date.now() + t.expires_in * 1000).toISOString(), updated_at: new Date().toISOString() }).eq('family_member_id', tok.family_member_id)
+    const expiresAt = t.expires_in
+      ? new Date(Date.now() + t.expires_in * 1000).toISOString()
+      : new Date(Date.now() + 3600 * 1000).toISOString() // default 1h if missing
+    await sb.from('google_tokens').update({ access_token: t.access_token, expires_at: expiresAt, updated_at: new Date().toISOString() }).eq('family_member_id', tok.family_member_id)
   }
   const now = Date.now()
   const timeMin = new Date(now - 7 * 86400000).toISOString()
   const timeMax = new Date(now + 90 * 86400000).toISOString()
-  let pageToken: string | undefined, syncToken = tok.sync_token, pulled = 0, upserted = 0
+  let pageToken: string | undefined, syncToken: string | null = tok.sync_token ?? null, pulled = 0, upserted = 0
   do {
     const params = new URLSearchParams({ singleEvents: 'true', maxResults: '250' })
     if (pageToken) params.set('pageToken', pageToken)
     else if (syncToken) params.set('syncToken', syncToken)
     else { params.set('timeMin', timeMin); params.set('timeMax', timeMax); params.set('orderBy', 'startTime') }
     const r = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?' + params, { headers: { authorization: 'Bearer ' + accessToken } })
+    if (r.status === 410) {
+      // Sync token expired — clear it and do a full re-sync from scratch
+      syncToken = null
+      pageToken = undefined
+      await sb.from('google_tokens').update({ sync_token: null }).eq('family_member_id', tok.family_member_id)
+      continue
+    }
     if (!r.ok) { const t = await r.text(); throw new Error('Calendar API ' + r.status + ': ' + t) }
     const page = await r.json()
     pulled += page.items?.length ?? 0
