@@ -8,15 +8,18 @@ interface Props {
 export default function ArtScreensaver({ onDismiss }: Props) {
   const { artwork, loaded, onLoad, next } = useArtwork(240)
   const [visible, setVisible] = useState(false)
+  const [dismissable, setDismissable] = useState(false)
 
-  // Fade in on mount
+  // Fade in on mount, then allow dismiss after a grace period
   useEffect(() => {
-    const t = setTimeout(() => setVisible(true), 50)
-    return () => clearTimeout(t)
+    const t1 = setTimeout(() => setVisible(true), 50)
+    const t2 = setTimeout(() => setDismissable(true), 1500)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [])
 
   // Touch anywhere to dismiss
   function handleDismiss() {
+    if (!dismissable) return
     setVisible(false)
     setTimeout(onDismiss, 500)
   }
@@ -29,7 +32,6 @@ export default function ArtScreensaver({ onDismiss }: Props) {
         transition: 'opacity 0.6s ease',
       }}
       onClick={handleDismiss}
-      onTouchStart={handleDismiss}
     >
       {/* Full-bleed mat — linen fills the entire screen */}
       <div
