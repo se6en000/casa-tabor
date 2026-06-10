@@ -955,19 +955,26 @@ def _stop_led_animation():
     _led_stop.clear()
 
 def _comet(spi, stop_event, r: int, g: int, b: int, speed: float = 1.2, tail: int = 12):
-    """Rolling comet animation — shared by listening (blue) and processing (amber)."""
+    """Bouncing comet — travels from one end to the other and back."""
     pos = 0.0
+    direction = 1
     while not stop_event.is_set():
         pixels = []
         for i in range(NUM_LEDS):
-            dist = (i - pos) % NUM_LEDS
-            if dist < tail:
+            dist = (pos - i) if direction == 1 else (i - pos)
+            if 0 <= dist < tail:
                 frac = 1 - dist / tail
                 pixels.append((_clamp(int(r * frac)), _clamp(int(g * frac)), _clamp(int(b * frac))))
             else:
                 pixels.append((0, 0, 0))
         _write_pixels(spi, pixels)
-        pos = (pos + speed) % NUM_LEDS
+        pos += speed * direction
+        if pos >= NUM_LEDS - 1:
+            pos = NUM_LEDS - 1
+            direction = -1
+        elif pos <= 0:
+            pos = 0
+            direction = 1
         stop_event.wait(0.03)
 
 def _run_listening():
