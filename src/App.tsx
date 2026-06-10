@@ -19,7 +19,8 @@ import { useLiveClock } from './hooks/useLiveClock'
 import { useWakeWord } from './hooks/useWakeWord'
 import { useIdleTimer } from './hooks/useIdleTimer'
 
-const IDLE_MS = 5 * 60 * 1000  // 5 minutes
+const IDLE_SCREENSAVER_MS = 5  * 60 * 1000  // 5 min → art screensaver
+const IDLE_DISPLAY_OFF_MS = 10 * 60 * 1000  // 10 min → monitor sleep
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
@@ -90,7 +91,7 @@ function AppShell() {
   useRoomTone()
   useTravelScan()
   usePushNotifications()
-  useIdleTimer(IDLE_MS)
+  useIdleTimer(IDLE_SCREENSAVER_MS, IDLE_DISPLAY_OFF_MS)
 
   const [screensaverActive, setScreensaverActive] = useState(false)
 

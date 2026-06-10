@@ -1,27 +1,38 @@
 import { useEffect, useRef } from 'react'
 
+const BRIDGE = 'http://127.0.0.1:8766'
+
 /**
- * Fires a `screensaver-on` DOM event after `ms` of inactivity.
+ * Fires `screensaver-on` after `screensaverMs` idle.
+ * Fires display sleep (bridge /display/off) after `displayOffMs` idle.
  * Resets on any user interaction (touch, mouse, keyboard).
  */
-export function useIdleTimer(ms: number) {
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+export function useIdleTimer(screensaverMs: number, displayOffMs: number) {
+  const ssTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dispTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     function reset() {
-      if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => {
+      if (ssTimerRef.current)   clearTimeout(ssTimerRef.current)
+      if (dispTimerRef.current) clearTimeout(dispTimerRef.current)
+
+      ssTimerRef.current = setTimeout(() => {
         document.dispatchEvent(new CustomEvent('screensaver-on'))
-      }, ms)
+      }, screensaverMs)
+
+      dispTimerRef.current = setTimeout(() => {
+        fetch(`${BRIDGE}/display/off`, { method: 'POST' }).catch(() => {})
+      }, displayOffMs)
     }
 
     const events = ['mousemove', 'mousedown', 'touchstart', 'keydown', 'scroll', 'wheel']
     events.forEach(e => window.addEventListener(e, reset, { passive: true }))
-    reset() // start timer immediately
+    reset()
 
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
+      if (ssTimerRef.current)   clearTimeout(ssTimerRef.current)
+      if (dispTimerRef.current) clearTimeout(dispTimerRef.current)
       events.forEach(e => window.removeEventListener(e, reset))
     }
-  }, [ms])
+  }, [screensaverMs, displayOffMs])
 }
