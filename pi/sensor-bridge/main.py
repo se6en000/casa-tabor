@@ -869,5 +869,24 @@ def health():
         return {"ok": _latest["error"] is None, "error": _latest["error"]}
 
 
+@app.post("/windowed")
+def windowed():
+    """DEV ONLY: un-maximize Chromium so the desktop is accessible during testing."""
+    try:
+        # Try wmctrl first (X11/XWayland), fall back to xdotool
+        result = subprocess.run(
+            ["wmctrl", "-r", ":ACTIVE:", "-b", "remove,maximized_vert,maximized_horz"],
+            capture_output=True, timeout=3
+        )
+        if result.returncode != 0:
+            subprocess.run(
+                ["xdotool", "search", "--name", "Chromium", "windowsize", "1280", "900"],
+                capture_output=True, timeout=3
+            )
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8765, log_level="info")
