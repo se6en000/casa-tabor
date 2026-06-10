@@ -288,11 +288,21 @@ INSTRUCTIONS:
   const msgList = messages as { role: 'user' | 'assistant'; content: string }[]
 
   for (const m of msgList) {
-    if (m.role === 'user') {
-      history.push({ role: 'user', parts: [{ text: m.content }] })
+    const text = (m.content ?? '').trim()
+    if (!text) continue  // skip empty messages — Gemini rejects them silently
+    const role = m.role === 'user' ? 'user' : 'model'
+    // Enforce strict alternation — merge consecutive same-role messages
+    const prev = history[history.length - 1]
+    if (prev?.role === role) {
+      (prev.parts[0] as { text: string }).text += '\n' + text
     } else {
-      history.push({ role: 'model', parts: [{ text: m.content }] })
+      history.push({ role, parts: [{ text }] })
     }
+  }
+
+  // Gemini requires conversation to start with a user turn
+  if (history.length > 0 && history[0].role !== 'user') {
+    history.shift()
   }
 
   // Add current user message with optional image
