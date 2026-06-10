@@ -1,6 +1,6 @@
 import { useMemo, useRef } from 'react'
 import { format, isAfter, isBefore } from 'date-fns'
-import { Cloud, Sparkles, Minimize2 } from 'lucide-react'
+import { Cloud, Sparkles, Minimize2, ImageIcon } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useLiveClock, greetingFor } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
@@ -125,6 +125,18 @@ export function TopBarC() {
         >
           <Minimize2 size={11} />
           <span className="hidden sm:inline">Window</span>
+        </button>
+
+        {/* Art Mode button */}
+        <button
+          onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
+          title="Art Mode"
+          className={cn(
+            'w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
+            'bg-white/10 hover:bg-white/20 text-white/60 hover:text-white/90',
+          )}
+        >
+          <ImageIcon size={15} strokeWidth={1.8} />
         </button>
 
         {/* AI button with subtle breathing ring */}
