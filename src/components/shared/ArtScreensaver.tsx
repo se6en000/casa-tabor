@@ -56,13 +56,10 @@ export default function ArtScreensaver({ onDismiss }: Props) {
         {/* Bevel wrapper — sized to actual image aspect ratio so shadow hugs the painting */}
         <div
           style={{
+            position: 'relative',
             aspectRatio: aspectRatio,
             maxWidth: '100%',
             maxHeight: '100%',
-            boxShadow: `
-              inset 4px 4px 8px rgba(0,0,0,0.45),
-              inset -2px -2px 5px rgba(255,255,255,0.22)
-            `,
             overflow: 'hidden',
             display: 'flex',
           }}
@@ -83,6 +80,18 @@ export default function ArtScreensaver({ onDismiss }: Props) {
               }}
             />
           )}
+          {/* Bevel overlay — sits on top of image so inset shadow is visible */}
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              pointerEvents: 'none',
+              boxShadow: `
+                inset 5px 5px 10px rgba(0,0,0,0.5),
+                inset -3px -3px 6px rgba(255,255,255,0.25)
+              `,
+            }}
+          />
         </div>
 
         {/* Loading shimmer */}
