@@ -43,7 +43,22 @@ export default function ArtScreensaver({ onDismiss }: Props) {
           padding: '3.5vw',
         }}
       >
-        {/* Artwork */}
+        {/* Artwork — bevel wrapper gives the mat its recessed cut edge */}
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            // Bevel: dark inset top-left (shadow), light inset bottom-right (highlight)
+            boxShadow: `
+              inset 4px 4px 8px rgba(0,0,0,0.45),
+              inset -2px -2px 5px rgba(255,255,255,0.22)
+            `,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+          }}
+        >
         {artwork && (
           <img
             key={artwork.id}
@@ -60,6 +75,7 @@ export default function ArtScreensaver({ onDismiss }: Props) {
             }}
           />
         )}
+        </div>
 
         {/* Loading shimmer */}
         {!loaded && (
