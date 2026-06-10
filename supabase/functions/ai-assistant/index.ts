@@ -226,7 +226,7 @@ Deno.serve(async (req) => {
 
   // Build Gemini conversation with system instruction + history
   // Pull user-editable custom instructions (persist across all chats)
-  const customRow = await supabase.from('settings').select('value').eq('key', 'ai_custom_instructions').maybeSingle()
+  const customRow = await sb.from('settings').select('value').eq('key', 'ai_custom_instructions').maybeSingle()
   const customInstructions = (customRow.data?.value as { text?: string } | null)?.text?.trim() || ''
 
   const systemInstruction = `You are the Casa Tabor family assistant — a smart, warm, conversational AI for the ${familyNames} family.
