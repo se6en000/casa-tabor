@@ -1366,10 +1366,11 @@ function LocationBlock({ locationName, address, parkingNotes, contactName, conta
 /* ── Footer ─────────────────────────────────────────────────── */
 
 function PanelFooter({ event, onEdit }: { event: EventWithDetails; onEdit: () => void }) {
-  const mapsUrl = event.address
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.address)}`
-    : event.location_name
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location_name)}`
+  const mapsQuery = event.address
+    ? (event.location_name ? `${event.location_name}, ${event.address}` : event.address)
+    : (event.location_name ?? '')
+  const mapsUrl = mapsQuery
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
     : null
 
   return (
