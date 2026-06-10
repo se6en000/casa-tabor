@@ -954,63 +954,92 @@ def _stop_led_animation():
         _led_thread.join(timeout=1.0)
     _led_stop.clear()
 
+def _comet(spi, stop_event, r: int, g: int, b: int, speed: float = 1.2, tail: int = 12):
+    """Rolling comet animation — shared by listening (blue) and processing (amber)."""
+    pos = 0.0
+    while not stop_event.is_set():
+        pixels = []
+        for i in range(NUM_LEDS):
+            dist = (i - pos) % NUM_LEDS
+            if dist < tail:
+                frac = 1 - dist / tail
+                pixels.append((_clamp(int(r * frac)), _clamp(int(g * frac)), _clamp(int(b * frac))))
+            else:
+                pixels.append((0, 0, 0))
+        _write_pixels(spi, pixels)
+        pos = (pos + speed) % NUM_LEDS
+        stop_event.wait(0.03)
+
 def _run_listening():
-    """Rolling blue glow — a bright comet sweeps the strip continuously."""
+    """Rolling blue comet."""
     if not SPI_AVAILABLE:
         return
     try:
         spi = _spi_open()
-        pos = 0.0
-        TAIL = 12
-        while not _led_stop.is_set():
-            pixels = []
-            for i in range(NUM_LEDS):
-                dist = (i - pos) % NUM_LEDS
-                if dist < TAIL:
-                    intensity = int(_clamp(60) * (1 - dist / TAIL))
-                    pixels.append((0, 0, intensity))
-                else:
-                    pixels.append((0, 0, 0))
-            _write_pixels(spi, pixels)
-            pos = (pos + 1.2) % NUM_LEDS
-            _led_stop.wait(0.03)
+        _comet(spi, _led_stop, r=0, g=0, b=70)
         _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
         spi.close()
     except Exception as e:
         log.warning(f"LED listening error: {e}")
 
 def _run_processing():
-    """Slow amber pulse while AI is thinking."""
+    """Rolling amber comet while AI is thinking."""
     if not SPI_AVAILABLE:
         return
     try:
         spi = _spi_open()
-        import math
-        t = 0.0
-        while not _led_stop.is_set():
-            brightness = int(20 + 35 * (0.5 + 0.5 * math.sin(t)))
-            pixels = [(_clamp(brightness), _clamp(brightness // 2), 0)] * NUM_LEDS
-            _write_pixels(spi, pixels)
-            t += 0.08
-            _led_stop.wait(0.04)
+        _comet(spi, _led_stop, r=80, g=35, b=0, speed=1.0)
         _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
         spi.close()
     except Exception as e:
         log.warning(f"LED processing error: {e}")
 
-def _run_flash(r: int, g: int, b: int, duration: float):
-    """Single colour flash then off."""
+def _run_confirm():
+    """Green burst: dim→bright→dim over ~2s, then return to listening."""
+    if not SPI_AVAILABLE:
+        return
+    import math
+    try:
+        spi = _spi_open()
+        steps = 60
+        for i in range(steps):
+            if _led_stop.is_set():
+                break
+            # sine envelope: 0→1→0 over the burst
+            frac = math.sin(math.pi * i / steps)
+            brightness = _clamp(int(100 * frac))
+            _write_pixels(spi, [(0, brightness, 0)] * NUM_LEDS)
+            _led_stop.wait(2.0 / steps)
+        _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
+        spi.close()
+    except Exception as e:
+        log.warning(f"LED confirm error: {e}")
+    # Chain back to listening unless something else stopped us
+    if not _led_stop.is_set():
+        _start_led_nowait(_run_listening)
+
+def _run_cancel():
+    """Red flash for 1.5s, then return to listening."""
     if not SPI_AVAILABLE:
         return
     try:
         spi = _spi_open()
-        pixels = [(_clamp(r), _clamp(g), _clamp(b))] * NUM_LEDS
-        _write_pixels(spi, pixels)
-        _led_stop.wait(duration)
+        _write_pixels(spi, [(90, 0, 0)] * NUM_LEDS)
+        _led_stop.wait(1.5)
         _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
         spi.close()
     except Exception as e:
-        log.warning(f"LED flash error: {e}")
+        log.warning(f"LED cancel error: {e}")
+    if not _led_stop.is_set():
+        _start_led_nowait(_run_listening)
+
+def _start_led_nowait(target, *args):
+    """Start a new LED animation from within an animation thread (no lock, no join)."""
+    global _led_thread, _led_stop
+    _led_stop = threading.Event()
+    t = threading.Thread(target=target, args=args, daemon=True)
+    _led_thread = t
+    t.start()
 
 def _start_led(target, *args):
     global _led_thread
@@ -1027,20 +1056,20 @@ def led_listening():
 
 @app.post("/led/processing")
 def led_processing():
-    """Amber pulse — AI is thinking."""
+    """Rolling amber comet — AI is thinking."""
     _start_led(_run_processing)
     return {"ok": True, "mode": "processing"}
 
 @app.post("/led/confirm")
 def led_confirm():
-    """Green flash — action confirmed."""
-    _start_led(_run_flash, 0, 80, 0, 2.0)
+    """Green burst dim→bright→dim, then back to listening."""
+    _start_led(_run_confirm)
     return {"ok": True, "mode": "confirm"}
 
 @app.post("/led/cancel")
 def led_cancel():
-    """Red flash — action cancelled."""
-    _start_led(_run_flash, 90, 0, 0, 1.5)
+    """Red flash, then back to listening."""
+    _start_led(_run_cancel)
     return {"ok": True, "mode": "cancel"}
 
 @app.post("/led/off")
