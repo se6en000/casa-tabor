@@ -67,7 +67,10 @@ SUPABASE_SENSOR_ID  = "00000000-0000-0000-0000-000000000001"  # fixed row for la
 
 _push_enabled           = False
 _push_checked_at        = 0.0
+_push_enabled_since     = 0.0   # when push was last turned on (0 = not active)
 PUSH_CHECK_INTERVAL     = 15
+PUSH_AUTO_DISABLE_S     = 600   # auto-disable push after 10 minutes
+SUPABASE_SETTINGS_KEY   = "display_config"
 
 # Auto-sleep config (overridden from Supabase display_config)
 _auto_sleep_enabled     = True
@@ -75,37 +78,97 @@ _sleep_lux_threshold    = 0.5   # lux below which display sleeps
 _wake_lux_threshold     = 3.0   # lux above which display wakes
 _sleep_delay_s          = 30    # seconds in darkness before sleeping
 
+def _disable_push_remotely():
+    """Set sensor_push_enabled=false in Supabase display_config + clear sensor row."""
+    if not REQUESTS_AVAILABLE:
+        return
+    try:
+        # Read current config
+        res = _requests.get(
+            f"{SUPABASE_URL}/rest/v1/settings",
+            params={"key": f"eq.{SUPABASE_SETTINGS_KEY}", "select": "value"},
+            headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"},
+            timeout=3,
+        )
+        rows = res.json() if res.ok else []
+        cfg = (rows[0].get("value", {}) if rows else {}) or {}
+        cfg["sensor_push_enabled"] = False
+        # Patch back
+        _requests.patch(
+            f"{SUPABASE_URL}/rest/v1/settings",
+            params={"key": f"eq.{SUPABASE_SETTINGS_KEY}"},
+            headers={
+                "apikey": SUPABASE_SERVICE_KEY,
+                "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={"value": cfg},
+            timeout=3,
+        )
+        # Delete the realtime sensor row so Casa app stops showing stale data
+        _requests.delete(
+            f"{SUPABASE_URL}/rest/v1/sensor_readings",
+            params={"id": f"eq.{SUPABASE_SENSOR_ID}"},
+            headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"},
+            timeout=3,
+        )
+        log.info("Push auto-disabled and sensor_readings row cleared")
+    except Exception as exc:
+        log.warning("Auto-disable failed: %s", exc)
+
 def _is_push_enabled() -> bool:
     """Return True if sensor_push_enabled is set in display_config. Caches for 15s.
-    Also refreshes brightness_min/brightness_max and auto-sleep config."""
-    global _push_enabled, _push_checked_at, _brightness_min, _brightness_max
+    Also refreshes brightness_min/brightness_max and auto-sleep config.
+    Auto-disables push after PUSH_AUTO_DISABLE_S to limit DB writes."""
+    global _push_enabled, _push_checked_at, _push_enabled_since
+    global _brightness_min, _brightness_max
     global _auto_sleep_enabled, _sleep_lux_threshold, _wake_lux_threshold, _sleep_delay_s
     now = time.time()
     if now - _push_checked_at < PUSH_CHECK_INTERVAL:
+        # Still apply auto-disable timer between fetches
+        if _push_enabled and _push_enabled_since and (now - _push_enabled_since) > PUSH_AUTO_DISABLE_S:
+            log.info("Push auto-disabled after %ds — clearing DB", PUSH_AUTO_DISABLE_S)
+            _push_enabled = False
+            _push_enabled_since = 0.0
+            threading.Thread(target=_disable_push_remotely, daemon=True).start()
         return _push_enabled
     try:
         res = _requests.get(
             f"{SUPABASE_URL}/rest/v1/settings",
-            params={"key": "eq.display_config", "select": "value"},
+            params={"key": f"eq.{SUPABASE_SETTINGS_KEY}", "select": "value"},
             headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"},
             timeout=3,
         )
         rows = res.json()
         if rows and isinstance(rows, list):
             cfg = rows[0].get("value", {})
-            _push_enabled        = bool(cfg.get("sensor_push_enabled", False))
+            new_push_enabled     = bool(cfg.get("sensor_push_enabled", False))
+            # Track when push was turned on (for auto-disable timer)
+            if new_push_enabled and not _push_enabled:
+                _push_enabled_since = now
+                log.info("Push enabled — will auto-disable in %ds", PUSH_AUTO_DISABLE_S)
+            elif not new_push_enabled and _push_enabled:
+                _push_enabled_since = 0.0
+                # User disabled — clear the row
+                threading.Thread(target=_disable_push_remotely, daemon=True).start()
+            _push_enabled        = new_push_enabled
             _brightness_min      = int(cfg.get("brightness_min", BRIGHTNESS_MIN_DEFAULT))
             _brightness_max      = int(cfg.get("brightness_max", BRIGHTNESS_MAX_DEFAULT))
             _auto_sleep_enabled  = bool(cfg.get("auto_sleep_enabled", True))
             _sleep_lux_threshold = float(cfg.get("sleep_lux_threshold", 0.5))
             _wake_lux_threshold  = float(cfg.get("wake_lux_threshold", 3.0))
             _sleep_delay_s       = int(cfg.get("sleep_delay_s", 30))
+        # Auto-disable check
+        if _push_enabled and _push_enabled_since and (now - _push_enabled_since) > PUSH_AUTO_DISABLE_S:
+            log.info("Push auto-disabled after %ds — clearing DB", PUSH_AUTO_DISABLE_S)
+            _push_enabled = False
+            _push_enabled_since = 0.0
+            threading.Thread(target=_disable_push_remotely, daemon=True).start()
         log.info("Push config refreshed — sensor_push_enabled=%s min=%d max=%d auto_sleep=%s",
                  _push_enabled, _brightness_min, _brightness_max, _auto_sleep_enabled)
     except Exception as exc:
         log.warning("Push config check failed: %s", exc)
     _push_checked_at = now
-    return _push_enabled
     return _push_enabled
 
 
@@ -724,6 +787,10 @@ class AS7343Reader:
             self._open()
 
         try:
+            # Restart spectral measurement: SP_EN off→on forces a fresh integration
+            self.bus.write_byte_data(AS7343_ADDR, REG_ENABLE, 0x01)  # PON only
+            time.sleep(0.005)
+            self.bus.write_byte_data(AS7343_ADDR, REG_ENABLE, 0x03)  # PON + SP_EN
             self._wait_data_ready()
 
             # Read 18 bytes = 9 × 16-bit channels (LE pairs)
