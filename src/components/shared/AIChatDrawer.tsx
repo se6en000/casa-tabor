@@ -88,9 +88,10 @@ function useSpeechInput({
     stopPoll()
     stopSilenceTimer()
     setPhase('processing')
+    const finalText = text.trim() || lastInterimRef.current.trim()
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
-    handleFinalTranscript(text)
+    handleFinalTranscript(finalText)
   }, [handleFinalTranscript])
 
   // ── Web Speech API path (Safari / iOS) ──────────────────────────────────
@@ -233,7 +234,7 @@ function useSpeechInput({
     activeRef.current = true
     setPhase('connecting')
 
-    // Auto-detect once per drawer session: bridge → Pi, else → Web Speech API
+    // Auto-detect once per component lifetime — don't re-probe on every open
     if (modeRef.current === 'unknown') {
       const hasBridge = await probeBridge()
       modeRef.current = hasBridge ? 'bridge' : (WebSpeech ? 'webspeech' : 'bridge')
@@ -318,11 +319,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
   useEffect(() => {
     if (open) {
-      // Auto-start mic when drawer opens — like macOS dictation
-      setTimeout(() => {
-        textareaRef.current?.focus()
-        speech.start()
-      }, 500)
+      // Start connecting immediately — don't wait for animation.
+      // Bridge buffers audio from /start so by the time the user speaks it's ready.
+      speech.start()
+      // Focus textarea slightly after animation settles (UI only, doesn't affect mic)
+      setTimeout(() => textareaRef.current?.focus(), 300)
     } else {
       speech.stop()
       led.off()
