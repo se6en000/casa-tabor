@@ -25,21 +25,19 @@ export default function ArtScreensaver({ onDismiss }: Props) {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center cursor-pointer"
       style={{
-        backgroundColor: '#0a0a0a',
         opacity: visible ? 1 : 0,
         transition: 'opacity 0.6s ease',
       }}
       onClick={handleDismiss}
       onTouchStart={handleDismiss}
     >
-      {/* Mat frame */}
+      {/* Full-bleed mat — linen fills the entire screen */}
       <div
-        className="relative flex items-center justify-center"
+        className="relative w-full h-full flex items-center justify-center"
         style={{
-          width: '84vw',
-          height: '84vh',
-          backgroundColor: '#F5F0E8',  // warm linen mat
-          boxShadow: 'inset 0 0 40px rgba(0,0,0,0.18), 0 8px 60px rgba(0,0,0,0.7)',
+          backgroundColor: '#F5F0E8',
+          // Inset shadow on all 4 edges simulates a picture frame
+          boxShadow: 'inset 0 0 80px 20px rgba(0,0,0,0.45)',
           padding: '3.5vw',
         }}
       >
