@@ -15,6 +15,7 @@ import { useRollingEvents } from './hooks/useCalendarEvents'
 import { useFamilyMembers } from './hooks/useFamilyMembers'
 import { useHomeWeather } from './hooks/useHomeWeather'
 import { useLiveClock } from './hooks/useLiveClock'
+import { useWakeWord } from './hooks/useWakeWord'
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
@@ -55,6 +56,7 @@ function GlobalAIDrawer() {
   const { data: events = [] } = useRollingEvents(now)
   const { data: family = [] } = useFamilyMembers()
   const { data: weather } = useHomeWeather()
+  useWakeWord(open)
 
   useEffect(() => {
     const handler = (e: Event) => {
