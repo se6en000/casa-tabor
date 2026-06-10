@@ -871,19 +871,34 @@ def health():
 
 @app.post("/windowed")
 def windowed():
-    """DEV ONLY: un-maximize Chromium so the desktop is accessible during testing."""
+    """DEV ONLY: kill kiosk Chromium and relaunch in windowed mode."""
+    import os, signal
     try:
-        # Try wmctrl first (X11/XWayland), fall back to xdotool
-        result = subprocess.run(
-            ["wmctrl", "-r", ":ACTIVE:", "-b", "remove,maximized_vert,maximized_horz"],
-            capture_output=True, timeout=3
-        )
-        if result.returncode != 0:
-            subprocess.run(
-                ["xdotool", "search", "--name", "Chromium", "windowsize", "1280", "900"],
-                capture_output=True, timeout=3
+        # Find and kill all chromium processes
+        result = subprocess.run(["pgrep", "-f", "chromium"], capture_output=True, text=True)
+        pids = [int(p) for p in result.stdout.strip().split() if p.isdigit()]
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        # Relaunch after a short delay with KIOSK=0
+        def _relaunch():
+            import time
+            time.sleep(1.5)
+            env = os.environ.copy()
+            env["KIOSK"] = "0"
+            env["DISPLAY"] = ":0"
+            env["WAYLAND_DISPLAY"] = "wayland-1"
+            subprocess.Popen(
+                ["bash", "/home/jake/start-casa.sh"],
+                env=env,
+                stdout=open("/home/jake/casa.log", "a"),
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
             )
-        return {"ok": True}
+        threading.Thread(target=_relaunch, daemon=True).start()
+        return {"ok": True, "msg": "Relaunching in windowed mode..."}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
