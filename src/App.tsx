@@ -11,11 +11,15 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import { TopBarC } from './components/shared/TopBar'
 import PinGate from './components/shared/PinGate'
 import AIChatDrawer from './components/shared/AIChatDrawer'
+import ArtScreensaver from './components/shared/ArtScreensaver'
 import { useRollingEvents } from './hooks/useCalendarEvents'
 import { useFamilyMembers } from './hooks/useFamilyMembers'
 import { useHomeWeather } from './hooks/useHomeWeather'
 import { useLiveClock } from './hooks/useLiveClock'
 import { useWakeWord } from './hooks/useWakeWord'
+import { useIdleTimer } from './hooks/useIdleTimer'
+
+const IDLE_MS = 5 * 60 * 1000  // 5 minutes
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
@@ -49,14 +53,14 @@ const queryClient = new QueryClient({
   },
 })
 
-function GlobalAIDrawer() {
+function GlobalAIDrawer({ screensaverActive }: { screensaverActive: boolean }) {
   const [open, setOpen] = useState(false)
   const [anchor, setAnchor] = useState<{ right: number; top: number } | undefined>()
   const now = useLiveClock(60_000)
   const { data: events = [] } = useRollingEvents(now)
   const { data: family = [] } = useFamilyMembers()
   const { data: weather } = useHomeWeather()
-  useWakeWord(open)
+  useWakeWord(open, screensaverActive)
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -77,6 +81,7 @@ function GlobalAIDrawer() {
       events={events}
       family={family}
       homeCity={weather?.city}
+      onSleepCommand={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
     />
   )
 }
@@ -85,6 +90,20 @@ function AppShell() {
   useRoomTone()
   useTravelScan()
   usePushNotifications()
+  useIdleTimer(IDLE_MS)
+
+  const [screensaverActive, setScreensaverActive] = useState(false)
+
+  useEffect(() => {
+    const onSleep = () => setScreensaverActive(true)
+    const onWake  = () => setScreensaverActive(false)
+    document.addEventListener('screensaver-on', onSleep)
+    document.addEventListener('wake-kiosk', onWake)
+    return () => {
+      document.removeEventListener('screensaver-on', onSleep)
+      document.removeEventListener('wake-kiosk', onWake)
+    }
+  }, [])
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-casa-bg">
@@ -101,8 +120,13 @@ function AppShell() {
       {/* Bottom nav only visible on mobile */}
       <NavBar />
 
-      {/* Global AI drawer — opens from TopBar sparkle */}
-      <GlobalAIDrawer />
+      {/* Global AI drawer — opens from TopBar sparkle or wake word */}
+      <GlobalAIDrawer screensaverActive={screensaverActive} />
+
+      {/* Art screensaver overlay */}
+      {screensaverActive && (
+        <ArtScreensaver onDismiss={() => setScreensaverActive(false)} />
+      )}
     </div>
   )
 }

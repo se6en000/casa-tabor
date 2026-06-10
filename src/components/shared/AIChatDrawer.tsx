@@ -263,9 +263,12 @@ interface Props {
   events: EventWithDetails[]
   family: FamilyMember[]
   homeCity?: string
+  onSleepCommand?: () => void
 }
 
-export default function AIChatDrawer({ open, onClose, anchor, page, events, family, homeCity }: Props) {
+const SLEEP_PHRASES = /\b(sleep|goodnight|good night|art mode|screen saver|screensaver|night mode)\b/i
+
+export default function AIChatDrawer({ open, onClose, anchor, page, events, family, homeCity, onSleepCommand }: Props) {
   const [input, setInput] = useState('')
   const interimRef = useRef('')
   const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; mimeType: string } | null>(null)
@@ -301,7 +304,14 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     },
     onFinalTranscript: (text) => {
       if (text === '__SEND__') {
-        sendCurrentInput(interimRef.current || (textareaRef.current?.value ?? ''))
+        const msg = interimRef.current || (textareaRef.current?.value ?? '')
+        // Check for sleep command before sending to AI
+        if (SLEEP_PHRASES.test(msg)) {
+          onSleepCommand?.()
+          setTimeout(onClose, 300)
+          return
+        }
+        sendCurrentInput(msg)
         interimRef.current = ''
       } else {
         interimRef.current = text

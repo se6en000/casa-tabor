@@ -5,10 +5,11 @@ const POLL_MS = 500
 
 /**
  * Polls the STT bridge /wake-poll endpoint while the AI drawer is closed.
- * When the wake word fires, dispatches 'open-ai-chat' to open the drawer.
+ * - If screensaver is active: wake word dismisses the screensaver
+ * - Otherwise: wake word opens the AI drawer
  * Silently no-ops when the bridge is unreachable (non-Pi environments).
  */
-export function useWakeWord(drawerOpen: boolean) {
+export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -23,7 +24,11 @@ export function useWakeWord(drawerOpen: boolean) {
         if (!res.ok) return
         const data = await res.json()
         if (data.triggered) {
-          document.dispatchEvent(new CustomEvent('open-ai-chat'))
+          if (screensaverActive) {
+            document.dispatchEvent(new CustomEvent('wake-kiosk'))
+          } else {
+            document.dispatchEvent(new CustomEvent('open-ai-chat'))
+          }
         }
       } catch {
         // bridge unreachable — not on Pi, ignore
@@ -31,5 +36,6 @@ export function useWakeWord(drawerOpen: boolean) {
     }, POLL_MS)
 
     return () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null } }
-  }, [drawerOpen])
+  }, [drawerOpen, screensaverActive])
 }
+
