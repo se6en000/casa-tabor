@@ -58,6 +58,7 @@ export default function ArtScreensaver({ onDismiss }: Props) {
           style={{
             position: 'relative',
             aspectRatio: aspectRatio,
+            minWidth: '55vw',
             maxWidth: '100%',
             maxHeight: '100%',
             overflow: 'hidden',
