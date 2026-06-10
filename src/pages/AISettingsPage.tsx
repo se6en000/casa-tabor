@@ -46,14 +46,20 @@ const DEFAULT_FAST_MODEL: Record<string, string> = {
 
 export default function AISettingsPage() {
   const [config, setConfig] = useState<LLMConfig>({ provider: 'gemini', model: 'gemini-2.0-flash', api_key: '' })
+  const [customInstructions, setCustomInstructions] = useState('')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const [testMessage, setTestMessage] = useState('')
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    supabase.from('settings').select('value').eq('key', 'llm_config').single().then(({ data }) => {
-      if (data?.value) setConfig(data.value as LLMConfig)
+    Promise.all([
+      supabase.from('settings').select('value').eq('key', 'llm_config').maybeSingle(),
+      supabase.from('settings').select('value').eq('key', 'ai_custom_instructions').maybeSingle(),
+    ]).then(([cfg, ci]) => {
+      if (cfg.data?.value) setConfig(cfg.data.value as LLMConfig)
+      const ciVal = (ci.data?.value as { text?: string } | null)?.text
+      if (ciVal) setCustomInstructions(ciVal)
       setIsLoading(false)
     })
   }, [])
@@ -72,12 +78,19 @@ export default function AISettingsPage() {
 
   async function handleSave() {
     setSaveStatus('saving')
-    const { error } = await supabase.from('settings').upsert(
-      { key: 'llm_config', value: config, updated_at: new Date().toISOString() },
-      { onConflict: 'key' }
-    )
-    setSaveStatus(error ? 'error' : 'saved')
-    if (!error) setTimeout(() => setSaveStatus('idle'), 3000)
+    const updatedAt = new Date().toISOString()
+    const [a, b] = await Promise.all([
+      supabase.from('settings').upsert(
+        { key: 'llm_config', value: config, updated_at: updatedAt },
+        { onConflict: 'key' }
+      ),
+      supabase.from('settings').upsert(
+        { key: 'ai_custom_instructions', value: { text: customInstructions.trim() }, updated_at: updatedAt },
+        { onConflict: 'key' }
+      ),
+    ])
+    setSaveStatus(a.error || b.error ? 'error' : 'saved')
+    if (!a.error && !b.error) setTimeout(() => setSaveStatus('idle'), 3000)
   }
 
   async function handleTest() {
@@ -176,6 +189,23 @@ export default function AISettingsPage() {
             className="w-full px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-navy bg-white focus:outline-none focus:ring-2 focus:ring-casa-navy/20 font-mono"
           />
           <p className="text-caption text-casa-muted">Stored securely server-side. Never sent to the browser.</p>
+        </div>
+
+        {/* Custom AI rules — persistent across all chats */}
+        <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-2">
+          <label className="block text-body-sm font-semibold text-casa-navy">
+            Your Custom Rules
+          </label>
+          <p className="text-caption text-casa-muted">
+            Plain-English rules the AI applies to every chat. Examples: "Default to mornings before 11am", "Never schedule during 5–7pm dinner", "Soccer is always at Phipps Park".
+          </p>
+          <textarea
+            value={customInstructions}
+            onChange={(e) => { setCustomInstructions(e.target.value); setSaveStatus('idle') }}
+            rows={6}
+            placeholder="One rule per line, in your own words. Saved instantly to every conversation."
+            className="w-full rounded-button border border-casa-border bg-white px-3 py-2 text-body-sm text-casa-navy focus:outline-none focus:border-casa-gold resize-y font-mono"
+          />
         </div>
 
         {/* Home Address — managed in Profile */}
