@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 const BRIDGE = 'http://127.0.0.1:8766'
 const POLL_MS = 500
 const SCREENSAVER_GRACE_MS = 3000  // ignore wake triggers for 3s after screensaver activates
+const DRAWER_CLOSE_GRACE_MS = 5000 // ignore wake triggers for 5s after drawer closes
 
 /**
  * Polls the STT bridge /wake-poll endpoint while the AI drawer is closed.
@@ -13,6 +14,7 @@ const SCREENSAVER_GRACE_MS = 3000  // ignore wake triggers for 3s after screensa
 export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const screensaverActiveAtRef = useRef<number>(0)
+  const drawerClosedAtRef = useRef<number>(0)
 
   // Track when screensaver became active
   useEffect(() => {
@@ -20,6 +22,13 @@ export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean) {
       screensaverActiveAtRef.current = Date.now()
     }
   }, [screensaverActive])
+
+  // Track when drawer closes
+  useEffect(() => {
+    if (!drawerOpen) {
+      drawerClosedAtRef.current = Date.now()
+    }
+  }, [drawerOpen])
 
   useEffect(() => {
     if (drawerOpen) {
@@ -33,9 +42,10 @@ export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean) {
         if (!res.ok) return
         const data = await res.json()
         if (data.triggered) {
-          // Ignore stale triggers during grace period after screensaver activates
-          const sinceScreensaver = Date.now() - screensaverActiveAtRef.current
-          if (screensaverActive && sinceScreensaver < SCREENSAVER_GRACE_MS) return
+          const now = Date.now()
+          // Ignore stale triggers during grace periods
+          if (now - drawerClosedAtRef.current < DRAWER_CLOSE_GRACE_MS) return
+          if (screensaverActive && now - screensaverActiveAtRef.current < SCREENSAVER_GRACE_MS) return
 
           if (screensaverActive) {
             document.dispatchEvent(new CustomEvent('wake-kiosk'))
