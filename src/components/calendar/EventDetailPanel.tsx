@@ -1241,15 +1241,15 @@ function LocationBlock({ locationName, address, parkingNotes, contactName, conta
   const isAlreadySaved = !!existingPlace || saved
 
   const copyText = address ?? locationName ?? ''
-  const googleMapsUrl = address
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
-    : locationName
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationName)}`
+  // Prepend location name to address for a more precise Maps hit (e.g. "St. John's Church, 123 Main St")
+  const mapsQuery = address
+    ? (locationName ? `${locationName}, ${address}` : address)
+    : (locationName ?? '')
+  const googleMapsUrl = mapsQuery
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
     : null
-  const appleMapsUrl = address
-    ? `http://maps.apple.com/?q=${encodeURIComponent(address)}`
-    : locationName
-    ? `http://maps.apple.com/?q=${encodeURIComponent(locationName)}`
+  const appleMapsUrl = mapsQuery
+    ? `http://maps.apple.com/?q=${encodeURIComponent(mapsQuery)}`
     : null
 
   async function handleCopy() {

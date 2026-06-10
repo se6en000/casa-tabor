@@ -221,8 +221,11 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
   const urgentAction = event.actions?.find(a => a.is_urgent && !a.completed)
   const category = enr?.category ? (CATEGORY_LABEL[enr.category] ?? enr.category) : null
   const hasMaps = event.location_name || event.address
+  const mapsQuery = event.address
+    ? (event.location_name ? `${event.location_name}, ${event.address}` : event.address)
+    : (event.location_name ?? '')
   const mapsUrl = hasMaps
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.address ?? event.location_name ?? '')}`
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
     : null
 
   const start = new Date(event.start_time)
