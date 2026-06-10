@@ -1019,13 +1019,20 @@ def _run_confirm():
         _start_led_nowait(_run_listening)
 
 def _run_cancel():
-    """Red flash for 1.5s, then return to listening."""
+    """Red sine burst dim→bright→dim over 2s, then return to listening."""
     if not SPI_AVAILABLE:
         return
+    import math
     try:
         spi = _spi_open()
-        _write_pixels(spi, [(90, 0, 0)] * NUM_LEDS)
-        _led_stop.wait(1.5)
+        steps = 60
+        for i in range(steps):
+            if _led_stop.is_set():
+                break
+            frac = math.sin(math.pi * i / steps)
+            brightness = _clamp(int(100 * frac))
+            _write_pixels(spi, [(brightness, 0, 0)] * NUM_LEDS)
+            _led_stop.wait(2.0 / steps)
         _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
         spi.close()
     except Exception as e:
