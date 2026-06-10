@@ -17,7 +17,9 @@ Deno.serve(async (req) => {
   const { messages, context, image, session_id } = await req.json()
 
   // Load config, saved places, contacts, grocery list, events in parallel
-  const yearStart = new Date(); yearStart.setMonth(0, 1); yearStart.setHours(0,0,0,0)
+  const now = new Date()
+  // Start from 24h ago so in-progress events (started earlier today) are visible
+  const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000)
   const yearEnd = new Date(); yearEnd.setFullYear(yearEnd.getFullYear() + 1, 11, 31); yearEnd.setHours(23,59,59,999)
 
   const [
@@ -34,7 +36,7 @@ Deno.serve(async (req) => {
     sb.from('events')
       .select('id, title, start_time, end_time, location_name, address, all_day, event_type, description, event_members(family_members(id, name))')
       .eq('status', 'confirmed')
-      .gte('start_time', yearStart.toISOString())
+      .gte('start_time', windowStart.toISOString())
       .lte('start_time', yearEnd.toISOString())
       .order('start_time'),
     sb.from('grocery_lists').select('id, name').order('created_at').limit(5),
