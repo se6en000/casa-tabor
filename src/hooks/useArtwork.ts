@@ -47,15 +47,13 @@ export function useArtwork(rotateSecs = 240) {
   const [artworks, setArtworks]   = useState<Artwork[]>([])
   const [index, setIndex]         = useState(0)
   const [loaded, setLoaded]       = useState(false)
-  const queueRef                  = useRef<number[]>(shuffled(CURATED_IDS))
   const rotateRef                 = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     let cancelled = false
     async function fetchAll() {
-      const ids = queueRef.current
+      const ids = shuffled(CURATED_IDS)
       const results: Artwork[] = []
-      // Fetch in one batched request
       try {
         const res = await fetch(
           `${API}/artworks?ids=${ids.join(',')}&fields=id,title,artist_display,image_id&limit=${ids.length}`
@@ -72,7 +70,12 @@ export function useArtwork(rotateSecs = 240) {
           }
         }
       } catch { /* silently fall back to empty */ }
-      if (!cancelled) setArtworks(results)
+      if (!cancelled) {
+        const shuffledResults = shuffled(results)
+        setArtworks(shuffledResults)
+        // Start at a random position so each screensaver session begins with a different piece
+        setIndex(Math.floor(Math.random() * Math.max(shuffledResults.length, 1)))
+      }
     }
     fetchAll()
     return () => { cancelled = true }
