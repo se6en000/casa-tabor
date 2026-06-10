@@ -90,8 +90,11 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
               inset: 0,
               pointerEvents: 'none',
               boxShadow: `
-                inset 5px 5px 10px rgba(0,0,0,0.5),
-                inset -3px -3px 6px rgba(255,255,255,0.25)
+                inset 0 6px 10px rgba(0,0,0,0.55),
+                inset 5px 0 8px rgba(0,0,0,0.42),
+                inset -5px 0 8px rgba(0,0,0,0.35),
+                inset 0 -6px 10px rgba(0,0,0,0.27),
+                inset -3px -3px 6px rgba(255,255,255,0.20)
               `,
             }}
           />
