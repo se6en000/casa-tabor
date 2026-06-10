@@ -338,7 +338,6 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   useEffect(() => {
     if (loading) {
       speech.stop()
-      led.processing()
     } else if (prevLoadingRef.current && !loading && open) {
       // AI just finished — restart mic for continuous listening
       setTimeout(() => speech.start(), 400)
@@ -350,13 +349,20 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  // Sync LED strip to voice phase
+  // LED state machine — loading takes priority over speech phase
   useEffect(() => {
-    if (!open) return
-    if (speech.phase === 'listening')   led.listening()
-    else if (speech.phase === 'processing') led.processing()
-    else if (speech.phase === 'idle')   led.off()
-  }, [speech.phase, open]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!open) {
+      led.off()
+      return
+    }
+    if (loading) {
+      led.processing()      // amber while AI is thinking
+    } else if (speech.phase === 'listening' || speech.phase === 'connecting') {
+      led.listening()       // blue when mic is active
+    }
+    // Otherwise (idle gap between thinking and listening) — leave as-is so
+    // we don't flicker to off. Will get corrected on next phase change.
+  }, [loading, speech.phase, open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const el = textareaRef.current
