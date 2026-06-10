@@ -155,6 +155,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   const locationRef = useRef<HTMLDivElement>(null)
   const { data: savedPlaces = [] } = useSavedPlaces()
   const [displayTitle, setDisplayTitle] = useState(event.title)
+  const titleRef = useRef<HTMLTextAreaElement>(null)
   const [extraContext, setExtraContext] = useState('')
   const [enrichStatus, setEnrichStatus] = useState<EnrichStatus>('idle')
   const [enrichMessage, setEnrichMessage] = useState('')
@@ -398,7 +399,14 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     }
   }
 
+  const pendingTitleRef = useRef<string | null>(null)
+
   const handleSave = async () => {
+    // Flush DOM value — fixes iOS/Safari composition lag where the last
+    // typed character hasn't committed to React state before Save is tapped
+    const finalTitle = titleRef.current?.value ?? displayTitle
+    if (finalTitle !== displayTitle) setDisplayTitle(finalTitle)
+    pendingTitleRef.current = finalTitle
     // If this is a recurring instance, show scope modal before saving
     if (isInstance && !showScopeModal) {
       setShowScopeModal(true)
@@ -438,6 +446,10 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   }
 
   const doSaveInner = async (scope: RecurScope, autoSave = false) => {
+    // Use pendingTitleRef when available (set in handleSave to flush DOM composition state)
+    const titleToSave = pendingTitleRef.current ?? displayTitle
+    pendingTitleRef.current = null
+
     // 1. Save enrichment fields (category + all form fields)
     const patch = objectFromForm(form, fields) as Record<string, unknown>
     patch.category = category
@@ -466,7 +478,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     if (scope === 'this') {
       // Only update this single instance
       const { error } = await supabase.from('events').update({
-        title: displayTitle,
+        title: titleToSave,
         location_name: location.trim() || null,
         address: address.trim() || null,
         start_time: masterStart,
@@ -509,7 +521,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
 
       // Step 2: Create a NEW master for the future branch
       const { data: newMaster, error: newMasterErr } = await supabase.from('events').insert({
-        title: displayTitle,
+        title: titleToSave,
         description: (masterEvent as any).description ?? null,
         location_name: location.trim() || null,
         address: address.trim() || null,
@@ -546,7 +558,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
         if (occurrences.length > 0) {
           const { data: newInstances } = await supabase.from('events').insert(
             occurrences.map(occ => ({
-              title: displayTitle,
+              title: titleToSave,
               description: (masterEvent as any).description ?? null,
               start_time: occ.start,
               end_time: occ.end,
@@ -579,7 +591,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
       // 'all' — update master + regenerate all instances
       const masterIdToUpdate = isInstance ? event.recurrence_master_id! : event.id
       const { error: updateError } = await supabase.from('events').update({
-        title: displayTitle,
+        title: titleToSave,
         location_name: location.trim() || null,
         address: address.trim() || null,
         start_time: masterStart,
@@ -607,7 +619,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
         const occurrences = expandRrule(masterStart, masterEnd, rruleStr)
         if (occurrences.length > 0) {
           const eventCopies = occurrences.map(occ => ({
-            title: displayTitle,
+            title: titleToSave,
             description: event.description ?? null,
             start_time: occ.start,
             end_time: occ.end,
@@ -756,6 +768,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
               </div>
               {/* Full-width touch-friendly title input */}
               <textarea
+                ref={titleRef}
                 value={displayTitle}
                 onChange={e => { setDisplayTitle(e.target.value); markDirty() }}
                 rows={2}
