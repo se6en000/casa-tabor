@@ -6,9 +6,10 @@ interface Props {
 }
 
 export default function ArtScreensaver({ onDismiss }: Props) {
-  const { artwork, loaded, onLoad, next } = useArtwork(240)
+  const { artwork, loaded, onLoad, } = useArtwork(240)
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)
+  const [aspectRatio, setAspectRatio] = useState<string | undefined>(undefined)
 
   // Fade in on mount, then allow dismiss after a grace period
   useEffect(() => {
@@ -17,7 +18,17 @@ export default function ArtScreensaver({ onDismiss }: Props) {
     return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [])
 
-  // Touch anywhere to dismiss
+  // Reset aspect ratio when artwork changes
+  useEffect(() => { setAspectRatio(undefined) }, [artwork?.id])
+
+  function handleImgLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+    const img = e.currentTarget
+    if (img.naturalWidth && img.naturalHeight) {
+      setAspectRatio(`${img.naturalWidth} / ${img.naturalHeight}`)
+    }
+    onLoad()
+  }
+
   function handleDismiss() {
     if (!dismissable) return
     setVisible(false)
@@ -38,43 +49,40 @@ export default function ArtScreensaver({ onDismiss }: Props) {
         className="relative w-full h-full flex items-center justify-center"
         style={{
           backgroundColor: '#F5F0E8',
-          // Inset shadow on all 4 edges simulates a picture frame
           boxShadow: 'inset 0 0 80px 20px rgba(0,0,0,0.45)',
           padding: '3.5vw',
         }}
       >
-        {/* Artwork — bevel wrapper gives the mat its recessed cut edge */}
+        {/* Bevel wrapper — sized to actual image aspect ratio so shadow hugs the painting */}
         <div
           style={{
-            width: '100%',
-            height: '100%',
-            // Bevel: dark inset top-left (shadow), light inset bottom-right (highlight)
+            aspectRatio: aspectRatio,
+            maxWidth: '100%',
+            maxHeight: '100%',
             boxShadow: `
               inset 4px 4px 8px rgba(0,0,0,0.45),
               inset -2px -2px 5px rgba(255,255,255,0.22)
             `,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
             overflow: 'hidden',
+            display: 'flex',
           }}
         >
-        {artwork && (
-          <img
-            key={artwork.id}
-            src={artwork.imageUrl}
-            alt={artwork.title}
-            onLoad={onLoad}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'contain',
-              display: 'block',
-              opacity: loaded ? 1 : 0,
-              transition: 'opacity 1.2s ease',
-            }}
-          />
-        )}
+          {artwork && (
+            <img
+              key={artwork.id}
+              src={artwork.imageUrl}
+              alt={artwork.title}
+              onLoad={handleImgLoad}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'fill',
+                display: 'block',
+                opacity: loaded ? 1 : 0,
+                transition: 'opacity 1.2s ease',
+              }}
+            />
+          )}
         </div>
 
         {/* Loading shimmer */}
@@ -100,11 +108,10 @@ export default function ArtScreensaver({ onDismiss }: Props) {
           </div>
         )}
 
-        {/* Next artwork hint — subtle tap indicator */}
+        {/* Hint */}
         <div
           className="absolute bottom-3 left-4 pointer-events-none"
           style={{ color: '#9b9285', fontSize: '0.55rem', fontFamily: 'Georgia, serif' }}
-          onClick={(e) => { e.stopPropagation(); next() }}
         >
           tap to wake · say alexa
         </div>
