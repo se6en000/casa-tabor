@@ -64,6 +64,22 @@ Deno.serve(async (req) => {
     })
   }
 
+  const utcOffset = (context.utcOffset as string) ?? '-04:00'
+
+  // Convert a UTC ISO string to a human-readable local time string using the user's offset
+  function toLocal(iso: string): string {
+    if (!iso) return ''
+    const offsetMatch = utcOffset.match(/([+-])(\d{2}):(\d{2})/)
+    if (!offsetMatch) return iso
+    const sign = offsetMatch[1] === '+' ? 1 : -1
+    const offsetMs = sign * (parseInt(offsetMatch[2]) * 60 + parseInt(offsetMatch[3])) * 60000
+    const local = new Date(new Date(iso).getTime() + offsetMs)
+    return local.toLocaleString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC'
+    })
+  }
+
   // Build context strings
   const familyNames = (context.family as {name: string}[]).map(f => f.name).join(', ')
 
@@ -78,7 +94,8 @@ Deno.serve(async (req) => {
     : (allEvents as DbEvent[]).map(e => {
         const members = e.event_members?.map(m => m.family_members?.name).filter(Boolean).join(', ') ?? ''
         const loc = e.address ?? e.location_name ?? ''
-        return `- ID:${e.id} | "${e.title}" | ${e.start_time} – ${e.end_time}${e.all_day ? ' (all-day)' : ''}${loc ? ` | 📍${loc}` : ''}${members ? ` | 👤${members}` : ''}`
+        const timeStr = e.all_day ? 'all-day' : `${toLocal(e.start_time)} – ${toLocal(e.end_time)}`
+        return `- ID:${e.id} | "${e.title}" | ${timeStr}${loc ? ` | 📍${loc}` : ''}${members ? ` | 👤${members}` : ''}`
       }).join('\n')
 
   const placesText = savedPlaces && savedPlaces.length > 0
