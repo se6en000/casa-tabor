@@ -17,6 +17,7 @@ import ThemeSettingsPage from '../../pages/ThemeSettingsPage'
 import ProfileSettingsPage from '../../pages/ProfileSettingsPage'
 import StatusDashboardPage from '../../pages/StatusDashboardPage'
 import SavedPlacesSettingsPage from '../../pages/SavedPlacesSettingsPage'
+import ScreensaverSettingsPage from '../../pages/ScreensaverSettingsPage'
 import PageTransition from './PageTransition'
 
 export default function AnimatedRoutes() {
@@ -43,6 +44,7 @@ export default function AnimatedRoutes() {
         <Route path="/settings/profile" element={<PageTransition><ProfileSettingsPage /></PageTransition>} />
         <Route path="/settings/status" element={<PageTransition><StatusDashboardPage /></PageTransition>} />
         <Route path="/settings/places" element={<PageTransition><SavedPlacesSettingsPage /></PageTransition>} />
+        <Route path="/settings/screensaver" element={<PageTransition><ScreensaverSettingsPage /></PageTransition>} />
       </Routes>
     </AnimatePresence>
   )

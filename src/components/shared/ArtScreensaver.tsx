@@ -3,10 +3,12 @@ import { useArtwork } from '../../hooks/useArtwork'
 
 interface Props {
   onDismiss: () => void
+  rotationMins?: number
+  minArtWidthVw?: number
 }
 
-export default function ArtScreensaver({ onDismiss }: Props) {
-  const { artwork, loaded, onLoad, } = useArtwork(240)
+export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidthVw = 55 }: Props) {
+  const { artwork, loaded, onLoad } = useArtwork(rotationMins * 60)
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)
   const [aspectRatio, setAspectRatio] = useState<string | undefined>(undefined)
@@ -58,7 +60,7 @@ export default function ArtScreensaver({ onDismiss }: Props) {
           style={{
             position: 'relative',
             aspectRatio: aspectRatio,
-            minWidth: '55vw',
+            minWidth: `${minArtWidthVw}vw`,
             maxWidth: '100%',
             maxHeight: '100%',
             overflow: 'hidden',

@@ -18,9 +18,10 @@ import { useHomeWeather } from './hooks/useHomeWeather'
 import { useLiveClock } from './hooks/useLiveClock'
 import { useWakeWord } from './hooks/useWakeWord'
 import { useIdleTimer } from './hooks/useIdleTimer'
+import { useScreensaverSettings } from './hooks/useScreensaverSettings'
 
-const IDLE_SCREENSAVER_MS = 5  * 60 * 1000  // 5 min → art screensaver
-const IDLE_DISPLAY_OFF_MS = 10 * 60 * 1000  // 10 min → monitor sleep
+const IDLE_SCREENSAVER_MS = 5  * 60 * 1000  // fallback — overridden by settings
+const IDLE_DISPLAY_OFF_MS = 10 * 60 * 1000  // fallback — overridden by settings
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
@@ -91,7 +92,11 @@ function AppShell() {
   useRoomTone()
   useTravelScan()
   usePushNotifications()
-  useIdleTimer(IDLE_SCREENSAVER_MS, IDLE_DISPLAY_OFF_MS)
+
+  const { settings } = useScreensaverSettings()
+  const ssMs   = settings.enabled ? settings.screensaverMins * 60_000 : IDLE_SCREENSAVER_MS
+  const dispMs = settings.displaySleepEnabled ? settings.displayOffMins * 60_000 : IDLE_DISPLAY_OFF_MS
+  useIdleTimer(ssMs, dispMs)
 
   const [screensaverActive, setScreensaverActive] = useState(false)
 
@@ -125,8 +130,12 @@ function AppShell() {
       <GlobalAIDrawer screensaverActive={screensaverActive} />
 
       {/* Art screensaver overlay */}
-      {screensaverActive && (
-        <ArtScreensaver onDismiss={() => setScreensaverActive(false)} />
+      {screensaverActive && settings.enabled && (
+        <ArtScreensaver
+          onDismiss={() => setScreensaverActive(false)}
+          rotationMins={settings.rotationMins}
+          minArtWidthVw={settings.minArtWidthVw}
+        />
       )}
     </div>
   )
