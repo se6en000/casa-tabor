@@ -47,6 +47,13 @@ except ImportError:
     EVDEV_AVAILABLE = False
     logging.warning("evdev not installed — touch-to-wake disabled")
 
+try:
+    import spidev as _spidev
+    SPI_AVAILABLE = True
+except ImportError:
+    SPI_AVAILABLE = False
+    logging.warning("spidev not installed — LED strip disabled")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -901,6 +908,153 @@ def windowed():
         return {"ok": True, "msg": "Relaunching in windowed mode..."}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# LED Strip (WS2812B via SPI MOSI — GPIO 10, /dev/spidev0.0)
+# ---------------------------------------------------------------------------
+NUM_LEDS      = 60
+LED_MAX_BRIGHT = 128   # hard cap to protect Pi 5V rail (50% = ~1.8A max)
+_led_lock     = threading.Lock()
+_led_stop     = threading.Event()
+_led_thread: threading.Thread | None = None
+
+def _spi_open():
+    spi = _spidev.SpiDev()
+    spi.open(0, 0)
+    spi.max_speed_hz = 3_200_000
+    spi.mode = 0
+    return spi
+
+def _encode_byte(b: int) -> list[int]:
+    """Encode one byte as 8 SPI bytes using WS2812B bit timing."""
+    out = []
+    for i in range(7, -1, -1):
+        out.append(0b11100000 if (b >> i) & 1 else 0b10000000)
+    return out
+
+def _make_frame(pixels: list[tuple[int, int, int]]) -> bytes:
+    frame = [0x00] * 50
+    for r, g, b in pixels:
+        for byte in [g, r, b]:   # WS2812B is GRB order
+            frame += _encode_byte(byte)
+    frame += [0x00] * 50
+    return bytes(frame)
+
+def _write_pixels(spi, pixels: list[tuple[int, int, int]]):
+    spi.xfer2(list(_make_frame(pixels)))
+
+def _clamp(val: int) -> int:
+    return max(0, min(LED_MAX_BRIGHT, val))
+
+def _stop_led_animation():
+    global _led_thread
+    _led_stop.set()
+    if _led_thread and _led_thread.is_alive():
+        _led_thread.join(timeout=1.0)
+    _led_stop.clear()
+
+def _run_listening():
+    """Rolling blue glow — a bright comet sweeps the strip continuously."""
+    if not SPI_AVAILABLE:
+        return
+    try:
+        spi = _spi_open()
+        pos = 0.0
+        TAIL = 12
+        while not _led_stop.is_set():
+            pixels = []
+            for i in range(NUM_LEDS):
+                dist = (i - pos) % NUM_LEDS
+                if dist < TAIL:
+                    intensity = int(_clamp(60) * (1 - dist / TAIL))
+                    pixels.append((0, 0, intensity))
+                else:
+                    pixels.append((0, 0, 0))
+            _write_pixels(spi, pixels)
+            pos = (pos + 1.2) % NUM_LEDS
+            _led_stop.wait(0.03)
+        _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
+        spi.close()
+    except Exception as e:
+        log.warning(f"LED listening error: {e}")
+
+def _run_processing():
+    """Slow amber pulse while AI is thinking."""
+    if not SPI_AVAILABLE:
+        return
+    try:
+        spi = _spi_open()
+        import math
+        t = 0.0
+        while not _led_stop.is_set():
+            brightness = int(20 + 35 * (0.5 + 0.5 * math.sin(t)))
+            pixels = [(_clamp(brightness), _clamp(brightness // 2), 0)] * NUM_LEDS
+            _write_pixels(spi, pixels)
+            t += 0.08
+            _led_stop.wait(0.04)
+        _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
+        spi.close()
+    except Exception as e:
+        log.warning(f"LED processing error: {e}")
+
+def _run_flash(r: int, g: int, b: int, duration: float):
+    """Single colour flash then off."""
+    if not SPI_AVAILABLE:
+        return
+    try:
+        spi = _spi_open()
+        pixels = [(_clamp(r), _clamp(g), _clamp(b))] * NUM_LEDS
+        _write_pixels(spi, pixels)
+        _led_stop.wait(duration)
+        _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
+        spi.close()
+    except Exception as e:
+        log.warning(f"LED flash error: {e}")
+
+def _start_led(target, *args):
+    global _led_thread
+    with _led_lock:
+        _stop_led_animation()
+        _led_thread = threading.Thread(target=target, args=args, daemon=True)
+        _led_thread.start()
+
+@app.post("/led/listening")
+def led_listening():
+    """Start rolling blue comet — AI is listening."""
+    _start_led(_run_listening)
+    return {"ok": True, "mode": "listening"}
+
+@app.post("/led/processing")
+def led_processing():
+    """Amber pulse — AI is thinking."""
+    _start_led(_run_processing)
+    return {"ok": True, "mode": "processing"}
+
+@app.post("/led/confirm")
+def led_confirm():
+    """Green flash — action confirmed."""
+    _start_led(_run_flash, 0, 80, 0, 2.0)
+    return {"ok": True, "mode": "confirm"}
+
+@app.post("/led/cancel")
+def led_cancel():
+    """Red flash — action cancelled."""
+    _start_led(_run_flash, 90, 0, 0, 1.5)
+    return {"ok": True, "mode": "cancel"}
+
+@app.post("/led/off")
+def led_off():
+    """Turn all LEDs off."""
+    _stop_led_animation()
+    if SPI_AVAILABLE:
+        try:
+            spi = _spi_open()
+            _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
+            spi.close()
+        except Exception as e:
+            log.warning(f"LED off error: {e}")
+    return {"ok": True, "mode": "off"}
 
 
 if __name__ == "__main__":

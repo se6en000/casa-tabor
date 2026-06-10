@@ -5,6 +5,7 @@ import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIc
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { useAIAssistant, type AIMessage } from '../../hooks/useAIAssistant'
+import { useLedStrip } from '../../hooks/useLedStrip'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
@@ -275,6 +276,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
   const { messages, loading, send, reset, session, sessionLoading, startFresh, updateMessageToolStatus } = useAIAssistant({ page, events, family, homeCity })
 
+  const led = useLedStrip()
+
   const pendingConfirmRef = useRef<(() => void) | null>(null)
   const pendingCancelRef  = useRef<(() => void) | null>(null)
 
@@ -308,8 +311,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       send('Thank you, talk soon!').catch(() => {})
       setTimeout(onClose, 800)
     },
-    onConfirm: () => { pendingConfirmRef.current?.() },
-    onCancel:  () => { pendingCancelRef.current?.() },
+    onConfirm: () => { led.confirm(); pendingConfirmRef.current?.() },
+    onCancel:  () => { led.cancel();  pendingCancelRef.current?.()  },
     hasPendingAction: hasPendingToolAction,
   })
 
@@ -322,6 +325,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       }, 500)
     } else {
       speech.stop()
+      led.off()
       reset()
       setInput('')
       interimRef.current = ''
@@ -334,6 +338,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   useEffect(() => {
     if (loading) {
       speech.stop()
+      led.processing()
     } else if (prevLoadingRef.current && !loading && open) {
       // AI just finished — restart mic for continuous listening
       setTimeout(() => speech.start(), 400)
@@ -344,6 +349,14 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
+
+  // Sync LED strip to voice phase
+  useEffect(() => {
+    if (!open) return
+    if (speech.phase === 'listening')   led.listening()
+    else if (speech.phase === 'processing') led.processing()
+    else if (speech.phase === 'idle')   led.off()
+  }, [speech.phase, open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const el = textareaRef.current
