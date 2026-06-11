@@ -16,8 +16,9 @@ const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s a
 const CONFIRM_PHRASES = /\b(yes|yeah|yep|confirm|ok|okay|go ahead|do it|sounds good|correct|right|affirmative|absolutely|sure|proceed)\b/i
 const CANCEL_PHRASES  = /\b(no|nope|cancel|don't|do not|stop|abort|never mind|nevermind|undo)\b/i
 
-/** DeepGram STT bridge — streams ALSA mic audio to DeepGram WebSocket, returns real-time words */
-const BRIDGE = 'http://127.0.0.1:8766'
+/** DeepGram STT bridge — HTTP for probe/display, WS for streaming */
+const BRIDGE    = 'http://127.0.0.1:8766'
+const BRIDGE_WS = 'ws://127.0.0.1:8767'
 
 type VoicePhase = 'idle' | 'connecting' | 'listening' | 'processing'
 type STTMode = 'unknown' | 'bridge' | 'webspeech'
@@ -53,7 +54,7 @@ function useSpeechInput({
   onCancel: () => void
   hasPendingAction: boolean
 }) {
-  const pollRef            = useRef<ReturnType<typeof setInterval> | null>(null)
+  const wsRef              = useRef<WebSocket | null>(null)
   const activeRef          = useRef(false)
   const suppressRef        = useRef(false)
   const modeRef            = useRef<STTMode>('unknown')
@@ -95,7 +96,12 @@ function useSpeechInput({
       : null
   ).current
 
-  const stopPoll = () => { if (pollRef.current) clearInterval(pollRef.current); pollRef.current = null }
+  const stopWS = () => {
+    if (wsRef.current) {
+      try { wsRef.current.close() } catch { /* ignore */ }
+      wsRef.current = null
+    }
+  }
   const stopSilenceTimer = () => { if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
 
   // No deps — uses only refs, so triggerFinal/startBridge are created once and never stale
@@ -120,7 +126,7 @@ function useSpeechInput({
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const triggerFinal = useCallback((text: string) => {
-    stopPoll()
+    stopWS()
     stopSilenceTimer()
     setPhaseSync('processing')
     const finalText = text.trim() || lastInterimRef.current.trim()
@@ -211,70 +217,75 @@ function useSpeechInput({
   }, [])
 
   // ── Bridge path (Pi / Chromium) ─────────────────────────────────────────
-  const startBridge = useCallback(async () => {
+  const startBridge = useCallback(() => {
     if (!activeRef.current) return
-    stopPoll()  // kill any leaked interval before starting a new session
+    stopWS()
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     connectStartRef.current = Date.now()
     setPhaseSync('connecting')
-    try {
-      await fetch(`${BRIDGE}/start`, { method: 'POST' })
-    } catch (e) {
-      console.warn('[STT] bridge unreachable', e)
-      activeRef.current = false
-      setPhaseSync('idle')
-      return
+
+    const ws = new WebSocket(BRIDGE_WS)
+    wsRef.current = ws
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'start' }))
     }
 
-    pollRef.current = setInterval(async () => {
-      if (!activeRef.current) { stopPoll(); return }
+    ws.onmessage = (evt) => {
+      if (!activeRef.current) return
       try {
-        const res  = await fetch(`${BRIDGE}/status`)
-        const data = await res.json()
-        setVolume(data.volume ?? 0)
-
-        if (data.ready) setPhaseSync('listening')
-
-        if (!data.ready && connectStartRef.current > 0 &&
-            Date.now() - connectStartRef.current > CONNECT_TIMEOUT_MS) {
-          console.warn('[STT] connect timeout, retrying')
-          stopPoll()
-          if (activeRef.current) setTimeout(() => startBridge(), 500)
-          return
-        }
-
-        const interim = data.interim_transcript ?? ''
-        if (interim) {
-          if (interim !== lastInterimRef.current) {
-            lastInterimRef.current = interim
-            lastInterimTimeRef.current = Date.now()
-            onInterimRef.current(interim)
-          } else if (lastInterimTimeRef.current > 0 &&
-                     Date.now() - lastInterimTimeRef.current >= SILENCE_MS) {
+        const msg = JSON.parse(evt.data as string)
+        switch (msg.type) {
+          case 'ready':
+            setPhaseSync('listening')
+            connectStartRef.current = 0
+            break
+          case 'volume':
+            setVolume(msg.level ?? 0)
+            break
+          case 'interim':
+            if (msg.text !== lastInterimRef.current) {
+              lastInterimRef.current = msg.text
+              lastInterimTimeRef.current = Date.now()
+              onInterimRef.current(msg.text)
+            }
+            break
+          case 'final':
             if (phaseRef.current !== 'processing') {
-              triggerFinal(interim)
+              triggerFinal(msg.text)
               if (activeRef.current) setTimeout(() => startBridge(), 300)
             }
-          }
+            break
+          case 'error':
+            console.warn('[STT] bridge error', msg.msg)
+            if (activeRef.current) setTimeout(() => startBridge(), 500)
+            break
         }
+      } catch { /* ignore */ }
+    }
 
-        // Guard against double-fire: a second queued poll callback that arrives
-        // after triggerFinal already set phase to 'processing' must not re-trigger.
-        if (!data.recording && data.transcript && phaseRef.current !== 'processing') {
-          triggerFinal(data.transcript || lastInterimRef.current)
-          if (activeRef.current) setTimeout(() => startBridge(), 300)
-        } else if (!data.recording && data.error) {
-          stopPoll()
-          if (activeRef.current) setTimeout(() => startBridge(), 500)
-        }
-      } catch { /* bridge momentarily busy */ }
-    }, 100)
-  }, [triggerFinal]) // onInterim via ref
+    ws.onerror = () => {
+      console.warn('[STT] WS connection error')
+    }
 
-  const stopBridge = useCallback(async () => {
-    stopPoll()
-    try { await fetch(`${BRIDGE}/stop`, { method: 'POST' }) } catch { /* ignore */ }
+    ws.onclose = () => {
+      wsRef.current = null
+      setVolume(0)
+      if (connectStartRef.current > 0 && Date.now() - connectStartRef.current > CONNECT_TIMEOUT_MS) {
+        console.warn('[STT] connect timeout, retrying')
+      }
+      if (activeRef.current && phaseRef.current !== 'processing') {
+        setTimeout(() => startBridge(), 500)
+      }
+    }
+  }, [triggerFinal]) // onInterim/phase via refs
+
+  const stopBridge = useCallback(() => {
+    if (wsRef.current) {
+      try { wsRef.current.send(JSON.stringify({ type: 'stop' })) } catch { /* ignore */ }
+    }
+    stopWS()
   }, [])
 
   // ── Unified start / stop ─────────────────────────────────────────────────
