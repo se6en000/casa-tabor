@@ -1387,19 +1387,19 @@ function PanelFooter({ event, onEdit, onEditWithAI }: { event: EventWithDetails;
     : null
 
   return (
-    <div className="p-4 border-t border-casa-border flex gap-2">
-      {/* Icon-only square buttons for edit actions */}
+    <div className="p-4 border-t border-casa-border flex gap-2 items-stretch">
+      {/* Icon-only square buttons — aspect-square makes them match the row height */}
       <button
         onClick={onEdit}
         title="Edit Details"
-        className="flex items-center justify-center w-[46px] h-[46px] shrink-0 rounded-button border border-casa-border text-casa-navy hover:bg-casa-bg transition-colors"
+        className="aspect-square flex items-center justify-center shrink-0 rounded-button border border-casa-border text-casa-navy hover:bg-casa-bg transition-colors"
       >
         <Pencil size={18} />
       </button>
       <button
         onClick={onEditWithAI}
         title="Edit with AI"
-        className="flex items-center justify-center w-[46px] h-[46px] shrink-0 rounded-button border border-casa-gold/60 text-casa-gold hover:bg-casa-gold/10 transition-colors"
+        className="aspect-square flex items-center justify-center shrink-0 rounded-button border border-casa-gold/60 text-casa-gold hover:bg-casa-gold/10 transition-colors"
       >
         <Sparkles size={18} />
       </button>
