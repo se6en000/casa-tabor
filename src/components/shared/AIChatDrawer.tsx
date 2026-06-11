@@ -55,6 +55,7 @@ function useSpeechInput({
 }) {
   const pollRef            = useRef<ReturnType<typeof setInterval> | null>(null)
   const activeRef          = useRef(false)
+  const suppressRef        = useRef(false)   // true while AI is thinking — bridge keeps running, transcripts ignored
   const modeRef            = useRef<STTMode>('unknown')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef     = useRef<any>(null)
@@ -62,7 +63,6 @@ function useSpeechInput({
   const lastInterimRef     = useRef('')
   const lastInterimTimeRef = useRef(0)
   const connectStartRef    = useRef(0)
-  const startBridgeRef     = useRef<() => void>(() => {})
   const [phase, setPhase]  = useState<VoicePhase>('idle')
   const [volume, setVolume] = useState(0)
   const supported = true
@@ -78,17 +78,21 @@ function useSpeechInput({
 
   const handleFinalTranscript = useCallback((transcript: string) => {
     if (!transcript.trim()) return
-    if (DISMISS_PHRASES.test(transcript)) { onDismiss(); return }
+    if (suppressRef.current) return  // AI is thinking — ignore stray audio
+    if (DISMISS_PHRASES.test(transcript)) {
+      // Set inactive NOW so the poll-scheduled restart (300ms) doesn't re-fire the bridge
+      activeRef.current = false
+      onDismiss()
+      return
+    }
     const isShort = transcript.trim().split(/\s+/).length <= 5
     if (isShort && hasPendingAction && CONFIRM_PHRASES.test(transcript)) {
       onConfirm(); onInterim('')
-      // Restart listening after confirm — triggerFinal stops the poll but confirm doesn't send to AI
-      if (activeRef.current) setTimeout(() => startBridgeRef.current(), 400)
+      // The poll caller already schedules a bridge restart (300ms) — no extra restart needed
       return
     }
     if (isShort && hasPendingAction && CANCEL_PHRASES.test(transcript)) {
       onCancel(); onInterim('')
-      if (activeRef.current) setTimeout(() => startBridgeRef.current(), 400)
       return
     }
     onFinalTranscript(transcript.trim()); onFinalTranscript('__SEND__')
@@ -226,10 +230,6 @@ function useSpeechInput({
     try { await fetch(`${BRIDGE}/stop`, { method: 'POST' }) } catch { /* ignore */ }
   }, [])
 
-  // Keep a stable ref to startBridge so handleFinalTranscript can call it without a forward-reference
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { startBridgeRef.current = startBridge }, [startBridge])
-
   // ── Unified start / stop ─────────────────────────────────────────────────
   const stop = useCallback(async () => {
     activeRef.current = false
@@ -264,7 +264,11 @@ function useSpeechInput({
     else start()
   }, [start, stop])
 
-  return { phase, volume, supported, start, stop, toggle, listening: phase === 'listening', connecting: phase === 'connecting' }
+  // Suppress/unsuppress without stopping the mic — used during AI loading
+  const suppress  = useCallback(() => { suppressRef.current = true  }, [])
+  const unsuppress = useCallback(() => { suppressRef.current = false }, [])
+
+  return { phase, volume, supported, start, stop, toggle, suppress, unsuppress, listening: phase === 'listening', connecting: phase === 'connecting' }
 }
 
 
@@ -408,14 +412,13 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     primeMessages([{ id: crypto.randomUUID(), role: 'assistant', content }])
   }, [open, focusedEvent?.id, sessionLoading, messages.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Pause voice while AI is thinking; auto-resume when response arrives
+  // While AI is thinking, suppress new voice input (don't stop the mic — avoids the fade/blue flicker)
   const prevLoadingRef = useRef(false)
   useEffect(() => {
     if (loading) {
-      speech.stop()
-    } else if (prevLoadingRef.current && !loading && open) {
-      // AI just finished — restart mic for continuous listening
-      setTimeout(() => speech.start(), 400)
+      speech.suppress()
+    } else {
+      speech.unsuppress()
     }
     prevLoadingRef.current = loading
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
