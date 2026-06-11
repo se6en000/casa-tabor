@@ -20,9 +20,11 @@ export function useIdleTimer(screensaverMs: number, displayOffMs: number) {
         document.dispatchEvent(new CustomEvent('screensaver-on'))
       }, screensaverMs)
 
-      dispTimerRef.current = setTimeout(() => {
-        fetch(`${BRIDGE}/display/off`, { method: 'POST' }).catch(() => {})
-      }, displayOffMs)
+      if (isFinite(displayOffMs)) {
+        dispTimerRef.current = setTimeout(() => {
+          fetch(`${BRIDGE}/display/off`, { method: 'POST' }).catch(() => {})
+        }, displayOffMs)
+      }
     }
 
     const events = ['mousemove', 'mousedown', 'touchstart', 'keydown', 'scroll', 'wheel']

@@ -21,7 +21,6 @@ import { useIdleTimer } from './hooks/useIdleTimer'
 import { useScreensaverSettings } from './hooks/useScreensaverSettings'
 
 const IDLE_SCREENSAVER_MS = 5  * 60 * 1000  // fallback — overridden by settings
-const IDLE_DISPLAY_OFF_MS = 10 * 60 * 1000  // fallback — overridden by settings
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
@@ -95,7 +94,7 @@ function AppShell() {
 
   const { settings } = useScreensaverSettings()
   const ssMs   = settings.enabled ? settings.screensaverMins * 60_000 : IDLE_SCREENSAVER_MS
-  const dispMs = settings.displaySleepEnabled ? settings.displayOffMins * 60_000 : IDLE_DISPLAY_OFF_MS
+  const dispMs = settings.displaySleepEnabled ? settings.displayOffMins * 60_000 : Infinity
   useIdleTimer(ssMs, dispMs)
 
   const [screensaverActive, setScreensaverActive] = useState(false)
