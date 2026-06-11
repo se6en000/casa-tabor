@@ -95,7 +95,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
               style={{
                 width: '100%',
                 height: '100%',
-                objectFit: 'fill',
+                objectFit: 'contain',
                 display: 'block',
                 opacity: loaded ? 1 : 0,
                 transition: 'opacity 1.2s ease',
