@@ -2,30 +2,15 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 
 const IIIF = 'https://www.artic.edu/iiif/2'
 const API  = 'https://api.artic.edu/api/v1'
-// Curated set of public-domain painting IDs from ARTIC — landscapes, still lifes, interiors
-// Mix of orientations that look great on 16:9 with a mat
-const CURATED_IDS = [
-  111628, // Seurat — A Sunday on La Grande Jatte
-  16487,  // El Greco — The Assumption of the Virgin
-  14968,  // Caillebotte — Paris Street, Rainy Day
-  27992,  // Monet — Stacks of Wheat (End of Summer)
-  16571,  // Monet — Water Lily Pond
-  151424, // Renoir — Two Sisters (On the Terrace)
-  6565,   // Winslow Homer — The Blue Boat
-  66434,  // Van Gogh — Self-Portrait
-  8991,   // Gustave Caillebotte — The Yerres, Rain
-  117266, // Edward Hopper — Nighthawks
-  20684,  // Georges Seurat — The Lake at Bois de Boulogne
-  44892,  // Pissarro — The Crystal Palace
-  102611, // Paul Gauguin — The Day of the God
-  64818,  // Childe Hassam — A New England Headland
-  81539,  // Mary Cassatt — The Child's Bath
-  149681, // Renoir — Acrobats at the Cirque Fernando
-  56905,  // Thomas Cole — Landscape
-  25853,  // Winslow Homer — Croquet Scene
-  9512,   // Grant Wood — American Gothic
-  36161,  // Georges Seurat — A Sunday on La Grande Jatte (study)
-]
+
+// Artwork type IDs at ARTIC:
+// 1 = Painting, 14 = Drawing and Watercolor
+// Excludes: photos, prints, sculpture, ceramics, etc.
+const PAINTING_TYPE_IDS = [1, 14]
+
+// Pages to randomly pick from — ARTIC has thousands of public-domain paintings
+const MAX_PAGE = 25
+const FETCH_LIMIT = 60
 
 export interface Artwork {
   id: number
@@ -52,12 +37,27 @@ export function useArtwork(rotateSecs = 240) {
   useEffect(() => {
     let cancelled = false
     async function fetchAll() {
-      const ids = shuffled(CURATED_IDS)
       const results: Artwork[] = []
       try {
-        const res = await fetch(
-          `${API}/artworks?ids=${ids.join(',')}&fields=id,title,artist_display,image_id&limit=${ids.length}`
-        )
+        const randomPage = Math.floor(Math.random() * MAX_PAGE) + 1
+        const res = await fetch(`${API}/artworks/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: {
+              bool: {
+                must: [
+                  { term: { is_public_domain: true } },
+                  { terms: { artwork_type_id: PAINTING_TYPE_IDS } },
+                  { exists: { field: 'image_id' } },
+                ],
+              },
+            },
+            fields: ['id', 'title', 'artist_display', 'image_id'],
+            limit: FETCH_LIMIT,
+            page: randomPage,
+          }),
+        })
         const json = await res.json()
         for (const a of json.data ?? []) {
           if (a.image_id) {
@@ -73,7 +73,6 @@ export function useArtwork(rotateSecs = 240) {
       if (!cancelled) {
         const shuffledResults = shuffled(results)
         setArtworks(shuffledResults)
-        // Start at a random position so each screensaver session begins with a different piece
         setIndex(Math.floor(Math.random() * Math.max(shuffledResults.length, 1)))
       }
     }
