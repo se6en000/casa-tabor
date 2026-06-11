@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Save, FlaskConical, CheckCircle, AlertCircle, Home } from 'lucide-react'
+import { Save, FlaskConical, CheckCircle, AlertCircle, Home, Mic } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
+import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 
 interface LLMConfig {
   provider: string
@@ -50,6 +51,7 @@ export default function AISettingsPage() {
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const [testMessage, setTestMessage] = useState('')
   const [isLoading, setIsLoading] = useState(true)
+  const { settings: screensaverSettings, update: updateScreensaver } = useScreensaverSettings()
 
   useEffect(() => {
     Promise.all([
@@ -201,6 +203,51 @@ export default function AISettingsPage() {
             placeholder="One rule per line, in your own words. Saved instantly to every conversation."
             className="w-full rounded-button border border-casa-border bg-white px-3 py-2 text-body-sm text-casa-navy focus:outline-none focus:border-casa-gold resize-y font-mono"
           />
+        </div>
+
+        {/* Wake Word Sensitivity */}
+        <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-3">
+          <div className="flex items-center gap-2">
+            <Mic size={15} className="text-casa-gold" />
+            <label className="text-body-sm font-semibold text-casa-navy">Wake Word — "Alexa"</label>
+          </div>
+          <p className="text-caption text-casa-muted">
+            How confidently the mic must hear "Alexa" before activating.{' '}
+            Lower = triggers more easily (more false positives). Higher = requires a clearer utterance.
+          </p>
+          <div className="flex items-center justify-between gap-4 py-1">
+            <div>
+              <p className="text-body-sm font-medium text-casa-navy">Sensitivity</p>
+              <p className="text-caption text-casa-muted mt-0.5">
+                {screensaverSettings.wakeWordSensitivity <= 0.15 ? 'Very sensitive — fires easily' :
+                 screensaverSettings.wakeWordSensitivity <= 0.25 ? 'High — good for quiet rooms' :
+                 screensaverSettings.wakeWordSensitivity <= 0.35 ? 'Balanced (default)' :
+                 screensaverSettings.wakeWordSensitivity <= 0.45 ? 'Strict — speak clearly' :
+                 'Very strict — nearly shout-level'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => {
+                  const next = Math.max(0.10, Math.round((screensaverSettings.wakeWordSensitivity - 0.05) * 100) / 100)
+                  updateScreensaver({ wakeWordSensitivity: next })
+                  fetch('http://127.0.0.1:8766/wake-sensitivity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ score: next }) }).catch(() => {})
+                }}
+                className="w-8 h-8 rounded-button border border-casa-border bg-white text-casa-navy font-semibold text-lg flex items-center justify-center hover:bg-casa-bg active:scale-95 transition-all"
+              >−</button>
+              <span className="w-14 text-center text-body-sm font-semibold text-casa-navy tabular-nums">
+                {Math.round(screensaverSettings.wakeWordSensitivity * 100)}%
+              </span>
+              <button
+                onClick={() => {
+                  const next = Math.min(0.60, Math.round((screensaverSettings.wakeWordSensitivity + 0.05) * 100) / 100)
+                  updateScreensaver({ wakeWordSensitivity: next })
+                  fetch('http://127.0.0.1:8766/wake-sensitivity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ score: next }) }).catch(() => {})
+                }}
+                className="w-8 h-8 rounded-button border border-casa-border bg-white text-casa-navy font-semibold text-lg flex items-center justify-center hover:bg-casa-bg active:scale-95 transition-all"
+              >+</button>
+            </div>
+          </div>
         </div>
 
         {/* Home Address — managed in Profile */}
