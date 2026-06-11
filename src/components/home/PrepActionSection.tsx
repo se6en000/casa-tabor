@@ -124,7 +124,7 @@ export default function PrepActionSection() {
                       {/* Content */}
                       <div className="flex-1 min-w-0">
                         <p className={cn(
-                          'text-caption text-casa-text leading-snug',
+                          'text-body-sm text-casa-text leading-snug',
                           isDone && 'line-through text-casa-muted',
                         )}>
                           <span className="mr-1 inline-flex"><PrepTypeIcon type={item.type} /></span>

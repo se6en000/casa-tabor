@@ -205,10 +205,10 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
             {paragraphs.length > 0 ? (
               <div className="space-y-2.5">
                 {visible.map((p, i) => (
-                  <p key={i} className="text-caption text-casa-text leading-relaxed">{p}</p>
+                  <p key={i} className="text-body-sm text-casa-text leading-relaxed">{p}</p>
                 ))}
                 {hasMore && briefingExpanded && rest.map((p, i) => (
-                  <p key={`r${i}`} className="text-caption text-casa-text leading-relaxed">{p}</p>
+                  <p key={`r${i}`} className="text-body-sm text-casa-text leading-relaxed">{p}</p>
                 ))}
                 {hasMore && (
                   <button
@@ -226,7 +226,7 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
                 )}
               </div>
             ) : (
-              <p className="text-caption text-casa-muted italic leading-relaxed">
+              <p className="text-body-sm text-casa-muted italic leading-relaxed">
                 {allTodayEvents.length} event{allTodayEvents.length !== 1 ? 's' : ''} scheduled today.{' '}
                 <Link to="/briefing" className="text-casa-gold hover:brightness-110">Generate briefing →</Link>
               </p>
@@ -282,7 +282,7 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
                 {notifications.slice(0, 6).map(n => (
                   <div key={n.id} className="py-2.5 border-b border-casa-divider last:border-0 flex items-start gap-2 group">
                     <div className="flex-1 min-w-0">
-                      <p className={cn('text-caption font-medium leading-snug', n.read ? 'text-casa-muted' : 'text-casa-navy')}>
+                      <p className={cn('text-body-sm font-medium leading-snug', n.read ? 'text-casa-muted' : 'text-casa-navy')}>
                         {n.body ?? n.title}
                       </p>
                       <p className="text-caption text-casa-muted/60 mt-0.5">
