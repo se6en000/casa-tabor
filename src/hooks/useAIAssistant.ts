@@ -56,12 +56,13 @@ export function useAIAssistant(ctx: AssistantContext) {
   useEffect(() => { messagesRef.current = messages }, [messages])
   useEffect(() => { ctxRef.current = ctx })
 
-  // Sync messages from session when session loads
+  // Sync messages from session when session loads — but never overwrite messages
+  // already accumulated (e.g. user spoke before sessionLoading resolved)
   useEffect(() => {
     if (!sessionLoading && session) {
-      setMessages(session.messages)
+      setMessages(prev => prev.length === 0 ? session.messages : prev)
     } else if (!sessionLoading && !session) {
-      setMessages([])
+      setMessages(prev => prev.length === 0 ? [] : prev)
     }
   }, [sessionLoading, session?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
