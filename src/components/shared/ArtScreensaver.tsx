@@ -11,7 +11,7 @@ interface Props {
 }
 
 export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidthVw = 55, artDimOffset = 30 }: Props) {
-  const { artwork, loaded, onLoad } = useArtwork(rotationMins * 60)
+  const { artwork, loaded, onLoad, onError } = useArtwork(rotationMins * 60)
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)
   const [aspectRatio, setAspectRatio] = useState<string | undefined>(undefined)
@@ -95,6 +95,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
               src={artwork.imageUrl}
               alt={artwork.title}
               onLoad={handleImgLoad}
+              onError={onError}
               style={{
                 width: '100%',
                 height: '100%',
