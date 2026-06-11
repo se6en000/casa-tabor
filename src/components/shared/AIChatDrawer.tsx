@@ -62,6 +62,7 @@ function useSpeechInput({
   const lastInterimRef     = useRef('')
   const lastInterimTimeRef = useRef(0)
   const connectStartRef    = useRef(0)
+  const startBridgeRef     = useRef<() => void>(() => {})
   const [phase, setPhase]  = useState<VoicePhase>('idle')
   const [volume, setVolume] = useState(0)
   const supported = true
@@ -79,9 +80,18 @@ function useSpeechInput({
     if (!transcript.trim()) return
     if (DISMISS_PHRASES.test(transcript)) { onDismiss(); return }
     const isShort = transcript.trim().split(/\s+/).length <= 5
-    if (isShort && hasPendingAction && CONFIRM_PHRASES.test(transcript)) { onConfirm(); onInterim('') }
-    else if (isShort && hasPendingAction && CANCEL_PHRASES.test(transcript)) { onCancel(); onInterim('') }
-    else { onFinalTranscript(transcript.trim()); onFinalTranscript('__SEND__') }
+    if (isShort && hasPendingAction && CONFIRM_PHRASES.test(transcript)) {
+      onConfirm(); onInterim('')
+      // Restart listening after confirm — triggerFinal stops the poll but confirm doesn't send to AI
+      if (activeRef.current) setTimeout(() => startBridgeRef.current(), 400)
+      return
+    }
+    if (isShort && hasPendingAction && CANCEL_PHRASES.test(transcript)) {
+      onCancel(); onInterim('')
+      if (activeRef.current) setTimeout(() => startBridgeRef.current(), 400)
+      return
+    }
+    onFinalTranscript(transcript.trim()); onFinalTranscript('__SEND__')
   }, [onInterim, onFinalTranscript, onDismiss, onConfirm, onCancel, hasPendingAction])
 
   const triggerFinal = useCallback((text: string) => {
@@ -215,6 +225,10 @@ function useSpeechInput({
     stopPoll()
     try { await fetch(`${BRIDGE}/stop`, { method: 'POST' }) } catch { /* ignore */ }
   }, [])
+
+  // Keep a stable ref to startBridge so handleFinalTranscript can call it without a forward-reference
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { startBridgeRef.current = startBridge }, [startBridge])
 
   // ── Unified start / stop ─────────────────────────────────────────────────
   const stop = useCallback(async () => {
