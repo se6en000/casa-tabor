@@ -125,7 +125,7 @@ export default function PrepActionSection() {
                       <div className="flex-1 min-w-0">
                         <p
                           className={cn(isDone && 'line-through text-casa-muted')}
-                          style={{ fontSize: '13px', lineHeight: '1.5', fontFamily: "'DM Sans', system-ui, sans-serif", color: isDone ? undefined : 'var(--color-casa-text)' }}
+                          style={{ fontSize: '0.8125rem', lineHeight: '1.5', fontFamily: "'DM Sans', system-ui, sans-serif", color: isDone ? undefined : 'var(--color-casa-text)' }}
                         >
                           <span className="mr-1 inline-flex"><PrepTypeIcon type={item.type} /></span>
                           {item.description}
