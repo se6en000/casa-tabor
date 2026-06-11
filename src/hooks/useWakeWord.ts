@@ -15,6 +15,7 @@ export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const screensaverActiveAtRef = useRef<number>(0)
   const drawerClosedAtRef = useRef<number>(0)
+  const bridgeDeadRef = useRef(false)  // back off when bridge is unreachable
 
   // Track when screensaver became active
   useEffect(() => {
@@ -37,9 +38,11 @@ export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean) {
     }
 
     timerRef.current = setInterval(async () => {
+      if (bridgeDeadRef.current) return  // bridge confirmed unreachable — skip this tick
       try {
         const res = await fetch(`${BRIDGE}/wake-poll`, { signal: AbortSignal.timeout(400) })
         if (!res.ok) return
+        bridgeDeadRef.current = false
         const data = await res.json()
         if (data.triggered) {
           const now = Date.now()
@@ -54,7 +57,9 @@ export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean) {
           }
         }
       } catch {
-        // bridge unreachable — not on Pi, ignore
+        // Bridge unreachable — pause polling for 10s so we don't spam network errors
+        bridgeDeadRef.current = true
+        setTimeout(() => { bridgeDeadRef.current = false }, 10_000)
       }
     }, POLL_MS)
 

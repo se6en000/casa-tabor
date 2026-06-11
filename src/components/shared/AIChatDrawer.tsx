@@ -161,7 +161,8 @@ function useSpeechInput({
     }
 
     recognition.onerror = (e: any) => {
-      if (e.error === 'no-speech') return
+      // 'no-speech' and 'aborted' are expected — no-speech = silence, aborted = we called stop()
+      if (e.error === 'no-speech' || e.error === 'aborted') return
       console.warn('[WebSpeech] error', e.error)
       if (activeRef.current) setTimeout(() => startWebSpeech(), 500)
     }
