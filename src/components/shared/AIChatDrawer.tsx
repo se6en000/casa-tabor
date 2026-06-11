@@ -366,7 +366,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     if (sessionLoading) return
     if (messages.length > 0) { firedEventGreetRef.current = focusedEvent.id; return }
     firedEventGreetRef.current = focusedEvent.id
-    send(`[EVENT_EDIT_MODE] I've opened the event "${focusedEvent.title}" for editing. Please greet me briefly and confirm which event you're ready to help me update. Don't list all the fields — just acknowledge it and ask what I'd like to change.`)
+    send(`[EVENT_EDIT_MODE] Summarize this event for me and tell me what fields are missing or could be improved.`)
   }, [open, focusedEvent?.id, sessionLoading, messages.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pause voice while AI is thinking; auto-resume when response arrives

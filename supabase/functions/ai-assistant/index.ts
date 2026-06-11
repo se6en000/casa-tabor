@@ -257,19 +257,27 @@ FAMILY MEMBERS: ${familyNames}
 ${placesText ? `\nSAVED PLACES (use for location nicknames):\n${placesText}` : ''}
 ${contactsText ? `\nSAVED CONTACTS:\n${contactsText}` : ''}
 ${context.focusedEvent ? `
-⭐ EVENT EDIT MODE — You are focused on this specific event:
+⭐ EVENT EDIT MODE — CRITICAL INSTRUCTIONS:
+You are EXCLUSIVELY focused on editing this one event. Do not answer general questions, discuss other events, or go off-topic. Every response must stay in the context of editing this event.
+
+CURRENT EVENT DATA:
 ID: ${(context.focusedEvent as {id:string}).id}
 Title: ${(context.focusedEvent as {title:string}).title}
 Time: ${(context.focusedEvent as {start_time:string}).start_time} → ${(context.focusedEvent as {end_time:string}).end_time}${(context.focusedEvent as {all_day:boolean}).all_day ? ' (all-day)' : ''}
-Location: ${(context.focusedEvent as {location_name:string|null}).location_name ?? '(none)'} | ${(context.focusedEvent as {address:string|null}).address ?? '(no address)'}
-Members: ${((context.focusedEvent as {members:string[]}).members ?? []).join(', ') || '(none)'}
-Category: ${(context.focusedEvent as {category:string|null}).category ?? '(none)'}
-Notes: ${(context.focusedEvent as {notes:string|null}).notes ?? '(none)'}
-Description: ${(context.focusedEvent as {description:string|null}).description ?? '(none)'}
+Location name: ${(context.focusedEvent as {location_name:string|null}).location_name ?? '⚠️ MISSING'}
+Address: ${(context.focusedEvent as {address:string|null}).address ?? '⚠️ MISSING'}
+Members: ${((context.focusedEvent as {members:string[]}).members ?? []).join(', ') || '⚠️ MISSING'}
+Category: ${(context.focusedEvent as {category:string|null}).category ?? '⚠️ MISSING'}
+Notes/Prep: ${(context.focusedEvent as {notes:string|null}).notes ?? '⚠️ MISSING'}
+Description: ${(context.focusedEvent as {description:string|null}).description ?? '⚠️ MISSING'}
 
-When the user asks to change anything, use update_event with ID: ${(context.focusedEvent as {id:string}).id}. You already know the event — no need to search for it.
-If the user changes the location, note that driving logistics and weather will refresh automatically.
-The first user message [EVENT_EDIT_MODE] is a system signal — greet warmly, name the event, and ask what they'd like to change. Don't repeat all the fields back.` : ''}
+RULES:
+- Always use update_event with ID: ${(context.focusedEvent as {id:string}).id} for any changes. You already have the event — never search for it.
+- After the user confirms a change, apply it immediately with update_event; confirm what you changed in one sentence.
+- If the user changes the location, mention that driving logistics and weather will refresh automatically.
+- If the user tries to discuss something unrelated to this event, politely redirect them back to editing it.
+
+ON OPEN (the [EVENT_EDIT_MODE] signal): Give a concise friendly summary of the event so the user knows you're primed — include title, date/time, who's attending, and location if set. Then highlight any ⚠️ MISSING fields as things worth filling in, and ask what they'd like to change or add first.` : ''}
 
 ALL UPCOMING EVENTS (full year, use exact IDs):
 ${eventsText}
