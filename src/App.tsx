@@ -135,6 +135,7 @@ function AppShell() {
           onDismiss={() => setScreensaverActive(false)}
           rotationMins={settings.rotationMins}
           minArtWidthVw={settings.minArtWidthVw}
+          artDimOffset={settings.artDimOffset}
         />
       )}
     </div>

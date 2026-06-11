@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useArtwork } from '../../hooks/useArtwork'
 
+const SENSOR = 'http://127.0.0.1:8765'
+
 interface Props {
   onDismiss: () => void
   rotationMins?: number
   minArtWidthVw?: number
+  artDimOffset?: number  // % below ambient lux (0–80)
 }
 
-export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidthVw = 55 }: Props) {
+export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidthVw = 55, artDimOffset = 30 }: Props) {
   const { artwork, loaded, onLoad } = useArtwork(rotationMins * 60)
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)
@@ -17,7 +20,18 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   useEffect(() => {
     const t1 = setTimeout(() => setVisible(true), 50)
     const t2 = setTimeout(() => setDismissable(true), 1500)
-    return () => { clearTimeout(t1); clearTimeout(t2) }
+    // Tell sensor bridge to dim monitor relative to ambient lux
+    fetch(`${SENSOR}/display/art-mode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dim_offset: artDimOffset / 100 }),
+    }).catch(() => { /* non-Pi — ignore */ })
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+      // Restore auto-brightness when art mode exits
+      fetch(`${SENSOR}/display/art-mode-off`, { method: 'POST' }).catch(() => {})
+    }
   }, [])
 
   // Reset aspect ratio when artwork changes

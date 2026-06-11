@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ChevronLeft, Palette, Clock, Monitor, Image, ToggleLeft } from 'lucide-react'
+import { ChevronLeft, Palette, Clock, Monitor, Image, ToggleLeft, Sun } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import BounceScroll from '../components/shared/BounceScroll'
@@ -172,6 +172,28 @@ export default function ScreensaverSettingsPage() {
               <p className="text-casa-muted">Art mode is disabled — screen will stay on.</p>
             )}
           </div>
+        </div>
+
+        {/* Display Brightness */}
+        <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card mt-4">
+          <SectionHeader icon={Sun} label="Display Brightness in Art Mode" />
+          <p className="text-caption text-casa-muted mb-4">
+            Monitor dims to <span className="font-medium text-casa-navy">{settings.artDimOffset}% below</span> the ambient light level — so the painting feels lit by the room, not glowing.
+            Higher = darker relative to surroundings.
+          </p>
+          <Row
+            label="Dim below ambient"
+            desc="Relative to current room lux reading"
+          >
+            <StepPicker
+              value={settings.artDimOffset}
+              onChange={v => update({ artDimOffset: v })}
+              min={5} max={80} step={5} unit="%"
+            />
+          </Row>
+          <p className="text-caption text-casa-muted mt-2">
+            Example: room at 300 lux → auto brightness 70 → art mode at {settings.artDimOffset}% below = {Math.round(70 * (1 - settings.artDimOffset / 100))}
+          </p>
         </div>
 
         {/* Mat color note */}

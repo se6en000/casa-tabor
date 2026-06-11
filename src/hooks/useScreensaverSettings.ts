@@ -7,6 +7,7 @@ export interface ScreensaverSettings {
   minArtWidthVw: number     // minimum painting width % of viewport (default 55)
   enabled: boolean          // master toggle for screensaver
   displaySleepEnabled: boolean
+  artDimOffset: number      // how much dimmer than ambient lux in art mode (0–80, default 30%)
 }
 
 const DEFAULTS: ScreensaverSettings = {
@@ -16,6 +17,7 @@ const DEFAULTS: ScreensaverSettings = {
   minArtWidthVw: 55,
   enabled: true,
   displaySleepEnabled: true,
+  artDimOffset: 30,
 }
 
 const KEY = 'casa-screensaver-settings'
