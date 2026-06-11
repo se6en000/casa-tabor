@@ -86,11 +86,14 @@ function useSpeechInput({
   useEffect(() => { onCancelRef.current   = onCancel },          [onCancel])
   useEffect(() => { hasPendingRef.current = hasPendingAction },  [hasPendingAction])
 
+  // Stable ref — avoids recreating startWebSpeech on every render
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const WebSpeech: any = (typeof window !== 'undefined')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? ((window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition ?? null)
-    : null
+  const WebSpeech = useRef<any>(
+    typeof window !== 'undefined'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? ((window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition ?? null)
+      : null
+  ).current
 
   const stopPoll = () => { if (pollRef.current) clearInterval(pollRef.current); pollRef.current = null }
   const stopSilenceTimer = () => { if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
@@ -129,6 +132,11 @@ function useSpeechInput({
   // ── Web Speech API path (Safari / iOS) ──────────────────────────────────
   const startWebSpeech = useCallback(() => {
     if (!WebSpeech || !activeRef.current) return
+    // Kill any lingering instance to prevent duplicate ghost listeners
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch { /* ignore */ }
+      recognitionRef.current = null
+    }
     setPhaseSync('listening')
 
     const recognition = new WebSpeech()
@@ -139,17 +147,31 @@ function useSpeechInput({
 
     recognition.onresult = (event: any) => {
       let interim = ''
+      let finalAccum = ''
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const t = event.results[i][0].transcript
-        if (!event.results[i].isFinal) interim += t
+        if (event.results[i].isFinal) finalAccum += t
+        else interim += t
       }
+
+      // Use final result immediately (authoritative — no silence timer needed)
+      if (finalAccum.trim()) {
+        stopSilenceTimer()
+        lastInterimRef.current = ''
+        onInterimRef.current(finalAccum.trim())
+        try { recognition.stop() } catch { /* ignore */ }
+        triggerFinal(finalAccum.trim())
+        if (activeRef.current) setTimeout(() => startWebSpeech(), 300)
+        return
+      }
+
       const display = interim.trim()
       if (!display) return
 
       onInterimRef.current(display)
       lastInterimRef.current = display
 
-      // Reset silence timer on every word arrival
+      // Silence timer fallback for browsers that don't emit isFinal promptly
       stopSilenceTimer()
       silenceTimerRef.current = setTimeout(() => {
         if (lastInterimRef.current && activeRef.current) {
@@ -178,7 +200,7 @@ function useSpeechInput({
     }
 
     recognition.start()
-  }, [WebSpeech, triggerFinal]) // onInterim via ref, phase via phaseRef
+  }, [WebSpeech, triggerFinal]) // all state accessed via refs
 
   const stopWebSpeech = useCallback(() => {
     stopSilenceTimer()
@@ -288,14 +310,19 @@ function useSpeechInput({
   const suppress  = useCallback(() => { suppressRef.current = true  }, [])
   const unsuppress = useCallback(() => { suppressRef.current = false }, [])
 
-  // Ensure mic is running — restarts WebSpeech if it naturally ended while suppressed
+  // Ensure mic is running — restarts WebSpeech if it naturally ended while suppressed.
+  // Reads phaseRef (not state) to avoid stale closure — ensureRunning is created once.
   const ensureRunning = useCallback(() => {
-    if (!activeRef.current) return  // was fully stopped (drawer closed), don't restart
-    if (modeRef.current === 'webspeech' && phase === 'idle') {
+    if (!activeRef.current) return  // fully stopped (drawer closed), don't restart
+    if (
+      modeRef.current === 'webspeech' &&
+      phaseRef.current !== 'listening' &&
+      phaseRef.current !== 'connecting'
+    ) {
       startWebSpeech()
     }
     // Bridge stays running continuously — no action needed
-  }, [phase, startWebSpeech])
+  }, [startWebSpeech]) // phase read via phaseRef, no stale closure
 
   return { phase, volume, supported, start, stop, toggle, suppress, unsuppress, ensureRunning, listening: phase === 'listening', connecting: phase === 'connecting' }
 }
@@ -441,8 +468,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     primeMessages([{ id: crypto.randomUUID(), role: 'assistant', content }])
   }, [open, focusedEvent?.id, sessionLoading, messages.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // While AI is thinking, suppress new voice input (don't stop the mic — avoids the fade/blue flicker)
-  const prevLoadingRef = useRef(false)
+  // While AI is thinking, suppress new voice input (don't stop the mic — avoids fade/blue flicker)
   useEffect(() => {
     if (loading) {
       speech.suppress()
@@ -451,7 +477,6 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       // WebSpeech naturally ends after each utterance — restart it if it went idle while AI was thinking
       if (open) setTimeout(() => speech.ensureRunning(), 300)
     }
-    prevLoadingRef.current = loading
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
