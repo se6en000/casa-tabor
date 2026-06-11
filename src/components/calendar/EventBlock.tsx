@@ -152,7 +152,7 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
         </p>
       )}
 
-      {/* Member pills — owner named pill + attendee initial dots */}
+      {/* Member pills — all members as name pills */}
       {!isCompact && event.members && event.members.length > 0 && (() => {
         const primary = event.members.find(m => m.role === 'primary') ?? event.members[0]
         const others = event.members.filter(m => m !== primary)
@@ -167,11 +167,10 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
             {others.slice(0, 3).map(m => (
               <span
                 key={m.id}
-                title={m.family_member?.name}
-                className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold shrink-0 bg-white/80"
+                className="px-1.5 py-0.5 rounded-full text-[9px] font-bold leading-none whitespace-nowrap bg-white/80"
                 style={{ color: m.family_member?.color_hex ?? '#444' }}
               >
-                {m.family_member?.name?.[0] ?? '?'}
+                {m.family_member?.name ?? '?'}
               </span>
             ))}
           </div>

@@ -321,11 +321,10 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
                 {others.slice(0, 3).map(m => (
                   <span
                     key={m.id}
-                    title={m.family_member?.name}
-                    className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-[9px] font-bold shrink-0"
+                    className="px-1.5 py-0.5 rounded-full text-white text-[9px] font-bold leading-none whitespace-nowrap shrink-0"
                     style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
                   >
-                    {m.family_member?.name?.[0] ?? '?'}
+                    {m.family_member?.name ?? '?'}
                   </span>
                 ))}
               </div>
