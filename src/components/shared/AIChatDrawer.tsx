@@ -64,6 +64,8 @@ function useSpeechInput({
   const lastInterimTimeRef = useRef(0)
   const connectStartRef    = useRef(0)
   const [phase, setPhase]  = useState<VoicePhase>('idle')
+  const phaseRef           = useRef<VoicePhase>('idle')
+  const setPhaseSync = (p: VoicePhase) => { phaseRef.current = p; setPhase(p) }
   const [volume, setVolume] = useState(0)
   const supported = true
 
@@ -117,7 +119,7 @@ function useSpeechInput({
   const triggerFinal = useCallback((text: string) => {
     stopPoll()
     stopSilenceTimer()
-    setPhase('processing')
+    setPhaseSync('processing')
     const finalText = text.trim() || lastInterimRef.current.trim()
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
@@ -127,7 +129,7 @@ function useSpeechInput({
   // ── Web Speech API path (Safari / iOS) ──────────────────────────────────
   const startWebSpeech = useCallback(() => {
     if (!WebSpeech || !activeRef.current) return
-    setPhase('listening')
+    setPhaseSync('listening')
 
     const recognition = new WebSpeech()
     recognitionRef.current = recognition
@@ -169,13 +171,14 @@ function useSpeechInput({
 
     recognition.onend = () => {
       // continuous=true can still stop on silence — restart transparently
-      if (activeRef.current && phase !== 'processing') {
+      // Use phaseRef (not phase) to avoid stale closure
+      if (activeRef.current && phaseRef.current !== 'processing') {
         setTimeout(() => startWebSpeech(), 150)
       }
     }
 
     recognition.start()
-  }, [WebSpeech, triggerFinal, phase]) // onInterim via ref
+  }, [WebSpeech, triggerFinal]) // onInterim via ref, phase via phaseRef
 
   const stopWebSpeech = useCallback(() => {
     stopSilenceTimer()
@@ -191,13 +194,13 @@ function useSpeechInput({
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     connectStartRef.current = Date.now()
-    setPhase('connecting')
+    setPhaseSync('connecting')
     try {
       await fetch(`${BRIDGE}/start`, { method: 'POST' })
     } catch (e) {
       console.warn('[STT] bridge unreachable', e)
       activeRef.current = false
-      setPhase('idle')
+      setPhaseSync('idle')
       return
     }
 
@@ -208,7 +211,7 @@ function useSpeechInput({
         const data = await res.json()
         setVolume(data.volume ?? 0)
 
-        if (data.ready) setPhase('listening')
+        if (data.ready) setPhaseSync('listening')
 
         if (!data.ready && connectStartRef.current > 0 &&
             Date.now() - connectStartRef.current > CONNECT_TIMEOUT_MS) {
@@ -253,7 +256,7 @@ function useSpeechInput({
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     connectStartRef.current = 0
-    setPhase('idle')
+    setPhaseSync('idle')
     setVolume(0)
     onInterimRef.current('')
     if (modeRef.current === 'webspeech') stopWebSpeech()
@@ -263,7 +266,7 @@ function useSpeechInput({
   const start = useCallback(async () => {
     if (activeRef.current) return
     activeRef.current = true
-    setPhase('connecting')
+    setPhaseSync('connecting')
 
     // Auto-detect once per component lifetime — don't re-probe on every open
     if (modeRef.current === 'unknown') {
@@ -285,7 +288,16 @@ function useSpeechInput({
   const suppress  = useCallback(() => { suppressRef.current = true  }, [])
   const unsuppress = useCallback(() => { suppressRef.current = false }, [])
 
-  return { phase, volume, supported, start, stop, toggle, suppress, unsuppress, listening: phase === 'listening', connecting: phase === 'connecting' }
+  // Ensure mic is running — restarts WebSpeech if it naturally ended while suppressed
+  const ensureRunning = useCallback(() => {
+    if (!activeRef.current) return  // was fully stopped (drawer closed), don't restart
+    if (modeRef.current === 'webspeech' && phase === 'idle') {
+      startWebSpeech()
+    }
+    // Bridge stays running continuously — no action needed
+  }, [phase, startWebSpeech])
+
+  return { phase, volume, supported, start, stop, toggle, suppress, unsuppress, ensureRunning, listening: phase === 'listening', connecting: phase === 'connecting' }
 }
 
 
@@ -436,6 +448,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       speech.suppress()
     } else {
       speech.unsuppress()
+      // WebSpeech naturally ends after each utterance — restart it if it went idle while AI was thinking
+      if (open) setTimeout(() => speech.ensureRunning(), 300)
     }
     prevLoadingRef.current = loading
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
