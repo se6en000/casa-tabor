@@ -1392,14 +1392,14 @@ function PanelFooter({ event, onEdit, onEditWithAI }: { event: EventWithDetails;
       <button
         onClick={onEdit}
         title="Edit Details"
-        className="flex items-center justify-center w-[46px] shrink-0 rounded-button border border-casa-border text-casa-navy hover:bg-casa-bg transition-colors"
+        className="flex items-center justify-center w-[46px] h-[46px] shrink-0 rounded-button border border-casa-border text-casa-navy hover:bg-casa-bg transition-colors"
       >
         <Pencil size={18} />
       </button>
       <button
         onClick={onEditWithAI}
         title="Edit with AI"
-        className="flex items-center justify-center w-[46px] shrink-0 rounded-button border border-casa-gold/60 text-casa-gold hover:bg-casa-gold/10 transition-colors"
+        className="flex items-center justify-center w-[46px] h-[46px] shrink-0 rounded-button border border-casa-gold/60 text-casa-gold hover:bg-casa-gold/10 transition-colors"
       >
         <Sparkles size={18} />
       </button>
