@@ -120,7 +120,7 @@ function MemberRow({
     <div className="flex items-center justify-between bg-casa-surface rounded-card border border-casa-border p-4 shadow-card">
       <div className="flex items-center gap-3 min-w-0">
         <span
-          className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-body-sm shrink-0"
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-body-sm shrink-0"
           style={{ backgroundColor: member.color_hex }}
         >
           {member.name[0]}

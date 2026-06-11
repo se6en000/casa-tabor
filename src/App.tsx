@@ -30,12 +30,12 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
     if (this.state.error) {
       return (
         <div className="flex flex-col items-center justify-center h-screen bg-casa-bg gap-4 px-8 text-center">
-          <p className="text-2xl">😞</p>
+          <p className="font-display text-display-sm">😞</p>
           <p className="font-semibold text-casa-navy">Something went wrong</p>
-          <p className="text-casa-muted text-sm">{(this.state.error as Error).message}</p>
+          <p className="text-casa-muted text-body-sm">{(this.state.error as Error).message}</p>
           <button
             onClick={() => { this.setState({ error: null }); window.location.reload() }}
-            className="mt-2 px-4 py-2 bg-casa-gold text-white rounded-button text-sm font-medium"
+            className="mt-2 px-4 py-2 bg-casa-gold text-white rounded-button text-body-sm font-medium"
           >
             Reload app
           </button>

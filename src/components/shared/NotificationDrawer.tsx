@@ -79,7 +79,7 @@ export default function NotificationDrawer({ open, onClose }: Props) {
               <div className="flex items-center gap-2">
                 <h2 className="font-display text-heading text-casa-navy">Notifications</h2>
                 {unreadCount > 0 && (
-                  <span className="text-xs font-bold bg-red-500 text-white rounded-full px-2 py-0.5">
+                  <span className="text-caption font-bold bg-red-500 text-white rounded-full px-2 py-0.5">
                     {unreadCount}
                   </span>
                 )}

@@ -41,7 +41,7 @@ function ConflictGroup({
       >
         <span className="text-base leading-none select-none">{cfg.emoji}</span>
         <span className="flex-1 font-semibold text-body-sm text-casa-navy">{cfg.label}</span>
-        <span className={cn('text-[11px] font-bold px-2 py-0.5 rounded-full', cfg.badge)}>
+        <span className={cn('text-caption font-bold px-2 py-0.5 rounded-full', cfg.badge)}>
           {conflicts.length}
         </span>
         <span
@@ -49,7 +49,7 @@ function ConflictGroup({
           tabIndex={0}
           onClick={(e) => { e.stopPropagation(); onDismissAll(conflicts.map((c) => c.id)) }}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onDismissAll(conflicts.map((c) => c.id)) } }}
-          className="text-[11px] text-casa-muted hover:text-casa-navy underline hover:no-underline ml-1 cursor-pointer"
+          className="text-caption text-casa-muted hover:text-casa-navy underline hover:no-underline ml-1 cursor-pointer"
         >
           Dismiss all
         </span>
@@ -107,9 +107,9 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
       person = match[1]
       detail = (
         <span className="flex items-center gap-1 flex-wrap">
-          <span className="px-1.5 py-0.5 bg-white/60 rounded border border-current/10 text-[11px] font-medium">{shortTitle(match[2])}</span>
-          <span className="text-[10px] text-casa-muted">↔</span>
-          <span className="px-1.5 py-0.5 bg-white/60 rounded border border-current/10 text-[11px] font-medium">{shortTitle(match[3])}</span>
+          <span className="px-1.5 py-0.5 bg-white/60 rounded border border-current/10 text-caption font-medium">{shortTitle(match[2])}</span>
+          <span className="text-caption text-casa-muted">↔</span>
+          <span className="px-1.5 py-0.5 bg-white/60 rounded border border-current/10 text-caption font-medium">{shortTitle(match[3])}</span>
         </span>
       )
     }
@@ -118,7 +118,7 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
     if (match) {
       person = match[1]
       detail = (
-        <span className="px-1.5 py-0.5 bg-white/60 rounded border border-current/10 text-[11px] font-medium">
+        <span className="px-1.5 py-0.5 bg-white/60 rounded border border-current/10 text-caption font-medium">
           {shortTitle(match[2])}
         </span>
       )
@@ -134,17 +134,17 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
       className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-black/5 transition-colors group cursor-pointer"
       title="View in calendar"
     >
-      <span className="shrink-0 w-6 h-6 rounded-full bg-white/70 border border-current/15 flex items-center justify-center text-[11px] font-bold text-casa-navy">
+      <span className="shrink-0 w-6 h-6 rounded-full bg-white/70 border border-current/15 flex items-center justify-center text-caption font-bold text-casa-navy">
         {person ? person.charAt(0) : '?'}
       </span>
 
       <div className="flex-1 min-w-0 space-y-0.5">
         <div className="flex items-center gap-1.5 flex-wrap">
-          {person && <span className="text-[11px] font-semibold text-casa-navy">{person}</span>}
-          {detail ?? <span className="text-[11px] text-casa-muted truncate">{desc}</span>}
+          {person && <span className="text-caption font-semibold text-casa-navy">{person}</span>}
+          {detail ?? <span className="text-caption text-casa-muted truncate">{desc}</span>}
         </div>
         {dateLabel && (
-          <div className="text-[10px] text-casa-muted font-medium">{dateLabel}</div>
+          <div className="text-caption text-casa-muted font-medium">{dateLabel}</div>
         )}
       </div>
 
@@ -153,15 +153,15 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
       <div className="shrink-0 flex items-center gap-1" onClick={e => e.stopPropagation()}>
         <button
           onClick={() => onSnooze(conflict.id)}
-          className="text-[11px] font-medium px-2 py-1 rounded-md text-casa-muted hover:text-casa-navy hover:bg-white/60 transition-colors"
+          className="text-caption font-medium px-2 py-1 rounded-md text-casa-muted hover:text-casa-navy hover:bg-white/60 transition-colors"
           title="Snooze until tomorrow"
         >
           Snooze
         </button>
-        <span className="text-casa-border text-xs">|</span>
+        <span className="text-casa-border text-caption">|</span>
         <button
           onClick={() => onDismiss(conflict.id)}
-          className="text-[11px] font-medium px-2 py-1 rounded-md text-casa-muted hover:text-red-600 hover:bg-white/60 transition-colors"
+          className="text-caption font-medium px-2 py-1 rounded-md text-casa-muted hover:text-red-600 hover:bg-white/60 transition-colors"
           title="Dismiss permanently"
         >
           Dismiss

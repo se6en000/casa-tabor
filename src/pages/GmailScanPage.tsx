@@ -220,7 +220,7 @@ export default function GmailScanPage() {
                 <div className="flex items-center gap-3">
                   {/* Avatar */}
                   <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-body shrink-0"
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-body shrink-0"
                     style={{ backgroundColor: member.color_hex ?? '#2D3B4E' }}
                   >
                     {member.name.charAt(0).toUpperCase()}

@@ -46,7 +46,7 @@ export default function PrepAlertsSection({ className }: { className?: string })
               )}
             >
               {/* Emoji */}
-              <span className="shrink-0 mt-0.5 text-lg leading-none select-none">
+              <span className="shrink-0 mt-0.5 font-display text-heading leading-none select-none">
                 {item.emoji}
               </span>
 
@@ -55,10 +55,10 @@ export default function PrepAlertsSection({ className }: { className?: string })
                 <p className="text-casa-text leading-snug">{item.description}</p>
                 {item.event_title && (
                   <div className="flex items-center gap-1.5 mt-1">
-                    <span className="text-[11px] text-casa-muted truncate">{item.event_title}</span>
+                    <span className="text-caption text-casa-muted truncate">{item.event_title}</span>
                     {days && (
                       <span className={cn(
-                        'text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0',
+                        'text-caption font-semibold px-1.5 py-0.5 rounded-full shrink-0',
                         item.priority === 3
                           ? 'bg-red-100 text-red-700'
                           : item.priority === 2
@@ -76,15 +76,15 @@ export default function PrepAlertsSection({ className }: { className?: string })
               <div className="shrink-0 flex items-center gap-1">
                 <button
                   onClick={() => snooze(item.id)}
-                  className="text-[11px] font-medium px-2 py-1 rounded-md text-casa-muted hover:text-casa-navy hover:bg-white/60 transition-colors"
+                  className="text-caption font-medium px-2 py-1 rounded-md text-casa-muted hover:text-casa-navy hover:bg-white/60 transition-colors"
                   title="Snooze until tomorrow morning"
                 >
                   Snooze
                 </button>
-                <span className="text-casa-border text-xs">|</span>
+                <span className="text-casa-border text-caption">|</span>
                 <button
                   onClick={() => dismiss(item.id)}
-                  className="text-[11px] font-medium px-2 py-1 rounded-md text-casa-muted hover:text-red-600 hover:bg-white/60 transition-colors"
+                  className="text-caption font-medium px-2 py-1 rounded-md text-casa-muted hover:text-red-600 hover:bg-white/60 transition-colors"
                   title="Permanently dismiss"
                 >
                   Dismiss

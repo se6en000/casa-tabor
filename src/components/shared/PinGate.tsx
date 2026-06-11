@@ -87,7 +87,7 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
             }}
             disabled={!k}
             className={cn(
-              'h-16 rounded-2xl text-xl font-semibold transition-all active:scale-95',
+              'h-16 rounded-2xl font-display text-heading font-semibold transition-all active:scale-95',
               k
                 ? 'bg-casa-surface border border-casa-border text-casa-navy shadow-card hover:bg-casa-bg hover:shadow-card-hover'
                 : 'invisible',

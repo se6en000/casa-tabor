@@ -138,7 +138,7 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
         return (
           <p className={cn(
             'font-body font-semibold truncate leading-tight',
-            isCompact ? 'text-[11px]' : 'text-body-sm'
+            isCompact ? 'text-caption' : 'text-body-sm'
           )}>
             {cleanTitle}
           </p>
@@ -147,7 +147,7 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
 
       {/* Time range */}
       {!isCompact && (
-        <p className="text-[11px] font-body opacity-80 mt-0.5">
+        <p className="text-caption font-body opacity-80 mt-0.5">
           {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
         </p>
       )}

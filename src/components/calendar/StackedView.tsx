@@ -107,13 +107,13 @@ export default function StackedView() {
                   today_ ? 'bg-casa-gold/20' : ''
                 )}>
                   <span className={cn(
-                    'text-[11px] font-semibold uppercase tracking-wide',
+                    'text-caption font-semibold uppercase tracking-wide',
                     today_ ? 'text-casa-gold' : 'text-casa-muted'
                   )}>
                     {format(day, 'EEE')}
                   </span>
                   <span className={cn(
-                    'text-[15px] font-bold leading-none',
+                    'text-body font-semibold leading-none',
                     today_ ? 'text-casa-gold' : 'text-casa-navy'
                   )}>
                     {format(day, 'd')}
@@ -171,7 +171,7 @@ export default function StackedView() {
                   </AnimatePresence>
 
                   {dayEvents.length === 0 && (
-                    <p className="text-[10px] text-casa-muted/50 text-center pt-2">—</p>
+                    <p className="text-caption text-casa-muted/50 text-center pt-2">—</p>
                   )}
                 </div>
               </div>
@@ -287,7 +287,7 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
         {/* Time + weather + urgent dot */}
         <div className="flex items-center justify-between gap-1 mb-0.5">
           <div className="flex items-center gap-1">
-            <p className="text-[11px] font-semibold text-casa-muted tabular-nums leading-none">
+            <p className="text-caption font-semibold text-casa-muted tabular-nums leading-none">
               {format(start, 'h:mm')}–{format(end, 'h:mma')}
             </p>
             {event.location_name && (
@@ -305,7 +305,7 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
           const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
           return (
             <>
-              <h3 className="text-[14px] font-bold text-casa-navy leading-snug line-clamp-1 mb-1">
+              <h3 className="text-body-sm font-semibold text-casa-navy leading-snug line-clamp-1 mb-1">
                 {cleanTitle}
               </h3>
               {/* Member pills/dots */}
@@ -346,18 +346,18 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
           >
             <div className="pl-3 pr-2 pb-2 space-y-1.5 border-t border-casa-divider pt-2">
               {event.location_name && (
-                <span className="flex items-center gap-1 text-[10px] text-casa-muted">
+                <span className="flex items-center gap-1 text-caption text-casa-muted">
                   <MapPin size={10} className="text-casa-error shrink-0" />
                   <span className="truncate">{event.location_name}</span>
                 </span>
               )}
               {category && (
-                <span className="text-[10px] text-casa-muted px-1.5 py-0.5 bg-casa-bg rounded-full border border-casa-border">
+                <span className="text-caption text-casa-muted px-1.5 py-0.5 bg-casa-bg rounded-full border border-casa-border">
                   {category}
                 </span>
               )}
               {snippet && (
-                <div className="flex items-center gap-1 text-[10px] text-casa-muted">
+                <div className="flex items-center gap-1 text-caption text-casa-muted">
                   <span className="text-casa-gold">{snippet.icon}</span>
                   <span className="line-clamp-2">{snippet.text}</span>
                 </div>
@@ -365,7 +365,7 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
               <div className="flex gap-1.5 pt-1">
                 <button
                   onClick={(e) => { e.stopPropagation(); onDoubleClick() }}
-                  className="flex items-center gap-1 px-2 py-1 rounded border border-casa-border text-[10px] font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
+                  className="flex items-center gap-1 px-2 py-1 rounded border border-casa-border text-caption font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
                 >
                   <Pencil size={10} />
                   Edit
@@ -376,13 +376,13 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
                     target="_blank"
                     rel="noreferrer"
                     onClick={e => e.stopPropagation()}
-                    className="flex items-center gap-1 px-2 py-1 rounded border border-casa-border text-[10px] font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
+                    className="flex items-center gap-1 px-2 py-1 rounded border border-casa-border text-caption font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
                   >
                     <Navigation size={10} />
                     Directions
                   </a>
                 )}
-                <button className="flex items-center gap-1 px-2 py-1 rounded bg-casa-gold text-white text-[10px] font-semibold hover:brightness-110 transition-all ml-auto">
+                <button className="flex items-center gap-1 px-2 py-1 rounded bg-casa-gold text-white text-caption font-semibold hover:brightness-110 transition-all ml-auto">
                   <Share2 size={10} />
                   Share
                 </button>

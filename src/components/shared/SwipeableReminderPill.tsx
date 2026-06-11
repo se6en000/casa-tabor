@@ -124,7 +124,7 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         onClick={() => { if (!moved.current) onClick?.() }}
-        className="relative z-10 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold select-none cursor-pointer"
+        className="relative z-10 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-caption font-semibold select-none cursor-pointer"
         style={{
           border: '1.5px solid #C4893A',
           backgroundColor: '#FDFAF4',

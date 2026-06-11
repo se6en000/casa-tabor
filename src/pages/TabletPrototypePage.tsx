@@ -100,7 +100,7 @@ export default function TabletPrototypePage() {
             <div className="font-display text-display-md text-casa-navy leading-none">Casa Tabor</div>
             <div className="font-mono text-display-lg text-casa-navy mt-2 tabular-nums leading-none">
               {format(now, 'h:mm')}
-              <span className="text-heading ml-1.5 text-casa-muted">{format(now, 'a')}</span>
+              <span className="font-display text-heading ml-1.5 text-casa-muted">{format(now, 'a')}</span>
             </div>
             <div className="text-caption text-casa-muted mt-1">{format(now, 'EEEE, MMMM d')}</div>
             {weather && (
@@ -137,7 +137,7 @@ export default function TabletPrototypePage() {
                     )}
                   >
                     {/* Avatar */}
-                    <span className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-white"
+                    <span className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-caption font-bold text-white"
                       style={{ backgroundColor: m.color_hex }}>
                       {m.name[0]}
                     </span>
@@ -360,7 +360,7 @@ export default function TabletPrototypePage() {
                       <div className="flex -space-x-1.5">
                         {editingEvent.members.map(m => (
                           <span key={m.family_member.id}
-                            className="w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold text-white"
+                            className="w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-caption font-bold text-white"
                             style={{ backgroundColor: m.family_member.color_hex }}>
                             {m.family_member.name[0]}
                           </span>
@@ -446,7 +446,7 @@ function EventRow({ ev, dim, expanded, now, onClick, onDoubleClick }: {
         <div className="flex -space-x-1.5 mr-2">
           {ev.members?.slice(0, 3).map(m => (
             <span key={m.family_member.id}
-              className="w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold text-white"
+              className="w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-caption font-bold text-white"
               style={{ backgroundColor: m.family_member.color_hex }}>
               {m.family_member.name[0]}
             </span>
@@ -525,7 +525,7 @@ function WeekStrip({ now, events }: { now: Date; events: EventWithDetails[] }) {
             <span className="text-caption uppercase tracking-wider opacity-70">{format(d, 'EEE')[0]}</span>
             <span className={cn('text-body font-medium mt-1', isToday ? 'text-white' : 'text-casa-navy')}>{format(d, 'd')}</span>
             {count > 0
-              ? <span className={cn('text-[10px] font-bold mt-1', isToday ? 'text-casa-gold' : 'text-casa-muted')}>{count}</span>
+              ? <span className={cn('text-caption font-bold mt-1', isToday ? 'text-casa-gold' : 'text-casa-muted')}>{count}</span>
               : <span className="h-3 mt-1" />
             }
           </div>

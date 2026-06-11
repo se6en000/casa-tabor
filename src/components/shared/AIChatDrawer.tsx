@@ -682,7 +682,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                   <Send size={14} />
                 </button>
               </div>
-              <p className="text-[10px] text-casa-muted mt-1.5 text-center opacity-60">
+              <p className="text-caption text-casa-muted mt-1.5 text-center opacity-60">
                 {speech.supported
                   ? speech.connecting
                     ? 'Connecting to mic…'
@@ -760,7 +760,7 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onCancelToolAction,
                     : 'Done ✓'}
                 </div>
                 {ta.tool === 'create_event' && ta.resultEventId && (
-                  <p className="text-[10px] text-casa-muted">Visible on your calendar now</p>
+                  <p className="text-caption text-casa-muted">Visible on your calendar now</p>
                 )}
               </div>
             ) : ta.status === 'cancelled' ? (
@@ -772,7 +772,7 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onCancelToolAction,
                 <div className="flex items-center gap-1.5 text-red-600 text-caption font-semibold">
                   <XCircle size={13} /> Failed
                 </div>
-                {ta.errorMsg && <p className="text-[10px] text-red-500">{ta.errorMsg}</p>}
+                {ta.errorMsg && <p className="text-caption text-red-500">{ta.errorMsg}</p>}
                 <button
                   type="button"
                   onClick={doConfirm}

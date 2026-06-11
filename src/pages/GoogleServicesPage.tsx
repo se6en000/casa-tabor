@@ -260,7 +260,7 @@ function MemberCard({
       {/* Header row */}
       <div className="flex items-center gap-3 mb-4">
         <div
-          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-body shrink-0"
+          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-body shrink-0"
           style={{ backgroundColor: member.color_hex ?? '#2D3B4E' }}
         >
           {member.name.charAt(0).toUpperCase()}
@@ -363,7 +363,7 @@ function MemberCard({
             <div className="flex items-center gap-2">
               <Calendar size={14} className="text-casa-muted" />
               <span className="text-body-sm text-casa-navy font-semibold">Google Calendar</span>
-              <span className="text-[10px] text-casa-muted bg-casa-divider px-1.5 py-0.5 rounded-full">Required</span>
+              <span className="text-caption text-casa-muted bg-casa-divider px-1.5 py-0.5 rounded-full">Required</span>
             </div>
           </label>
 
@@ -416,11 +416,11 @@ function ServiceRow({
         <p className={cn('text-body-sm font-semibold leading-none', active ? 'text-casa-navy' : 'text-casa-muted')}>
           {label}
         </p>
-        <p className={cn('text-[11px] mt-0.5', active ? 'text-green-600' : 'text-casa-muted')}>
+        <p className={cn('text-caption mt-0.5', active ? 'text-green-600' : 'text-casa-muted')}>
           {active && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 mr-1 mb-px" />}
           {statusText}
         </p>
-        {errorText && <p className="text-[11px] text-casa-error mt-0.5">{errorText}</p>}
+        {errorText && <p className="text-caption text-casa-error mt-0.5">{errorText}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </div>

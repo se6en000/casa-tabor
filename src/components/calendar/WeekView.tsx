@@ -399,7 +399,7 @@ export default function WeekView() {
                   onDoubleClick={(e) => { e.stopPropagation(); setSelectedEventId(null); setEditEventId(ev.id) }}
                   title={`${ev.title} — click to view, double-click to edit`}
                   className={cn(
-                    'absolute flex items-center px-2 rounded text-[11px] font-semibold truncate transition-all',
+                    'absolute flex items-center px-2 rounded text-caption font-semibold truncate transition-all',
                     'text-white',
                     isSelected ? 'brightness-110 ring-2 ring-white/60' : 'hover:brightness-110',
                   )}
@@ -534,11 +534,11 @@ export default function WeekView() {
             <p className="font-body font-semibold text-body-sm truncate leading-tight">{drag.event.title}</p>
             {dropInfo && (
               <>
-                <p className="text-[11px] font-body opacity-85 mt-0.5">
+                <p className="text-caption font-body opacity-85 mt-0.5">
                   {format(dropInfo.newStart, 'h:mm a')} – {format(dropInfo.newEnd, 'h:mm a')}
                 </p>
                 {dropDayKey !== origDayKey && (
-                  <p className="text-[10px] font-body opacity-70 mt-0.5">
+                  <p className="text-caption font-body opacity-70 mt-0.5">
                     → {format(dropInfo.targetDay, 'EEE, MMM d')}
                   </p>
                 )}

@@ -47,7 +47,7 @@ export function TopBarC() {
     >
       {/* ── Left: brand + greeting ──────────────────────── */}
       <div className="flex items-center gap-2.5 flex-shrink-0">
-        <span className="w-8 h-8 rounded-lg bg-casa-gold flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">
+        <span className="w-8 h-8 rounded-lg bg-casa-gold flex items-center justify-center text-caption font-bold text-white flex-shrink-0">
           CT
         </span>
         <span className="font-display text-heading text-white hidden sm:block tracking-wide">
@@ -55,8 +55,8 @@ export function TopBarC() {
         </span>
         {/* Greeting + date — shown when there's enough width */}
         <div className="hidden md:flex flex-col justify-center ml-1 border-l border-white/15 pl-3">
-          <span className="text-[13px] font-semibold text-white/90 leading-tight">{greetingFor(now)}</span>
-          <span className="text-[11px] text-white/45 leading-tight">{format(now, 'EEEE, MMMM d')}</span>
+          <span className="text-body-sm font-semibold text-white/90 leading-tight">{greetingFor(now)}</span>
+          <span className="text-caption text-white/45 leading-tight">{format(now, 'EEEE, MMMM d')}</span>
         </div>
       </div>
 
@@ -65,13 +65,13 @@ export function TopBarC() {
         {displayEvents.length > 0 ? (
           <>
             {isNow && (
-              <span className="flex items-center gap-1 text-[10px] font-semibold text-white/50 uppercase tracking-wider flex-shrink-0">
+              <span className="flex items-center gap-1 text-caption font-semibold text-white/50 uppercase tracking-wider flex-shrink-0">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 Now
               </span>
             )}
             {!isNow && nextEvent && (
-              <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider flex-shrink-0">
+              <span className="text-caption font-semibold text-white/40 uppercase tracking-wider flex-shrink-0">
                 Next &middot;{' '}
                 {(() => {
                   const mins = Math.round((new Date(nextEvent.start_time).getTime() - now.getTime()) / 60000)
@@ -88,40 +88,40 @@ export function TopBarC() {
                     className="flex items-center gap-1.5 bg-white/10 rounded-full px-3 py-1 min-w-0 max-w-[220px]"
                   >
                     {color && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />}
-                    <span className="text-[12px] text-white truncate">{ev.title.includes(' | ') ? ev.title.split(' | ').slice(1).join(' | ') : ev.title}</span>
+                    <span className="text-caption text-white truncate">{ev.title.includes(' | ') ? ev.title.split(' | ').slice(1).join(' | ') : ev.title}</span>
                   </div>
                 )
               })}
               {displayEvents.length > 3 && (
-                <span className="text-[11px] text-white/40 flex-shrink-0">+{displayEvents.length - 3}</span>
+                <span className="text-caption text-white/40 flex-shrink-0">+{displayEvents.length - 3}</span>
               )}
             </div>
           </>
         ) : (
-          <span className="text-[12px] text-white/30">All clear</span>
+          <span className="text-caption text-white/30">All clear</span>
         )}
       </div>
 
       {/* ── Right: weather · clock · AI ─────────────── */}
       <div className="flex items-center gap-3 flex-shrink-0">
         {weather && (
-          <div className="hidden sm:flex items-center gap-1.5 text-[12px] text-white/70">
+          <div className="hidden sm:flex items-center gap-1.5 text-caption text-white/70">
             <Cloud size={13} className="text-white/40" />
             <span>{weather.temp}°</span>
             <span className="text-white/40 hidden md:inline ml-1">{weather.city}</span>
           </div>
         )}
 
-        <div className="font-mono text-[15px] font-semibold text-white tabular-nums">
+        <div className="font-mono text-body font-semibold text-white tabular-nums">
           {format(now, 'h:mm')}
-          <span className="text-[11px] text-white/50 ml-0.5">{format(now, 'a')}</span>
+          <span className="text-caption text-white/50 ml-0.5">{format(now, 'a')}</span>
         </div>
 
         {/* DEV: exit fullscreen / un-maximize */}
         <button
           onClick={exitKioskMode}
           title="Exit fullscreen (dev)"
-          className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white/60 hover:text-white text-[10px] transition-colors"
+          className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white/60 hover:text-white text-caption transition-colors"
         >
           <Minimize2 size={11} />
           <span className="hidden sm:inline">Window</span>

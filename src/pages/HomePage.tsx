@@ -384,7 +384,7 @@ function TimelineRow({
         </div>
         <span className="w-2 rounded-full self-stretch" style={{ backgroundColor: '#C4893A' }} />
         <div
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-caption font-semibold"
           style={{ border: '1.5px solid #C4893A', backgroundColor: '#FDFAF4', color: '#7A5520' }}
         >
           <Bell size={13} style={{ color: '#C4893A' }} className="shrink-0" />
@@ -445,7 +445,7 @@ function TimelineRow({
                     {/* Owner as full pill */}
                     {primary && (
                       <span
-                        className="px-2 py-0.5 rounded-full text-white text-[10px] font-bold leading-none whitespace-nowrap"
+                        className="px-2 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
                         style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
                         title={ownerName}
                       >

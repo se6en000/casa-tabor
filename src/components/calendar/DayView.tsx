@@ -98,12 +98,12 @@ function DayEventCard({
         className="flex items-center gap-3 px-4 py-2.5 rounded-card border border-red-200 bg-red-50 text-red-800"
         style={{ borderLeftColor: HOLIDAY_COLOR, borderLeftWidth: 4 }}
       >
-        <span className="text-lg leading-none">{holidayLabel(event.title).split(' ')[0]}</span>
+        <span className="font-display text-heading leading-none">{holidayLabel(event.title).split(' ')[0]}</span>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-body-sm text-red-800 leading-snug">{event.title}</p>
-          <p className="text-[10px] font-semibold text-red-400 uppercase tracking-wide mt-0.5">Federal Holiday</p>
+          <p className="text-caption font-semibold text-red-400 uppercase tracking-wide mt-0.5">Federal Holiday</p>
         </div>
-        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600 shrink-0">
+        <span className="text-caption font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600 shrink-0">
           All day
         </span>
       </motion.div>
@@ -126,8 +126,8 @@ function DayEventCard({
           style={{ border: '1.5px solid #C4893A', backgroundColor: '#FDFAF4' }}
         >
           <Bell size={13} style={{ color: '#C4893A' }} className="shrink-0" />
-          <span className="text-[11px] font-semibold" style={{ color: '#7A5520' }}>{event.title}</span>
-          <span className="text-[10px] ml-1" style={{ color: '#C4893A' }}>
+          <span className="text-caption font-semibold" style={{ color: '#7A5520' }}>{event.title}</span>
+          <span className="text-caption ml-1" style={{ color: '#C4893A' }}>
             {format(new Date(event.start_time), 'h:mm a')}
           </span>
         </motion.div>
@@ -147,9 +147,9 @@ function DayEventCard({
         <Bell size={18} className="text-casa-gold shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-body-sm text-amber-800 leading-snug">{cleanTitle}</p>
-          {primary && <p className="text-[10px] text-amber-600 mt-0.5">{primary.family_member?.name}</p>}
+          {primary && <p className="text-caption text-amber-600 mt-0.5">{primary.family_member?.name}</p>}
         </div>
-        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 shrink-0">
+        <span className="text-caption font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 shrink-0">
           Reminder
         </span>
       </motion.div>
@@ -191,7 +191,7 @@ function DayEventCard({
             </span>
           )}
           {isAllDay && (
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-casa-divider text-casa-muted shrink-0">
+            <span className="text-caption font-semibold px-2 py-0.5 rounded-full bg-casa-divider text-casa-muted shrink-0">
               All day
             </span>
           )}
@@ -201,7 +201,7 @@ function DayEventCard({
           {/* Owner as full pill */}
           {primary && (
             <span
-              className="px-2 py-0.5 rounded-full text-white text-[10px] font-bold leading-none whitespace-nowrap"
+              className="px-2 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
               style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
             >
               {primary.family_member?.name}
@@ -316,7 +316,7 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
                   <p className="text-body-sm text-red-800 leading-snug">{c.description}</p>
                   <button
                     onClick={() => resolveConflict(c.id, 'dismissed from day view')}
-                    className="text-[11px] text-red-500 hover:text-red-700 mt-1 transition-colors"
+                    className="text-caption text-red-500 hover:text-red-700 mt-1 transition-colors"
                   >
                     Dismiss
                   </button>
@@ -358,14 +358,14 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
                     <div className="flex gap-2 mt-2 ml-6">
                       <button
                         onClick={() => snooze(item.id)}
-                        className="text-[11px] text-casa-muted hover:text-casa-navy transition-colors"
+                        className="text-caption text-casa-muted hover:text-casa-navy transition-colors"
                       >
                         Snooze
                       </button>
-                      <span className="text-casa-border text-xs">|</span>
+                      <span className="text-casa-border text-caption">|</span>
                       <button
                         onClick={() => dismiss(item.id)}
-                        className="text-[11px] text-casa-muted hover:text-red-600 transition-colors"
+                        className="text-caption text-casa-muted hover:text-red-600 transition-colors"
                       >
                         Dismiss
                       </button>

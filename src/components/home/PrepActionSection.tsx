@@ -63,7 +63,7 @@ export default function PrepActionSection() {
         <div className="flex items-center gap-1.5 text-body font-medium text-casa-navy">
           <ClipboardList size={15} className="text-casa-gold" />
           Prep &amp; Action
-          <span className="ml-1 text-[11px] font-bold bg-casa-gold/20 text-casa-gold px-1.5 py-0.5 rounded-full">
+          <span className="ml-1 text-caption font-bold bg-casa-gold/20 text-casa-gold px-1.5 py-0.5 rounded-full">
             {items.length}
           </span>
         </div>
@@ -132,11 +132,11 @@ export default function PrepActionSection() {
                         </p>
                         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                           {item.event_title && (
-                            <span className="text-[10px] text-casa-muted truncate max-w-[120px]">
+                            <span className="text-caption text-casa-muted truncate max-w-[120px]">
                               {item.event_title}
                             </span>
                           )}
-                          <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0', urg.badge)}>
+                          <span className={cn('text-caption font-semibold px-1.5 py-0.5 rounded-full shrink-0', urg.badge)}>
                             {urg.badgeText}
                           </span>
                         </div>

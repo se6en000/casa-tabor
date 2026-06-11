@@ -136,10 +136,10 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             className="absolute bottom-3 right-4 text-right pointer-events-none"
             style={{ color: '#6b6355' }}
           >
-            <p className="text-xs italic leading-tight" style={{ fontFamily: 'Georgia, serif', fontSize: '0.65rem' }}>
+            <p className="text-caption italic leading-tight" style={{ fontFamily: 'Georgia, serif', fontSize: '0.65rem' }}>
               {artwork.title}
             </p>
-            <p className="text-xs leading-tight mt-0.5" style={{ fontFamily: 'Georgia, serif', fontSize: '0.6rem', opacity: 0.75 }}>
+            <p className="text-caption leading-tight mt-0.5" style={{ fontFamily: 'Georgia, serif', fontSize: '0.6rem', opacity: 0.75 }}>
               {artwork.artist}
             </p>
           </div>

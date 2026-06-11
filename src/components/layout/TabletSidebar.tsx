@@ -94,7 +94,7 @@ export default function TabletSidebar() {
                         )}
                       >
                         <span
-                          className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-white"
+                          className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-caption font-bold text-white"
                           style={{ backgroundColor: m.color_hex }}
                         >
                           {m.name[0]}

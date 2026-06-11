@@ -215,7 +215,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
                 key={event.id}
                 data-event-pill
                 className={cn(
-                  'flex items-center gap-1 px-1.5 py-0.5 rounded text-sm font-medium leading-tight truncate cursor-pointer hover:brightness-90 transition-all',
+                  'flex items-center gap-1 px-1.5 py-0.5 rounded text-body-sm font-medium leading-tight truncate cursor-pointer hover:brightness-90 transition-all',
                   holiday && 'font-semibold tracking-tight',
                   reminder && 'font-semibold',
                 )}
@@ -335,7 +335,7 @@ export default function MonthView() {
         {DOW_LABELS.map(label => (
           <div
             key={label}
-            className="py-2.5 text-center text-sm font-semibold text-casa-muted uppercase tracking-wide border-r border-casa-divider last:border-r-0"
+            className="py-2.5 text-center text-body-sm font-semibold text-casa-muted uppercase tracking-wide border-r border-casa-divider last:border-r-0"
           >
             {label}
           </div>

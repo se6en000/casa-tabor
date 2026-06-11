@@ -74,11 +74,11 @@ function WarmthPreview({ filter }: { filter: string }) {
       <div className="bg-[#FAF8F5] p-4">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <div className="font-display text-[#1B2A4A] text-xl font-semibold">Thursday</div>
-            <div className="text-[#8C8C8C] text-xs mt-0.5">May 28 · 7:00 PM</div>
+            <div className="font-display text-[#1B2A4A] text-heading font-semibold">Thursday</div>
+            <div className="text-[#8C8C8C] text-caption mt-0.5">May 28 · 7:00 PM</div>
           </div>
           <div className="text-right">
-            <div className="text-[#8C8C8C] text-xs">72°F · Partly Cloudy</div>
+            <div className="text-[#8C8C8C] text-caption">72°F · Partly Cloudy</div>
           </div>
         </div>
         <div className="space-y-1.5">
@@ -89,8 +89,8 @@ function WarmthPreview({ filter }: { filter: string }) {
           ].map(e => (
             <div key={e.label} className="flex items-center gap-2 py-1 px-2.5 rounded-lg bg-white border border-[#E8E2D9]">
               <div className="w-2 h-2 rounded-full shrink-0" style={{ background: e.color }} />
-              <span className="text-[#2D2D2D] text-xs flex-1 truncate">{e.label}</span>
-              <span className="text-[#8C8C8C] text-xs">{e.time}</span>
+              <span className="text-[#2D2D2D] text-caption flex-1 truncate">{e.label}</span>
+              <span className="text-[#8C8C8C] text-caption">{e.time}</span>
             </div>
           ))}
         </div>
@@ -110,13 +110,13 @@ function HourPicker({ label, value, onChange }: { label: string; value: number; 
         <button
           type="button"
           onClick={() => onChange((value - 1 + 24) % 24)}
-          className="w-7 h-7 rounded-full border border-casa-border flex items-center justify-center text-casa-muted hover:text-casa-navy hover:border-casa-navy/40 transition-colors text-sm"
+          className="w-7 h-7 rounded-full border border-casa-border flex items-center justify-center text-casa-muted hover:text-casa-navy hover:border-casa-navy/40 transition-colors text-body-sm"
         >−</button>
         <span className="w-16 text-center text-body-sm font-medium text-casa-navy tabular-nums">{display}</span>
         <button
           type="button"
           onClick={() => onChange((value + 1) % 24)}
-          className="w-7 h-7 rounded-full border border-casa-border flex items-center justify-center text-casa-muted hover:text-casa-navy hover:border-casa-navy/40 transition-colors text-sm"
+          className="w-7 h-7 rounded-full border border-casa-border flex items-center justify-center text-casa-muted hover:text-casa-navy hover:border-casa-navy/40 transition-colors text-body-sm"
         >+</button>
       </div>
     </div>
@@ -151,7 +151,7 @@ function DayTimeline({ cfg }: { cfg: DisplayConfig }) {
           )
         })}
       </div>
-      <div className="flex justify-between text-[10px] text-casa-muted mt-1 px-0.5">
+      <div className="flex justify-between text-caption text-casa-muted mt-1 px-0.5">
         <span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>11 PM</span>
       </div>
     </div>
@@ -168,7 +168,7 @@ function StepPicker({ value, onChange, min, max, step = 1, unit }: {
     <div className="flex items-center gap-3">
       <button
         onClick={() => onChange(Math.max(min, value - step))}
-        className="w-9 h-9 rounded-full bg-casa-bg border border-casa-border text-casa-navy font-bold text-lg flex items-center justify-center active:scale-95 transition-transform"
+        className="w-9 h-9 rounded-full bg-casa-bg border border-casa-border text-casa-navy font-semibold font-display text-heading flex items-center justify-center active:scale-95 transition-transform"
       >−</button>
       <div className="min-w-[5rem] text-center">
         <span className="font-display text-display-sm text-casa-navy">{value}</span>
@@ -176,7 +176,7 @@ function StepPicker({ value, onChange, min, max, step = 1, unit }: {
       </div>
       <button
         onClick={() => onChange(Math.min(max, value + step))}
-        className="w-9 h-9 rounded-full bg-casa-bg border border-casa-border text-casa-navy font-bold text-lg flex items-center justify-center active:scale-95 transition-transform"
+        className="w-9 h-9 rounded-full bg-casa-bg border border-casa-border text-casa-navy font-semibold font-display text-heading flex items-center justify-center active:scale-95 transition-transform"
       >+</button>
     </div>
   )
@@ -481,22 +481,22 @@ export default function DisplaySettingsPage() {
               {/* Live readings grid */}
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div className="rounded-xl bg-casa-bg border border-casa-divider px-3 py-2.5">
-                  <p className="text-[10px] font-semibold text-casa-muted uppercase tracking-wide mb-0.5">Color Temp</p>
+                  <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-0.5">Color Temp</p>
                   <p className="text-body-sm font-semibold text-casa-navy tabular-nums">{Math.round(sensorData.cct).toLocaleString()} K</p>
-                  <p className="text-[10px] text-casa-muted mt-0.5">
+                  <p className="text-caption text-casa-muted mt-0.5">
                     {sensorData.cct < 3000 ? 'Warm candlelight' : sensorData.cct < 4000 ? 'Warm white' : sensorData.cct < 5500 ? 'Natural daylight' : 'Cool daylight'}
                   </p>
                 </div>
                 <div className="rounded-xl bg-casa-bg border border-casa-divider px-3 py-2.5">
-                  <p className="text-[10px] font-semibold text-casa-muted uppercase tracking-wide mb-0.5">Illuminance</p>
+                  <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-0.5">Illuminance</p>
                   <p className="text-body-sm font-semibold text-casa-navy tabular-nums">{sensorData.lux.toFixed(1)} lux</p>
-                  <p className="text-[10px] text-casa-muted mt-0.5">
+                  <p className="text-caption text-casa-muted mt-0.5">
                     {sensorData.lux < 5 ? 'Very dark' : sensorData.lux < 30 ? 'Dim room' : sensorData.lux < 200 ? 'Indoor lit' : 'Bright / daylight'}
                   </p>
                 </div>
                 {sensorData.brightness != null && (
                   <div className="rounded-xl bg-casa-bg border border-casa-divider px-3 py-2.5">
-                    <p className="text-[10px] font-semibold text-casa-muted uppercase tracking-wide mb-0.5">DDC Brightness</p>
+                    <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-0.5">DDC Brightness</p>
                     <p className="text-body-sm font-semibold text-casa-navy tabular-nums mb-1">{sensorData.brightness}%</p>
                     <div className="h-1.5 w-full rounded-full bg-casa-border overflow-hidden">
                       <div className="h-full rounded-full bg-casa-gold transition-all duration-700" style={{ width: `${sensorData.brightness}%` }} />
@@ -505,14 +505,14 @@ export default function DisplaySettingsPage() {
                 )}
                 {sensorData.rgb && (
                   <div className="rounded-xl bg-casa-bg border border-casa-divider px-3 py-2.5">
-                    <p className="text-[10px] font-semibold text-casa-muted uppercase tracking-wide mb-0.5">Monitor RGB Gains</p>
+                    <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-0.5">Monitor RGB Gains</p>
                     <div className="flex gap-2 mt-1">
                       {(['R', 'G', 'B'] as const).map((ch, i) => {
                         const val = sensorData.rgb![i]
                         const color = ch === 'R' ? '#E05050' : ch === 'G' ? '#4CAF72' : '#5080E0'
                         return (
                           <div key={ch} className="flex-1 text-center">
-                            <div className="text-[10px] font-bold mb-0.5" style={{ color }}>{ch}</div>
+                            <div className="text-caption font-bold mb-0.5" style={{ color }}>{ch}</div>
                             <div className="text-body-sm font-semibold text-casa-navy tabular-nums">{val}</div>
                             <div className="h-1 rounded-full bg-casa-border overflow-hidden mt-1">
                               <div className="h-full rounded-full transition-all duration-700" style={{ width: `${val}%`, background: color }} />

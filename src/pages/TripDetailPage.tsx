@@ -127,7 +127,7 @@ function TimelineStep({
       <div className="flex-1 pb-5">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className={cn('font-semibold text-sm', accent ? 'text-casa-navy' : 'text-casa-text')}>{title}</p>
+            <p className={cn('font-semibold text-body-sm', accent ? 'text-casa-navy' : 'text-casa-text')}>{title}</p>
             {subtitle && (subtitleCopyable ? (
               <button onClick={handleCopy} className="flex items-center gap-1.5 mt-0.5 text-caption text-casa-muted hover:text-casa-navy transition-colors group text-left" title="Tap to copy address">
                 <span className="group-hover:underline">{subtitle}</span>
@@ -139,8 +139,8 @@ function TimelineStep({
           </div>
           {time && (
             <div className="text-right flex-shrink-0">
-              <p className="text-sm font-bold text-casa-navy">{time}</p>
-              {timeLabel && <p className="text-[10px] text-casa-gold font-medium">{timeLabel}</p>}
+              <p className="text-body-sm font-semibold text-casa-navy">{time}</p>
+              {timeLabel && <p className="text-caption text-casa-gold font-medium">{timeLabel}</p>}
             </div>
           )}
         </div>
@@ -166,11 +166,11 @@ function FlightCard({ airline, flightNum, seat, terminal, confirmation, departs,
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Plane size={14} className="text-casa-gold" />
-          <span className="text-sm font-bold">{flightNum ?? '—'}</span>
-          <span className="text-xs text-white/60">·</span>
-          <span className="text-xs text-white/70">{airline ?? 'Airline'}</span>
+          <span className="text-body-sm font-semibold">{flightNum ?? '—'}</span>
+          <span className="text-caption text-white/60">·</span>
+          <span className="text-caption text-white/70">{airline ?? 'Airline'}</span>
         </div>
-        <div className="flex items-center gap-1.5 bg-green-500/20 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded-full">
+        <div className="flex items-center gap-1.5 bg-green-500/20 text-green-400 text-caption font-bold px-2 py-0.5 rounded-full">
           <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
           ON TIME
         </div>
@@ -178,39 +178,39 @@ function FlightCard({ airline, flightNum, seat, terminal, confirmation, departs,
 
       <div className="flex items-center gap-3">
         <div className="text-center">
-          <p className="text-xl font-bold">{origin ?? '???'}</p>
-          <p className="text-[10px] text-white/50 uppercase">Origin</p>
+          <p className="font-display text-heading font-semibold">{origin ?? '???'}</p>
+          <p className="text-caption text-white/50 uppercase">Origin</p>
         </div>
         <div className="flex-1 flex flex-col items-center">
-          <div className="text-[10px] text-white/50">{flightDuration(departs, arrives)}</div>
+          <div className="text-caption text-white/50">{flightDuration(departs, arrives)}</div>
           <div className="flex items-center gap-1 w-full my-1">
             <div className="h-px flex-1 bg-white/20" />
             <Plane size={12} className="text-casa-gold" />
             <div className="h-px flex-1 bg-white/20" />
           </div>
-          <div className="text-[10px] text-white/50">{fmtTime(departs)} → {fmtTime(arrives)}</div>
+          <div className="text-caption text-white/50">{fmtTime(departs)} → {fmtTime(arrives)}</div>
         </div>
         <div className="text-center">
-          <p className="text-xl font-bold">{dest ?? '???'}</p>
-          <p className="text-[10px] text-white/50 uppercase">Dest</p>
+          <p className="font-display text-heading font-semibold">{dest ?? '???'}</p>
+          <p className="text-caption text-white/50 uppercase">Dest</p>
         </div>
       </div>
 
       <div className="flex gap-3 mt-3 pt-3 border-t border-white/10">
         {seat && (
-          <div className="flex items-center gap-1 text-[11px] text-white/60">
+          <div className="flex items-center gap-1 text-caption text-white/60">
             <Armchair size={11} />
             <span>Seat {seat}</span>
           </div>
         )}
         {terminal && (
-          <div className="flex items-center gap-1 text-[11px] text-white/60">
+          <div className="flex items-center gap-1 text-caption text-white/60">
             <DoorOpen size={11} />
             <span>Terminal {terminal}</span>
           </div>
         )}
         {confirmation && (
-          <div className="flex items-center gap-1 text-[11px] text-white/60">
+          <div className="flex items-center gap-1 text-caption text-white/60">
             <Hash size={11} />
             <span>{confirmation}</span>
           </div>
@@ -224,11 +224,11 @@ function WeatherCard({ day }: { day: WeatherDay }) {
   const date = new Date(day.date + 'T12:00:00')
   return (
     <div className="flex-1 bg-white rounded-xl p-3 text-center border border-casa-border">
-      <p className="text-[11px] text-casa-muted font-medium">{format(date, 'EEE')}</p>
-      <p className="text-[10px] text-casa-muted/70">{format(date, 'M/d')}</p>
+      <p className="text-caption text-casa-muted font-medium">{format(date, 'EEE')}</p>
+      <p className="text-caption text-casa-muted/70">{format(date, 'M/d')}</p>
       <div className="my-2 flex justify-center">{weatherIcon(day.condition)}</div>
-      <p className="text-xs font-bold text-casa-navy">{day.high}°</p>
-      <p className="text-[10px] text-casa-muted">{day.low}°</p>
+      <p className="text-caption font-bold text-casa-navy">{day.high}°</p>
+      <p className="text-caption text-casa-muted">{day.low}°</p>
       <p className="text-[9px] text-casa-muted/70 mt-1 capitalize leading-tight">{day.condition}</p>
     </div>
   )
@@ -236,7 +236,7 @@ function WeatherCard({ day }: { day: WeatherDay }) {
 
 function SectionHead({ label, icon }: { label: string; icon: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-1.5 text-[11px] font-bold text-casa-muted uppercase tracking-widest mb-4 mt-2">
+    <div className="flex items-center gap-1.5 text-caption font-bold text-casa-muted uppercase tracking-widest mb-4 mt-2">
       <span className="text-casa-gold">{icon}</span>
       {label}
     </div>
@@ -299,7 +299,7 @@ export default function TripDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4">
         <p className="text-casa-muted">Trip not found.</p>
-        <button onClick={goBack} className="text-casa-gold text-sm">← Go back</button>
+        <button onClick={goBack} className="text-casa-gold text-body-sm">← Go back</button>
       </div>
     )
   }
@@ -316,27 +316,27 @@ export default function TripDetailPage() {
       {/* ── Header ─────────────────────────────────────── */}
       <div className="bg-casa-navy px-5 pt-12 pb-6 relative overflow-hidden">
         <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 80% 50%, white 0%, transparent 60%)' }} />
-        <button onClick={goBack} className="flex items-center gap-1 text-white/60 text-sm mb-4">
+        <button onClick={goBack} className="flex items-center gap-1 text-white/60 text-body-sm mb-4">
           <ArrowLeft size={14} /> Back
         </button>
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <div className="w-8 h-8 rounded-full bg-casa-gold flex items-center justify-center text-white font-bold text-sm">
+              <div className="w-8 h-8 rounded-full bg-casa-gold flex items-center justify-center text-white font-semibold text-body-sm">
                 {trip.traveler_name[0]}
               </div>
-              <span className="text-white/70 text-sm font-medium">{trip.traveler_name}</span>
+              <span className="text-white/70 text-body-sm font-medium">{trip.traveler_name}</span>
             </div>
-            <h1 className="text-2xl font-bold text-white leading-tight">
+            <h1 className="font-display text-display-sm font-semibold text-white leading-tight">
               {trip.destination_city ?? 'Work Trip'}
               {trip.destination_state && `, ${trip.destination_state}`}
             </h1>
-            <p className="text-white/50 text-sm mt-1">
+            <p className="text-white/50 text-body-sm mt-1">
               {fmtDate(trip.trip_start_date)} – {fmtDateShort(trip.trip_end_date)}
             </p>
           </div>
           <div className={cn(
-            'text-xs font-bold px-2.5 py-1 rounded-full',
+            'text-caption font-bold px-2.5 py-1 rounded-full',
             trip.status === 'confirmed' ? 'bg-green-500/20 text-green-300' : 'bg-amber-500/20 text-amber-300'
           )}>
             {trip.status === 'confirmed' ? '✓ Confirmed' : 'Needs Review'}
@@ -344,7 +344,7 @@ export default function TripDetailPage() {
         </div>
 
         {countdown && (
-          <div className="mt-3 flex items-center gap-1.5 bg-casa-gold/20 text-casa-gold text-xs font-bold px-3 py-1.5 rounded-xl w-fit">
+          <div className="mt-3 flex items-center gap-1.5 bg-casa-gold/20 text-casa-gold text-caption font-bold px-3 py-1.5 rounded-xl w-fit">
             <Clock size={11} />
             Leave home {countdown}
           </div>
@@ -518,7 +518,7 @@ export default function TripDetailPage() {
                     : <Square size={16} className="text-casa-muted flex-shrink-0" />
                   }
                   <div className={cn('flex-1', checkedItems.has(i) && 'opacity-50 line-through')}>
-                    <p className="text-sm text-casa-navy font-medium">{p.item}</p>
+                    <p className="text-body-sm text-casa-navy font-medium">{p.item}</p>
                     {p.reason && <p className="text-caption text-casa-muted">{p.reason}</p>}
                   </div>
                 </button>
@@ -560,7 +560,7 @@ export default function TripDetailPage() {
           <button
             onClick={rescan}
             disabled={scanning}
-            className="flex items-center gap-2 text-sm text-casa-muted hover:text-casa-navy transition-colors"
+            className="flex items-center gap-2 text-body-sm text-casa-muted hover:text-casa-navy transition-colors"
           >
             {scanning ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             Rescan Gmail for updates

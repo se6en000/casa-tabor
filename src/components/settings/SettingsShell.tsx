@@ -93,7 +93,7 @@ export default function SettingsShell() {
           <nav className="px-3 py-3 space-y-5">
             {NAV_GROUPS.map(group => (
               <div key={group.label}>
-                <p className="text-[10px] font-bold text-casa-muted uppercase tracking-widest px-2 mb-1.5">
+                <p className="text-caption font-bold text-casa-muted uppercase tracking-widest px-2 mb-1.5">
                   {group.label}
                 </p>
                 <ul className="space-y-0.5">
@@ -113,7 +113,7 @@ export default function SettingsShell() {
                             <item.icon size={16} className={cn('flex-shrink-0', isActive ? 'text-casa-gold' : 'text-casa-muted group-hover:text-casa-navy')} />
                             <div className="flex-1 min-w-0">
                               <p className="text-body-sm font-medium leading-none">{item.label}</p>
-                              <p className="text-[11px] text-casa-muted mt-0.5 md:block truncate hidden">{item.desc}</p>
+                              <p className="text-caption text-casa-muted mt-0.5 md:block truncate hidden">{item.desc}</p>
                             </div>
                             <ChevronRight size={14} className="md:hidden text-casa-muted flex-shrink-0" />
                           </>

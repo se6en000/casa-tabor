@@ -25,7 +25,7 @@ export default function ThemeSettingsPage() {
         <Palette size={22} className="text-casa-gold" />
         <h1 className="font-display text-display-md text-casa-navy">Theme & Colors</h1>
       </div>
-      <p className="text-casa-muted text-sm mb-8">
+      <p className="text-casa-muted text-body-sm mb-8">
         Changes apply instantly — no save needed. Your theme persists across sessions.
       </p>
 
@@ -55,7 +55,7 @@ export default function ThemeSettingsPage() {
                   <div className="w-5 h-5 rounded-full" style={{ background: preset.colors['casa-gold'] }} />
                   <div className="w-5 h-5 rounded-full border" style={{ background: preset.colors['casa-bg'], borderColor: preset.colors['casa-border'] }} />
                 </div>
-                <p className="text-[11px] font-semibold" style={{ color: preset.colors['casa-navy'] }}>
+                <p className="text-caption font-semibold" style={{ color: preset.colors['casa-navy'] }}>
                   {preset.emoji} {preset.label}
                 </p>
               </button>
@@ -85,12 +85,12 @@ export default function ThemeSettingsPage() {
               </label>
 
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-casa-navy leading-tight">{label}</p>
-                <p className="text-xs text-casa-muted mt-0.5">{desc}</p>
+                <p className="text-body-sm font-semibold text-casa-navy leading-tight">{label}</p>
+                <p className="text-caption text-casa-muted mt-0.5">{desc}</p>
               </div>
 
               <div className="flex items-center gap-2">
-                <code className="text-xs font-mono text-casa-muted bg-casa-bg px-2 py-1 rounded-md">
+                <code className="text-caption font-mono text-casa-muted bg-casa-bg px-2 py-1 rounded-md">
                   {colors[key].toUpperCase()}
                 </code>
                 {colors[key] !== DEFAULTS[key] && (
@@ -114,19 +114,19 @@ export default function ThemeSettingsPage() {
         <div className="rounded-2xl overflow-hidden border border-casa-border shadow-sm">
           {/* Header bar */}
           <div className="px-4 py-3 flex items-center justify-between" style={{ background: colors['casa-navy'] }}>
-            <span className="font-display text-sm font-semibold text-white">Casa Tabor</span>
+            <span className="font-display text-body-sm font-semibold text-white">Casa Tabor</span>
             <div className="w-2 h-2 rounded-full" style={{ background: colors['casa-gold'] }} />
           </div>
           {/* Card */}
           <div className="p-4" style={{ background: colors['casa-bg'] }}>
             <div className="rounded-xl p-3 border" style={{ background: colors['casa-surface'], borderColor: colors['casa-border'] }}>
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold" style={{ background: colors['casa-gold'] }}>J</div>
-                <span className="text-sm font-semibold" style={{ color: colors['casa-navy'] }}>Jake's Event</span>
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-caption font-bold" style={{ background: colors['casa-gold'] }}>J</div>
+                <span className="text-body-sm font-semibold" style={{ color: colors['casa-navy'] }}>Jake's Event</span>
               </div>
-              <p className="text-xs" style={{ color: colors['casa-text'] }}>Thursday · 3:00 PM – 4:00 PM</p>
+              <p className="text-caption" style={{ color: colors['casa-text'] }}>Thursday · 3:00 PM – 4:00 PM</p>
               <div className="mt-2 pt-2 border-t" style={{ borderColor: colors['casa-border'] }}>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-white" style={{ background: colors['casa-gold'] }}>Work</span>
+                <span className="text-caption font-semibold px-2 py-0.5 rounded-full text-white" style={{ background: colors['casa-gold'] }}>Work</span>
               </div>
             </div>
           </div>
@@ -137,12 +137,12 @@ export default function ThemeSettingsPage() {
       {!isDefault && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-amber-800">Custom theme active</p>
-            <p className="text-xs text-amber-600 mt-0.5">Restore original Casa Tabor colors</p>
+            <p className="text-body-sm font-semibold text-amber-800">Custom theme active</p>
+            <p className="text-caption text-amber-600 mt-0.5">Restore original Casa Tabor colors</p>
           </div>
           <button
             onClick={resetToDefaults}
-            className="flex items-center gap-2 bg-white border border-amber-300 text-amber-700 text-sm font-semibold px-4 py-2 rounded-xl hover:bg-amber-50 transition-colors shadow-sm"
+            className="flex items-center gap-2 bg-white border border-amber-300 text-amber-700 text-body-sm font-semibold px-4 py-2 rounded-xl hover:bg-amber-50 transition-colors shadow-sm"
           >
             <RotateCcw size={14} />
             Reset to defaults

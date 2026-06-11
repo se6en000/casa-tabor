@@ -312,7 +312,7 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
                     className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-casa-bg transition-colors text-left"
                   >
                     <span
-                      className="w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0"
+                      className="w-6 h-6 rounded-full text-white text-caption font-bold flex items-center justify-center shrink-0"
                       style={{ backgroundColor: fm.color_hex ?? '#888' }}
                     >
                       {fm.name?.[0]}
@@ -460,7 +460,7 @@ function tripWeatherIcon(condition: string): React.ReactNode {
 
 function TripSectionHead({ label, icon }: { label: string; icon: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-1.5 text-[10px] font-bold text-casa-muted uppercase tracking-widest mb-3 mt-1">
+    <div className="flex items-center gap-1.5 text-caption font-bold text-casa-muted uppercase tracking-widest mb-3 mt-1">
       <span className="text-casa-gold">{icon}</span>
       {label}
     </div>
@@ -485,13 +485,13 @@ function TripTimelineStep({ icon, title, subtitle, time, timeLabel, detail, acce
       <div className="flex-1 pb-4">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className={cn('font-semibold text-sm', accent ? 'text-casa-navy' : 'text-casa-text')}>{title}</p>
-            {subtitle && <p className="text-[11px] text-casa-muted mt-0.5">{subtitle}</p>}
+            <p className={cn('font-semibold text-body-sm', accent ? 'text-casa-navy' : 'text-casa-text')}>{title}</p>
+            {subtitle && <p className="text-caption text-casa-muted mt-0.5">{subtitle}</p>}
           </div>
           {time && (
             <div className="text-right flex-shrink-0">
-              <p className="text-sm font-bold text-casa-navy">{time}</p>
-              {timeLabel && <p className="text-[10px] text-casa-gold font-medium">{timeLabel}</p>}
+              <p className="text-body-sm font-semibold text-casa-navy">{time}</p>
+              {timeLabel && <p className="text-caption text-casa-gold font-medium">{timeLabel}</p>}
             </div>
           )}
         </div>
@@ -510,9 +510,9 @@ function TripFlightCard({ airline, flightNum, seat, terminal, confirmation, depa
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Plane size={12} className="text-casa-gold" />
-          <span className="text-sm font-bold">{flightNum ?? '—'}</span>
-          <span className="text-xs text-white/60">·</span>
-          <span className="text-xs text-white/70">{airline ?? 'Airline'}</span>
+          <span className="text-body-sm font-semibold">{flightNum ?? '—'}</span>
+          <span className="text-caption text-white/60">·</span>
+          <span className="text-caption text-white/70">{airline ?? 'Airline'}</span>
         </div>
         <div className="flex items-center gap-1 bg-green-500/20 text-green-400 text-[9px] font-bold px-1.5 py-0.5 rounded-full">
           <div className="w-1 h-1 rounded-full bg-green-400" />
@@ -521,7 +521,7 @@ function TripFlightCard({ airline, flightNum, seat, terminal, confirmation, depa
       </div>
       <div className="flex items-center gap-2">
         <div className="text-center">
-          <p className="text-lg font-bold">{origin ?? '???'}</p>
+          <p className="font-display text-heading font-semibold">{origin ?? '???'}</p>
           <p className="text-[9px] text-white/50 uppercase">Origin</p>
         </div>
         <div className="flex-1 flex flex-col items-center">
@@ -534,15 +534,15 @@ function TripFlightCard({ airline, flightNum, seat, terminal, confirmation, depa
           <div className="text-[9px] text-white/50">{fmtTripTime(departs)} → {fmtTripTime(arrives)}</div>
         </div>
         <div className="text-center">
-          <p className="text-lg font-bold">{dest ?? '???'}</p>
+          <p className="font-display text-heading font-semibold">{dest ?? '???'}</p>
           <p className="text-[9px] text-white/50 uppercase">Dest</p>
         </div>
       </div>
       {(seat || terminal || confirmation) && (
         <div className="flex gap-3 mt-2 pt-2 border-t border-white/10">
-          {seat && <span className="flex items-center gap-1 text-[10px] text-white/60"><Armchair size={10} />Seat {seat}</span>}
-          {terminal && <span className="flex items-center gap-1 text-[10px] text-white/60"><DoorOpen size={10} />Terminal {terminal}</span>}
-          {confirmation && <span className="flex items-center gap-1 text-[10px] text-white/60"><Hash size={10} />{confirmation}</span>}
+          {seat && <span className="flex items-center gap-1 text-caption text-white/60"><Armchair size={10} />Seat {seat}</span>}
+          {terminal && <span className="flex items-center gap-1 text-caption text-white/60"><DoorOpen size={10} />Terminal {terminal}</span>}
+          {confirmation && <span className="flex items-center gap-1 text-caption text-white/60"><Hash size={10} />{confirmation}</span>}
         </div>
       )}
     </div>
@@ -553,11 +553,11 @@ function TripWeatherCard({ day }: { day: { date: string; high: number; low: numb
   const date = new Date(day.date + 'T12:00:00')
   return (
     <div className="flex-1 bg-white rounded-xl p-2 text-center border border-casa-border">
-      <p className="text-[10px] text-casa-muted font-medium">{format(date, 'EEE')}</p>
+      <p className="text-caption text-casa-muted font-medium">{format(date, 'EEE')}</p>
       <p className="text-[9px] text-casa-muted/70">{format(date, 'M/d')}</p>
       <div className="my-1.5 flex justify-center">{tripWeatherIcon(day.condition)}</div>
-      <p className="text-xs font-bold text-casa-navy">{day.high}°</p>
-      <p className="text-[10px] text-casa-muted">{day.low}°</p>
+      <p className="text-caption font-bold text-casa-navy">{day.high}°</p>
+      <p className="text-caption text-casa-muted">{day.low}°</p>
     </div>
   )
 }
@@ -648,7 +648,7 @@ function TravelIntelligenceBody({ trip }: { trip: Trip }) {
           timeLabel="Check-in"
           connector={false}
           detail={
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-casa-muted mt-1">
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-caption text-casa-muted mt-1">
               {hotelConfirmation && <span className="flex items-center gap-1"><Hash size={10} />{hotelConfirmation}</span>}
               {trip.hotel_phone && <span className="flex items-center gap-1"><Phone size={10} />{trip.hotel_phone}</span>}
               {trip.hotel_checkout_date && <span className="flex items-center gap-1"><DoorOpen size={10} />Checkout {trip.hotel_checkout_time} · {fmtDateShort(trip.hotel_checkout_date)}</span>}
@@ -713,8 +713,8 @@ function TravelIntelligenceBody({ trip }: { trip: Trip }) {
                   : <Square size={14} className="text-casa-muted flex-shrink-0" />
                 }
                 <div className={cn('flex-1', checkedItems.has(i) && 'opacity-50 line-through')}>
-                  <p className="text-xs text-casa-navy font-medium">{p.item}</p>
-                  {p.reason && <p className="text-[10px] text-casa-muted">{p.reason}</p>}
+                  <p className="text-caption text-casa-navy font-medium">{p.item}</p>
+                  {p.reason && <p className="text-caption text-casa-muted">{p.reason}</p>}
                 </div>
               </button>
             ))}
@@ -729,7 +729,7 @@ function TravelIntelligenceBody({ trip }: { trip: Trip }) {
             {homeTasks.map((t, i) => (
               <div key={i} className="flex items-start gap-2">
                 <ChevronRight size={12} className="text-casa-gold mt-0.5 flex-shrink-0" />
-                <p className="text-[11px] text-casa-text">{t}</p>
+                <p className="text-caption text-casa-text">{t}</p>
               </div>
             ))}
           </div>
@@ -738,14 +738,14 @@ function TravelIntelligenceBody({ trip }: { trip: Trip }) {
 
       {trip.ai_notes && (
         <div className="bg-casa-navy/5 rounded-xl px-3 py-2.5 border border-casa-navy/10 mt-2">
-          <p className="text-[10px] text-casa-muted font-semibold mb-1">Travel Tips</p>
-          <p className="text-[11px] text-casa-text leading-relaxed">{trip.ai_notes}</p>
+          <p className="text-caption text-casa-muted font-semibold mb-1">Travel Tips</p>
+          <p className="text-caption text-casa-text leading-relaxed">{trip.ai_notes}</p>
         </div>
       )}
 
       <button
         onClick={() => navigate(`/trips/${trip.id}`)}
-        className="w-full flex items-center justify-center gap-2 pt-3 pb-1 text-xs text-casa-muted hover:text-casa-navy transition-colors font-medium"
+        className="w-full flex items-center justify-center gap-2 pt-3 pb-1 text-caption text-casa-muted hover:text-casa-navy transition-colors font-medium"
       >
         <ExternalLink size={12} />
         Open full trip view
@@ -921,11 +921,11 @@ function PanelBody({ event, onEventUpdated }: { event: EventWithDetails; onEvent
             <Plane size={13} className="text-casa-gold" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-white">
+            <p className="text-caption font-bold text-white">
               ✈ Travel Intelligence Ready
-              {trip.source_type === 'pdf' && <span className="ml-1.5 text-[10px] font-normal text-white/40">PDF</span>}
+              {trip.source_type === 'pdf' && <span className="ml-1.5 text-caption font-normal text-white/40">PDF</span>}
             </p>
-            <p className="text-[11px] text-white/50 truncate">
+            <p className="text-caption text-white/50 truncate">
               {(trip.legs?.find(l => l.leg_type === 'flight_outbound')?.flight_number ?? trip.outbound_flight_number) && `${trip.legs?.find(l => l.leg_type === 'flight_outbound')?.flight_number ?? trip.outbound_flight_number} · `}
               {trip.legs?.find(l => l.leg_type === 'hotel')?.location_name ?? trip.hotel_name ?? trip.destination_city ?? 'Gmail-sourced trip details below'}
             </p>
@@ -947,7 +947,7 @@ function PanelBody({ event, onEventUpdated }: { event: EventWithDetails; onEvent
               title={trip.source_email_body ? 'Re-extract from original email' : 'Re-scan Gmail for this trip'}
               className="text-white/30 hover:text-white/70 transition-colors disabled:opacity-40"
             >
-              {scanning ? <Loader2 size={13} className="animate-spin" /> : <span className="text-[10px] font-medium">↺ rescan</span>}
+              {scanning ? <Loader2 size={13} className="animate-spin" /> : <span className="text-caption font-medium">↺ rescan</span>}
             </button>
           </div>
         </div>
@@ -972,13 +972,13 @@ function PanelBody({ event, onEventUpdated }: { event: EventWithDetails; onEvent
         <div className="flex items-start gap-2">
           <AlertTriangle size={14} className="text-amber-500 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
-            <p className="text-xs font-semibold text-amber-800">Flight info not found</p>
-            <p className="text-[11px] text-amber-700 mt-0.5">
+            <p className="text-caption font-semibold text-amber-800">Flight info not found</p>
+            <p className="text-caption text-amber-700 mt-0.5">
               {scanDone
                 ? 'No travel emails detected. Try attaching a PDF itinerary below.'
                 : 'Scan Gmail to auto-detect flight and hotel details.'}
             </p>
-            {pdfError && <p className="text-[11px] text-red-600 mt-1">PDF error: {pdfError}</p>}
+            {pdfError && <p className="text-caption text-red-600 mt-1">PDF error: {pdfError}</p>}
           </div>
         </div>
         <div className="mt-2 flex gap-2">
@@ -986,7 +986,7 @@ function PanelBody({ event, onEventUpdated }: { event: EventWithDetails; onEvent
             <button
               onClick={scanGmail}
               disabled={scanning}
-              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors disabled:opacity-60"
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-amber-500 text-white text-caption font-bold hover:bg-amber-600 transition-colors disabled:opacity-60"
             >
               {scanning ? <Loader2 size={12} className="animate-spin" /> : <Plane size={12} />}
               {scanning ? 'Scanning Gmail…' : 'Scan Gmail'}
@@ -995,7 +995,7 @@ function PanelBody({ event, onEventUpdated }: { event: EventWithDetails; onEvent
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={scanning}
-            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-700 text-xs font-bold hover:bg-amber-50 transition-colors disabled:opacity-60"
+            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-700 text-caption font-bold hover:bg-amber-50 transition-colors disabled:opacity-60"
           >
             {scanning ? <Loader2 size={12} className="animate-spin" /> : <Paperclip size={12} />}
             {scanning ? 'Processing…' : 'Attach PDF'}
@@ -1051,7 +1051,7 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
             {event.logistics.map((step, i) => (
               <li key={step.id} className="flex gap-3">
                 <div className="flex flex-col items-center">
-                  <span className="text-lg leading-none">{step.icon ?? '•'}</span>
+                  <span className="font-display text-heading leading-none">{step.icon ?? '•'}</span>
                   {i < event.logistics.length - 1 && <div className="w-px flex-1 bg-casa-divider mt-1" />}
                 </div>
                 <div className="pb-3 min-w-0">
@@ -1300,7 +1300,7 @@ function LocationBlock({ locationName, address, parkingNotes, contactName, conta
             </button>
           )}
           {copied && (
-            <p className="text-[11px] text-emerald-600 mt-0.5">Copied!</p>
+            <p className="text-caption text-emerald-600 mt-0.5">Copied!</p>
           )}
           {parkingNotes && (
             <p className="text-caption text-casa-muted mt-0.5">{parkingNotes}</p>
@@ -1319,7 +1319,7 @@ function LocationBlock({ locationName, address, parkingNotes, contactName, conta
             <p className="text-caption text-casa-muted mt-0.5">{contactName}</p>
           )}
           {existingPlace?.notes && (
-            <p className="text-[11px] text-casa-gold/80 mt-1 italic">{existingPlace.notes}</p>
+            <p className="text-caption text-casa-gold/80 mt-1 italic">{existingPlace.notes}</p>
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">

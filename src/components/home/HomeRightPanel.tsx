@@ -46,7 +46,7 @@ function SectionHeader({
         {icon}
         {label}
         {badge != null && badge > 0 && (
-          <span className="ml-1 text-[11px] font-bold bg-casa-gold/20 text-casa-gold px-1.5 py-0.5 rounded-full">
+          <span className="ml-1 text-caption font-bold bg-casa-gold/20 text-casa-gold px-1.5 py-0.5 rounded-full">
             {badge}
           </span>
         )}
@@ -179,7 +179,7 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
                   <span className={cn('text-body font-semibold mt-1', isToday ? 'text-white' : 'text-casa-navy')}>
                     {format(d, 'd')}
                   </span>
-                  <span className={cn('text-[10px] font-bold mt-0.5 h-3.5', isToday ? 'text-casa-gold' : 'text-casa-muted/60')}>
+                  <span className={cn('text-caption font-bold mt-0.5 h-3.5', isToday ? 'text-casa-gold' : 'text-casa-muted/60')}>
                     {count > 0 ? count : ''}
                   </span>
                 </div>
@@ -213,13 +213,13 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
                 {hasMore && (
                   <button
                     onClick={() => setBriefingExpanded(e => !e)}
-                    className="text-[11px] text-casa-gold hover:brightness-110 font-medium flex items-center gap-1"
+                    className="text-caption text-casa-gold hover:brightness-110 font-medium flex items-center gap-1"
                   >
                     {briefingExpanded ? '↑ Show less' : '↓ Show more'}
                   </button>
                 )}
                 {briefing?.generated_by && (
-                  <p className="text-[10px] text-casa-muted flex items-center gap-1 pt-2 border-t border-casa-divider">
+                  <p className="text-caption text-casa-muted flex items-center gap-1 pt-2 border-t border-casa-divider">
                     <Bot size={10} className="text-casa-gold" />
                     {briefing.generated_by}
                   </p>
@@ -267,7 +267,7 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
           action={notifications.length > 0 ? (
             <button
               onClick={() => clearAll.mutate()}
-              className="text-[10px] text-casa-muted hover:text-red-500 transition-colors font-medium"
+              className="text-caption text-casa-muted hover:text-red-500 transition-colors font-medium"
             >
               Clear all
             </button>

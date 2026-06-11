@@ -160,7 +160,7 @@ function PlaceRow({ place, onEdit, onDelete }: { place: SavedPlace; onEdit: () =
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <p className="font-display text-heading text-casa-navy leading-none">{place.name}</p>
-          <span className="text-[10px] font-semibold text-casa-muted bg-casa-divider px-2 py-0.5 rounded-full">{meta.label}</span>
+          <span className="text-caption font-semibold text-casa-muted bg-casa-divider px-2 py-0.5 rounded-full">{meta.label}</span>
         </div>
         {place.aliases.length > 0 && <p className="text-caption text-casa-gold mt-0.5 truncate">Also known as: {place.aliases.join(', ')}</p>}
         {fullAddress && (
@@ -275,7 +275,7 @@ function ContactRow({ contact, onEdit, onDelete }: { contact: SavedContact; onEd
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <p className="font-display text-heading text-casa-navy leading-none">{contact.name}</p>
-          {contact.relationship && <span className="text-[10px] font-semibold text-casa-muted bg-casa-divider px-2 py-0.5 rounded-full">{contact.relationship}</span>}
+          {contact.relationship && <span className="text-caption font-semibold text-casa-muted bg-casa-divider px-2 py-0.5 rounded-full">{contact.relationship}</span>}
         </div>
         {contact.aliases.length > 0 && <p className="text-caption text-casa-gold mt-0.5 truncate">Also known as: {contact.aliases.join(', ')}</p>}
         {contact.phone && <p className="flex items-center gap-1 text-caption text-casa-muted mt-1"><Phone size={11} />{contact.phone}</p>}

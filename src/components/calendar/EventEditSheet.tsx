@@ -778,7 +778,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                 <div className="flex items-center gap-2">
                   <h3 className="font-display text-display-sm text-casa-navy leading-tight">Edit Details</h3>
                   {isInstance && (
-                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-casa-gold/10 text-casa-gold text-[10px] font-semibold uppercase tracking-wide">
+                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-casa-gold/10 text-casa-gold text-caption font-semibold uppercase tracking-wide">
                       <Repeat size={9} />
                       Recurring
                     </span>
@@ -976,7 +976,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                             ...(isPrimary ? { ringColor: member.color_hex } : {}),
                           }}
                         >
-                          {isPrimary && <span className="text-[10px] leading-none">★</span>}
+                          {isPrimary && <span className="text-caption leading-none">★</span>}
                           {isSupporting && <span className="w-2 h-2 rounded-full bg-white/60 shrink-0" />}
                           {!isTagged && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: member.color_hex }} />}
                           {member.name}
