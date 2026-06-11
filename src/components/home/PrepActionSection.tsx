@@ -33,11 +33,11 @@ function urgencyConfig(days: number): {
   badgeText: string
   label: string
 } {
-  if (days <= 0) return { dot: 'bg-red-500', badge: 'bg-red-100 text-red-700', badgeText: 'Today', label: 'Today' }
-  if (days === 1) return { dot: 'bg-red-500', badge: 'bg-red-100 text-red-700', badgeText: 'Tomorrow', label: 'Tomorrow' }
-  if (days < 3)  return { dot: 'bg-red-400',  badge: 'bg-red-100 text-red-700',   badgeText: `In ${days}d`, label: `In ${days} days` }
-  if (days < 7)  return { dot: 'bg-amber-400', badge: 'bg-amber-100 text-amber-700', badgeText: `In ${days}d`, label: `In ${days} days` }
-  return           { dot: 'bg-green-400',  badge: 'bg-green-100 text-green-700',  badgeText: `In ${days}d`, label: `In ${days} days` }
+  if (days <= 0) return { dot: 'bg-red-500', badge: 'bg-red-500 text-white', badgeText: 'Today', label: 'Today' }
+  if (days === 1) return { dot: 'bg-red-500', badge: 'bg-red-500 text-white', badgeText: 'Tomorrow', label: 'Tomorrow' }
+  if (days < 3)  return { dot: 'bg-red-400',  badge: 'bg-red-400 text-white',   badgeText: `In ${days}d`, label: `In ${days} days` }
+  if (days < 7)  return { dot: 'bg-amber-400', badge: 'bg-amber-400 text-white', badgeText: `In ${days}d`, label: `In ${days} days` }
+  return           { dot: 'bg-green-400',  badge: 'bg-green-400 text-white',  badgeText: `In ${days}d`, label: `In ${days} days` }
 }
 
 export default function PrepActionSection() {
@@ -124,7 +124,7 @@ export default function PrepActionSection() {
                       {/* Content */}
                       <div className="flex-1 min-w-0">
                         <p className={cn(
-                          'text-body-sm text-casa-text leading-snug',
+                          'text-caption text-casa-text leading-snug',
                           isDone && 'line-through text-casa-muted',
                         )}>
                           <span className="mr-1 inline-flex"><PrepTypeIcon type={item.type} /></span>
@@ -136,7 +136,7 @@ export default function PrepActionSection() {
                               {item.event_title}
                             </span>
                           )}
-                          <span className={cn('text-caption font-semibold px-1.5 py-0.5 rounded-full shrink-0', urg.badge)}>
+                          <span className={cn('text-[9px] font-bold leading-none px-1.5 py-0.5 rounded-full whitespace-nowrap shrink-0', urg.badge)}>
                             {urg.badgeText}
                           </span>
                         </div>
