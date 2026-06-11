@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Save, Sparkles, Trash2, AlertTriangle,
-  CheckCircle, MapPin, ChevronDown, Users, Lock, Clock, Repeat,
+  CheckCircle, MapPin, ChevronDown, Users, Lock, Clock, Repeat, Mic, MicOff,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
@@ -162,6 +162,38 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [eventType, setEventType] = useState<'event' | 'reminder'>(event.event_type ?? 'event')
+
+  // Mic state for AI context textarea
+  const [micActive, setMicActive] = useState(false)
+  const micPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const STT_BRIDGE = 'http://localhost:8766'
+
+  const startMic = useCallback(async () => {
+    try {
+      await fetch(`${STT_BRIDGE}/start`, { method: 'POST' })
+      setMicActive(true)
+      micPollRef.current = setInterval(async () => {
+        try {
+          const res = await fetch(`${STT_BRIDGE}/status`)
+          const data = await res.json()
+          if (data.interim_transcript) setExtraContext(data.interim_transcript)
+          if (data.transcript && !data.recording) {
+            setExtraContext(data.transcript)
+            stopMic()
+          }
+        } catch { /* bridge unreachable */ }
+      }, 300)
+    } catch { setMicActive(false) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const stopMic = useCallback(() => {
+    fetch(`${STT_BRIDGE}/stop`, { method: 'POST' }).catch(() => {})
+    if (micPollRef.current) { clearInterval(micPollRef.current); micPollRef.current = null }
+    setMicActive(false)
+  }, [])
+
+  // Clean up mic on unmount
+  useEffect(() => () => { if (micPollRef.current) clearInterval(micPollRef.current) }, [])
 
   // Autosave state
   const [_autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'scheduled' | 'saving' | 'saved'>('idle')
@@ -837,26 +869,46 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                 <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">
                   AI Re-enrich
                 </label>
-                <textarea
-                  rows={2}
-                  value={extraContext}
-                  onChange={e => setExtraContext(e.target.value)}
-                  placeholder='Optional context — e.g. "EDS is the AC company, appointment at 3209 Washington Rd WPB"'
-                  className={cn(textareaCls, 'mb-3')}
-                />
-                <button
-                  onClick={handleReenrich}
-                  disabled={enrichStatus === 'loading'}
-                  className={cn(
-                    'w-full flex items-center justify-center gap-2 py-2.5 rounded-button border border-casa-gold text-casa-gold text-body-sm font-semibold hover:bg-casa-gold hover:text-white disabled:opacity-50 transition-all',
-                    enrichStatus === 'loading' && 'ai-thinking',
-                  )}
-                >
-                  {enrichStatus === 'loading'
-                    ? <Sparkles size={14} className="animate-pulse" />
-                    : <Sparkles size={14} />}
-                  {enrichStatus === 'loading' ? 'AI is thinking…' : 'Re-enrich with AI'}
-                </button>
+                {/* Textarea + mic + enrich button inline */}
+                <div className="flex items-start gap-2">
+                  <textarea
+                    rows={2}
+                    value={extraContext}
+                    onChange={e => setExtraContext(e.target.value)}
+                    placeholder='Optional context — e.g. "EDS is the AC company, appointment at 3209 Washington Rd WPB"'
+                    className={cn(textareaCls, 'flex-1')}
+                  />
+                  <div className="flex flex-col gap-1.5 shrink-0">
+                    {/* Mic button */}
+                    <button
+                      type="button"
+                      onClick={micActive ? stopMic : startMic}
+                      title={micActive ? 'Stop listening' : 'Speak context'}
+                      className={cn(
+                        'w-9 h-9 flex items-center justify-center rounded-lg border transition-colors',
+                        micActive
+                          ? 'bg-red-500 border-red-500 text-white animate-pulse'
+                          : 'border-casa-border text-casa-muted hover:border-casa-gold hover:text-casa-gold',
+                      )}
+                    >
+                      {micActive ? <MicOff size={15} /> : <Mic size={15} />}
+                    </button>
+                    {/* Enrich button */}
+                    <button
+                      onClick={handleReenrich}
+                      disabled={enrichStatus === 'loading'}
+                      title="Re-enrich with AI"
+                      className={cn(
+                        'w-9 h-9 flex items-center justify-center rounded-lg border border-casa-gold text-casa-gold hover:bg-casa-gold hover:text-white disabled:opacity-50 transition-all',
+                        enrichStatus === 'loading' && 'ai-thinking',
+                      )}
+                    >
+                      {enrichStatus === 'loading'
+                        ? <Sparkles size={14} className="animate-pulse" />
+                        : <Sparkles size={14} />}
+                    </button>
+                  </div>
+                </div>
 
                 {/* Status banner */}
                 <AnimatePresence>
@@ -1234,20 +1286,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
               </div>
             </BounceScroll>
 
-            {/* Footer */}
-            <div className="px-6 py-4 border-t border-casa-border flex items-center gap-3 shrink-0">
-              <button onClick={handleClose} className="flex-1 py-3 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-bg transition-colors">
-                Close
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="flex-1 py-3 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-              >
-                <Save size={15} />
-                {isSaving ? (saveStatus === 'slow' ? 'Waking up…' : 'Saving…') : 'Save'}
-              </button>
-            </div>
+            {/* Footer removed — Save and Close are in the top bar */}
           </motion.div>
 
           {/* Recurring edit scope modal */}
