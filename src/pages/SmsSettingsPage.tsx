@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { ChevronLeft, Save, CheckCircle, MessageSquare, Bell, Clock, Send, ExternalLink, Copy } from 'lucide-react'
+import { Save, CheckCircle, MessageSquare, Bell, Clock, Send, ExternalLink, Copy } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
-import BounceScroll from '../components/shared/BounceScroll'
 
 interface SmsConfig {
   enabled: boolean
@@ -142,15 +140,10 @@ export default function SmsSettingsPage() {
       ? config.notify_members.filter(m => m !== id)
       : [...config.notify_members, id])
 
-  if (isLoading) return <div className="max-w-2xl mx-auto p-6 text-casa-muted text-body-sm">Loading…</div>
+  if (isLoading) return <div className="text-casa-muted text-body-sm">Loading…</div>
 
   return (
-    <BounceScroll className="flex-1">
-    <div className="max-w-2xl mx-auto p-6">
-      <Link to="/settings" className="inline-flex items-center gap-1.5 text-caption text-casa-muted hover:text-casa-navy mb-6 transition-colors">
-        <ChevronLeft size={15} /> Settings
-      </Link>
-
+    <>
       <div className="flex items-center gap-3 mb-6">
         <span className="w-10 h-10 rounded-full bg-casa-bg border border-casa-border flex items-center justify-center text-casa-gold">
           <MessageSquare size={18} />
@@ -347,7 +340,6 @@ export default function SmsSettingsPage() {
           {saved ? <><CheckCircle size={16} /> Saved</> : <><Save size={16} /> {saveMutation.isPending ? 'Saving…' : 'Save'}</>}
         </button>
       </div>
-    </div>
-    </BounceScroll>
+    </>
   )
 }

@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { ChevronLeft, Save, Home, CheckCircle, AlertCircle } from 'lucide-react'
+import { Save, Home, CheckCircle, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
-import BounceScroll from '../components/shared/BounceScroll'
 
 interface HomeConfig {
   address: string
@@ -39,12 +37,7 @@ export default function ProfileSettingsPage() {
   if (isLoading) return <div className="p-6 text-casa-muted animate-breathe">Loading…</div>
 
   return (
-    <BounceScroll className="flex-1">
-    <div className="max-w-2xl mx-auto p-6">
-      <Link to="/settings" className="inline-flex items-center gap-1 text-body-sm text-casa-muted hover:text-casa-navy mb-4">
-        <ChevronLeft size={16} /> Settings
-      </Link>
-
+    <>
       <h1 className="font-display text-display-md text-casa-navy mb-1">Profile & Home</h1>
       <p className="text-body-sm text-casa-muted mb-6">Your home address is used for drive time estimates, AI event enrichment, and travel planning.</p>
 
@@ -128,7 +121,6 @@ export default function ProfileSettingsPage() {
           </button>
         </div>
       </div>
-    </div>
-    </BounceScroll>
+    </>
   )
 }

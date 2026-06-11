@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronLeft, Activity, Zap, DollarSign, BarChart3, RefreshCw, Bot, TrendingUp } from 'lucide-react'
+import { Activity, Zap, DollarSign, BarChart3, RefreshCw, Bot, TrendingUp } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
-import BounceScroll from '../components/shared/BounceScroll'
 
 interface UsageRow {
   function_name: string
@@ -135,13 +134,9 @@ export default function StatusDashboardPage() {
   if (loading) return <div className="p-6 text-casa-muted animate-breathe">Loading…</div>
 
   return (
-    <BounceScroll className="flex-1">
-    <div className="max-w-5xl mx-auto p-6 space-y-6">
+    <>
       {/* Header */}
       <div>
-        <Link to="/settings" className="inline-flex items-center gap-1 text-body-sm text-casa-muted hover:text-casa-navy mb-4">
-          <ChevronLeft size={16} /> Settings
-        </Link>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-display text-display-md text-casa-navy mb-1">Status Dashboard</h1>
@@ -319,7 +314,6 @@ export default function StatusDashboardPage() {
       <p className="text-caption text-casa-muted text-center pb-4">
         Last refreshed {lastRefresh.toLocaleTimeString()}
       </p>
-    </div>
-    </BounceScroll>
+    </>
   )
 }

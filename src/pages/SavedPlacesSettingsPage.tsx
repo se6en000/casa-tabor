@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react'
-import { Link } from 'react-router-dom'
 import {
-  ChevronLeft, Plus, Trash2, Save, X, MapPin, Phone, Mail,
+  Plus, Trash2, Save, X, MapPin, Phone, Mail,
   Search, BookmarkCheck, Home, Utensils, School, Dumbbell,
   Briefcase, HeartPulse, Star, Edit2, Users, User, Copy, Check,
 } from 'lucide-react'
@@ -9,7 +8,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import type { SavedPlace, SavedPlaceCategory } from '../types'
-import BounceScroll from '../components/shared/BounceScroll'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -391,14 +389,9 @@ export default function SavedPlacesSettingsPage() {
   const isAdding = tab === 'places' ? placeMode.type !== 'list' : contactMode.type !== 'list'
 
   return (
-    <BounceScroll className="flex-1">
-      <div className="max-w-3xl mx-auto px-6 py-8">
-
+    <>
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
-          <Link to="/settings" className="p-2 rounded-lg hover:bg-casa-divider transition-colors text-casa-muted">
-            <ChevronLeft size={20} />
-          </Link>
           <div className="flex-1 min-w-0">
             <h1 className="font-display text-display-md text-casa-navy">Saved Places & Contacts</h1>
             <p className="text-caption text-casa-muted mt-0.5">
@@ -556,7 +549,6 @@ export default function SavedPlacesSettingsPage() {
             )}
           </>
         )}
-      </div>
-    </BounceScroll>
+    </>
   )
 }

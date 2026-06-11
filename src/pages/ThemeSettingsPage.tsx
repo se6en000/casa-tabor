@@ -3,11 +3,9 @@
  * All changes apply instantly; no save button required.
  */
 
-import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, RotateCcw, Palette } from 'lucide-react'
+import { RotateCcw, Palette } from 'lucide-react'
 import { useTheme, PRESETS, DEFAULTS, type ThemeColors } from '../contexts/ThemeContext'
 import { cn } from '../utils/cn'
-import BounceScroll from '../components/shared/BounceScroll'
 
 const COLOR_FIELDS: { key: keyof ThemeColors; label: string; desc: string }[] = [
   { key: 'casa-gold',    label: 'Accent Color',       desc: 'Icons, highlights, buttons, badges' },
@@ -19,22 +17,10 @@ const COLOR_FIELDS: { key: keyof ThemeColors; label: string; desc: string }[] = 
 ]
 
 export default function ThemeSettingsPage() {
-  const navigate = useNavigate()
   const { colors, setColor, applyPreset, resetToDefaults, isDefault } = useTheme()
 
   return (
-    <BounceScroll className="flex-1">
-    <div className="max-w-2xl mx-auto p-6 pb-20">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-1 text-casa-muted hover:text-casa-navy text-sm transition-colors"
-        >
-          <ArrowLeft size={16} /> Back
-        </button>
-      </div>
-
+    <>
       <div className="flex items-center gap-3 mb-1">
         <Palette size={22} className="text-casa-gold" />
         <h1 className="font-display text-display-md text-casa-navy">Theme & Colors</h1>
@@ -163,7 +149,6 @@ export default function ThemeSettingsPage() {
           </button>
         </div>
       )}
-    </div>
-    </BounceScroll>
+    </>
   )
 }

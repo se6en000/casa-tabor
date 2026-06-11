@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronLeft, Save, FlaskConical, CheckCircle, AlertCircle, Home } from 'lucide-react'
+import { Save, FlaskConical, CheckCircle, AlertCircle, Home } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
-import BounceScroll from '../components/shared/BounceScroll'
 
 interface LLMConfig {
   provider: string
@@ -115,11 +114,7 @@ export default function AISettingsPage() {
   if (isLoading) return <div className="p-6 text-casa-muted animate-breathe">Loading…</div>
 
   return (
-    <BounceScroll className="flex-1">
-    <div className="max-w-2xl mx-auto p-6">
-      <Link to="/settings" className="inline-flex items-center gap-1 text-body-sm text-casa-muted hover:text-casa-navy mb-4">
-        <ChevronLeft size={16} /> Settings
-      </Link>
+    <>
       <h1 className="font-display text-display-md text-casa-navy mb-1">AI Settings</h1>
       <p className="text-body text-casa-muted mb-6">
         Choose your AI vendor and model. A fast, low-cost model is recommended — briefings don't need heavy reasoning.
@@ -251,7 +246,6 @@ export default function AISettingsPage() {
           </button>
         </div>
       </div>
-    </div>
-    </BounceScroll>
+    </>
   )
 }

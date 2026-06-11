@@ -1,11 +1,9 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ChevronLeft, Plus, Trash2, GripVertical, Save, Crown } from 'lucide-react'
+import { Plus, Trash2, GripVertical, Save, Crown } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import type { FamilyMember } from '../types'
-import BounceScroll from '../components/shared/BounceScroll'
 
 // Preset color palette
 const COLOR_OPTIONS = [
@@ -129,12 +127,7 @@ export default function FamilySettingsPage() {
   ]
 
   return (
-    <BounceScroll className="flex-1">
-    <div className="max-w-2xl mx-auto p-6 pb-24">
-      <Link to="/settings" className="inline-flex items-center gap-1 text-body-sm text-casa-muted hover:text-casa-navy mb-4">
-        <ChevronLeft size={16} /> Settings
-      </Link>
-
+    <>
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="font-display text-display-md text-casa-navy mb-1">Family</h1>
@@ -330,7 +323,6 @@ export default function FamilySettingsPage() {
           <Plus size={16} /> Add Family Member
         </button>
       </div>
-    </div>
-    </BounceScroll>
+    </>
   )
 }
