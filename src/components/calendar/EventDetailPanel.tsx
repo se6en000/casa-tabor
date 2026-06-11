@@ -51,10 +51,18 @@ const stopTouch = (e: React.TouchEvent | React.PointerEvent) => e.stopPropagatio
 export default function EventDetailPanel({ event, onClose }: EventDetailPanelProps) {
   const [showEdit, setShowEdit] = useState(false)
   const [showAIEdit, setShowAIEdit] = useState(false)
+  const [aiEditEvent, setAIEditEvent] = useState<EventWithDetails | null>(null)
   const { data: familyMembers = [] } = useFamilyMembers()
   const isMobile = useIsMobile()
   const mobileDragControls = useDragControls()
   const desktopDragControls = useDragControls()
+
+  function handleEditWithAI() {
+    if (!event) return
+    setAIEditEvent(event)   // snapshot event before panel closes
+    onClose()               // animate panel out (~300ms spring)
+    setTimeout(() => setShowAIEdit(true), 350)
+  }
 
   // Lock body scroll while panel is open so the calendar can't scroll behind it
   useEffect(() => {
@@ -128,7 +136,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 })()}
                 <PanelHeader event={event} onClose={onClose} />
                 <PanelBody event={event} />
-                <PanelFooter event={event} onEdit={() => setShowEdit(true)} onEditWithAI={() => setShowAIEdit(true)} />
+                <PanelFooter event={event} onEdit={() => setShowEdit(true)} onEditWithAI={handleEditWithAI} />
               </motion.div>
             ) : (
               /* ── Desktop: right side panel, swipe-right from handle only ── */
@@ -174,7 +182,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 })()}
                 <PanelHeader event={event} onClose={onClose} />
                 <PanelBody event={event} />
-                <PanelFooter event={event} onEdit={() => setShowEdit(true)} onEditWithAI={() => setShowAIEdit(true)} />
+                <PanelFooter event={event} onEdit={() => setShowEdit(true)} onEditWithAI={handleEditWithAI} />
               </motion.div>
             )}
           </>
@@ -184,14 +192,14 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
       {event && (
         <EventEditSheet event={event} open={showEdit} onClose={() => setShowEdit(false)} />
       )}
-      {event && (
+      {aiEditEvent && (
         <AIChatDrawer
           open={showAIEdit}
-          onClose={() => setShowAIEdit(false)}
+          onClose={() => { setShowAIEdit(false); setAIEditEvent(null) }}
           page="event-edit"
-          events={[event]}
+          events={[aiEditEvent]}
           family={familyMembers}
-          focusedEvent={event}
+          focusedEvent={aiEditEvent}
         />
       )}
     </>
