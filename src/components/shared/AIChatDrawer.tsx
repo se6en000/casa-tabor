@@ -279,7 +279,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
 
-  const { messages, loading, send, reset, session, sessionLoading, startFresh, updateMessageToolStatus } = useAIAssistant({ page, events, family, homeCity, focusedEvent })
+  const { messages, loading, send, reset, session, sessionLoading, startFresh, primeMessages, updateMessageToolStatus } = useAIAssistant({ page, events, family, homeCity, focusedEvent })
 
   const led = useLedStrip()
 
@@ -358,15 +358,40 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     startFresh()
   }, [open, focusedEvent?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Once session is fresh (no messages), auto-send a silent priming message
-  // so the AI greets the user with context about the specific event.
+  // Once session is fresh (no messages), inject a deterministic event summary greeting
+  // so the user immediately sees what event the AI has loaded — no API round-trip needed.
   useEffect(() => {
     if (!open || !focusedEvent || loading) return
     if (firedEventGreetRef.current === focusedEvent.id) return
     if (sessionLoading) return
     if (messages.length > 0) { firedEventGreetRef.current = focusedEvent.id; return }
     firedEventGreetRef.current = focusedEvent.id
-    send(`[EVENT_EDIT_MODE] Summarize this event for me and tell me what fields are missing or could be improved.`)
+
+    const ev = focusedEvent
+    const memberNames = ev.members.map(m => m.family_member?.name).filter(Boolean).join(', ')
+    const start = new Date(ev.start_time)
+    const dateStr = start.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    const timeStr = ev.all_day ? 'All day' : start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+
+    const missing: string[] = []
+    if (!ev.location_name) missing.push('Location')
+    if (!memberNames) missing.push('Attendees')
+    if (!ev.enrichment?.category) missing.push('Category')
+    if (!ev.description && !ev.enrichment?.prep_notes) missing.push('Notes')
+
+    let content = `I'm ready to edit **${ev.title}** ✏️\n\n`
+    content += `📅 ${dateStr} at ${timeStr}\n`
+    if (ev.location_name) content += `📍 ${ev.location_name}\n`
+    if (memberNames) content += `👥 ${memberNames}\n`
+    if (ev.enrichment?.category) content += `🏷️ ${ev.enrichment.category}\n`
+    if (missing.length > 0) {
+      content += `\n⚠️ Missing: ${missing.join(', ')} — want me to help fill those in?\n`
+    } else {
+      content += `\nEverything looks filled in!`
+    }
+    content += `\n\nWhat would you like to change or add?`
+
+    primeMessages([{ id: crypto.randomUUID(), role: 'assistant', content }])
   }, [open, focusedEvent?.id, sessionLoading, messages.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pause voice while AI is thinking; auto-resume when response arrives

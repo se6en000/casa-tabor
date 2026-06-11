@@ -199,6 +199,11 @@ export function useAIAssistant(ctx: AssistantContext) {
   // Backward-compat reset alias
   const reset = useCallback(() => setMessages([]), [])
 
+  // Inject synthetic messages directly (no API call) — used for deterministic greetings
+  const primeMessages = useCallback((msgs: AIMessage[]) => {
+    setMessages(msgs)
+  }, [])
+
   return {
     messages,
     loading,
@@ -207,6 +212,7 @@ export function useAIAssistant(ctx: AssistantContext) {
     send,
     reset,
     startFresh,
+    primeMessages,
     updateMessageToolStatus,
   }
 }
