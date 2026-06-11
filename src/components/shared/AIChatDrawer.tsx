@@ -55,7 +55,7 @@ function useSpeechInput({
 }) {
   const pollRef            = useRef<ReturnType<typeof setInterval> | null>(null)
   const activeRef          = useRef(false)
-  const suppressRef        = useRef(false)   // true while AI is thinking — bridge keeps running, transcripts ignored
+  const suppressRef        = useRef(false)
   const modeRef            = useRef<STTMode>('unknown')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef     = useRef<any>(null)
@@ -67,6 +67,23 @@ function useSpeechInput({
   const [volume, setVolume] = useState(0)
   const supported = true
 
+  // ── Stable callback refs — always current, never stale inside setInterval ──
+  // This is the core pattern for voice agents: the polling loop runs continuously
+  // but React re-creates callbacks whenever state changes (e.g. hasPendingAction).
+  // Using refs ensures the poll always calls the latest version.
+  const onInterimRef       = useRef(onInterim)
+  const onFinalRef         = useRef(onFinalTranscript)
+  const onDismissRef       = useRef(onDismiss)
+  const onConfirmRef       = useRef(onConfirm)
+  const onCancelRef        = useRef(onCancel)
+  const hasPendingRef      = useRef(hasPendingAction)
+  useEffect(() => { onInterimRef.current  = onInterim },        [onInterim])
+  useEffect(() => { onFinalRef.current    = onFinalTranscript }, [onFinalTranscript])
+  useEffect(() => { onDismissRef.current  = onDismiss },         [onDismiss])
+  useEffect(() => { onConfirmRef.current  = onConfirm },         [onConfirm])
+  useEffect(() => { onCancelRef.current   = onCancel },          [onCancel])
+  useEffect(() => { hasPendingRef.current = hasPendingAction },  [hasPendingAction])
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const WebSpeech: any = (typeof window !== 'undefined')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -76,27 +93,26 @@ function useSpeechInput({
   const stopPoll = () => { if (pollRef.current) clearInterval(pollRef.current); pollRef.current = null }
   const stopSilenceTimer = () => { if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
 
+  // No deps — uses only refs, so triggerFinal/startBridge are created once and never stale
   const handleFinalTranscript = useCallback((transcript: string) => {
     if (!transcript.trim()) return
-    if (suppressRef.current) return  // AI is thinking — ignore stray audio
+    if (suppressRef.current) return
     if (DISMISS_PHRASES.test(transcript)) {
-      // Set inactive NOW so the poll-scheduled restart (300ms) doesn't re-fire the bridge
-      activeRef.current = false
-      onDismiss()
+      activeRef.current = false  // prevent poll-scheduled restart from re-firing
+      onDismissRef.current()
       return
     }
     const isShort = transcript.trim().split(/\s+/).length <= 5
-    if (isShort && hasPendingAction && CONFIRM_PHRASES.test(transcript)) {
-      onConfirm(); onInterim('')
-      // The poll caller already schedules a bridge restart (300ms) — no extra restart needed
+    if (isShort && hasPendingRef.current && CONFIRM_PHRASES.test(transcript)) {
+      onConfirmRef.current(); onInterimRef.current('')
       return
     }
-    if (isShort && hasPendingAction && CANCEL_PHRASES.test(transcript)) {
-      onCancel(); onInterim('')
+    if (isShort && hasPendingRef.current && CANCEL_PHRASES.test(transcript)) {
+      onCancelRef.current(); onInterimRef.current('')
       return
     }
-    onFinalTranscript(transcript.trim()); onFinalTranscript('__SEND__')
-  }, [onInterim, onFinalTranscript, onDismiss, onConfirm, onCancel, hasPendingAction])
+    onFinalRef.current(transcript.trim()); onFinalRef.current('__SEND__')
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const triggerFinal = useCallback((text: string) => {
     stopPoll()
@@ -128,7 +144,7 @@ function useSpeechInput({
       const display = interim.trim()
       if (!display) return
 
-      onInterim(display)
+      onInterimRef.current(display)
       lastInterimRef.current = display
 
       // Reset silence timer on every word arrival
@@ -158,7 +174,7 @@ function useSpeechInput({
     }
 
     recognition.start()
-  }, [WebSpeech, onInterim, triggerFinal, phase])
+  }, [WebSpeech, triggerFinal, phase]) // onInterim via ref
 
   const stopWebSpeech = useCallback(() => {
     stopSilenceTimer()
@@ -206,7 +222,7 @@ function useSpeechInput({
           if (interim !== lastInterimRef.current) {
             lastInterimRef.current = interim
             lastInterimTimeRef.current = Date.now()
-            onInterim(interim)
+            onInterimRef.current(interim)
           } else if (lastInterimTimeRef.current > 0 &&
                      Date.now() - lastInterimTimeRef.current >= SILENCE_MS) {
             triggerFinal(interim)
@@ -223,7 +239,7 @@ function useSpeechInput({
         }
       } catch { /* bridge momentarily busy */ }
     }, 100)
-  }, [onInterim, triggerFinal])
+  }, [triggerFinal]) // onInterim via ref
 
   const stopBridge = useCallback(async () => {
     stopPoll()
@@ -238,10 +254,10 @@ function useSpeechInput({
     connectStartRef.current = 0
     setPhase('idle')
     setVolume(0)
-    onInterim('')
+    onInterimRef.current('')
     if (modeRef.current === 'webspeech') stopWebSpeech()
     else stopBridge()
-  }, [onInterim, stopWebSpeech, stopBridge])
+  }, [stopWebSpeech, stopBridge])
 
   const start = useCallback(async () => {
     if (activeRef.current) return
