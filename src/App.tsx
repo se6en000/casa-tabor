@@ -20,7 +20,6 @@ import { useWakeWord } from './hooks/useWakeWord'
 import { useIdleTimer } from './hooks/useIdleTimer'
 import { useScreensaverSettings } from './hooks/useScreensaverSettings'
 
-const IDLE_SCREENSAVER_MS = 5  * 60 * 1000  // fallback — overridden by settings
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
@@ -93,7 +92,7 @@ function AppShell() {
   usePushNotifications()
 
   const { settings } = useScreensaverSettings()
-  const ssMs   = settings.enabled ? settings.screensaverMins * 60_000 : IDLE_SCREENSAVER_MS
+  const ssMs   = settings.enabled ? settings.screensaverMins * 60_000 : Infinity
   const dispMs = settings.displaySleepEnabled ? settings.displayOffMins * 60_000 : Infinity
   useIdleTimer(ssMs, dispMs)
 
@@ -128,8 +127,8 @@ function AppShell() {
       {/* Global AI drawer — opens from TopBar sparkle or wake word */}
       <GlobalAIDrawer screensaverActive={screensaverActive} />
 
-      {/* Art screensaver overlay */}
-      {screensaverActive && settings.enabled && (
+      {/* Art screensaver overlay — always available when triggered manually; idle auto-fire respects settings.enabled */}
+      {screensaverActive && (
         <ArtScreensaver
           onDismiss={() => setScreensaverActive(false)}
           rotationMins={settings.rotationMins}

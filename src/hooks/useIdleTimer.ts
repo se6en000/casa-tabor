@@ -16,9 +16,11 @@ export function useIdleTimer(screensaverMs: number, displayOffMs: number) {
       if (ssTimerRef.current)   clearTimeout(ssTimerRef.current)
       if (dispTimerRef.current) clearTimeout(dispTimerRef.current)
 
-      ssTimerRef.current = setTimeout(() => {
-        document.dispatchEvent(new CustomEvent('screensaver-on'))
-      }, screensaverMs)
+      if (isFinite(screensaverMs)) {
+        ssTimerRef.current = setTimeout(() => {
+          document.dispatchEvent(new CustomEvent('screensaver-on'))
+        }, screensaverMs)
+      }
 
       if (isFinite(displayOffMs)) {
         dispTimerRef.current = setTimeout(() => {
