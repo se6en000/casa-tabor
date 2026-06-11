@@ -78,13 +78,11 @@ Deno.serve(async (req) => {
   for (const seg of titleSegments) {
     const matched = familyMembers.find(m =>
       m.name.toLowerCase() === seg.toLowerCase() ||
-      m.full_name?.toLowerCase() === seg.toLowerCase() ||
-      m.name.toLowerCase().startsWith(seg.toLowerCase()) ||
-      seg.toLowerCase().startsWith(m.name.toLowerCase())
+      m.full_name?.toLowerCase() === seg.toLowerCase()
     )
     if (matched && !serverDetectedPrimary) {
-      serverDetectedPrimary = matched.name  // first name found is primary
-    } else if (!matched) {
+      serverDetectedPrimary = matched.name  // first exact name match is primary
+    } else {
       descriptionSegments.push(seg)
     }
   }
