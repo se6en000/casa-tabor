@@ -343,16 +343,26 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       setInput('')
       interimRef.current = ''
       setAttachedImage(null)
+      freshStartedRef.current = null  // allow fresh start next time this event is opened
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When in event-edit mode and no prior messages, auto-send a silent priming message
-  // so the AI greets the user with context about the specific event.
+  // When in event-edit mode, always start a fresh session so old conversations don't bleed in.
   const firedEventGreetRef = useRef<string | null>(null)
+  const freshStartedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!open || !focusedEvent) return
+    if (freshStartedRef.current === focusedEvent.id) return
+    freshStartedRef.current = focusedEvent.id
+    firedEventGreetRef.current = null  // reset so greet fires after fresh start
+    startFresh()
+  }, [open, focusedEvent?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Once session is fresh (no messages), auto-send a silent priming message
+  // so the AI greets the user with context about the specific event.
   useEffect(() => {
     if (!open || !focusedEvent || loading) return
     if (firedEventGreetRef.current === focusedEvent.id) return
-    // Only fire when session is resolved and there are no messages yet
     if (sessionLoading) return
     if (messages.length > 0) { firedEventGreetRef.current = focusedEvent.id; return }
     firedEventGreetRef.current = focusedEvent.id
