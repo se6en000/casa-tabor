@@ -264,11 +264,12 @@ interface Props {
   family: FamilyMember[]
   homeCity?: string
   onSleepCommand?: () => void
+  focusedEvent?: EventWithDetails
 }
 
 const SLEEP_PHRASES = /\b(sleep|goodnight|good night|art mode|screen saver|screensaver|night mode)\b/i
 
-export default function AIChatDrawer({ open, onClose, anchor, page, events, family, homeCity, onSleepCommand }: Props) {
+export default function AIChatDrawer({ open, onClose, anchor, page, events, family, homeCity, onSleepCommand, focusedEvent }: Props) {
   const [input, setInput] = useState('')
   const interimRef = useRef('')
   const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; mimeType: string } | null>(null)
@@ -278,7 +279,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
 
-  const { messages, loading, send, reset, session, sessionLoading, startFresh, updateMessageToolStatus } = useAIAssistant({ page, events, family, homeCity })
+  const { messages, loading, send, reset, session, sessionLoading, startFresh, updateMessageToolStatus } = useAIAssistant({ page, events, family, homeCity, focusedEvent })
 
   const led = useLedStrip()
 
@@ -344,6 +345,19 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       setAttachedImage(null)
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When in event-edit mode and no prior messages, auto-send a silent priming message
+  // so the AI greets the user with context about the specific event.
+  const firedEventGreetRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!open || !focusedEvent || loading) return
+    if (firedEventGreetRef.current === focusedEvent.id) return
+    // Only fire when session is resolved and there are no messages yet
+    if (sessionLoading) return
+    if (messages.length > 0) { firedEventGreetRef.current = focusedEvent.id; return }
+    firedEventGreetRef.current = focusedEvent.id
+    send(`[EVENT_EDIT_MODE] I've opened the event "${focusedEvent.title}" for editing. Please greet me briefly and confirm which event you're ready to help me update. Don't list all the fields — just acknowledge it and ask what I'd like to change.`)
+  }, [open, focusedEvent?.id, sessionLoading, messages.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pause voice while AI is thinking; auto-resume when response arrives
   const prevLoadingRef = useRef(false)

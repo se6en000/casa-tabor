@@ -11,6 +11,7 @@ export interface AssistantContext {
   events: EventWithDetails[]
   family: FamilyMember[]
   homeCity?: string
+  focusedEvent?: EventWithDetails
 }
 
 const genId = (): string =>
@@ -42,6 +43,19 @@ function buildContext(ctx: AssistantContext) {
     })),
     family: ctx.family.map(f => ({ id: f.id, name: f.name })),
     homeCity: ctx.homeCity,
+    focusedEvent: ctx.focusedEvent ? {
+      id: ctx.focusedEvent.id,
+      title: ctx.focusedEvent.title,
+      start_time: ctx.focusedEvent.start_time,
+      end_time: ctx.focusedEvent.end_time,
+      all_day: ctx.focusedEvent.all_day,
+      location_name: ctx.focusedEvent.location_name ?? null,
+      address: ctx.focusedEvent.address ?? null,
+      description: ctx.focusedEvent.description ?? null,
+      members: ctx.focusedEvent.members.map(m => m.family_member?.name ?? '').filter(Boolean),
+      category: ctx.focusedEvent.enrichment?.category ?? null,
+      notes: ctx.focusedEvent.enrichment?.prep_notes ?? null,
+    } : undefined,
   }
 }
 

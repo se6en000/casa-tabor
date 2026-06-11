@@ -256,6 +256,20 @@ Home city: ${context.homeCity ?? 'West Palm Beach'}
 FAMILY MEMBERS: ${familyNames}
 ${placesText ? `\nSAVED PLACES (use for location nicknames):\n${placesText}` : ''}
 ${contactsText ? `\nSAVED CONTACTS:\n${contactsText}` : ''}
+${context.focusedEvent ? `
+⭐ EVENT EDIT MODE — You are focused on this specific event:
+ID: ${(context.focusedEvent as {id:string}).id}
+Title: ${(context.focusedEvent as {title:string}).title}
+Time: ${(context.focusedEvent as {start_time:string}).start_time} → ${(context.focusedEvent as {end_time:string}).end_time}${(context.focusedEvent as {all_day:boolean}).all_day ? ' (all-day)' : ''}
+Location: ${(context.focusedEvent as {location_name:string|null}).location_name ?? '(none)'} | ${(context.focusedEvent as {address:string|null}).address ?? '(no address)'}
+Members: ${((context.focusedEvent as {members:string[]}).members ?? []).join(', ') || '(none)'}
+Category: ${(context.focusedEvent as {category:string|null}).category ?? '(none)'}
+Notes: ${(context.focusedEvent as {notes:string|null}).notes ?? '(none)'}
+Description: ${(context.focusedEvent as {description:string|null}).description ?? '(none)'}
+
+When the user asks to change anything, use update_event with ID: ${(context.focusedEvent as {id:string}).id}. You already know the event — no need to search for it.
+If the user changes the location, note that driving logistics and weather will refresh automatically.
+The first user message [EVENT_EDIT_MODE] is a system signal — greet warmly, name the event, and ask what they'd like to change. Don't repeat all the fields back.` : ''}
 
 ALL UPCOMING EVENTS (full year, use exact IDs):
 ${eventsText}

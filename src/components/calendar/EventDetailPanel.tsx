@@ -18,6 +18,7 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { EventChecklistItem } from '../../types'
 import { getFieldsForCategory, CATEGORY_LABEL } from './categoryFields'
 import EventEditSheet from './EventEditSheet'
+import AIChatDrawer from '../shared/AIChatDrawer'
 import type { Trip } from '../../hooks/useTrips'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useSavedPlaces, useSavePlace, findSavedPlace } from '../../hooks/useSavedPlaces'
@@ -49,6 +50,8 @@ const stopTouch = (e: React.TouchEvent | React.PointerEvent) => e.stopPropagatio
 
 export default function EventDetailPanel({ event, onClose }: EventDetailPanelProps) {
   const [showEdit, setShowEdit] = useState(false)
+  const [showAIEdit, setShowAIEdit] = useState(false)
+  const { data: familyMembers = [] } = useFamilyMembers()
   const isMobile = useIsMobile()
   const mobileDragControls = useDragControls()
   const desktopDragControls = useDragControls()
@@ -125,7 +128,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 })()}
                 <PanelHeader event={event} onClose={onClose} />
                 <PanelBody event={event} />
-                <PanelFooter event={event} onEdit={() => setShowEdit(true)} />
+                <PanelFooter event={event} onEdit={() => setShowEdit(true)} onEditWithAI={() => setShowAIEdit(true)} />
               </motion.div>
             ) : (
               /* ── Desktop: right side panel, swipe-right from handle only ── */
@@ -171,7 +174,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 })()}
                 <PanelHeader event={event} onClose={onClose} />
                 <PanelBody event={event} />
-                <PanelFooter event={event} onEdit={() => setShowEdit(true)} />
+                <PanelFooter event={event} onEdit={() => setShowEdit(true)} onEditWithAI={() => setShowAIEdit(true)} />
               </motion.div>
             )}
           </>
@@ -180,6 +183,16 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
 
       {event && (
         <EventEditSheet event={event} open={showEdit} onClose={() => setShowEdit(false)} />
+      )}
+      {event && (
+        <AIChatDrawer
+          open={showAIEdit}
+          onClose={() => setShowAIEdit(false)}
+          page="event-edit"
+          events={[event]}
+          family={familyMembers}
+          focusedEvent={event}
+        />
       )}
     </>
   )
@@ -1365,7 +1378,7 @@ function LocationBlock({ locationName, address, parkingNotes, contactName, conta
 
 /* ── Footer ─────────────────────────────────────────────────── */
 
-function PanelFooter({ event, onEdit }: { event: EventWithDetails; onEdit: () => void }) {
+function PanelFooter({ event, onEdit, onEditWithAI }: { event: EventWithDetails; onEdit: () => void; onEditWithAI: () => void }) {
   const mapsQuery = event.address
     ? (event.location_name ? `${event.location_name}, ${event.address}` : event.address)
     : (event.location_name ?? '')
@@ -1375,13 +1388,22 @@ function PanelFooter({ event, onEdit }: { event: EventWithDetails; onEdit: () =>
 
   return (
     <div className="p-4 border-t border-casa-border flex gap-2">
+      {/* Two compact edit buttons */}
       <button
         onClick={onEdit}
-        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
+        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-button border border-casa-border text-[11px] font-semibold text-casa-navy hover:bg-casa-bg transition-colors whitespace-nowrap"
       >
-        <Pencil size={15} />
-        Edit Details
+        <Pencil size={13} />
+        Edit
       </button>
+      <button
+        onClick={onEditWithAI}
+        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-button border border-casa-gold/60 text-[11px] font-semibold text-casa-gold hover:bg-casa-gold/10 transition-colors whitespace-nowrap"
+      >
+        <Sparkles size={13} />
+        Edit with AI
+      </button>
+      {/* Full-size action buttons */}
       {mapsUrl && (
         <a
           href={mapsUrl}
