@@ -50,8 +50,10 @@ export function useAIAssistant(ctx: AssistantContext) {
   const [messages, setMessages] = useState<AIMessage[]>([])
   const [loading, setLoading] = useState(false)
   const sessionRef = useRef(session)
+  const messagesRef = useRef(messages)
   const ctxRef = useRef(ctx)
   useEffect(() => { sessionRef.current = session }, [session])
+  useEffect(() => { messagesRef.current = messages }, [messages])
   useEffect(() => { ctxRef.current = ctx })
 
   // Sync messages from session when session loads
@@ -95,7 +97,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       : undefined
 
     try {
-      const currentMessages = [...(activeSession.messages ?? []), userMsg]
+      const currentMessages = [...messagesRef.current, userMsg]
       const allMsgsForApi = currentMessages.map(m => ({ role: m.role, content: m.content }))
 
       const invokePromise = supabase.functions.invoke('ai-assistant', {
