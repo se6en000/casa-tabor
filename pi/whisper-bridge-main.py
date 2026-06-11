@@ -24,9 +24,12 @@ DG_URL = (
 )
 
 WAKE_MODEL    = 'alexa'
-WAKE_SCORE    = 0.3
+WAKE_SCORE    = 0.12
 WAKE_COOLDOWN = 2.0
 WAKE_WATCHDOG_SECS = 90
+
+# ── Audio buffering for wake word ─────────────────────────────────────────────
+BUFFER_SECS = 2.0  # Keep 2 seconds of pre-wake audio
 
 # ── STT state ────────────────────────────────────────────────────────────────
 _state      = dict(recording=False, ready=False, volume=0, transcript=None,
@@ -123,9 +126,33 @@ _wake_ts             = 0.0
 _wake_lock           = threading.Lock()
 _wake_proc           = None
 _wake_last_chunk_ts  = time.time()
+_audio_buffer        = []  # Circular buffer of audio chunks
+_audio_buffer_lock   = threading.Lock()
 
 # ── Display sleep/wake ───────────────────────────────────────────────────────
 _DISPLAY = ':0'
+
+def _add_to_buffer(raw_bytes):
+    """Add audio chunk to circular buffer, maintaining BUFFER_SECS of audio."""
+    with _audio_buffer_lock:
+        _audio_buffer.append(raw_bytes)
+        # Each chunk is 1280 bytes at 16kHz (16-bit mono) = 40ms
+        # For 2 seconds: 2.0 / 0.04 = 50 chunks
+        max_chunks = int(BUFFER_SECS / 0.04) + 1
+        while len(_audio_buffer) > max_chunks:
+            _audio_buffer.pop(0)
+
+def _get_buffer_copy():
+    """Get a copy of current buffer as single bytes object."""
+    with _audio_buffer_lock:
+        if not _audio_buffer:
+            return b''
+        return b''.join(_audio_buffer)
+
+def _clear_buffer():
+    """Clear the audio buffer."""
+    with _audio_buffer_lock:
+        _audio_buffer.clear()
 
 def _display_off():
     subprocess.Popen(['xset', '-display', _DISPLAY, 'dpms', 'force', 'off'],
@@ -187,6 +214,7 @@ def _wake_word_loop():
                 client_active = _stt_client is not None
 
         _wake_last_chunk_ts = time.time()
+        _clear_buffer()
         proc = subprocess.Popen(
             ['arecord', '-D', ALSA_DEVICE, '-f', 'S16_LE', '-r', str(RATE), '-c', '1', '-'],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
@@ -213,6 +241,10 @@ def _wake_word_loop():
                     time.sleep(0.1)
                     break
                 _wake_last_chunk_ts = time.time()
+                
+                # Add to rolling buffer
+                _add_to_buffer(raw)
+                
                 audio_np = np.frombuffer(raw, dtype=np.int16)
                 prediction = model.predict(audio_np)
                 score = max(prediction.get(WAKE_MODEL, 0),
@@ -224,10 +256,21 @@ def _wake_word_loop():
                     if now - _wake_ts >= WAKE_COOLDOWN:
                         log.info(f'[wake] triggered! score={score:.2f}')
                         _display_on()
+                        
+                        # Capture buffer for pre-fill
+                        buffer_audio = _get_buffer_copy()
+                        log.info(f'[wake] buffer size: {len(buffer_audio)} bytes')
+                        
                         with _wake_lock:
                             _wake_triggered = True
                             _wake_ts = now
-                        _ws_push_all({'type': 'wake'})
+                        
+                        # Send wake event with buffered audio
+                        msg = {'type': 'wake', 'buffer': len(buffer_audio)}
+                        _ws_push_all(msg)
+                        
+                        # If an STT client gets created immediately, the buffer will be
+                        # sent as initial audio before any new chunks
         except Exception as e:
             log.error(f'[wake] inner error: {e}')
         finally:
@@ -304,9 +347,18 @@ def _on_close(ws_arg, code, msg):
     log.info(f'[DG] ws closed {code}')
     stop_recording()
 
-def _stream_audio(proc, ws_arg, gen):
+def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
     chunk_bytes = (RATE // 10) * 2   # 100ms of S16_LE mono
     warmup = 0
+    
+    # Send initial buffer if available (pre-wake audio)
+    if initial_buffer:
+        try:
+            log.info(f'[stream_audio] sending initial buffer ({len(initial_buffer)} bytes)')
+            ws_arg.send(initial_buffer, websocket.ABNF.OPCODE_BINARY)
+        except Exception as e:
+            log.error(f'send initial buffer failed: {e}')
+    
     try:
         while True:
             with _state_lock:
@@ -354,6 +406,10 @@ def start_recording():
             pass
         _wake_proc = None
 
+    # Capture buffer for pre-fill before starting new recording
+    initial_buffer = _get_buffer_copy()
+    log.info(f'[start_recording] captured {len(initial_buffer)} bytes for pre-fill')
+    
     _finals = []
     _ws_gen += 1          # invalidate any in-flight _on_close / _stream_audio from old session
     current_gen = _ws_gen
@@ -402,7 +458,7 @@ def start_recording():
     def _deferred_stream():
         if ws_ready.wait(timeout=5):
             log.info('[stream] WS ready, streaming audio...')
-            _stream_audio(proc, ws, current_gen)
+            _stream_audio(proc, ws, current_gen, initial_buffer=initial_buffer)
         else:
             log.error('[stream] WS did not connect within 5s')
             _set(error='WS connect timeout', recording=False, ready=False)
