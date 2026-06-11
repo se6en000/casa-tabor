@@ -15,6 +15,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)
   const [aspectRatio, setAspectRatio] = useState<string | undefined>(undefined)
+  const [isPortrait, setIsPortrait] = useState(false)
 
   // Fade in on mount, then allow dismiss after a grace period
   useEffect(() => {
@@ -35,12 +36,13 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   }, [])
 
   // Reset aspect ratio when artwork changes
-  useEffect(() => { setAspectRatio(undefined) }, [artwork?.id])
+  useEffect(() => { setAspectRatio(undefined); setIsPortrait(false) }, [artwork?.id])
 
   function handleImgLoad(e: React.SyntheticEvent<HTMLImageElement>) {
     const img = e.currentTarget
     if (img.naturalWidth && img.naturalHeight) {
       setAspectRatio(`${img.naturalWidth} / ${img.naturalHeight}`)
+      setIsPortrait(img.naturalHeight > img.naturalWidth)
     }
     onLoad()
   }
@@ -79,9 +81,10 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
           style={{
             position: 'relative',
             aspectRatio: aspectRatio,
-            minWidth: `${minArtWidthVw}vw`,
-            maxWidth: '100%',
-            maxHeight: '100%',
+            ...(isPortrait
+              ? { minHeight: '70vh', maxHeight: '100%', maxWidth: '100%' }
+              : { minWidth: `${minArtWidthVw}vw`, maxWidth: '100%', maxHeight: '100%' }
+            ),
             overflow: 'hidden',
             display: 'flex',
           }}
