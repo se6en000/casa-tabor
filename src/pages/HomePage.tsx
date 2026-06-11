@@ -228,7 +228,7 @@ export default function HomePage() {
             <ol className="space-y-2">
               {/* Past events */}
               {events.filter(e => isBefore(new Date(e.end_time), now)).map((ev, i) => (
-                <TimelineRow key={ev.id} event={ev} now={now} index={i} onClick={() => setSelectedEventId(ev.id)} />
+                <TimelineRow key={ev.id} event={ev} now={now} index={i} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
               ))}
 
               {/* ── Now line ── */}
@@ -249,7 +249,7 @@ export default function HomePage() {
 
               {/* Upcoming events */}
               {events.filter(e => isAfter(new Date(e.end_time), now)).map((ev, i) => (
-                <TimelineRow key={ev.id} event={ev} now={now} index={i} onClick={() => setSelectedEventId(ev.id)} />
+                <TimelineRow key={ev.id} event={ev} now={now} index={i} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
               ))}
             </ol>
           )}
@@ -273,7 +273,7 @@ export default function HomePage() {
               </div>
               <ol className="space-y-2">
                 {tomorrowEvents.map((ev, i) => (
-                  <TimelineRow key={ev.id} event={ev} now={now} index={i} onClick={() => setSelectedEventId(ev.id)} />
+                  <TimelineRow key={ev.id} event={ev} now={now} index={i} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
                 ))}
               </ol>
             </motion.section>
@@ -353,11 +353,13 @@ function TimelineRow({
   now,
   index,
   onClick,
+  onComplete,
 }: {
   event: EventWithDetails
   now: Date
   index: number
   onClick: () => void
+  onComplete?: (id: string) => void
 }) {
   const start = new Date(event.start_time)
   const end = new Date(event.end_time)
@@ -366,12 +368,22 @@ function TimelineRow({
   const color = eventColor(event)
   const timed = isTimedReminder(event)
 
-  // Timed reminder — slim amber pill in the timeline
+  const [checking, setChecking] = useState(false)
+
+  // Timed reminder — slim amber pill in the timeline with dismiss checkbox
   if (timed) {
+    async function handleCheck(e: React.MouseEvent) {
+      e.stopPropagation()
+      if (checking || !onComplete) return
+      setChecking(true)
+      await new Promise(r => setTimeout(r, 320))
+      onComplete(event.id)
+    }
     return (
       <motion.li
         initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: past ? 0.4 : 1, x: 0 }}
+        exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
         transition={{ duration: 0.3, delay: index * 0.04 }}
         className="flex items-center gap-3 cursor-pointer"
         onClick={e => { e.stopPropagation(); onClick() }}
@@ -387,8 +399,22 @@ function TimelineRow({
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-caption font-semibold"
           style={{ border: '1.5px solid #C4893A', backgroundColor: '#FDFAF4', color: '#7A5520' }}
         >
+          {/* Dismiss checkbox */}
+          <button
+            onClick={handleCheck}
+            className={`shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+              checking ? 'bg-green-500 border-green-500' : 'border-amber-400 hover:border-green-400 bg-transparent'
+            }`}
+            title="Mark done"
+          >
+            {checking && (
+              <svg width="8" height="6" viewBox="0 0 9 7" fill="none">
+                <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </button>
           <Bell size={13} style={{ color: '#C4893A' }} className="shrink-0" />
-          <span>{event.title}</span>
+          <span className={checking ? 'line-through opacity-50' : ''}>{event.title}</span>
           {event.members.length > 0 && (
             <div className="flex gap-1 ml-0.5">
               {event.members.slice(0, 4).map(m => (
