@@ -12,6 +12,7 @@ export interface AssistantContext {
   family: FamilyMember[]
   homeCity?: string
   focusedEvent?: EventWithDetails
+  onSessionEnd?: () => void
 }
 
 const genId = (): string =>
@@ -96,6 +97,8 @@ export function useAIAssistant(ctx: AssistantContext) {
         return updated
       })
       endSession()
+      // Close the drawer after a brief moment so user sees the farewell message
+      setTimeout(() => ctxRef.current.onSessionEnd?.(), 1200)
       return
     }
 

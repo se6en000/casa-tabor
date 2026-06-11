@@ -279,7 +279,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
 
-  const { messages, loading, send, reset, session, sessionLoading, startFresh, primeMessages, updateMessageToolStatus } = useAIAssistant({ page, events, family, homeCity, focusedEvent })
+  const { messages, loading, send, reset, session, sessionLoading, startFresh, primeMessages, updateMessageToolStatus } = useAIAssistant({ page, events, family, homeCity, focusedEvent, onSessionEnd: onClose })
 
   const led = useLedStrip()
 
