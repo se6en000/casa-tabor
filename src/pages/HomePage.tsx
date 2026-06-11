@@ -452,15 +452,14 @@ function TimelineRow({
                         {ownerName}
                       </span>
                     )}
-                    {/* Other attendees as initials */}
+                    {/* Other attendees as name pills */}
                     {others.slice(0, 3).map((m) => (
                       <span
                         key={m.id}
-                        className="w-5 h-5 rounded-full text-white text-[9px] font-bold flex items-center justify-center border-2 border-white"
+                        className="px-2 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
                         style={{ backgroundColor: m.family_member?.color_hex }}
-                        title={m.family_member?.name}
                       >
-                        {m.family_member?.name?.[0]}
+                        {m.family_member?.name}
                       </span>
                     ))}
                   </div>
