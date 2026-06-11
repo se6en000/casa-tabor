@@ -207,15 +207,14 @@ function DayEventCard({
               {primary.family_member?.name}
             </span>
           )}
-          {/* Other attendees as initials */}
+          {/* Other attendees as name pills */}
           {otherMembers.slice(0, 3).map(m => (
             <span
               key={m.id}
-              className="w-4 h-4 rounded-full text-white text-[9px] font-bold flex items-center justify-center shrink-0"
+              className="px-2 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
               style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
-              title={m.family_member?.name}
             >
-              {m.family_member?.name?.[0] ?? '?'}
+              {m.family_member?.name ?? '?'}
             </span>
           ))}
           {event.location_name && (

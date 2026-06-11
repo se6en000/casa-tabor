@@ -9,12 +9,12 @@ import { cn } from '../../utils/cn'
 import type { Conflict } from '../../types'
 
 const TYPE_CONFIG: Record<string, { label: string; emoji: string; borderBg: string; badge: string }> = {
-  drive_time:    { label: 'Needs a Ride',   emoji: '🚗', borderBg: 'border-red-200 bg-red-50',    badge: 'bg-red-100 text-red-700' },
-  double_book:   { label: 'Double Booked',  emoji: '⚡', borderBg: 'border-amber-200 bg-amber-50', badge: 'bg-amber-100 text-amber-700' },
-  overlap:       { label: 'Time Overlap',   emoji: '⏱',  borderBg: 'border-amber-200 bg-amber-50', badge: 'bg-amber-100 text-amber-700' },
-  gear_conflict: { label: 'Gear Conflict',  emoji: '🎒', borderBg: 'border-blue-100 bg-blue-50',   badge: 'bg-blue-100 text-blue-700' },
+  drive_time:    { label: 'Needs a Ride',   emoji: '🚗', borderBg: 'border-red-200 bg-red-50',    badge: 'bg-red-500 text-white' },
+  double_book:   { label: 'Double Booked',  emoji: '⚡', borderBg: 'border-amber-200 bg-amber-50', badge: 'bg-amber-400 text-white' },
+  overlap:       { label: 'Time Overlap',   emoji: '⏱',  borderBg: 'border-amber-200 bg-amber-50', badge: 'bg-amber-400 text-white' },
+  gear_conflict: { label: 'Gear Conflict',  emoji: '🎒', borderBg: 'border-blue-100 bg-blue-50',   badge: 'bg-blue-500 text-white' },
 }
-const DEFAULT_CONFIG = { label: 'Conflict', emoji: '⚠️', borderBg: 'border-amber-200 bg-amber-50', badge: 'bg-amber-100 text-amber-700' }
+const DEFAULT_CONFIG = { label: 'Conflict', emoji: '⚠️', borderBg: 'border-amber-200 bg-amber-50', badge: 'bg-amber-400 text-white' }
 
 function shortTitle(raw: string): string {
   const stripped = raw.includes(' | ') ? raw.split(' | ').slice(1).join(' | ') : raw

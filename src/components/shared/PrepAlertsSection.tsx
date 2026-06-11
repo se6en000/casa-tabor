@@ -60,10 +60,10 @@ export default function PrepAlertsSection({ className }: { className?: string })
                       <span className={cn(
                         'text-caption font-semibold px-1.5 py-0.5 rounded-full shrink-0',
                         item.priority === 3
-                          ? 'bg-red-100 text-red-700'
+                          ? 'bg-red-500 text-white'
                           : item.priority === 2
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-blue-100 text-blue-700',
+                          ? 'bg-amber-400 text-white'
+                          : 'bg-blue-500 text-white',
                       )}>
                         {days}
                       </span>

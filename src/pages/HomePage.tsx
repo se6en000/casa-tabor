@@ -390,15 +390,14 @@ function TimelineRow({
           <Bell size={13} style={{ color: '#C4893A' }} className="shrink-0" />
           <span>{event.title}</span>
           {event.members.length > 0 && (
-            <div className="flex gap-0.5 ml-0.5">
+            <div className="flex gap-1 ml-0.5">
               {event.members.slice(0, 4).map(m => (
                 <span
                   key={m.id}
-                  className="w-4 h-4 rounded-full text-white text-[8px] flex items-center justify-center font-bold border border-white"
+                  className="px-1.5 py-0.5 rounded-full text-white text-[9px] font-bold leading-none whitespace-nowrap"
                   style={{ backgroundColor: m.family_member?.color_hex }}
-                  title={m.family_member?.name}
                 >
-                  {m.family_member?.name?.[0]}
+                  {m.family_member?.name}
                 </span>
               ))}
             </div>
