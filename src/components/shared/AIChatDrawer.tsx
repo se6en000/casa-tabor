@@ -213,6 +213,7 @@ function useSpeechInput({
   // ── Bridge path (Pi / Chromium) ─────────────────────────────────────────
   const startBridge = useCallback(async () => {
     if (!activeRef.current) return
+    stopPoll()  // kill any leaked interval before starting a new session
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     connectStartRef.current = Date.now()
@@ -251,12 +252,16 @@ function useSpeechInput({
             onInterimRef.current(interim)
           } else if (lastInterimTimeRef.current > 0 &&
                      Date.now() - lastInterimTimeRef.current >= SILENCE_MS) {
-            triggerFinal(interim)
-            if (activeRef.current) setTimeout(() => startBridge(), 300)
+            if (phaseRef.current !== 'processing') {
+              triggerFinal(interim)
+              if (activeRef.current) setTimeout(() => startBridge(), 300)
+            }
           }
         }
 
-        if (!data.recording && data.transcript) {
+        // Guard against double-fire: a second queued poll callback that arrives
+        // after triggerFinal already set phase to 'processing' must not re-trigger.
+        if (!data.recording && data.transcript && phaseRef.current !== 'processing') {
           triggerFinal(data.transcript || lastInterimRef.current)
           if (activeRef.current) setTimeout(() => startBridge(), 300)
         } else if (!data.recording && data.error) {
