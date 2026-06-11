@@ -319,8 +319,9 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       }
     },
     onDismiss: () => {
-      send('Thank you, talk soon!').catch(() => {})
-      setTimeout(onClose, 800)
+      // Verbal goodbye — clear session immediately so next open starts fresh
+      startFresh()
+      setTimeout(onClose, 400)
     },
     onConfirm: () => { led.confirm(); pendingConfirmRef.current?.() },
     onCancel:  () => { led.cancel();  pendingCancelRef.current?.()  },

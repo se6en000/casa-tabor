@@ -67,9 +67,10 @@ export function useAIAssistant(ctx: AssistantContext) {
   }, [sessionLoading, session?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const startFresh = useCallback(() => {
+    endSession()   // clear localStorage so next open is truly blank
     setMessages([])
     startNewSession()
-  }, [startNewSession])
+  }, [endSession, startNewSession])
 
   const send = useCallback(async (text: string, image?: { dataUrl: string; mimeType: string }) => {
     // Check for goodbye phrase → end session
