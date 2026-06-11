@@ -141,10 +141,19 @@ export default function GoogleServicesPage() {
   // Sync calendar now
   const syncCalendar = useMutation({
     mutationFn: async (memberId: string) => {
-      const { error } = await supabase.functions.invoke('sync-calendars', {
-        body: { family_member_id: memberId },
-      })
-      if (error) throw error
+      // Run calendar sync and Gmail scan in parallel — one button does both
+      const [calResult, gmailResult] = await Promise.allSettled([
+        supabase.functions.invoke('sync-calendars', { body: { family_member_id: memberId } }),
+        supabase.functions.invoke('scan-gmail-inbox', { body: { family_member_id: memberId } }),
+      ])
+      if (calResult.status === 'rejected') throw calResult.reason
+      if (calResult.value.error) throw calResult.value.error
+      if (gmailResult.status === 'fulfilled' && !gmailResult.value.error) {
+        const results = gmailResult.value.data?.results ?? []
+        const created = results.reduce((s: number, r: { created: number }) => s + r.created, 0)
+        const scanned = results.reduce((s: number, r: { scanned: number }) => s + r.scanned, 0)
+        setScanResult(`Scanned ${scanned} emails · ${created} event${created !== 1 ? 's' : ''} added`)
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['google-services'] })
