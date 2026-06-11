@@ -33,7 +33,14 @@ if [ "${XDG_SESSION_TYPE:-x11}" = "wayland" ]; then
   echo "Run: sudo raspi-config nonint do_wayland W1 && sudo reboot" >&2
 fi
 
-# Disable screen blanking and power management
+# Ensure X11 auth is available before any X11 commands
+export DISPLAY="${DISPLAY:-:0}"
+export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
+
+# Wait for X11 display to be ready (up to 20 seconds)
+for i in $(seq 1 20); do xdpyinfo >/dev/null 2>&1 && break; sleep 1; done
+
+# Disable screen blanking and DPMS power management AFTER display is ready
 xset s off
 xset s noblank
 xset -dpms
@@ -67,10 +74,6 @@ KIOSK_FLAG=""
 if [ "$KIOSK" = "1" ]; then
   KIOSK_FLAG="--kiosk"
 fi
-
-# Ensure X11 auth is available when script is called from SSH or autostart
-export DISPLAY="${DISPLAY:-:0}"
-export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
 
 chromium-browser \
   $KIOSK_FLAG \
