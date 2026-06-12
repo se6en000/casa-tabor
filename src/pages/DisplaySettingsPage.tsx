@@ -737,6 +737,13 @@ export default function DisplaySettingsPage() {
           <div className="flex items-center gap-2 text-caption text-casa-muted mt-1">
             <span className="text-casa-gold">✓</span> Realistic frame effect
           </div>
+          <button
+            type="button"
+            onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
+            className="mt-4 px-4 py-2 rounded-lg text-body-sm font-medium bg-casa-gold text-white hover:bg-casa-gold/90 transition-colors"
+          >
+            Preview Art Mode
+          </button>
         </div>
 
       </div>

@@ -56,18 +56,17 @@ export function generateLightingOverlay(strength: number = 0.08): string {
 
 /**
  * Generate a paper-like texture using CSS background patterns.
- * Combines multiple layers for depth.
+ * Combines multiple layers for depth without using data URLs.
  */
 export function getTextureStyle() {
   const vignette = generateVignetteGradient(0.1)
   const lighting = generateLightingOverlay(0.06)
-  const texture = generateCanvasTexture(0.012)
   
   return {
-    backgroundImage: `${vignette}, ${lighting}, url('${texture}')`,
-    backgroundSize: '100% 100%, 100% 100%, 256px 256px',
-    backgroundPosition: '0 0, 0 0, 0 0',
-    backgroundAttachment: 'scroll, scroll, fixed',
+    backgroundImage: `${vignette}, ${lighting}`,
+    backgroundSize: '100% 100%, 100% 100%',
+    backgroundPosition: '0 0, 0 0',
+    backgroundAttachment: 'scroll, scroll',
     backgroundBlendMode: 'normal',
   }
 }

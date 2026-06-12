@@ -240,3 +240,13 @@ button:active, a:active, [role="button"]:active {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-casa-muted);
 }
+
+/* ── Art mode texture effects ──────────────────────────────── */
+@supports (background: repeating-conic-gradient(from 45deg, #000 0 90deg, transparent 90deg 180deg)) {
+  .art-texture {
+    background-image: 
+      repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,.03) 2px, rgba(0,0,0,.03) 4px),
+      repeating-linear-gradient(-45deg, transparent, transparent 2px, rgba(0,0,0,.02) 2px, rgba(0,0,0,.02) 4px),
+      repeating-linear-gradient(90deg, transparent, transparent 1px, rgba(0,0,0,.01) 1px, rgba(0,0,0,.01) 2px);
+  }
+}
