@@ -73,6 +73,25 @@ export default function SettingsShell() {
     location.pathname === i.to || location.pathname.startsWith(i.to + '/')
   )
 
+  // Auto-scroll active tab to center on mobile
+  useEffect(() => {
+    if (!tabsRef.current || !activeItem) return
+    
+    const activeButton = tabsRef.current.querySelector(
+      `button[data-path="${activeItem.to}"]`
+    ) as HTMLElement | null
+    
+    if (activeButton) {
+      setTimeout(() => {
+        activeButton.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+          inline: 'center',
+        })
+      }, 0)
+    }
+  }, [activeItem])
+
   return (
     <div className="flex flex-1 overflow-hidden h-full">
 
@@ -149,6 +168,7 @@ export default function SettingsShell() {
             {ALL_ITEMS.map((item) => (
               <button
                 key={item.to}
+                data-path={item.to}
                 onClick={() => navigate(item.to)}
                 className={cn(
                   'px-4 py-3 text-body-sm font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-all',
