@@ -8,6 +8,7 @@ const MAX_PAGE   = 25
 const FETCH_LIMIT = 60
 const MAX_RETRIES = 4   // try up to 4 different random pages before giving up
 const RETRY_DELAY = 2000
+const WATERCOLOR_BIAS_RATIO = 3 // 3 watercolor picks per 1 non-watercolor pick
 
 // Hardcoded fallback artworks — guaranteed public-domain ARTIC images.
 // Used when API is unreachable (offline, rate-limited, etc.)
@@ -66,8 +67,51 @@ function savePrefs(prefs: ArtworkPreferences) {
   }
 }
 
-async function fetchPage(): Promise<Artwork[]> {
+function dedupeById(artworks: Artwork[]): Artwork[] {
+  const seen = new Set<number>()
+  const deduped: Artwork[] = []
+  for (const artwork of artworks) {
+    if (seen.has(artwork.id)) continue
+    seen.add(artwork.id)
+    deduped.push(artwork)
+  }
+  return deduped
+}
+
+function blendWatercolorFirst(watercolors: Artwork[], others: Artwork[]): Artwork[] {
+  const wc = shuffled(dedupeById(watercolors))
+  const nonWatercolor = shuffled(dedupeById(others).filter(a => !wc.some(w => w.id === a.id)))
+  const mixed: Artwork[] = []
+  let w = 0
+  let o = 0
+
+  while (w < wc.length || o < nonWatercolor.length) {
+    for (let i = 0; i < WATERCOLOR_BIAS_RATIO && w < wc.length; i += 1) {
+      mixed.push(wc[w])
+      w += 1
+    }
+    if (o < nonWatercolor.length) {
+      mixed.push(nonWatercolor[o])
+      o += 1
+    }
+  }
+
+  return mixed
+}
+
+async function fetchPage(mode: 'watercolor' | 'mixed'): Promise<Artwork[]> {
   const randomPage = Math.floor(Math.random() * MAX_PAGE) + 1
+  const watercolorClause = {
+    bool: {
+      should: [
+        { match_phrase: { medium_display: 'watercolor' } },
+        { match_phrase: { medium_display: 'watercolour' } },
+        { match_phrase: { title: 'watercolor' } },
+        { match_phrase: { title: 'watercolour' } },
+      ],
+      minimum_should_match: 1,
+    },
+  }
   const res = await fetch(`${API}/artworks/search`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -78,6 +122,7 @@ async function fetchPage(): Promise<Artwork[]> {
             { term: { is_public_domain: true } },
             { terms: { artwork_type_id: PAINTING_TYPE_IDS } },
             { exists: { field: 'image_id' } },
+            ...(mode === 'watercolor' ? [watercolorClause] : []),
           ],
         },
       },
@@ -119,9 +164,10 @@ export function useArtwork(rotateSecs = 240) {
     async function loadWithRetry() {
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         try {
-          const results = await fetchPage()
+          const [watercolors, mixed] = await Promise.all([fetchPage('watercolor'), fetchPage('mixed')])
+          const results = blendWatercolorFirst(watercolors, mixed)
           if (results.length > 0 && !cancelled) {
-            const filtered = results.filter(a => prefsRef.current[a.id] !== 'down')
+            const filtered = dedupeById(results).filter(a => prefsRef.current[a.id] !== 'down')
             const upvoted = filtered.filter(a => prefsRef.current[a.id] === 'up')
             const neutral = filtered.filter(a => prefsRef.current[a.id] !== 'up')
             const shuffledResults = [...shuffled(upvoted), ...shuffled(neutral)]
