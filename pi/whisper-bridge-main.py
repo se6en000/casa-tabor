@@ -187,17 +187,19 @@ def _wake_watchdog():
 
 def _make_recorder_cmd():
     """Return best available audio capture command for this platform.
-    Prefers parec (PipeWire/PulseAudio) so we coexist with the Chromium browser
-    process; falls back to arecord if parec is not available.
+    Prefers pw-record (PipeWire native) so we coexist with Chromium;
+    falls back to parec, then arecord.
     """
-    import shutil
+    import shutil, os
+    # Ensure PipeWire/PulseAudio can connect when started outside a full session env
+    os.environ.setdefault('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')
+    if shutil.which('pw-record'):
+        log.info('[recorder] using pw-record (PipeWire native)')
+        return ['pw-record', f'--rate={RATE}', '--channels=1', '--format=s16', '-']
     if shutil.which('parec'):
-        return [
-            'parec', '--raw',
-            '--rate', str(RATE),
-            '--channels', '1',
-            '--format', 's16le',
-        ]
+        log.info('[recorder] using parec (PulseAudio/PipeWire)')
+        return ['parec', '--raw', '--rate', str(RATE), '--channels', '1', '--format', 's16le']
+    log.info('[recorder] falling back to arecord (ALSA)')
     return ['arecord', '-D', ALSA_DEVICE, '-f', 'S16_LE', '-r', str(RATE), '-c', '1', '-']
 
 def _wake_word_loop():
@@ -224,14 +226,6 @@ def _wake_word_loop():
     while True:
         while _get()['recording']:
             time.sleep(0.2)
-
-        # Also wait if a browser STT client is actively connected (drawer is open)
-        with _stt_lock:
-            client_active = _stt_client is not None
-        while client_active:
-            time.sleep(0.2)
-            with _stt_lock:
-                client_active = _stt_client is not None
 
         _wake_last_chunk_ts = time.time()
         _clear_buffer()
