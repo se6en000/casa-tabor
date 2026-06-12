@@ -114,7 +114,7 @@ function AppShell() {
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
   const location = useLocation()
-  const hideFab = location.pathname.startsWith('/settings')
+  const hideFab = location.pathname.startsWith('/settings') || screensaverActive
 
   useEffect(() => {
     const onSleep = () => setScreensaverActive(true)
