@@ -23,9 +23,6 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   const [matTransition, setMatTransition] = useState(false)
   const [driftIndex, setDriftIndex] = useState(0)
   const [swiping, setSwiping] = useState(false)
-  
-  // Buffer for preloading next artwork
-  const [nextBuffered, setNextBuffered] = useState<{ aspectRatio: string; isPortrait: boolean; matColor: string } | null>(null)
   const touchStartXRef = useRef<number | null>(null)
   const textureStyle = useMemo(() => getTextureStyle(), [])
 
@@ -45,15 +42,9 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   }, [])
 
   useEffect(() => {
-    // Don't reset aspectRatio immediately—keep it until new one is ready
-    setNextBuffered(null)
+    // When artwork changes, reset state but keep dimensions stable to avoid resize flicker
+    // aspectRatio will be updated by onLoad, but old one won't disappear until new one loads
   }, [artwork?.id])
-
-  // Preload next artwork after current finishes loading
-  useEffect(() => {
-    if (!loaded || !artwork) return
-    preloadNextArtwork(artwork)
-  }, [loaded, artwork])
 
   useEffect(() => {
     const t = setInterval(() => setDriftIndex(i => (i + 1) % 4), 45000)
@@ -62,24 +53,16 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
 
   useEffect(() => {
     if (!artwork?.imageUrl || !adaptiveMatColor) return
-    
-    // Only compute if we don't already have a buffered value
-    if (nextBuffered) {
-      setMatColor(nextBuffered.matColor)
-      setNextBuffered(null)
-      return
-    }
-    
     setMatTransition(false)
     const timeout = setTimeout(async () => {
       try {
         const colorAnalysis = await generateAdaptiveMatColor(artwork.imageUrl)
         setMatColor(colorAnalysis.matColor)
-        setTimeout(() => setMatTransition(true), 100)
+        setTimeout(() => setMatTransition(true), 50)
       } catch {
         setMatColor('#F5F0E8')
       }
-    }, 100)
+    }, 50)
     return () => clearTimeout(timeout)
   }, [artwork?.id, artwork?.imageUrl, adaptiveMatColor])
 
@@ -92,42 +75,6 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
     onLoad()
   }
 
-  async function preloadNextArtwork(nextArtwork: typeof artwork) {
-    if (!nextArtwork) return
-    
-    try {
-      const img = new Image()
-      await new Promise((resolve, reject) => {
-        img.onload = resolve
-        img.onerror = reject
-        img.src = nextArtwork.imageUrl
-      })
-      
-      const naturalWidth = img.naturalWidth
-      const naturalHeight = img.naturalHeight
-      const isPortraitNext = naturalHeight > naturalWidth
-      
-      // Precompute mat color if adaptive
-      let precomputedMatColor = '#F5F0E8'
-      if (adaptiveMatColor && nextArtwork.imageUrl) {
-        try {
-          const colorAnalysis = await generateAdaptiveMatColor(nextArtwork.imageUrl)
-          precomputedMatColor = colorAnalysis.matColor
-        } catch {
-          precomputedMatColor = '#F5F0E8'
-        }
-      }
-      
-      setNextBuffered({
-        aspectRatio: `${naturalWidth} / ${naturalHeight}`,
-        isPortrait: isPortraitNext,
-        matColor: precomputedMatColor,
-      })
-    } catch {
-      setNextBuffered(null)
-    }
-  }
-
   function handleDismiss() {
     if (!dismissable) return
     setVisible(false)
@@ -136,19 +83,8 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
 
   function handleNextPiece(e?: React.MouseEvent | React.TouchEvent) {
     e?.stopPropagation()
-    
-    // Apply buffered dimensions and color instantly
-    if (nextBuffered) {
-      setAspectRatio(nextBuffered.aspectRatio)
-      setIsPortrait(nextBuffered.isPortrait)
-      setMatColor(nextBuffered.matColor)
-      setNextBuffered(null)
-    }
-    
     setSwiping(true)
-    setTimeout(() => {
-      setSwiping(false)
-    }, 260)
+    setTimeout(() => setSwiping(false), 260)
     next()
   }
 
@@ -188,7 +124,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             'inset 0 -18px 24px -12px rgba(0,0,0,0.10)',
           ].join(', '),
           padding: '3.5vw',
-          transition: matTransition ? 'background-color 0.8s ease' : 'none',
+          transition: matTransition ? 'background-color 0.4s ease-out' : 'none',
         }}
       >
         <div
@@ -200,12 +136,13 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
               : { minWidth: `${minArtWidthVw}vw`, maxWidth: '100%', maxHeight: '100%' }),
             overflow: 'hidden',
             display: 'flex',
-            transform: [
-              'translate3d(0px,0px,0)',
-              'translate3d(1px,0px,0)',
-              'translate3d(0px,1px,0)',
-              'translate3d(-1px,0px,0)'
-            ][driftIndex],
+            backgroundColor: matColor,
+            backgroundImage: textureStyle.backgroundImage,
+            backgroundSize: textureStyle.backgroundSize,
+            backgroundPosition: textureStyle.backgroundPosition,
+            backgroundAttachment: textureStyle.backgroundAttachment,
+            backgroundBlendMode: textureStyle.backgroundBlendMode,
+            transform: ['translate3d(0px,0px,0)', 'translate3d(1px,0px,0)', 'translate3d(0px,1px,0)', 'translate3d(-1px,0px,0)'][driftIndex],
             transition: swiping ? 'transform 260ms cubic-bezier(0.4, 0, 0.2, 1)' : 'transform 16s linear',
           }}
         >
@@ -222,8 +159,8 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
                 objectFit: 'contain',
                 display: 'block',
                 opacity: loaded ? 1 : 0,
-                transform: loaded ? 'translateX(0)' : 'translateX(-20px)',
-                transition: 'opacity 300ms ease-out, transform 300ms ease-out',
+                transform: loaded ? 'scale(1)' : 'scale(0.98)',
+                transition: 'opacity 400ms ease-out, transform 400ms ease-out',
               }}
             />
           )}
