@@ -55,7 +55,7 @@ sleep 3
 # Prevents port conflicts and socket hang-ups when restarting
 kill $(pgrep -f "sensor-bridge.*main.py" 2>/dev/null) 2>/dev/null
 kill $(pgrep -f "whisper-bridge.*main.py" 2>/dev/null) 2>/dev/null
-sleep 1
+sleep 3  # Wait for sockets to close (TIME_WAIT state)
 
 # ── Sensor bridge ──────────────────────────────────────────────────────────
 # Reads AS7343 via I²C and serves Room Tone data on 127.0.0.1:8765.
