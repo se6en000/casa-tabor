@@ -256,7 +256,7 @@ DDC_SRC      = 0x51    # host source address (standard DDC/CI)
 LUX_REF      = 1000.0  # lux at which brightness reaches max_b
 LUX_EXPONENT = 0.35    # power-law exponent (0.35 ≈ human eye response)
 
-BRIGHTNESS_MIN_DEFAULT = 2
+BRIGHTNESS_MIN_DEFAULT = 1    # DDC level 1 (darkest stable setting)
 BRIGHTNESS_MAX_DEFAULT = 90
 
 _brightness_min = BRIGHTNESS_MIN_DEFAULT
@@ -975,6 +975,66 @@ def windowed():
         return {"ok": True, "msg": "Relaunching in windowed mode..."}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+@app.post("/display/art-mode")
+def art_mode():
+    """Enter art mode: dim monitor based on ambient light.
+    
+    Expects JSON: { "dim_offset": 0.0-0.8 }
+    dim_offset is multiplier: 0.3 = dim to 70% of auto-brightness
+    """
+    try:
+       data = request.json or {}
+       dim_offset = float(data.get("dim_offset", 0.3))
+       dim_offset = max(0.0, min(0.8, dim_offset))  # clamp 0-80%
+        
+       # Set new brightness max to account for art mode dimming
+       # E.g., if auto max is 90 and dim_offset=0.3, art max becomes 63
+       global _brightness_max
+       original_max = BRIGHTNESS_MAX_DEFAULT
+       _brightness_max = max(2, int(original_max * (1.0 - dim_offset)))
+        
+       log.info("Art mode enabled: dim_offset=%.1f, brightness_max=%d", dim_offset, _brightness_max)
+       return {"ok": True, "msg": f"Art mode: max brightness now {_brightness_max}"}
+    except Exception as e:
+       log.error("Art mode error: %s", e)
+       return {"ok": False, "error": str(e)}
+
+
+@app.post("/display/art-mode-off")
+def art_mode_off():
+    """Exit art mode: restore auto-brightness scaling."""
+    try:
+       global _brightness_max
+       _brightness_max = BRIGHTNESS_MAX_DEFAULT
+       log.info("Art mode disabled: brightness_max restored to %d", _brightness_max)
+       return {"ok": True, "msg": "Auto-brightness restored"}
+    except Exception as e:
+       log.error("Art mode off error: %s", e)
+       return {"ok": False, "error": str(e)}
+
+
+@app.post("/display/art-brightness-min")
+def art_brightness_min():
+    """Set minimum brightness for art mode (how dark it can go).
+    
+    Expects JSON: { "min": 1-20 }
+    min=1 is darkest, min=10 allows slightly brighter.
+    """
+    try:
+       data = request.json or {}
+       min_val = int(data.get("min", 1))
+       min_val = max(1, min(20, min_val))  # clamp 1-20
+        
+       global _brightness_min
+       _brightness_min = min_val
+        
+       log.info("Art mode min brightness set to %d", _brightness_min)
+       return {"ok": True, "msg": f"Art mode minimum brightness: {_brightness_min}"}
+    except Exception as e:
+       log.error("Art brightness min error: %s", e)
+       return {"ok": False, "error": str(e)}
 
 
 # ---------------------------------------------------------------------------
