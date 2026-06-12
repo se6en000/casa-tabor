@@ -1046,21 +1046,27 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
   const hasActions = event.actions?.filter((a) => !a.is_urgent).length > 0
   const activeFields = getFieldsForCategory(enr?.category)
   const shows = (field: string) => activeFields.includes(field as ReturnType<typeof getFieldsForCategory>[number])
+  const hasText = (value: unknown) => {
+    if (typeof value === 'string') return value.trim() !== ''
+    return value !== null && value !== undefined
+  }
+  const hasDestinationExtras = hasText(enr?.parking_notes) || hasText(enr?.contact_name) || hasText(enr?.contact_phone)
+  const hasDestinationInfo = !!(event.location_name || event.address || hasDestinationExtras)
 
   return (
     <BounceScroll className="flex-1" innerClassName="p-6 space-y-6">
       {topSlot}
 
       {/* Target location — always at top when available */}
-      {!reminder && (event.location_name || event.address) && (
+      {!reminder && hasDestinationInfo && (
         <section>
           <SectionLabel>Destination</SectionLabel>
           <LocationBlock
             locationName={event.location_name}
             address={event.address}
-            parkingNotes={shows('parking_notes') ? enr?.parking_notes : null}
-            contactName={shows('contact_name') ? enr?.contact_name : null}
-            contactPhone={shows('contact_name') ? enr?.contact_phone : null}
+            parkingNotes={shows('parking_notes') || hasText(enr?.parking_notes) ? enr?.parking_notes : null}
+            contactName={shows('contact_name') || hasText(enr?.contact_name) ? enr?.contact_name : null}
+            contactPhone={shows('contact_name') || hasText(enr?.contact_phone) ? enr?.contact_phone : null}
           />
         </section>
       )}
@@ -1121,7 +1127,7 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
         </section>
       )}
 
-      {!hasChecklist && shows('what_to_bring') && enr?.what_to_bring && enr.what_to_bring.length > 0 && (
+      {!hasChecklist && enr?.what_to_bring && enr.what_to_bring.length > 0 && (
         <section>
           <SectionLabel>What to Bring</SectionLabel>
           <div className="space-y-2">
@@ -1158,10 +1164,10 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
 
       {enr && (
         <>
-          {shows('outfit_suggestion') && enr.outfit_suggestion && (
+          {hasText(enr.outfit_suggestion) && (
             <section><SectionLabel>What to Wear</SectionLabel><p className="text-body-sm text-casa-text">{enr.outfit_suggestion}</p></section>
           )}
-          {shows('contact_name') && (enr.contact_name || enr.contact_phone) && (
+          {(hasText(enr.contact_name) || hasText(enr.contact_phone)) && (
             <section>
               <SectionLabel>Contact</SectionLabel>
               <InfoRow icon={<Phone size={16} className="text-casa-muted" />}>
@@ -1177,22 +1183,22 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
               </InfoRow>
             </section>
           )}
-          {shows('cost_estimate') && enr.cost_estimate && (
+          {hasText(enr.cost_estimate) && (
             <section>
               <SectionLabel>Cost Estimate</SectionLabel>
               <InfoRow icon={<DollarSign size={16} className="text-casa-muted" />}><p className="text-body-sm text-casa-navy">{enr.cost_estimate}</p></InfoRow>
             </section>
           )}
-          {shows('dietary_notes') && enr.dietary_notes && (
+          {hasText(enr.dietary_notes) && (
             <section><SectionLabel>Dietary Notes</SectionLabel><p className="text-body-sm text-casa-text">{enr.dietary_notes}</p></section>
           )}
-          {shows('meal_impact') && enr.meal_impact && (
+          {hasText(enr.meal_impact) && (
             <section>
               <SectionLabel>Meal Impact</SectionLabel>
               <InfoRow icon={<Utensils size={16} className="text-casa-muted" />}><p className="text-body-sm text-casa-text">{enr.meal_impact}</p></InfoRow>
             </section>
           )}
-          {shows('prep_notes') && enr.prep_notes && (
+          {hasText(enr.prep_notes) && (
             <section><SectionLabel>Notes</SectionLabel><p className="text-body-sm text-casa-text whitespace-pre-line leading-relaxed">{enr.prep_notes}</p></section>
           )}
         </>
@@ -1298,7 +1304,7 @@ function LocationBlock({ locationName, address, parkingNotes, contactName, conta
     setSaving(false)
   }
 
-  if (!locationName && !address) return null
+  if (!locationName && !address && !parkingNotes && !contactName && !contactPhone) return null
 
   return (
     <InfoRow icon={<MapPin size={16} className="text-casa-error" />}>
@@ -1343,7 +1349,8 @@ function LocationBlock({ locationName, address, parkingNotes, contactName, conta
             <p className="text-caption text-casa-gold/80 mt-1 italic">{existingPlace.notes}</p>
           )}
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+        {(locationName || address) && (
+          <div className="flex items-center gap-1.5 shrink-0">
           {/* Save to places */}
           <button
             onClick={handleSave}
@@ -1378,7 +1385,8 @@ function LocationBlock({ locationName, address, parkingNotes, contactName, conta
               <Navigation size={15} />
             </a>
           )}
-        </div>
+          </div>
+        )}
       </div>
     </InfoRow>
   )
