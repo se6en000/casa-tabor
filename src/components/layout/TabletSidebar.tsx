@@ -31,9 +31,15 @@ export default function TabletSidebar() {
   const { data: todayEvents } = useTodayEvents(now)
 
   // Infer status per family member
+  const homeFamily = useMemo(
+    () => (family ?? []).filter(m => m.role === 'parent' || m.role === 'child'),
+    [family],
+  )
+
+  // Infer status per family member
   const whoStatus = useMemo(() => {
-    if (!family || !todayEvents) return []
-    return family.map(m => {
+    if (!todayEvents) return []
+    return homeFamily.map(m => {
       const mine = todayEvents.filter(e => e.members?.some(em => em.family_member.id === m.id))
       const activeNow = mine.find(e => isBefore(new Date(e.start_time), now) && isAfter(new Date(e.end_time), now))
       const nextUp = mine
@@ -41,7 +47,7 @@ export default function TabletSidebar() {
         .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
       return { member: m, activeNow, nextUp }
     })
-  }, [family, todayEvents, now])
+  }, [homeFamily, todayEvents, now])
 
   return (
     <>
@@ -72,7 +78,7 @@ export default function TabletSidebar() {
                 style={{ overflow: 'hidden' }}
               >
                 <div className="px-4 pb-4 flex flex-col gap-0.5">
-                  {family?.map(m => {
+                  {homeFamily.map(m => {
                     const active = visibleMembers.length === 0 || visibleMembers.includes(m.id)
                     const status = whoStatus.find(s => s.member.id === m.id)
                     const busy = !!status?.activeNow

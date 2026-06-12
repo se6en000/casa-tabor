@@ -19,6 +19,12 @@ const COLOR_OPTIONS = [
   { hex: '#7F8C8D', name: 'Slate' },
 ]
 
+const ROLE_OPTIONS = [
+  { value: 'parent', label: 'Parent' },
+  { value: 'child', label: 'Child' },
+  { value: 'caregiver', label: 'Care Giver' },
+] as const
+
 type EditableMember = Partial<FamilyMember> & { _tempId?: string; _isNew?: boolean }
 
 function emptyMember(): EditableMember {
@@ -54,6 +60,11 @@ export default function FamilySettingsPage() {
   const [saved, setSaved] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const hydratedRef = useRef(false)
+  const formatRoleLabel = (role?: string | null) => {
+    if (!role) return 'Child'
+    if (role === 'caregiver') return 'Care Giver'
+    return role.charAt(0).toUpperCase() + role.slice(1)
+  }
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -185,7 +196,7 @@ export default function FamilySettingsPage() {
                     {m.name || <span className="text-casa-muted italic">New member</span>}
                     {m.is_admin && <Crown size={12} className="inline ml-1.5 text-casa-gold" />}
                   </p>
-                  <p className="text-caption text-casa-muted mt-0.5 capitalize">{m.role ?? 'child'} · {m.phone || m.email || 'No contact'}</p>
+                  <p className="text-caption text-casa-muted mt-0.5">{formatRoleLabel(m.role)} · {m.phone || m.email || 'No contact'}</p>
                 </div>
                 <span className="text-caption text-casa-muted">{isExpanded ? '▲' : '▼'}</span>
               </button>
@@ -221,18 +232,18 @@ export default function FamilySettingsPage() {
                   <div>
                     <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Role</label>
                     <div className="flex gap-2">
-                      {(['parent', 'child'] as const).map(r => (
+                      {ROLE_OPTIONS.map(({ value, label }) => (
                         <button
-                          key={r}
-                          onClick={() => isNew ? patchNew(m._tempId!, { role: r }) : patch(m.id!, { role: r })}
+                          key={value}
+                          onClick={() => isNew ? patchNew(m._tempId!, { role: value }) : patch(m.id!, { role: value })}
                           className={cn(
                             'flex-1 py-2 rounded-button border text-body-sm font-medium transition-all capitalize',
-                            (m.role ?? 'child') === r
+                            (m.role ?? 'child') === value
                               ? 'bg-casa-navy text-white border-casa-navy'
                               : 'bg-white border-casa-border text-casa-navy hover:bg-casa-bg',
                           )}
                         >
-                          {r}
+                          {label}
                         </button>
                       ))}
                     </div>

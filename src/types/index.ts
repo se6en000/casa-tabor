@@ -1,6 +1,6 @@
 // ── Family ──────────────────────────────────────────────────
 
-export type FamilyRole = 'parent' | 'child'
+export type FamilyRole = 'parent' | 'child' | 'caregiver'
 
 export interface FamilyMember {
   id: string

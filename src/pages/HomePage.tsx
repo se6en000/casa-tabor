@@ -37,6 +37,10 @@ export default function HomePage() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLElement | null>(null)
   const nowLineRef = useRef<HTMLLIElement | null>(null)
+  const homeFamily = useMemo(
+    () => (family ?? []).filter(m => m.role === 'parent' || m.role === 'child'),
+    [family],
+  )
 
   const events = useMemo<EventWithDetails[]>(() => {
     if (!allTodayEvents) return []
@@ -302,7 +306,7 @@ export default function HomePage() {
         {/* ── Family filter + music player ─────────────────── */}
         <div className="mt-6 space-y-4">
           <div className="flex gap-2 flex-wrap">
-            {family?.map((m) => {
+            {homeFamily.map((m) => {
               const active = visibleMembers.length === 0 || visibleMembers.includes(m.id)
               return (
                 <button
