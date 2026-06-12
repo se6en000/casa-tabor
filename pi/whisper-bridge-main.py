@@ -185,6 +185,21 @@ def _wake_watchdog():
                 except Exception:
                     pass
 
+def _make_recorder_cmd():
+    """Return best available audio capture command for this platform.
+    Prefers parec (PipeWire/PulseAudio) so we coexist with the Chromium browser
+    process; falls back to arecord if parec is not available.
+    """
+    import shutil
+    if shutil.which('parec'):
+        return [
+            'parec', '--raw',
+            '--rate', str(RATE),
+            '--channels', '1',
+            '--format', 's16le',
+        ]
+    return ['arecord', '-D', ALSA_DEVICE, '-f', 'S16_LE', '-r', str(RATE), '-c', '1', '-']
+
 def _wake_word_loop():
     global _wake_triggered, _wake_ts, _wake_last_chunk_ts
     try:
@@ -200,7 +215,9 @@ def _wake_word_loop():
     except Exception as e:
         log.error(f'[wake] failed to load model: {e}')
         return
-    log.info('[wake] ready — listening for wake word...')
+
+    rec_cmd = _make_recorder_cmd()
+    log.info(f'[wake] ready — listening for wake word... (recorder: {rec_cmd[0]})')
 
     CHUNK_BYTES = 1280 * 2
 
@@ -219,12 +236,12 @@ def _wake_word_loop():
         _wake_last_chunk_ts = time.time()
         _clear_buffer()
         proc = subprocess.Popen(
-            ['arecord', '-D', ALSA_DEVICE, '-f', 'S16_LE', '-r', str(RATE), '-c', '1', '-'],
+            rec_cmd,
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
         )
         global _wake_proc
         _wake_proc = proc
-        log.info('[wake] arecord started (pid=%d)', proc.pid)
+        log.info('[wake] recorder started (pid=%d)', proc.pid)
         try:
             while True:
                 rec_state = _get()['recording']
@@ -460,7 +477,7 @@ def start_recording():
     _ws = ws
 
     proc = subprocess.Popen(
-        ['arecord', '-D', ALSA_DEVICE, '-f', 'S16_LE', '-r', str(RATE), '-c', '1', '-'],
+        _make_recorder_cmd(),
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
     )
     _rec_proc = proc
