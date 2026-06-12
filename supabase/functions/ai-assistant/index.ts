@@ -86,6 +86,20 @@ Deno.serve(async (req) => {
     })
   }
 
+  function normalizeSearchText(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/\b(appt|apt)\b/g, 'appointment')
+      .replace(/\bdr\b/g, 'doctor')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  function tokenized(value: string): string[] {
+    return normalizeSearchText(value).split(' ').filter((token) => token.length > 1)
+  }
+
   // Build context strings
   const familyNames = (context.family as {name: string}[]).map(f => f.name).join(', ')
 
@@ -403,6 +417,7 @@ INSTRUCTIONS:
 - "Next event" / "what's next" = first event whose start_time is strictly AFTER NOW. If an event is currently in progress (started before NOW, ends after NOW), mention it as "currently happening" first, then state what starts next.
 - Default duration: 1 hour if not specified. Default time: morning (9am) for "tomorrow"/"next week", 2pm for "afternoon", 6pm for "evening", 12pm for "lunch".
 - Fuzzy match titles, nicknames, partial names, relative dates. If multiple events match, ask which one.
+- If an initial event search is empty, retry with a shorter/broader query before telling the user nothing was found.
 - Never perform writes when search_events reports ambiguous=true or top confidence < 0.75; ask a disambiguation question first.
 - Working context: keep operating on the same event we're discussing unless the user clearly switches.
 - Relative shifts ("push it 1h later"): compute from the event's current start_time.
@@ -450,41 +465,45 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   // Helper: execute read-only tools server-side
   async function executeReadTool(name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
     if (name === 'search_events') {
-      const query = ((args.query as string) ?? '').toLowerCase()
-      const dateHint = ((args.date_hint as string) ?? '').toLowerCase()
-      const memberName = ((args.member_name as string) ?? '').toLowerCase()
+      const query = normalizeSearchText((args.query as string) ?? '')
+      const queryTokens = tokenized(query)
+      const dateHint = normalizeSearchText((args.date_hint as string) ?? '')
+      const memberName = normalizeSearchText((args.member_name as string) ?? '')
 
       let results = allEvents as DbEvent[] ?? []
 
-      if (query) {
-        results = results.filter(e => e.title.toLowerCase().includes(query))
-      }
       if (memberName) {
         results = results.filter(e =>
-          e.event_members?.some(m => m.family_members?.name.toLowerCase().includes(memberName))
+          e.event_members?.some(m => normalizeSearchText(m.family_members?.name ?? '').includes(memberName))
         )
       }
       if (dateHint) {
         results = results.filter(e => {
           const d = new Date(e.start_time)
-          const dayName = d.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase()
-          const dateStr = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }).toLowerCase()
+          const dayName = normalizeSearchText(d.toLocaleDateString('en-US', { weekday: 'long' }))
+          const dateStr = normalizeSearchText(d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }))
           return dayName.includes(dateHint) || dateStr.includes(dateHint) || e.start_time.includes(dateHint.replace(/[^0-9-]/g, ''))
         })
       }
 
-      if (results.length === 0) return { found: false, message: 'No matching events found.' }
-
       const scoredResults = results.map((event) => {
         let score = 0
+        const title = normalizeSearchText(event.title)
+        const searchableText = normalizeSearchText([
+          event.title,
+          event.location_name ?? '',
+          event.address ?? '',
+          event.description ?? '',
+          event.event_enrichments?.[0]?.prep_notes ?? '',
+        ].join(' '))
+
         if (query) {
-          const title = event.title.toLowerCase()
-          const q = query.trim()
-          if (title === q) score += 0.8
-          else if (title.includes(q)) score += 0.55
-          const qTokens = q.split(/\s+/).filter(Boolean)
-          if (qTokens.length > 0) {
-            const overlap = qTokens.filter((token) => title.includes(token)).length / qTokens.length
+          if (title === query) score += 0.85
+          else if (title.includes(query)) score += 0.65
+          else if (searchableText.includes(query)) score += 0.5
+
+          if (queryTokens.length > 0) {
+            const overlap = queryTokens.filter((token) => searchableText.includes(token)).length / queryTokens.length
             score += overlap * 0.25
           }
         }
@@ -495,7 +514,11 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         if (dateHint) score += 0.15
         if (!query && !memberName && !dateHint) score += 0.5
         return { event, confidence: Math.min(1, Number(score.toFixed(2))) }
-      }).sort((a, b) => b.confidence - a.confidence)
+      })
+        .filter(({ confidence }) => !query || confidence >= 0.2)
+        .sort((a, b) => b.confidence - a.confidence)
+
+      if (scoredResults.length === 0) return { found: false, message: 'No matching events found.' }
 
       const topConfidence = scoredResults[0]?.confidence ?? 0
       const secondConfidence = scoredResults[1]?.confidence ?? 0
