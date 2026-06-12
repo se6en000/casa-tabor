@@ -130,8 +130,13 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 32, stiffness: 260 }}
-            className="fixed bottom-0 left-0 right-0 z-[70] bg-casa-surface rounded-t-2xl shadow-modal sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-lg sm:rounded-2xl sm:bottom-8 overflow-y-auto"
-            style={{ maxHeight: viewportHeight ? `${Math.max(300, viewportHeight - 8)}px` : '92vh' }}
+            className="fixed left-0 right-0 z-[70] bg-casa-surface rounded-t-2xl shadow-modal sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-lg sm:rounded-2xl overflow-y-auto"
+            style={{
+              bottom: 'var(--vk-height, 0px)',
+              maxHeight: viewportHeight
+                ? `${Math.max(300, viewportHeight - 8)}px`
+                : 'calc(100dvh - var(--vk-height, 0px) - 8px)',
+            }}
             onClick={e => e.stopPropagation()}
           >
             {/* Drag handle */}

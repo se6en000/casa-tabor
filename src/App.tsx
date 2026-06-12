@@ -14,6 +14,7 @@ import AIChatDrawer from './components/shared/AIChatDrawer'
 import ArtScreensaver from './components/shared/ArtScreensaver'
 import QuickCreateSheet from './components/shared/QuickCreateSheet'
 import AddEventFab from './components/shared/AddEventFab'
+import TouchKeyboard from './components/shared/TouchKeyboard'
 import { useRollingEvents } from './hooks/useCalendarEvents'
 import { useFamilyMembers } from './hooks/useFamilyMembers'
 import { useHomeWeather } from './hooks/useHomeWeather'
@@ -155,6 +156,8 @@ function AppShell() {
         open={quickCreateOpen}
         onClose={() => setQuickCreateOpen(false)}
       />
+
+      <TouchKeyboard />
 
       {/* Global AI drawer — opens from TopBar sparkle or wake word */}
       <GlobalAIDrawer

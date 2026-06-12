@@ -48,16 +48,9 @@ xset -dpms
 # Hide the mouse cursor after 1 second of inactivity (install: sudo apt install unclutter)
 unclutter -idle 1 -root &
 
-# Start touch keyboard.
-# Florence is preferred when available; Bookworm may not ship it, so use
-# Matchbox as a larger fallback than Onboard.
-if command -v florence >/dev/null 2>&1; then
-  kill $(pgrep -f "florence" 2>/dev/null) 2>/dev/null
-  florence &>> "$HOME/florence.log" &
-elif command -v matchbox-keyboard >/dev/null 2>&1; then
-  kill $(pgrep -f "matchbox-keyboard" 2>/dev/null) 2>/dev/null
-  matchbox-keyboard --fontptsize 26 --rowspacing 3 --colspacing 3 &>> "$HOME/matchbox-keyboard.log" &
-fi
+# Stop external keyboards; Casa now uses an integrated in-app keyboard.
+kill $(pgrep -f "florence" 2>/dev/null) 2>/dev/null
+kill $(pgrep -f "matchbox-keyboard" 2>/dev/null) 2>/dev/null
 
 # Wait for network
 sleep 3
