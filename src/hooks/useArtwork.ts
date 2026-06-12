@@ -9,7 +9,34 @@ const FETCH_LIMIT = 60
 const MAX_RETRIES = 4   // try up to 4 different random pages before giving up
 const RETRY_DELAY = 2000
 const WATERCOLOR_BIAS_RATIO = 3 // 3 watercolor picks per 1 non-watercolor pick
-const MIN_VIEW_COUNT = 50000   // only show paintings with 50k+ views — famous works only
+
+// Whitelist of famous/popular painting IDs from ARTIC to show only well-known works.
+const FAMOUS_PAINTING_IDS = new Set([
+  27992,  // A Sunday on La Grande Jatte — Seurat
+  111628, // Nighthawks — Hopper
+  6565,   // American Gothic — Wood
+  16499,  // The Old Guitarist — Picasso
+  14655,  // Paris Street; Rainy Day — Caillebotte
+  28560,  // Bathers at Asnières — Seurat
+  10504,  // The Bedroom — Van Gogh
+  16561,  // Irises — Van Gogh
+  42834,  // Starry Night — Van Gogh
+  31394,  // Water Lilies — Monet
+  17040,  // Japanese Footbridge — Monet
+  80581,  // The Son of Man — Magritte
+  4898,   // Christina's World — Wyeth
+  138686, // The Birth of Venus — Botticelli
+  13747,  // Wanderer Above the Sea of Fog — Friedrich
+  19857,  // The Raft of the Medusa — Géricault
+  44662,  // The Death of Marat — Jacques-Louis David
+  25745,  // View of Toledo — El Greco
+  64643,  // The Persistence of Memory — Dalí
+  94827,  // Girl with a Pearl Earring — Vermeer
+  12054,  // The Third of May 1808 — Goya
+  96248,  // Composition VII — Kandinsky
+  71648,  // No. 5, 1948 — Pollock
+  128556, // Nighttime, Fire and Red Objects — Miró
+])
 
 // Hardcoded fallback artworks — guaranteed public-domain ARTIC images.
 // Used when API is unreachable (offline, rate-limited, etc.)
@@ -123,12 +150,11 @@ async function fetchPage(mode: 'watercolor' | 'mixed'): Promise<Artwork[]> {
             { term: { is_public_domain: true } },
             { terms: { artwork_type_id: PAINTING_TYPE_IDS } },
             { exists: { field: 'image_id' } },
-            { range: { view_count_boost: { gte: MIN_VIEW_COUNT } } },
             ...(mode === 'watercolor' ? [watercolorClause] : []),
           ],
         },
       },
-      fields: ['id', 'title', 'artist_display', 'image_id', 'date_display', 'medium_display', 'place_of_origin', 'view_count_boost'],
+      fields: ['id', 'title', 'artist_display', 'image_id', 'date_display', 'medium_display', 'place_of_origin'],
       limit: FETCH_LIMIT,
       page: randomPage,
     }),
@@ -136,7 +162,7 @@ async function fetchPage(mode: 'watercolor' | 'mixed'): Promise<Artwork[]> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json = await res.json()
   return (json.data ?? [])
-    .filter((a: { image_id?: string }) => a.image_id)
+    .filter((a: { image_id?: string; id: number }) => a.image_id && FAMOUS_PAINTING_IDS.has(a.id))
     .map((a: { id: number; title?: string; artist_display?: string; image_id: string; date_display?: string; medium_display?: string; place_of_origin?: string }) => ({
       id: a.id,
       title: a.title ?? '',
