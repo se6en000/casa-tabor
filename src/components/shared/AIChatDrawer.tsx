@@ -27,6 +27,7 @@ type STTMode = 'unknown' | 'bridge' | 'webspeech'
 
 const SILENCE_MS = 1500
 const CONNECT_TIMEOUT_MS = 5000
+const NO_ACTIVITY_AUTO_CLOSE_MS = 30_000
 
 /** Quick probe — resolves true if bridge is reachable within 800ms */
 async function probeBridge(): Promise<boolean> {
@@ -392,6 +393,8 @@ const SLEEP_PHRASES = /\b(sleep|goodnight|good night|art mode|screen saver|scree
 export default function AIChatDrawer({ open, onClose, anchor, page, events, family, homeCity, onSleepCommand, focusedEvent }: Props) {
   const [input, setInput] = useState('')
   const interimRef = useRef('')
+  const idleAutoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hadUserInteractionRef = useRef(false)
   const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; mimeType: string } | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -405,6 +408,18 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
   const pendingConfirmRef = useRef<(() => Promise<boolean>) | null>(null)
   const pendingCancelRef  = useRef<(() => Promise<boolean>) | null>(null)
+
+  const clearIdleAutoCloseTimer = useCallback(() => {
+    if (idleAutoCloseTimerRef.current) {
+      clearTimeout(idleAutoCloseTimerRef.current)
+      idleAutoCloseTimerRef.current = null
+    }
+  }, [])
+
+  const markUserInteraction = useCallback(() => {
+    hadUserInteractionRef.current = true
+    clearIdleAutoCloseTimer()
+  }, [clearIdleAutoCloseTimer])
 
   // True when the latest assistant message has a pending tool action awaiting confirmation
   const hasPendingToolAction = messages.some(m => m.toolAction?.status === 'pending')
@@ -420,6 +435,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
   const speech = useSpeechInput({
     onInterim: (interim) => {
+      if (interim.trim()) markUserInteraction()
       interimRef.current = interim
       setInput(interim)
     },
@@ -435,16 +451,19 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
         sendCurrentInput(msg)
         interimRef.current = ''
       } else {
+        if (text.trim()) markUserInteraction()
         interimRef.current = text
         setInput(text)
       }
     },
     onDismiss: () => {
+      markUserInteraction()
       // Verbal goodbye — clear session immediately so next open starts fresh
       startFresh()
       setTimeout(onClose, 400)
     },
     onConfirm: () => {
+      markUserInteraction()
       led.confirm()
       const run = pendingConfirmRef.current
       if (!run) return
@@ -455,6 +474,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       })
     },
     onCancel:  () => {
+      markUserInteraction()
       led.cancel()
       const run = pendingCancelRef.current
       if (!run) return
@@ -474,7 +494,21 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    return () => {
+      clearIdleAutoCloseTimer()
+    }
+  }, [clearIdleAutoCloseTimer])
+
+  useEffect(() => {
     if (open) {
+      hadUserInteractionRef.current = false
+      clearIdleAutoCloseTimer()
+      idleAutoCloseTimerRef.current = setTimeout(() => {
+        if (!hadUserInteractionRef.current) {
+          startFresh()
+          onClose()
+        }
+      }, NO_ACTIVITY_AUTO_CLOSE_MS)
       if (IS_SAFE_MODE) return
       // Start connecting immediately — don't wait for animation.
       // Bridge buffers audio from /start so by the time the user speaks it's ready.
@@ -482,6 +516,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       // Focus textarea slightly after animation settles (UI only, doesn't affect mic)
       setTimeout(() => textareaRef.current?.focus(), 300)
     } else {
+      clearIdleAutoCloseTimer()
       speech.stop()
       led.off()
       reset()
@@ -598,29 +633,34 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     if (imageItem) {
       e.preventDefault()
       const blob = imageItem.getAsFile()
-      if (blob) setAttachedImage(await readImageFile(blob))
+      if (blob) {
+        markUserInteraction()
+        setAttachedImage(await readImageFile(blob))
+      }
     }
-  }, [readImageFile])
+  }, [readImageFile, markUserInteraction])
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file && file.type.startsWith('image/')) {
+      markUserInteraction()
       setAttachedImage(await readImageFile(file))
     }
     e.target.value = ''
-  }, [readImageFile])
+  }, [readImageFile, markUserInteraction])
 
   const handleSend = useCallback((e?: React.MouseEvent) => {
     e?.stopPropagation()
     const text = (textareaRef.current?.value ?? input).trim()
     const img = attachedImage
     if ((!text && !img) || loading) return
+    markUserInteraction()
     setInput('')
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
     setAttachedImage(null)
     send(text || '(see attached image)', img ?? undefined)
-  }, [input, attachedImage, loading, send])
+  }, [input, attachedImage, loading, send, markUserInteraction])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -628,6 +668,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       handleSend()
     }
   }
+
+  const handleInputChange = useCallback((value: string) => {
+    if (value.trim()) markUserInteraction()
+    setInput(value)
+  }, [markUserInteraction])
 
   const hasSession = !sessionLoading && !!session && session.messages.length > 0
 
@@ -738,7 +783,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                     {SUGGESTIONS[page]?.map(s => (
                       <button
                         key={s}
-                        onClick={() => { setInput(s); textareaRef.current?.focus() }}
+                        onClick={() => { markUserInteraction(); setInput(s); textareaRef.current?.focus() }}
                         className="px-3 py-1.5 rounded-full border border-casa-border text-caption text-casa-muted hover:bg-casa-bg hover:text-casa-navy transition-colors"
                       >
                         {s}
@@ -892,7 +937,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                 <textarea
                   ref={textareaRef}
                   value={input}
-                  onChange={e => setInput(e.target.value)}
+                  onChange={e => handleInputChange(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={speech.listening ? 'Listening… speak now' : attachedImage ? 'Ask about this image…' : "Ask anything or say 'add an event…'"}
                   rows={1}
@@ -903,7 +948,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                 {speech.supported && (
                   <button
                     type="button"
-                    onClick={speech.toggle}
+                    onClick={() => { markUserInteraction(); speech.toggle() }}
                     title={speech.listening ? 'Stop listening' : speech.connecting ? 'Connecting…' : 'Start voice input'}
                     className={cn(
                       'w-8 h-8 rounded-full flex items-center justify-center transition-all shrink-0 mb-0.5',
