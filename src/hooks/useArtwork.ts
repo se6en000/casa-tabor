@@ -106,40 +106,8 @@ function dedupeById(artworks: Artwork[]): Artwork[] {
   return deduped
 }
 
-function blendWatercolorFirst(watercolors: Artwork[], others: Artwork[]): Artwork[] {
-  const wc = shuffled(dedupeById(watercolors))
-  const nonWatercolor = shuffled(dedupeById(others).filter(a => !wc.some(w => w.id === a.id)))
-  const mixed: Artwork[] = []
-  let w = 0
-  let o = 0
-
-  while (w < wc.length || o < nonWatercolor.length) {
-    for (let i = 0; i < WATERCOLOR_BIAS_RATIO && w < wc.length; i += 1) {
-      mixed.push(wc[w])
-      w += 1
-    }
-    if (o < nonWatercolor.length) {
-      mixed.push(nonWatercolor[o])
-      o += 1
-    }
-  }
-
-  return mixed
-}
-
-async function fetchPage(mode: 'watercolor' | 'mixed'): Promise<Artwork[]> {
+async function fetchPage(): Promise<Artwork[]> {
   const randomPage = Math.floor(Math.random() * MAX_PAGE) + 1
-  const watercolorClause = {
-    bool: {
-      should: [
-        { match_phrase: { medium_display: 'watercolor' } },
-        { match_phrase: { medium_display: 'watercolour' } },
-        { match_phrase: { title: 'watercolor' } },
-        { match_phrase: { title: 'watercolour' } },
-      ],
-      minimum_should_match: 1,
-    },
-  }
   const res = await fetch(`${API}/artworks/search`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -150,7 +118,6 @@ async function fetchPage(mode: 'watercolor' | 'mixed'): Promise<Artwork[]> {
             { term: { is_public_domain: true } },
             { terms: { artwork_type_id: PAINTING_TYPE_IDS } },
             { exists: { field: 'image_id' } },
-            ...(mode === 'watercolor' ? [watercolorClause] : []),
           ],
         },
       },
@@ -192,14 +159,27 @@ export function useArtwork(rotateSecs = 240) {
     async function loadWithRetry() {
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         try {
-          const [watercolors, mixed] = await Promise.all([fetchPage('watercolor'), fetchPage('mixed')])
-          const results = blendWatercolorFirst(watercolors, mixed)
-          if (results.length > 0 && !cancelled) {
-            const filtered = dedupeById(results).filter(a => prefsRef.current[a.id] !== 'down')
+          const [page1, page2] = await Promise.all([fetchPage(), fetchPage()])
+          const allResults = dedupeById([...page1, ...page2])
+          const famous = allResults.filter(a => FAMOUS_PAINTING_IDS.has(a.id))
+          const nonFamous = allResults.filter(a => !FAMOUS_PAINTING_IDS.has(a.id))
+          // Blend 3:1 famous to non-famous for curated rotation
+          const blended: Artwork[] = []
+          let f = 0, n = 0
+          while (f < famous.length || n < nonFamous.length) {
+            for (let i = 0; i < WATERCOLOR_BIAS_RATIO && f < famous.length; i++) {
+              blended.push(famous[f++])
+            }
+            if (n < nonFamous.length) {
+              blended.push(nonFamous[n++])
+            }
+          }
+          if (blended.length > 0 && !cancelled) {
+            const filtered = blended.filter(a => prefsRef.current[a.id] !== 'down')
             const upvoted = filtered.filter(a => prefsRef.current[a.id] === 'up')
             const neutral = filtered.filter(a => prefsRef.current[a.id] !== 'up')
             const shuffledResults = [...shuffled(upvoted), ...shuffled(neutral)]
-            const finalResults = shuffledResults.length > 0 ? shuffledResults : shuffled(results)
+            const finalResults = shuffledResults.length > 0 ? shuffledResults : shuffled(blended)
             setArtworks(finalResults)
             setIndex(0)
             return
