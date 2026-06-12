@@ -17,7 +17,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   const { artwork, loaded, onLoad, onError, next } = useArtwork(rotationMins * 60)
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)
-  const [aspectRatio, setAspectRatio] = useState<string | undefined>(undefined)
+  const [aspectRatio, setAspectRatio] = useState<string | undefined>('16 / 9')
   const [isPortrait, setIsPortrait] = useState(false)
   const [matColor, setMatColor] = useState('#F5F0E8')
   const [matTransition, setMatTransition] = useState(false)
@@ -202,7 +202,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
         </div>
 
         {!loaded && (
-          <div className="absolute inset-0 m-[3.5vw]" style={{ backgroundColor: '#e8e3db', animation: 'pulse 2s ease-in-out infinite' }} />
+          <div className="absolute inset-0 m-[3.5vw]" style={{ backgroundColor: matColor, backgroundImage: textureStyle.backgroundImage, backgroundSize: textureStyle.backgroundSize, backgroundPosition: textureStyle.backgroundPosition, animation: 'pulse 2s ease-in-out infinite' }} />
         )}
 
         {artwork && loaded && (
