@@ -1,21 +1,11 @@
 import { useMemo, useRef } from 'react'
 import { format, isAfter, isBefore } from 'date-fns'
-import { Cloud, Sparkles, Minimize2, ImageIcon } from 'lucide-react'
+import { Cloud, Sparkles, ImageIcon } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useLiveClock, greetingFor } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
-
-async function exitKioskMode() {
-  // Try JS fullscreen exit first
-  if (document.fullscreenElement) {
-    await document.exitFullscreen().catch(() => {})
-    return
-  }
-  // Ask sensor bridge to un-maximize the Chromium window (Pi only)
-  fetch('http://localhost:8765/windowed', { method: 'POST' }).catch(() => {})
-}
 
 /** Full-width Command Bar — CT logo · current events center · weather + clock + AI right */
 export function TopBarC() {
@@ -116,16 +106,6 @@ export function TopBarC() {
           {format(now, 'h:mm')}
           <span className="text-caption text-white/50 ml-0.5">{format(now, 'a')}</span>
         </div>
-
-        {/* DEV: exit fullscreen / un-maximize */}
-        <button
-          onClick={exitKioskMode}
-          title="Exit fullscreen (dev)"
-          className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white/60 hover:text-white text-caption transition-colors"
-        >
-          <Minimize2 size={11} />
-          <span className="hidden sm:inline">Window</span>
-        </button>
 
         {/* Art Mode button */}
         <button

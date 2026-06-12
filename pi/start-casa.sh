@@ -67,8 +67,7 @@ sleep 3  # Wait for sockets to close (TIME_WAIT state)
 # sensor isn't wired yet — bridge starts in simulation mode.
 BRIDGE_DIR="$HOME/sensor-bridge"
 if [ -f "$BRIDGE_DIR/main.py" ]; then
-  cd "$BRIDGE_DIR" && python3 main.py &>> "$HOME/sensor-bridge.log" &
-  cd "$HOME"
+  python3 "$BRIDGE_DIR/main.py" &>> "$HOME/sensor-bridge.log" &
   sleep 1
 fi
 
