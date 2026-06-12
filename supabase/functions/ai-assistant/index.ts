@@ -1,4 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import {
+  AMBIGUITY_GUARDRAILS,
+  DIFF_AND_OUTPUT_GUARDRAILS,
+  EDIT_INTENT_GUARDRAILS,
+  RECOVERY_AND_CONFLICT_GUARDRAILS,
+} from '../_shared/ai-prompt-guardrails.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -370,7 +376,10 @@ RULES:
 - After the user confirms a change, apply it immediately with update_event; confirm what you changed in one sentence.
 - If the user changes the location, mention that driving logistics and weather will refresh automatically.
 - If the user tries to discuss something unrelated to this event, politely redirect them back to editing it.
-
+${EDIT_INTENT_GUARDRAILS}
+${DIFF_AND_OUTPUT_GUARDRAILS}
+${RECOVERY_AND_CONFLICT_GUARDRAILS}
+ 
 ON OPEN (the [EVENT_EDIT_MODE] signal): Give a concise friendly summary of the event so the user knows you're primed — include title, date/time, who's attending, and location if set. Then highlight any ⚠️ MISSING fields as things worth filling in, and ask what they'd like to change or add first.` : ''}
 
 ALL UPCOMING EVENTS (full year, use exact IDs):
@@ -387,10 +396,14 @@ INSTRUCTIONS:
 - Batch related field updates into a single update_event action instead of many small ones.
 - When editing an event found via search_events, preserve unchanged detail-pane data from that event response (notes, category, bring list, checklist_items, action_items, etc.).
 - what_to_bring is a full replacement field. When adding/removing one item, preserve existing items from the selected event and send the complete final list.
+- Always apply append/replace/clear/transform intent classification before building update_event args.
+- Prefer append semantics for "add/include/also/plus" phrasing unless user explicitly asks to replace.
+- For each write proposal, include "Will change", "Will preserve", and "Needs confirmation".
 - Default time window: when no date is given, search from NOW (${context.currentDate}) forward — never return past events.
 - "Next event" / "what's next" = first event whose start_time is strictly AFTER NOW. If an event is currently in progress (started before NOW, ends after NOW), mention it as "currently happening" first, then state what starts next.
 - Default duration: 1 hour if not specified. Default time: morning (9am) for "tomorrow"/"next week", 2pm for "afternoon", 6pm for "evening", 12pm for "lunch".
 - Fuzzy match titles, nicknames, partial names, relative dates. If multiple events match, ask which one.
+- Never perform writes when search_events reports ambiguous=true or top confidence < 0.75; ask a disambiguation question first.
 - Working context: keep operating on the same event we're discussing unless the user clearly switches.
 - Relative shifts ("push it 1h later"): compute from the event's current start_time.
 - "Add my wife"/"add Kelly": resolve from FAMILY MEMBERS.
@@ -398,7 +411,10 @@ INSTRUCTIONS:
 - Conflict awareness: warn if a new event overlaps an existing one by >15 min.
 - Prefer edit over create: if a similar event exists at the same time, update it instead of creating a duplicate.
 - Tone: warm, concise (1–3 sentences). Be proactive — flag conflicts, drive-time buffers, busy days.
-- Never say "I can't do that" — use the tools.${customInstructions ? `\n\nUSER'S CUSTOM RULES (always apply, override defaults if they conflict):\n${customInstructions}` : ''}`
+- Never say "I can't do that" — use the tools.${customInstructions ? `\n\nUSER'S CUSTOM RULES (always apply, override defaults if they conflict):\n${customInstructions}` : ''}
+${AMBIGUITY_GUARDRAILS}
+${DIFF_AND_OUTPUT_GUARDRAILS}
+${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
   // Convert message history to Gemini format
   type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } } | { functionCall: { name: string; args: Record<string, unknown> } } | { functionResponse: { name: string; response: Record<string, unknown> } }
@@ -459,11 +475,44 @@ INSTRUCTIONS:
 
       if (results.length === 0) return { found: false, message: 'No matching events found.' }
 
+      const scoredResults = results.map((event) => {
+        let score = 0
+        if (query) {
+          const title = event.title.toLowerCase()
+          const q = query.trim()
+          if (title === q) score += 0.8
+          else if (title.includes(q)) score += 0.55
+          const qTokens = q.split(/\s+/).filter(Boolean)
+          if (qTokens.length > 0) {
+            const overlap = qTokens.filter((token) => title.includes(token)).length / qTokens.length
+            score += overlap * 0.25
+          }
+        }
+        if (memberName) {
+          const memberHit = event.event_members?.some((m) => m.family_members?.name.toLowerCase().includes(memberName))
+          if (memberHit) score += 0.2
+        }
+        if (dateHint) score += 0.15
+        if (!query && !memberName && !dateHint) score += 0.5
+        return { event, confidence: Math.min(1, Number(score.toFixed(2))) }
+      }).sort((a, b) => b.confidence - a.confidence)
+
+      const topConfidence = scoredResults[0]?.confidence ?? 0
+      const secondConfidence = scoredResults[1]?.confidence ?? 0
+      const ambiguous = scoredResults.length > 1 && (topConfidence < 0.75 || topConfidence - secondConfidence < 0.15)
+
       return {
         found: true,
-        count: results.length,
-        events: results.slice(0, 10).map(e => ({
+        count: scoredResults.length,
+        ambiguity: {
+          ambiguous,
+          top_confidence: topConfidence,
+          second_confidence: secondConfidence,
+          recommended_action: ambiguous ? 'ask_user_to_disambiguate' : 'safe_to_proceed_after_confirmation',
+        },
+        events: scoredResults.slice(0, 10).map(({ event: e, confidence }) => ({
           id: e.id,
+          confidence,
           title: e.title,
           start: e.start_time,
           end: e.end_time,
@@ -638,7 +687,7 @@ INSTRUCTIONS:
       if ((args.members_add as string[])?.length) changes.push(`add: ${(args.members_add as string[]).join(', ')}`)
       if ((args.members_remove as string[])?.length) changes.push(`remove: ${(args.members_remove as string[]).join(', ')}`)
       if (args.all_day !== undefined) changes.push(`all-day → ${args.all_day}`)
-      return `Update event: ${changes.join(' · ')}`
+      return `Update event: ${changes.join(' · ')}\nWill preserve: all unspecified fields unchanged.\nNeeds confirmation: yes`
     }
     if (name === 'delete_event') return `Delete: **${args.title}**`
     if (name === 'add_grocery_items') {
