@@ -40,8 +40,9 @@ export async function extractDominantColor(imageUrl: string): Promise<string> {
     img.crossOrigin = 'anonymous'
     
     const timeout = setTimeout(() => {
+      console.warn('[ColorUtils] Image load timeout, using palette fallback')
       resolve(getPaletteColorForKey(imageUrl))
-    }, 3000)
+    }, 5000)
     
     img.onload = () => {
       clearTimeout(timeout)
@@ -75,7 +76,9 @@ export async function extractDominantColor(imageUrl: string): Promise<string> {
           return
         }
 
-        resolve(rgbToHex(avgR, avgG, avgB))
+        const hex = rgbToHex(avgR, avgG, avgB)
+        console.log('[ColorUtils] Extracted color:', hex)
+        resolve(hex)
       } catch (err) {
         console.warn('[ColorUtils] Canvas extraction failed:', err)
         resolve(getPaletteColorForKey(imageUrl))
@@ -83,6 +86,7 @@ export async function extractDominantColor(imageUrl: string): Promise<string> {
     }
     img.onerror = () => {
       clearTimeout(timeout)
+      console.warn('[ColorUtils] Image load failed for CORS, using palette')
       resolve(getPaletteColorForKey(imageUrl))
     }
     img.src = imageUrl
