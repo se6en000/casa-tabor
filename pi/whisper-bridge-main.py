@@ -24,12 +24,15 @@ DG_URL = (
 )
 
 WAKE_MODEL    = 'alexa'
-WAKE_SCORE    = 0.12
+WAKE_SCORE    = 0.10           # Lowered for better sensitivity
 WAKE_COOLDOWN = 2.0
 WAKE_WATCHDOG_SECS = 90
+WAKE_AUDIO_GAIN   = 3.0        # Amplify mic input before wake detection
 
 # ── Audio buffering for wake word ─────────────────────────────────────────────
-BUFFER_SECS = 2.0  # Keep 2 seconds of pre-wake audio
+# 0.3s post-wake buffer — just enough to capture the first word after "Alexa".
+# Using a short buffer means "Alexa" itself is NOT sent to DeepGram (stripped naturally).
+BUFFER_SECS = 0.3
 
 # ── STT state ────────────────────────────────────────────────────────────────
 _state      = dict(recording=False, ready=False, volume=0, transcript=None,
@@ -245,7 +248,9 @@ def _wake_word_loop():
                 # Add to rolling buffer
                 _add_to_buffer(raw)
                 
-                audio_np = np.frombuffer(raw, dtype=np.int16)
+                # Amplify audio before wake word detection to compensate for quiet mic
+                audio_np = np.frombuffer(raw, dtype=np.int16).astype(np.float32)
+                audio_np = np.clip(audio_np * WAKE_AUDIO_GAIN, -32768, 32767).astype(np.int16)
                 prediction = model.predict(audio_np)
                 score = max(prediction.get(WAKE_MODEL, 0),
                             prediction.get(f'{WAKE_MODEL}_v0.1', 0))
@@ -284,6 +289,13 @@ def _wake_word_loop():
         time.sleep(0.5)
 
 # ── STT functions ─────────────────────────────────────────────────────────────
+import re as _re
+_WAKE_STRIP = _re.compile(r'^(alexa[\s,\.!?]*)+', _re.IGNORECASE)
+
+def _strip_wake(text: str) -> str:
+    """Remove leading 'Alexa' (and any variant) from transcript."""
+    return _WAKE_STRIP.sub('', text).strip()
+
 def _on_message(ws_arg, message):
     global _finals
     try:
@@ -295,7 +307,7 @@ def _on_message(ws_arg, message):
             return
 
         if msg_type == 'UtteranceEnd':
-            full = ' '.join(_finals).strip()
+            full = _strip_wake(' '.join(_finals).strip())
             if full:
                 log.info(f'[DG] UtteranceEnd -> "{full}"')
                 _finals = []
@@ -314,7 +326,7 @@ def _on_message(ws_arg, message):
         if spch_final:
             if text:
                 _finals.append(text)
-            full = ' '.join(_finals).strip()
+            full = _strip_wake(' '.join(_finals).strip())
             _finals = []
             if full:
                 log.info(f'[DG] speech_final -> "{full}"')
@@ -322,11 +334,11 @@ def _on_message(ws_arg, message):
                 _ws_push_stt({'type': 'final', 'text': full})
         elif is_final and text:
             _finals.append(text)
-            interim = ' '.join(_finals)
+            interim = _strip_wake(' '.join(_finals))
             _set(interim_transcript=interim)
             _ws_push_stt({'type': 'interim', 'text': interim})
         elif text:
-            interim = (' '.join(_finals) + ' ' + text).strip()
+            interim = _strip_wake((' '.join(_finals) + ' ' + text).strip())
             _set(interim_transcript=interim)
             _ws_push_stt({'type': 'interim', 'text': interim})
     except Exception as e:
