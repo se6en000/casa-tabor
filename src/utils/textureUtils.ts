@@ -62,11 +62,18 @@ export function getTextureStyle() {
   const vignette = generateVignetteGradient(0.1)
   const lighting = generateLightingOverlay(0.06)
   
+  // Grain texture using repeating gradients (crosshatch pattern)
+  const grain = `
+    repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,.015) 2px, rgba(0,0,0,.015) 4px),
+    repeating-linear-gradient(-45deg, transparent, transparent 2px, rgba(0,0,0,.01) 2px, rgba(0,0,0,.01) 4px),
+    repeating-linear-gradient(90deg, transparent, transparent 1px, rgba(0,0,0,.008) 1px, rgba(0,0,0,.008) 2px)
+  `
+  
   return {
-    backgroundImage: `${vignette}, ${lighting}`,
-    backgroundSize: '100% 100%, 100% 100%',
-    backgroundPosition: '0 0, 0 0',
-    backgroundAttachment: 'scroll, scroll',
+    backgroundImage: `${vignette}, ${lighting}, ${grain}`,
+    backgroundSize: '100% 100%, 100% 100%, 256px 256px',
+    backgroundPosition: '0 0, 0 0, 0 0',
+    backgroundAttachment: 'scroll, scroll, fixed',
     backgroundBlendMode: 'normal',
   }
 }
