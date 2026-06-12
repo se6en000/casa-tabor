@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 const SENSOR_BRIDGE = 'http://127.0.0.1:8765'
 const FEEDBACK_LOCK_MS = 2800  // how long confirm/cancel block phase sync
@@ -17,6 +17,8 @@ function callLed(mode: LedMode) {
 export function useLedStrip() {
   const currentMode  = useRef<LedMode>('off')
   const lockedUntil  = useRef<number>(0)
+  const desiredMode  = useRef<LedMode>('off')
+  const unlockTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const setMode = useCallback((mode: LedMode) => {
     if (currentMode.current === mode) return
@@ -27,20 +29,37 @@ export function useLedStrip() {
   const setFeedback = useCallback((mode: 'confirm' | 'cancel') => {
     // Lock out phase sync for the duration of the burst
     lockedUntil.current = Date.now() + FEEDBACK_LOCK_MS
-    currentMode.current = mode
-    callLed(mode)
-  }, [])
+    setMode(mode)
+    if (unlockTimer.current) clearTimeout(unlockTimer.current)
+    unlockTimer.current = setTimeout(() => {
+      lockedUntil.current = 0
+      setMode(desiredMode.current)
+    }, FEEDBACK_LOCK_MS + 25)
+  }, [setMode])
 
   const setPhaseMode = useCallback((mode: LedMode) => {
+    desiredMode.current = mode
     if (Date.now() < lockedUntil.current) return  // locked — feedback animating
     setMode(mode)
   }, [setMode])
+
+  useEffect(() => {
+    return () => {
+      if (unlockTimer.current) clearTimeout(unlockTimer.current)
+    }
+  }, [])
 
   return {
     listening:  () => setPhaseMode('listening'),
     processing: () => setPhaseMode('processing'),
     confirm:    () => setFeedback('confirm'),
     cancel:     () => setFeedback('cancel'),
-    off:        () => setMode('off'),
+    off:        () => {
+      desiredMode.current = 'off'
+      lockedUntil.current = 0
+      if (unlockTimer.current) clearTimeout(unlockTimer.current)
+      unlockTimer.current = null
+      setMode('off')
+    },
   }
 }
