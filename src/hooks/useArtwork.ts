@@ -127,36 +127,23 @@ export function useArtwork(rotateSecs = 240) {
 
   useEffect(() => {
     let cancelled = false
-    async function loadWithRetry() {
-      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        try {
-          const [page1, page2, page3] = await Promise.all([fetchPage(), fetchPage(), fetchPage()])
-          const allResults = dedupeById([...page1, ...page2, ...page3])
-          if (allResults.length > 0 && !cancelled) {
-            const filtered = allResults.filter(a => prefsRef.current[a.id] !== 'down')
-            const upvoted = filtered.filter(a => prefsRef.current[a.id] === 'up')
-            const neutral = filtered.filter(a => prefsRef.current[a.id] !== 'up')
-            const shuffledResults = [...shuffled(upvoted), ...shuffled(neutral)]
-            const finalResults = shuffledResults.length > 0 ? shuffledResults : shuffled(allResults)
-            setArtworks(finalResults)
-            setIndex(0)
-            return
-          }
-        } catch { /* network error — try again */ }
-        if (cancelled) return
-        await new Promise(r => setTimeout(r, RETRY_DELAY))
-      }
-      // All attempts failed — use fallbacks so art mode always has something to show
-      if (!cancelled) {
-        const filteredFallbacks = FALLBACKS.filter(a => prefsRef.current[a.id] !== 'down')
-        const upvotedFallbacks = filteredFallbacks.filter(a => prefsRef.current[a.id] === 'up')
-        const neutralFallbacks = filteredFallbacks.filter(a => prefsRef.current[a.id] !== 'up')
-        const finalFallbacks = [...shuffled(upvotedFallbacks), ...shuffled(neutralFallbacks)]
-        setArtworks(finalFallbacks.length > 0 ? finalFallbacks : shuffled(FALLBACKS))
-        setIndex(0)
+    async function load() {
+      try {
+        const page1 = await fetchPage()
+        if (!cancelled && page1.length > 0) {
+          const shuffled_ = shuffled(page1)
+          setArtworks(shuffled_)
+          setIndex(0)
+        }
+      } catch (e) {
+        console.error('Failed to load artwork:', e)
+        if (!cancelled) {
+          setArtworks(FALLBACKS)
+          setIndex(0)
+        }
       }
     }
-    loadWithRetry()
+    load()
     return () => { cancelled = true }
   }, [])
 
