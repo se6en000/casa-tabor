@@ -6,8 +6,6 @@ const API  = 'https://api.artic.edu/api/v1'
 const PAINTING_TYPE_IDS = [1, 14]
 const MAX_PAGE   = 25
 const FETCH_LIMIT = 60
-const MAX_RETRIES = 4   // try up to 4 different random pages before giving up
-const RETRY_DELAY = 2000
 
 // Hardcoded fallback artworks — guaranteed public-domain ARTIC images.
 // Used when API is unreachable (offline, rate-limited, etc.)
@@ -66,17 +64,6 @@ function savePrefs(prefs: ArtworkPreferences) {
   }
 }
 
-function dedupeById(artworks: Artwork[]): Artwork[] {
-  const seen = new Set<number>()
-  const deduped: Artwork[] = []
-  for (const artwork of artworks) {
-    if (seen.has(artwork.id)) continue
-    seen.add(artwork.id)
-    deduped.push(artwork)
-  }
-  return deduped
-}
-
 async function fetchPage(): Promise<Artwork[]> {
   const randomPage = Math.floor(Math.random() * MAX_PAGE) + 1
   const res = await fetch(`${API}/artworks/search`, {
@@ -129,10 +116,10 @@ export function useArtwork(rotateSecs = 240) {
     let cancelled = false
     async function load() {
       try {
-        const page1 = await fetchPage()
-        if (!cancelled && page1.length > 0) {
-          const shuffled_ = shuffled(page1)
-          setArtworks(shuffled_)
+        const [p1, p2, p3] = await Promise.all([fetchPage(), fetchPage(), fetchPage()])
+        const all = [...p1, ...p2, ...p3]
+        if (!cancelled && all.length > 0) {
+          setArtworks(shuffled(all))
           setIndex(0)
         }
       } catch (e) {
@@ -153,19 +140,7 @@ export function useArtwork(rotateSecs = 240) {
     if (rotateRef.current) clearInterval(rotateRef.current)
     rotateRef.current = setInterval(() => {
       setLoaded(false)
-      setIndex(i => {
-        let next = (i + 1) % artworks.length
-        // Skip any known-failed images (but don't loop forever)
-        let attempts = 0
-        while (
-          (failedIdsRef.current.has(artworks[next]?.id) || prefsRef.current[artworks[next]?.id] === 'down')
-          && attempts < artworks.length
-        ) {
-          next = (next + 1) % artworks.length
-          attempts++
-        }
-        return next
-      })
+      setIndex(i => (i + 1) % artworks.length)
     }, rotateSecs * 1000)
     return () => { if (rotateRef.current) clearInterval(rotateRef.current) }
   }, [artworks.length, rotateSecs])
@@ -188,16 +163,7 @@ export function useArtwork(rotateSecs = 240) {
 
   const next = useCallback(() => {
     setLoaded(false)
-    setIndex(i => {
-      if (artworks.length === 0) return 0
-      let nextIndex = (i + 1) % artworks.length
-      let attempts = 0
-      while (prefsRef.current[artworks[nextIndex]?.id] === 'down' && attempts < artworks.length) {
-        nextIndex = (nextIndex + 1) % artworks.length
-        attempts++
-      }
-      return nextIndex
-    })
+    setIndex(i => (i + 1) % Math.max(artworks.length, 1))
   }, [artworks.length])
 
   const setPreference = useCallback((artworkId: number, preference: ArtworkPreference) => {
