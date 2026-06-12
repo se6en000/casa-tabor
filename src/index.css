@@ -241,6 +241,16 @@ button:active, a:active, [role="button"]:active {
   background: var(--color-casa-muted);
 }
 
+/* ── Hide scrollbar utility ────────────────────────────────────── */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;     /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
 /* ── Art mode texture effects ──────────────────────────────── */
 @supports (background: repeating-conic-gradient(from 45deg, #000 0 90deg, transparent 90deg 180deg)) {
   .art-texture {
