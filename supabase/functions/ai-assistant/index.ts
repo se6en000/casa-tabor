@@ -5,6 +5,7 @@ import {
   EDIT_INTENT_GUARDRAILS,
   RECOVERY_AND_CONFLICT_GUARDRAILS,
 } from '../_shared/ai-prompt-guardrails.mjs'
+import { optionalEnv, requireEnv } from '../_shared/env.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -17,10 +18,12 @@ interface ImagePayload { mimeType: string; data: string }
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
-  const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-  const mapsKey = Deno.env.get('GOOGLE_MAPS_API_KEY') ?? ''
+  const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
+  const mapsKey = optionalEnv('GOOGLE_MAPS_API_KEY', '')
 
-  const { messages, context, image } = await req.json()
+  const { messages, context, image, correlation_id: correlationId } = await req.json()
+  const cid = correlationId ?? `${context?.page ?? 'unknown'}:${Date.now().toString(36)}`
+  console.log(`[ai-assistant][${cid}] request messages=${Array.isArray(messages) ? messages.length : 0}`)
 
   // Load config, saved places, contacts, grocery list, events in parallel
   const now = new Date()
@@ -51,7 +54,7 @@ Deno.serve(async (req) => {
 
   if (eventsResult.error) {
     console.error('[ai-assistant] events query error:', JSON.stringify(eventsResult.error))
-    return new Response(JSON.stringify({ type: 'debug', error: eventsResult.error, yearStart: yearStart.toISOString(), yearEnd: yearEnd.toISOString() }), {
+    return new Response(JSON.stringify({ type: 'debug', error: eventsResult.error, yearStart: windowStart.toISOString(), yearEnd: yearEnd.toISOString(), correlation_id: cid }), {
       status: 200, headers: { ...CORS, 'content-type': 'application/json' }
     })
   }
@@ -65,7 +68,7 @@ Deno.serve(async (req) => {
   const model = (config.model as string) || 'gemini-1.5-flash'
 
   if (!apiKey) {
-    return new Response(JSON.stringify({ type: 'error', code: 'no_api_key', message: 'No AI API key configured. Go to Settings → AI to add one.' }), {
+    return new Response(JSON.stringify({ type: 'error', code: 'no_api_key', message: 'No AI API key configured. Go to Settings → AI to add one.', correlation_id: cid }), {
       status: 200, headers: { ...CORS, 'content-type': 'application/json' }
     })
   }
@@ -741,13 +744,14 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   try {
     const result = await callGeminiWithTools(history)
     logUsage()
-    return new Response(JSON.stringify(result), {
+    return new Response(JSON.stringify({ ...result, correlation_id: cid }), {
       headers: { ...CORS, 'content-type': 'application/json' },
     })
   } catch (e) {
     const msg = (e as Error).message ?? 'Unknown error'
+    console.error(`[ai-assistant][${cid}] error ${msg}`)
     return new Response(
-      JSON.stringify({ type: 'error', code: 'llm_error', message: msg }),
+      JSON.stringify({ type: 'error', code: 'llm_error', message: msg, correlation_id: cid }),
       { status: 200, headers: { ...CORS, 'content-type': 'application/json' } }
     )
   }

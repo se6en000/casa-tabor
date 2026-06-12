@@ -113,6 +113,11 @@ export function useAIAssistant(ctx: AssistantContext) {
     startNewSession()
   }, [endSession, startNewSession])
 
+  const buildCorrelationId = useCallback((messageId: string, sessionId?: string) => {
+    const sid = sessionId ?? 'no-session'
+    return `${sid}:${messageId}:${Date.now().toString(36)}`
+  }, [])
+
   const send = useCallback(async (text: string, image?: { dataUrl: string; mimeType: string }) => {
     // Check for goodbye phrase → end session
     if (GOODBYE_PHRASES.test(text)) {
@@ -151,6 +156,7 @@ export function useAIAssistant(ctx: AssistantContext) {
           context: buildContext(ctxRef.current),
           image: imagePayload,
           session_id: activeSession.id,
+          correlation_id: buildCorrelationId(userMsg.id, activeSession.id),
         },
       })
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -207,7 +213,7 @@ export function useAIAssistant(ctx: AssistantContext) {
     } finally {
       setLoading(false)
     }
-  }, [startNewSession, endSession, saveMessages])
+  }, [startNewSession, endSession, saveMessages, buildCorrelationId])
 
   const updateMessageToolStatus = useCallback((
     messageId: string,

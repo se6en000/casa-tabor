@@ -12,7 +12,7 @@ const RECONNECT_MS = 3000          // backoff before reconnecting WS
  * - Otherwise: wake word opens the AI drawer
  * Silently no-ops when the bridge is unreachable (non-Pi environments).
  */
-export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean) {
+export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean, enabled = true) {
   const wsRef = useRef<WebSocket | null>(null)
   const screensaverActiveAtRef = useRef<number>(0)
   const drawerClosedAtRef = useRef<number>(0)
@@ -40,6 +40,12 @@ export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean) {
   }, [drawerOpen])
 
   useEffect(() => {
+    if (!enabled) {
+      if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null }
+      if (wsRef.current) { try { wsRef.current.close() } catch { /* ignore */ } wsRef.current = null }
+      return
+    }
+
     if (drawerOpen) {
       // Drawer opened — disconnect WS, we don't need wake detection right now
       if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null }
@@ -97,6 +103,5 @@ export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean) {
       if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null }
       if (wsRef.current) { try { wsRef.current.close() } catch { /* ignore */ } wsRef.current = null }
     }
-  }, [drawerOpen])
+  }, [drawerOpen, enabled])
 }
-

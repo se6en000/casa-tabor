@@ -19,6 +19,8 @@ const CANCEL_PHRASES  = /\b(no|nope|cancel|don't|do not|stop|abort|never mind|ne
 /** DeepGram STT bridge — HTTP for probe/display, WS for streaming */
 const BRIDGE    = 'http://127.0.0.1:8766'
 const BRIDGE_WS = 'ws://127.0.0.1:8767'
+const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
+const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
 
 type VoicePhase = 'idle' | 'connecting' | 'listening' | 'processing'
 type STTMode = 'unknown' | 'bridge' | 'webspeech'
@@ -68,7 +70,8 @@ function useSpeechInput({
   const phaseRef           = useRef<VoicePhase>('idle')
   const setPhaseSync = (p: VoicePhase) => { phaseRef.current = p; setPhase(p) }
   const [volume, setVolume] = useState(0)
-  const supported = true
+  const [bridgeDown, setBridgeDown] = useState(false)
+  const supported = !IS_SAFE_MODE
 
   // ── Stable callback refs — always current, never stale inside setInterval ──
   // This is the core pattern for voice agents: the polling loop runs continuously
@@ -229,6 +232,7 @@ function useSpeechInput({
     wsRef.current = ws
 
     ws.onopen = () => {
+      setBridgeDown(false)
       ws.send(JSON.stringify({ type: 'start' }))
     }
 
@@ -240,6 +244,7 @@ function useSpeechInput({
           case 'ready':
             setPhaseSync('listening')
             connectStartRef.current = 0
+            setBridgeDown(false)
             break
           case 'volume':
             setVolume(msg.level ?? 0)
@@ -274,6 +279,7 @@ function useSpeechInput({
       setVolume(0)
       if (connectStartRef.current > 0 && Date.now() - connectStartRef.current > CONNECT_TIMEOUT_MS) {
         console.warn('[STT] connect timeout, retrying')
+        setBridgeDown(true)
       }
       if (activeRef.current && phaseRef.current !== 'processing') {
         setTimeout(() => startBridge(), 500)
@@ -303,6 +309,7 @@ function useSpeechInput({
 
   const start = useCallback(async () => {
     if (activeRef.current) return
+    if (IS_SAFE_MODE) return
     activeRef.current = true
     setPhaseSync('connecting')
 
@@ -350,7 +357,20 @@ function useSpeechInput({
     }
   }, [stopWebSpeech, stopBridge])
 
-  return { phase, volume, supported, start, stop, toggle, suppress, unsuppress, ensureRunning, listening: phase === 'listening', connecting: phase === 'connecting' }
+  return {
+    phase,
+    volume,
+    supported,
+    bridgeDown,
+    start,
+    stop,
+    toggle,
+    suppress,
+    unsuppress,
+    ensureRunning,
+    listening: phase === 'listening',
+    connecting: phase === 'connecting',
+  }
 }
 
 
@@ -455,6 +475,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
   useEffect(() => {
     if (open) {
+      if (IS_SAFE_MODE) return
       // Start connecting immediately — don't wait for animation.
       // Bridge buffers audio from /start so by the time the user speaks it's ready.
       speech.start()
@@ -470,6 +491,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       freshStartedRef.current = null  // allow fresh start next time this event is opened
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const buildCorrelationId = useCallback((suffix: string) => {
+    const sessionPart = session?.id ?? 'no-session'
+    return `${sessionPart}:${suffix}:${Date.now().toString(36)}`
+  }, [session?.id])
 
   // When in event-edit mode, always start a fresh session so old conversations don't bleed in.
   const firedEventGreetRef = useRef<string | null>(null)
@@ -737,7 +763,13 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                         ? { ...args, expected_updated_at: matchedEvent.updated_at }
                         : args
                       const { data, error } = await supabase.functions.invoke('execute-ai-action', {
-                        body: { tool, args: requestArgs, action_id: messageId, session_id: session?.id ?? null },
+                        body: {
+                          tool,
+                          args: requestArgs,
+                          action_id: messageId,
+                          session_id: session?.id ?? null,
+                          correlation_id: buildCorrelationId(messageId),
+                        },
                       })
                       if (error) throw error
                       if (data?.success === false) throw new Error(data.error ?? 'Action failed')
@@ -761,7 +793,13 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                     updateMessageToolStatus(messageId, 'done', { undoStatus: 'loading', undoErrorMsg: undefined })
                     try {
                       const { data, error } = await supabase.functions.invoke('execute-ai-action', {
-                        body: { tool: 'undo_event_edit', args: { action_id: actionId }, action_id: `${messageId}:undo`, session_id: session?.id ?? null },
+                        body: {
+                          tool: 'undo_event_edit',
+                          args: { action_id: actionId },
+                          action_id: `${messageId}:undo`,
+                          session_id: session?.id ?? null,
+                          correlation_id: buildCorrelationId(`${messageId}:undo`),
+                        },
                       })
                       if (error) throw error
                       if (data?.success === false) throw new Error(data.error ?? 'Undo failed')
@@ -897,7 +935,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                 </button>
               </div>
               <p className="text-caption text-casa-muted mt-1.5 text-center opacity-60">
-                {speech.supported
+                {IS_SAFE_MODE
+                  ? 'Safe mode enabled: voice capture is disabled'
+                  : speech.bridgeDown
+                    ? 'Voice bridge offline — text input still works'
+                    : speech.supported
                   ? speech.connecting
                     ? 'Connecting to mic…'
                     : speech.listening

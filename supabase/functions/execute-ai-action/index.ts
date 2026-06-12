@@ -3,6 +3,7 @@ import {
   RECURRING_EDIT_ERROR,
   buildValidatedUpdatePayload,
 } from '../_shared/ai-event-edit.mjs'
+import { requireEnv } from '../_shared/env.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -105,8 +106,16 @@ async function finalizeEventSync(
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
-  const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-  const { tool, args, action_id: actionId, session_id: sessionId } = await req.json()
+  const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
+  const {
+    tool,
+    args,
+    action_id: actionId,
+    session_id: sessionId,
+    correlation_id: correlationId,
+  } = await req.json()
+  const cid = correlationId ?? `${sessionId ?? 'no-session'}:${actionId ?? 'no-action'}`
+  console.log(`[execute-ai-action][${cid}] start tool=${tool}`)
 
   try {
     if (tool === 'create_event') {
@@ -142,7 +151,7 @@ Deno.serve(async (req) => {
       // Await Google sync — fire-and-forget can be killed before completion in Deno Deploy
       await sb.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {})
 
-      return new Response(JSON.stringify({ success: true, event_id: event.id }), {
+      return new Response(JSON.stringify({ success: true, event_id: event.id, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
@@ -150,7 +159,7 @@ Deno.serve(async (req) => {
     if (tool === 'update_event') {
       const existingResult = await getExistingActionResult(sb, actionId)
       if (existingResult) {
-        return new Response(JSON.stringify(existingResult), {
+        return new Response(JSON.stringify({ ...existingResult, correlation_id: cid }), {
           headers: { ...CORS, 'content-type': 'application/json' },
         })
       }
@@ -238,7 +247,7 @@ Deno.serve(async (req) => {
       }
       const responsePayload = await finalizeEventSync(sb, normalized.eventId, historyRow?.[0]?.id, baseResponse)
 
-      return new Response(JSON.stringify(responsePayload), {
+      return new Response(JSON.stringify({ ...responsePayload, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
@@ -246,7 +255,7 @@ Deno.serve(async (req) => {
     if (tool === 'undo_event_edit') {
       const existingResult = await getExistingActionResult(sb, actionId)
       if (existingResult) {
-        return new Response(JSON.stringify(existingResult), {
+        return new Response(JSON.stringify({ ...existingResult, correlation_id: cid }), {
           headers: { ...CORS, 'content-type': 'application/json' },
         })
       }
@@ -282,7 +291,7 @@ Deno.serve(async (req) => {
       }
       const responsePayload = await finalizeEventSync(sb, baseResponse.event_id, historyRow?.[0]?.id, baseResponse)
 
-      return new Response(JSON.stringify(responsePayload), {
+      return new Response(JSON.stringify({ ...responsePayload, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
@@ -291,7 +300,7 @@ Deno.serve(async (req) => {
       await sb.functions.invoke('delete-google-event', { body: { event_id: args.id } }).catch(() => {})
       const { error } = await sb.from('events').update({ status: 'cancelled' }).eq('id', args.id)
       if (error) throw new Error(error.message)
-      return new Response(JSON.stringify({ success: true }), {
+      return new Response(JSON.stringify({ success: true, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
@@ -312,7 +321,7 @@ Deno.serve(async (req) => {
       }))
       const { error } = await sb.from('grocery_items').insert(items)
       if (error) throw new Error(error.message)
-      return new Response(JSON.stringify({ success: true, count: items.length }), {
+      return new Response(JSON.stringify({ success: true, count: items.length, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
@@ -320,7 +329,7 @@ Deno.serve(async (req) => {
     if (tool === 'check_grocery_item') {
       const { error } = await sb.from('grocery_items').update({ checked: args.checked }).eq('id', args.item_id)
       if (error) throw new Error(error.message)
-      return new Response(JSON.stringify({ success: true }), {
+      return new Response(JSON.stringify({ success: true, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
@@ -328,17 +337,18 @@ Deno.serve(async (req) => {
     if (tool === 'clear_checked_grocery_items') {
       const { error } = await sb.from('grocery_items').delete().eq('checked', true)
       if (error) throw new Error(error.message)
-      return new Response(JSON.stringify({ success: true }), {
+      return new Response(JSON.stringify({ success: true, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
 
-    return new Response(JSON.stringify({ error: 'Unknown tool' }), {
+    return new Response(JSON.stringify({ error: 'Unknown tool', correlation_id: cid }), {
       status: 400, headers: { ...CORS, 'content-type': 'application/json' },
     })
   } catch (e) {
     const msg = (e as Error).message ?? 'Action failed'
-    return new Response(JSON.stringify({ success: false, error: msg }), {
+    console.error(`[execute-ai-action][${cid}] error ${msg}`)
+    return new Response(JSON.stringify({ success: false, error: msg, correlation_id: cid }), {
       status: 200, headers: { ...CORS, 'content-type': 'application/json' },
     })
   }

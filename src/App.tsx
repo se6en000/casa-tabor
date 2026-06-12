@@ -20,6 +20,8 @@ import { useWakeWord } from './hooks/useWakeWord'
 import { useIdleTimer } from './hooks/useIdleTimer'
 import { useScreensaverSettings } from './hooks/useScreensaverSettings'
 
+const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
+const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
@@ -57,17 +59,19 @@ function GlobalAIDrawer({
   screensaverActive,
   open,
   setOpen,
+  safeMode,
 }: {
   screensaverActive: boolean
   open: boolean
   setOpen: (open: boolean) => void
+  safeMode: boolean
 }) {
   const [anchor, setAnchor] = useState<{ right: number; top: number } | undefined>()
   const now = useLiveClock(60_000)
   const { data: events = [] } = useRollingEvents(now)
   const { data: family = [] } = useFamilyMembers()
   const { data: weather } = useHomeWeather()
-  useWakeWord(open, screensaverActive)
+  useWakeWord(open, screensaverActive, !safeMode)
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -77,7 +81,7 @@ function GlobalAIDrawer({
     }
     document.addEventListener('open-ai-chat', handler)
     return () => document.removeEventListener('open-ai-chat', handler)
-  }, [])
+  }, [setOpen])
 
   return (
     <AIChatDrawer
@@ -99,8 +103,8 @@ function AppShell() {
   usePushNotifications()
 
   const { settings } = useScreensaverSettings()
-  const ssMs   = settings.enabled ? settings.screensaverMins * 60_000 : Infinity
-  const dispMs = settings.displaySleepEnabled ? settings.displayOffMins * 60_000 : Infinity
+  const ssMs   = settings.enabled && !IS_SAFE_MODE ? settings.screensaverMins * 60_000 : Infinity
+  const dispMs = settings.displaySleepEnabled && !IS_SAFE_MODE ? settings.displayOffMins * 60_000 : Infinity
   useIdleTimer(ssMs, dispMs)
 
   const [screensaverActive, setScreensaverActive] = useState(false)
@@ -139,7 +143,12 @@ function AppShell() {
       <NavBar />
 
       {/* Global AI drawer — opens from TopBar sparkle or wake word */}
-      <GlobalAIDrawer screensaverActive={screensaverActive} open={aiDrawerOpen} setOpen={setAiDrawerOpen} />
+      <GlobalAIDrawer
+        screensaverActive={screensaverActive}
+        open={aiDrawerOpen}
+        setOpen={setAiDrawerOpen}
+        safeMode={IS_SAFE_MODE}
+      />
 
       {/* Art screensaver overlay — always available when triggered manually; idle auto-fire respects settings.enabled */}
       {screensaverActive && (
