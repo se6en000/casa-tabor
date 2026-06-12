@@ -187,19 +187,20 @@ def _wake_watchdog():
 
 def _make_recorder_cmd():
     """Return best available audio capture command for this platform.
-    Prefers pw-record (PipeWire native) so we coexist with Chromium;
-    falls back to parec, then arecord.
+    Uses arecord -D pulse which routes through PipeWire's PulseAudio
+    compatibility layer — coexists with Chromium and provides proper levels.
+    Falls back to pw-record then arecord direct ALSA.
     """
     import shutil, os
-    # Ensure PipeWire/PulseAudio can connect when started outside a full session env
     os.environ.setdefault('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')
+    # arecord -D pulse routes via PipeWire PulseAudio compat — shared access + correct gain
+    if shutil.which('arecord'):
+        log.info('[recorder] using arecord -D pulse (PipeWire PulseAudio)')
+        return ['arecord', '-D', 'pulse', '-f', 'S16_LE', '-r', str(RATE), '-c', '1', '-']
     if shutil.which('pw-record'):
         log.info('[recorder] using pw-record (PipeWire native)')
         return ['pw-record', f'--rate={RATE}', '--channels=1', '--format=s16', '-']
-    if shutil.which('parec'):
-        log.info('[recorder] using parec (PulseAudio/PipeWire)')
-        return ['parec', '--raw', '--rate', str(RATE), '--channels', '1', '--format', 's16le']
-    log.info('[recorder] falling back to arecord (ALSA)')
+    log.info('[recorder] falling back to arecord direct ALSA')
     return ['arecord', '-D', ALSA_DEVICE, '-f', 'S16_LE', '-r', str(RATE), '-c', '1', '-']
 
 def _wake_word_loop():
@@ -222,6 +223,7 @@ def _wake_word_loop():
     log.info(f'[wake] ready — listening for wake word... (recorder: {rec_cmd[0]})')
 
     CHUNK_BYTES = 1280 * 2
+    WARMUP_CHUNKS = 3  # skip initial chunks (arecord startup pop)
 
     while True:
         while _get()['recording']:
@@ -237,6 +239,9 @@ def _wake_word_loop():
         _wake_proc = proc
         log.info('[wake] recorder started (pid=%d)', proc.pid)
         try:
+            # Drain warmup chunks to skip startup pop/noise
+            for _ in range(WARMUP_CHUNKS):
+                proc.stdout.read(CHUNK_BYTES)
             while True:
                 rec_state = _get()['recording']
                 if rec_state:
