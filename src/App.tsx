@@ -1,5 +1,5 @@
 import { useState, useEffect, Component, type ReactNode } from 'react'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import NavBar from './components/shared/NavBar'
 import AnimatedRoutes from './components/shared/AnimatedRoutes'
@@ -12,6 +12,8 @@ import { TopBarC } from './components/shared/TopBar'
 import PinGate from './components/shared/PinGate'
 import AIChatDrawer from './components/shared/AIChatDrawer'
 import ArtScreensaver from './components/shared/ArtScreensaver'
+import QuickCreateSheet from './components/shared/QuickCreateSheet'
+import AddEventFab from './components/shared/AddEventFab'
 import { useRollingEvents } from './hooks/useCalendarEvents'
 import { useFamilyMembers } from './hooks/useFamilyMembers'
 import { useHomeWeather } from './hooks/useHomeWeather'
@@ -109,6 +111,9 @@ function AppShell() {
 
   const [screensaverActive, setScreensaverActive] = useState(false)
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false)
+  const location = useLocation()
+  const hideFab = location.pathname.startsWith('/settings')
 
   useEffect(() => {
     const onSleep = () => setScreensaverActive(true)
@@ -141,6 +146,15 @@ function AppShell() {
 
       {/* Bottom nav only visible on mobile */}
       <NavBar />
+
+      {!hideFab && (
+        <AddEventFab onClick={() => setQuickCreateOpen(true)} />
+      )}
+
+      <QuickCreateSheet
+        open={quickCreateOpen}
+        onClose={() => setQuickCreateOpen(false)}
+      />
 
       {/* Global AI drawer — opens from TopBar sparkle or wake word */}
       <GlobalAIDrawer

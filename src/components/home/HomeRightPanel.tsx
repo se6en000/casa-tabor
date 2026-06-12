@@ -29,6 +29,33 @@ interface Briefing {
   generated_by: string | null
 }
 
+interface HomePanelSectionState {
+  trips: boolean
+  week: boolean
+  briefing: boolean
+  alerts: boolean
+  activity: boolean
+}
+
+const HOME_PANEL_SECTIONS_KEY = 'casa-home-right-panel-sections-v1'
+const DEFAULT_SECTION_STATE: HomePanelSectionState = {
+  trips: true,
+  week: false,
+  briefing: true,
+  alerts: true,
+  activity: false,
+}
+
+function loadSectionState(): HomePanelSectionState {
+  try {
+    const raw = localStorage.getItem(HOME_PANEL_SECTIONS_KEY)
+    if (!raw) return DEFAULT_SECTION_STATE
+    return { ...DEFAULT_SECTION_STATE, ...JSON.parse(raw) }
+  } catch {
+    return DEFAULT_SECTION_STATE
+  }
+}
+
 /** Shared collapsible section header — gold icon + label + chevron */
 function SectionHeader({
   icon, label, open, onToggle, action, badge,
@@ -95,11 +122,8 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
   const [briefingExpanded, setBriefingExpanded] = useState(false)
   const setActiveView = useCalendarStore(s => s.setActiveView)
 
-  const [openTrips, setOpenTrips] = useState(true)
-  const [openWeek, setOpenWeek] = useState(false)
-  const [openBriefing, setOpenBriefing] = useState(true)
-  const [openAlerts, setOpenAlerts] = useState(true)
-  const [openActivity, setOpenActivity] = useState(false)
+  const [sectionState, setSectionState] = useState<HomePanelSectionState>(loadSectionState)
+  const { trips: openTrips, week: openWeek, briefing: openBriefing, alerts: openAlerts, activity: openActivity } = sectionState
 
   const handleSeeAllWeek = useCallback(() => {
     setActiveView('stacked')
@@ -117,6 +141,14 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
       .then(({ data }) => { if (data) setBriefing(data as Briefing) })
   }, [])
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(HOME_PANEL_SECTIONS_KEY, JSON.stringify(sectionState))
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [sectionState])
+
   const paragraphs = briefing?.summary_text ? parseParagraphs(briefing.summary_text) : []
   const { visible, rest } = truncateToWords(paragraphs)
   const hasMore = rest.length > 0
@@ -132,7 +164,7 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
             icon={<Plane size={15} className="text-casa-gold" />}
             label="Upcoming Trips"
             open={openTrips}
-            onToggle={() => setOpenTrips(v => !v)}
+            onToggle={() => setSectionState(v => ({ ...v, trips: !v.trips }))}
           />
           {openTrips && (
             <div className="mt-3 space-y-2.5">
@@ -150,7 +182,7 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
           icon={<CalendarDays size={15} className="text-casa-gold" />}
           label="This Week"
           open={openWeek}
-          onToggle={() => setOpenWeek(v => !v)}
+          onToggle={() => setSectionState(v => ({ ...v, week: !v.week }))}
           action={
             <Link
               to="/calendar"
@@ -195,7 +227,7 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
           icon={<Sun size={15} className="text-casa-gold" />}
           label="Daily Briefing"
           open={openBriefing}
-          onToggle={() => setOpenBriefing(v => !v)}
+          onToggle={() => setSectionState(v => ({ ...v, briefing: !v.briefing }))}
           action={
             <Link to="/briefing" className="text-caption text-casa-gold hover:brightness-110">Full →</Link>
           }
@@ -246,7 +278,7 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
             label="Heads Up"
             badge={conflicts.length}
             open={openAlerts}
-            onToggle={() => setOpenAlerts(v => !v)}
+            onToggle={() => setSectionState(v => ({ ...v, alerts: !v.alerts }))}
           />
           {openAlerts && (
             <div className="mt-3">
@@ -263,7 +295,7 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
           label="Recent Activity"
           badge={notifications.filter(n => !n.read).length || undefined}
           open={openActivity}
-          onToggle={() => setOpenActivity(v => !v)}
+          onToggle={() => setSectionState(v => ({ ...v, activity: !v.activity }))}
           action={notifications.length > 0 ? (
             <button
               onClick={() => clearAll.mutate()}

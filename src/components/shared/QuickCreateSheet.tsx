@@ -19,6 +19,7 @@ function toLocalDT(d: Date): string {
 
 export default function QuickCreateSheet({ open, onClose, initialStart }: Props) {
   const qc = useQueryClient()
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null)
 
   const defaultStart = initialStart ?? new Date()
   const defaultEnd   = addHours(defaultStart, 1)
@@ -37,6 +38,41 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     setEndDT(toLocalDT(addHours(s, 1)))
     setSaving(false)
   }, [open, initialStart])
+
+  useEffect(() => {
+    if (!open) return
+
+    const vv = window.visualViewport
+    const updateViewport = () => {
+      if (!vv) return
+      setViewportHeight(vv.height)
+    }
+
+    if (vv) {
+      updateViewport()
+      vv.addEventListener('resize', updateViewport)
+      vv.addEventListener('scroll', updateViewport)
+    }
+
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target
+      if (!(target instanceof HTMLElement)) return
+      if (!target.matches('input, textarea, [contenteditable="true"]')) return
+      setTimeout(() => {
+        target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      }, 120)
+    }
+
+    document.addEventListener('focusin', handleFocusIn)
+    return () => {
+      if (vv) {
+        vv.removeEventListener('resize', updateViewport)
+        vv.removeEventListener('scroll', updateViewport)
+      }
+      document.removeEventListener('focusin', handleFocusIn)
+      setViewportHeight(null)
+    }
+  }, [open])
 
   const handleSave = async () => {
     if (!title.trim()) return
@@ -94,7 +130,8 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 32, stiffness: 260 }}
-            className="fixed bottom-0 left-0 right-0 z-[70] bg-casa-surface rounded-t-2xl shadow-modal sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-lg sm:rounded-2xl sm:bottom-8"
+            className="fixed bottom-0 left-0 right-0 z-[70] bg-casa-surface rounded-t-2xl shadow-modal sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-lg sm:rounded-2xl sm:bottom-8 overflow-y-auto"
+            style={{ maxHeight: viewportHeight ? `${Math.max(300, viewportHeight - 8)}px` : '92vh' }}
             onClick={e => e.stopPropagation()}
           >
             {/* Drag handle */}

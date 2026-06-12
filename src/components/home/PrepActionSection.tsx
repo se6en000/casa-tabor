@@ -10,6 +10,18 @@ import { differenceInDays, parseISO } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { usePrepItems, useDismissPrepItem, useSnoozePrepItem } from '../../hooks/usePrepItems'
 
+const PREP_SECTION_KEY = 'casa-home-prep-section-open-v1'
+
+function loadOpenState() {
+  try {
+    const raw = localStorage.getItem(PREP_SECTION_KEY)
+    if (raw == null) return true
+    return raw === '1'
+  } catch {
+    return true
+  }
+}
+
 function daysUntil(eventDate: string | null): number {
   if (!eventDate) return 99
   return differenceInDays(parseISO(eventDate), new Date())
@@ -44,7 +56,7 @@ export default function PrepActionSection() {
   const { data: items = [] } = usePrepItems()
   const dismiss = useDismissPrepItem()
   const snooze = useSnoozePrepItem()
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(loadOpenState)
   const [checking, setChecking] = useState<string | null>(null)
 
   if (items.length === 0) return null
@@ -59,7 +71,18 @@ export default function PrepActionSection() {
   return (
     <div className="px-5 py-5 border-b border-casa-border">
       {/* Header */}
-      <button onClick={() => setOpen(v => !v)} className="w-full flex items-center justify-between">
+      <button
+        onClick={() => setOpen(v => {
+          const next = !v
+          try {
+            localStorage.setItem(PREP_SECTION_KEY, next ? '1' : '0')
+          } catch {
+            // Ignore storage failures.
+          }
+          return next
+        })}
+        className="w-full flex items-center justify-between"
+      >
         <div className="flex items-center gap-1.5 text-body font-medium text-casa-navy">
           <ClipboardList size={15} className="text-casa-gold" />
           Prep &amp; Action
