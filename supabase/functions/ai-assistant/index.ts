@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
     sb.from('saved_places').select('name, aliases, address, city, state, zip, category, notes, phone').order('name'),
     sb.from('saved_contacts').select('name, aliases, phone, email, address, relationship, notes').order('name').then(r => r).catch(() => ({ data: null, error: null })),
     sb.from('events')
-      .select('id, title, start_time, end_time, updated_at, location_name, address, all_day, event_type, description, event_enrichments(what_to_bring), event_members(family_members(id, name))')
+      .select('id, title, start_time, end_time, updated_at, location_name, address, all_day, event_type, description, event_enrichments(prep_notes, category, what_to_bring, outfit_suggestion, parking_notes, contact_name, contact_phone, cost_estimate, dietary_notes, meal_impact), event_checklist_items(id, label, note, checked, category, sort_order, created_at), event_action_items(id, title, description, due_date, is_urgent, completed, assigned_to, created_at), event_members(family_members(id, name))')
       .eq('status', 'confirmed')
       .gte('start_time', windowStart.toISOString())
       .lte('start_time', yearEnd.toISOString())
@@ -86,7 +86,37 @@ Deno.serve(async (req) => {
   type DbEvent = {
     id: string; title: string; start_time: string; end_time: string; updated_at: string;
     location_name: string | null; address: string | null; all_day: boolean; event_type: string; description: string | null;
-    event_enrichments?: { what_to_bring?: string[] | null }[] | null;
+    event_enrichments?: {
+      prep_notes?: string | null;
+      category?: string | null;
+      what_to_bring?: string[] | null;
+      outfit_suggestion?: string | null;
+      parking_notes?: string | null;
+      contact_name?: string | null;
+      contact_phone?: string | null;
+      cost_estimate?: string | null;
+      dietary_notes?: string | null;
+      meal_impact?: string | null;
+    }[] | null;
+    event_checklist_items?: {
+      id: string;
+      label: string;
+      note?: string | null;
+      checked?: boolean | null;
+      category?: string | null;
+      sort_order?: number | null;
+      created_at?: string | null;
+    }[] | null;
+    event_action_items?: {
+      id: string;
+      title: string;
+      description?: string | null;
+      due_date?: string | null;
+      is_urgent?: boolean | null;
+      completed?: boolean | null;
+      assigned_to?: string | null;
+      created_at?: string | null;
+    }[] | null;
     event_members: { family_members: { id: string; name: string } | null }[];
   }
 
@@ -355,6 +385,7 @@ INSTRUCTIONS:
 - Always operate on UUIDs from the events list. Use search_events when unsure, then update with the exact ID.
 - For update_event, always copy the event's updated_at value from context/events list into expected_updated_at.
 - Batch related field updates into a single update_event action instead of many small ones.
+- When editing an event found via search_events, preserve unchanged detail-pane data from that event response (notes, category, bring list, checklist_items, action_items, etc.).
 - what_to_bring is a full replacement field. When adding/removing one item, preserve existing items from the selected event and send the complete final list.
 - Default time window: when no date is given, search from NOW (${context.currentDate}) forward — never return past events.
 - "Next event" / "what's next" = first event whose start_time is strictly AFTER NOW. If an event is currently in progress (started before NOW, ends after NOW), mention it as "currently happening" first, then state what starts next.
@@ -437,10 +468,42 @@ INSTRUCTIONS:
           start: e.start_time,
           end: e.end_time,
           location: e.location_name,
+          address: e.address,
           members: e.event_members?.map(m => m.family_members?.name).filter(Boolean),
           all_day: e.all_day,
-          notes: e.description,
+          description: e.description,
+          notes: e.event_enrichments?.[0]?.prep_notes ?? null,
+          category: e.event_enrichments?.[0]?.category ?? null,
           what_to_bring: e.event_enrichments?.[0]?.what_to_bring ?? [],
+          outfit_suggestion: e.event_enrichments?.[0]?.outfit_suggestion ?? null,
+          parking_notes: e.event_enrichments?.[0]?.parking_notes ?? null,
+          contact_name: e.event_enrichments?.[0]?.contact_name ?? null,
+          contact_phone: e.event_enrichments?.[0]?.contact_phone ?? null,
+          cost_estimate: e.event_enrichments?.[0]?.cost_estimate ?? null,
+          dietary_notes: e.event_enrichments?.[0]?.dietary_notes ?? null,
+          meal_impact: e.event_enrichments?.[0]?.meal_impact ?? null,
+          checklist_items: (e.event_checklist_items ?? [])
+            .slice()
+            .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')))
+            .map((item) => ({
+              id: item.id,
+              label: item.label,
+              note: item.note ?? null,
+              checked: item.checked === true,
+              category: item.category ?? null,
+            })),
+          action_items: (e.event_action_items ?? [])
+            .slice()
+            .sort((a, b) => String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')))
+            .map((item) => ({
+              id: item.id,
+              title: item.title,
+              description: item.description ?? null,
+              due_date: item.due_date ?? null,
+              is_urgent: item.is_urgent === true,
+              completed: item.completed === true,
+              assigned_to: item.assigned_to ?? null,
+            })),
         })),
       }
     }
