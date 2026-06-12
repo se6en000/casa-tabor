@@ -73,7 +73,7 @@ export default function SettingsShell() {
     location.pathname === i.to || location.pathname.startsWith(i.to + '/')
   )
 
-  // Auto-scroll active tab to center on mobile
+  // Auto-scroll active tab to center on mobile — only if out of view
   useEffect(() => {
     if (!tabsRef.current || !activeItem) return
     
@@ -81,14 +81,26 @@ export default function SettingsShell() {
       `button[data-path="${activeItem.to}"]`
     ) as HTMLElement | null
     
-    if (activeButton) {
-      setTimeout(() => {
-        activeButton.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest',
-          inline: 'center',
-        })
-      }, 0)
+    if (!activeButton) return
+
+    // Check if button is already visible in the scroll container
+    const container = tabsRef.current
+    const buttonLeft = activeButton.offsetLeft
+    const buttonRight = buttonLeft + activeButton.offsetWidth
+    const containerScrollLeft = container.scrollLeft
+    const containerWidth = container.clientWidth
+
+    const isVisible = 
+      buttonLeft >= containerScrollLeft && 
+      buttonRight <= containerScrollLeft + containerWidth
+
+    // Only scroll if button is NOT fully visible
+    if (!isVisible) {
+      activeButton.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      })
     }
   }, [activeItem])
 
@@ -164,6 +176,7 @@ export default function SettingsShell() {
           <div
             ref={tabsRef}
             className="overflow-x-auto scrollbar-hide flex"
+            style={{ scrollBehavior: 'smooth' }}
           >
             {ALL_ITEMS.map((item) => (
               <button
