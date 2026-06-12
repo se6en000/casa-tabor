@@ -51,6 +51,12 @@ unclutter -idle 1 -root &
 # Wait for network
 sleep 3
 
+# ── Kill stale bridges before starting new ones ─────────────────────────────
+# Prevents port conflicts and socket hang-ups when restarting
+kill $(pgrep -f "sensor-bridge.*main.py" 2>/dev/null) 2>/dev/null
+kill $(pgrep -f "whisper-bridge.*main.py" 2>/dev/null) 2>/dev/null
+sleep 1
+
 # ── Sensor bridge ──────────────────────────────────────────────────────────
 # Reads AS7343 via I²C and serves Room Tone data on 127.0.0.1:8765.
 # Starts in background; Chromium polls it for CCT/lux. Safe to run even if
@@ -59,6 +65,7 @@ BRIDGE_DIR="$HOME/sensor-bridge"
 if [ -f "$BRIDGE_DIR/main.py" ]; then
   cd "$BRIDGE_DIR" && python3 main.py &>> "$HOME/sensor-bridge.log" &
   cd "$HOME"
+  sleep 1
 fi
 
 # ── Whisper speech-to-text bridge ─────────────────────────────────────────
@@ -66,6 +73,7 @@ fi
 WHISPER_DIR="$HOME/whisper-bridge"
 if [ -f "$WHISPER_DIR/main.py" ]; then
   PATH="$HOME/.local/bin:$PATH" python3 "$WHISPER_DIR/main.py" &>> "$HOME/whisper-bridge.log" &
+  sleep 1
 fi
 
 # Launch Chromium with full touch support.
