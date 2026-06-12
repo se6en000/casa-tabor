@@ -1,8 +1,8 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Users, Sun, MessageSquare, Bot, Palette, Home, Activity,
-  BookmarkCheck, Layers, ChevronLeft, ChevronRight, Music2,
+  BookmarkCheck, Layers, ChevronLeft, ChevronRight, Music2, Menu, X,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import BounceScroll from '../shared/BounceScroll'
@@ -54,6 +54,7 @@ const ALL_ITEMS = NAV_GROUPS.flatMap(g => g.items)
 export default function SettingsShell() {
   const location = useLocation()
   const navigate = useNavigate()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // On mobile: are we looking at the list or a detail page?
   const isRoot = location.pathname === '/settings'
@@ -134,17 +135,58 @@ export default function SettingsShell() {
         isRoot && 'hidden md:flex',
       )}>
         {/* Mobile back bar */}
-        <div className="md:hidden flex items-center gap-2 px-4 py-3 border-b border-casa-border bg-casa-surface flex-shrink-0">
+        <div className="md:hidden flex items-center justify-between px-4 py-4 border-b border-casa-border bg-casa-surface flex-shrink-0">
           <button
             onClick={() => navigate('/settings')}
-            className="flex items-center gap-1 text-casa-gold text-body-sm font-medium"
+            className="flex items-center gap-2 text-casa-gold hover:text-casa-gold/80 text-body-lg font-semibold transition-colors active:scale-95"
           >
-            <ChevronLeft size={18} /> Settings
+            <ChevronLeft size={20} /> Back
           </button>
           {activeItem && (
-            <span className="text-body-sm font-semibold text-casa-navy ml-1">{activeItem.label}</span>
+            <span className="text-body-sm font-semibold text-casa-navy flex-1 text-center px-4 truncate">{activeItem.label}</span>
           )}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="flex items-center gap-2 text-casa-navy hover:text-casa-gold transition-colors active:scale-95"
+          >
+            {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
         </div>
+
+        {/* Mobile menu drawer */}
+        {mobileMenuOpen && (
+          <div className="md:hidden bg-casa-surface border-b border-casa-border px-2 py-2 flex-shrink-0 max-h-72 overflow-y-auto">
+            <nav className="space-y-1">
+              {NAV_GROUPS.map(group => (
+                <div key={group.label}>
+                  <p className="text-caption font-bold text-casa-muted uppercase tracking-widest px-3 py-2 mb-1">
+                    {group.label}
+                  </p>
+                  {group.items.map(item => (
+                    <button
+                      key={item.to}
+                      onClick={() => {
+                        navigate(item.to)
+                        setMobileMenuOpen(false)
+                      }}
+                      className={cn(
+                        'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors group',
+                        activeItem?.to === item.to
+                          ? 'bg-casa-gold/10 text-casa-gold'
+                          : 'text-casa-navy hover:bg-casa-bg'
+                      )}
+                    >
+                      <item.icon size={16} className={cn('flex-shrink-0', activeItem?.to === item.to ? 'text-casa-gold' : 'text-casa-muted group-hover:text-casa-navy')} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-body-sm font-medium leading-none">{item.label}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </nav>
+          </div>
+        )}
 
         {/* Page content */}
         <BounceScroll className="flex-1">
