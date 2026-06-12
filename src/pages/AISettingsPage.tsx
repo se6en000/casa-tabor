@@ -127,6 +127,15 @@ export default function AISettingsPage() {
   const vendor = VENDORS[config.provider]
   const models = vendor?.models ?? []
 
+  function setWakeWordSensitivity(next: number) {
+    updateScreensaver({ wakeWordSensitivity: next })
+    fetch('http://127.0.0.1:8766/wake-sensitivity', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ score: next }),
+    }).catch(() => {})
+  }
+
   if (isLoading) return <div className="p-6 text-casa-muted animate-breathe">Loading…</div>
 
   return (
@@ -244,8 +253,7 @@ export default function AISettingsPage() {
               <button
                 onClick={() => {
                   const next = Math.max(0.10, Math.round((screensaverSettings.wakeWordSensitivity - 0.05) * 100) / 100)
-                  updateScreensaver({ wakeWordSensitivity: next })
-                  fetch('http://127.0.0.1:8766/wake-sensitivity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ score: next }) }).catch(() => {})
+                  setWakeWordSensitivity(next)
                 }}
                 className="w-8 h-8 rounded-button border border-casa-border bg-white text-casa-navy font-semibold text-lg flex items-center justify-center hover:bg-casa-bg active:scale-95 transition-all"
               >−</button>
@@ -255,8 +263,7 @@ export default function AISettingsPage() {
               <button
                 onClick={() => {
                   const next = Math.min(0.60, Math.round((screensaverSettings.wakeWordSensitivity + 0.05) * 100) / 100)
-                  updateScreensaver({ wakeWordSensitivity: next })
-                  fetch('http://127.0.0.1:8766/wake-sensitivity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ score: next }) }).catch(() => {})
+                  setWakeWordSensitivity(next)
                 }}
                 className="w-8 h-8 rounded-button border border-casa-border bg-white text-casa-navy font-semibold text-lg flex items-center justify-center hover:bg-casa-bg active:scale-95 transition-all"
               >+</button>

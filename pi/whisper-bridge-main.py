@@ -28,6 +28,8 @@ WAKE_SCORE    = 0.07           # More sensitive wake threshold for quiet-room sp
 WAKE_COOLDOWN = 2.0
 WAKE_WATCHDOG_SECS = 90
 WAKE_AUDIO_GAIN   = 3.0        # Amplify mic input before wake detection
+WAKE_SCORE_MIN = 0.10
+WAKE_SCORE_MAX = 0.60
 
 # ── Audio buffering for wake word ─────────────────────────────────────────────
 # 0.3s post-wake buffer — just enough to capture the first word after "Alexa".
@@ -542,11 +544,32 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200); self._cors(); self.end_headers()
 
     def do_POST(self):
+        global WAKE_SCORE
         if self.path == '/start':
             stop_recording(); start_recording()
             self.send_response(200); self._cors()
             self.send_header('Content-Type', 'application/json'); self.end_headers()
             self.wfile.write(b'{"ok":true}')
+        elif self.path == '/wake-sensitivity':
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+            except ValueError:
+                length = 0
+            raw = self.rfile.read(length) if length > 0 else b'{}'
+            try:
+                body = json.loads(raw.decode('utf-8'))
+                score = float(body.get('score'))
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self.send_response(400); self._cors()
+                self.send_header('Content-Type', 'application/json'); self.end_headers()
+                self.wfile.write(b'{"ok":false,"error":"invalid score"}')
+                return
+            score = max(WAKE_SCORE_MIN, min(WAKE_SCORE_MAX, score))
+            WAKE_SCORE = score
+            log.info(f'[wake] sensitivity updated: {WAKE_SCORE:.2f}')
+            self.send_response(200); self._cors()
+            self.send_header('Content-Type', 'application/json'); self.end_headers()
+            self.wfile.write(json.dumps({'ok': True, 'score': WAKE_SCORE}).encode())
         elif self.path == '/display/off':
             _display_off()
             self.send_response(200); self._cors()
@@ -575,6 +598,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200); self._cors()
             self.send_header('Content-Type', 'application/json'); self.end_headers()
             self.wfile.write(json.dumps({'triggered': triggered}).encode())
+        elif self.path == '/wake-sensitivity':
+            self.send_response(200); self._cors()
+            self.send_header('Content-Type', 'application/json'); self.end_headers()
+            self.wfile.write(json.dumps({'score': WAKE_SCORE}).encode())
         else:
             self.send_response(404); self.end_headers()
 

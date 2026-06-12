@@ -133,6 +133,14 @@ function AppShell() {
     }
   }, [aiDrawerOpen])
 
+  useEffect(() => {
+    fetch('http://127.0.0.1:8766/wake-sensitivity', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ score: settings.wakeWordSensitivity }),
+    }).catch(() => {})
+  }, [settings.wakeWordSensitivity])
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-casa-bg">
       {/* Full-width top bar — sticky, never scrolls */}
