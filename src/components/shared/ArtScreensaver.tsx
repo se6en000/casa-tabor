@@ -42,8 +42,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   }, [])
 
   useEffect(() => {
-    // When artwork changes, reset state but keep dimensions stable to avoid resize flicker
-    // aspectRatio will be updated by onLoad, but old one won't disappear until new one loads
+    // Reset loading state when artwork changes, but keep old aspectRatio until new one loads
   }, [artwork?.id])
 
   useEffect(() => {
@@ -124,7 +123,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             'inset 0 -18px 24px -12px rgba(0,0,0,0.10)',
           ].join(', '),
           padding: '3.5vw',
-          transition: matTransition ? 'background-color 0.4s ease-out' : 'none',
+          transition: matTransition ? 'background-color 0.5s ease-out' : 'none',
         }}
       >
         <div
@@ -136,12 +135,6 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
               : { minWidth: `${minArtWidthVw}vw`, maxWidth: '100%', maxHeight: '100%' }),
             overflow: 'hidden',
             display: 'flex',
-            backgroundColor: matColor,
-            backgroundImage: textureStyle.backgroundImage,
-            backgroundSize: textureStyle.backgroundSize,
-            backgroundPosition: textureStyle.backgroundPosition,
-            backgroundAttachment: textureStyle.backgroundAttachment,
-            backgroundBlendMode: textureStyle.backgroundBlendMode,
             transform: ['translate3d(0px,0px,0)', 'translate3d(1px,0px,0)', 'translate3d(0px,1px,0)', 'translate3d(-1px,0px,0)'][driftIndex],
             transition: swiping ? 'transform 260ms cubic-bezier(0.4, 0, 0.2, 1)' : 'transform 16s linear',
           }}
@@ -159,8 +152,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
                 objectFit: 'contain',
                 display: 'block',
                 opacity: loaded ? 1 : 0,
-                transform: loaded ? 'scale(1)' : 'scale(0.98)',
-                transition: 'opacity 400ms ease-out, transform 400ms ease-out',
+                transition: 'opacity 500ms ease-out',
               }}
             />
           )}
