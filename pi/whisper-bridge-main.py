@@ -24,7 +24,7 @@ DG_URL = (
 )
 
 WAKE_MODEL    = 'alexa'
-WAKE_SCORE    = 0.10           # Lowered for better sensitivity
+WAKE_SCORE    = 0.07           # More sensitive wake threshold for quiet-room speech
 WAKE_COOLDOWN = 2.0
 WAKE_WATCHDOG_SECS = 90
 WAKE_AUDIO_GAIN   = 3.0        # Amplify mic input before wake detection
@@ -106,11 +106,17 @@ def _handle_ws_client(ws):
     except Exception as e:
         log.error(f'[WS] browser client error: {e}')
     finally:
+        should_stop = False
         with _ws_clients_lock:
             _ws_clients.discard(ws)
         with _stt_lock:
             if _stt_client is ws:
                 _stt_client = None
+                should_stop = True
+        if should_stop:
+            # If the active STT browser disconnects unexpectedly, stop recording so
+            # the wake-word loop can regain the mic immediately.
+            stop_recording()
         log.info('[WS] browser client disconnected')
 
 def _run_ws_server():
@@ -227,6 +233,12 @@ def _wake_word_loop():
 
     while True:
         while _get()['recording']:
+            with _stt_lock:
+                has_stt_client = _stt_client is not None
+            if not has_stt_client:
+                log.warning('[wake] recording=true with no STT client — forcing stop')
+                stop_recording()
+                break
             time.sleep(0.2)
 
         _wake_last_chunk_ts = time.time()
