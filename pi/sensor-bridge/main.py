@@ -25,6 +25,9 @@ import time
 import threading
 import logging
 import subprocess
+import json
+import os
+import re
 from contextlib import asynccontextmanager
 
 try:
@@ -54,7 +57,7 @@ except ImportError:
     SPI_AVAILABLE = False
     logging.warning("spidev not installed — LED strip disabled")
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
@@ -261,6 +264,11 @@ BRIGHTNESS_MAX_DEFAULT = 90
 
 _brightness_min = BRIGHTNESS_MIN_DEFAULT
 _brightness_max = BRIGHTNESS_MAX_DEFAULT
+_panel_brightness_min = BRIGHTNESS_MIN_DEFAULT
+_panel_brightness_max = BRIGHTNESS_MAX_DEFAULT
+_art_mode_active = False
+
+PANEL_CALIBRATION_PATH = "/home/jake/sensor-bridge/panel-calibration.json"
 
 # Deadband + burst thresholds
 LUX_DEADBAND       = 3.0   # ignore lux changes smaller than this (sensor noise)
@@ -326,6 +334,102 @@ def _ddc_write_rgb(r: int, g: int, b: int):
     _ddc_setvcp(0x18, g)
     _ddc_setvcp(0x1A, b)
 
+
+def _read_vcp(vcp: int) -> tuple[int | None, int | None]:
+    """
+    Read VCP value via ddcutil and return (current, max).
+    Example output contains: "current value = 27, max value = 100"
+    """
+    try:
+        res = subprocess.run(
+            ["sudo", "ddcutil", "getvcp", f"{vcp:02x}"],
+            timeout=5,
+            capture_output=True,
+            text=True,
+        )
+        if res.returncode != 0:
+            return (None, None)
+        m = re.search(r"current value\s*=\s*(\d+),\s*max value\s*=\s*(\d+)", res.stdout)
+        if not m:
+            return (None, None)
+        return (int(m.group(1)), int(m.group(2)))
+    except Exception:
+        return (None, None)
+
+
+def _save_panel_calibration(min_value: int, max_value: int):
+    try:
+        os.makedirs(os.path.dirname(PANEL_CALIBRATION_PATH), exist_ok=True)
+        with open(PANEL_CALIBRATION_PATH, "w", encoding="utf-8") as fh:
+            json.dump({"panel_min": min_value, "panel_max": max_value, "updated_at": time.time()}, fh)
+    except Exception as exc:
+        log.warning("Failed to save panel calibration: %s", exc)
+
+
+def _load_panel_calibration():
+    global _panel_brightness_min, _panel_brightness_max
+    try:
+        if not os.path.exists(PANEL_CALIBRATION_PATH):
+            cur, maxv = _read_vcp(0x10)
+            if maxv is not None:
+                _panel_brightness_max = max(BRIGHTNESS_MAX_DEFAULT, min(100, maxv))
+                log.info("No calibration file; detected panel max via DDC: %d", _panel_brightness_max)
+            return
+        with open(PANEL_CALIBRATION_PATH, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        pmin = int(data.get("panel_min", BRIGHTNESS_MIN_DEFAULT))
+        pmax = int(data.get("panel_max", BRIGHTNESS_MAX_DEFAULT))
+        _panel_brightness_min = max(0, min(100, pmin))
+        _panel_brightness_max = max(_panel_brightness_min + 1, min(100, pmax))
+        log.info("Loaded panel calibration: min=%d max=%d", _panel_brightness_min, _panel_brightness_max)
+    except Exception as exc:
+        log.warning("Failed to load panel calibration: %s", exc)
+
+
+def _effective_brightness_bounds() -> tuple[int, int]:
+    lo = max(_brightness_min, _panel_brightness_min)
+    hi = min(_brightness_max, _panel_brightness_max)
+    if hi <= lo:
+        hi = min(100, lo + 1)
+    return (lo, hi)
+
+
+def _calibrate_panel_brightness() -> tuple[int, int]:
+    """
+    Probe real monitor brightness range via DDC.
+    Uses getvcp 0x10 max + a low-end write/read probe.
+    """
+    global _panel_brightness_min, _panel_brightness_max
+
+    cur, maxv = _read_vcp(0x10)
+    original = cur if cur is not None else 20
+    reported_max = maxv if maxv is not None else 100
+
+    discovered_min = BRIGHTNESS_MIN_DEFAULT
+    for candidate in (0, 1, 2, 3, 4, 5):
+        try:
+            _ddc_write(candidate)
+            time.sleep(0.12)
+            read_cur, _ = _read_vcp(0x10)
+            if read_cur is None:
+                continue
+            if abs(read_cur - candidate) <= 1:
+                discovered_min = max(0, read_cur)
+                break
+        except Exception:
+            continue
+
+    try:
+        _ddc_write(original)
+    except Exception:
+        pass
+
+    _panel_brightness_min = max(0, min(100, discovered_min))
+    _panel_brightness_max = max(_panel_brightness_min + 1, min(100, reported_max))
+    _save_panel_calibration(_panel_brightness_min, _panel_brightness_max)
+    log.info("Panel calibrated: min=%d max=%d", _panel_brightness_min, _panel_brightness_max)
+    return (_panel_brightness_min, _panel_brightness_max)
+
 def _display_sleep():
     """Power off monitor via VCP 0xD6 = 0x04."""
     global _display_on, _current_brightness
@@ -350,9 +454,10 @@ def _display_wake(target_brightness: int):
         _current_brightness = 0
     log.info("Display woke — bursting 0 → %d", target_brightness)
     # Burst ramp from 0 to target
+    lo, hi = _effective_brightness_bounds()
     for i in range(1, BURST_STEPS + 1):
         val = round(target_brightness * i / BURST_STEPS)
-        val = max(_brightness_min, min(_brightness_max, val))
+        val = max(lo, min(hi, val))
         try:
             _ddc_write(val)
             with _ddc_lock:
@@ -366,9 +471,10 @@ def _display_wake(target_brightness: int):
 
 def lux_to_brightness(lux: float) -> int:
     """Map lux → DDC brightness % using power-law curve."""
+    lo, hi = _effective_brightness_bounds()
     ratio = min(max(lux, 0.0) / LUX_REF, 1.0)
-    mapped = _brightness_min + (_brightness_max - _brightness_min) * (ratio ** LUX_EXPONENT)
-    return max(_brightness_min, min(_brightness_max, round(mapped)))
+    mapped = lo + (hi - lo) * (ratio ** LUX_EXPONENT)
+    return max(lo, min(hi, round(mapped)))
 
 
 def set_brightness_target(lux: float):
@@ -381,7 +487,17 @@ def set_color_target(cct: float):
     """Called by sensor poll — converts CCT to RGB gains and updates target."""
     global _target_rgb
     if cct is not None:
-        _target_rgb = cct_to_rgb_gains(cct)
+        adjusted_cct = cct
+        if _art_mode_active:
+            with _lock:
+                lux_now = _latest.get("lux")
+            # In art mode, keep warmth slightly below ambient CCT at night
+            # so the panel feels reflected, not self-emissive.
+            lux_for_warmth = lux_now if isinstance(lux_now, (int, float)) else 30.0
+            night_factor = 1.0 - min(max(lux_for_warmth, 0.0), 80.0) / 80.0  # 0..1
+            warm_shift_k = 250 + (night_factor * 850)  # 250K day, ~1100K at very low lux
+            adjusted_cct = max(2400.0, min(6500.0, cct - warm_shift_k))
+        _target_rgb = cct_to_rgb_gains(adjusted_cct)
 
 
 def _touch_wake_loop():
@@ -484,10 +600,11 @@ def _brightness_loop():
         global _current_brightness
         if start == end:
             return
+        lo, hi = _effective_brightness_bounds()
         for i in range(1, BURST_STEPS + 1):
             t = i / BURST_STEPS
             val = round(start + (end - start) * t)
-            val = max(_brightness_min, min(_brightness_max, val))
+            val = max(lo, min(hi, val))
             try:
                 _ddc_write(val)
                 with _ddc_lock:
@@ -551,7 +668,8 @@ def _brightness_loop():
         if delta == 0:
             continue
 
-        if delta >= round((_brightness_max - _brightness_min) * LUX_BURST_THRESH / LUX_REF ** LUX_EXPONENT / 10):
+        lo, hi = _effective_brightness_bounds()
+        if delta >= round((hi - lo) * LUX_BURST_THRESH / LUX_REF ** LUX_EXPONENT / 10):
             _fire_burst(b_current, b_target)
         else:
             nxt = b_current + (1 if b_target > b_current else -1)
@@ -886,6 +1004,7 @@ def _poll_loop(reader):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _ddc_open()
+    _load_panel_calibration()
     reader = AS7343Reader() if I2C_AVAILABLE else SimulatedReader()
     thread = threading.Thread(target=_poll_loop, args=(reader,), daemon=True)
     thread.start()
@@ -905,7 +1024,7 @@ app = FastAPI(title="Casa Tabor Sensor Bridge", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],   # localhost only — no public exposure needed
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -978,22 +1097,26 @@ def windowed():
 
 
 @app.post("/display/art-mode")
-def art_mode():
+async def art_mode(request: Request):
     """Enter art mode: dim monitor based on ambient light.
     
     Expects JSON: { "dim_offset": 0.0-0.8 }
     dim_offset is multiplier: 0.3 = dim to 70% of auto-brightness
     """
     try:
-       data = request.json or {}
+       try:
+           data = await request.json()
+       except Exception:
+           data = {}
        dim_offset = float(data.get("dim_offset", 0.3))
        dim_offset = max(0.0, min(0.8, dim_offset))  # clamp 0-80%
         
        # Set new brightness max to account for art mode dimming
-       # E.g., if auto max is 90 and dim_offset=0.3, art max becomes 63
-       global _brightness_max
-       original_max = BRIGHTNESS_MAX_DEFAULT
-       _brightness_max = max(2, int(original_max * (1.0 - dim_offset)))
+       # E.g., if calibrated panel max is 94 and dim_offset=0.3, art max becomes 65
+       global _brightness_max, _art_mode_active
+       original_max = _panel_brightness_max
+       _brightness_max = max(_brightness_min, int(original_max * (1.0 - dim_offset)))
+       _art_mode_active = True
         
        log.info("Art mode enabled: dim_offset=%.1f, brightness_max=%d", dim_offset, _brightness_max)
        return {"ok": True, "msg": f"Art mode: max brightness now {_brightness_max}"}
@@ -1006,8 +1129,9 @@ def art_mode():
 def art_mode_off():
     """Exit art mode: restore auto-brightness scaling."""
     try:
-       global _brightness_max
-       _brightness_max = BRIGHTNESS_MAX_DEFAULT
+       global _brightness_max, _art_mode_active
+       _brightness_max = min(BRIGHTNESS_MAX_DEFAULT, _panel_brightness_max)
+       _art_mode_active = False
        log.info("Art mode disabled: brightness_max restored to %d", _brightness_max)
        return {"ok": True, "msg": "Auto-brightness restored"}
     except Exception as e:
@@ -1016,16 +1140,19 @@ def art_mode_off():
 
 
 @app.post("/display/art-brightness-min")
-def art_brightness_min():
+async def art_brightness_min(request: Request):
     """Set minimum brightness for art mode (how dark it can go).
     
     Expects JSON: { "min": 1-20 }
     min=1 is darkest, min=10 allows slightly brighter.
     """
     try:
-       data = request.json or {}
+       try:
+           data = await request.json()
+       except Exception:
+           data = {}
        min_val = int(data.get("min", 1))
-       min_val = max(1, min(20, min_val))  # clamp 1-20
+       min_val = max(_panel_brightness_min, min(20, min_val))  # clamp to panel floor
         
        global _brightness_min
        _brightness_min = min_val
@@ -1035,6 +1162,28 @@ def art_brightness_min():
     except Exception as e:
        log.error("Art brightness min error: %s", e)
        return {"ok": False, "error": str(e)}
+
+
+@app.get("/display/panel-calibration")
+def get_panel_calibration():
+    lo, hi = _effective_brightness_bounds()
+    return {
+        "ok": True,
+        "panel_min": _panel_brightness_min,
+        "panel_max": _panel_brightness_max,
+        "effective_min": lo,
+        "effective_max": hi,
+    }
+
+
+@app.post("/display/calibrate-panel")
+def calibrate_panel():
+    try:
+        panel_min, panel_max = _calibrate_panel_brightness()
+        return {"ok": True, "panel_min": panel_min, "panel_max": panel_max}
+    except Exception as exc:
+        log.error("Panel calibration failed: %s", exc)
+        return {"ok": False, "error": str(exc)}
 
 
 # ---------------------------------------------------------------------------
