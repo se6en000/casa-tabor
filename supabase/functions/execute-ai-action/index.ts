@@ -58,11 +58,24 @@ Deno.serve(async (req) => {
       if (args.end !== undefined) updates.end_time = args.end
       const locationChanged = args.location !== undefined
       if (locationChanged) { updates.location_name = args.location; updates.is_enriched = false }
-      if (args.notes !== undefined) updates.description = args.notes
       if (args.all_day !== undefined) updates.all_day = args.all_day
 
       if (Object.keys(updates).length > 0) {
         const { error } = await sb.from('events').update(updates).eq('id', args.id)
+        if (error) throw new Error(error.message)
+      }
+
+      if (args.notes !== undefined) {
+        const { error } = await sb
+          .from('event_enrichments')
+          .upsert(
+            {
+              event_id: args.id,
+              prep_notes: args.notes ?? null,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'event_id' }
+          )
         if (error) throw new Error(error.message)
       }
 
