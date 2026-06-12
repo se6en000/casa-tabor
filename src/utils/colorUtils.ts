@@ -37,12 +37,10 @@ const MAT_PALETTE = [
 export async function extractDominantColor(imageUrl: string): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image()
-    // Try multiple CORS modes
-    img.crossOrigin = 'use-credentials'
+    img.crossOrigin = 'anonymous'
     
     const timeout = setTimeout(() => {
-      console.warn(`[ColorUtils] Image load timeout for ${imageUrl}`)
-      resolve(getRandomPaletteColor())
+      resolve(getPaletteColorForKey(imageUrl))
     }, 3000)
     
     img.onload = () => {
@@ -53,7 +51,7 @@ export async function extractDominantColor(imageUrl: string): Promise<string> {
         canvas.height = 100
         const ctx = canvas.getContext('2d', { willReadFrequently: true })
         if (!ctx) {
-          resolve(getRandomPaletteColor())
+          resolve(getPaletteColorForKey(imageUrl))
           return
         }
         ctx.drawImage(img, 0, 0, 100, 100)
@@ -72,19 +70,20 @@ export async function extractDominantColor(imageUrl: string): Promise<string> {
         const avgG = Math.round(g / count)
         const avgB = Math.round(b / count)
 
-        const hex = rgbToHex(avgR, avgG, avgB)
-        console.log(`[ColorUtils] Extracted dominant color: ${hex}`)
-        resolve(hex)
+        if (!count) {
+          resolve(getPaletteColorForKey(imageUrl))
+          return
+        }
+
+        resolve(rgbToHex(avgR, avgG, avgB))
       } catch (err) {
         console.warn('[ColorUtils] Canvas extraction failed:', err)
-        resolve(getRandomPaletteColor())
+        resolve(getPaletteColorForKey(imageUrl))
       }
     }
     img.onerror = () => {
       clearTimeout(timeout)
-      console.warn(`[ColorUtils] Image load failed (CORS likely): ${imageUrl}`)
-      // Fallback to palette color on CORS/load failure
-      resolve(getRandomPaletteColor())
+      resolve(getPaletteColorForKey(imageUrl))
     }
     img.src = imageUrl
   })
@@ -94,8 +93,12 @@ export async function extractDominantColor(imageUrl: string): Promise<string> {
  * Select a random mat color from the curated palette.
  * This ensures variety even when color extraction fails.
  */
-function getRandomPaletteColor(): string {
-  return MAT_PALETTE[Math.floor(Math.random() * MAT_PALETTE.length)]
+function getPaletteColorForKey(key: string): string {
+  let hash = 0
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash * 31 + key.charCodeAt(i)) >>> 0
+  }
+  return MAT_PALETTE[hash % MAT_PALETTE.length]
 }
 
 /**
@@ -140,6 +143,14 @@ function getLuminance(r: number, g: number, b: number): number {
 export async function generateAdaptiveMatColor(imageUrl: string): Promise<ColorAnalysis> {
   try {
     const dominantHex = await extractDominantColor(imageUrl)
+    if (MAT_PALETTE.includes(dominantHex)) {
+      return {
+        dominant: dominantHex,
+        complementary: dominantHex,
+        matColor: dominantHex,
+        isLight: true,
+      }
+    }
     const { r, g, b } = hexToRgb(dominantHex)
 
     const luminance = getLuminance(r, g, b)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useArtwork } from '../../hooks/useArtwork'
 import { generateAdaptiveMatColor } from '../../utils/colorUtils'
 import { getTextureStyle } from '../../utils/textureUtils'
@@ -21,6 +21,9 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   const [isPortrait, setIsPortrait] = useState(false)
   const [matColor, setMatColor] = useState('#F5F0E8')
   const [matTransition, setMatTransition] = useState(false)
+  const [metaVisible, setMetaVisible] = useState(true)
+  const [driftIndex, setDriftIndex] = useState(0)
+  const textureStyle = useMemo(() => getTextureStyle(), [])
 
   // Fade in on mount, then allow dismiss after a grace period
   useEffect(() => {
@@ -43,16 +46,28 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   // Reset aspect ratio when artwork changes
   useEffect(() => { setAspectRatio(undefined); setIsPortrait(false) }, [artwork?.id])
 
+  useEffect(() => {
+    if (!artwork?.id) return
+    setMetaVisible(true)
+    const t = setTimeout(() => setMetaVisible(false), 9000)
+    return () => clearTimeout(t)
+  }, [artwork?.id])
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setDriftIndex(i => (i + 1) % 4)
+    }, 45000)
+    return () => clearInterval(t)
+  }, [])
+
   // Extract and apply adaptive mat color when artwork loads
   useEffect(() => {
     if (!artwork?.imageUrl || !adaptiveMatColor) return
     
-    console.log(`[ArtScreensaver] Loading artwork: ${artwork.title}`)
     setMatTransition(false) // disable transition during load
     const timeout = setTimeout(async () => {
       try {
         const colorAnalysis = await generateAdaptiveMatColor(artwork.imageUrl)
-        console.log(`[ArtScreensaver] Applied mat color: ${colorAnalysis.matColor}`)
         setMatColor(colorAnalysis.matColor)
         // Enable smooth transition after color is set
         setTimeout(() => setMatTransition(true), 100)
@@ -95,11 +110,11 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
         className="relative w-full h-full flex items-center justify-center"
         style={{
           backgroundColor: matColor,
-          backgroundImage: getTextureStyle().backgroundImage,
-          backgroundSize: getTextureStyle().backgroundSize,
-          backgroundPosition: getTextureStyle().backgroundPosition,
-          backgroundAttachment: getTextureStyle().backgroundAttachment,
-          backgroundBlendMode: getTextureStyle().backgroundBlendMode,
+          backgroundImage: textureStyle.backgroundImage,
+          backgroundSize: textureStyle.backgroundSize,
+          backgroundPosition: textureStyle.backgroundPosition,
+          backgroundAttachment: textureStyle.backgroundAttachment,
+          backgroundBlendMode: textureStyle.backgroundBlendMode,
           boxShadow: [
             'inset 0 36px 48px -12px rgba(0,0,0,0.50)',   // top — strongest, light comes from above
             'inset 36px 0 48px -12px rgba(0,0,0,0.38)',   // left — medium
@@ -121,6 +136,8 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             ),
             overflow: 'hidden',
             display: 'flex',
+            transform: ['translate3d(0px,0px,0)', 'translate3d(1px,0px,0)', 'translate3d(0px,1px,0)', 'translate3d(-1px,0px,0)'][driftIndex],
+            transition: 'transform 16s linear',
           }}
         >
           {artwork && (
@@ -173,6 +190,8 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             style={{
               color: '#5a4f4a',
               textShadow: '0 1px 2px rgba(255,255,255,0.8)',
+              opacity: metaVisible ? 1 : 0,
+              transition: 'opacity 0.8s ease',
             }}
           >
             <p className="text-caption italic leading-tight" style={{ fontFamily: 'Georgia, serif', fontSize: '0.7rem', fontWeight: 500, letterSpacing: '0.3px' }}>

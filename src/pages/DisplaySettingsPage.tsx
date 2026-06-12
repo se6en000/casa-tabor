@@ -737,6 +737,9 @@ export default function DisplaySettingsPage() {
           <div className="flex items-center gap-2 text-caption text-casa-muted mt-1">
             <span className="text-casa-gold">✓</span> Realistic frame effect
           </div>
+          <div className="flex items-center gap-2 text-caption text-casa-muted mt-1">
+            <span className="text-casa-gold">✓</span> Gallery label auto-fades after a few seconds
+          </div>
           <button
             type="button"
             onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
