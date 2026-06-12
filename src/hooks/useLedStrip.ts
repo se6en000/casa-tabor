@@ -41,6 +41,6 @@ export function useLedStrip() {
     processing: () => setPhaseMode('processing'),
     confirm:    () => setFeedback('confirm'),
     cancel:     () => setFeedback('cancel'),
-    off:        () => setPhaseMode('off'),
+    off:        () => setMode('off'),
   }
 }

@@ -340,6 +340,16 @@ function useSpeechInput({
     // Bridge stays running continuously — no action needed
   }, [startWebSpeech]) // phase read via phaseRef, no stale closure
 
+  // Ensure bridge/webspeech resources are always torn down on component unmount.
+  useEffect(() => {
+    return () => {
+      activeRef.current = false
+      stopSilenceTimer()
+      stopWebSpeech()
+      stopBridge()
+    }
+  }, [stopWebSpeech, stopBridge])
+
   return { phase, volume, supported, start, stop, toggle, suppress, unsuppress, ensureRunning, listening: phase === 'listening', connecting: phase === 'connecting' }
 }
 
@@ -418,6 +428,12 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     onCancel:  () => { led.cancel();  pendingCancelRef.current?.()  },
     hasPendingAction: hasPendingToolAction,
   })
+
+  useEffect(() => {
+    return () => {
+      led.off()
+    }
+  }, [led])
 
   useEffect(() => {
     if (open) {
