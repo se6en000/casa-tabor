@@ -68,7 +68,10 @@ async function fetchPage(): Promise<Artwork[]> {
   const randomPage = Math.floor(Math.random() * MAX_PAGE) + 1
   const res = await fetch(`${API}/artworks/search`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      'User-Agent': 'Casa-Tabor/1.0 (compatible; Chromium)',
+    },
     body: JSON.stringify({
       query: {
         bool: {
@@ -116,7 +119,12 @@ export function useArtwork(rotateSecs = 240) {
     let cancelled = false
     async function load() {
       try {
-        const [p1, p2, p3] = await Promise.all([fetchPage(), fetchPage(), fetchPage()])
+        // Throttle requests to avoid rate limiting
+        const [p1, p2, p3] = await Promise.all([
+          fetchPage(),
+          new Promise(r => setTimeout(r, 500)).then(() => fetchPage()),
+          new Promise(r => setTimeout(r, 1000)).then(() => fetchPage()),
+        ])
         const all = [...p1, ...p2, ...p3]
         if (!cancelled && all.length > 0) {
           setArtworks(shuffled(all))
