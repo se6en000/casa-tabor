@@ -101,6 +101,48 @@ Deno.serve(async (req) => {
         if (error) throw new Error(error.message)
       }
 
+      if (args.checklist_items !== undefined) {
+        const incoming = Array.isArray(args.checklist_items) ? args.checklist_items as Record<string, unknown>[] : []
+        const checklistRows = incoming.map((item, index) => ({
+          id: typeof item.id === 'string' && item.id ? item.id : crypto.randomUUID(),
+          event_id: args.id as string,
+          label: String(item.label ?? '').trim(),
+          note: item.note == null ? null : String(item.note),
+          checked: item.checked === true,
+          category: item.category == null ? null : String(item.category),
+          sort_order: index,
+        })).filter(row => row.label)
+
+        const { error: deleteChecklistError } = await sb.from('event_checklist_items').delete().eq('event_id', args.id)
+        if (deleteChecklistError) throw new Error(deleteChecklistError.message)
+        if (checklistRows.length > 0) {
+          const { error: insertChecklistError } = await sb.from('event_checklist_items').insert(checklistRows)
+          if (insertChecklistError) throw new Error(insertChecklistError.message)
+        }
+      }
+
+      if (args.action_items !== undefined) {
+        const incoming = Array.isArray(args.action_items) ? args.action_items as Record<string, unknown>[] : []
+        const actionRows = incoming.map((item) => ({
+          id: typeof item.id === 'string' && item.id ? item.id : crypto.randomUUID(),
+          event_id: args.id as string,
+          title: String(item.title ?? '').trim(),
+          description: item.description == null ? null : String(item.description),
+          due_date: item.due_date == null ? null : String(item.due_date),
+          is_urgent: item.is_urgent === true,
+          completed: item.completed === true,
+          completed_at: item.completed === true ? (item.completed_at == null ? new Date().toISOString() : String(item.completed_at)) : null,
+          assigned_to: item.assigned_to == null ? null : String(item.assigned_to),
+        })).filter(row => row.title)
+
+        const { error: deleteActionError } = await sb.from('event_action_items').delete().eq('event_id', args.id)
+        if (deleteActionError) throw new Error(deleteActionError.message)
+        if (actionRows.length > 0) {
+          const { error: insertActionError } = await sb.from('event_action_items').insert(actionRows)
+          if (insertActionError) throw new Error(insertActionError.message)
+        }
+      }
+
       // Handle member additions
       if (args.members_add?.length > 0) {
         const { data: family } = await sb.from('family_members').select('id, name')

@@ -64,6 +64,22 @@ function buildContext(ctx: AssistantContext) {
       cost_estimate: ctx.focusedEvent.enrichment?.cost_estimate ?? null,
       dietary_notes: ctx.focusedEvent.enrichment?.dietary_notes ?? null,
       meal_impact: ctx.focusedEvent.enrichment?.meal_impact ?? null,
+      checklist: ctx.focusedEvent.checklist.map(item => ({
+        id: item.id,
+        label: item.label,
+        note: item.note,
+        checked: item.checked,
+        category: item.category,
+      })),
+      actions: ctx.focusedEvent.actions.map(item => ({
+        id: item.id,
+        title: item.title,
+        description: item.description,
+        due_date: item.due_date,
+        is_urgent: item.is_urgent,
+        completed: item.completed,
+        assigned_to: item.assigned_to,
+      })),
     } : undefined,
   }
 }

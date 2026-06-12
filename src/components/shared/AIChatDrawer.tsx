@@ -980,6 +980,8 @@ function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, 
     if (args.cost_estimate) changes.push(`cost → "${args.cost_estimate}"`)
     if (args.dietary_notes) changes.push(`dietary → "${args.dietary_notes}"`)
     if (args.meal_impact) changes.push(`meal impact → "${args.meal_impact}"`)
+    if (args.checklist_items !== undefined) changes.push(`checklist → ${Array.isArray(args.checklist_items) ? `${(args.checklist_items as unknown[]).length} item(s)` : 'updated'}`)
+    if (args.action_items !== undefined) changes.push(`actions → ${Array.isArray(args.action_items) ? `${(args.action_items as unknown[]).length} item(s)` : 'updated'}`)
     if ((args.members_add as string[])?.length) changes.push(`add: ${(args.members_add as string[]).join(', ')}`)
     if ((args.members_remove as string[])?.length) changes.push(`remove: ${(args.members_remove as string[]).join(', ')}`)
     return <p className="text-caption text-casa-muted">{changes.join(' · ')}</p>

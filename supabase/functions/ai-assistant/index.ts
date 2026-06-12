@@ -181,6 +181,38 @@ Deno.serve(async (req) => {
             cost_estimate: { type: 'STRING', description: 'Cost Estimate field' },
             dietary_notes: { type: 'STRING', description: 'Dietary Notes field' },
             meal_impact: { type: 'STRING', description: 'Meal Impact field' },
+            checklist_items: {
+              type: 'ARRAY',
+              description: 'Full replacement checklist for the event. Send the complete final list; use [] to clear.',
+              items: {
+                type: 'OBJECT',
+                properties: {
+                  id: { type: 'STRING', description: 'Existing checklist item ID when editing an existing item' },
+                  label: { type: 'STRING', description: 'Checklist item text' },
+                  note: { type: 'STRING', description: 'Optional secondary note' },
+                  checked: { type: 'BOOLEAN', description: 'Whether the item is already checked off' },
+                  category: { type: 'STRING', description: 'Optional grouping/category label' },
+                },
+                required: ['label'],
+              },
+            },
+            action_items: {
+              type: 'ARRAY',
+              description: 'Full replacement action-item list for the event. Send the complete final list; use [] to clear.',
+              items: {
+                type: 'OBJECT',
+                properties: {
+                  id: { type: 'STRING', description: 'Existing action item ID when editing an existing item' },
+                  title: { type: 'STRING', description: 'Action item title' },
+                  description: { type: 'STRING', description: 'Optional longer description' },
+                  due_date: { type: 'STRING', description: 'Optional ISO datetime with UTC offset' },
+                  is_urgent: { type: 'BOOLEAN', description: 'True if this should appear as the urgent banner' },
+                  completed: { type: 'BOOLEAN', description: 'Whether the action is already completed' },
+                  assigned_to: { type: 'STRING', description: 'Optional assignee name' },
+                },
+                required: ['title'],
+              },
+            },
           },
           required: ['id'],
         },
@@ -289,11 +321,14 @@ Contact phone: ${(context.focusedEvent as {contact_phone:string|null}).contact_p
 Cost estimate: ${(context.focusedEvent as {cost_estimate:string|null}).cost_estimate ?? '⚠️ MISSING'}
 Dietary notes: ${(context.focusedEvent as {dietary_notes:string|null}).dietary_notes ?? '⚠️ MISSING'}
 Meal impact: ${(context.focusedEvent as {meal_impact:string|null}).meal_impact ?? '⚠️ MISSING'}
+Checklist items: ${JSON.stringify((context.focusedEvent as {checklist?: unknown[]}).checklist ?? [])}
+Action items: ${JSON.stringify((context.focusedEvent as {actions?: unknown[]}).actions ?? [])}
 
 RULES:
 - Always use update_event with ID: ${(context.focusedEvent as {id:string}).id} for any changes. You already have the event — never search for it.
 - Use notes for the visible Notes section, and description for the underlying calendar body text.
 - For what_to_bring, send the complete final list, not just the newly added item.
+- For checklist_items and action_items, send the complete final list, not just the delta. Preserve existing item IDs when keeping/editing an item so state stays stable.
 - After the user confirms a change, apply it immediately with update_event; confirm what you changed in one sentence.
 - If the user changes the location, mention that driving logistics and weather will refresh automatically.
 - If the user tries to discuss something unrelated to this event, politely redirect them back to editing it.
@@ -522,6 +557,8 @@ INSTRUCTIONS:
       if (args.cost_estimate) changes.push(`cost → "${args.cost_estimate}"`)
       if (args.dietary_notes) changes.push(`dietary → "${args.dietary_notes}"`)
       if (args.meal_impact) changes.push(`meal impact → "${args.meal_impact}"`)
+      if (args.checklist_items !== undefined) changes.push(`checklist → ${Array.isArray(args.checklist_items) ? `${(args.checklist_items as unknown[]).length} item(s)` : 'updated'}`)
+      if (args.action_items !== undefined) changes.push(`actions → ${Array.isArray(args.action_items) ? `${(args.action_items as unknown[]).length} item(s)` : 'updated'}`)
       if ((args.members_add as string[])?.length) changes.push(`add: ${(args.members_add as string[]).join(', ')}`)
       if ((args.members_remove as string[])?.length) changes.push(`remove: ${(args.members_remove as string[]).join(', ')}`)
       if (args.all_day !== undefined) changes.push(`all-day → ${args.all_day}`)
