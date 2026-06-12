@@ -88,13 +88,22 @@ Deno.serve(async (req) => {
       if (args.meal_impact !== undefined) enrichmentUpdates.meal_impact = args.meal_impact ?? null
 
       if (Object.keys(enrichmentUpdates).length > 0) {
+        const { data: existingEnrichment, error: enrichLoadError } = await sb
+          .from('event_enrichments')
+          .select('event_id')
+          .eq('event_id', args.id)
+          .maybeSingle()
+        if (enrichLoadError) throw new Error(enrichLoadError.message)
+
+        const nowIso = new Date().toISOString()
         const { error } = await sb
           .from('event_enrichments')
           .upsert(
             {
               event_id: args.id,
+              ...(existingEnrichment ? {} : { confidence: 'low', what_to_bring: [], created_at: nowIso }),
               ...enrichmentUpdates,
-              updated_at: new Date().toISOString(),
+              updated_at: nowIso,
             },
             { onConflict: 'event_id' }
           )
