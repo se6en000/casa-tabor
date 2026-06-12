@@ -12,8 +12,7 @@ import SmsSettingsPage from '../../pages/SmsSettingsPage'
 import MusicPage from '../../pages/MusicPage'
 import TabletPrototypePage from '../../pages/TabletPrototypePage'
 import TripDetailPage from '../../pages/TripDetailPage'
-import ThemeSettingsPage from '../../pages/ThemeSettingsPage'
-import ProfileSettingsPage from '../../pages/ProfileSettingsPage'
+import HomeSettingsPage from '../../pages/HomeSettingsPage'
 import StatusDashboardPage from '../../pages/StatusDashboardPage'
 import SavedPlacesSettingsPage from '../../pages/SavedPlacesSettingsPage'
 import SettingsShell from '../settings/SettingsShell'
@@ -36,18 +35,20 @@ export default function AnimatedRoutes() {
 
         {/* Settings — shell wraps all sub-pages with sidebar nav */}
         <Route path="/settings" element={<PageTransition><SettingsShell /></PageTransition>}>
-          <Route index element={<Navigate to="/settings/family" replace />} />
+          <Route index element={<Navigate to="/settings/display" replace />} />
           <Route path="family"     element={<FamilySettingsPage />} />
-          <Route path="profile"    element={<ProfileSettingsPage />} />
+          <Route path="home"       element={<HomeSettingsPage />} />
+          <Route path="profile"    element={<Navigate to="/settings/home" replace />} />
           <Route path="places"     element={<SavedPlacesSettingsPage />} />
           <Route path="google"     element={<GoogleServicesPage />} />
           <Route path="calendars"  element={<Navigate to="/settings/google" replace />} />
           <Route path="gmail-scan" element={<Navigate to="/settings/google" replace />} />
           <Route path="ai"         element={<AISettingsPage />} />
           <Route path="sms"        element={<SmsSettingsPage />} />
+          <Route path="music"      element={<MusicPage />} />
           <Route path="display"    element={<DisplaySettingsPage />} />
           <Route path="screensaver" element={<Navigate to="/settings/display" replace />} />
-          <Route path="theme"      element={<ThemeSettingsPage />} />
+          <Route path="theme"      element={<Navigate to="/settings/display" replace />} />
           <Route path="status"     element={<StatusDashboardPage />} />
         </Route>
       </Routes>

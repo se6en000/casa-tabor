@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useRef } from 'react'
 import {
-  Users, Sun, MessageSquare, Bot, Palette, Home, Activity,
+  Users, Sun, MessageSquare, Bot, Home, Activity,
   BookmarkCheck, Layers, ChevronRight, Music2,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
@@ -11,32 +11,31 @@ import BounceScroll from '../shared/BounceScroll'
 
 const NAV_GROUPS = [
   {
+    label: 'Visual & Display',
+    items: [
+      { to: '/settings/display', icon: Sun,           label: 'Display & Art Mode',  desc: 'Theme, colors, brightness, art mode, sensors' },
+    ],
+  },
+  {
+    label: 'Home & Content',
+    items: [
+      { to: '/settings/home',    icon: Home,          label: 'Home & Profile',      desc: 'Address, home screen layout' },
+      { to: '/settings/places',  icon: BookmarkCheck, label: 'Saved Places',        desc: 'Locations & people nicknames' },
+    ],
+  },
+  {
     label: 'Household',
     items: [
       { to: '/settings/family',  icon: Users,         label: 'Family',              desc: 'Members, colors, roles' },
-      { to: '/settings/profile', icon: Home,          label: 'Home & Profile',      desc: 'Address, drive times, planning' },
-      { to: '/settings/places',  icon: BookmarkCheck, label: 'Saved Places',        desc: 'Locations & people nicknames' },
     ],
   },
   {
     label: 'Connections',
     items: [
       { to: '/settings/google',  icon: Layers,        label: 'Google Services',     desc: 'Calendar sync + Gmail' },
+      { to: '/settings/music',   icon: Music2,        label: 'Spotify / Music',     desc: 'Connect music playback' },
       { to: '/settings/ai',      icon: Bot,           label: 'AI Provider',         desc: 'Vendor, model, API key' },
       { to: '/settings/sms',     icon: MessageSquare, label: 'Notifications',       desc: 'SMS briefings & alerts' },
-      { to: '/music',            icon: Music2,        label: 'Spotify / Music',     desc: 'Connect music playback' },
-    ],
-  },
-  {
-    label: 'Display & Art',
-    items: [
-      { to: '/settings/display', icon: Sun,           label: 'Display & Art Mode',  desc: 'Brightness, Room Tone, sleep, art' },
-    ],
-  },
-  {
-    label: 'Appearance',
-    items: [
-      { to: '/settings/theme',   icon: Palette,       label: 'Theme & Colors',      desc: 'Presets and custom palette' },
     ],
   },
   {
@@ -64,7 +63,7 @@ export default function SettingsShell() {
     if (location.pathname === '/settings') {
       // Only auto-navigate on wider screens
       if (window.innerWidth >= 768) {
-        navigate('/settings/family', { replace: true })
+        navigate('/settings/display', { replace: true })
       }
     }
   }, [location.pathname, navigate])

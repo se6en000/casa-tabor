@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Image, ToggleLeft, Sun } from 'lucide-react'
+import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Image, ToggleLeft, Sun, RotateCcw } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
+import { useTheme, PRESETS, DEFAULTS, type ThemeColors } from '../contexts/ThemeContext'
 import {
   useRoomTone,
   getZoneForHour,
@@ -15,6 +16,15 @@ import {
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 
 // ── Shared sub-components ──────────────────────────────────────────
+
+const COLOR_FIELDS: { key: keyof ThemeColors; label: string; desc: string }[] = [
+  { key: 'casa-gold',    label: 'Accent Color',       desc: 'Icons, highlights, buttons, badges' },
+  { key: 'casa-navy',    label: 'Primary Color',      desc: 'Navigation, headers, dark elements' },
+  { key: 'casa-bg',      label: 'Background',         desc: 'Main page background' },
+  { key: 'casa-surface', label: 'Card / Panel',       desc: 'Cards, panels, input backgrounds' },
+  { key: 'casa-text',    label: 'Body Text',          desc: 'Primary text color' },
+  { key: 'casa-border',  label: 'Borders & Dividers', desc: 'Card borders, divider lines' },
+]
 
 function Toggle({ checked, onChange, label, desc, disabled }: {
   checked: boolean; onChange: (v: boolean) => void; label: string; desc?: string; disabled?: boolean
@@ -222,6 +232,7 @@ export default function DisplaySettingsPage() {
   const qc = useQueryClient()
   const { cfg: liveCfg, currentZone, sensorData } = useRoomTone()
   const { settings, update: updateScreensaver } = useScreensaverSettings()
+  const { colors, setColor, applyPreset, resetToDefaults, isDefault } = useTheme()
   const [config, setConfig] = useState<DisplayConfig>(DISPLAY_DEFAULTS)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [previewZone, setPreviewZone] = useState<RoomToneZone>('day')
@@ -277,21 +288,170 @@ export default function DisplaySettingsPage() {
 
   return (
     <>
+      {/* Page header */}
       <div className="flex items-center gap-3 mb-6">
         <span className="w-10 h-10 rounded-full bg-casa-bg border border-casa-border flex items-center justify-center text-casa-gold">
           <Monitor size={18} />
         </span>
         <div>
-          <h1 className="font-display text-display-sm text-casa-navy">Display & Room Tone</h1>
-          <p className="text-caption text-casa-muted">Warm screen adaptive display — feels like a painting, not a monitor</p>
+          <h1 className="font-display text-display-sm text-casa-navy">Display Settings</h1>
+          <p className="text-caption text-casa-muted">Customize colors, room tone, sensors, and art mode</p>
         </div>
       </div>
 
       <div className="space-y-4">
 
-        {/* ── Room Tone Master ─────────────────────────── */}
+        {/* ─────────────────────────────────────────────────────────────────── */}
+        {/* 1. THEME & COLORS ──────────────────────────────────────────────── */}
+        {/* ─────────────────────────────────────────────────────────────────── */}
+        
+        {/* Section header with icon */}
+        <div className="mt-6 mb-4 flex items-center gap-3">
+          <div className="flex-1 h-px bg-casa-border" />
+          <span className="flex items-center gap-2 px-1">
+            <Palette size={15} className="text-casa-gold" />
+            <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Theme &amp; Colors</span>
+          </span>
+          <div className="flex-1 h-px bg-casa-border" />
+        </div>
+
+        {/* Preset palettes */}
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Sunset} label="Room Tone" />
+          <SectionHeader icon={Palette} label="Presets" />
+          <div className="grid grid-cols-3 gap-3">
+            {PRESETS.map(preset => {
+              const active = Object.entries(preset.colors).every(
+                ([k, v]) => colors[k as keyof ThemeColors] === v
+              )
+              return (
+                <button
+                  key={preset.id}
+                  onClick={() => applyPreset(preset)}
+                  className={cn(
+                    'rounded-2xl border-2 p-3 text-left transition-all hover:shadow-md',
+                    active
+                      ? 'border-casa-gold shadow-md'
+                      : 'border-casa-border hover:border-casa-gold/40'
+                  )}
+                  style={{ background: preset.colors['casa-surface'] }}
+                >
+                  {/* Mini color preview */}
+                  <div className="flex gap-1 mb-2">
+                    <div className="w-5 h-5 rounded-full" style={{ background: preset.colors['casa-navy'] }} />
+                    <div className="w-5 h-5 rounded-full" style={{ background: preset.colors['casa-gold'] }} />
+                    <div className="w-5 h-5 rounded-full border" style={{ background: preset.colors['casa-bg'], borderColor: preset.colors['casa-border'] }} />
+                  </div>
+                  <p className="text-caption font-semibold" style={{ color: preset.colors['casa-navy'] }}>
+                    {preset.emoji} {preset.label}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Individual color pickers */}
+        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
+          <SectionHeader icon={Palette} label="Custom Colors" />
+          <div className="divide-y divide-casa-divider">
+            {COLOR_FIELDS.map(({ key, label, desc }) => (
+              <div key={key} className="flex items-center gap-4 px-0 py-3.5">
+                {/* Color swatch + picker */}
+                <label className="relative cursor-pointer flex-shrink-0">
+                  <div
+                    className="w-10 h-10 rounded-xl border-2 border-casa-border shadow-sm transition-transform hover:scale-105"
+                    style={{ background: colors[key] }}
+                  />
+                  <input
+                    type="color"
+                    value={colors[key]}
+                    onChange={e => setColor(key, e.target.value)}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  />
+                </label>
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-body-sm font-semibold text-casa-navy leading-tight">{label}</p>
+                  <p className="text-caption text-casa-muted mt-0.5">{desc}</p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <code className="text-caption font-mono text-casa-muted bg-casa-bg px-2 py-1 rounded-md">
+                    {colors[key].toUpperCase()}
+                  </code>
+                  {colors[key] !== DEFAULTS[key] && (
+                    <button
+                      onClick={() => setColor(key, DEFAULTS[key])}
+                      title="Reset this color"
+                      className="text-casa-muted hover:text-casa-gold transition-colors"
+                    >
+                      <RotateCcw size={13} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Live preview strip */}
+        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
+          <SectionHeader icon={Eye} label="Preview" />
+          <div className="rounded-2xl overflow-hidden border border-casa-border shadow-sm">
+            {/* Header bar */}
+            <div className="px-4 py-3 flex items-center justify-between" style={{ background: colors['casa-navy'] }}>
+              <span className="font-display text-body-sm font-semibold text-white">Casa Tabor</span>
+              <div className="w-2 h-2 rounded-full" style={{ background: colors['casa-gold'] }} />
+            </div>
+            {/* Card */}
+            <div className="p-4" style={{ background: colors['casa-bg'] }}>
+              <div className="rounded-xl p-3 border" style={{ background: colors['casa-surface'], borderColor: colors['casa-border'] }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-caption font-bold" style={{ background: colors['casa-gold'] }}>J</div>
+                  <span className="text-body-sm font-semibold" style={{ color: colors['casa-navy'] }}>Jake's Event</span>
+                </div>
+                <p className="text-caption" style={{ color: colors['casa-text'] }}>Thursday · 3:00 PM – 4:00 PM</p>
+                <div className="mt-2 pt-2 border-t" style={{ borderColor: colors['casa-border'] }}>
+                  <span className="text-caption font-semibold px-2 py-0.5 rounded-full text-white" style={{ background: colors['casa-gold'] }}>Work</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Reset to defaults */}
+        {!isDefault && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-center justify-between">
+            <div>
+              <p className="text-body-sm font-semibold text-amber-800">Custom theme active</p>
+              <p className="text-caption text-amber-600 mt-0.5">Restore original Casa Tabor colors</p>
+            </div>
+            <button
+              onClick={resetToDefaults}
+              className="flex items-center gap-2 bg-white border border-amber-300 text-amber-700 text-body-sm font-semibold px-4 py-2 rounded-xl hover:bg-amber-50 transition-colors shadow-sm"
+            >
+              <RotateCcw size={14} />
+              Reset to defaults
+            </button>
+          </div>
+        )}
+
+        {/* ─────────────────────────────────────────────────────────────────── */}
+        {/* 2. DISPLAY SETTINGS ────────────────────────────────────────────── */}
+        {/* ─────────────────────────────────────────────────────────────────── */}
+        
+        <div className="mt-8 mb-4 flex items-center gap-3">
+          <div className="flex-1 h-px bg-casa-border" />
+          <span className="flex items-center gap-2 px-1">
+            <Sunset size={15} className="text-casa-gold" />
+            <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Display Settings</span>
+          </span>
+          <div className="flex-1 h-px bg-casa-border" />
+        </div>
+
+        {/* Room Tone Master */}
+        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
+          <SectionHeader icon={Sunset} label="Adaptive Room Tone" />
           <Toggle
             checked={config.room_tone_enabled}
             onChange={v => set('room_tone_enabled', v)}
@@ -412,11 +572,21 @@ export default function DisplaySettingsPage() {
           </div>
         )}
 
-        {/* ── Sensor Status ─────────────────────────────── */}
+        {/* ─────────────────────────────────────────────────────────────────── */}
+        {/* 3. SENSOR ARRAY ────────────────────────────────────────────────── */}
+        {/* ─────────────────────────────────────────────────────────────────── */}
+        
+        <div className="mt-8 mb-4 flex items-center gap-3">
+          <div className="flex-1 h-px bg-casa-border" />
+          <span className="flex items-center gap-2 px-1">
+            <Cpu size={15} className="text-casa-gold" />
+            <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Sensor Array</span>
+          </span>
+          <div className="flex-1 h-px bg-casa-border" />
+        </div>
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
           <SectionHeader icon={Cpu} label="Sensor Array" />
 
-          {/* Push toggle — always visible */}
           <Toggle
             checked={config.sensor_push_enabled}
             onChange={v => set('sensor_push_enabled', v)}
@@ -424,58 +594,7 @@ export default function DisplaySettingsPage() {
             desc="Pi bridge streams readings to Supabase. Turn off to stop recording when not needed."
           />
 
-          {/* Brightness range */}
-          <SliderRow
-            label="Min Brightness"
-            desc="Floor when room is very dark (lux < 1). DDC scale 0–100."
-            value={config.brightness_min}
-            min={0} max={40}
-            onChange={v => set('brightness_min', v)}
-          />
-          <SliderRow
-            label="Max Brightness"
-            desc="Ceiling for full daylight. DDC scale 0–100."
-            value={config.brightness_max}
-            min={50} max={100}
-            onChange={v => set('brightness_max', v)}
-          />
-
-          {/* Auto-sleep */}
-          <Toggle
-            checked={config.auto_sleep_enabled}
-            onChange={v => set('auto_sleep_enabled', v)}
-            label="Auto-sleep display"
-            desc="Blanks the monitor when the room is very dark. Wakes on ambient light."
-          />
-          {config.auto_sleep_enabled && (
-            <>
-              <SliderRow
-                label="Sleep threshold"
-                desc={`Room must drop below ${(config.sleep_lux_threshold).toFixed(1)} lux for ${config.sleep_delay_s}s to sleep.`}
-                value={Math.round(config.sleep_lux_threshold * 10)}
-                min={1} max={30}
-                unit=" ×0.1lux"
-                onChange={v => set('sleep_lux_threshold', v / 10)}
-              />
-              <SliderRow
-                label="Wake threshold"
-                desc={`Wakes when lux rises above ${(config.wake_lux_threshold).toFixed(1)}.`}
-                value={Math.round(config.wake_lux_threshold * 10)}
-                min={5} max={100}
-                unit=" ×0.1lux"
-                onChange={v => set('wake_lux_threshold', v / 10)}
-              />
-              <SliderRow
-                label="Sleep delay"
-                desc="Seconds in darkness before sleeping."
-                value={config.sleep_delay_s}
-                min={5} max={120}
-                unit="s"
-                onChange={v => set('sleep_delay_s', v)}
-              />
-            </>
-          )}
-
+          {/* Keep live sensor feedback directly under the toggle */}
           {config.sensor_push_enabled && sensorData ? (
             <div className="mt-3 pt-3 border-t border-casa-divider">
               {/* Live readings grid */}
@@ -559,73 +678,76 @@ export default function DisplaySettingsPage() {
                 Push enabled — waiting for Pi bridge. Using <span className="font-medium text-casa-navy">time-of-day schedule</span> as proxy.
               </p>
             </div>
-          ) : (
-            <p className="text-caption text-casa-muted mt-2">
-              Push off — using <span className="font-medium text-casa-navy">time-of-day schedule</span>.
-            </p>
+          ) : null}
+
+          <SliderRow
+            label="Min Brightness"
+            desc="Floor when room is very dark (lux < 1). DDC scale 0–100."
+            value={config.brightness_min}
+            min={0}
+            max={40}
+            onChange={v => set('brightness_min', v)}
+          />
+          <SliderRow
+            label="Max Brightness"
+            desc="Ceiling for full daylight. DDC scale 0–100."
+            value={config.brightness_max}
+            min={50}
+            max={100}
+            onChange={v => set('brightness_max', v)}
+          />
+
+          <Toggle
+            checked={config.auto_sleep_enabled}
+            onChange={v => set('auto_sleep_enabled', v)}
+            label="Auto-sleep display"
+            desc="Blanks the monitor when the room is very dark. Wakes on ambient light."
+          />
+          {config.auto_sleep_enabled && (
+            <>
+              <SliderRow
+                label="Sleep threshold"
+                desc={`Room must drop below ${(config.sleep_lux_threshold).toFixed(1)} lux for ${config.sleep_delay_s}s to sleep.`}
+                value={Math.round(config.sleep_lux_threshold * 10)}
+                min={1}
+                max={30}
+                unit=" ×0.1lux"
+                onChange={v => set('sleep_lux_threshold', v / 10)}
+              />
+              <SliderRow
+                label="Wake threshold"
+                desc={`Wakes when lux rises above ${(config.wake_lux_threshold).toFixed(1)}.`}
+                value={Math.round(config.wake_lux_threshold * 10)}
+                min={5}
+                max={100}
+                unit=" ×0.1lux"
+                onChange={v => set('wake_lux_threshold', v / 10)}
+              />
+              <SliderRow
+                label="Sleep delay"
+                desc="Seconds in darkness before sleeping."
+                value={config.sleep_delay_s}
+                min={5}
+                max={120}
+                unit="s"
+                onChange={v => set('sleep_delay_s', v)}
+              />
+            </>
           )}
         </div>
 
-        {/* ── Home Screen visibility ───────────────────── */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Eye} label="Home Screen Sections" />
-          <div className="divide-y divide-casa-divider">
-            <Toggle checked={config.show_weather} onChange={v => set('show_weather', v)} label="Weather" desc="Current conditions at the top" />
-            <Toggle checked={config.show_briefing_on_home} onChange={v => set('show_briefing_on_home', v)} label="Daily Briefing" desc="AI briefing card" />
-            <Toggle checked={config.show_conflicts} onChange={v => set('show_conflicts', v)} label="Conflict Alerts" desc="Scheduling conflicts & logistics gaps" />
-            <Toggle checked={config.show_prep_alerts} onChange={v => set('show_prep_alerts', v)} label="Prep Alerts" desc="Upcoming birthdays, deadlines, and to-dos" />
-          </div>
+        {/* ─────────────────────────────────────────────────────────────────── */}
+        {/* 4. ART MODE ────────────────────────────────────────────────────── */}
+        {/* ─────────────────────────────────────────────────────────────────── */}
+        
+        <div className="mt-8 mb-4 flex items-center gap-3">
+         <div className="flex-1 h-px bg-casa-border" />
+         <span className="flex items-center gap-2 px-1">
+           <Image size={15} className="text-casa-gold" />
+           <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Art Mode &amp; Sleep</span>
+         </span>
+         <div className="flex-1 h-px bg-casa-border" />
         </div>
-
-        {/* ── Clock ────────────────────────────────────── */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Clock} label="Clock & Calendar" />
-          <div className="space-y-4 mt-1">
-            <div>
-              <label className="block text-body-sm font-medium text-casa-navy mb-2">
-                Events ahead <span className="text-casa-muted font-normal">({config.calendar_days_ahead} days)</span>
-              </label>
-              <input type="range" min={1} max={30} value={config.calendar_days_ahead}
-                onChange={e => set('calendar_days_ahead', Number(e.target.value))}
-                className="w-full accent-casa-navy"
-              />
-              <div className="flex justify-between text-caption text-casa-muted mt-1">
-                <span>1 day</span><span>30 days</span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-body-sm font-medium text-casa-navy mb-2">Clock Format</label>
-              <div className="flex gap-2">
-                {(['12h', '24h'] as const).map(fmt => (
-                  <button key={fmt} type="button" onClick={() => set('clock_format', fmt)}
-                    className={cn(
-                      'px-4 py-2 rounded-lg text-body-sm font-medium border transition-colors',
-                      config.clock_format === fmt
-                        ? 'bg-casa-navy text-white border-casa-navy'
-                        : 'bg-white text-casa-navy border-casa-border hover:border-casa-navy/40'
-                    )}
-                  >
-                    {fmt === '12h' ? '12-hour (3:00 PM)' : '24-hour (15:00)'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ── Art Mode & Sleep divider ──────────────────── */}
-      <div className="mt-8 mb-2 flex items-center gap-3">
-        <div className="flex-1 h-px bg-casa-border" />
-        <span className="flex items-center gap-2 px-1">
-          <Sunset size={15} className="text-casa-gold" />
-          <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Art Mode &amp; Sleep</span>
-        </span>
-        <div className="flex-1 h-px bg-casa-border" />
-      </div>
-
-      <div className="space-y-4">
 
         {/* ── Master toggles ──────────────────────────── */}
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
@@ -645,6 +767,10 @@ export default function DisplaySettingsPage() {
             />
           </div>
         </div>
+
+        {/* Show remaining Art Mode options only when enabled */}
+        {settings.enabled && (
+          <div className="space-y-4">
 
         {/* ── Timing ──────────────────────────────────── */}
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
@@ -748,6 +874,9 @@ export default function DisplaySettingsPage() {
             Preview Art Mode
           </button>
         </div>
+
+         </div>
+        )}
 
       </div>
 

@@ -250,15 +250,15 @@ export default function AISettingsPage() {
           </div>
         </div>
 
-        {/* Home Address — managed in Profile */}
+        {/* Home Address — managed in Home settings */}
         <Link
-          to="/settings/profile"
+          to="/settings/home"
           className="flex items-center gap-3 bg-casa-bg/60 rounded-card border border-casa-border/50 p-4 hover:bg-casa-bg transition-colors"
         >
           <Home size={16} className="text-casa-gold shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-body-sm font-semibold text-casa-navy">Home Address</p>
-            <p className="text-caption text-casa-muted mt-0.5">Manage in Profile & Home settings →</p>
+            <p className="text-caption text-casa-muted mt-0.5">Manage in Home settings →</p>
           </div>
         </Link>
 
