@@ -53,8 +53,15 @@ const queryClient = new QueryClient({
   },
 })
 
-function GlobalAIDrawer({ screensaverActive }: { screensaverActive: boolean }) {
-  const [open, setOpen] = useState(false)
+function GlobalAIDrawer({
+  screensaverActive,
+  open,
+  setOpen,
+}: {
+  screensaverActive: boolean
+  open: boolean
+  setOpen: (open: boolean) => void
+}) {
   const [anchor, setAnchor] = useState<{ right: number; top: number } | undefined>()
   const now = useLiveClock(60_000)
   const { data: events = [] } = useRollingEvents(now)
@@ -97,17 +104,24 @@ function AppShell() {
   useIdleTimer(ssMs, dispMs)
 
   const [screensaverActive, setScreensaverActive] = useState(false)
+  const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
 
   useEffect(() => {
     const onSleep = () => setScreensaverActive(true)
+    const onSleepIdle = () => {
+      if (aiDrawerOpen) return
+      setScreensaverActive(true)
+    }
     const onWake  = () => setScreensaverActive(false)
     document.addEventListener('screensaver-on', onSleep)
+    document.addEventListener('screensaver-idle-on', onSleepIdle)
     document.addEventListener('wake-kiosk', onWake)
     return () => {
       document.removeEventListener('screensaver-on', onSleep)
+      document.removeEventListener('screensaver-idle-on', onSleepIdle)
       document.removeEventListener('wake-kiosk', onWake)
     }
-  }, [])
+  }, [aiDrawerOpen])
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-casa-bg">
@@ -125,7 +139,7 @@ function AppShell() {
       <NavBar />
 
       {/* Global AI drawer — opens from TopBar sparkle or wake word */}
-      <GlobalAIDrawer screensaverActive={screensaverActive} />
+      <GlobalAIDrawer screensaverActive={screensaverActive} open={aiDrawerOpen} setOpen={setAiDrawerOpen} />
 
       {/* Art screensaver overlay — always available when triggered manually; idle auto-fire respects settings.enabled */}
       {screensaverActive && (

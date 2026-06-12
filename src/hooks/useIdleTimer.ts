@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 const BRIDGE = 'http://127.0.0.1:8766'
 
 /**
- * Fires `screensaver-on` after `screensaverMs` idle.
+ * Fires `screensaver-idle-on` after `screensaverMs` idle.
  * Fires display sleep (bridge /display/off) after `displayOffMs` idle.
  * Resets on any user interaction (touch, mouse, keyboard).
  */
@@ -18,7 +18,7 @@ export function useIdleTimer(screensaverMs: number, displayOffMs: number) {
 
       if (isFinite(screensaverMs)) {
         ssTimerRef.current = setTimeout(() => {
-          document.dispatchEvent(new CustomEvent('screensaver-on'))
+          document.dispatchEvent(new CustomEvent('screensaver-idle-on'))
         }, screensaverMs)
       }
 
