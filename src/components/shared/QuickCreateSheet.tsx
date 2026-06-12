@@ -17,6 +17,32 @@ function toLocalDT(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+function parseLocalDT(value: string): Date {
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed
+}
+
+function getPickerParts(value: string) {
+  const d = parseLocalDT(value)
+  const hour24 = d.getHours()
+  return {
+    year: d.getFullYear(),
+    month: d.getMonth(),
+    day: d.getDate(),
+    hour12: ((hour24 + 11) % 12) + 1,
+    minute: d.getMinutes(),
+    ampm: hour24 >= 12 ? 'PM' as const : 'AM' as const,
+  }
+}
+
+function fromPickerParts(parts: { year: number; month: number; day: number; hour12: number; minute: number; ampm: 'AM' | 'PM' }) {
+  const safeDay = Math.min(parts.day, new Date(parts.year, parts.month + 1, 0).getDate())
+  const hour24 = (parts.hour12 % 12) + (parts.ampm === 'PM' ? 12 : 0)
+  return new Date(parts.year, parts.month, safeDay, hour24, parts.minute, 0, 0)
+}
+
 export default function QuickCreateSheet({ open, onClose, initialStart }: Props) {
   const qc = useQueryClient()
   const [viewportHeight, setViewportHeight] = useState<number | null>(null)
@@ -93,6 +119,19 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
       setViewportHeight(null)
     }
   }, [open])
+
+  const updateStartParts = (patch: Partial<ReturnType<typeof getPickerParts>>) => {
+    const parts = { ...getPickerParts(startDT), ...patch }
+    const nextStart = fromPickerParts(parts)
+    setStartDT(toLocalDT(nextStart))
+    setEndDT(toLocalDT(addHours(nextStart, 1)))
+  }
+
+  const updateEndParts = (patch: Partial<ReturnType<typeof getPickerParts>>) => {
+    const parts = { ...getPickerParts(endDT), ...patch }
+    const nextEnd = fromPickerParts(parts)
+    setEndDT(toLocalDT(nextEnd))
+  }
 
   const handleSave = async () => {
     if (!title.trim()) return
@@ -196,23 +235,133 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                   <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">
                     Start
                   </label>
-                  <input
-                    type="datetime-local"
-                    value={startDT}
-                    onChange={e => setStartDT(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-casa-border bg-casa-bg text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
-                  />
+                  {(() => {
+                    const p = getPickerParts(startDT)
+                    const daysInMonth = new Date(p.year, p.month + 1, 0).getDate()
+                    return (
+                      <div className="rounded-xl border border-casa-border bg-casa-bg p-2 space-y-2">
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <select
+                            data-vk-nav="true"
+                            value={p.month}
+                            onChange={e => updateStartParts({ month: Number(e.target.value) })}
+                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                          >
+                            {MONTH_LABELS.map((m, i) => <option key={m} value={i}>{m}</option>)}
+                          </select>
+                          <select
+                            data-vk-nav="true"
+                            value={p.day}
+                            onChange={e => updateStartParts({ day: Number(e.target.value) })}
+                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                          >
+                            {Array.from({ length: daysInMonth }, (_, idx) => idx + 1).map(day => <option key={day} value={day}>{day}</option>)}
+                          </select>
+                          <select
+                            data-vk-nav="true"
+                            value={p.year}
+                            onChange={e => updateStartParts({ year: Number(e.target.value) })}
+                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                          >
+                            {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 1 + i).map(year => <option key={year} value={year}>{year}</option>)}
+                          </select>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <select
+                            data-vk-nav="true"
+                            value={p.hour12}
+                            onChange={e => updateStartParts({ hour12: Number(e.target.value) })}
+                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                          >
+                            {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
+                          </select>
+                          <select
+                            data-vk-nav="true"
+                            value={p.minute}
+                            onChange={e => updateStartParts({ minute: Number(e.target.value) })}
+                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                          >
+                            {Array.from({ length: 60 }, (_, i) => i).map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
+                          </select>
+                          <select
+                            data-vk-nav="true"
+                            value={p.ampm}
+                            onChange={e => updateStartParts({ ampm: e.target.value as 'AM' | 'PM' })}
+                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm font-semibold text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                          >
+                            <option value="AM">AM</option>
+                            <option value="PM">PM</option>
+                          </select>
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
                 <div>
                   <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">
                     End
                   </label>
-                  <input
-                    type="datetime-local"
-                    value={endDT}
-                    onChange={e => setEndDT(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-casa-border bg-casa-bg text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
-                  />
+                  {(() => {
+                    const p = getPickerParts(endDT)
+                    const daysInMonth = new Date(p.year, p.month + 1, 0).getDate()
+                    return (
+                      <div className="rounded-xl border border-casa-border bg-casa-bg p-2 space-y-2">
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <select
+                            data-vk-nav="true"
+                            value={p.month}
+                            onChange={e => updateEndParts({ month: Number(e.target.value) })}
+                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                          >
+                            {MONTH_LABELS.map((m, i) => <option key={m} value={i}>{m}</option>)}
+                          </select>
+                          <select
+                            data-vk-nav="true"
+                            value={p.day}
+                            onChange={e => updateEndParts({ day: Number(e.target.value) })}
+                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                          >
+                            {Array.from({ length: daysInMonth }, (_, idx) => idx + 1).map(day => <option key={day} value={day}>{day}</option>)}
+                          </select>
+                          <select
+                            data-vk-nav="true"
+                            value={p.year}
+                            onChange={e => updateEndParts({ year: Number(e.target.value) })}
+                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                          >
+                            {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 1 + i).map(year => <option key={year} value={year}>{year}</option>)}
+                          </select>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <select
+                            data-vk-nav="true"
+                            value={p.hour12}
+                            onChange={e => updateEndParts({ hour12: Number(e.target.value) })}
+                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                          >
+                            {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
+                          </select>
+                          <select
+                            data-vk-nav="true"
+                            value={p.minute}
+                            onChange={e => updateEndParts({ minute: Number(e.target.value) })}
+                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                          >
+                            {Array.from({ length: 60 }, (_, i) => i).map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
+                          </select>
+                          <select
+                            data-vk-nav="true"
+                            value={p.ampm}
+                            onChange={e => updateEndParts({ ampm: e.target.value as 'AM' | 'PM' })}
+                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm font-semibold text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                          >
+                            <option value="AM">AM</option>
+                            <option value="PM">PM</option>
+                          </select>
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
             </div>

@@ -12,6 +12,12 @@ type KeyboardAlign = 'left' | 'center' | 'right'
 type KeyboardSize = 'compact' | 'comfortable' | 'large'
 type Handedness = 'left' | 'right'
 type EditableTarget = HTMLInputElement | HTMLTextAreaElement | HTMLElement
+type TouchKeyboardControlDetail = {
+  target?: Element | null
+  toggle?: boolean
+  open?: boolean
+  close?: boolean
+}
 
 const PREFS_KEY = 'casa-touch-keyboard-prefs-v1'
 
@@ -87,6 +93,10 @@ function isEditableElement(el: Element | null): el is EditableTarget {
   return el.isContentEditable
 }
 
+function isAutoOpenExcluded(el: Element | null): boolean {
+  return !!(el instanceof HTMLElement && el.closest('[data-touch-keyboard="ignore"]'))
+}
+
 function emitInput(el: HTMLElement) {
   el.dispatchEvent(new InputEvent('input', { bubbles: true }))
 }
@@ -123,8 +133,14 @@ function getFieldLabel(el: EditableTarget | null) {
 }
 
 function focusables(): HTMLElement[] {
-  const all = Array.from(document.querySelectorAll<HTMLElement>('input, textarea, [contenteditable="true"]'))
-  return all.filter(el => isEditableElement(el) && !!el.getClientRects().length)
+  const all = Array.from(document.querySelectorAll<HTMLElement>('input, textarea, select, [contenteditable="true"]'))
+  return all.filter((el) => {
+    if (!el.getClientRects().length) return false
+    if (el instanceof HTMLInputElement) return !el.disabled && !el.readOnly && el.type !== 'hidden'
+    if (el instanceof HTMLTextAreaElement) return !el.disabled && !el.readOnly
+    if (el instanceof HTMLSelectElement) return !el.disabled
+    return el.isContentEditable
+  })
 }
 
 function normalizeForType(text: string, target: EditableTarget | null): string {
@@ -204,7 +220,8 @@ export default function TouchKeyboard() {
       if (!(next instanceof Element) || !isEditableElement(next)) return
       const pointerIsRecent = Date.now() - pointerIntentAtRef.current < 900
       const pointerMatchesField = pointerIntentElRef.current === next
-      const shouldOpen = visible || (pointerIsRecent && pointerMatchesField)
+      const canAutoOpen = !isAutoOpenExcluded(next)
+      const shouldOpen = visible || (canAutoOpen && (pointerIsRecent && pointerMatchesField || !pointerIsRecent))
       setTarget(next)
       setMode(modeForTarget(next))
       if (shouldOpen) setVisible(true)
@@ -236,6 +253,38 @@ export default function TouchKeyboard() {
       document.removeEventListener('pointerdown', handlePointerDown, true)
     }
   }, [enabled, visible])
+
+  useEffect(() => {
+    if (!enabled) return
+
+    const resolveTarget = (candidate: Element | null | undefined): EditableTarget | null => {
+      if (candidate && isEditableElement(candidate)) return candidate
+      const active = document.activeElement
+      return active && isEditableElement(active) ? active : null
+    }
+
+    const handleControl = (evt: Event) => {
+      const detail = (evt as CustomEvent<TouchKeyboardControlDetail>).detail ?? {}
+      if (detail.close) {
+        hideKeyboard()
+        return
+      }
+      const nextTarget = resolveTarget(detail.target ?? null)
+      if (!nextTarget) return
+      if (detail.toggle && visible && target === nextTarget) {
+        hideKeyboard()
+        return
+      }
+      nextTarget.focus()
+      setTarget(nextTarget)
+      setMode(modeForTarget(nextTarget))
+      setShift(false)
+      if (detail.toggle || detail.open) setVisible(true)
+    }
+
+    document.addEventListener('touch-keyboard:control', handleControl as EventListener)
+    return () => document.removeEventListener('touch-keyboard:control', handleControl as EventListener)
+  }, [enabled, visible, target])
 
   const keyboardWidthPx = useMemo(() => {
     const vw = window.innerWidth || 1280
@@ -375,7 +424,8 @@ export default function TouchKeyboard() {
     tapFeedback()
     const nodes = focusables()
     if (nodes.length === 0) return
-    const current = target ? nodes.indexOf(target) : -1
+    const active = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const current = active ? nodes.indexOf(active) : (target ? nodes.indexOf(target) : -1)
     const next = current === -1 ? 0 : (current + step + nodes.length) % nodes.length
     nodes[next]?.focus()
   }
