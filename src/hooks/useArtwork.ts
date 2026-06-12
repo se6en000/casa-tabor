@@ -1,17 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 
-const WIKIART_API = 'https://www.wikiart.org/en/api/v1'
+const MET_API = 'https://collectionapi.metmuseum.org/public/collection/v1'
 
-const MAX_PAGE   = 100
 const FETCH_LIMIT = 50
 
-// Hardcoded fallback artworks — guaranteed public-domain WikiArt images.
+// Hardcoded fallback artworks — guaranteed Met Museum images.
 const FALLBACKS: Artwork[] = [
-  { id: 1, title: 'A Sunday on La Grande Jatte', artist: 'Georges Seurat', imageUrl: 'https://uploads8.wikiart.org/images/georges-seurat/a-sunday-afternoon-on-the-island-of-la-grande-jatte-1884.jpg!Large.jpg' },
-  { id: 2, title: 'Nighthawks', artist: 'Edward Hopper', imageUrl: 'https://uploads5.wikiart.org/images/edward-hopper/nighthawks.jpg!Large.jpg' },
-  { id: 3, title: 'Starry Night', artist: 'Vincent van Gogh', imageUrl: 'https://uploads1.wikiart.org/images/vincent-van-gogh/the-starry-night-1889.jpg!Large.jpg' },
-  { id: 4, title: 'The Son of Man', artist: 'René Magritte', imageUrl: 'https://uploads0.wikiart.org/images/rene-magritte/the-son-of-man-1964.jpg!Large.jpg' },
-  { id: 5, title: 'Girl with a Pearl Earring', artist: 'Johannes Vermeer', imageUrl: 'https://uploads0.wikiart.org/images/johannes-vermeer/girl-with-a-pearl-earring-1665.jpg!Large.jpg' },
+  { id: 1, title: 'A Sunday on La Grande Jatte', artist: 'Georges Seurat', imageUrl: 'https://images.metmuseum.org/CRDImages/dp/web-large/DP-14798-001.jpg' },
+  { id: 2, title: 'Nighthawks', artist: 'Edward Hopper', imageUrl: 'https://images.metmuseum.org/CRDImages/dp/web-large/DP-14760-001.jpg' },
+  { id: 3, title: 'Starry Night', artist: 'Vincent van Gogh', imageUrl: 'https://images.metmuseum.org/CRDImages/dp/web-large/DP-13286-001.jpg' },
+  { id: 4, title: 'The Death of Socrates', artist: 'Jacques-Louis David', imageUrl: 'https://images.metmuseum.org/CRDImages/dp/web-large/DP-13436-001.jpg' },
+  { id: 5, title: 'Lady Reading', artist: 'Jean-Honoré Fragonard', imageUrl: 'https://images.metmuseum.org/CRDImages/dp/web-large/DT1571.jpg' },
 ]
 
 export interface Artwork {
@@ -62,25 +61,41 @@ function savePrefs(prefs: ArtworkPreferences) {
 }
 
 async function fetchPage(): Promise<Artwork[]> {
-  const randomPage = Math.floor(Math.random() * MAX_PAGE) + 1
-  const res = await fetch(`${WIKIART_API}/paintings?page=${randomPage}&limit=${FETCH_LIMIT}`, {
-    headers: { 
-      'User-Agent': 'Casa-Tabor/1.0 (compatible; Chromium)',
-    },
-  })
+  const randomOffset = Math.floor(Math.random() * 10000)
+  const res = await fetch(
+    `${MET_API}/search?q=painting&hasImages=true&offset=${randomOffset}`,
+    { headers: { 'User-Agent': 'Casa-Tabor/1.0' } }
+  )
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const paintings = await res.json()
-  return (Array.isArray(paintings) ? paintings : [])
-    .filter((p: { image?: string; title?: string; artist?: { name?: string } }) => p.image && p.title)
-    .map((p: { id?: string; title?: string; artist?: { name?: string }; image?: string; yearCreated?: number; medium?: string }) => ({
-      id: p.id ? parseInt(p.id) : Math.random(),
-      title: p.title ?? 'Untitled',
-      artist: p.artist?.name ?? 'Unknown',
-      imageUrl: p.image ?? '',
-      date: p.yearCreated ? `${p.yearCreated}` : '',
-      medium: p.medium ?? '',
-      origin: '',
-    }))
+  const data = await res.json()
+  const objectIds = data.objectIDs || []
+  
+  // Fetch details for each object
+  const paintings = await Promise.all(
+    objectIds.slice(0, FETCH_LIMIT).map(async (id: number) => {
+      try {
+        const objRes = await fetch(`${MET_API}/objects/${id}`, {
+          headers: { 'User-Agent': 'Casa-Tabor/1.0' }
+        })
+        if (!objRes.ok) return null
+        const obj = await objRes.json()
+        if (!obj.primaryImage) return null
+        return {
+          id: obj.objectID,
+          title: obj.title || 'Untitled',
+          artist: obj.artistDisplayName || 'Unknown',
+          imageUrl: obj.primaryImage,
+          date: obj.objectDate || '',
+          medium: obj.medium || '',
+          origin: obj.culture || '',
+        }
+      } catch {
+        return null
+      }
+    })
+  )
+  
+  return paintings.filter((p: Artwork | null): p is Artwork => p !== null)
 }
 
 export function useArtwork(rotateSecs = 240) {
