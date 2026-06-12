@@ -23,6 +23,10 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   const [matTransition, setMatTransition] = useState(false)
   const [driftIndex, setDriftIndex] = useState(0)
   const [swiping, setSwiping] = useState(false)
+  
+  // Previous artwork for cross-fade
+  const [prevArtwork, setPrevArtwork] = useState<typeof artwork>(null)
+  
   const touchStartXRef = useRef<number | null>(null)
   const textureStyle = useMemo(() => getTextureStyle(), [])
 
@@ -42,7 +46,10 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   }, [])
 
   useEffect(() => {
-    // Reset loading state when artwork changes, but keep old aspectRatio until new one loads
+    // When artwork changes, save the current one as previous for cross-fade
+    if (artwork) {
+      setPrevArtwork(artwork)
+    }
   }, [artwork?.id])
 
   useEffect(() => {
@@ -139,6 +146,26 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             transition: swiping ? 'transform 260ms cubic-bezier(0.4, 0, 0.2, 1)' : 'transform 16s linear',
           }}
         >
+          {/* Previous image fades out as new one fades in */}
+          {prevArtwork && (
+            <img
+              src={prevArtwork.imageUrl}
+              alt={prevArtwork.title}
+              onError={onError}
+              style={{
+                position: 'absolute',
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                display: 'block',
+                opacity: loaded ? 0 : 1,
+                transition: 'opacity 500ms ease-out',
+                pointerEvents: 'none',
+              }}
+            />
+          )}
+          
+          {/* Current image fades in */}
           {artwork && (
             <img
               key={artwork.id}
@@ -156,6 +183,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
               }}
             />
           )}
+          
           <div
             style={{
               position: 'absolute',
