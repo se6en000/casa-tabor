@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 const SENSOR_BRIDGE = 'http://127.0.0.1:8765'
 const FEEDBACK_LOCK_MS = 2800  // how long confirm/cancel block phase sync
@@ -43,23 +43,30 @@ export function useLedStrip() {
     setMode(mode)
   }, [setMode])
 
+  const off = useCallback(() => {
+    desiredMode.current = 'off'
+    lockedUntil.current = 0
+    if (unlockTimer.current) clearTimeout(unlockTimer.current)
+    unlockTimer.current = null
+    setMode('off')
+  }, [setMode])
+
   useEffect(() => {
     return () => {
       if (unlockTimer.current) clearTimeout(unlockTimer.current)
     }
   }, [])
 
-  return {
-    listening:  () => setPhaseMode('listening'),
-    processing: () => setPhaseMode('processing'),
-    confirm:    () => setFeedback('confirm'),
-    cancel:     () => setFeedback('cancel'),
-    off:        () => {
-      desiredMode.current = 'off'
-      lockedUntil.current = 0
-      if (unlockTimer.current) clearTimeout(unlockTimer.current)
-      unlockTimer.current = null
-      setMode('off')
-    },
-  }
+  const listening = useCallback(() => setPhaseMode('listening'), [setPhaseMode])
+  const processing = useCallback(() => setPhaseMode('processing'), [setPhaseMode])
+  const confirm = useCallback(() => setFeedback('confirm'), [setFeedback])
+  const cancel = useCallback(() => setFeedback('cancel'), [setFeedback])
+
+  return useMemo(() => ({
+    listening,
+    processing,
+    confirm,
+    cancel,
+    off,
+  }), [listening, processing, confirm, cancel, off])
 }

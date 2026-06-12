@@ -433,7 +433,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     return () => {
       led.off()
     }
-  }, [led])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (open) {
