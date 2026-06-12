@@ -383,8 +383,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
   const led = useLedStrip()
 
-  const pendingConfirmRef = useRef<(() => void) | null>(null)
-  const pendingCancelRef  = useRef<(() => void) | null>(null)
+  const pendingConfirmRef = useRef<(() => Promise<boolean>) | null>(null)
+  const pendingCancelRef  = useRef<(() => Promise<boolean>) | null>(null)
 
   // True when the latest assistant message has a pending tool action awaiting confirmation
   const hasPendingToolAction = messages.some(m => m.toolAction?.status === 'pending')
@@ -424,8 +424,26 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       startFresh()
       setTimeout(onClose, 400)
     },
-    onConfirm: () => { led.confirm(); pendingConfirmRef.current?.() },
-    onCancel:  () => { led.cancel();  pendingCancelRef.current?.()  },
+    onConfirm: () => {
+      led.confirm()
+      const run = pendingConfirmRef.current
+      if (!run) return
+      void Promise.resolve(run()).then((confirmed) => {
+        if (!confirmed) return
+        startFresh()
+        setTimeout(onClose, 350)
+      })
+    },
+    onCancel:  () => {
+      led.cancel()
+      const run = pendingCancelRef.current
+      if (!run) return
+      void Promise.resolve(run()).then((cancelled) => {
+        if (!cancelled) return
+        startFresh()
+        setTimeout(onClose, 350)
+      })
+    },
     hasPendingAction: hasPendingToolAction,
   })
 
@@ -733,8 +751,10 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                       })
                       qc.invalidateQueries({ queryKey: ['events'] })
                       qc.invalidateQueries({ queryKey: ['grocery'] })
+                      return true
                     } catch (err) {
                       updateMessageToolStatus(messageId, 'error', { errorMsg: (err as Error).message })
+                      return false
                     }
                   }}
                   onUndoToolAction={async (messageId, actionId) => {
@@ -900,12 +920,12 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingConfirm, registerPendingCancel }: {
   msg: AIMessage
   isLatest: boolean
-  onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<void>
+  onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<boolean>
   onUndoToolAction: (messageId: string, actionId: string) => Promise<void>
   onCancelToolAction: (messageId: string) => void
   onRefreshToolAction: () => void
-  registerPendingConfirm: (fn: () => void) => void
-  registerPendingCancel:  (fn: () => void) => void
+  registerPendingConfirm: (fn: () => Promise<boolean>) => void
+  registerPendingCancel:  (fn: () => Promise<boolean>) => void
 }) {
   const isUser = msg.role === 'user'
   const ta = msg.toolAction
@@ -913,13 +933,14 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, o
   const isStaleError = !!ta?.errorMsg && ta.errorMsg.toLowerCase().includes('changed since')
   const isDestructiveAction = ta?.tool === 'delete_event' || ta?.tool === 'clear_checked_grocery_items'
 
-  const doConfirm = useCallback(() => {
-    if (!ta) return
-    onConfirmToolAction(msg.id, ta.tool, ta.args)
+  const doConfirm = useCallback(async () => {
+    if (!ta) return false
+    return onConfirmToolAction(msg.id, ta.tool, ta.args)
   }, [msg.id, ta, onConfirmToolAction])
 
-  const doCancel = useCallback(() => {
+  const doCancel = useCallback(async () => {
     onCancelToolAction(msg.id)
+    return true
   }, [msg.id, onCancelToolAction])
 
   useEffect(() => {
