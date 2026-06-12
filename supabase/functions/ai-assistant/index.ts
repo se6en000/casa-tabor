@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
     { data: groceryLists },
     { data: groceryItems },
   ] = await Promise.all([
-    sb.from('settings').select('value').eq('key', 'llm_config').single(),
+    sb.from('settings').select('value').eq('key', 'llm_config').limit(1),
     sb.from('saved_places').select('name, aliases, address, city, state, zip, category, notes, phone').order('name'),
     sb.from('saved_contacts').select('name, aliases, phone, email, address, relationship, notes').order('name').then(r => r).catch(() => ({ data: null, error: null })),
     sb.from('events')
@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
 
   const savedContacts = (savedContactsResult as { data: unknown }).data
 
-  const config = cfgRow?.value ?? { provider: 'gemini', model: 'gemini-1.5-flash', api_key: '' }
+  const config = cfgRow?.[0]?.value ?? { provider: 'gemini', model: 'gemini-1.5-flash', api_key: '' }
   const apiKey = config.api_key as string
   const model = (config.model as string) || 'gemini-1.5-flash'
 

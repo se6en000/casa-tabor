@@ -16,10 +16,11 @@ async function getExistingActionResult(sb: ReturnType<typeof createClient>, acti
     .from('ai_event_edit_history')
     .select('result_payload')
     .eq('action_id', actionId)
-    .maybeSingle()
+    .order('created_at', { ascending: false })
+    .limit(1)
 
   if (error) throw new Error(error.message)
-  return data?.result_payload ?? null
+  return data?.[0]?.result_payload ?? null
 }
 
 async function updateAuditResult(
@@ -163,7 +164,7 @@ Deno.serve(async (req) => {
         .from('events')
         .select('id, event_type, google_event_id, recurrence_master_id, rrule, updated_at')
         .eq('id', normalized.eventId)
-        .single()
+        .maybeSingle()
       if (eventLoadError || !eventRow) {
         throw new Error(eventLoadError?.message ?? 'Event not found')
       }
@@ -221,7 +222,12 @@ Deno.serve(async (req) => {
       }
 
       const { data: historyRow, error: historyLoadError } = actionId
-        ? await sb.from('ai_event_edit_history').select('id').eq('action_id', actionId).maybeSingle()
+        ? await sb
+          .from('ai_event_edit_history')
+          .select('id')
+          .eq('action_id', actionId)
+          .order('created_at', { ascending: false })
+          .limit(1)
         : { data: null, error: null }
       if (historyLoadError) throw new Error(historyLoadError.message)
 
@@ -230,7 +236,7 @@ Deno.serve(async (req) => {
         event_id: normalized.eventId,
         action_id: actionId ?? null,
       }
-      const responsePayload = await finalizeEventSync(sb, normalized.eventId, historyRow?.id, baseResponse)
+      const responsePayload = await finalizeEventSync(sb, normalized.eventId, historyRow?.[0]?.id, baseResponse)
 
       return new Response(JSON.stringify(responsePayload), {
         headers: { ...CORS, 'content-type': 'application/json' },
@@ -264,7 +270,8 @@ Deno.serve(async (req) => {
         .from('ai_event_edit_history')
         .select('id')
         .eq('action_id', actionId)
-        .maybeSingle()
+        .order('created_at', { ascending: false })
+        .limit(1)
       if (historyLoadError) throw new Error(historyLoadError.message)
 
       const baseResponse = {
@@ -273,7 +280,7 @@ Deno.serve(async (req) => {
         action_id: actionId,
         undid_action_id: targetActionId,
       }
-      const responsePayload = await finalizeEventSync(sb, baseResponse.event_id, historyRow?.id, baseResponse)
+      const responsePayload = await finalizeEventSync(sb, baseResponse.event_id, historyRow?.[0]?.id, baseResponse)
 
       return new Response(JSON.stringify(responsePayload), {
         headers: { ...CORS, 'content-type': 'application/json' },
