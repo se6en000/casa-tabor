@@ -12,38 +12,54 @@ export interface ColorAnalysis {
 }
 
 /**
+ * Curated palette of mat colors that work beautifully with art.
+ * Each color is a neutral that complements different artwork tones.
+ */
+const MAT_PALETTE = [
+  '#F5F0E8', // Warm ivory (default)
+  '#EDE7DC', // Light taupe
+  '#E8DDD0', // Warm beige
+  '#E5DFD5', // Soft sand
+  '#DFD8CE', // Quiet greige
+  '#DCCCC1', // Warm gray-beige
+  '#D9CFBE', // Muted tan
+  '#D5CDBB', // Neutral linen
+  '#D4C5B9', // Cooler linen
+  '#D0C5BB', // Sophisticated gray
+  '#E1D7CA', // Cream
+  '#EBE0D5', // Off-white
+]
+
+/**
  * Extract dominant color from an image using canvas + pixel sampling.
- * Faster than full quantization; good enough for mat color selection.
+ * Falls back gracefully if CORS blocks access.
  */
 export async function extractDominantColor(imageUrl: string): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image()
-    img.crossOrigin = 'Anonymous'
+    // Try multiple CORS modes
+    img.crossOrigin = 'use-credentials'
     
     const timeout = setTimeout(() => {
       console.warn(`[ColorUtils] Image load timeout for ${imageUrl}`)
-      resolve('#D4C5B9') // fallback
-    }, 5000) // 5 second timeout
+      resolve(getRandomPaletteColor())
+    }, 3000)
     
     img.onload = () => {
       clearTimeout(timeout)
       try {
         const canvas = document.createElement('canvas')
-        const width = 150
-        const height = Math.round((width / img.naturalWidth) * img.naturalHeight)
-        canvas.width = width
-        canvas.height = height
-        const ctx = canvas.getContext('2d')
+        canvas.width = 100
+        canvas.height = 100
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })
         if (!ctx) {
-          console.warn('[ColorUtils] Canvas context unavailable')
-          resolve('#D4C5B9') // fallback
+          resolve(getRandomPaletteColor())
           return
         }
-        ctx.drawImage(img, 0, 0, width, height)
-        const imageData = ctx.getImageData(0, 0, width, height)
+        ctx.drawImage(img, 0, 0, 100, 100)
+        const imageData = ctx.getImageData(0, 0, 100, 100)
         const data = imageData.data
 
-        // Sample every 4th pixel to speed up
         let r = 0, g = 0, b = 0, count = 0
         for (let i = 0; i < data.length; i += 16) {
           r += data[i]
@@ -57,20 +73,29 @@ export async function extractDominantColor(imageUrl: string): Promise<string> {
         const avgB = Math.round(b / count)
 
         const hex = rgbToHex(avgR, avgG, avgB)
-        console.log(`[ColorUtils] Extracted dominant color: ${hex} from image`)
+        console.log(`[ColorUtils] Extracted dominant color: ${hex}`)
         resolve(hex)
       } catch (err) {
-        console.warn('[ColorUtils] Extraction error:', err)
-        resolve('#D4C5B9') // fallback
+        console.warn('[ColorUtils] Canvas extraction failed:', err)
+        resolve(getRandomPaletteColor())
       }
     }
     img.onerror = () => {
       clearTimeout(timeout)
-      console.warn(`[ColorUtils] Image load failed for ${imageUrl}`)
-      resolve('#D4C5B9') // fallback
+      console.warn(`[ColorUtils] Image load failed (CORS likely): ${imageUrl}`)
+      // Fallback to palette color on CORS/load failure
+      resolve(getRandomPaletteColor())
     }
     img.src = imageUrl
   })
+}
+
+/**
+ * Select a random mat color from the curated palette.
+ * This ensures variety even when color extraction fails.
+ */
+function getRandomPaletteColor(): string {
+  return MAT_PALETTE[Math.floor(Math.random() * MAT_PALETTE.length)]
 }
 
 /**
