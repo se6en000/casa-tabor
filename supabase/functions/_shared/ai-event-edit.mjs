@@ -17,6 +17,39 @@ export const EVENT_CATEGORIES = [
 export const RECURRING_EDIT_ERROR =
   'AI editing for recurring events is not supported yet. Use the regular event editor so you can choose This event, Future events, or All events.'
 
+export const AI_EVENT_EDIT_LIMITS = {
+  whatToBring: 25,
+  checklistItems: 30,
+  actionItems: 30,
+  membersPerAction: 10,
+}
+
+const ALLOWED_UPDATE_KEYS = new Set([
+  'id',
+  'expected_updated_at',
+  'title',
+  'start',
+  'end',
+  'location',
+  'address',
+  'description',
+  'all_day',
+  'notes',
+  'category',
+  'what_to_bring',
+  'outfit_suggestion',
+  'parking_notes',
+  'contact_name',
+  'contact_phone',
+  'cost_estimate',
+  'dietary_notes',
+  'meal_impact',
+  'checklist_items',
+  'action_items',
+  'members_add',
+  'members_remove',
+])
+
 export function normalizeOptionalText(value) {
   if (value === undefined) return undefined
   if (value == null) return null
@@ -36,6 +69,15 @@ function isBoolean(value) {
 
 function isValidIsoDateTime(value) {
   return typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Date.parse(value))
+}
+
+function normalizeExpectedUpdatedAt(value, errors) {
+  if (value === undefined) return undefined
+  if (!isValidIsoDateTime(value)) {
+    errors.push('expected_updated_at must be an ISO datetime')
+    return undefined
+  }
+  return String(value)
 }
 
 function normalizeChecklistItems(value, errors) {
@@ -105,12 +147,22 @@ export function buildValidatedUpdatePayload(args) {
     return { errors: ['update_event arguments must be an object'] }
   }
 
+  for (const key of Object.keys(args)) {
+    if (!ALLOWED_UPDATE_KEYS.has(key)) {
+      errors.push(`Unsupported update_event field: ${key}`)
+    }
+  }
+
   if (typeof args.id !== 'string' || !args.id.trim()) {
     errors.push('id is required')
   }
 
   const eventUpdates = {}
   const enrichmentUpdates = {}
+  const expectedUpdatedAt = normalizeExpectedUpdatedAt(args.expected_updated_at, errors)
+  if (expectedUpdatedAt === undefined) {
+    errors.push('expected_updated_at is required')
+  }
 
   if (args.title !== undefined) {
     const title = normalizeOptionalText(args.title)
@@ -183,10 +235,38 @@ export function buildValidatedUpdatePayload(args) {
       ? args.members_remove.map((name) => String(name).trim()).filter(Boolean)
       : (errors.push('members_remove must be an array'), undefined)
 
+  if (bringList && bringList.length > AI_EVENT_EDIT_LIMITS.whatToBring) {
+    errors.push(`what_to_bring cannot exceed ${AI_EVENT_EDIT_LIMITS.whatToBring} items`)
+  }
+  if (checklistItems && checklistItems.length > AI_EVENT_EDIT_LIMITS.checklistItems) {
+    errors.push(`checklist_items cannot exceed ${AI_EVENT_EDIT_LIMITS.checklistItems} items`)
+  }
+  if (actionItems && actionItems.length > AI_EVENT_EDIT_LIMITS.actionItems) {
+    errors.push(`action_items cannot exceed ${AI_EVENT_EDIT_LIMITS.actionItems} items`)
+  }
+  if (membersAdd && membersAdd.length > AI_EVENT_EDIT_LIMITS.membersPerAction) {
+    errors.push(`members_add cannot exceed ${AI_EVENT_EDIT_LIMITS.membersPerAction} names`)
+  }
+  if (membersRemove && membersRemove.length > AI_EVENT_EDIT_LIMITS.membersPerAction) {
+    errors.push(`members_remove cannot exceed ${AI_EVENT_EDIT_LIMITS.membersPerAction} names`)
+  }
+
+  if (
+    Object.keys(eventUpdates).length === 0 &&
+    Object.keys(enrichmentUpdates).length === 0 &&
+    checklistItems === undefined &&
+    actionItems === undefined &&
+    membersAdd === undefined &&
+    membersRemove === undefined
+  ) {
+    errors.push('update_event must include at least one editable field')
+  }
+
   return {
     errors,
     normalized: {
       eventId: String(args.id ?? '').trim(),
+      expectedUpdatedAt,
       eventUpdates,
       enrichmentUpdates,
       checklistItems,

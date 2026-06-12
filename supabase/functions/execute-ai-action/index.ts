@@ -10,11 +10,101 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+async function getExistingActionResult(sb: ReturnType<typeof createClient>, actionId?: string) {
+  if (!actionId) return null
+  const { data, error } = await sb
+    .from('ai_event_edit_history')
+    .select('result_payload')
+    .eq('action_id', actionId)
+    .maybeSingle()
+
+  if (error) throw new Error(error.message)
+  return data?.result_payload ?? null
+}
+
+async function updateAuditResult(
+  sb: ReturnType<typeof createClient>,
+  historyId: string | null | undefined,
+  payload: Record<string, unknown>,
+  syncStatus: 'not_needed' | 'pending' | 'retrying' | 'succeeded' | 'failed',
+  errorMessage?: string,
+) {
+  if (!historyId) return
+  const { error } = await sb
+    .from('ai_event_edit_history')
+    .update({
+      result_payload: payload,
+      sync_status: syncStatus,
+      error_message: errorMessage ?? null,
+    })
+    .eq('id', historyId)
+
+  if (error) throw new Error(error.message)
+}
+
+async function queueGoogleSyncRetry(
+  sb: ReturnType<typeof createClient>,
+  eventId: string,
+  historyId: string | null | undefined,
+  syncError: string,
+) {
+  const { data, error } = await sb.rpc('enqueue_google_sync_job', {
+    p_event_id: eventId,
+    p_audit_history_id: historyId ?? null,
+    p_error: syncError,
+  })
+  if (error) throw new Error(error.message)
+  return data as string | null
+}
+
+async function finalizeEventSync(
+  sb: ReturnType<typeof createClient>,
+  eventId: string,
+  historyId: string | null | undefined,
+  response: Record<string, unknown>,
+) {
+  const syncRes = await sb.functions.invoke('push-to-google', {
+    body: { event_id: eventId },
+  }).catch((err: Error) => ({ data: null, error: err }))
+
+  const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? null
+  if (!syncError) {
+    await updateAuditResult(sb, historyId, response, 'succeeded')
+    return response
+  }
+
+  try {
+    const syncJobId = await queueGoogleSyncRetry(sb, eventId, historyId, syncError)
+    const queuedResponse = {
+      ...response,
+      sync_warning: `Saved in Casa Tabor. Google sync failed for now and was queued to retry automatically: ${syncError}`,
+      sync_status: 'queued',
+      sync_job_id: syncJobId,
+    }
+    await updateAuditResult(sb, historyId, queuedResponse, 'pending', syncError)
+    return queuedResponse
+  } catch (queueError) {
+    const failedResponse = {
+      ...response,
+      sync_warning: `Saved in Casa Tabor, but Google sync failed and retry queueing also failed: ${syncError}`,
+      sync_status: 'failed',
+    }
+    await updateAuditResult(
+      sb,
+      historyId,
+      failedResponse,
+      'failed',
+      `${syncError}; retry queue error: ${(queueError as Error).message ?? 'unknown error'}`,
+    )
+    return failedResponse
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-  const { tool, args } = await req.json()
+  const { tool, args, action_id: actionId, session_id: sessionId } = await req.json()
 
   try {
     if (tool === 'create_event') {
@@ -56,6 +146,13 @@ Deno.serve(async (req) => {
     }
 
     if (tool === 'update_event') {
+      const existingResult = await getExistingActionResult(sb, actionId)
+      if (existingResult) {
+        return new Response(JSON.stringify(existingResult), {
+          headers: { ...CORS, 'content-type': 'application/json' },
+        })
+      }
+
       const { errors, normalized } = buildValidatedUpdatePayload(args)
       if (errors.length > 0) {
         throw new Error(errors.join('; '))
@@ -63,7 +160,7 @@ Deno.serve(async (req) => {
 
       const { data: eventRow, error: eventLoadError } = await sb
         .from('events')
-        .select('id, event_type, google_event_id, recurrence_master_id, rrule')
+        .select('id, event_type, google_event_id, recurrence_master_id, rrule, updated_at')
         .eq('id', normalized.eventId)
         .single()
       if (eventLoadError || !eventRow) {
@@ -111,6 +208,10 @@ Deno.serve(async (req) => {
         p_action_items: normalized.actionItems ?? null,
         p_members_add: addIds,
         p_members_remove: removeIds,
+        p_action_id: actionId ?? null,
+        p_expected_updated_at: normalized.expectedUpdatedAt,
+        p_request_payload: args,
+        p_ai_session_id: sessionId ?? null,
       })
       if (rpcError) throw new Error(rpcError.message)
 
@@ -118,15 +219,62 @@ Deno.serve(async (req) => {
         sb.functions.invoke('enrich-event', { body: { event_id: normalized.eventId } }).catch(() => {})
       }
 
-      let syncWarning: string | undefined
-      const syncRes = await sb.functions.invoke('push-to-google', { body: { event_id: normalized.eventId } }).catch((err: Error) => ({ data: null, error: err }))
-      if (syncRes?.error) {
-        syncWarning = `Saved in Casa Tabor, but Google sync failed: ${syncRes.error.message ?? 'unknown error'}`
-      } else if (syncRes?.data?.error) {
-        syncWarning = `Saved in Casa Tabor, but Google sync failed: ${syncRes.data.error}`
+      const { data: historyRow, error: historyLoadError } = actionId
+        ? await sb.from('ai_event_edit_history').select('id').eq('action_id', actionId).maybeSingle()
+        : { data: null, error: null }
+      if (historyLoadError) throw new Error(historyLoadError.message)
+
+      const baseResponse = {
+        success: true,
+        event_id: normalized.eventId,
+        action_id: actionId ?? null,
+      }
+      const responsePayload = await finalizeEventSync(sb, normalized.eventId, historyRow?.id, baseResponse)
+
+      return new Response(JSON.stringify(responsePayload), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
+    if (tool === 'undo_event_edit') {
+      const existingResult = await getExistingActionResult(sb, actionId)
+      if (existingResult) {
+        return new Response(JSON.stringify(existingResult), {
+          headers: { ...CORS, 'content-type': 'application/json' },
+        })
       }
 
-      return new Response(JSON.stringify({ success: true, event_id: normalized.eventId, sync_warning: syncWarning }), {
+      const targetActionId = String(args?.action_id ?? '').trim()
+      if (!targetActionId) {
+        throw new Error('action_id is required for undo_event_edit')
+      }
+      if (!actionId) {
+        throw new Error('Undo action requires an action_id')
+      }
+
+      const { data: undoResult, error: undoError } = await sb.rpc('ai_revert_event_edit', {
+        p_action_id: targetActionId,
+        p_undo_action_id: actionId,
+        p_ai_session_id: sessionId ?? null,
+      })
+      if (undoError) throw new Error(undoError.message)
+
+      const { data: historyRow, error: historyLoadError } = await sb
+        .from('ai_event_edit_history')
+        .select('id')
+        .eq('action_id', actionId)
+        .maybeSingle()
+      if (historyLoadError) throw new Error(historyLoadError.message)
+
+      const baseResponse = {
+        success: true,
+        event_id: String(undoResult?.event_id ?? ''),
+        action_id: actionId,
+        undid_action_id: targetActionId,
+      }
+      const responsePayload = await finalizeEventSync(sb, baseResponse.event_id, historyRow?.id, baseResponse)
+
+      return new Response(JSON.stringify(responsePayload), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }

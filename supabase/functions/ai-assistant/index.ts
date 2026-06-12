@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
   const mapsKey = Deno.env.get('GOOGLE_MAPS_API_KEY') ?? ''
 
-  const { messages, context, image, session_id } = await req.json()
+  const { messages, context, image } = await req.json()
 
   // Load config, saved places, contacts, grocery list, events in parallel
   const now = new Date()
@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
     sb.from('saved_places').select('name, aliases, address, city, state, zip, category, notes, phone').order('name'),
     sb.from('saved_contacts').select('name, aliases, phone, email, address, relationship, notes').order('name').then(r => r).catch(() => ({ data: null, error: null })),
     sb.from('events')
-      .select('id, title, start_time, end_time, location_name, address, all_day, event_type, description, event_members(family_members(id, name))')
+      .select('id, title, start_time, end_time, updated_at, location_name, address, all_day, event_type, description, event_members(family_members(id, name))')
       .eq('status', 'confirmed')
       .gte('start_time', windowStart.toISOString())
       .lte('start_time', yearEnd.toISOString())
@@ -84,7 +84,7 @@ Deno.serve(async (req) => {
   const familyNames = (context.family as {name: string}[]).map(f => f.name).join(', ')
 
   type DbEvent = {
-    id: string; title: string; start_time: string; end_time: string;
+    id: string; title: string; start_time: string; end_time: string; updated_at: string;
     location_name: string | null; address: string | null; all_day: boolean; event_type: string; description: string | null;
     event_members: { family_members: { id: string; name: string } | null }[];
   }
@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
         const members = e.event_members?.map(m => m.family_members?.name).filter(Boolean).join(', ') ?? ''
         const loc = e.address ?? e.location_name ?? ''
         const timeStr = e.all_day ? 'all-day' : `${toLocal(e.start_time)} – ${toLocal(e.end_time)}`
-        return `- ID:${e.id} | "${e.title}" | ${timeStr}${loc ? ` | 📍${loc}` : ''}${members ? ` | 👤${members}` : ''}`
+        return `- ID:${e.id} | updated_at:${e.updated_at} | "${e.title}" | ${timeStr}${loc ? ` | 📍${loc}` : ''}${members ? ` | 👤${members}` : ''}`
       }).join('\n')
 
   const placesText = savedPlaces && savedPlaces.length > 0
@@ -162,6 +162,7 @@ Deno.serve(async (req) => {
           type: 'OBJECT',
           properties: {
             id: { type: 'STRING', description: 'Exact event UUID from the events list' },
+            expected_updated_at: { type: 'STRING', description: 'Current event updated_at timestamp from context. Required for safe edit/undo protection.' },
             title: { type: 'STRING', description: 'New title' },
             start: { type: 'STRING', description: 'New start ISO datetime with UTC offset' },
             end: { type: 'STRING', description: 'New end ISO datetime with UTC offset' },
@@ -307,6 +308,7 @@ CURRENT EVENT DATA:
 ID: ${(context.focusedEvent as {id:string}).id}
 Title: ${(context.focusedEvent as {title:string}).title}
 Time: ${(context.focusedEvent as {start_time:string}).start_time} → ${(context.focusedEvent as {end_time:string}).end_time}${(context.focusedEvent as {all_day:boolean}).all_day ? ' (all-day)' : ''}
+Updated at: ${(context.focusedEvent as {updated_at:string}).updated_at}
 Location name: ${(context.focusedEvent as {location_name:string|null}).location_name ?? '⚠️ MISSING'}
 Address: ${(context.focusedEvent as {address:string|null}).address ?? '⚠️ MISSING'}
 Members: ${((context.focusedEvent as {members:string[]}).members ?? []).join(', ') || '⚠️ MISSING'}
@@ -326,10 +328,13 @@ Action items: ${JSON.stringify((context.focusedEvent as {actions?: unknown[]}).a
 
 RULES:
 - Always use update_event with ID: ${(context.focusedEvent as {id:string}).id} for any changes. You already have the event — never search for it.
+- Always include expected_updated_at: ${(context.focusedEvent as {updated_at:string}).updated_at} in every update_event call for this event.
 - Use notes for the visible Notes section, and description for the underlying calendar body text.
 - Use empty string to clear a text field.
+- Never invent or send fields outside the update_event schema.
 - For what_to_bring, send the complete final list, not just the newly added item.
 - For checklist_items and action_items, send the complete final list, not just the delta. Preserve existing item IDs when keeping/editing an item so state stays stable.
+- Hard limits: what_to_bring max 25 items, checklist_items max 30, action_items max 30, members_add/members_remove max 10 names per action. If the user wants more, ask to split it up.
 - After the user confirms a change, apply it immediately with update_event; confirm what you changed in one sentence.
 - If the user changes the location, mention that driving logistics and weather will refresh automatically.
 - If the user tries to discuss something unrelated to this event, politely redirect them back to editing it.
@@ -346,6 +351,7 @@ ${defaultListId ? `Default list ID: ${defaultListId}` : ''}
 INSTRUCTIONS:
 - Use tools for all calendar/grocery actions — never describe, always call. Writes (create/update/delete) need user confirm; reads (search) execute immediately.
 - Always operate on UUIDs from the events list. Use search_events when unsure, then update with the exact ID.
+- For update_event, always copy the event's updated_at value from context/events list into expected_updated_at.
 - Default time window: when no date is given, search from NOW (${context.currentDate}) forward — never return past events.
 - "Next event" / "what's next" = first event whose start_time is strictly AFTER NOW. If an event is currently in progress (started before NOW, ends after NOW), mention it as "currently happening" first, then state what starts next.
 - Default duration: 1 hour if not specified. Default time: morning (9am) for "tomorrow"/"next week", 2pm for "afternoon", 6pm for "evening", 12pm for "lunch".

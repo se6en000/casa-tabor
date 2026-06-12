@@ -694,16 +694,49 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                   onConfirmToolAction={async (messageId, tool, args) => {
                     updateMessageToolStatus(messageId, 'loading')
                     try {
+                      const matchedEvent = tool === 'update_event'
+                        ? events.find((event) => event.id === String(args.id ?? ''))
+                        : undefined
+                      const requestArgs = tool === 'update_event' && matchedEvent && args.expected_updated_at === undefined
+                        ? { ...args, expected_updated_at: matchedEvent.updated_at }
+                        : args
                       const { data, error } = await supabase.functions.invoke('execute-ai-action', {
-                        body: { tool, args },
+                        body: { tool, args: requestArgs, action_id: messageId, session_id: session?.id ?? null },
                       })
                       if (error) throw error
                       if (data?.success === false) throw new Error(data.error ?? 'Action failed')
-                      updateMessageToolStatus(messageId, 'done', { resultEventId: data?.event_id, syncWarning: data?.sync_warning })
+                      updateMessageToolStatus(messageId, 'done', {
+                        actionId: data?.action_id,
+                        resultEventId: data?.event_id,
+                        syncWarning: data?.sync_warning,
+                        undoStatus: 'idle',
+                        undoErrorMsg: undefined,
+                      })
                       qc.invalidateQueries({ queryKey: ['events'] })
                       qc.invalidateQueries({ queryKey: ['grocery'] })
                     } catch (err) {
                       updateMessageToolStatus(messageId, 'error', { errorMsg: (err as Error).message })
+                    }
+                  }}
+                  onUndoToolAction={async (messageId, actionId) => {
+                    updateMessageToolStatus(messageId, 'done', { undoStatus: 'loading', undoErrorMsg: undefined })
+                    try {
+                      const { data, error } = await supabase.functions.invoke('execute-ai-action', {
+                        body: { tool: 'undo_event_edit', args: { action_id: actionId }, action_id: `${messageId}:undo`, session_id: session?.id ?? null },
+                      })
+                      if (error) throw error
+                      if (data?.success === false) throw new Error(data.error ?? 'Undo failed')
+                      updateMessageToolStatus(messageId, 'done', {
+                        syncWarning: data?.sync_warning,
+                        undoStatus: 'done',
+                        undoErrorMsg: undefined,
+                      })
+                      qc.invalidateQueries({ queryKey: ['events'] })
+                    } catch (err) {
+                      updateMessageToolStatus(messageId, 'done', {
+                        undoStatus: 'error',
+                        undoErrorMsg: (err as Error).message,
+                      })
                     }
                   }}
                   onCancelToolAction={(messageId) => updateMessageToolStatus(messageId, 'cancelled')}
@@ -841,10 +874,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
 /* ── Message Bubble ─────────────────────────────────────────── */
 
-function MessageBubble({ msg, isLatest, onConfirmToolAction, onCancelToolAction, registerPendingConfirm, registerPendingCancel }: {
+function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, onCancelToolAction, registerPendingConfirm, registerPendingCancel }: {
   msg: AIMessage
   isLatest: boolean
   onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<void>
+  onUndoToolAction: (messageId: string, actionId: string) => Promise<void>
   onCancelToolAction: (messageId: string) => void
   registerPendingConfirm: (fn: () => void) => void
   registerPendingCancel:  (fn: () => void) => void
@@ -902,6 +936,25 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onCancelToolAction,
                 )}
                 {ta.syncWarning && (
                   <p className="text-caption text-amber-600">{ta.syncWarning}</p>
+                )}
+                {ta.tool === 'update_event' && ta.actionId && ta.undoStatus !== 'done' && (
+                  <div className="pt-1 space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => onUndoToolAction(msg.id, ta.actionId!)}
+                      disabled={ta.undoStatus === 'loading'}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-button border border-casa-border text-casa-navy text-caption font-semibold hover:bg-casa-bg transition-all disabled:opacity-60"
+                    >
+                      {ta.undoStatus === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+                      Undo this edit
+                    </button>
+                    {ta.undoStatus === 'error' && ta.undoErrorMsg && (
+                      <p className="text-caption text-red-500">{ta.undoErrorMsg}</p>
+                    )}
+                  </div>
+                )}
+                {ta.undoStatus === 'done' && (
+                  <p className="text-caption text-casa-muted">Undo applied.</p>
                 )}
               </div>
             ) : ta.status === 'cancelled' ? (

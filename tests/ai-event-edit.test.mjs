@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  AI_EVENT_EDIT_LIMITS,
   buildValidatedUpdatePayload,
   normalizeOptionalText,
   normalizeStringList,
@@ -24,6 +25,7 @@ test('normalizeStringList supports arrays and comma/newline strings', () => {
 test('buildValidatedUpdatePayload normalizes clears and list replacement', () => {
   const { errors, normalized } = buildValidatedUpdatePayload({
     id: 'event-1',
+    expected_updated_at: '2026-06-11T21:00:00.000Z',
     location: '  ',
     notes: '',
     what_to_bring: [' water bottle ', ' snacks '],
@@ -41,6 +43,7 @@ test('buildValidatedUpdatePayload normalizes clears and list replacement', () =>
   assert.deepEqual(normalized.actionItems, [
     { id: undefined, title: 'Text coach', description: null, due_date: undefined, is_urgent: false, completed: false, assigned_to: undefined },
   ])
+  assert.equal(normalized.expectedUpdatedAt, '2026-06-11T21:00:00.000Z')
 })
 
 test('buildValidatedUpdatePayload rejects invalid categories and dates', () => {
@@ -62,4 +65,27 @@ test('buildValidatedUpdatePayload rejects invalid categories and dates', () => {
 test('recurring edit error message stays explicit', () => {
   assert.match(RECURRING_EDIT_ERROR, /recurring events/i)
   assert.match(RECURRING_EDIT_ERROR, /This event, Future events, or All events/i)
+})
+
+test('buildValidatedUpdatePayload rejects unsupported fields and empty edits', () => {
+  const { errors } = buildValidatedUpdatePayload({
+    id: 'event-1',
+    unsupported_field: 'nope',
+  })
+
+  assert.ok(errors.includes('Unsupported update_event field: unsupported_field'))
+  assert.ok(errors.includes('update_event must include at least one editable field'))
+})
+
+test('buildValidatedUpdatePayload enforces optimistic concurrency timestamp and item limits', () => {
+  const { errors, normalized } = buildValidatedUpdatePayload({
+    id: 'event-1',
+    expected_updated_at: '2026-06-11T21:00:00.000Z',
+    what_to_bring: Array.from({ length: AI_EVENT_EDIT_LIMITS.whatToBring + 1 }, (_, index) => `item-${index}`),
+    members_add: Array.from({ length: AI_EVENT_EDIT_LIMITS.membersPerAction + 1 }, (_, index) => `Member ${index}`),
+  })
+
+  assert.equal(normalized.expectedUpdatedAt, '2026-06-11T21:00:00.000Z')
+  assert.ok(errors.includes(`what_to_bring cannot exceed ${AI_EVENT_EDIT_LIMITS.whatToBring} items`))
+  assert.ok(errors.includes(`members_add cannot exceed ${AI_EVENT_EDIT_LIMITS.membersPerAction} names`))
 })

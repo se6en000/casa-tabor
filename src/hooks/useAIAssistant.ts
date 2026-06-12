@@ -38,6 +38,7 @@ function buildContext(ctx: AssistantContext) {
       title: e.title,
       start_time: e.start_time,
       end_time: e.end_time,
+      updated_at: e.updated_at,
       location_name: e.location_name ?? null,
       members: e.members.map(m => m.family_member?.name ?? '').filter(Boolean),
       category: e.enrichment?.category ?? null,
@@ -49,6 +50,7 @@ function buildContext(ctx: AssistantContext) {
       title: ctx.focusedEvent.title,
       start_time: ctx.focusedEvent.start_time,
       end_time: ctx.focusedEvent.end_time,
+      updated_at: ctx.focusedEvent.updated_at,
       all_day: ctx.focusedEvent.all_day,
       location_name: ctx.focusedEvent.location_name ?? null,
       address: ctx.focusedEvent.address ?? null,
@@ -210,7 +212,14 @@ export function useAIAssistant(ctx: AssistantContext) {
   const updateMessageToolStatus = useCallback((
     messageId: string,
     status: NonNullable<AIMessage['toolAction']>['status'],
-    extra?: { errorMsg?: string; resultEventId?: string; syncWarning?: string }
+    extra?: {
+      actionId?: string
+      errorMsg?: string
+      resultEventId?: string
+      syncWarning?: string
+      undoStatus?: NonNullable<AIMessage['toolAction']>['undoStatus']
+      undoErrorMsg?: string
+    }
   ) => {
     setMessages(prev => {
       const updated = prev.map(m =>

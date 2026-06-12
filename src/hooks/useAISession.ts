@@ -10,9 +10,12 @@ export interface AIMessage {
     args: Record<string, unknown>
     displayText: string
     status: 'pending' | 'loading' | 'done' | 'error' | 'cancelled'
+    actionId?: string
     errorMsg?: string
     resultEventId?: string
     syncWarning?: string
+    undoStatus?: 'idle' | 'loading' | 'done' | 'error'
+    undoErrorMsg?: string
   }
 }
 
