@@ -98,11 +98,16 @@ export async function extractDominantColor(imageUrl: string): Promise<string> {
  * This ensures variety even when color extraction fails.
  */
 function getPaletteColorForKey(key: string): string {
+  // Use randomness based on key hash for consistency per image,
+  // but with enough variance to cycle through palette
   let hash = 0
   for (let i = 0; i < key.length; i += 1) {
     hash = (hash * 31 + key.charCodeAt(i)) >>> 0
   }
-  return MAT_PALETTE[hash % MAT_PALETTE.length]
+  // Use modulo to map to palette, ensuring good distribution
+  const index = hash % MAT_PALETTE.length
+  console.log(`[ColorUtils] Palette color selected: ${MAT_PALETTE[index]} (index ${index})`)
+  return MAT_PALETTE[index]
 }
 
 /**
@@ -148,6 +153,7 @@ export async function generateAdaptiveMatColor(imageUrl: string): Promise<ColorA
   try {
     const dominantHex = await extractDominantColor(imageUrl)
     if (MAT_PALETTE.includes(dominantHex)) {
+      console.log(`[ColorUtils] Using palette color: ${dominantHex}`)
       return {
         dominant: dominantHex,
         complementary: dominantHex,
@@ -170,13 +176,16 @@ export async function generateAdaptiveMatColor(imageUrl: string): Promise<ColorA
     // Complementary color for optional accent (not used yet, but useful for future)
     const complementaryRgb = getComplementary(r, g, b)
 
-    return {
+    const result = {
       dominant: dominantHex,
       complementary: rgbToHex(complementaryRgb.r, complementaryRgb.g, complementaryRgb.b),
       matColor: rgbToHex(matRgb.r, matRgb.g, matRgb.b),
       isLight,
     }
-  } catch {
+    console.log(`[ColorUtils] Generated mat color: ${result.matColor}`)
+    return result
+  } catch (err) {
+    console.error('[ColorUtils] Color generation failed:', err)
     // Safe fallback
     return {
       dominant: '#808080',
