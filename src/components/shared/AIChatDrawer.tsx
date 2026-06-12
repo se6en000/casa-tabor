@@ -893,6 +893,7 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, o
   const ta = msg.toolAction
   const hasPendingAction = !!ta && ta.status === 'pending'
   const isStaleError = !!ta?.errorMsg && ta.errorMsg.toLowerCase().includes('changed since')
+  const isDestructiveAction = ta?.tool === 'delete_event' || ta?.tool === 'clear_checked_grocery_items'
 
   const doConfirm = useCallback(() => {
     if (!ta) return
@@ -1004,10 +1005,21 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, o
                     type="button"
                     disabled={ta.status === 'loading'}
                     onClick={doConfirm}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-button bg-casa-gold text-white text-caption font-semibold hover:brightness-110 transition-all disabled:opacity-50"
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1 rounded-button text-caption font-semibold transition-all disabled:opacity-50',
+                      isDestructiveAction
+                        ? 'bg-red-600 text-white hover:brightness-110'
+                        : 'bg-casa-gold text-white hover:brightness-110',
+                    )}
                   >
                     {ta.status === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                    {ta.status === 'loading' ? 'Working…' : 'Confirm'}
+                    {ta.status === 'loading'
+                      ? 'Working…'
+                      : isDestructiveAction
+                        ? ta.tool === 'delete_event'
+                          ? 'Delete event'
+                          : 'Clear checked items'
+                        : 'Confirm'}
                   </button>
                   <button
                     type="button"
@@ -1027,6 +1039,8 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, o
 }
 
 function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, unknown> }) {
+  const [expanded, setExpanded] = useState(false)
+
   if (tool === 'create_event') {
     const start = new Date(args.start as string)
     const end = new Date(args.end as string)
@@ -1041,13 +1055,15 @@ function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, 
   }
   if (tool === 'update_event') {
     const changes = summarizeUpdateArgs(args)
+    const MAX_VISIBLE = 6
+    const visibleChanges = expanded ? changes : changes.slice(0, MAX_VISIBLE)
     return (
       <div className="space-y-2">
         <p className="text-caption font-semibold text-casa-navy">
           Applying {changes.length} change{changes.length === 1 ? '' : 's'}
         </p>
         <div className="flex flex-wrap gap-1.5">
-          {changes.map((change) => (
+          {visibleChanges.map((change) => (
             <span
               key={change}
               className="inline-flex items-center rounded-full bg-casa-surface border border-casa-border px-2 py-0.5 text-[11px] text-casa-muted"
@@ -1056,11 +1072,25 @@ function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, 
             </span>
           ))}
         </div>
+        {changes.length > MAX_VISIBLE && (
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            className="text-[11px] font-semibold text-casa-gold hover:underline"
+          >
+            {expanded ? 'Show less' : `Show ${changes.length - MAX_VISIBLE} more`}
+          </button>
+        )}
       </div>
     )
   }
   if (tool === 'delete_event') {
-    return <p className="text-caption text-red-600 font-semibold">Delete "{args.title as string}"?</p>
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2">
+        <p className="text-caption text-red-700 font-semibold">Delete this event permanently?</p>
+        <p className="text-caption text-red-600 mt-0.5">"{args.title as string}" will be removed from your calendar and synced deletion will follow.</p>
+      </div>
+    )
   }
   if (tool === 'add_grocery_items') {
     const items = args.items as { name: string; quantity?: string }[]
@@ -1076,7 +1106,12 @@ function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, 
     return <p className="text-caption text-casa-muted">Mark item as {args.checked ? 'done ✓' : 'undone'}</p>
   }
   if (tool === 'clear_checked_grocery_items') {
-    return <p className="text-caption text-casa-muted">Clear all checked grocery items</p>
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2">
+        <p className="text-caption text-amber-800 font-semibold">Clear all checked grocery items?</p>
+        <p className="text-caption text-amber-700 mt-0.5">This removes completed items from the list.</p>
+      </div>
+    )
   }
   return <p className="text-caption text-casa-muted">{tool}</p>
 }

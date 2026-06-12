@@ -30,6 +30,36 @@ export interface AISession {
 const STORAGE_KEY = 'casa_tabor_ai_session'
 const IDLE_TIMEOUT_MS = 12 * 60 * 60 * 1000 // 12 hours
 
+function normalizeInterruptedMessages(messages: AIMessage[]): { messages: AIMessage[]; changed: boolean } {
+  let changed = false
+  const normalized = messages.map((message) => {
+    if (!message.toolAction) return message
+
+    let nextToolAction = message.toolAction
+    if (nextToolAction.status === 'loading') {
+      changed = true
+      nextToolAction = {
+        ...nextToolAction,
+        status: 'error',
+        errorMsg: nextToolAction.errorMsg ?? 'Previous action was interrupted. Please retry.',
+      }
+    }
+
+    if (nextToolAction.undoStatus === 'loading') {
+      changed = true
+      nextToolAction = {
+        ...nextToolAction,
+        undoStatus: 'error',
+        undoErrorMsg: nextToolAction.undoErrorMsg ?? 'Undo was interrupted. Tap Undo again to retry.',
+      }
+    }
+
+    return nextToolAction === message.toolAction ? message : { ...message, toolAction: nextToolAction }
+  })
+
+  return { messages: normalized, changed }
+}
+
 function readStorage(): AISession | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -67,7 +97,10 @@ export function useAISession() {
         writeStorage(null)
         setSessionState(null)
       } else {
-        setSessionState(stored)
+        const normalized = normalizeInterruptedMessages(stored.messages ?? [])
+        const hydrated = normalized.changed ? { ...stored, messages: normalized.messages } : stored
+        if (normalized.changed) writeStorage(hydrated)
+        setSessionState(hydrated)
       }
     } else {
       setSessionState(null)

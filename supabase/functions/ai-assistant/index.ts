@@ -334,6 +334,7 @@ RULES:
 - Never invent or send fields outside the update_event schema.
 - For what_to_bring, send the complete final list, not just the newly added item.
 - For checklist_items and action_items, send the complete final list, not just the delta. Preserve existing item IDs when keeping/editing an item so state stays stable.
+- Batch related edits into one update_event call whenever possible so the user confirms once.
 - Hard limits: what_to_bring max 25 items, checklist_items max 30, action_items max 30, members_add/members_remove max 10 names per action. If the user wants more, ask to split it up.
 - After the user confirms a change, apply it immediately with update_event; confirm what you changed in one sentence.
 - If the user changes the location, mention that driving logistics and weather will refresh automatically.
@@ -352,6 +353,7 @@ INSTRUCTIONS:
 - Use tools for all calendar/grocery actions — never describe, always call. Writes (create/update/delete) need user confirm; reads (search) execute immediately.
 - Always operate on UUIDs from the events list. Use search_events when unsure, then update with the exact ID.
 - For update_event, always copy the event's updated_at value from context/events list into expected_updated_at.
+- Batch related field updates into a single update_event action instead of many small ones.
 - Default time window: when no date is given, search from NOW (${context.currentDate}) forward — never return past events.
 - "Next event" / "what's next" = first event whose start_time is strictly AFTER NOW. If an event is currently in progress (started before NOW, ends after NOW), mention it as "currently happening" first, then state what starts next.
 - Default duration: 1 hour if not specified. Default time: morning (9am) for "tomorrow"/"next week", 2pm for "afternoon", 6pm for "evening", 12pm for "lunch".
