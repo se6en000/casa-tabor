@@ -1,20 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 
-const IIIF = 'https://www.artic.edu/iiif/2'
-const API  = 'https://api.artic.edu/api/v1'
+const WIKIART_API = 'https://www.wikiart.org/en/api/v1'
 
-const PAINTING_TYPE_IDS = [1, 14]
-const MAX_PAGE   = 25
-const FETCH_LIMIT = 60
+const MAX_PAGE   = 100
+const FETCH_LIMIT = 50
 
-// Hardcoded fallback artworks — guaranteed public-domain ARTIC images.
-// Used when API is unreachable (offline, rate-limited, etc.)
+// Hardcoded fallback artworks — guaranteed public-domain WikiArt images.
 const FALLBACKS: Artwork[] = [
-  { id: 27992,  title: 'A Sunday on La Grande Jatte',  artist: 'Georges Seurat',        imageUrl: `${IIIF}/1adf2696-8489-499b-cad2-821d7fde4b33/full/1600,/0/default.jpg` },
-  { id: 111628, title: 'Nighthawks',                   artist: 'Edward Hopper',          imageUrl: `${IIIF}/831a05de-d3f6-f4fa-a460-23008dd58dda/full/1600,/0/default.jpg` },
-  { id: 6565,   title: 'American Gothic',              artist: 'Grant Wood',             imageUrl: `${IIIF}/a6b1cdb3-accf-a52f-78ad-5da1a3ee4b3c/full/1600,/0/default.jpg` },
-  { id: 16499,  title: 'The Old Guitarist',            artist: 'Pablo Picasso',          imageUrl: `${IIIF}/e5b2c43f-8b27-5c51-1dce-b9e5e4d4a1dc/full/1600,/0/default.jpg` },
-  { id: 14655,  title: 'Paris Street; Rainy Day',      artist: 'Gustave Caillebotte',    imageUrl: `${IIIF}/25c31d8d-21a4-9ea1-1d73-6a2eca4dda7e/full/1600,/0/default.jpg` },
+  { id: 1, title: 'A Sunday on La Grande Jatte', artist: 'Georges Seurat', imageUrl: 'https://uploads8.wikiart.org/images/georges-seurat/a-sunday-afternoon-on-the-island-of-la-grande-jatte-1884.jpg!Large.jpg' },
+  { id: 2, title: 'Nighthawks', artist: 'Edward Hopper', imageUrl: 'https://uploads5.wikiart.org/images/edward-hopper/nighthawks.jpg!Large.jpg' },
+  { id: 3, title: 'Starry Night', artist: 'Vincent van Gogh', imageUrl: 'https://uploads1.wikiart.org/images/vincent-van-gogh/the-starry-night-1889.jpg!Large.jpg' },
+  { id: 4, title: 'The Son of Man', artist: 'René Magritte', imageUrl: 'https://uploads0.wikiart.org/images/rene-magritte/the-son-of-man-1964.jpg!Large.jpg' },
+  { id: 5, title: 'Girl with a Pearl Earring', artist: 'Johannes Vermeer', imageUrl: 'https://uploads0.wikiart.org/images/johannes-vermeer/girl-with-a-pearl-earring-1665.jpg!Large.jpg' },
 ]
 
 export interface Artwork {
@@ -66,39 +63,23 @@ function savePrefs(prefs: ArtworkPreferences) {
 
 async function fetchPage(): Promise<Artwork[]> {
   const randomPage = Math.floor(Math.random() * MAX_PAGE) + 1
-  const res = await fetch(`${API}/artworks/search`, {
-    method: 'POST',
+  const res = await fetch(`${WIKIART_API}/paintings?page=${randomPage}&limit=${FETCH_LIMIT}`, {
     headers: { 
-      'Content-Type': 'application/json',
       'User-Agent': 'Casa-Tabor/1.0 (compatible; Chromium)',
     },
-    body: JSON.stringify({
-      query: {
-        bool: {
-          must: [
-            { term: { is_public_domain: true } },
-            { terms: { artwork_type_id: PAINTING_TYPE_IDS } },
-            { exists: { field: 'image_id' } },
-          ],
-        },
-      },
-      fields: ['id', 'title', 'artist_display', 'image_id', 'date_display', 'medium_display', 'place_of_origin'],
-      limit: FETCH_LIMIT,
-      page: randomPage,
-    }),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const json = await res.json()
-  return (json.data ?? [])
-    .filter((a: { image_id?: string }) => a.image_id)
-    .map((a: { id: number; title?: string; artist_display?: string; image_id: string; date_display?: string; medium_display?: string; place_of_origin?: string }) => ({
-      id: a.id,
-      title: a.title ?? '',
-      artist: (a.artist_display ?? '').split('\n')[0],
-      imageUrl: `${IIIF}/${a.image_id}/full/1600,/0/default.jpg`,
-      date: a.date_display ?? '',
-      medium: a.medium_display ?? '',
-      origin: a.place_of_origin ?? '',
+  const paintings = await res.json()
+  return (Array.isArray(paintings) ? paintings : [])
+    .filter((p: { image?: string; title?: string; artist?: { name?: string } }) => p.image && p.title)
+    .map((p: { id?: string; title?: string; artist?: { name?: string }; image?: string; yearCreated?: number; medium?: string }) => ({
+      id: p.id ? parseInt(p.id) : Math.random(),
+      title: p.title ?? 'Untitled',
+      artist: p.artist?.name ?? 'Unknown',
+      imageUrl: p.image ?? '',
+      date: p.yearCreated ? `${p.yearCreated}` : '',
+      medium: p.medium ?? '',
+      origin: '',
     }))
 }
 
@@ -119,12 +100,7 @@ export function useArtwork(rotateSecs = 240) {
     let cancelled = false
     async function load() {
       try {
-        // Throttle requests to avoid rate limiting
-        const [p1, p2, p3] = await Promise.all([
-          fetchPage(),
-          new Promise(r => setTimeout(r, 500)).then(() => fetchPage()),
-          new Promise(r => setTimeout(r, 1000)).then(() => fetchPage()),
-        ])
+        const [p1, p2, p3] = await Promise.all([fetchPage(), fetchPage(), fetchPage()])
         const all = [...p1, ...p2, ...p3]
         if (!cancelled && all.length > 0) {
           setArtworks(shuffled(all))
