@@ -9,6 +9,7 @@ const FETCH_LIMIT = 60
 const MAX_RETRIES = 4   // try up to 4 different random pages before giving up
 const RETRY_DELAY = 2000
 const WATERCOLOR_BIAS_RATIO = 3 // 3 watercolor picks per 1 non-watercolor pick
+const MIN_VIEW_COUNT = 50000   // only show paintings with 50k+ views — famous works only
 
 // Hardcoded fallback artworks — guaranteed public-domain ARTIC images.
 // Used when API is unreachable (offline, rate-limited, etc.)
@@ -122,11 +123,12 @@ async function fetchPage(mode: 'watercolor' | 'mixed'): Promise<Artwork[]> {
             { term: { is_public_domain: true } },
             { terms: { artwork_type_id: PAINTING_TYPE_IDS } },
             { exists: { field: 'image_id' } },
+            { range: { view_count_boost: { gte: MIN_VIEW_COUNT } } },
             ...(mode === 'watercolor' ? [watercolorClause] : []),
           ],
         },
       },
-      fields: ['id', 'title', 'artist_display', 'image_id', 'date_display', 'medium_display', 'place_of_origin'],
+      fields: ['id', 'title', 'artist_display', 'image_id', 'date_display', 'medium_display', 'place_of_origin', 'view_count_boost'],
       limit: FETCH_LIMIT,
       page: randomPage,
     }),
