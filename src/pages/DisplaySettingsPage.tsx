@@ -726,8 +726,17 @@ export default function DisplaySettingsPage() {
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
           <SectionHeader icon={Palette} label="Mat Style" />
           <p className="text-body-sm text-casa-muted">
-            Warm linen mat <span className="inline-block w-4 h-4 rounded-sm align-middle mx-1 border border-casa-border" style={{ backgroundColor: '#F5F0E8' }} /> with inset bevel shadow. Style changes coming soon.
+            Adaptive linen mat with subtle canvas grain texture. Each painting gets a complementary mat color extracted from the artwork itself — warm neutrals for bright pieces, cooler tones for darker works. Includes realistic bevel shadow, vignetting, and lighting simulation for museum-quality presentation.
           </p>
+          <div className="mt-3 flex items-center gap-2 text-caption text-casa-muted">
+            <span className="text-casa-gold">✓</span> Adaptive color from artwork
+          </div>
+          <div className="flex items-center gap-2 text-caption text-casa-muted mt-1">
+            <span className="text-casa-gold">✓</span> Paper texture grain overlay
+          </div>
+          <div className="flex items-center gap-2 text-caption text-casa-muted mt-1">
+            <span className="text-casa-gold">✓</span> Realistic frame effect
+          </div>
         </div>
 
       </div>

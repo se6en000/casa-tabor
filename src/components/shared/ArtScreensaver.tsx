@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useArtwork } from '../../hooks/useArtwork'
+import { generateAdaptiveMatColor } from '../../utils/colorUtils'
+import { getTextureStyle } from '../../utils/textureUtils'
 
 const SENSOR = 'http://127.0.0.1:8765'
 
@@ -8,14 +10,17 @@ interface Props {
   rotationMins?: number
   minArtWidthVw?: number
   artDimOffset?: number  // % below ambient lux (0–80)
+  adaptiveMatColor?: boolean  // enable mat color adaptation (default true)
 }
 
-export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidthVw = 55, artDimOffset = 30 }: Props) {
+export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidthVw = 55, artDimOffset = 30, adaptiveMatColor = true }: Props) {
   const { artwork, loaded, onLoad, onError } = useArtwork(rotationMins * 60)
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)
   const [aspectRatio, setAspectRatio] = useState<string | undefined>(undefined)
   const [isPortrait, setIsPortrait] = useState(false)
+  const [matColor, setMatColor] = useState('#F5F0E8')
+  const [matTransition, setMatTransition] = useState(false)
 
   // Fade in on mount, then allow dismiss after a grace period
   useEffect(() => {
@@ -37,6 +42,26 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
 
   // Reset aspect ratio when artwork changes
   useEffect(() => { setAspectRatio(undefined); setIsPortrait(false) }, [artwork?.id])
+
+  // Extract and apply adaptive mat color when artwork loads
+  useEffect(() => {
+    if (!artwork?.imageUrl || !adaptiveMatColor) return
+    
+    setMatTransition(false) // disable transition during load
+    const timeout = setTimeout(async () => {
+      try {
+        const colorAnalysis = await generateAdaptiveMatColor(artwork.imageUrl)
+        setMatColor(colorAnalysis.matColor)
+        // Enable smooth transition after color is set
+        setTimeout(() => setMatTransition(true), 100)
+      } catch {
+        // Fallback to default
+        setMatColor('#F5F0E8')
+      }
+    }, 100)
+    
+    return () => clearTimeout(timeout)
+  }, [artwork?.id, artwork?.imageUrl, adaptiveMatColor])
 
   function handleImgLoad(e: React.SyntheticEvent<HTMLImageElement>) {
     const img = e.currentTarget
@@ -62,11 +87,16 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
       }}
       onClick={handleDismiss}
     >
-      {/* Full-bleed mat — linen fills the entire screen */}
+      {/* Full-bleed mat with adaptive color and texture */}
       <div
         className="relative w-full h-full flex items-center justify-center"
         style={{
-          backgroundColor: '#F5F0E8',
+          backgroundColor: matColor,
+          backgroundImage: getTextureStyle().backgroundImage,
+          backgroundSize: getTextureStyle().backgroundSize,
+          backgroundPosition: getTextureStyle().backgroundPosition,
+          backgroundAttachment: getTextureStyle().backgroundAttachment,
+          backgroundBlendMode: getTextureStyle().backgroundBlendMode,
           boxShadow: [
             'inset 0 36px 48px -12px rgba(0,0,0,0.50)',   // top — strongest, light comes from above
             'inset 36px 0 48px -12px rgba(0,0,0,0.38)',   // left — medium
@@ -74,6 +104,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             'inset 0 -18px 24px -12px rgba(0,0,0,0.10)',  // bottom — barely visible, light from above
           ].join(', '),
           padding: '3.5vw',
+          transition: matTransition ? 'background-color 0.8s ease' : 'none',
         }}
       >
         {/* Bevel wrapper — sized to actual image aspect ratio so shadow hugs the painting */}
@@ -117,7 +148,8 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
                 inset 5px 0 8px rgba(0,0,0,0.42),
                 inset -5px 0 8px rgba(0,0,0,0.35),
                 inset 0 -3px 5px rgba(0,0,0,0.10),
-                inset -3px -3px 6px rgba(255,255,255,0.20)
+                inset -3px -3px 6px rgba(255,255,255,0.20),
+                0 0 20px rgba(0,0,0,0.15)
               `,
             }}
           />
@@ -131,16 +163,19 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
           />
         )}
 
-        {/* Gallery label — bottom right inside mat */}
+        {/* Gallery label — bottom right inside mat with enhanced styling */}
         {artwork && loaded && (
           <div
-            className="absolute bottom-3 right-4 text-right pointer-events-none"
-            style={{ color: '#6b6355' }}
+            className="absolute bottom-4 right-5 text-right pointer-events-none"
+            style={{
+              color: '#5a4f4a',
+              textShadow: '0 1px 2px rgba(255,255,255,0.8)',
+            }}
           >
-            <p className="text-caption italic leading-tight" style={{ fontFamily: 'Georgia, serif', fontSize: '0.65rem' }}>
+            <p className="text-caption italic leading-tight" style={{ fontFamily: 'Georgia, serif', fontSize: '0.7rem', fontWeight: 500, letterSpacing: '0.3px' }}>
               {artwork.title}
             </p>
-            <p className="text-caption leading-tight mt-0.5" style={{ fontFamily: 'Georgia, serif', fontSize: '0.6rem', opacity: 0.75 }}>
+            <p className="text-caption leading-tight mt-0.5" style={{ fontFamily: 'Georgia, serif', fontSize: '0.62rem', opacity: 0.7, letterSpacing: '0.2px' }}>
               {artwork.artist}
             </p>
           </div>
