@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Plus } from 'lucide-react'
 import { addHours } from 'date-fns'
@@ -20,6 +20,7 @@ function toLocalDT(d: Date): string {
 export default function QuickCreateSheet({ open, onClose, initialStart }: Props) {
   const qc = useQueryClient()
   const [viewportHeight, setViewportHeight] = useState<number | null>(null)
+  const sheetRef = useRef<HTMLDivElement>(null)
 
   const defaultStart = initialStart ?? new Date()
   const defaultEnd   = addHours(defaultStart, 1)
@@ -38,6 +39,24 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     setEndDT(toLocalDT(addHours(s, 1)))
     setSaving(false)
   }, [open, initialStart])
+
+  useEffect(() => {
+    if (!open) return
+    const clearFieldFocus = () => {
+      const active = document.activeElement
+      if (!(active instanceof HTMLElement)) return
+      if (!sheetRef.current?.contains(active)) return
+      if (!active.matches('input, textarea, [contenteditable="true"]')) return
+      active.blur()
+      sheetRef.current?.focus({ preventScroll: true })
+    }
+    const raf = requestAnimationFrame(clearFieldFocus)
+    const timer = window.setTimeout(clearFieldFocus, 320)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.clearTimeout(timer)
+    }
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -127,11 +146,13 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
 
           <motion.div
             key="qc-sheet"
+            ref={sheetRef}
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 32, stiffness: 260 }}
             className="fixed left-0 right-0 z-[70] bg-casa-surface rounded-t-2xl shadow-modal sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-lg sm:rounded-2xl overflow-y-auto"
+            tabIndex={-1}
             style={{
               bottom: 'max(0px, env(safe-area-inset-bottom))',
               maxHeight: viewportHeight
@@ -161,7 +182,6 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                   Event Title
                 </label>
                 <input
-                  autoFocus
                   value={title}
                   onChange={e => setTitle(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
