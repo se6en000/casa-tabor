@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, RotateCcw } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { useAIAssistant, type AIMessage } from '../../hooks/useAIAssistant'
@@ -674,6 +674,16 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     setInput(value)
   }, [markUserInteraction])
 
+  const handleKeyboardToggle = useCallback(() => {
+    markUserInteraction()
+    document.dispatchEvent(new CustomEvent('touch-keyboard:control', {
+      detail: {
+        target: textareaRef.current,
+        toggle: true,
+      },
+    }))
+  }, [markUserInteraction])
+
   const hasSession = !sessionLoading && !!session && session.messages.length > 0
 
   return (
@@ -699,6 +709,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
               'sm:rounded-2xl sm:w-[760px] sm:shadow-[0_8px_40px_rgba(0,0,0,0.22)] sm:border sm:border-casa-border',
               loading && 'ai-thinking',
             )}
+            data-touch-keyboard="ignore"
             style={{
               ...(window.innerWidth < 640 ? {
                 maxHeight: '88vh',
@@ -964,6 +975,15 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                       : <Mic size={14} />}
                   </button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={handleKeyboardToggle}
+                  title="Toggle on-screen keyboard"
+                  className="w-8 h-8 rounded-full flex items-center justify-center transition-all shrink-0 mb-0.5 bg-casa-divider text-casa-muted hover:text-casa-gold"
+                >
+                  <Keyboard size={14} />
+                </button>
 
                 <button
                   type="button"
