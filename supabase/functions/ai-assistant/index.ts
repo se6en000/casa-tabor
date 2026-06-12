@@ -165,11 +165,22 @@ Deno.serve(async (req) => {
             title: { type: 'STRING', description: 'New title' },
             start: { type: 'STRING', description: 'New start ISO datetime with UTC offset' },
             end: { type: 'STRING', description: 'New end ISO datetime with UTC offset' },
-            location: { type: 'STRING', description: 'New full address or place name' },
+            location: { type: 'STRING', description: 'New location name or venue label' },
+            address: { type: 'STRING', description: 'New street address' },
             members_add: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Family member names to ADD to the event' },
             members_remove: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Family member names to REMOVE from the event' },
-            notes: { type: 'STRING', description: 'New notes or description' },
+            notes: { type: 'STRING', description: 'Visible Notes field in the event details panel (prep_notes)' },
+            description: { type: 'STRING', description: 'Underlying calendar description/body text' },
             all_day: { type: 'BOOLEAN', description: 'Toggle all-day status' },
+            category: { type: 'STRING', description: 'Category like appointment, school, sports, dining, travel, social, other' },
+            what_to_bring: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Full replacement list for What to Bring. Send the complete final list.' },
+            outfit_suggestion: { type: 'STRING', description: 'What to Wear field' },
+            parking_notes: { type: 'STRING', description: 'Parking field' },
+            contact_name: { type: 'STRING', description: 'Contact name' },
+            contact_phone: { type: 'STRING', description: 'Contact phone number' },
+            cost_estimate: { type: 'STRING', description: 'Cost Estimate field' },
+            dietary_notes: { type: 'STRING', description: 'Dietary Notes field' },
+            meal_impact: { type: 'STRING', description: 'Meal Impact field' },
           },
           required: ['id'],
         },
@@ -270,9 +281,19 @@ Members: ${((context.focusedEvent as {members:string[]}).members ?? []).join(', 
 Category: ${(context.focusedEvent as {category:string|null}).category ?? '⚠️ MISSING'}
 Notes/Prep: ${(context.focusedEvent as {notes:string|null}).notes ?? '⚠️ MISSING'}
 Description: ${(context.focusedEvent as {description:string|null}).description ?? '⚠️ MISSING'}
+What to bring: ${((context.focusedEvent as {what_to_bring?: string[]}).what_to_bring ?? []).join(', ') || '⚠️ MISSING'}
+What to wear: ${(context.focusedEvent as {outfit_suggestion:string|null}).outfit_suggestion ?? '⚠️ MISSING'}
+Parking: ${(context.focusedEvent as {parking_notes:string|null}).parking_notes ?? '⚠️ MISSING'}
+Contact name: ${(context.focusedEvent as {contact_name:string|null}).contact_name ?? '⚠️ MISSING'}
+Contact phone: ${(context.focusedEvent as {contact_phone:string|null}).contact_phone ?? '⚠️ MISSING'}
+Cost estimate: ${(context.focusedEvent as {cost_estimate:string|null}).cost_estimate ?? '⚠️ MISSING'}
+Dietary notes: ${(context.focusedEvent as {dietary_notes:string|null}).dietary_notes ?? '⚠️ MISSING'}
+Meal impact: ${(context.focusedEvent as {meal_impact:string|null}).meal_impact ?? '⚠️ MISSING'}
 
 RULES:
 - Always use update_event with ID: ${(context.focusedEvent as {id:string}).id} for any changes. You already have the event — never search for it.
+- Use notes for the visible Notes section, and description for the underlying calendar body text.
+- For what_to_bring, send the complete final list, not just the newly added item.
 - After the user confirms a change, apply it immediately with update_event; confirm what you changed in one sentence.
 - If the user changes the location, mention that driving logistics and weather will refresh automatically.
 - If the user tries to discuss something unrelated to this event, politely redirect them back to editing it.
@@ -489,7 +510,18 @@ INSTRUCTIONS:
       if (args.start) changes.push(`start → ${args.start}`)
       if (args.end) changes.push(`end → ${args.end}`)
       if (args.location) changes.push(`location → "${args.location}"`)
+      if (args.address) changes.push(`address → "${args.address}"`)
       if (args.notes) changes.push(`notes → "${args.notes}"`)
+      if (args.description) changes.push(`description → "${args.description}"`)
+      if (args.category) changes.push(`category → "${args.category}"`)
+      if (args.what_to_bring) changes.push(`bring → ${(args.what_to_bring as string[]).join(', ')}`)
+      if (args.outfit_suggestion) changes.push(`wear → "${args.outfit_suggestion}"`)
+      if (args.parking_notes) changes.push(`parking → "${args.parking_notes}"`)
+      if (args.contact_name) changes.push(`contact → "${args.contact_name}"`)
+      if (args.contact_phone) changes.push(`phone → "${args.contact_phone}"`)
+      if (args.cost_estimate) changes.push(`cost → "${args.cost_estimate}"`)
+      if (args.dietary_notes) changes.push(`dietary → "${args.dietary_notes}"`)
+      if (args.meal_impact) changes.push(`meal impact → "${args.meal_impact}"`)
       if ((args.members_add as string[])?.length) changes.push(`add: ${(args.members_add as string[]).join(', ')}`)
       if ((args.members_remove as string[])?.length) changes.push(`remove: ${(args.members_remove as string[]).join(', ')}`)
       if (args.all_day !== undefined) changes.push(`all-day → ${args.all_day}`)

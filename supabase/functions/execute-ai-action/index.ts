@@ -56,8 +56,11 @@ Deno.serve(async (req) => {
       if (args.title !== undefined) updates.title = args.title
       if (args.start !== undefined) updates.start_time = args.start
       if (args.end !== undefined) updates.end_time = args.end
-      const locationChanged = args.location !== undefined
-      if (locationChanged) { updates.location_name = args.location; updates.is_enriched = false }
+      const destinationChanged = args.location !== undefined || args.address !== undefined
+      if (args.location !== undefined) updates.location_name = args.location
+      if (args.address !== undefined) updates.address = args.address
+      if (destinationChanged) updates.is_enriched = false
+      if (args.description !== undefined) updates.description = args.description
       if (args.all_day !== undefined) updates.all_day = args.all_day
 
       if (Object.keys(updates).length > 0) {
@@ -65,13 +68,32 @@ Deno.serve(async (req) => {
         if (error) throw new Error(error.message)
       }
 
-      if (args.notes !== undefined) {
+      const enrichmentUpdates: Record<string, unknown> = {}
+      if (args.notes !== undefined) enrichmentUpdates.prep_notes = args.notes ?? null
+      if (args.category !== undefined) enrichmentUpdates.category = args.category ?? null
+      if (args.what_to_bring !== undefined) {
+        enrichmentUpdates.what_to_bring = Array.isArray(args.what_to_bring)
+          ? args.what_to_bring
+          : String(args.what_to_bring)
+              .split(/\n|,/)
+              .map((item) => item.trim())
+              .filter(Boolean)
+      }
+      if (args.outfit_suggestion !== undefined) enrichmentUpdates.outfit_suggestion = args.outfit_suggestion ?? null
+      if (args.parking_notes !== undefined) enrichmentUpdates.parking_notes = args.parking_notes ?? null
+      if (args.contact_name !== undefined) enrichmentUpdates.contact_name = args.contact_name ?? null
+      if (args.contact_phone !== undefined) enrichmentUpdates.contact_phone = args.contact_phone ?? null
+      if (args.cost_estimate !== undefined) enrichmentUpdates.cost_estimate = args.cost_estimate ?? null
+      if (args.dietary_notes !== undefined) enrichmentUpdates.dietary_notes = args.dietary_notes ?? null
+      if (args.meal_impact !== undefined) enrichmentUpdates.meal_impact = args.meal_impact ?? null
+
+      if (Object.keys(enrichmentUpdates).length > 0) {
         const { error } = await sb
           .from('event_enrichments')
           .upsert(
             {
               event_id: args.id,
-              prep_notes: args.notes ?? null,
+              ...enrichmentUpdates,
               updated_at: new Date().toISOString(),
             },
             { onConflict: 'event_id' }
@@ -105,7 +127,7 @@ Deno.serve(async (req) => {
       }
 
       // Re-enrich if location changed (slow — don't block)
-      if (locationChanged) {
+      if (destinationChanged && Object.keys(enrichmentUpdates).length === 0) {
         sb.functions.invoke('enrich-event', { body: { event_id: args.id } }).catch(() => {})
       }
       // Await Google sync to ensure it completes before Deno terminates the function

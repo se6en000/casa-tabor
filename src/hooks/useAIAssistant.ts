@@ -56,6 +56,14 @@ function buildContext(ctx: AssistantContext) {
       members: ctx.focusedEvent.members.map(m => m.family_member?.name ?? '').filter(Boolean),
       category: ctx.focusedEvent.enrichment?.category ?? null,
       notes: ctx.focusedEvent.enrichment?.prep_notes ?? null,
+      what_to_bring: ctx.focusedEvent.enrichment?.what_to_bring ?? [],
+      outfit_suggestion: ctx.focusedEvent.enrichment?.outfit_suggestion ?? null,
+      parking_notes: ctx.focusedEvent.enrichment?.parking_notes ?? null,
+      contact_name: ctx.focusedEvent.enrichment?.contact_name ?? null,
+      contact_phone: ctx.focusedEvent.enrichment?.contact_phone ?? null,
+      cost_estimate: ctx.focusedEvent.enrichment?.cost_estimate ?? null,
+      dietary_notes: ctx.focusedEvent.enrichment?.dietary_notes ?? null,
+      meal_impact: ctx.focusedEvent.enrichment?.meal_impact ?? null,
     } : undefined,
   }
 }
