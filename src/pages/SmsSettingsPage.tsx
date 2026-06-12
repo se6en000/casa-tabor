@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
-import { Save, CheckCircle, MessageSquare, Bell, Clock, Send, ExternalLink, Copy } from 'lucide-react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState, useEffect, useRef } from 'react'
+import { CheckCircle, MessageSquare, Bell, Clock, Send, ExternalLink, Copy } from 'lucide-react'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 
@@ -72,9 +72,9 @@ function Field({ label, value, onChange, type = 'text', placeholder, disabled }:
 }
 
 export default function SmsSettingsPage() {
-  const qc = useQueryClient()
   const [config, setConfig] = useState<SmsConfig>(DEFAULTS)
   const [saved, setSaved] = useState(false)
+  const hydratedRef = useRef(false)
 
   // Load family members for the notify selector
   const { data: members = [] } = useQuery<{ id: string; name: string; phone: string | null }[]>({
@@ -106,7 +106,6 @@ export default function SmsSettingsPage() {
       if (error) throw error
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['settings', 'sms_config'] })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     },
@@ -134,6 +133,18 @@ export default function SmsSettingsPage() {
 
   const set = <K extends keyof SmsConfig>(key: K, value: SmsConfig[K]) =>
     setConfig(prev => ({ ...prev, [key]: value }))
+
+  useEffect(() => {
+    if (isLoading) return
+    if (!hydratedRef.current) {
+      hydratedRef.current = true
+      return
+    }
+    const t = setTimeout(() => {
+      saveMutation.mutate(config)
+    }, 700)
+    return () => clearTimeout(t)
+  }, [config, isLoading])
 
   const toggleMember = (id: string) =>
     set('notify_members', config.notify_members.includes(id)
@@ -327,18 +338,11 @@ export default function SmsSettingsPage() {
       )}
 
       <div className="mt-6 flex justify-end">
-        <button
-          onClick={() => saveMutation.mutate(config)}
-          disabled={saveMutation.isPending}
-          className={cn(
-            'inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-body-sm font-semibold transition-colors',
-            saved
-              ? 'bg-green-100 text-green-700'
-              : 'bg-casa-navy text-white hover:bg-casa-navy/90'
-          )}
-        >
-          {saved ? <><CheckCircle size={16} /> Saved</> : <><Save size={16} /> {saveMutation.isPending ? 'Saving…' : 'Save'}</>}
-        </button>
+        {saveMutation.isPending ? (
+          <span className="text-caption text-casa-muted">Saving…</span>
+        ) : saved ? (
+          <span className="text-caption text-emerald-700 inline-flex items-center gap-1"><CheckCircle size={14} /> Saved</span>
+        ) : null}
       </div>
     </>
   )

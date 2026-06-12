@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Save, FlaskConical, CheckCircle, AlertCircle, Home, Mic } from 'lucide-react'
+import { FlaskConical, CheckCircle, AlertCircle, Home, Mic } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
@@ -51,6 +51,7 @@ export default function AISettingsPage() {
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const [testMessage, setTestMessage] = useState('')
   const [isLoading, setIsLoading] = useState(true)
+  const hydratedRef = useRef(false)
   const { settings: screensaverSettings, update: updateScreensaver } = useScreensaverSettings()
 
   useEffect(() => {
@@ -93,6 +94,19 @@ export default function AISettingsPage() {
     setSaveStatus(a.error || b.error ? 'error' : 'saved')
     if (!a.error && !b.error) setTimeout(() => setSaveStatus('idle'), 3000)
   }
+
+  useEffect(() => {
+    if (isLoading) return
+    if (!hydratedRef.current) {
+      hydratedRef.current = true
+      return
+    }
+    setSaveStatus('saving')
+    const t = setTimeout(() => {
+      handleSave()
+    }, 700)
+    return () => clearTimeout(t)
+  }, [config, customInstructions, isLoading])
 
   async function handleTest() {
     setTestStatus('testing')
@@ -283,15 +297,10 @@ export default function AISettingsPage() {
             <FlaskConical size={14} className={cn(testStatus === 'testing' && 'animate-spin')} />
             {testStatus === 'testing' ? 'Testing…' : 'Test connection'}
           </button>
-          <button
-            onClick={handleSave}
-            disabled={saveStatus === 'saving'}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-button bg-casa-navy text-white text-body-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all"
-          >
-            <Save size={14} />
-            {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? '✓ Saved' : 'Save'}
-          </button>
         </div>
+        {saveStatus === 'saving' && (
+          <p className="text-caption text-casa-muted text-right">Saving…</p>
+        )}
       </div>
     </>
   )

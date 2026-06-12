@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Plus, Trash2, GripVertical, Save, Crown } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Plus, Trash2, GripVertical, Crown } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
@@ -53,6 +53,7 @@ export default function FamilySettingsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const hydratedRef = useRef(false)
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -75,6 +76,7 @@ export default function FamilySettingsPage() {
   }
 
   async function handleSave() {
+    if (saving) return
     setSaving(true)
     try {
       // Update existing members that have edits
@@ -117,6 +119,20 @@ export default function FamilySettingsPage() {
     }
   }
 
+  useEffect(() => {
+    if (!hydratedRef.current) {
+      hydratedRef.current = true
+      return
+    }
+    const hasPendingChanges = Object.keys(edits).length > 0 || newMembers.length > 0
+    if (!hasPendingChanges) return
+    setSaved(false)
+    const t = setTimeout(() => {
+      handleSave()
+    }, 700)
+    return () => clearTimeout(t)
+  }, [edits, newMembers])
+
   const hasChanges = Object.keys(edits).length > 0 || newMembers.length > 0
 
   if (isLoading) return <div className="p-6 text-casa-muted animate-breathe">Loading…</div>
@@ -133,14 +149,15 @@ export default function FamilySettingsPage() {
           <h1 className="font-display text-display-md text-casa-navy mb-1">Family</h1>
           <p className="text-body text-casa-muted">Manage members, colors, and roles.</p>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={!hasChanges || saving}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-button bg-casa-navy text-white text-body-sm font-semibold hover:brightness-110 disabled:opacity-40 transition-all"
-        >
-          <Save size={14} />
-          {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Changes'}
-        </button>
+        <div className="text-right">
+          {saving ? (
+            <p className="text-caption text-casa-muted">Saving…</p>
+          ) : saved ? (
+            <p className="text-caption text-emerald-700">✓ Saved</p>
+          ) : hasChanges ? (
+            <p className="text-caption text-casa-muted">Saving shortly…</p>
+          ) : null}
+        </div>
       </div>
 
       <div className="space-y-3">

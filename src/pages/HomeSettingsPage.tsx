@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Save, Home, CheckCircle, AlertCircle, Cloud, BookOpen, AlertTriangle, CheckSquare } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Home, CheckCircle, AlertCircle, Cloud, BookOpen, AlertTriangle, CheckSquare } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 
@@ -20,6 +20,7 @@ export default function HomeSettingsPage() {
   })
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [isLoading, setIsLoading] = useState(true)
+  const hydratedRef = useRef(false)
 
   useEffect(() => {
     Promise.all([
@@ -73,6 +74,19 @@ export default function HomeSettingsPage() {
     setSaveStatus(hasError ? 'error' : 'saved')
     if (!hasError) setTimeout(() => setSaveStatus('idle'), 3000)
   }
+
+  useEffect(() => {
+    if (isLoading) return
+    if (!hydratedRef.current) {
+      hydratedRef.current = true
+      return
+    }
+    setSaveStatus('saving')
+    const t = setTimeout(() => {
+      handleSave()
+    }, 700)
+    return () => clearTimeout(t)
+  }, [home, homeScreenLayout, isLoading])
 
   const fullAddress = [home.address, home.city, home.state, home.zip].filter(Boolean).join(', ')
 
@@ -270,19 +284,9 @@ export default function HomeSettingsPage() {
           </div>
         )}
 
-        <div className="flex justify-end">
-          <button
-            onClick={handleSave}
-            disabled={saveStatus === 'saving'}
-            className={cn(
-              'inline-flex items-center gap-2 px-4 py-2 rounded-button text-body-sm font-semibold transition-all',
-              'bg-casa-navy text-white hover:brightness-110 disabled:opacity-50'
-            )}
-          >
-            <Save size={14} />
-            {saveStatus === 'saving' ? 'Saving…' : 'Save'}
-          </button>
-        </div>
+        {saveStatus === 'saving' && (
+          <p className="text-caption text-casa-muted text-right">Saving…</p>
+        )}
       </div>
     </>
   )

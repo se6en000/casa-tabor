@@ -196,7 +196,7 @@ export default function SettingsShell() {
         </div>
         
         {/* Desktop title */}
-        <div className="hidden md:block px-6 py-6 border-b border-casa-border bg-casa-surface flex-shrink-0">
+        <div className="hidden md:block px-5 py-5 border-b border-casa-border bg-casa-surface flex-shrink-0">
           <h1 className="font-display text-display-sm text-casa-navy">{activeItem?.label || 'Settings'}</h1>
         </div>
 
