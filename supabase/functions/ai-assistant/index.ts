@@ -687,30 +687,35 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   function buildDisplayText(name: string, args: Record<string, unknown>): string {
     if (name === 'create_event') return `Create: **${args.title}** on ${args.start}`
     if (name === 'update_event') {
-      const show = (value: unknown) => value == null || String(value).trim() === '' ? '(clear)' : `"${String(value)}"`
-      const changes: string[] = []
-      if (args.title !== undefined) changes.push(`title → ${show(args.title)}`)
-      if (args.start !== undefined) changes.push(`start → ${args.start}`)
-      if (args.end !== undefined) changes.push(`end → ${args.end}`)
-      if (args.location !== undefined) changes.push(`location → ${show(args.location)}`)
-      if (args.address !== undefined) changes.push(`address → ${show(args.address)}`)
-      if (args.notes !== undefined) changes.push(`notes → ${show(args.notes)}`)
-      if (args.description !== undefined) changes.push(`description → ${show(args.description)}`)
-      if (args.category !== undefined) changes.push(`category → ${show(args.category)}`)
-      if (args.what_to_bring !== undefined) changes.push(`bring → ${Array.isArray(args.what_to_bring) && (args.what_to_bring as string[]).length > 0 ? (args.what_to_bring as string[]).join(', ') : '(clear)'}`)
-      if (args.outfit_suggestion !== undefined) changes.push(`wear → ${show(args.outfit_suggestion)}`)
-      if (args.parking_notes !== undefined) changes.push(`parking → ${show(args.parking_notes)}`)
-      if (args.contact_name !== undefined) changes.push(`contact → ${show(args.contact_name)}`)
-      if (args.contact_phone !== undefined) changes.push(`phone → ${show(args.contact_phone)}`)
-      if (args.cost_estimate !== undefined) changes.push(`cost → ${show(args.cost_estimate)}`)
-      if (args.dietary_notes !== undefined) changes.push(`dietary → ${show(args.dietary_notes)}`)
-      if (args.meal_impact !== undefined) changes.push(`meal impact → ${show(args.meal_impact)}`)
-      if (args.checklist_items !== undefined) changes.push(`checklist → ${Array.isArray(args.checklist_items) ? `${(args.checklist_items as unknown[]).length} item(s)` : 'updated'}`)
-      if (args.action_items !== undefined) changes.push(`actions → ${Array.isArray(args.action_items) ? `${(args.action_items as unknown[]).length} item(s)` : 'updated'}`)
-      if ((args.members_add as string[])?.length) changes.push(`add: ${(args.members_add as string[]).join(', ')}`)
-      if ((args.members_remove as string[])?.length) changes.push(`remove: ${(args.members_remove as string[]).join(', ')}`)
-      if (args.all_day !== undefined) changes.push(`all-day → ${args.all_day}`)
-      return `Update event: ${changes.join(' · ')}\nWill preserve: all unspecified fields unchanged.\nNeeds confirmation: yes`
+      const labels: string[] = []
+      if (args.title !== undefined) labels.push('title')
+      if (args.start !== undefined || args.end !== undefined) labels.push('time')
+      if (args.location !== undefined || args.address !== undefined) labels.push('location')
+      if (args.notes !== undefined) labels.push('notes')
+      if (args.description !== undefined) labels.push('description')
+      if (args.category !== undefined) labels.push('category')
+      if (args.what_to_bring !== undefined) labels.push('bring list')
+      if (args.checklist_items !== undefined) labels.push('checklist')
+      if (args.action_items !== undefined) labels.push('actions')
+      if ((args.members_add as string[])?.length || (args.members_remove as string[])?.length) labels.push('attendees')
+      if (
+        args.outfit_suggestion !== undefined ||
+        args.parking_notes !== undefined ||
+        args.contact_name !== undefined ||
+        args.contact_phone !== undefined ||
+        args.cost_estimate !== undefined ||
+        args.dietary_notes !== undefined ||
+        args.meal_impact !== undefined
+      ) {
+        labels.push('details')
+      }
+
+      const uniqueLabels = [...new Set(labels)]
+      const preview = uniqueLabels.slice(0, 3).join(', ')
+      const extra = uniqueLabels.length > 3 ? ` +${uniqueLabels.length - 3} more` : ''
+      return uniqueLabels.length > 0
+        ? `Review update: ${preview}${extra}`
+        : 'Review event update'
     }
     if (name === 'delete_event') return `Delete: **${args.title}**`
     if (name === 'add_grocery_items') {
