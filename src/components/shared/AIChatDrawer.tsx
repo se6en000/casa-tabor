@@ -699,7 +699,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                       })
                       if (error) throw error
                       if (data?.success === false) throw new Error(data.error ?? 'Action failed')
-                      updateMessageToolStatus(messageId, 'done', { resultEventId: data?.event_id })
+                      updateMessageToolStatus(messageId, 'done', { resultEventId: data?.event_id, syncWarning: data?.sync_warning })
                       qc.invalidateQueries({ queryKey: ['events'] })
                       qc.invalidateQueries({ queryKey: ['grocery'] })
                     } catch (err) {
@@ -899,6 +899,9 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onCancelToolAction,
                 </div>
                 {ta.tool === 'create_event' && ta.resultEventId && (
                   <p className="text-caption text-casa-muted">Visible on your calendar now</p>
+                )}
+                {ta.syncWarning && (
+                  <p className="text-caption text-amber-600">{ta.syncWarning}</p>
                 )}
               </div>
             ) : ta.status === 'cancelled' ? (

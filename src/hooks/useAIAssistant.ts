@@ -210,7 +210,7 @@ export function useAIAssistant(ctx: AssistantContext) {
   const updateMessageToolStatus = useCallback((
     messageId: string,
     status: NonNullable<AIMessage['toolAction']>['status'],
-    extra?: { errorMsg?: string; resultEventId?: string }
+    extra?: { errorMsg?: string; resultEventId?: string; syncWarning?: string }
   ) => {
     setMessages(prev => {
       const updated = prev.map(m =>

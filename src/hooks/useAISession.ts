@@ -12,6 +12,7 @@ export interface AIMessage {
     status: 'pending' | 'loading' | 'done' | 'error' | 'cancelled'
     errorMsg?: string
     resultEventId?: string
+    syncWarning?: string
   }
 }
 

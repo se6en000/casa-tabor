@@ -1,24 +1,13 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import {
+  RECURRING_EDIT_ERROR,
+  buildValidatedUpdatePayload,
+} from '../_shared/ai-event-edit.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-const normalizeOptionalText = (value: unknown): string | null | undefined => {
-  if (value === undefined) return undefined
-  if (value == null) return null
-  const text = String(value).trim()
-  return text === '' ? null : text
-}
-
-const normalizeStringList = (value: unknown): string[] | undefined => {
-  if (value === undefined) return undefined
-  const items = Array.isArray(value) ? value : String(value).split(/\n|,/)
-  return items
-    .map((item) => String(item).trim())
-    .filter(Boolean)
 }
 
 Deno.serve(async (req) => {
@@ -67,134 +56,77 @@ Deno.serve(async (req) => {
     }
 
     if (tool === 'update_event') {
-      const updates: Record<string, unknown> = {}
-      if (args.title !== undefined) updates.title = args.title
-      if (args.start !== undefined) updates.start_time = args.start
-      if (args.end !== undefined) updates.end_time = args.end
-      const destinationChanged = args.location !== undefined || args.address !== undefined
-      if (args.location !== undefined) updates.location_name = normalizeOptionalText(args.location)
-      if (args.address !== undefined) updates.address = normalizeOptionalText(args.address)
-      if (destinationChanged) updates.is_enriched = false
-      if (args.description !== undefined) updates.description = normalizeOptionalText(args.description)
-      if (args.all_day !== undefined) updates.all_day = args.all_day
-
-      if (Object.keys(updates).length > 0) {
-        const { error } = await sb.from('events').update(updates).eq('id', args.id)
-        if (error) throw new Error(error.message)
+      const { errors, normalized } = buildValidatedUpdatePayload(args)
+      if (errors.length > 0) {
+        throw new Error(errors.join('; '))
       }
 
-      const enrichmentUpdates: Record<string, unknown> = {}
-      if (args.notes !== undefined) enrichmentUpdates.prep_notes = normalizeOptionalText(args.notes)
-      if (args.category !== undefined) enrichmentUpdates.category = normalizeOptionalText(args.category)
-      if (args.what_to_bring !== undefined) {
-        enrichmentUpdates.what_to_bring = normalizeStringList(args.what_to_bring) ?? []
-      }
-      if (args.outfit_suggestion !== undefined) enrichmentUpdates.outfit_suggestion = normalizeOptionalText(args.outfit_suggestion)
-      if (args.parking_notes !== undefined) enrichmentUpdates.parking_notes = normalizeOptionalText(args.parking_notes)
-      if (args.contact_name !== undefined) enrichmentUpdates.contact_name = normalizeOptionalText(args.contact_name)
-      if (args.contact_phone !== undefined) enrichmentUpdates.contact_phone = normalizeOptionalText(args.contact_phone)
-      if (args.cost_estimate !== undefined) enrichmentUpdates.cost_estimate = normalizeOptionalText(args.cost_estimate)
-      if (args.dietary_notes !== undefined) enrichmentUpdates.dietary_notes = normalizeOptionalText(args.dietary_notes)
-      if (args.meal_impact !== undefined) enrichmentUpdates.meal_impact = normalizeOptionalText(args.meal_impact)
-
-      if (Object.keys(enrichmentUpdates).length > 0) {
-        const { data: existingEnrichment, error: enrichLoadError } = await sb
-          .from('event_enrichments')
-          .select('event_id')
-          .eq('event_id', args.id)
-          .maybeSingle()
-        if (enrichLoadError) throw new Error(enrichLoadError.message)
-
-        const nowIso = new Date().toISOString()
-        const { error } = await sb
-          .from('event_enrichments')
-          .upsert(
-            {
-              event_id: args.id,
-              ...(existingEnrichment ? {} : { confidence: 'low', what_to_bring: [], created_at: nowIso }),
-              ...enrichmentUpdates,
-              updated_at: nowIso,
-            },
-            { onConflict: 'event_id' }
-          )
-        if (error) throw new Error(error.message)
+      const { data: eventRow, error: eventLoadError } = await sb
+        .from('events')
+        .select('id, event_type, google_event_id, recurrence_master_id, rrule')
+        .eq('id', normalized.eventId)
+        .single()
+      if (eventLoadError || !eventRow) {
+        throw new Error(eventLoadError?.message ?? 'Event not found')
       }
 
-      if (args.checklist_items !== undefined) {
-        const incoming = Array.isArray(args.checklist_items) ? args.checklist_items as Record<string, unknown>[] : []
-        const checklistRows = incoming.map((item, index) => ({
-          id: typeof item.id === 'string' && item.id ? item.id : crypto.randomUUID(),
-          event_id: args.id as string,
-          label: String(item.label ?? '').trim(),
-          note: normalizeOptionalText(item.note),
-          checked: item.checked === true,
-          category: normalizeOptionalText(item.category),
-          sort_order: index,
-        })).filter(row => row.label)
-
-        const { error: deleteChecklistError } = await sb.from('event_checklist_items').delete().eq('event_id', args.id)
-        if (deleteChecklistError) throw new Error(deleteChecklistError.message)
-        if (checklistRows.length > 0) {
-          const { error: insertChecklistError } = await sb.from('event_checklist_items').insert(checklistRows)
-          if (insertChecklistError) throw new Error(insertChecklistError.message)
-        }
+      if (eventRow.recurrence_master_id || eventRow.rrule) {
+        throw new Error(RECURRING_EDIT_ERROR)
       }
 
-      if (args.action_items !== undefined) {
-        const incoming = Array.isArray(args.action_items) ? args.action_items as Record<string, unknown>[] : []
-        const actionRows = incoming.map((item) => ({
-          id: typeof item.id === 'string' && item.id ? item.id : crypto.randomUUID(),
-          event_id: args.id as string,
-          title: String(item.title ?? '').trim(),
-          description: normalizeOptionalText(item.description),
-          due_date: normalizeOptionalText(item.due_date),
-          is_urgent: item.is_urgent === true,
-          completed: item.completed === true,
-          completed_at: item.completed === true ? (item.completed_at == null ? new Date().toISOString() : String(item.completed_at)) : null,
-          assigned_to: normalizeOptionalText(item.assigned_to),
-        })).filter(row => row.title)
-
-        const { error: deleteActionError } = await sb.from('event_action_items').delete().eq('event_id', args.id)
-        if (deleteActionError) throw new Error(deleteActionError.message)
-        if (actionRows.length > 0) {
-          const { error: insertActionError } = await sb.from('event_action_items').insert(actionRows)
-          if (insertActionError) throw new Error(insertActionError.message)
-        }
-      }
-
-      // Handle member additions
-      if (args.members_add?.length > 0) {
+      let addIds: string[] = []
+      if (normalized.membersAdd && normalized.membersAdd.length > 0) {
         const { data: family } = await sb.from('family_members').select('id, name')
-        const addIds = (args.members_add as string[])
-          .map((name: string) => (family ?? []).find((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase())?.id)
-          .filter(Boolean)
-        if (addIds.length > 0) {
-          await sb.from('event_members').upsert(
-            addIds.map(id => ({ event_id: args.id, family_member_id: id, role: 'attendee' })),
-            { onConflict: 'event_id,family_member_id', ignoreDuplicates: true }
-          )
+        const unresolved = normalized.membersAdd.filter((name) => !(family ?? []).some((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase()))
+        if (unresolved.length > 0) {
+          throw new Error(`Unknown family member(s): ${unresolved.join(', ')}`)
         }
+        addIds = normalized.membersAdd
+          .map((name) => (family ?? []).find((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase())?.id)
+          .filter(Boolean) as string[]
       }
 
-      // Handle member removals
-      if (args.members_remove?.length > 0) {
+      let removeIds: string[] = []
+      if (normalized.membersRemove && normalized.membersRemove.length > 0) {
         const { data: family } = await sb.from('family_members').select('id, name')
-        const removeIds = (args.members_remove as string[])
-          .map((name: string) => (family ?? []).find((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase())?.id)
-          .filter(Boolean)
-        if (removeIds.length > 0) {
-          await sb.from('event_members').delete().eq('event_id', args.id).in('family_member_id', removeIds)
+        const unresolved = normalized.membersRemove.filter((name) => !(family ?? []).some((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase()))
+        if (unresolved.length > 0) {
+          throw new Error(`Unknown family member(s): ${unresolved.join(', ')}`)
         }
+        removeIds = normalized.membersRemove
+          .map((name) => (family ?? []).find((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase())?.id)
+          .filter(Boolean) as string[]
       }
 
-      // Re-enrich if location changed (slow — don't block)
-      if (destinationChanged && Object.keys(enrichmentUpdates).length === 0) {
-        sb.functions.invoke('enrich-event', { body: { event_id: args.id } }).catch(() => {})
+      const eventUpdates = {
+        ...normalized.eventUpdates,
+        ...(normalized.destinationChanged ? { is_enriched: false } : {}),
       }
-      // Await Google sync to ensure it completes before Deno terminates the function
-      await sb.functions.invoke('push-to-google', { body: { event_id: args.id } }).catch(() => {})
 
-      return new Response(JSON.stringify({ success: true, event_id: args.id }), {
+      const { error: rpcError } = await sb.rpc('ai_apply_event_update', {
+        p_event_id: normalized.eventId,
+        p_event_updates: eventUpdates,
+        p_enrichment_updates: normalized.enrichmentUpdates,
+        p_checklist_items: normalized.checklistItems ?? null,
+        p_action_items: normalized.actionItems ?? null,
+        p_members_add: addIds,
+        p_members_remove: removeIds,
+      })
+      if (rpcError) throw new Error(rpcError.message)
+
+      if (normalized.destinationChanged && Object.keys(normalized.enrichmentUpdates).length === 0) {
+        sb.functions.invoke('enrich-event', { body: { event_id: normalized.eventId } }).catch(() => {})
+      }
+
+      let syncWarning: string | undefined
+      const syncRes = await sb.functions.invoke('push-to-google', { body: { event_id: normalized.eventId } }).catch((err: Error) => ({ data: null, error: err }))
+      if (syncRes?.error) {
+        syncWarning = `Saved in Casa Tabor, but Google sync failed: ${syncRes.error.message ?? 'unknown error'}`
+      } else if (syncRes?.data?.error) {
+        syncWarning = `Saved in Casa Tabor, but Google sync failed: ${syncRes.data.error}`
+      }
+
+      return new Response(JSON.stringify({ success: true, event_id: normalized.eventId, sync_warning: syncWarning }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
