@@ -5,6 +5,7 @@ import { ArrowBigUp, CornerDownLeft, Delete, MoveHorizontal, X } from 'lucide-re
 const MAX_VK_HEIGHT = 380
 const MIN_VK_HEIGHT = 332
 const VK_GAP = 18
+const MOBILE_BREAKPOINT = 1024
 const LETTER_ROWS = [
   ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
   ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
@@ -70,8 +71,14 @@ export default function TouchKeyboard() {
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const touchCapable = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0
-    setEnabled(touchCapable)
+    const updateEnabled = () => {
+      const touchCapable = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0
+      const mobileViewport = window.innerWidth < MOBILE_BREAKPOINT
+      setEnabled(touchCapable && !mobileViewport)
+    }
+    updateEnabled()
+    window.addEventListener('resize', updateEnabled)
+    return () => window.removeEventListener('resize', updateEnabled)
   }, [])
 
   useEffect(() => {
