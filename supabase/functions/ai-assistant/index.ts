@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
     sb.from('saved_places').select('name, aliases, address, city, state, zip, category, notes, phone').order('name'),
     sb.from('saved_contacts').select('name, aliases, phone, email, address, relationship, notes').order('name').then(r => r).catch(() => ({ data: null, error: null })),
     sb.from('events')
-      .select('id, title, start_time, end_time, updated_at, location_name, address, all_day, event_type, description, event_members(family_members(id, name))')
+      .select('id, title, start_time, end_time, updated_at, location_name, address, all_day, event_type, description, event_enrichments(what_to_bring), event_members(family_members(id, name))')
       .eq('status', 'confirmed')
       .gte('start_time', windowStart.toISOString())
       .lte('start_time', yearEnd.toISOString())
@@ -86,6 +86,7 @@ Deno.serve(async (req) => {
   type DbEvent = {
     id: string; title: string; start_time: string; end_time: string; updated_at: string;
     location_name: string | null; address: string | null; all_day: boolean; event_type: string; description: string | null;
+    event_enrichments?: { what_to_bring?: string[] | null }[] | null;
     event_members: { family_members: { id: string; name: string } | null }[];
   }
 
@@ -354,6 +355,7 @@ INSTRUCTIONS:
 - Always operate on UUIDs from the events list. Use search_events when unsure, then update with the exact ID.
 - For update_event, always copy the event's updated_at value from context/events list into expected_updated_at.
 - Batch related field updates into a single update_event action instead of many small ones.
+- what_to_bring is a full replacement field. When adding/removing one item, preserve existing items from the selected event and send the complete final list.
 - Default time window: when no date is given, search from NOW (${context.currentDate}) forward — never return past events.
 - "Next event" / "what's next" = first event whose start_time is strictly AFTER NOW. If an event is currently in progress (started before NOW, ends after NOW), mention it as "currently happening" first, then state what starts next.
 - Default duration: 1 hour if not specified. Default time: morning (9am) for "tomorrow"/"next week", 2pm for "afternoon", 6pm for "evening", 12pm for "lunch".
@@ -437,7 +439,8 @@ INSTRUCTIONS:
           location: e.location_name,
           members: e.event_members?.map(m => m.family_members?.name).filter(Boolean),
           all_day: e.all_day,
-          notes: e.notes,
+          notes: e.description,
+          what_to_bring: e.event_enrichments?.[0]?.what_to_bring ?? [],
         })),
       }
     }
