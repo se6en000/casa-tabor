@@ -59,8 +59,8 @@ export function generateLightingOverlay(strength: number = 0.08): string {
  * Combines multiple layers for depth without using data URLs.
  */
 export function getTextureStyle() {
-  const vignette = generateVignetteGradient(0.1)
-  const lighting = generateLightingOverlay(0.06)
+  const vignette = generateVignetteGradient(0.04)  // Subtle 4% edge darkening (Frame-like)
+  const lighting = generateLightingOverlay(0.04)   // Reduced from 0.06 for subtlety
   
   // Grain texture using repeating gradients (crosshatch pattern)
   const grain = `
