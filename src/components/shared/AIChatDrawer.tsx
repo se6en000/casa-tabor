@@ -515,7 +515,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  // LED state machine — loading takes priority over speech phase
+  // LED state machine — keep deterministic phase sync so LEDs can't get stuck.
   useEffect(() => {
     if (!open) {
       led.off()
@@ -523,11 +523,13 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     }
     if (loading) {
       led.processing()      // amber while AI is thinking
-    } else if (speech.phase === 'listening' || speech.phase === 'connecting') {
+      return
+    }
+    if (speech.phase === 'processing') {
+      led.processing()
+    } else {
       led.listening()       // blue when mic is active
     }
-    // Otherwise (idle gap between thinking and listening) — leave as-is so
-    // we don't flicker to off. Will get corrected on next phase change.
   }, [loading, speech.phase, open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
