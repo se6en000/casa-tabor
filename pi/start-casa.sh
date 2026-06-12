@@ -25,7 +25,7 @@
 # Set to "0" for a normal windowed browser while testing/building (tabs,
 # address bar, and access to the rest of the desktop). Override at launch:
 #   KIOSK=0 /home/jake/start-casa.sh
-KIOSK="${KIOSK:-0}"
+KIOSK="${KIOSK:-1}"
 
 # Bail out loudly if we somehow booted into Wayland — touch will not work.
 if [ "${XDG_SESSION_TYPE:-x11}" = "wayland" ]; then
