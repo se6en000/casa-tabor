@@ -10,7 +10,7 @@ export default function AddEventFab({ onClick }: Props) {
     <motion.button
       whileTap={{ scale: 0.92 }}
       onClick={onClick}
-      className="fixed right-5 bottom-[calc(var(--spacing-nav-height)+1rem+var(--vk-height,0px))] lg:bottom-[calc(1.5rem+var(--vk-height,0px))] z-[60] w-14 h-14 rounded-full bg-casa-navy text-white shadow-modal flex items-center justify-center hover:bg-casa-navy/90 transition-colors"
+      className="fixed right-5 bottom-[calc(var(--spacing-nav-height)+1rem+var(--vk-height,0px)+var(--vk-gap,0px))] lg:bottom-[calc(1.5rem+var(--vk-height,0px)+var(--vk-gap,0px))] z-[60] w-14 h-14 rounded-full bg-casa-navy text-white shadow-modal flex items-center justify-center hover:bg-casa-navy/90 transition-colors"
       title="Add event"
       aria-label="Add event"
     >

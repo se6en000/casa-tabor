@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowBigUp, CornerDownLeft, Delete, MoveHorizontal, X } from 'lucide-react'
 
-const VK_HEIGHT = 316
+const MAX_VK_HEIGHT = 380
+const MIN_VK_HEIGHT = 332
+const VK_GAP = 18
 const LETTER_ROWS = [
   ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
   ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
@@ -64,6 +66,7 @@ export default function TouchKeyboard() {
   const [visible, setVisible] = useState(false)
   const [shift, setShift] = useState(false)
   const [target, setTarget] = useState<EditableTarget | null>(null)
+  const [keyboardHeight, setKeyboardHeight] = useState(MIN_VK_HEIGHT)
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -107,9 +110,34 @@ export default function TouchKeyboard() {
 
   useEffect(() => {
     const root = document.documentElement
-    root.style.setProperty('--vk-height', enabled && visible ? `${VK_HEIGHT}px` : '0px')
-    return () => root.style.setProperty('--vk-height', '0px')
-  }, [enabled, visible])
+    if (enabled && visible) {
+      root.style.setProperty('--vk-height', `${keyboardHeight}px`)
+      root.style.setProperty('--vk-gap', `${VK_GAP}px`)
+    } else {
+      root.style.setProperty('--vk-height', '0px')
+      root.style.setProperty('--vk-gap', '0px')
+    }
+    return () => {
+      root.style.setProperty('--vk-height', '0px')
+      root.style.setProperty('--vk-gap', '0px')
+    }
+  }, [enabled, visible, keyboardHeight])
+
+  useEffect(() => {
+    const vv = window.visualViewport
+    const updateSize = () => {
+      const vh = vv?.height ?? window.innerHeight
+      const next = Math.min(MAX_VK_HEIGHT, Math.max(MIN_VK_HEIGHT, Math.round(vh * 0.5)))
+      setKeyboardHeight(next)
+    }
+    updateSize()
+    vv?.addEventListener('resize', updateSize)
+    window.addEventListener('resize', updateSize)
+    return () => {
+      vv?.removeEventListener('resize', updateSize)
+      window.removeEventListener('resize', updateSize)
+    }
+  }, [])
 
   const rows = useMemo(() => {
     const mappedLetters = LETTER_ROWS.map(row => row.map(k => (shift ? k.toUpperCase() : k)))
@@ -195,7 +223,7 @@ export default function TouchKeyboard() {
           exit={{ y: '100%' }}
           transition={{ type: 'spring', damping: 28, stiffness: 250 }}
           className="fixed left-0 right-0 bottom-0 z-[85] border-t border-casa-border bg-casa-surface/98 backdrop-blur-sm shadow-modal"
-          style={{ height: `${VK_HEIGHT}px` }}
+          style={{ height: `${keyboardHeight}px` }}
         >
           <div className="h-full px-3 pt-2 pb-3 flex flex-col gap-2 select-none">
             <div className="flex justify-end">
