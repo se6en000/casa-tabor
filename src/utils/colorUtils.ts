@@ -19,7 +19,14 @@ export async function extractDominantColor(imageUrl: string): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image()
     img.crossOrigin = 'Anonymous'
+    
+    const timeout = setTimeout(() => {
+      console.warn(`[ColorUtils] Image load timeout for ${imageUrl}`)
+      resolve('#D4C5B9') // fallback
+    }, 5000) // 5 second timeout
+    
     img.onload = () => {
+      clearTimeout(timeout)
       try {
         const canvas = document.createElement('canvas')
         const width = 150
@@ -28,6 +35,7 @@ export async function extractDominantColor(imageUrl: string): Promise<string> {
         canvas.height = height
         const ctx = canvas.getContext('2d')
         if (!ctx) {
+          console.warn('[ColorUtils] Canvas context unavailable')
           resolve('#D4C5B9') // fallback
           return
         }
@@ -48,12 +56,19 @@ export async function extractDominantColor(imageUrl: string): Promise<string> {
         const avgG = Math.round(g / count)
         const avgB = Math.round(b / count)
 
-        resolve(rgbToHex(avgR, avgG, avgB))
-      } catch {
+        const hex = rgbToHex(avgR, avgG, avgB)
+        console.log(`[ColorUtils] Extracted dominant color: ${hex} from image`)
+        resolve(hex)
+      } catch (err) {
+        console.warn('[ColorUtils] Extraction error:', err)
         resolve('#D4C5B9') // fallback
       }
     }
-    img.onerror = () => resolve('#D4C5B9') // fallback
+    img.onerror = () => {
+      clearTimeout(timeout)
+      console.warn(`[ColorUtils] Image load failed for ${imageUrl}`)
+      resolve('#D4C5B9') // fallback
+    }
     img.src = imageUrl
   })
 }

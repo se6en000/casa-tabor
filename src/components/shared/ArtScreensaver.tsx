@@ -47,14 +47,17 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   useEffect(() => {
     if (!artwork?.imageUrl || !adaptiveMatColor) return
     
+    console.log(`[ArtScreensaver] Loading artwork: ${artwork.title}`)
     setMatTransition(false) // disable transition during load
     const timeout = setTimeout(async () => {
       try {
         const colorAnalysis = await generateAdaptiveMatColor(artwork.imageUrl)
+        console.log(`[ArtScreensaver] Applied mat color: ${colorAnalysis.matColor}`)
         setMatColor(colorAnalysis.matColor)
         // Enable smooth transition after color is set
         setTimeout(() => setMatTransition(true), 100)
-      } catch {
+      } catch (err) {
+        console.warn('[ArtScreensaver] Color analysis failed:', err)
         // Fallback to default
         setMatColor('#F5F0E8')
       }
