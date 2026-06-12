@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowBigUp, CornerDownLeft, Delete, MoveHorizontal, X } from 'lucide-react'
 
-const MAX_VK_HEIGHT = 380
-const MIN_VK_HEIGHT = 332
+const MIN_VK_HEIGHT = 240
 const VK_GAP = 18
+const VK_BOTTOM_OFFSET = 12
 const MOBILE_BREAKPOINT = 1024
 const LETTER_ROWS = [
   ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
@@ -118,7 +118,7 @@ export default function TouchKeyboard() {
   useEffect(() => {
     const root = document.documentElement
     if (enabled && visible) {
-      root.style.setProperty('--vk-height', `${keyboardHeight}px`)
+      root.style.setProperty('--vk-height', `${keyboardHeight + VK_BOTTOM_OFFSET}px`)
       root.style.setProperty('--vk-gap', `${VK_GAP}px`)
     } else {
       root.style.setProperty('--vk-height', '0px')
@@ -134,7 +134,7 @@ export default function TouchKeyboard() {
     const vv = window.visualViewport
     const updateSize = () => {
       const vh = vv?.height ?? window.innerHeight
-      const next = Math.min(MAX_VK_HEIGHT, Math.max(MIN_VK_HEIGHT, Math.round(vh * 0.5)))
+      const next = Math.max(MIN_VK_HEIGHT, Math.round(vh * 0.5))
       setKeyboardHeight(next)
     }
     updateSize()
@@ -229,14 +229,15 @@ export default function TouchKeyboard() {
           animate={{ y: 0 }}
           exit={{ y: '100%' }}
           transition={{ type: 'spring', damping: 28, stiffness: 250 }}
-          className="fixed left-0 right-0 bottom-0 z-[85] border-t border-casa-border bg-casa-surface/98 backdrop-blur-sm shadow-modal"
-          style={{ height: `${keyboardHeight}px` }}
+          className="fixed left-0 right-0 z-[85] border-t border-casa-border bg-casa-surface/98 backdrop-blur-sm shadow-modal overflow-y-auto"
+          style={{ height: `${keyboardHeight}px`, bottom: `${VK_BOTTOM_OFFSET}px` }}
         >
           <div className="h-full px-3 pt-2 pb-3 flex flex-col gap-2 select-none">
             <div className="flex justify-end">
               <button
                 onClick={hideKeyboard}
-                className="h-8 px-3 rounded-pill bg-casa-bg border border-casa-border text-casa-muted text-caption font-semibold flex items-center gap-1"
+                className="rounded-pill bg-casa-bg border border-casa-border text-casa-muted font-semibold flex items-center gap-1"
+                style={{ height: '34px', paddingInline: '12px', fontSize: '12px' }}
               >
                 <X size={12} />
                 Hide
@@ -249,7 +250,8 @@ export default function TouchKeyboard() {
                   <button
                     key={k}
                     onClick={() => insertText(k)}
-                    className="h-11 rounded-button bg-casa-bg border border-casa-border text-casa-navy text-body font-semibold active:scale-95 transition-transform"
+                    className="rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold active:scale-95 transition-transform"
+                    style={{ height: '42px', fontSize: '18px', lineHeight: 1 }}
                   >
                     {k}
                   </button>
@@ -260,21 +262,24 @@ export default function TouchKeyboard() {
             <div className="grid grid-cols-12 gap-1.5">
               <button
                 onClick={() => setShift(v => !v)}
-                className={`col-span-2 h-11 rounded-button border text-casa-navy flex items-center justify-center ${shift ? 'bg-casa-gold/20 border-casa-gold' : 'bg-casa-bg border-casa-border'}`}
+                className={`col-span-2 rounded-button border text-casa-navy flex items-center justify-center ${shift ? 'bg-casa-gold/20 border-casa-gold' : 'bg-casa-bg border-casa-border'}`}
+                style={{ height: '42px' }}
                 aria-label="Shift"
               >
                 <ArrowBigUp size={18} />
               </button>
               <button
                 onClick={handleBackspace}
-                className="col-span-2 h-11 rounded-button bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center"
+                className="col-span-2 rounded-button bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center"
+                style={{ height: '42px' }}
                 aria-label="Backspace"
               >
                 <Delete size={18} />
               </button>
               <button
                 onClick={() => moveFocusBy(shift ? -1 : 1)}
-                className="col-span-2 h-11 rounded-button bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center gap-1 text-body-sm font-semibold"
+                className="col-span-2 rounded-button bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center gap-1 font-semibold"
+                style={{ height: '42px', fontSize: '14px' }}
                 aria-label="Tab"
               >
                 <MoveHorizontal size={16} />
@@ -282,13 +287,15 @@ export default function TouchKeyboard() {
               </button>
               <button
                 onClick={() => insertText(' ')}
-                className="col-span-4 h-11 rounded-button bg-casa-bg border border-casa-border text-casa-navy text-body-sm font-semibold"
+                className="col-span-4 rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold"
+                style={{ height: '42px', fontSize: '14px' }}
               >
                 Space
               </button>
               <button
                 onClick={handleEnter}
-                className="col-span-2 h-11 rounded-button bg-casa-navy text-white border border-casa-navy flex items-center justify-center"
+                className="col-span-2 rounded-button bg-casa-navy text-white border border-casa-navy flex items-center justify-center"
+                style={{ height: '42px' }}
                 aria-label="Enter"
               >
                 <CornerDownLeft size={16} />
