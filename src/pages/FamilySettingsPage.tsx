@@ -58,6 +58,7 @@ export default function FamilySettingsPage() {
   const [newMembers, setNewMembers] = useState<EditableMember[]>([])
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const hydratedRef = useRef(false)
   const formatRoleLabel = (role?: string | null) => {
@@ -88,6 +89,7 @@ export default function FamilySettingsPage() {
 
   async function handleSave() {
     if (saving) return
+    setSaveError(null)
     setSaving(true)
     try {
       // Update existing members that have edits
@@ -125,6 +127,8 @@ export default function FamilySettingsPage() {
       qc.invalidateQueries({ queryKey: ['family-members'] })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      setSaveError((err as Error).message || 'Failed to save changes')
     } finally {
       setSaving(false)
     }
@@ -161,7 +165,9 @@ export default function FamilySettingsPage() {
           <p className="text-body text-casa-muted">Manage members, colors, and roles.</p>
         </div>
         <div className="text-right">
-          {saving ? (
+          {saveError ? (
+            <p className="text-caption text-casa-error">Save failed: {saveError}</p>
+          ) : saving ? (
             <p className="text-caption text-casa-muted">Saving…</p>
           ) : saved ? (
             <p className="text-caption text-emerald-700">✓ Saved</p>
