@@ -152,11 +152,14 @@ export default function TouchKeyboard() {
   const [align, setAlign] = useState<KeyboardAlign>('center')
   const [target, setTarget] = useState<EditableTarget | null>(null)
   const [keyboardHeight, setKeyboardHeight] = useState(MIN_VK_HEIGHT)
+  const [occupiedHeight, setOccupiedHeight] = useState(MIN_VK_HEIGHT + VK_BOTTOM_OFFSET)
   const [size, setSize] = useState<KeyboardSize>('comfortable')
   const [handedness, setHandedness] = useState<Handedness>('right')
   const [haptics, setHaptics] = useState(true)
   const [sound, setSound] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const pointerIntentAtRef = useRef(0)
+  const pointerIntentElRef = useRef<EditableTarget | null>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
 
   useEffect(() => {
@@ -185,16 +188,34 @@ export default function TouchKeyboard() {
   useEffect(() => {
     if (!enabled) return
 
+    const handlePointerDown = (e: PointerEvent) => {
+      const next = e.target
+      if (!(next instanceof Element) || !isEditableElement(next)) {
+        pointerIntentAtRef.current = 0
+        pointerIntentElRef.current = null
+        return
+      }
+      pointerIntentAtRef.current = Date.now()
+      pointerIntentElRef.current = next
+    }
+
     const handleFocusIn = (e: FocusEvent) => {
       const next = e.target
       if (!(next instanceof Element) || !isEditableElement(next)) return
+      const pointerIsRecent = Date.now() - pointerIntentAtRef.current < 900
+      const pointerMatchesField = pointerIntentElRef.current === next
+      const shouldOpen = visible || (pointerIsRecent && pointerMatchesField)
       setTarget(next)
       setMode(modeForTarget(next))
-      setVisible(true)
+      if (shouldOpen) setVisible(true)
       setShift(false)
-      setTimeout(() => {
-        next.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      }, 80)
+      if (shouldOpen) {
+        setTimeout(() => {
+          next.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        }, 80)
+      }
+      pointerIntentAtRef.current = 0
+      pointerIntentElRef.current = null
     }
 
     const handleFocusOut = () => {
@@ -213,11 +234,13 @@ export default function TouchKeyboard() {
 
     document.addEventListener('focusin', handleFocusIn)
     document.addEventListener('focusout', handleFocusOut)
+    document.addEventListener('pointerdown', handlePointerDown, true)
     return () => {
       document.removeEventListener('focusin', handleFocusIn)
       document.removeEventListener('focusout', handleFocusOut)
+      document.removeEventListener('pointerdown', handlePointerDown, true)
     }
-  }, [enabled])
+  }, [enabled, visible])
 
   const keyboardWidthPx = useMemo(() => {
     const vw = window.innerWidth || 1280
@@ -244,7 +267,7 @@ export default function TouchKeyboard() {
   useEffect(() => {
     const root = document.documentElement
     if (enabled && visible) {
-      root.style.setProperty('--vk-height', `${keyboardHeight + VK_BOTTOM_OFFSET}px`)
+      root.style.setProperty('--vk-height', `${occupiedHeight}px`)
       root.style.setProperty('--vk-gap', `${VK_GAP}px`)
     } else {
       root.style.setProperty('--vk-height', '0px')
@@ -254,7 +277,7 @@ export default function TouchKeyboard() {
       root.style.setProperty('--vk-height', '0px')
       root.style.setProperty('--vk-gap', '0px')
     }
-  }, [enabled, visible, keyboardHeight])
+  }, [enabled, visible, occupiedHeight])
 
   useEffect(() => {
     const vv = window.visualViewport
@@ -271,6 +294,20 @@ export default function TouchKeyboard() {
       window.removeEventListener('resize', updateSize)
     }
   }, [])
+
+  useEffect(() => {
+    if (!enabled || !visible) return
+    const measure = () => {
+      const contentHeight = rootRef.current?.offsetHeight ?? keyboardHeight
+      setOccupiedHeight(contentHeight + VK_BOTTOM_OFFSET)
+    }
+    const raf = requestAnimationFrame(measure)
+    window.addEventListener('resize', measure)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('resize', measure)
+    }
+  }, [enabled, visible, keyboardHeight, mode, size, shift, align])
 
   const rows = useMemo(() => {
     if (mode === 'num') return NUM_ROWS
@@ -407,7 +444,7 @@ export default function TouchKeyboard() {
           transition={{ type: 'spring', damping: 28, stiffness: 250 }}
           className="fixed z-[85] border border-casa-border bg-casa-surface/98 backdrop-blur-sm shadow-modal overflow-y-auto rounded-2xl"
           style={{
-            height: `${keyboardHeight}px`,
+            maxHeight: `${keyboardHeight}px`,
             width: `${keyboardWidthPx}px`,
             bottom: `${VK_BOTTOM_OFFSET}px`,
             left: cardLeft,
