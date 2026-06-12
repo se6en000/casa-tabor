@@ -24,7 +24,14 @@ export interface Artwork {
   title: string
   artist: string
   imageUrl: string
+  date?: string
+  medium?: string
+  origin?: string
 }
+
+type ArtworkPreference = 'up' | 'down'
+type ArtworkPreferences = Record<number, ArtworkPreference>
+const PREFS_KEY = 'artwork-preferences-v1'
 
 function shuffled<T>(arr: T[]): T[] {
   const a = [...arr]
@@ -33,6 +40,30 @@ function shuffled<T>(arr: T[]): T[] {
     [a[i], a[j]] = [a[j], a[i]]
   }
   return a
+}
+
+function loadPrefs(): ArtworkPreferences {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as Record<string, ArtworkPreference>
+    const out: ArtworkPreferences = {}
+    for (const [k, v] of Object.entries(parsed)) {
+      const id = Number(k)
+      if (!Number.isNaN(id) && (v === 'up' || v === 'down')) out[id] = v
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+function savePrefs(prefs: ArtworkPreferences) {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
+  } catch {
+    // Ignore storage failures.
+  }
 }
 
 async function fetchPage(): Promise<Artwork[]> {
@@ -50,7 +81,7 @@ async function fetchPage(): Promise<Artwork[]> {
           ],
         },
       },
-      fields: ['id', 'title', 'artist_display', 'image_id'],
+      fields: ['id', 'title', 'artist_display', 'image_id', 'date_display', 'medium_display', 'place_of_origin'],
       limit: FETCH_LIMIT,
       page: randomPage,
     }),
@@ -59,11 +90,14 @@ async function fetchPage(): Promise<Artwork[]> {
   const json = await res.json()
   return (json.data ?? [])
     .filter((a: { image_id?: string }) => a.image_id)
-    .map((a: { id: number; title?: string; artist_display?: string; image_id: string }) => ({
+    .map((a: { id: number; title?: string; artist_display?: string; image_id: string; date_display?: string; medium_display?: string; place_of_origin?: string }) => ({
       id: a.id,
       title: a.title ?? '',
       artist: (a.artist_display ?? '').split('\n')[0],
       imageUrl: `${IIIF}/${a.image_id}/full/1600,/0/default.jpg`,
+      date: a.date_display ?? '',
+      medium: a.medium_display ?? '',
+      origin: a.place_of_origin ?? '',
     }))
 }
 
@@ -71,8 +105,14 @@ export function useArtwork(rotateSecs = 240) {
   const [artworks, setArtworks]   = useState<Artwork[]>([])
   const [index, setIndex]         = useState(0)
   const [loaded, setLoaded]       = useState(false)
+  const [, setPrefsVersion] = useState(0)
   const rotateRef                 = useRef<ReturnType<typeof setInterval> | null>(null)
   const failedIdsRef              = useRef<Set<number>>(new Set())
+  const prefsRef                  = useRef<ArtworkPreferences>({})
+
+  useEffect(() => {
+    prefsRef.current = loadPrefs()
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -81,8 +121,12 @@ export function useArtwork(rotateSecs = 240) {
         try {
           const results = await fetchPage()
           if (results.length > 0 && !cancelled) {
-            const shuffledResults = shuffled(results)
-            setArtworks(shuffledResults)
+            const filtered = results.filter(a => prefsRef.current[a.id] !== 'down')
+            const upvoted = filtered.filter(a => prefsRef.current[a.id] === 'up')
+            const neutral = filtered.filter(a => prefsRef.current[a.id] !== 'up')
+            const shuffledResults = [...shuffled(upvoted), ...shuffled(neutral)]
+            const finalResults = shuffledResults.length > 0 ? shuffledResults : shuffled(results)
+            setArtworks(finalResults)
             setIndex(0)
             return
           }
@@ -92,7 +136,11 @@ export function useArtwork(rotateSecs = 240) {
       }
       // All attempts failed — use fallbacks so art mode always has something to show
       if (!cancelled) {
-        setArtworks(shuffled(FALLBACKS))
+        const filteredFallbacks = FALLBACKS.filter(a => prefsRef.current[a.id] !== 'down')
+        const upvotedFallbacks = filteredFallbacks.filter(a => prefsRef.current[a.id] === 'up')
+        const neutralFallbacks = filteredFallbacks.filter(a => prefsRef.current[a.id] !== 'up')
+        const finalFallbacks = [...shuffled(upvotedFallbacks), ...shuffled(neutralFallbacks)]
+        setArtworks(finalFallbacks.length > 0 ? finalFallbacks : shuffled(FALLBACKS))
         setIndex(0)
       }
     }
@@ -110,7 +158,10 @@ export function useArtwork(rotateSecs = 240) {
         let next = (i + 1) % artworks.length
         // Skip any known-failed images (but don't loop forever)
         let attempts = 0
-        while (failedIdsRef.current.has(artworks[next]?.id) && attempts < artworks.length) {
+        while (
+          (failedIdsRef.current.has(artworks[next]?.id) || prefsRef.current[artworks[next]?.id] === 'down')
+          && attempts < artworks.length
+        ) {
           next = (next + 1) % artworks.length
           attempts++
         }
@@ -138,8 +189,35 @@ export function useArtwork(rotateSecs = 240) {
 
   const next = useCallback(() => {
     setLoaded(false)
-    setIndex(i => (i + 1) % Math.max(artworks.length, 1))
+    setIndex(i => {
+      if (artworks.length === 0) return 0
+      let nextIndex = (i + 1) % artworks.length
+      let attempts = 0
+      while (prefsRef.current[artworks[nextIndex]?.id] === 'down' && attempts < artworks.length) {
+        nextIndex = (nextIndex + 1) % artworks.length
+        attempts++
+      }
+      return nextIndex
+    })
   }, [artworks.length])
 
-  return { artwork: current, loaded, onLoad, onError, next, total: artworks.length }
+  const setPreference = useCallback((artworkId: number, preference: ArtworkPreference) => {
+    const nextPrefs: ArtworkPreferences = { ...prefsRef.current, [artworkId]: preference }
+    prefsRef.current = nextPrefs
+    savePrefs(nextPrefs)
+    setPrefsVersion(v => v + 1)
+  }, [])
+
+  const currentPreference = current ? prefsRef.current[current.id] : undefined
+
+  return {
+    artwork: current,
+    loaded,
+    onLoad,
+    onError,
+    next,
+    total: artworks.length,
+    setPreference,
+    currentPreference,
+  }
 }

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronRight, Info, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { useArtwork } from '../../hooks/useArtwork'
 import { generateAdaptiveMatColor } from '../../utils/colorUtils'
 import { getTextureStyle } from '../../utils/textureUtils'
@@ -9,75 +10,59 @@ interface Props {
   onDismiss: () => void
   rotationMins?: number
   minArtWidthVw?: number
-  artDimOffset?: number  // % below ambient lux (0–80)
-  adaptiveMatColor?: boolean  // enable mat color adaptation (default true)
+  artDimOffset?: number
+  adaptiveMatColor?: boolean
 }
 
 export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidthVw = 55, artDimOffset = 30, adaptiveMatColor = true }: Props) {
-  const { artwork, loaded, onLoad, onError } = useArtwork(rotationMins * 60)
+  const { artwork, loaded, onLoad, onError, next, setPreference, currentPreference } = useArtwork(rotationMins * 60)
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)
   const [aspectRatio, setAspectRatio] = useState<string | undefined>(undefined)
   const [isPortrait, setIsPortrait] = useState(false)
   const [matColor, setMatColor] = useState('#F5F0E8')
   const [matTransition, setMatTransition] = useState(false)
-  const [metaVisible, setMetaVisible] = useState(true)
+  const [showMoreInfo, setShowMoreInfo] = useState(false)
   const [driftIndex, setDriftIndex] = useState(0)
+  const [swiping, setSwiping] = useState(false)
+  const touchStartXRef = useRef<number | null>(null)
   const textureStyle = useMemo(() => getTextureStyle(), [])
 
-  // Fade in on mount, then allow dismiss after a grace period
   useEffect(() => {
     const t1 = setTimeout(() => setVisible(true), 50)
     const t2 = setTimeout(() => setDismissable(true), 1500)
-    // Tell sensor bridge to dim monitor relative to ambient lux
     fetch(`${SENSOR}/display/art-mode`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dim_offset: artDimOffset / 100 }),
-    }).catch(() => { /* non-Pi — ignore */ })
+    }).catch(() => {})
     return () => {
       clearTimeout(t1)
       clearTimeout(t2)
-      // Restore auto-brightness when art mode exits
       fetch(`${SENSOR}/display/art-mode-off`, { method: 'POST' }).catch(() => {})
     }
   }, [])
 
-  // Reset aspect ratio when artwork changes
   useEffect(() => { setAspectRatio(undefined); setIsPortrait(false) }, [artwork?.id])
+  useEffect(() => { setShowMoreInfo(false) }, [artwork?.id])
 
   useEffect(() => {
-    if (!artwork?.id) return
-    setMetaVisible(true)
-    const t = setTimeout(() => setMetaVisible(false), 9000)
-    return () => clearTimeout(t)
-  }, [artwork?.id])
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      setDriftIndex(i => (i + 1) % 4)
-    }, 45000)
+    const t = setInterval(() => setDriftIndex(i => (i + 1) % 4), 45000)
     return () => clearInterval(t)
   }, [])
 
-  // Extract and apply adaptive mat color when artwork loads
   useEffect(() => {
     if (!artwork?.imageUrl || !adaptiveMatColor) return
-    
-    setMatTransition(false) // disable transition during load
+    setMatTransition(false)
     const timeout = setTimeout(async () => {
       try {
         const colorAnalysis = await generateAdaptiveMatColor(artwork.imageUrl)
         setMatColor(colorAnalysis.matColor)
-        // Enable smooth transition after color is set
         setTimeout(() => setMatTransition(true), 100)
-      } catch (err) {
-        console.warn('[ArtScreensaver] Color analysis failed:', err)
-        // Fallback to default
+      } catch {
         setMatColor('#F5F0E8')
       }
     }, 100)
-    
     return () => clearTimeout(timeout)
   }, [artwork?.id, artwork?.imageUrl, adaptiveMatColor])
 
@@ -96,16 +81,46 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
     setTimeout(onDismiss, 500)
   }
 
+  function handleNextPiece(e?: React.MouseEvent | React.TouchEvent) {
+    e?.stopPropagation()
+    setSwiping(true)
+    setTimeout(() => setSwiping(false), 260)
+    next()
+  }
+
+  function handleThumbUp(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!artwork) return
+    setPreference(artwork.id, 'up')
+  }
+
+  function handleThumbDown(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!artwork) return
+    setPreference(artwork.id, 'down')
+    handleNextPiece()
+  }
+
+  function handleTouchStart(e: React.TouchEvent<HTMLDivElement>) {
+    touchStartXRef.current = e.touches[0]?.clientX ?? null
+  }
+
+  function handleTouchEnd(e: React.TouchEvent<HTMLDivElement>) {
+    const startX = touchStartXRef.current
+    if (startX == null) return
+    const endX = e.changedTouches[0]?.clientX ?? startX
+    if (endX - startX < -50) handleNextPiece(e)
+    touchStartXRef.current = null
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center cursor-pointer"
-      style={{
-        opacity: visible ? 1 : 0,
-        transition: 'opacity 0.6s ease',
-      }}
+      style={{ opacity: visible ? 1 : 0, transition: 'opacity 0.6s ease' }}
       onClick={handleDismiss}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
-      {/* Full-bleed mat with adaptive color and texture */}
       <div
         className="relative w-full h-full flex items-center justify-center"
         style={{
@@ -116,28 +131,26 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
           backgroundAttachment: textureStyle.backgroundAttachment,
           backgroundBlendMode: textureStyle.backgroundBlendMode,
           boxShadow: [
-            'inset 0 36px 48px -12px rgba(0,0,0,0.50)',   // top — strongest, light comes from above
-            'inset 36px 0 48px -12px rgba(0,0,0,0.38)',   // left — medium
-            'inset -36px 0 48px -12px rgba(0,0,0,0.32)',  // right — slightly lighter
-            'inset 0 -18px 24px -12px rgba(0,0,0,0.10)',  // bottom — barely visible, light from above
+            'inset 0 36px 48px -12px rgba(0,0,0,0.50)',
+            'inset 36px 0 48px -12px rgba(0,0,0,0.38)',
+            'inset -36px 0 48px -12px rgba(0,0,0,0.32)',
+            'inset 0 -18px 24px -12px rgba(0,0,0,0.10)',
           ].join(', '),
           padding: '3.5vw',
           transition: matTransition ? 'background-color 0.8s ease' : 'none',
         }}
       >
-        {/* Bevel wrapper — sized to actual image aspect ratio so shadow hugs the painting */}
         <div
           style={{
             position: 'relative',
             aspectRatio: aspectRatio,
             ...(isPortrait
               ? { minHeight: '70vh', maxHeight: '100%', maxWidth: '100%' }
-              : { minWidth: `${minArtWidthVw}vw`, maxWidth: '100%', maxHeight: '100%' }
-            ),
+              : { minWidth: `${minArtWidthVw}vw`, maxWidth: '100%', maxHeight: '100%' }),
             overflow: 'hidden',
             display: 'flex',
             transform: ['translate3d(0px,0px,0)', 'translate3d(1px,0px,0)', 'translate3d(0px,1px,0)', 'translate3d(-1px,0px,0)'][driftIndex],
-            transition: 'transform 16s linear',
+            transition: swiping ? 'transform 260ms ease' : 'transform 16s linear',
           }}
         >
           {artwork && (
@@ -153,11 +166,11 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
                 objectFit: 'contain',
                 display: 'block',
                 opacity: loaded ? 1 : 0,
-                transition: 'opacity 1.2s ease',
+                transform: loaded ? 'translateX(0)' : 'translateX(18px)',
+                transition: 'opacity 1.2s ease, transform 0.35s ease',
               }}
             />
           )}
-          {/* Bevel overlay — sits on top of image so inset shadow is visible */}
           <div
             style={{
               position: 'absolute',
@@ -175,25 +188,12 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
           />
         </div>
 
-        {/* Loading shimmer */}
         {!loaded && (
-          <div
-            className="absolute inset-0 m-[3.5vw]"
-            style={{ backgroundColor: '#e8e3db', animation: 'pulse 2s ease-in-out infinite' }}
-          />
+          <div className="absolute inset-0 m-[3.5vw]" style={{ backgroundColor: '#e8e3db', animation: 'pulse 2s ease-in-out infinite' }} />
         )}
 
-        {/* Gallery label — bottom right inside mat with enhanced styling */}
         {artwork && loaded && (
-          <div
-            className="absolute bottom-4 right-5 text-right pointer-events-none"
-            style={{
-              color: '#5a4f4a',
-              textShadow: '0 1px 2px rgba(255,255,255,0.8)',
-              opacity: metaVisible ? 1 : 0,
-              transition: 'opacity 0.8s ease',
-            }}
-          >
+          <div className="absolute bottom-4 right-5 text-right pointer-events-none" style={{ color: '#5a4f4a', textShadow: '0 1px 2px rgba(255,255,255,0.8)' }}>
             <p className="text-caption italic leading-tight" style={{ fontFamily: 'Georgia, serif', fontSize: '0.7rem', fontWeight: 500, letterSpacing: '0.3px' }}>
               {artwork.title}
             </p>
@@ -203,14 +203,69 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
           </div>
         )}
 
-        {/* Hint */}
-        <div
-          className="absolute bottom-3 left-4 pointer-events-none"
-          style={{ color: '#9b9285', fontSize: '0.55rem', fontFamily: 'Georgia, serif' }}
-        >
+        {artwork && loaded && (
+          <>
+            <div className="absolute bottom-4 left-5 flex items-center gap-1.5 pointer-events-auto">
+              <button
+                type="button"
+                onClick={handleThumbUp}
+                className="w-7 h-7 rounded-full flex items-center justify-center border border-black/10 bg-white/65 text-[#5a4f4a] hover:bg-white/80 transition-colors"
+                aria-label="Show more like this"
+              >
+                <ThumbsUp size={12} className={currentPreference === 'up' ? 'text-emerald-700' : ''} />
+              </button>
+              <button
+                type="button"
+                onClick={handleThumbDown}
+                className="w-7 h-7 rounded-full flex items-center justify-center border border-black/10 bg-white/65 text-[#5a4f4a] hover:bg-white/80 transition-colors"
+                aria-label="Don't show again"
+              >
+                <ThumbsDown size={12} className={currentPreference === 'down' ? 'text-red-700' : ''} />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setShowMoreInfo(v => !v) }}
+                className="w-7 h-7 rounded-full flex items-center justify-center border border-black/10 bg-white/65 text-[#5a4f4a] hover:bg-white/80 transition-colors"
+                aria-label="Artwork details"
+              >
+                <Info size={12} />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleNextPiece}
+              className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full border border-black/10 bg-white/50 text-[#5a4f4a] hover:bg-white/75 flex items-center justify-center pointer-events-auto transition-colors"
+              aria-label="Next artwork"
+            >
+              <ChevronRight size={14} />
+            </button>
+
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-3 text-[0.55rem] text-[#8f8678] pointer-events-none">
+              swipe left for next piece
+            </div>
+          </>
+        )}
+
+        {artwork && loaded && showMoreInfo && (
+          <div className="absolute top-4 left-4 max-w-[360px] rounded-xl border border-black/10 bg-white/78 backdrop-blur-sm p-3 pointer-events-none" style={{ color: '#4e4540' }}>
+            <p className="text-[0.72rem] font-semibold leading-tight">{artwork.title}</p>
+            <p className="text-[0.68rem] mt-0.5">{artwork.artist || 'Unknown artist'}</p>
+            {(artwork.date || artwork.medium || artwork.origin) && (
+              <div className="mt-2 space-y-0.5 text-[0.62rem] opacity-85">
+                {artwork.date && <p>Date: {artwork.date}</p>}
+                {artwork.medium && <p>Medium: {artwork.medium}</p>}
+                {artwork.origin && <p>Origin: {artwork.origin}</p>}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="absolute bottom-3 left-4 pointer-events-none" style={{ color: '#9b9285', fontSize: '0.55rem', fontFamily: 'Georgia, serif' }}>
           tap to wake · say alexa
         </div>
       </div>
     </div>
   )
 }
+
