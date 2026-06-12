@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronRight, Info, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { useArtwork } from '../../hooks/useArtwork'
 import { generateAdaptiveMatColor } from '../../utils/colorUtils'
 import { getTextureStyle } from '../../utils/textureUtils'
@@ -15,14 +14,13 @@ interface Props {
 }
 
 export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidthVw = 55, artDimOffset = 30, adaptiveMatColor = true }: Props) {
-  const { artwork, loaded, onLoad, onError, next, setPreference, currentPreference } = useArtwork(rotationMins * 60)
+  const { artwork, loaded, onLoad, onError, next } = useArtwork(rotationMins * 60)
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)
   const [aspectRatio, setAspectRatio] = useState<string | undefined>(undefined)
   const [isPortrait, setIsPortrait] = useState(false)
   const [matColor, setMatColor] = useState('#F5F0E8')
   const [matTransition, setMatTransition] = useState(false)
-  const [showMoreInfo, setShowMoreInfo] = useState(false)
   const [driftIndex, setDriftIndex] = useState(0)
   const [swiping, setSwiping] = useState(false)
   const touchStartXRef = useRef<number | null>(null)
@@ -44,7 +42,6 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   }, [])
 
   useEffect(() => { setAspectRatio(undefined); setIsPortrait(false) }, [artwork?.id])
-  useEffect(() => { setShowMoreInfo(false) }, [artwork?.id])
 
   useEffect(() => {
     const t = setInterval(() => setDriftIndex(i => (i + 1) % 4), 45000)
@@ -86,19 +83,6 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
     setSwiping(true)
     setTimeout(() => setSwiping(false), 260)
     next()
-  }
-
-  function handleThumbUp(e: React.MouseEvent) {
-    e.stopPropagation()
-    if (!artwork) return
-    setPreference(artwork.id, 'up')
-  }
-
-  function handleThumbDown(e: React.MouseEvent) {
-    e.stopPropagation()
-    if (!artwork) return
-    setPreference(artwork.id, 'down')
-    handleNextPiece()
   }
 
   function handleTouchStart(e: React.TouchEvent<HTMLDivElement>) {
@@ -204,60 +188,8 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
         )}
 
         {artwork && loaded && (
-          <>
-            <div className="absolute bottom-4 left-5 flex items-center gap-1.5 pointer-events-auto">
-              <button
-                type="button"
-                onClick={handleThumbUp}
-                className="w-7 h-7 rounded-full flex items-center justify-center border border-black/10 bg-white/65 text-[#5a4f4a] hover:bg-white/80 transition-colors"
-                aria-label="Show more like this"
-              >
-                <ThumbsUp size={12} className={currentPreference === 'up' ? 'text-emerald-700' : ''} />
-              </button>
-              <button
-                type="button"
-                onClick={handleThumbDown}
-                className="w-7 h-7 rounded-full flex items-center justify-center border border-black/10 bg-white/65 text-[#5a4f4a] hover:bg-white/80 transition-colors"
-                aria-label="Don't show again"
-              >
-                <ThumbsDown size={12} className={currentPreference === 'down' ? 'text-red-700' : ''} />
-              </button>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setShowMoreInfo(v => !v) }}
-                className="w-7 h-7 rounded-full flex items-center justify-center border border-black/10 bg-white/65 text-[#5a4f4a] hover:bg-white/80 transition-colors"
-                aria-label="Artwork details"
-              >
-                <Info size={12} />
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleNextPiece}
-              className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full border border-black/10 bg-white/50 text-[#5a4f4a] hover:bg-white/75 flex items-center justify-center pointer-events-auto transition-colors"
-              aria-label="Next artwork"
-            >
-              <ChevronRight size={14} />
-            </button>
-
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-3 text-[0.55rem] text-[#8f8678] pointer-events-none">
-              swipe left for next piece
-            </div>
-          </>
-        )}
-
-        {artwork && loaded && showMoreInfo && (
-          <div className="absolute top-4 left-4 max-w-[360px] rounded-xl border border-black/10 bg-white/78 backdrop-blur-sm p-3 pointer-events-none" style={{ color: '#4e4540' }}>
-            <p className="text-[0.72rem] font-semibold leading-tight">{artwork.title}</p>
-            <p className="text-[0.68rem] mt-0.5">{artwork.artist || 'Unknown artist'}</p>
-            {(artwork.date || artwork.medium || artwork.origin) && (
-              <div className="mt-2 space-y-0.5 text-[0.62rem] opacity-85">
-                {artwork.date && <p>Date: {artwork.date}</p>}
-                {artwork.medium && <p>Medium: {artwork.medium}</p>}
-                {artwork.origin && <p>Origin: {artwork.origin}</p>}
-              </div>
-            )}
+          <div className="absolute left-1/2 -translate-x-1/2 bottom-3 text-[0.55rem] text-[#8f8678] pointer-events-none">
+            swipe left for next piece
           </div>
         )}
 
@@ -268,4 +200,3 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
     </div>
   )
 }
-
