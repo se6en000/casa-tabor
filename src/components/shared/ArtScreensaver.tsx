@@ -177,7 +177,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
         )}
 
         {artwork && loaded && (
-          <div className="absolute bottom-4 right-5 text-right pointer-events-none" style={{ color: '#4f453f' }}>
+          <div className="absolute bottom-4 right-5 text-right pointer-events-none" style={{ color: '#5a4f4a' }}>
             <p className="text-caption italic leading-tight" style={{ fontFamily: 'Georgia, serif', fontSize: '0.7rem', fontWeight: 500, letterSpacing: '0.3px' }}>
               {artwork.title}
             </p>
