@@ -1,0 +1,20 @@
+[Unit]
+Description=Casa Tabor Chromium Kiosk
+After=graphical.target lightdm.service
+Wants=graphical.target
+
+[Service]
+Type=simple
+User=jake
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/jake/.Xauthority
+Environment=KIOSK=1
+ExecStartPre=/bin/sleep 5
+ExecStartPre=/bin/rm -f /home/jake/.config/chromium/SingletonLock
+ExecStartPre=/bin/rm -f /home/jake/.config/chromium/SingletonSocket
+ExecStart=/bin/bash /home/jake/start-casa.sh
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=graphical.target
