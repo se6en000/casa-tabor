@@ -165,22 +165,22 @@ Deno.serve(async (req) => {
             title: { type: 'STRING', description: 'New title' },
             start: { type: 'STRING', description: 'New start ISO datetime with UTC offset' },
             end: { type: 'STRING', description: 'New end ISO datetime with UTC offset' },
-            location: { type: 'STRING', description: 'New location name or venue label' },
-            address: { type: 'STRING', description: 'New street address' },
+            location: { type: 'STRING', description: 'New location name or venue label. Use empty string to clear.' },
+            address: { type: 'STRING', description: 'New street address. Use empty string to clear.' },
             members_add: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Family member names to ADD to the event' },
             members_remove: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Family member names to REMOVE from the event' },
-            notes: { type: 'STRING', description: 'Visible Notes field in the event details panel (prep_notes)' },
-            description: { type: 'STRING', description: 'Underlying calendar description/body text' },
+            notes: { type: 'STRING', description: 'Visible Notes field in the event details panel (prep_notes). Use empty string to clear.' },
+            description: { type: 'STRING', description: 'Underlying calendar description/body text. Use empty string to clear.' },
             all_day: { type: 'BOOLEAN', description: 'Toggle all-day status' },
-            category: { type: 'STRING', description: 'Category like appointment, school, sports, dining, travel, social, other' },
+            category: { type: 'STRING', description: 'Category like appointment, school, sports, dining, travel, social, other. Use empty string to clear.' },
             what_to_bring: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Full replacement list for What to Bring. Send the complete final list.' },
-            outfit_suggestion: { type: 'STRING', description: 'What to Wear field' },
-            parking_notes: { type: 'STRING', description: 'Parking field' },
-            contact_name: { type: 'STRING', description: 'Contact name' },
-            contact_phone: { type: 'STRING', description: 'Contact phone number' },
-            cost_estimate: { type: 'STRING', description: 'Cost Estimate field' },
-            dietary_notes: { type: 'STRING', description: 'Dietary Notes field' },
-            meal_impact: { type: 'STRING', description: 'Meal Impact field' },
+            outfit_suggestion: { type: 'STRING', description: 'What to Wear field. Use empty string to clear.' },
+            parking_notes: { type: 'STRING', description: 'Parking field. Use empty string to clear.' },
+            contact_name: { type: 'STRING', description: 'Contact name. Use empty string to clear.' },
+            contact_phone: { type: 'STRING', description: 'Contact phone number. Use empty string to clear.' },
+            cost_estimate: { type: 'STRING', description: 'Cost Estimate field. Use empty string to clear.' },
+            dietary_notes: { type: 'STRING', description: 'Dietary Notes field. Use empty string to clear.' },
+            meal_impact: { type: 'STRING', description: 'Meal Impact field. Use empty string to clear.' },
             checklist_items: {
               type: 'ARRAY',
               description: 'Full replacement checklist for the event. Send the complete final list; use [] to clear.',
@@ -189,9 +189,9 @@ Deno.serve(async (req) => {
                 properties: {
                   id: { type: 'STRING', description: 'Existing checklist item ID when editing an existing item' },
                   label: { type: 'STRING', description: 'Checklist item text' },
-                  note: { type: 'STRING', description: 'Optional secondary note' },
+                  note: { type: 'STRING', description: 'Optional secondary note. Use empty string to clear.' },
                   checked: { type: 'BOOLEAN', description: 'Whether the item is already checked off' },
-                  category: { type: 'STRING', description: 'Optional grouping/category label' },
+                  category: { type: 'STRING', description: 'Optional grouping/category label. Use empty string to clear.' },
                 },
                 required: ['label'],
               },
@@ -204,11 +204,11 @@ Deno.serve(async (req) => {
                 properties: {
                   id: { type: 'STRING', description: 'Existing action item ID when editing an existing item' },
                   title: { type: 'STRING', description: 'Action item title' },
-                  description: { type: 'STRING', description: 'Optional longer description' },
-                  due_date: { type: 'STRING', description: 'Optional ISO datetime with UTC offset' },
+                  description: { type: 'STRING', description: 'Optional longer description. Use empty string to clear.' },
+                  due_date: { type: 'STRING', description: 'Optional ISO datetime with UTC offset. Use empty string to clear.' },
                   is_urgent: { type: 'BOOLEAN', description: 'True if this should appear as the urgent banner' },
                   completed: { type: 'BOOLEAN', description: 'Whether the action is already completed' },
-                  assigned_to: { type: 'STRING', description: 'Optional assignee name' },
+                  assigned_to: { type: 'STRING', description: 'Optional assignee name. Use empty string to clear.' },
                 },
                 required: ['title'],
               },
@@ -327,6 +327,7 @@ Action items: ${JSON.stringify((context.focusedEvent as {actions?: unknown[]}).a
 RULES:
 - Always use update_event with ID: ${(context.focusedEvent as {id:string}).id} for any changes. You already have the event — never search for it.
 - Use notes for the visible Notes section, and description for the underlying calendar body text.
+- Use empty string to clear a text field.
 - For what_to_bring, send the complete final list, not just the newly added item.
 - For checklist_items and action_items, send the complete final list, not just the delta. Preserve existing item IDs when keeping/editing an item so state stays stable.
 - After the user confirms a change, apply it immediately with update_event; confirm what you changed in one sentence.
@@ -540,23 +541,24 @@ INSTRUCTIONS:
   function buildDisplayText(name: string, args: Record<string, unknown>): string {
     if (name === 'create_event') return `Create: **${args.title}** on ${args.start}`
     if (name === 'update_event') {
+      const show = (value: unknown) => value == null || String(value).trim() === '' ? '(clear)' : `"${String(value)}"`
       const changes: string[] = []
-      if (args.title) changes.push(`title → "${args.title}"`)
-      if (args.start) changes.push(`start → ${args.start}`)
-      if (args.end) changes.push(`end → ${args.end}`)
-      if (args.location) changes.push(`location → "${args.location}"`)
-      if (args.address) changes.push(`address → "${args.address}"`)
-      if (args.notes) changes.push(`notes → "${args.notes}"`)
-      if (args.description) changes.push(`description → "${args.description}"`)
-      if (args.category) changes.push(`category → "${args.category}"`)
-      if (args.what_to_bring) changes.push(`bring → ${(args.what_to_bring as string[]).join(', ')}`)
-      if (args.outfit_suggestion) changes.push(`wear → "${args.outfit_suggestion}"`)
-      if (args.parking_notes) changes.push(`parking → "${args.parking_notes}"`)
-      if (args.contact_name) changes.push(`contact → "${args.contact_name}"`)
-      if (args.contact_phone) changes.push(`phone → "${args.contact_phone}"`)
-      if (args.cost_estimate) changes.push(`cost → "${args.cost_estimate}"`)
-      if (args.dietary_notes) changes.push(`dietary → "${args.dietary_notes}"`)
-      if (args.meal_impact) changes.push(`meal impact → "${args.meal_impact}"`)
+      if (args.title !== undefined) changes.push(`title → ${show(args.title)}`)
+      if (args.start !== undefined) changes.push(`start → ${args.start}`)
+      if (args.end !== undefined) changes.push(`end → ${args.end}`)
+      if (args.location !== undefined) changes.push(`location → ${show(args.location)}`)
+      if (args.address !== undefined) changes.push(`address → ${show(args.address)}`)
+      if (args.notes !== undefined) changes.push(`notes → ${show(args.notes)}`)
+      if (args.description !== undefined) changes.push(`description → ${show(args.description)}`)
+      if (args.category !== undefined) changes.push(`category → ${show(args.category)}`)
+      if (args.what_to_bring !== undefined) changes.push(`bring → ${Array.isArray(args.what_to_bring) && (args.what_to_bring as string[]).length > 0 ? (args.what_to_bring as string[]).join(', ') : '(clear)'}`)
+      if (args.outfit_suggestion !== undefined) changes.push(`wear → ${show(args.outfit_suggestion)}`)
+      if (args.parking_notes !== undefined) changes.push(`parking → ${show(args.parking_notes)}`)
+      if (args.contact_name !== undefined) changes.push(`contact → ${show(args.contact_name)}`)
+      if (args.contact_phone !== undefined) changes.push(`phone → ${show(args.contact_phone)}`)
+      if (args.cost_estimate !== undefined) changes.push(`cost → ${show(args.cost_estimate)}`)
+      if (args.dietary_notes !== undefined) changes.push(`dietary → ${show(args.dietary_notes)}`)
+      if (args.meal_impact !== undefined) changes.push(`meal impact → ${show(args.meal_impact)}`)
       if (args.checklist_items !== undefined) changes.push(`checklist → ${Array.isArray(args.checklist_items) ? `${(args.checklist_items as unknown[]).length} item(s)` : 'updated'}`)
       if (args.action_items !== undefined) changes.push(`actions → ${Array.isArray(args.action_items) ? `${(args.action_items as unknown[]).length} item(s)` : 'updated'}`)
       if ((args.members_add as string[])?.length) changes.push(`add: ${(args.members_add as string[]).join(', ')}`)

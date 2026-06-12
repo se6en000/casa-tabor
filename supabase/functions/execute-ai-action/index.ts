@@ -6,6 +6,21 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const normalizeOptionalText = (value: unknown): string | null | undefined => {
+  if (value === undefined) return undefined
+  if (value == null) return null
+  const text = String(value).trim()
+  return text === '' ? null : text
+}
+
+const normalizeStringList = (value: unknown): string[] | undefined => {
+  if (value === undefined) return undefined
+  const items = Array.isArray(value) ? value : String(value).split(/\n|,/)
+  return items
+    .map((item) => String(item).trim())
+    .filter(Boolean)
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
@@ -57,10 +72,10 @@ Deno.serve(async (req) => {
       if (args.start !== undefined) updates.start_time = args.start
       if (args.end !== undefined) updates.end_time = args.end
       const destinationChanged = args.location !== undefined || args.address !== undefined
-      if (args.location !== undefined) updates.location_name = args.location
-      if (args.address !== undefined) updates.address = args.address
+      if (args.location !== undefined) updates.location_name = normalizeOptionalText(args.location)
+      if (args.address !== undefined) updates.address = normalizeOptionalText(args.address)
       if (destinationChanged) updates.is_enriched = false
-      if (args.description !== undefined) updates.description = args.description
+      if (args.description !== undefined) updates.description = normalizeOptionalText(args.description)
       if (args.all_day !== undefined) updates.all_day = args.all_day
 
       if (Object.keys(updates).length > 0) {
@@ -69,23 +84,18 @@ Deno.serve(async (req) => {
       }
 
       const enrichmentUpdates: Record<string, unknown> = {}
-      if (args.notes !== undefined) enrichmentUpdates.prep_notes = args.notes ?? null
-      if (args.category !== undefined) enrichmentUpdates.category = args.category ?? null
+      if (args.notes !== undefined) enrichmentUpdates.prep_notes = normalizeOptionalText(args.notes)
+      if (args.category !== undefined) enrichmentUpdates.category = normalizeOptionalText(args.category)
       if (args.what_to_bring !== undefined) {
-        enrichmentUpdates.what_to_bring = Array.isArray(args.what_to_bring)
-          ? args.what_to_bring
-          : String(args.what_to_bring)
-              .split(/\n|,/)
-              .map((item) => item.trim())
-              .filter(Boolean)
+        enrichmentUpdates.what_to_bring = normalizeStringList(args.what_to_bring) ?? []
       }
-      if (args.outfit_suggestion !== undefined) enrichmentUpdates.outfit_suggestion = args.outfit_suggestion ?? null
-      if (args.parking_notes !== undefined) enrichmentUpdates.parking_notes = args.parking_notes ?? null
-      if (args.contact_name !== undefined) enrichmentUpdates.contact_name = args.contact_name ?? null
-      if (args.contact_phone !== undefined) enrichmentUpdates.contact_phone = args.contact_phone ?? null
-      if (args.cost_estimate !== undefined) enrichmentUpdates.cost_estimate = args.cost_estimate ?? null
-      if (args.dietary_notes !== undefined) enrichmentUpdates.dietary_notes = args.dietary_notes ?? null
-      if (args.meal_impact !== undefined) enrichmentUpdates.meal_impact = args.meal_impact ?? null
+      if (args.outfit_suggestion !== undefined) enrichmentUpdates.outfit_suggestion = normalizeOptionalText(args.outfit_suggestion)
+      if (args.parking_notes !== undefined) enrichmentUpdates.parking_notes = normalizeOptionalText(args.parking_notes)
+      if (args.contact_name !== undefined) enrichmentUpdates.contact_name = normalizeOptionalText(args.contact_name)
+      if (args.contact_phone !== undefined) enrichmentUpdates.contact_phone = normalizeOptionalText(args.contact_phone)
+      if (args.cost_estimate !== undefined) enrichmentUpdates.cost_estimate = normalizeOptionalText(args.cost_estimate)
+      if (args.dietary_notes !== undefined) enrichmentUpdates.dietary_notes = normalizeOptionalText(args.dietary_notes)
+      if (args.meal_impact !== undefined) enrichmentUpdates.meal_impact = normalizeOptionalText(args.meal_impact)
 
       if (Object.keys(enrichmentUpdates).length > 0) {
         const { data: existingEnrichment, error: enrichLoadError } = await sb
@@ -116,9 +126,9 @@ Deno.serve(async (req) => {
           id: typeof item.id === 'string' && item.id ? item.id : crypto.randomUUID(),
           event_id: args.id as string,
           label: String(item.label ?? '').trim(),
-          note: item.note == null ? null : String(item.note),
+          note: normalizeOptionalText(item.note),
           checked: item.checked === true,
-          category: item.category == null ? null : String(item.category),
+          category: normalizeOptionalText(item.category),
           sort_order: index,
         })).filter(row => row.label)
 
@@ -136,12 +146,12 @@ Deno.serve(async (req) => {
           id: typeof item.id === 'string' && item.id ? item.id : crypto.randomUUID(),
           event_id: args.id as string,
           title: String(item.title ?? '').trim(),
-          description: item.description == null ? null : String(item.description),
-          due_date: item.due_date == null ? null : String(item.due_date),
+          description: normalizeOptionalText(item.description),
+          due_date: normalizeOptionalText(item.due_date),
           is_urgent: item.is_urgent === true,
           completed: item.completed === true,
           completed_at: item.completed === true ? (item.completed_at == null ? new Date().toISOString() : String(item.completed_at)) : null,
-          assigned_to: item.assigned_to == null ? null : String(item.assigned_to),
+          assigned_to: normalizeOptionalText(item.assigned_to),
         })).filter(row => row.title)
 
         const { error: deleteActionError } = await sb.from('event_action_items').delete().eq('event_id', args.id)
