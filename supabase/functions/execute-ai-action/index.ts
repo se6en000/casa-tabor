@@ -69,8 +69,9 @@ async function finalizeEventSync(
 
   const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? null
   if (!syncError) {
-    await updateAuditResult(sb, historyId, response, 'succeeded')
-    return response
+    const syncedResponse = { ...response, sync_status: 'synced' }
+    await updateAuditResult(sb, historyId, syncedResponse, 'succeeded')
+    return syncedResponse
   }
 
   try {

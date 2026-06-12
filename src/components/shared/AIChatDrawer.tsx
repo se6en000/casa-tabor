@@ -709,6 +709,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                         actionId: data?.action_id,
                         resultEventId: data?.event_id,
                         syncWarning: data?.sync_warning,
+                        syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
                         undoStatus: 'idle',
                         undoErrorMsg: undefined,
                       })
@@ -728,6 +729,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                       if (data?.success === false) throw new Error(data.error ?? 'Undo failed')
                       updateMessageToolStatus(messageId, 'done', {
                         syncWarning: data?.sync_warning,
+                        syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
                         undoStatus: 'done',
                         undoErrorMsg: undefined,
                       })
@@ -740,6 +742,9 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                     }
                   }}
                   onCancelToolAction={(messageId) => updateMessageToolStatus(messageId, 'cancelled')}
+                  onRefreshToolAction={() => {
+                    qc.invalidateQueries({ queryKey: ['events'] })
+                  }}
                   registerPendingConfirm={(fn) => { pendingConfirmRef.current = fn }}
                   registerPendingCancel={(fn)  => { pendingCancelRef.current  = fn }}
                 />
@@ -874,18 +879,20 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
 /* ── Message Bubble ─────────────────────────────────────────── */
 
-function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, onCancelToolAction, registerPendingConfirm, registerPendingCancel }: {
+function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingConfirm, registerPendingCancel }: {
   msg: AIMessage
   isLatest: boolean
   onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<void>
   onUndoToolAction: (messageId: string, actionId: string) => Promise<void>
   onCancelToolAction: (messageId: string) => void
+  onRefreshToolAction: () => void
   registerPendingConfirm: (fn: () => void) => void
   registerPendingCancel:  (fn: () => void) => void
 }) {
   const isUser = msg.role === 'user'
   const ta = msg.toolAction
   const hasPendingAction = !!ta && ta.status === 'pending'
+  const isStaleError = !!ta?.errorMsg && ta.errorMsg.toLowerCase().includes('changed since')
 
   const doConfirm = useCallback(() => {
     if (!ta) return
@@ -937,6 +944,9 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, o
                 {ta.syncWarning && (
                   <p className="text-caption text-amber-600">{ta.syncWarning}</p>
                 )}
+                {ta.tool === 'update_event' && (
+                  <SyncStatusPill status={ta.syncStatus ?? (ta.syncWarning ? 'queued' : 'synced')} />
+                )}
                 {ta.tool === 'update_event' && ta.actionId && ta.undoStatus !== 'done' && (
                   <div className="pt-1 space-y-1">
                     <button
@@ -967,13 +977,24 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, o
                   <XCircle size={13} /> Failed
                 </div>
                 {ta.errorMsg && <p className="text-caption text-red-500">{ta.errorMsg}</p>}
-                <button
-                  type="button"
-                  onClick={doConfirm}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-button bg-red-600 text-white text-caption font-semibold hover:brightness-110 transition-all"
-                >
-                  <Loader2 size={12} /> Retry
-                </button>
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={doConfirm}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-button bg-red-600 text-white text-caption font-semibold hover:brightness-110 transition-all"
+                  >
+                    <Loader2 size={12} /> Retry
+                  </button>
+                  {isStaleError && (
+                    <button
+                      type="button"
+                      onClick={onRefreshToolAction}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-button border border-casa-border text-casa-navy text-caption font-semibold hover:bg-casa-bg transition-all"
+                    >
+                      Refresh event
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               <>
@@ -1019,29 +1040,24 @@ function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, 
     )
   }
   if (tool === 'update_event') {
-    const show = (value: unknown) => value == null || String(value).trim() === '' ? '(clear)' : `"${String(value)}"`
-    const changes: string[] = []
-    if (args.title !== undefined) changes.push(`title → ${show(args.title)}`)
-    if (args.start !== undefined) changes.push(`start → ${format(new Date(args.start as string), 'MMM d h:mm a')}`)
-    if (args.end !== undefined) changes.push(`end → ${format(new Date(args.end as string), 'h:mm a')}`)
-    if (args.location !== undefined) changes.push(`location → ${show(args.location)}`)
-    if (args.address !== undefined) changes.push(`address → ${show(args.address)}`)
-    if (args.notes !== undefined) changes.push(`notes → ${show(args.notes)}`)
-    if (args.description !== undefined) changes.push(`description → ${show(args.description)}`)
-    if (args.category !== undefined) changes.push(`category → ${show(args.category)}`)
-    if (args.what_to_bring !== undefined) changes.push(`bring → ${Array.isArray(args.what_to_bring) && (args.what_to_bring as string[]).length > 0 ? (args.what_to_bring as string[]).join(', ') : '(clear)'}`)
-    if (args.outfit_suggestion !== undefined) changes.push(`wear → ${show(args.outfit_suggestion)}`)
-    if (args.parking_notes !== undefined) changes.push(`parking → ${show(args.parking_notes)}`)
-    if (args.contact_name !== undefined) changes.push(`contact → ${show(args.contact_name)}`)
-    if (args.contact_phone !== undefined) changes.push(`phone → ${show(args.contact_phone)}`)
-    if (args.cost_estimate !== undefined) changes.push(`cost → ${show(args.cost_estimate)}`)
-    if (args.dietary_notes !== undefined) changes.push(`dietary → ${show(args.dietary_notes)}`)
-    if (args.meal_impact !== undefined) changes.push(`meal impact → ${show(args.meal_impact)}`)
-    if (args.checklist_items !== undefined) changes.push(`checklist → ${Array.isArray(args.checklist_items) ? `${(args.checklist_items as unknown[]).length} item(s)` : 'updated'}`)
-    if (args.action_items !== undefined) changes.push(`actions → ${Array.isArray(args.action_items) ? `${(args.action_items as unknown[]).length} item(s)` : 'updated'}`)
-    if ((args.members_add as string[])?.length) changes.push(`add: ${(args.members_add as string[]).join(', ')}`)
-    if ((args.members_remove as string[])?.length) changes.push(`remove: ${(args.members_remove as string[]).join(', ')}`)
-    return <p className="text-caption text-casa-muted">{changes.join(' · ')}</p>
+    const changes = summarizeUpdateArgs(args)
+    return (
+      <div className="space-y-2">
+        <p className="text-caption font-semibold text-casa-navy">
+          Applying {changes.length} change{changes.length === 1 ? '' : 's'}
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {changes.map((change) => (
+            <span
+              key={change}
+              className="inline-flex items-center rounded-full bg-casa-surface border border-casa-border px-2 py-0.5 text-[11px] text-casa-muted"
+            >
+              {change}
+            </span>
+          ))}
+        </div>
+      </div>
+    )
   }
   if (tool === 'delete_event') {
     return <p className="text-caption text-red-600 font-semibold">Delete "{args.title as string}"?</p>
@@ -1063,6 +1079,51 @@ function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, 
     return <p className="text-caption text-casa-muted">Clear all checked grocery items</p>
   }
   return <p className="text-caption text-casa-muted">{tool}</p>
+}
+
+function SyncStatusPill({ status }: { status: 'synced' | 'queued' | 'failed' }) {
+  const tone = status === 'synced'
+    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    : status === 'queued'
+      ? 'bg-amber-50 text-amber-700 border-amber-200'
+      : 'bg-red-50 text-red-700 border-red-200'
+  const label = status === 'synced'
+    ? 'Google synced'
+    : status === 'queued'
+      ? 'Retry queued'
+      : 'Sync failed'
+
+  return (
+    <span className={cn('inline-flex mt-1 items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold', tone)}>
+      {label}
+    </span>
+  )
+}
+
+function summarizeUpdateArgs(args: Record<string, unknown>): string[] {
+  const show = (value: unknown) => value == null || String(value).trim() === '' ? '(clear)' : String(value)
+  const changes: string[] = []
+  if (args.title !== undefined) changes.push(`Title: ${show(args.title)}`)
+  if (args.start !== undefined) changes.push(`Start: ${format(new Date(args.start as string), 'MMM d h:mm a')}`)
+  if (args.end !== undefined) changes.push(`End: ${format(new Date(args.end as string), 'h:mm a')}`)
+  if (args.location !== undefined) changes.push(`Location: ${show(args.location)}`)
+  if (args.address !== undefined) changes.push(`Address: ${show(args.address)}`)
+  if (args.notes !== undefined) changes.push(`Notes: ${show(args.notes)}`)
+  if (args.description !== undefined) changes.push(`Description: ${show(args.description)}`)
+  if (args.category !== undefined) changes.push(`Category: ${show(args.category)}`)
+  if (args.what_to_bring !== undefined) changes.push(`What to bring: ${Array.isArray(args.what_to_bring) ? `${(args.what_to_bring as unknown[]).length} item(s)` : 'updated'}`)
+  if (args.outfit_suggestion !== undefined) changes.push(`Outfit: ${show(args.outfit_suggestion)}`)
+  if (args.parking_notes !== undefined) changes.push(`Parking: ${show(args.parking_notes)}`)
+  if (args.contact_name !== undefined) changes.push(`Contact: ${show(args.contact_name)}`)
+  if (args.contact_phone !== undefined) changes.push(`Phone: ${show(args.contact_phone)}`)
+  if (args.cost_estimate !== undefined) changes.push(`Cost: ${show(args.cost_estimate)}`)
+  if (args.dietary_notes !== undefined) changes.push(`Dietary: ${show(args.dietary_notes)}`)
+  if (args.meal_impact !== undefined) changes.push(`Meal impact: ${show(args.meal_impact)}`)
+  if (args.checklist_items !== undefined) changes.push(`Checklist: ${Array.isArray(args.checklist_items) ? `${(args.checklist_items as unknown[]).length} item(s)` : 'updated'}`)
+  if (args.action_items !== undefined) changes.push(`Actions: ${Array.isArray(args.action_items) ? `${(args.action_items as unknown[]).length} item(s)` : 'updated'}`)
+  if ((args.members_add as string[])?.length) changes.push(`Add: ${(args.members_add as string[]).join(', ')}`)
+  if ((args.members_remove as string[])?.length) changes.push(`Remove: ${(args.members_remove as string[]).join(', ')}`)
+  return changes
 }
 
 /* ── Contextual suggestions ─────────────────────────────────── */

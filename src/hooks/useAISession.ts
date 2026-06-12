@@ -14,6 +14,7 @@ export interface AIMessage {
     errorMsg?: string
     resultEventId?: string
     syncWarning?: string
+    syncStatus?: 'synced' | 'queued' | 'failed'
     undoStatus?: 'idle' | 'loading' | 'done' | 'error'
     undoErrorMsg?: string
   }

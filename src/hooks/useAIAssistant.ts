@@ -217,6 +217,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       errorMsg?: string
       resultEventId?: string
       syncWarning?: string
+      syncStatus?: NonNullable<AIMessage['toolAction']>['syncStatus']
       undoStatus?: NonNullable<AIMessage['toolAction']>['undoStatus']
       undoErrorMsg?: string
     }
