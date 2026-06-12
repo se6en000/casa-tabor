@@ -36,16 +36,16 @@ const SYM_ROWS = [
 function loadPrefs(): { size: KeyboardSize; handedness: Handedness; haptics: boolean; sound: boolean } {
   try {
     const raw = localStorage.getItem(PREFS_KEY)
-    if (!raw) return { size: 'comfortable', handedness: 'right', haptics: true, sound: false }
+    if (!raw) return { size: 'comfortable', handedness: 'right', haptics: true, sound: true }
     const parsed = JSON.parse(raw) as Partial<{ size: KeyboardSize; handedness: Handedness; haptics: boolean; sound: boolean }>
     return {
       size: parsed.size === 'compact' || parsed.size === 'large' || parsed.size === 'comfortable' ? parsed.size : 'comfortable',
       handedness: parsed.handedness === 'left' || parsed.handedness === 'right' ? parsed.handedness : 'right',
       haptics: parsed.haptics ?? true,
-      sound: parsed.sound ?? false,
+      sound: parsed.sound ?? true,
     }
   } catch {
-    return { size: 'comfortable', handedness: 'right', haptics: true, sound: false }
+    return { size: 'comfortable', handedness: 'right', haptics: true, sound: true }
   }
 }
 
@@ -156,7 +156,7 @@ export default function TouchKeyboard() {
   const [size, setSize] = useState<KeyboardSize>('comfortable')
   const [handedness, setHandedness] = useState<Handedness>('right')
   const [haptics, setHaptics] = useState(true)
-  const [sound, setSound] = useState(false)
+  const [sound, setSound] = useState(true)
   const rootRef = useRef<HTMLDivElement>(null)
   const pointerIntentAtRef = useRef(0)
   const pointerIntentElRef = useRef<EditableTarget | null>(null)
@@ -209,11 +209,6 @@ export default function TouchKeyboard() {
       setMode(modeForTarget(next))
       if (shouldOpen) setVisible(true)
       setShift(false)
-      if (shouldOpen) {
-        setTimeout(() => {
-          next.scrollIntoView({ block: 'center', behavior: 'smooth' })
-        }, 80)
-      }
       pointerIntentAtRef.current = 0
       pointerIntentElRef.current = null
     }
