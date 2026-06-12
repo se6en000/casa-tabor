@@ -8,35 +8,6 @@ const MAX_PAGE   = 25
 const FETCH_LIMIT = 60
 const MAX_RETRIES = 4   // try up to 4 different random pages before giving up
 const RETRY_DELAY = 2000
-const WATERCOLOR_BIAS_RATIO = 3 // 3 watercolor picks per 1 non-watercolor pick
-
-// Whitelist of famous/popular painting IDs from ARTIC to show only well-known works.
-const FAMOUS_PAINTING_IDS = new Set([
-  27992,  // A Sunday on La Grande Jatte — Seurat
-  111628, // Nighthawks — Hopper
-  6565,   // American Gothic — Wood
-  16499,  // The Old Guitarist — Picasso
-  14655,  // Paris Street; Rainy Day — Caillebotte
-  28560,  // Bathers at Asnières — Seurat
-  10504,  // The Bedroom — Van Gogh
-  16561,  // Irises — Van Gogh
-  42834,  // Starry Night — Van Gogh
-  31394,  // Water Lilies — Monet
-  17040,  // Japanese Footbridge — Monet
-  80581,  // The Son of Man — Magritte
-  4898,   // Christina's World — Wyeth
-  138686, // The Birth of Venus — Botticelli
-  13747,  // Wanderer Above the Sea of Fog — Friedrich
-  19857,  // The Raft of the Medusa — Géricault
-  44662,  // The Death of Marat — Jacques-Louis David
-  25745,  // View of Toledo — El Greco
-  64643,  // The Persistence of Memory — Dalí
-  94827,  // Girl with a Pearl Earring — Vermeer
-  12054,  // The Third of May 1808 — Goya
-  96248,  // Composition VII — Kandinsky
-  71648,  // No. 5, 1948 — Pollock
-  128556, // Nighttime, Fire and Red Objects — Miró
-])
 
 // Hardcoded fallback artworks — guaranteed public-domain ARTIC images.
 // Used when API is unreachable (offline, rate-limited, etc.)
@@ -129,7 +100,7 @@ async function fetchPage(): Promise<Artwork[]> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json = await res.json()
   return (json.data ?? [])
-    .filter((a: { image_id?: string; id: number }) => a.image_id && FAMOUS_PAINTING_IDS.has(a.id))
+    .filter((a: { image_id?: string }) => a.image_id)
     .map((a: { id: number; title?: string; artist_display?: string; image_id: string; date_display?: string; medium_display?: string; place_of_origin?: string }) => ({
       id: a.id,
       title: a.title ?? '',
@@ -159,27 +130,14 @@ export function useArtwork(rotateSecs = 240) {
     async function loadWithRetry() {
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         try {
-          const [page1, page2] = await Promise.all([fetchPage(), fetchPage()])
-          const allResults = dedupeById([...page1, ...page2])
-          const famous = allResults.filter(a => FAMOUS_PAINTING_IDS.has(a.id))
-          const nonFamous = allResults.filter(a => !FAMOUS_PAINTING_IDS.has(a.id))
-          // Blend 3:1 famous to non-famous for curated rotation
-          const blended: Artwork[] = []
-          let f = 0, n = 0
-          while (f < famous.length || n < nonFamous.length) {
-            for (let i = 0; i < WATERCOLOR_BIAS_RATIO && f < famous.length; i++) {
-              blended.push(famous[f++])
-            }
-            if (n < nonFamous.length) {
-              blended.push(nonFamous[n++])
-            }
-          }
-          if (blended.length > 0 && !cancelled) {
-            const filtered = blended.filter(a => prefsRef.current[a.id] !== 'down')
+          const [page1, page2, page3] = await Promise.all([fetchPage(), fetchPage(), fetchPage()])
+          const allResults = dedupeById([...page1, ...page2, ...page3])
+          if (allResults.length > 0 && !cancelled) {
+            const filtered = allResults.filter(a => prefsRef.current[a.id] !== 'down')
             const upvoted = filtered.filter(a => prefsRef.current[a.id] === 'up')
             const neutral = filtered.filter(a => prefsRef.current[a.id] !== 'up')
             const shuffledResults = [...shuffled(upvoted), ...shuffled(neutral)]
-            const finalResults = shuffledResults.length > 0 ? shuffledResults : shuffled(blended)
+            const finalResults = shuffledResults.length > 0 ? shuffledResults : shuffled(allResults)
             setArtworks(finalResults)
             setIndex(0)
             return
