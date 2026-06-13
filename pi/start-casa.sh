@@ -20,6 +20,14 @@
 # Exec=/home/jake/start-casa.sh
 # X-GNOME-Autostart-enabled=true
 
+# Single-instance guard: prevent duplicate launcher runs from autostart/manual restarts.
+LOCK_FILE="/tmp/casa-kiosk-launch.lock"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "Casa Tabor: launcher already running; skipping duplicate start."
+  exit 0
+fi
+
 # ── Kiosk toggle ──────────────────────────────────────────────────────────
 # Set to "1" for locked-down fullscreen kiosk (production on the wall).
 # Set to "0" for a normal windowed browser while testing/building (tabs,
@@ -46,6 +54,7 @@ xset s noblank
 xset -dpms
 
 # Hide the mouse cursor after 1 second of inactivity (install: sudo apt install unclutter)
+kill $(pgrep -f "unclutter -idle 1 -root" 2>/dev/null) 2>/dev/null
 unclutter -idle 1 -root &
 
 # Stop external keyboards; Casa now uses an integrated in-app keyboard.
