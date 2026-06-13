@@ -20,6 +20,7 @@ Deno.serve(async (req) => {
 
   const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
   const mapsKey = optionalEnv('GOOGLE_MAPS_API_KEY', '')
+  const braveKey = optionalEnv('BRAVE_API_KEY', '')
 
   const { messages, context, image, correlation_id: correlationId } = await req.json()
   const cid = correlationId ?? `${context?.page ?? 'unknown'}:${Date.now().toString(36)}`
@@ -297,6 +298,18 @@ Deno.serve(async (req) => {
         },
       },
       {
+        name: 'search_web',
+        description: 'Search the live web for current information, reviews, news, prices, and factual lookups that need fresh sources.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            query: { type: 'STRING', description: 'Search query' },
+            max_results: { type: 'NUMBER', description: 'Number of results to return (1-8). Default 5.' },
+          },
+          required: ['query'],
+        },
+      },
+      {
         name: 'add_grocery_items',
         description: 'Add one or more items to the grocery list.',
         parameters: {
@@ -431,7 +444,7 @@ INSTRUCTIONS:
 - Prefer edit over create: if a similar event exists at the same time, update it instead of creating a duplicate.
 - Tone: warm, concise (1–3 sentences). Be proactive — flag conflicts, drive-time buffers, busy days.
 - For timeless facts and general knowledge (e.g., ages/biographies/math/history), answer directly from model knowledge and simple reasoning. Do not refuse just because live web access is unavailable.
-- For live/public info requests (e.g., latest reviews/news/prices), use search_places when relevant; otherwise answer with best available knowledge and explicitly note when you may be out of date.${customInstructions ? `\n\nUSER'S CUSTOM RULES (always apply, override defaults if they conflict):\n${customInstructions}` : ''}
+- For live/public info requests (e.g., latest reviews/news/prices), use search_web first. For local business lookups (address/phone/location), use search_places. When using search_web, cite the source links you used in your reply.${customInstructions ? `\n\nUSER'S CUSTOM RULES (always apply, override defaults if they conflict):\n${customInstructions}` : ''}
 ${AMBIGUITY_GUARDRAILS}
 ${DIFF_AND_OUTPUT_GUARDRAILS}
 ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
@@ -608,6 +621,51 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       } catch { return { places: [], count: 0 } }
     }
 
+    if (name === 'search_web') {
+      const query = String(args.query ?? '').trim()
+      const parsedMax = Number(args.max_results ?? 5)
+      const maxResults = Number.isFinite(parsedMax) ? Math.max(1, Math.min(8, Math.round(parsedMax))) : 5
+      if (!query) return { results: [], count: 0, error: 'Missing query' }
+      if (!braveKey) return { results: [], count: 0, error: 'BRAVE_API_KEY not configured' }
+
+      try {
+        const url = new URL('https://api.search.brave.com/res/v1/web/search')
+        url.searchParams.set('q', query)
+        url.searchParams.set('count', String(maxResults))
+        url.searchParams.set('safesearch', 'moderate')
+
+        const res = await fetch(url.toString(), {
+          headers: {
+            'Accept': 'application/json',
+            'X-Subscription-Token': braveKey,
+          },
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          const message = data?.error?.detail ?? data?.error ?? 'Brave search failed'
+          return { results: [], count: 0, error: message }
+        }
+
+        const results = (data?.web?.results ?? []).map((item: {
+          title?: string
+          url?: string
+          description?: string
+          age?: string
+          page_age?: string
+          profile?: { long_name?: string }
+        }) => ({
+          title: item.title ?? '',
+          url: item.url ?? '',
+          snippet: item.description ?? '',
+          source: item.profile?.long_name ?? null,
+          age: item.age ?? item.page_age ?? null,
+        }))
+        return { results, count: results.length, query }
+      } catch {
+        return { results: [], count: 0, error: 'Unable to reach Brave Search' }
+      }
+    }
+
     return { error: 'Unknown tool' }
   }
 
@@ -654,7 +712,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const { name, args } = (funcCallPart as { functionCall: { name: string; args: Record<string, unknown> } }).functionCall
 
       // Read-only tools: execute server-side, feed result back for final answer
-      if (name === 'search_events' || name === 'search_places') {
+      if (name === 'search_events' || name === 'search_places' || name === 'search_web') {
         const toolResult = await executeReadTool(name, args)
 
         // Feed result back to Gemini for final answer
