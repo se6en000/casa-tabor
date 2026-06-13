@@ -4,6 +4,7 @@
 // and fires push notifications for each unnotified event.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { format } from 'https://esm.sh/date-fns@3'
+import { getCorrelationId, withCorrelationHeaders } from '../_shared/correlation.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -18,6 +19,7 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  const correlationId = getCorrelationId(req, 'notify')
   try {
     const now = new Date()
     // Window: 25 to 35 minutes from now
@@ -60,6 +62,7 @@ Deno.serve(async (req) => {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'x-correlation-id': correlationId,
           },
           body: JSON.stringify({
             title: `⏰ ${title} in ~30 min`,
@@ -85,15 +88,16 @@ Deno.serve(async (req) => {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'x-correlation-id': correlationId,
       },
       body: JSON.stringify({}),
     }).catch(() => null)
     const policy = policyRes?.ok ? await policyRes.json().catch(() => null) : null
 
-    return json({ ok: true, fired, policy })
+    return json({ ok: true, correlation_id: correlationId, fired, policy }, 200, correlationId)
   } catch (err) {
-    console.error('[notify-upcoming-events]', err)
-    return json({ ok: false, error: String(err) }, 500)
+    console.error(`[notify-upcoming-events][${correlationId}]`, err)
+    return json({ ok: false, correlation_id: correlationId, error: String(err) }, 500, correlationId)
   }
 })
 
@@ -104,12 +108,12 @@ function stripPersonPrefix(title: string): string {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, content-type',
+  'Access-Control-Allow-Headers': 'authorization, content-type, x-correlation-id',
 }
 
-function json(data: unknown, status = 200) {
+function json(data: unknown, status = 200, correlationId?: string) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: withCorrelationHeaders({ ...corsHeaders, 'Content-Type': 'application/json' }, correlationId ?? `notify-${crypto.randomUUID()}`),
   })
 }

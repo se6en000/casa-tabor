@@ -1,9 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { getCorrelationId, withCorrelationHeaders } from '../_shared/correlation.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-correlation-id',
 }
 
 type GraphNodeType = 'member' | 'place' | 'contact' | 'event' | 'routine'
@@ -47,6 +48,7 @@ function addEdge(edges: Map<string, GraphEdge>, edge: GraphEdge) {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
+  const correlationId = getCorrelationId(req, 'graph')
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
   const now = new Date()
@@ -68,9 +70,9 @@ Deno.serve(async (req) => {
 
   if (membersResult.error || placesResult.error || contactsResult.error || eventsResult.error) {
     const error = membersResult.error ?? placesResult.error ?? contactsResult.error ?? eventsResult.error
-    return new Response(JSON.stringify({ ok: false, error: error?.message ?? 'Graph query failed' }), {
+    return new Response(JSON.stringify({ ok: false, error: error?.message ?? 'Graph query failed', correlation_id: correlationId }), {
       status: 500,
-      headers: { ...CORS, 'content-type': 'application/json' },
+      headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId),
     })
   }
 
@@ -284,18 +286,18 @@ Deno.serve(async (req) => {
   if (nodeRows.length > 0) {
     const { error: upsertNodeError } = await sb.from('household_graph_nodes').upsert(nodeRows, { onConflict: 'node_key' })
     if (upsertNodeError) {
-      return new Response(JSON.stringify({ ok: false, error: upsertNodeError.message }), {
+      return new Response(JSON.stringify({ ok: false, error: upsertNodeError.message, correlation_id: correlationId }), {
         status: 500,
-        headers: { ...CORS, 'content-type': 'application/json' },
+        headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId),
       })
     }
   }
 
   const { data: nodeLookup, error: nodeLookupError } = await sb.from('household_graph_nodes').select('id, node_key')
   if (nodeLookupError) {
-    return new Response(JSON.stringify({ ok: false, error: nodeLookupError.message }), {
+    return new Response(JSON.stringify({ ok: false, error: nodeLookupError.message, correlation_id: correlationId }), {
       status: 500,
-      headers: { ...CORS, 'content-type': 'application/json' },
+      headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId),
     })
   }
 
@@ -318,9 +320,9 @@ Deno.serve(async (req) => {
       onConflict: 'edge_type,from_node_id,to_node_id',
     })
     if (upsertEdgeError) {
-      return new Response(JSON.stringify({ ok: false, error: upsertEdgeError.message }), {
+      return new Response(JSON.stringify({ ok: false, error: upsertEdgeError.message, correlation_id: correlationId }), {
         status: 500,
-        headers: { ...CORS, 'content-type': 'application/json' },
+        headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId),
       })
     }
   }
@@ -331,6 +333,7 @@ Deno.serve(async (req) => {
   return new Response(
     JSON.stringify({
       ok: true,
+      correlation_id: correlationId,
       window: { start: windowStart, end: windowEnd },
       counts: {
         nodes_upserted: nodeRows.length,
@@ -339,6 +342,6 @@ Deno.serve(async (req) => {
         edges_total: edgeCount ?? null,
       },
     }),
-    { headers: { ...CORS, 'content-type': 'application/json' } },
+    { headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
   )
 })

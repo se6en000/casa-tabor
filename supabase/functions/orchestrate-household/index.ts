@@ -1,9 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { getCorrelationId, invocationHeaders, withCorrelationHeaders } from '../_shared/correlation.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-correlation-id',
 }
 
 type ActionItem = {
@@ -26,6 +27,7 @@ function parseRainChance(text: string | null | undefined): number | null {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
+  const correlationId = getCorrelationId(req, 'orchestrate')
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
   const body = await req.json().catch(() => ({}))
 
@@ -37,10 +39,11 @@ Deno.serve(async (req) => {
   const [conflictRun, prepRun, weatherRun, graphRun] = await Promise.all([
     sb.functions.invoke('analyze-conflicts', {
       body: { range_start: start.toISOString(), range_end: end.toISOString() },
+      headers: invocationHeaders(correlationId),
     }),
-    sb.functions.invoke('analyze-prep', { body: {} }),
-    sb.functions.invoke('weather-pending', { body: {} }),
-    sb.functions.invoke('build-household-graph', { body: {} }),
+    sb.functions.invoke('analyze-prep', { body: {}, headers: invocationHeaders(correlationId) }),
+    sb.functions.invoke('weather-pending', { body: {}, headers: invocationHeaders(correlationId) }),
+    sb.functions.invoke('build-household-graph', { body: {}, headers: invocationHeaders(correlationId) }),
   ])
 
   const { data: conflictsRaw } = await sb
@@ -174,6 +177,7 @@ Deno.serve(async (req) => {
   return new Response(
     JSON.stringify({
       ok: true,
+      correlation_id: correlationId,
       runs,
       counts: {
         conflicts: (conflictsRaw ?? []).length,
@@ -186,6 +190,6 @@ Deno.serve(async (req) => {
       prep_items: prepRaw ?? [],
       action_queue: actionQueue,
     }),
-    { headers: { ...CORS, 'content-type': 'application/json' } },
+    { headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
   )
 })

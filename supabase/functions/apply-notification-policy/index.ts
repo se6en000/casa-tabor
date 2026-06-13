@@ -1,9 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { getCorrelationId, invocationHeaders, withCorrelationHeaders } from '../_shared/correlation.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-correlation-id',
 }
 
 type SmsConfig = {
@@ -48,6 +49,7 @@ function isQuietHours(now: Date, cfg: SmsConfig): boolean {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
+  const correlationId = getCorrelationId(req, 'policy')
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
   const now = new Date()
   const nowIso = now.toISOString()
@@ -99,7 +101,10 @@ Deno.serve(async (req) => {
   let sentSms = 0
 
   async function maybeSendPush(title: string, body: string, tag: string) {
-    const { error } = await sb.functions.invoke('send-push-notification', { body: { title, body, tag, url: '/' } })
+    const { error } = await sb.functions.invoke('send-push-notification', {
+      body: { title, body, tag, url: '/' },
+      headers: invocationHeaders(correlationId),
+    })
     if (!error) sentPush++
   }
 
@@ -110,6 +115,7 @@ Deno.serve(async (req) => {
       if (!m.phone) continue
       const { error } = await sb.functions.invoke('send-sms', {
         body: { to: m.phone, body: message.slice(0, 1590), member_id: m.id },
+        headers: invocationHeaders(correlationId),
       })
       if (!error) sentSms++
     }
@@ -172,11 +178,12 @@ Deno.serve(async (req) => {
   return new Response(
     JSON.stringify({
       ok: true,
+      correlation_id: correlationId,
       quiet_hours_active: quiet,
       created_notifications: createdNotifications,
       push_sent: sentPush,
       sms_sent: sentSms,
     }),
-    { headers: { ...CORS, 'content-type': 'application/json' } },
+    { headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
   )
 })

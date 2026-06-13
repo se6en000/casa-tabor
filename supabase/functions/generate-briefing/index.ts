@@ -1,13 +1,15 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { getCorrelationId, invocationHeaders, withCorrelationHeaders } from '../_shared/correlation.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-correlation-id',
 }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
+  const correlationId = getCorrelationId(req, 'briefing')
   const sb = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))
 
   // Client sends UTC ISO strings for local-day boundaries so timezone is always correct.
@@ -35,9 +37,10 @@ Deno.serve(async (req) => {
   const sevenDaysOut = new Date(new Date(dayStartUtc).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
   const { data: orchestrationData, error: orchestrationError } = await sb.functions.invoke('orchestrate-household', {
     body: { range_start: dayStartUtc, range_end: sevenDaysOut },
+    headers: invocationHeaders(correlationId),
   })
   if (orchestrationError) {
-    console.error('[generate-briefing] orchestration invoke failed:', orchestrationError.message)
+    console.error(`[generate-briefing][${correlationId}] orchestration invoke failed:`, orchestrationError.message)
   }
 
   // Load today's events — use UTC boundaries computed by client for local-day accuracy
@@ -49,7 +52,10 @@ Deno.serve(async (req) => {
     .eq('status', 'confirmed')
     .order('start_time')
 
-  if (evErr) return new Response(JSON.stringify({ error: evErr.message }), { status: 500, headers: { ...CORS, 'content-type': 'application/json' } })
+  if (evErr) return new Response(
+    JSON.stringify({ error: evErr.message, correlation_id: correlationId }),
+    { status: 500, headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+  )
 
   // Load family members for the schedule grouping
   const { data: familyMembers } = await sb.from('family_members').select('id, name, color_hex').order('sort_order')
@@ -116,7 +122,7 @@ Deno.serve(async (req) => {
     try {
       summaryText = await callLLM(llmConfig, today, events ?? [], familyMembers ?? [], weatherCity, prepItems, actionQueue)
     } catch (err) {
-      console.error('LLM error:', err)
+      console.error(`[generate-briefing][${correlationId}] LLM error:`, err)
       summaryText = ''
     }
   }
@@ -142,8 +148,14 @@ Deno.serve(async (req) => {
     .select()
     .single()
 
-  if (bErr) return new Response(JSON.stringify({ error: bErr.message }), { status: 500, headers: { ...CORS, 'content-type': 'application/json' } })
-  return new Response(JSON.stringify({ ok: true, briefing }), { headers: { ...CORS, 'content-type': 'application/json' } })
+  if (bErr) return new Response(
+    JSON.stringify({ error: bErr.message, correlation_id: correlationId }),
+    { status: 500, headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+  )
+  return new Response(
+    JSON.stringify({ ok: true, correlation_id: correlationId, briefing }),
+    { headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+  )
 })
 
 async function callLLM(
