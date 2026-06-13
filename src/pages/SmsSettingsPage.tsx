@@ -13,6 +13,11 @@ interface SmsConfig {
   briefing_enabled: boolean
   conflict_alerts: boolean       // SMS on new conflict
   prep_alerts: boolean           // SMS on upcoming prep item
+  quiet_hours_enabled: boolean
+  quiet_hours_start: string      // HH:mm local
+  quiet_hours_end: string        // HH:mm local
+  escalation_enabled: boolean
+  escalation_minutes: number
   notify_members: string[]       // family_member ids to text
 }
 
@@ -25,6 +30,11 @@ const DEFAULTS: SmsConfig = {
   briefing_enabled: false,
   conflict_alerts: false,
   prep_alerts: false,
+  quiet_hours_enabled: true,
+  quiet_hours_start: '22:00',
+  quiet_hours_end: '07:00',
+  escalation_enabled: true,
+  escalation_minutes: 90,
   notify_members: [],
 }
 
@@ -247,6 +257,55 @@ export default function SmsSettingsPage() {
               label="Prep Reminders"
               desc="Text when a high-priority prep item is due soon"
             />
+            <div>
+              <Toggle
+                checked={config.quiet_hours_enabled}
+                onChange={v => set('quiet_hours_enabled', v)}
+                label="Quiet Hours"
+                desc="Suppress non-critical SMS during overnight hours"
+              />
+              {config.quiet_hours_enabled && (
+                <div className="pb-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-caption text-casa-muted mb-1">Quiet starts</label>
+                    <input
+                      type="time"
+                      value={config.quiet_hours_start}
+                      onChange={e => set('quiet_hours_start', e.target.value)}
+                      className="border border-casa-border rounded-lg px-3 py-2 text-body-sm text-casa-navy bg-white focus:outline-none focus:ring-2 focus:ring-casa-navy/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-caption text-casa-muted mb-1">Quiet ends</label>
+                    <input
+                      type="time"
+                      value={config.quiet_hours_end}
+                      onChange={e => set('quiet_hours_end', e.target.value)}
+                      className="border border-casa-border rounded-lg px-3 py-2 text-body-sm text-casa-navy bg-white focus:outline-none focus:ring-2 focus:ring-casa-navy/20"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+            <div>
+              <Toggle
+                checked={config.escalation_enabled}
+                onChange={v => set('escalation_enabled', v)}
+                label="Escalation Window"
+                desc="Send SMS when prep items are close to due time"
+              />
+              {config.escalation_enabled && (
+                <div className="pb-3">
+                  <Field
+                    label="Escalate when due in (minutes)"
+                    value={String(config.escalation_minutes)}
+                    onChange={(v) => set('escalation_minutes', Number(v) || 0)}
+                    type="number"
+                    placeholder="90"
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

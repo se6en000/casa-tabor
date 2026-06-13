@@ -37,51 +37,60 @@ Deno.serve(async (req) => {
       .is('notified_at', null)
 
     if (error) throw error
-    if (!events || events.length === 0) {
-      return json({ ok: true, fired: 0 })
-    }
-
     let fired = 0
-    for (const event of events) {
-      const enr = Array.isArray(event.enrichment) ? event.enrichment[0] : event.enrichment
-      const members = Array.isArray(event.members) ? event.members : []
-      const peopleNames = members
-        .map((m: { family_member: { name: string } }) => m.family_member?.name)
-        .filter(Boolean)
-        .join(', ')
+    if (events && events.length > 0) {
+      for (const event of events) {
+        const enr = Array.isArray(event.enrichment) ? event.enrichment[0] : event.enrichment
+        const members = Array.isArray(event.members) ? event.members : []
+        const peopleNames = members
+          .map((m: { family_member: { name: string } }) => m.family_member?.name)
+          .filter(Boolean)
+          .join(', ')
 
-      const startStr = format(new Date(event.start_time), 'h:mm a')
-      const title = stripPersonPrefix(event.title)
+        const startStr = format(new Date(event.start_time), 'h:mm a')
+        const title = stripPersonPrefix(event.title)
 
-      let body = `${startStr}`
-      if (peopleNames) body += ` · ${peopleNames}`
-      if (enr?.location_name) body += `\n📍 ${enr.location_name}`
+        let body = `${startStr}`
+        if (peopleNames) body += ` · ${peopleNames}`
+        if (enr?.location_name) body += `\n📍 ${enr.location_name}`
 
-      // Fire notification
-      await fetch(`${SUPABASE_URL}/functions/v1/send-push-notification`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          title: `⏰ ${title} in ~30 min`,
-          body,
-          url: '/',
-          tag: `event-${event.id}`,
-        }),
-      })
+        // Fire notification
+        await fetch(`${SUPABASE_URL}/functions/v1/send-push-notification`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({
+            title: `⏰ ${title} in ~30 min`,
+            body,
+            url: '/',
+            tag: `event-${event.id}`,
+          }),
+        })
 
-      // Mark notified so it doesn't fire again
-      await supabase
-        .from('events')
-        .update({ notified_at: now.toISOString() })
-        .eq('id', event.id)
+        // Mark notified so it doesn't fire again
+        await supabase
+          .from('events')
+          .update({ notified_at: now.toISOString() })
+          .eq('id', event.id)
 
-      fired++
+        fired++
+      }
     }
 
-    return json({ ok: true, fired })
+    // Always run policy layer each cycle (conflicts/prep routing + quiet-hours + escalation).
+    const policyRes = await fetch(`${SUPABASE_URL}/functions/v1/apply-notification-policy`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({}),
+    }).catch(() => null)
+    const policy = policyRes?.ok ? await policyRes.json().catch(() => null) : null
+
+    return json({ ok: true, fired, policy })
   } catch (err) {
     console.error('[notify-upcoming-events]', err)
     return json({ ok: false, error: String(err) }, 500)
