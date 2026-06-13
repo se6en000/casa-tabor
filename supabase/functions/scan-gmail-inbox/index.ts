@@ -519,24 +519,14 @@ Deno.serve(async (req) => {
       if (newEvent) {
         await sb.from('event_members').insert({ event_id: newEvent.id, family_member_id: assignedMember.id, role: 'primary' })
 
-        // Push to Google Calendar
-        await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
-          body: JSON.stringify({
-            summary: classified.title,
-            description: classified.description,
-            location: classified.location || undefined,
-            start: classified.all_day ? { date: startTime.toISOString().split('T')[0] } : { dateTime: startTime.toISOString() },
-            end:   classified.all_day ? { date: (endTime ?? startTime).toISOString().split('T')[0] } : { dateTime: (endTime ?? new Date(startTime.getTime() + 3600_000)).toISOString() },
-          }),
+        // Use canonical create flow so DB + Google linkage stays consistent.
+        await sb.functions.invoke('create-google-event', {
+          body: { event_id: newEvent.id },
         }).catch(console.error)
 
         // Trigger AI enrichment asynchronously
-        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/enrich-event`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`, 'content-type': 'application/json' },
-          body: JSON.stringify({ event_id: newEvent.id }),
+        sb.functions.invoke('enrich-event', {
+          body: { event_id: newEvent.id },
         }).catch(() => {})
 
         await sb.from('gmail_processed_messages').upsert({
