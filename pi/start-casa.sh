@@ -48,6 +48,12 @@ export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
 # Wait for X11 display to be ready (up to 20 seconds)
 for i in $(seq 1 20); do xdpyinfo >/dev/null 2>&1 && break; sleep 1; done
 
+# Restore QHD resolution — xrandr --auto can drop it to 1024x768 on reconnect.
+# This custom mode matches the Pisichen 23.8" 2560x1440 panel via HDMI-2.
+xrandr --newmode "2560x1440_60" 241.50 2560 2608 2640 2720 1440 1443 1448 1481 -hsync +vsync 2>/dev/null || true
+xrandr --addmode HDMI-2 "2560x1440_60" 2>/dev/null || true
+xrandr --output HDMI-2 --mode "2560x1440_60" 2>/dev/null || true
+
 # Disable screen blanking and DPMS power management AFTER display is ready
 xset s off
 xset s noblank
