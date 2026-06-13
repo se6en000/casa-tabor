@@ -23,6 +23,7 @@ const DEFAULTS: ScreensaverSettings = {
 }
 
 const KEY = 'casa-screensaver-settings'
+const SYNC_EVENT = 'casa-screensaver-settings-updated'
 
 function load(): ScreensaverSettings {
   try {
@@ -39,8 +40,34 @@ export function useScreensaverSettings() {
     localStorage.setItem(KEY, JSON.stringify(settings))
   }, [settings])
 
+  useEffect(() => {
+    const onSync = (event: Event) => {
+      const detail = (event as CustomEvent<ScreensaverSettings>).detail
+      if (detail) {
+        setSettings(current => ({ ...current, ...detail }))
+        return
+      }
+      setSettings(load())
+    }
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== KEY) return
+      setSettings(load())
+    }
+
+    document.addEventListener(SYNC_EVENT, onSync as EventListener)
+    window.addEventListener('storage', onStorage)
+    return () => {
+      document.removeEventListener(SYNC_EVENT, onSync as EventListener)
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [])
+
   function update(patch: Partial<ScreensaverSettings>) {
-    setSettings(s => ({ ...s, ...patch }))
+    setSettings(current => {
+      const next = { ...current, ...patch }
+      document.dispatchEvent(new CustomEvent<ScreensaverSettings>(SYNC_EVENT, { detail: next }))
+      return next
+    })
   }
 
   return { settings, update }
