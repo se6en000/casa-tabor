@@ -124,7 +124,33 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   // Fetch master's rrule + enrichment for instances
   useEffect(() => {
     if (!open || !isInstance || !event.recurrence_master_id) { setMasterData(null); return }
-    supabase.from('events').select('rrule, event_enrichments(*)').eq('id', event.recurrence_master_id).single()
+    supabase.from('events').select(`
+      rrule,
+      event_enrichments (
+        id,
+        event_id,
+        category,
+        confidence,
+        what_to_bring,
+        outfit_suggestion,
+        parking_notes,
+        contact_name,
+        contact_phone,
+        cost_estimate,
+        dietary_notes,
+        meal_impact,
+        prep_notes,
+        departure_time,
+        drive_time_mins,
+        route_summary,
+        weather_at_event,
+        weather_summary,
+        enriched_by,
+        enriched_at,
+        created_at,
+        updated_at
+      )
+    `).eq('id', event.recurrence_master_id).single()
       .then(({ data }) => {
         if (data) setMasterData({
           rrule: (data as any).rrule ?? null,

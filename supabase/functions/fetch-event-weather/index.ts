@@ -160,7 +160,6 @@ Deno.serve(async (req) => {
         event_id: event_id,
         weather_at_event: weatherText,
         weather_summary: weatherText,
-        weather_icon: icon,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'event_id', ignoreDuplicates: false }

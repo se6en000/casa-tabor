@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
   // Load everything in parallel
   const [eventRes, llmRes, familyRes, homeRes, placesRes] = await Promise.all([
     sb.from('events')
-      .select('id, title, description, start_time, end_time, all_day, location_name, address, source_member_id, leg_type, event_members(family_members(id, name, full_name, role)), event_enrichments(*)')
+      .select('id, title, description, start_time, end_time, all_day, location_name, address, source_member_id, leg_type, event_members(family_members(id, name, full_name, role)), event_enrichments(source_hash, category, confidence, what_to_bring, outfit_suggestion, parking_notes, contact_name, contact_phone, cost_estimate, dietary_notes, meal_impact, prep_notes, departure_time, drive_time_mins, route_summary, weather_at_event, weather_summary)')
       .eq('id', event_id)
       .single(),
     sb.from('settings').select('value').eq('key', 'llm_config').single(),
@@ -60,12 +60,26 @@ Deno.serve(async (req) => {
   const defaultOwnerName = adminMember?.name ?? 'Jake'
 
   const usageAccum: UsageAccum = { inputTokens: 0, outputTokens: 0 }
-  const enrichment = await enrichEvent(llmConfig, event, familyMembers, homeConfig, defaultOwnerName, extra_context, locked_category, usageAccum, savedPlaces)
+  const enrichment = await enrichEvent(
+    llmConfig,
+    event,
+    familyMembers,
+    homeConfig,
+    defaultOwnerName,
+    extra_context,
+    locked_category,
+    usageAccum,
+    savedPlaces,
+    existingEnrichment ?? null,
+  )
 
   const row = { ...enrichment, event_id, enriched_by: `${llmConfig.provider}/${llmConfig.model}`, enriched_at: new Date().toISOString(), updated_at: new Date().toISOString() }
 
   // Strip fields that don't belong in event_enrichments
   const { location_name: aiLocationName, address: aiAddress, attendees: aiAttendees, primary_attendee: aiPrimaryRaw, title: aiTitleRaw, concise_description: aiConcise, ...enrichmentFields } = row as typeof row & { location_name?: string; address?: string; attendees?: string[]; primary_attendee?: string; title?: string; concise_description?: string }
+  const contractFields = Object.fromEntries(
+    ENRICHMENT_FIELDS.map((key) => [key, enrichmentFields[key]]),
+  ) as Record<EnrichmentField, unknown>
 
   const nameToId = Object.fromEntries(familyMembers.map(m => [m.name.toLowerCase(), m.id]))
 
@@ -105,7 +119,18 @@ Deno.serve(async (req) => {
   const finalTitle = `${resolvedPrimary} | ${concisePart}`
 
   const { error: upsertErr } = await sb.from('event_enrichments')
-    .upsert({ ...enrichmentFields, source_hash: contentHash, created_at: new Date().toISOString() }, { onConflict: 'event_id' })
+    .upsert(
+      {
+        event_id,
+        ...contractFields,
+        source_hash: contentHash,
+        enriched_by: `${llmConfig.provider}/${llmConfig.model}`,
+        enriched_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      },
+      { onConflict: 'event_id' },
+    )
   if (upsertErr) return new Response(JSON.stringify({ error: upsertErr.message }), { status: 500, headers: { ...CORS, 'content-type': 'application/json' } })
 
   // Sync event_members with roles
@@ -150,7 +175,7 @@ Deno.serve(async (req) => {
     : null
 
   const isAtHome = !finalLocationName && !finalAddress
-  const isHomeService = ['home_maintenance'].includes(enrichmentFields.category as string)
+  const isHomeService = ['home_maintenance'].includes((contractFields.category as string) ?? 'other')
 
   console.log('[enrich-event] logistics check:', { isAtHome, isHomeService, homeAddress: !!homeAddress, location: finalLocationName })
 
@@ -167,7 +192,7 @@ Deno.serve(async (req) => {
           end_time: event.end_time as string,
           location_name: finalLocationName,
           address: finalAddress,
-          category: enrichmentFields.category as string,
+          category: (contractFields.category as string) ?? 'other',
         },
         homeAddress,
         attendeeObjs,
@@ -236,7 +261,7 @@ Times should be in local Eastern time stored as UTC (EDT = UTC-4 in summer, EST 
 
   return new Response(JSON.stringify({
     ok: true,
-    enrichment: enrichmentFields,
+    enrichment: contractFields,
     title: finalTitle,
     location_name: finalLocationName,
     address: finalAddress,
@@ -276,6 +301,88 @@ const FIELD_DESCRIPTIONS: Record<string, string> = {
   prep_notes:        'prep_notes: string — prep reminders or notes (1–3 sentences). Always fill this with something useful.',
 }
 
+const ENRICHMENT_FIELDS = [
+  'category',
+  'confidence',
+  'what_to_bring',
+  'outfit_suggestion',
+  'parking_notes',
+  'contact_name',
+  'contact_phone',
+  'cost_estimate',
+  'dietary_notes',
+  'meal_impact',
+  'prep_notes',
+  'departure_time',
+  'drive_time_mins',
+  'route_summary',
+  'weather_at_event',
+  'weather_summary',
+] as const
+
+type EnrichmentField = typeof ENRICHMENT_FIELDS[number]
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function normalizeText(value: unknown): string | null {
+  if (value == null) return null
+  const text = String(value).trim()
+  return text ? text : null
+}
+
+function normalizeConfidence(value: unknown): 'low' | 'medium' | 'high' {
+  const confidence = normalizeText(value)?.toLowerCase()
+  if (confidence === 'low' || confidence === 'medium' || confidence === 'high') return confidence
+  return 'medium'
+}
+
+function normalizeBringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item).trim())
+      .filter(Boolean)
+      .slice(0, 25)
+  }
+  const single = normalizeText(value)
+  return single ? [single] : []
+}
+
+function normalizeDriveTime(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.round(value)
+  const parsed = Number.parseInt(String(value ?? ''), 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function normalizeEnrichmentContract(
+  raw: Record<string, unknown>,
+  category: string,
+  existing: Record<string, unknown> | null,
+): Record<EnrichmentField, unknown> {
+  const source = existing ?? {}
+  const read = (key: EnrichmentField) => (raw[key] !== undefined ? raw[key] : source[key])
+
+  return {
+    category,
+    confidence: normalizeConfidence(read('confidence')),
+    what_to_bring: normalizeBringList(read('what_to_bring')),
+    outfit_suggestion: normalizeText(read('outfit_suggestion')),
+    parking_notes: normalizeText(read('parking_notes')),
+    contact_name: normalizeText(read('contact_name')),
+    contact_phone: normalizeText(read('contact_phone')),
+    cost_estimate: normalizeText(read('cost_estimate')),
+    dietary_notes: normalizeText(read('dietary_notes')),
+    meal_impact: normalizeText(read('meal_impact')),
+    prep_notes: normalizeText(read('prep_notes')),
+    departure_time: normalizeText(read('departure_time')),
+    drive_time_mins: normalizeDriveTime(read('drive_time_mins')),
+    route_summary: normalizeText(read('route_summary')),
+    weather_at_event: normalizeText(read('weather_at_event')),
+    weather_summary: normalizeText(read('weather_summary')),
+  }
+}
+
 async function enrichEvent(
   config: { provider: string; model: string; api_key: string },
   event: Record<string, unknown>,
@@ -286,6 +393,7 @@ async function enrichEvent(
   lockedCategory?: string,
   accum?: UsageAccum,
   savedPlaces?: { id: string; name: string; aliases: string[]; address: string | null; city: string | null; state: string | null; zip: string | null; category: string; notes: string | null }[],
+  existingEnrichment?: Record<string, unknown> | null,
 ) {
   const start = new Date(event.start_time as string)
   const timeStr = (event.all_day as boolean)
@@ -357,7 +465,7 @@ ${allCategoryFields}`
 
   const detectedCategoryPlaceholder = (lockedCategory && CATEGORY_FIELDS[lockedCategory]) ? lockedCategory : '<detected>'
 
-  const fillPrompt = `You are a smart family assistant for the Tabor family. You have access to Google Search — USE IT to find real venue, business, and parking information.
+  const fillPrompt = `You are a smart family assistant for the Tabor family. You have access to Google Search — USE IT for missing public facts.
 
 ═══ FAMILY CONTEXT ═══
 Home: ${homeConfig ? [homeConfig.address, homeConfig.city, homeConfig.state, homeConfig.zip].filter(Boolean).join(', ') : 'West Palm Beach, FL'}
@@ -370,6 +478,11 @@ ${eventBlock}
 ═══ YOUR JOB ═══
 ${categoryInstruction}
 
+Evidence priority (must follow this order):
+1) Household context in this prompt (family roster + saved places + explicit event details)
+2) Location context inferred from saved places/home/base geography
+3) Internet lookup only for gaps not already covered by #1 or #2
+
 STEP 2 — Fill ALL of these fields:
 • primary_attendee (REQUIRED): The ONE person this event is for.
     Rules (in order): 1) Name before "|", ":", or "@" in title → use that name; 2) Home service/maintenance → "${defaultOwner}"; 3) Child's school/activity → the child; 4) Unknown → "${defaultOwner}"
@@ -380,7 +493,7 @@ STEP 2 — Fill ALL of these fields:
 • address: real full street address (search Google, NOT home address)
 • confidence: "low" | "medium" | "high"
 
-Category-specific fields to fill (only those relevant to the detected/locked category):
+Category-specific guidance (fill relevant values, leave unknowns null):
 ${allFieldDescriptions}
 
 Return ONLY this JSON object (no markdown, no prose):
@@ -391,20 +504,41 @@ Return ONLY this JSON object (no markdown, no prose):
   "attendees": [],
   "location_name": null,
   "address": null,
-  "confidence": "medium"
-  ... (plus any category-specific fields from the list above)
+  "confidence": "medium",
+  "what_to_bring": [],
+  "outfit_suggestion": null,
+  "parking_notes": null,
+  "contact_name": null,
+  "contact_phone": null,
+  "cost_estimate": null,
+  "dietary_notes": null,
+  "meal_impact": null,
+  "prep_notes": null
 }`
 
   const text = await callLLM(config, fillPrompt, accum)
-  const result = parseJSON(text)
+  const parsed = parseJSON(text)
+  const result = isRecord(parsed) ? parsed : {}
 
   // Ensure category is valid
   const detectedCategory = (lockedCategory && CATEGORY_FIELDS[lockedCategory])
     ? lockedCategory
     : (CATEGORY_FIELDS[result.category as string] ? result.category as string : 'other')
-  result.category = detectedCategory
 
-  return result
+  const normalizedEnrichment = normalizeEnrichmentContract(result, detectedCategory, existingEnrichment ?? null)
+  const normalizedAttendees = Array.isArray(result.attendees)
+    ? [...new Set(result.attendees.map((name) => String(name).trim()).filter(Boolean))]
+    : []
+
+  return {
+    ...normalizedEnrichment,
+    category: detectedCategory,
+    primary_attendee: normalizeText(result.primary_attendee),
+    concise_description: normalizeText(result.concise_description),
+    attendees: normalizedAttendees,
+    location_name: normalizeText(result.location_name),
+    address: normalizeText(result.address),
+  }
 }
 
 function parseJSON(text: string): Record<string, unknown> {

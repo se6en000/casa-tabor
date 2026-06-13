@@ -1067,7 +1067,7 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
             address={event.address}
             parkingNotes={shows('parking_notes') || hasText(enr?.parking_notes) ? enr?.parking_notes : null}
             contactName={shows('contact_name') || hasText(enr?.contact_name) ? enr?.contact_name : null}
-            contactPhone={shows('contact_name') || hasText(enr?.contact_phone) ? enr?.contact_phone : null}
+            contactPhone={shows('contact_phone') || hasText(enr?.contact_phone) ? enr?.contact_phone : null}
             weatherAtVenue={weatherAtVenue}
           />
         </section>

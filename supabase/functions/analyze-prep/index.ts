@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
       event_members(family_member_id, role),
       event_enrichments(
         what_to_bring, prep_notes, outfit_suggestion,
-        dietary_notes, special_instructions, cost_estimate,
+        dietary_notes, cost_estimate,
         weather_summary, category
       )
     `)
@@ -69,8 +69,8 @@ Deno.serve(async (req) => {
     event_members: { family_member_id: string; role: string }[];
     event_enrichments: {
       what_to_bring?: string[]; prep_notes?: string | null; outfit_suggestion?: string | null;
-      dietary_notes?: string | null; special_instructions?: string | null;
-      cost_estimate?: number | null; weather_summary?: string | null; category?: string | null;
+      dietary_notes?: string | null;
+      cost_estimate?: string | null; weather_summary?: string | null; category?: string | null;
     } | null;
   }
 
@@ -86,9 +86,8 @@ Deno.serve(async (req) => {
       enr?.what_to_bring?.length ? `Bring: ${(enr.what_to_bring as string[]).join(', ')}` : '',
       enr?.outfit_suggestion ? `Outfit: ${enr.outfit_suggestion}` : '',
       enr?.dietary_notes ? `Dietary: ${enr.dietary_notes}` : '',
-      enr?.special_instructions ? `Special: ${enr.special_instructions}` : '',
       enr?.prep_notes ? `PrepNotes: ${enr.prep_notes}` : '',
-      enr?.cost_estimate ? `Cost: $${enr.cost_estimate}` : '',
+      enr?.cost_estimate ? `Cost: ${enr.cost_estimate}` : '',
       enr?.weather_summary ? `Weather: ${enr.weather_summary}` : '',
     ].filter(Boolean).join(' | ')
 

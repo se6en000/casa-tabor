@@ -21,6 +21,30 @@ export interface EventWithDetails extends Omit<CalendarEvent, 'members' | 'enric
 }
 
 async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDetails[]> {
+  const enrichmentSelect = `
+    id,
+    event_id,
+    category,
+    confidence,
+    what_to_bring,
+    outfit_suggestion,
+    parking_notes,
+    contact_name,
+    contact_phone,
+    cost_estimate,
+    dietary_notes,
+    meal_impact,
+    prep_notes,
+    departure_time,
+    drive_time_mins,
+    route_summary,
+    weather_at_event,
+    weather_summary,
+    enriched_by,
+    enriched_at,
+    created_at,
+    updated_at
+  `
   const { data: events, error } = await supabase
     .from('events')
     .select(`
@@ -30,7 +54,7 @@ async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDet
         role,
         family_member:family_members (*)
       ),
-      event_enrichments (*),
+      event_enrichments (${enrichmentSelect}),
       event_logistics ( * ),
       event_checklist_items ( * ),
       event_action_items ( * )

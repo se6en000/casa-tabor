@@ -67,19 +67,16 @@ export interface EventEnrichment {
   id: string
   event_id: string
   drive_time_mins: number | null
-  distance_miles: number | null
   departure_time: string | null
   route_summary: string | null
   weather_at_event: string | null
   weather_summary: string | null
-  weather_icon: string | null
   what_to_bring: string[]
   prep_notes: string | null
   outfit_suggestion: string | null
   parking_notes: string | null
   dietary_notes: string | null
-  special_instructions: string | null
-  cost_estimate: number | null
+  cost_estimate: string | null
   contact_name: string | null
   contact_phone: string | null
   meal_impact: string | null
