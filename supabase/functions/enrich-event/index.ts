@@ -1,4 +1,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import {
+  ENRICHMENT_FIELDS,
+  normalizeEnrichmentFieldList,
+} from '../_shared/enrichment-impact.mjs'
 
 interface UsageAccum { inputTokens: number; outputTokens: number }
 
@@ -12,8 +16,17 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const sb = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))
 
-  const { event_id, extra_context, locked_category } = await req.json().catch(() => ({}))
+  const {
+    event_id,
+    extra_context,
+    locked_category,
+    target_fields,
+    locked_fields,
+    change_context,
+  } = await req.json().catch(() => ({}))
   if (!event_id) return new Response(JSON.stringify({ error: 'event_id required' }), { status: 400, headers: { ...CORS, 'content-type': 'application/json' } })
+  const targetFields = normalizeEnrichmentFieldList(target_fields)
+  const lockedFields = normalizeEnrichmentFieldList(locked_fields)
 
   // Load everything in parallel
   const [eventRes, llmRes, familyRes, homeRes, placesRes] = await Promise.all([
@@ -48,7 +61,12 @@ Deno.serve(async (req) => {
   ].join('|')
 
   const existingEnrichment = (event.event_enrichments as Record<string, unknown>[] | null)?.[0]
-  if (!extra_context && !locked_category && existingEnrichment?.source_hash === contentHash) {
+  if (
+    targetFields.length === 0 &&
+    !extra_context &&
+    !locked_category &&
+    existingEnrichment?.source_hash === contentHash
+  ) {
     console.log('[enrich-event] skipping — content unchanged, hash matches')
     // Log cached hit (non-blocking)
     sb.from('ai_usage_log').insert({ function_name: 'enrich-event', provider: llmConfig.provider, model: llmConfig.model, input_tokens: 0, output_tokens: 0, cached: true }).then(() => {}).catch(() => {})
@@ -71,6 +89,8 @@ Deno.serve(async (req) => {
     usageAccum,
     savedPlaces,
     existingEnrichment ?? null,
+    targetFields,
+    lockedFields,
   )
 
   const row = { ...enrichment, event_id, enriched_by: `${llmConfig.provider}/${llmConfig.model}`, enriched_at: new Date().toISOString(), updated_at: new Date().toISOString() }
@@ -117,6 +137,7 @@ Deno.serve(async (req) => {
   const rawConcise = aiConcise?.trim() || aiTitleRaw?.replace(/^[^|]+\|\s*/,'').trim() || cleanTitleDescription
   const concisePart = toTitleCase(rawConcise)
   const finalTitle = `${resolvedPrimary} | ${concisePart}`
+  const targetedMode = targetFields.length > 0
 
   const { error: upsertErr } = await sb.from('event_enrichments')
     .upsert(
@@ -157,11 +178,11 @@ Deno.serve(async (req) => {
   const finalAddress = isTripLeg
     ? (event.address as string | null)
     : (aiAddress ?? (event.address as string | null))
-  const eventPatch: Record<string, string> = isTripLeg
+  const eventPatch: Record<string, string> = isTripLeg || targetedMode
     ? {}  // don't overwrite title or location for leg events
     : { title: finalTitle }
-  if (!isTripLeg && aiLocationName) eventPatch.location_name = aiLocationName
-  if (!isTripLeg && aiAddress) eventPatch.address = aiAddress
+  if (!isTripLeg && !targetedMode && aiLocationName) eventPatch.location_name = aiLocationName
+  if (!isTripLeg && !targetedMode && aiAddress) eventPatch.address = aiAddress
 
   await sb.from('events').update({
     is_enriched: true,
@@ -179,7 +200,8 @@ Deno.serve(async (req) => {
 
   console.log('[enrich-event] logistics check:', { isAtHome, isHomeService, homeAddress: !!homeAddress, location: finalLocationName })
 
-  if (!isAtHome && !isHomeService && homeAddress && (finalLocationName || finalAddress)) {
+  const shouldRunLogistics = targetFields.length === 0 || targetFields.some((f) => ['departure_time', 'drive_time_mins', 'route_summary'].includes(f))
+  if (shouldRunLogistics && !isAtHome && !isHomeService && homeAddress && (finalLocationName || finalAddress)) {
     const allAttendeeNames = [resolvedPrimary, ...(aiAttendees ?? [])]
     const attendeeObjs = familyMembers.filter(m => allAttendeeNames.includes(m.name))
 
@@ -206,7 +228,11 @@ Deno.serve(async (req) => {
 
         // Strip drive_time_mins — not a column in event_logistics (goes to event_enrichments)
         await sb.from('event_logistics').insert(
-          logisticsSteps.map(({ drive_time_mins: _dtm, ...step }, i) => ({ ...step, event_id, sort_order: i + 1 }))
+          logisticsSteps.map((step, i) => {
+            const { drive_time_mins, ...stepWithoutDriveTime } = step
+            void drive_time_mins
+            return { ...stepWithoutDriveTime, event_id, sort_order: i + 1 }
+          })
         )
 
         // Backfill enrichment travel fields if LLM returned them
@@ -262,6 +288,10 @@ Times should be in local Eastern time stored as UTC (EDT = UTC-4 in summer, EST 
   return new Response(JSON.stringify({
     ok: true,
     enrichment: contractFields,
+    targeted: targetedMode,
+    target_fields: targetFields,
+    locked_fields: lockedFields,
+    change_context: change_context ?? null,
     title: finalTitle,
     location_name: finalLocationName,
     address: finalAddress,
@@ -301,26 +331,7 @@ const FIELD_DESCRIPTIONS: Record<string, string> = {
   prep_notes:        'prep_notes: string — prep reminders or notes (1–3 sentences). Always fill this with something useful.',
 }
 
-const ENRICHMENT_FIELDS = [
-  'category',
-  'confidence',
-  'what_to_bring',
-  'outfit_suggestion',
-  'parking_notes',
-  'contact_name',
-  'contact_phone',
-  'cost_estimate',
-  'dietary_notes',
-  'meal_impact',
-  'prep_notes',
-  'departure_time',
-  'drive_time_mins',
-  'route_summary',
-  'weather_at_event',
-  'weather_summary',
-] as const
-
-type EnrichmentField = typeof ENRICHMENT_FIELDS[number]
+type EnrichmentField = (typeof ENRICHMENT_FIELDS)[number]
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -359,9 +370,16 @@ function normalizeEnrichmentContract(
   raw: Record<string, unknown>,
   category: string,
   existing: Record<string, unknown> | null,
+  targetFields: EnrichmentField[] | null,
+  lockedFields: Set<EnrichmentField>,
 ): Record<EnrichmentField, unknown> {
   const source = existing ?? {}
-  const read = (key: EnrichmentField) => (raw[key] !== undefined ? raw[key] : source[key])
+  const targetSet = targetFields ? new Set(targetFields) : null
+  const read = (key: EnrichmentField) => {
+    if (lockedFields.has(key)) return source[key]
+    if (targetSet && !targetSet.has(key)) return source[key]
+    return raw[key] !== undefined ? raw[key] : source[key]
+  }
 
   return {
     category,
@@ -394,15 +412,13 @@ async function enrichEvent(
   accum?: UsageAccum,
   savedPlaces?: { id: string; name: string; aliases: string[]; address: string | null; city: string | null; state: string | null; zip: string | null; category: string; notes: string | null }[],
   existingEnrichment?: Record<string, unknown> | null,
+  targetFields?: string[],
+  lockedFields?: string[],
 ) {
   const start = new Date(event.start_time as string)
   const timeStr = (event.all_day as boolean)
     ? 'all day'
     : start.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
-
-  const homeAddress = homeConfig
-    ? [homeConfig.address, homeConfig.city, homeConfig.state, homeConfig.zip].filter(Boolean).join(', ')
-    : null
 
   const familyRoster = familyMembers.length > 0
     ? familyMembers.map(m => {
@@ -430,8 +446,6 @@ Location: ${(event.location_name as string) || (event.address as string) || 'not
 Description: ${(event.description as string) || 'none'}
 Who: ${whoLine}${extraContextLine}`
 
-  const nearCity = homeConfig?.city ?? 'West Palm Beach, FL'
-
   // Build saved places block for the prompt
   const savedPlacesBlock = savedPlaces && savedPlaces.length > 0
     ? `\n═══ SAVED PLACES (family address book — use these to resolve place nicknames) ═══\n${
@@ -452,9 +466,14 @@ Who: ${whoLine}${extraContextLine}`
 
   const familyNamesList = familyMembers.map(m => m.name).join(', ')
 
-  // If category is locked by user, skip detection and go straight to fill
-  const categoryInstruction = lockedCategory && CATEGORY_FIELDS[lockedCategory]
-    ? `Category is already set to: ${lockedCategory} — do NOT change it.`
+  const targetFieldList = normalizeEnrichmentFieldList(targetFields) as EnrichmentField[]
+  const lockedFieldSet = new Set(normalizeEnrichmentFieldList(lockedFields) as EnrichmentField[])
+  const shouldTargetCategory = targetFieldList.length === 0 || targetFieldList.includes('category')
+  const existingCategory = normalizeText(existingEnrichment?.category) ?? 'other'
+
+  // If category is locked by user or not in targeted fields, skip detection and go straight to fill
+  const categoryInstruction = (lockedCategory && CATEGORY_FIELDS[lockedCategory]) || !shouldTargetCategory
+    ? `Category is fixed to: ${(lockedCategory && CATEGORY_FIELDS[lockedCategory]) ? lockedCategory : existingCategory} — do NOT change it.`
     : `STEP 1 — Detect the best category from: appointment, school, sports, social, errand, travel, work, medical, birthday, holiday, home_maintenance, dining, other
 Category → fields to fill:
 ${allCategoryFields}`
@@ -464,6 +483,14 @@ ${allCategoryFields}`
     .join('\n')
 
   const detectedCategoryPlaceholder = (lockedCategory && CATEGORY_FIELDS[lockedCategory]) ? lockedCategory : '<detected>'
+
+  const targetedPromptLine = targetFieldList.length > 0
+    ? `Targeted re-enrichment mode: ONLY update these enrichment fields if better evidence exists: ${targetFieldList.join(', ')}. Never change other enrichment fields.`
+    : 'Full enrichment mode: update the full enrichment contract.'
+
+  const lockedPromptLine = lockedFieldSet.size > 0
+    ? `User-locked enrichment fields (never modify): ${[...lockedFieldSet].join(', ')}.`
+    : ''
 
   const fillPrompt = `You are a smart family assistant for the Tabor family. You have access to Google Search — USE IT for missing public facts.
 
@@ -477,6 +504,8 @@ ${eventBlock}
 
 ═══ YOUR JOB ═══
 ${categoryInstruction}
+${targetedPromptLine}
+${lockedPromptLine}
 
 Evidence priority (must follow this order):
 1) Household context in this prompt (family roster + saved places + explicit event details)
@@ -523,9 +552,15 @@ Return ONLY this JSON object (no markdown, no prose):
   // Ensure category is valid
   const detectedCategory = (lockedCategory && CATEGORY_FIELDS[lockedCategory])
     ? lockedCategory
-    : (CATEGORY_FIELDS[result.category as string] ? result.category as string : 'other')
+    : (shouldTargetCategory && CATEGORY_FIELDS[result.category as string] ? result.category as string : existingCategory)
 
-  const normalizedEnrichment = normalizeEnrichmentContract(result, detectedCategory, existingEnrichment ?? null)
+  const normalizedEnrichment = normalizeEnrichmentContract(
+    result,
+    detectedCategory,
+    existingEnrichment ?? null,
+    targetFieldList.length > 0 ? targetFieldList : null,
+    lockedFieldSet,
+  )
   const normalizedAttendees = Array.isArray(result.attendees)
     ? [...new Set(result.attendees.map((name) => String(name).trim()).filter(Boolean))]
     : []

@@ -3,6 +3,10 @@ import {
   RECURRING_EDIT_ERROR,
   buildValidatedUpdatePayload,
 } from '../_shared/ai-event-edit.mjs'
+import {
+  deriveImpactedEnrichmentFields,
+  hasSmartEnrichmentInputs,
+} from '../_shared/enrichment-impact.mjs'
 import { requireEnv } from '../_shared/env.mjs'
 
 const CORS = {
@@ -210,6 +214,20 @@ Deno.serve(async (req) => {
         ...normalized.eventUpdates,
         ...(normalized.destinationChanged ? { is_enriched: false } : {}),
       }
+      const manualEnrichmentFields = Object.keys(normalized.enrichmentUpdates)
+      const shouldTargetedReenrich = hasSmartEnrichmentInputs({
+        changedEventFields: normalized.changedEventFields,
+        changedEnrichmentFields: normalized.changedEnrichmentFields,
+        membersChanged: normalized.membersChanged,
+      })
+      const targetFields = shouldTargetedReenrich
+        ? deriveImpactedEnrichmentFields({
+          changedEventFields: normalized.changedEventFields,
+          changedEnrichmentFields: normalized.changedEnrichmentFields,
+          membersChanged: normalized.membersChanged,
+          lockedFields: manualEnrichmentFields,
+        })
+        : []
 
       const { error: rpcError } = await sb.rpc('ai_apply_event_update', {
         p_event_id: normalized.eventId,
@@ -226,8 +244,22 @@ Deno.serve(async (req) => {
       })
       if (rpcError) throw new Error(rpcError.message)
 
-      if (normalized.destinationChanged && Object.keys(normalized.enrichmentUpdates).length === 0) {
-        sb.functions.invoke('enrich-event', { body: { event_id: normalized.eventId } }).catch(() => {})
+      if (targetFields.length > 0) {
+        sb.functions.invoke('enrich-event', {
+          body: {
+            event_id: normalized.eventId,
+            target_fields: targetFields,
+            locked_fields: manualEnrichmentFields,
+            locked_category: typeof normalized.enrichmentUpdates.category === 'string'
+              ? normalized.enrichmentUpdates.category
+              : undefined,
+            change_context: {
+              changed_event_fields: normalized.changedEventFields,
+              changed_enrichment_fields: normalized.changedEnrichmentFields,
+              members_changed: normalized.membersChanged,
+            },
+          },
+        }).catch(() => {})
       }
 
       const { data: historyRow, error: historyLoadError } = actionId

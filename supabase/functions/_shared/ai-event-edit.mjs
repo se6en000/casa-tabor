@@ -274,6 +274,28 @@ export function buildValidatedUpdatePayload(args) {
       membersAdd,
       membersRemove,
       destinationChanged: args.location !== undefined || args.address !== undefined,
+      changedEventFields: [
+        ...(args.title !== undefined ? ['title'] : []),
+        ...(args.start !== undefined ? ['start_time'] : []),
+        ...(args.end !== undefined ? ['end_time'] : []),
+        ...(args.location !== undefined ? ['location_name'] : []),
+        ...(args.address !== undefined ? ['address'] : []),
+        ...(args.description !== undefined ? ['description'] : []),
+        ...(args.all_day !== undefined ? ['all_day'] : []),
+      ],
+      changedEnrichmentFields: [
+        ...(args.category !== undefined ? ['category'] : []),
+        ...(args.notes !== undefined ? ['prep_notes'] : []),
+        ...(args.what_to_bring !== undefined ? ['what_to_bring'] : []),
+        ...(args.outfit_suggestion !== undefined ? ['outfit_suggestion'] : []),
+        ...(args.parking_notes !== undefined ? ['parking_notes'] : []),
+        ...(args.contact_name !== undefined ? ['contact_name'] : []),
+        ...(args.contact_phone !== undefined ? ['contact_phone'] : []),
+        ...(args.cost_estimate !== undefined ? ['cost_estimate'] : []),
+        ...(args.dietary_notes !== undefined ? ['dietary_notes'] : []),
+        ...(args.meal_impact !== undefined ? ['meal_impact'] : []),
+      ],
+      membersChanged: (membersAdd?.length ?? 0) > 0 || (membersRemove?.length ?? 0) > 0,
     },
   }
 }
