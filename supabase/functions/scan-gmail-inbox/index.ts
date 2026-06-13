@@ -4,6 +4,7 @@
  * For each family member with gmail_scan_enabled:
  *   1. Fetch new inbox messages (incremental via historyId)
  *   2. Classify intent: new_event | update_event | travel_detail | skip
+ *   2b. Extract non-calendar inbox actions: forms | payment | rsvp | deadline
  *   3. new_event    → fuzzy-dedup against existing events → create or skip
  *   4. update_event → patch existing event; surface conflict notification if times changed significantly
  *   5. travel_detail → hand off to scan-travel-emails pipeline inline
@@ -29,6 +30,7 @@ const TRAVEL_KEYWORDS = /itinerary|e-ticket|eticket|boarding pass|flight confirm
 
 // Keywords that suggest calendar relevance
 const CALENDAR_KEYWORDS = /appointment|appt|booking|reservation|confirm|invite|invitation|reminder|rsvp|meeting|schedule|event|registration|playdate|dentist|doctor|physician|clinic|hospital|therapy|checkup|concert|show|performance|game|match|tournament|practice|party|birthday|celebration|dinner|lunch|brunch|flight|hotel|check-in|checkout|school|class|lesson|camp|workshop|conference/i
+const ACTION_KEYWORDS = /permission slip|consent form|waiver|due date|deadline|invoice|payment due|pay by|tuition|fee|balance due|rsvp|respond by|register by|submit by|application/i
 
 // ── Gmail helpers ─────────────────────────────────────────────────
 
@@ -149,6 +151,15 @@ interface EmailIntent {
   skip_reason?: string
 }
 
+interface InboxActionItem {
+  type: 'forms' | 'payment' | 'rsvp' | 'deadline' | 'general'
+  title: string
+  description: string
+  due_datetime?: string // ISO8601 or empty
+  assigned_member?: string
+  priority?: 1 | 2 | 3
+}
+
 async function classifyEmail(
   subject: string,
   from: string,
@@ -193,6 +204,107 @@ Reply ONLY with JSON:
     const raw = await callLLM(llmConfig, prompt)
     return JSON.parse(raw.replace(/```json\n?|\n?```/g, '').trim()) as EmailIntent
   } catch { return null }
+}
+
+async function extractInboxActions(
+  subject: string,
+  from: string,
+  date: string,
+  body: string,
+  familyMembers: { id: string; name: string; role: string }[],
+  llmConfig: { provider?: string; model?: string; api_key: string },
+): Promise<InboxActionItem[]> {
+  const today = new Date().toISOString().slice(0, 10)
+  const prompt = `You extract actionable family inbox tasks. Today is ${today}.
+Family members: ${familyMembers.map(m => `${m.name} (${m.role})`).join(', ')}
+
+Return ONLY tasks that require action to avoid problems:
+- forms (permission slips, waivers, docs)
+- payment (fee, tuition, invoice, balance due)
+- rsvp (respond/confirm attendance)
+- deadline (submit/apply/register by date)
+
+EMAIL:
+Subject: ${subject}
+From: ${from}
+Date: ${date}
+Body: ${body.slice(0, 3500)}
+
+Respond ONLY JSON:
+{
+  "actions": [
+    {
+      "type": "forms|payment|rsvp|deadline|general",
+      "title": "short title",
+      "description": "what needs to be done and why",
+      "due_datetime": "ISO8601 with timezone offset or empty",
+      "assigned_member": "family member name or empty",
+      "priority": 1
+    }
+  ]
+}
+
+If no actionable task exists, return {"actions":[]}.`
+
+  try {
+    const raw = await callLLM(llmConfig, prompt)
+    const parsed = JSON.parse(raw.replace(/```json\n?|\n?```/g, '').trim()) as { actions?: InboxActionItem[] }
+    return (parsed.actions ?? []).filter(a => !!a?.description && !!a?.type)
+  } catch {
+    return []
+  }
+}
+
+function parseDueDateOrFallback(due: string | undefined, receivedAtIso: string, eventStartIso?: string | null): string {
+  if (due) {
+    const parsed = new Date(due)
+    if (!isNaN(parsed.getTime())) return parsed.toISOString()
+  }
+  if (eventStartIso) {
+    const parsedEvent = new Date(eventStartIso)
+    if (!isNaN(parsedEvent.getTime())) return parsedEvent.toISOString()
+  }
+  return new Date(new Date(receivedAtIso).getTime() + 72 * 60 * 60 * 1000).toISOString()
+}
+
+async function persistInboxActions(
+  sb: ReturnType<typeof createClient>,
+  memberId: string,
+  subject: string,
+  eventId: string | null,
+  eventTitle: string | null,
+  eventDate: string | null,
+  receivedAtIso: string,
+  actions: InboxActionItem[],
+  familyMembers: { id: string; name: string; role: string }[],
+): Promise<number> {
+  if (actions.length === 0) return 0
+  const rows = actions.map((a) => {
+    const owner = familyMembers.find((m) =>
+      a.assigned_member && m.name.toLowerCase().includes(a.assigned_member.toLowerCase()),
+    )
+    const dueBy = parseDueDateOrFallback(a.due_datetime, receivedAtIso, eventDate)
+    const title = a.title?.trim() || subject.slice(0, 80)
+    const description = a.description.trim()
+    const emoji = a.type === 'payment' ? '💳'
+      : a.type === 'rsvp' ? '📩'
+      : a.type === 'forms' ? '📝'
+      : a.type === 'deadline' ? '⏰'
+      : '📌'
+    const normalizedPriority: 1 | 2 | 3 = a.priority === 3 ? 3 : a.priority === 1 ? 1 : 2
+    return {
+      event_id: eventId,
+      type: a.type,
+      emoji,
+      description,
+      event_title: eventTitle ?? `${owner?.name ?? familyMembers.find(f => f.id === memberId)?.name ?? 'Family'} · ${title}`,
+      event_date: eventDate ?? dueBy,
+      due_by: dueBy,
+      priority: normalizedPriority,
+    }
+  })
+  await sb.from('prep_items').insert(rows)
+  return rows.length
 }
 
 // ── Fuzzy event dedup ─────────────────────────────────────────────
@@ -275,7 +387,7 @@ Deno.serve(async (req) => {
   if (targetMemberId) query = query.eq('family_member_id', targetMemberId)
   const { data: tokens } = await query
 
-  const results: { member_id: string; scanned: number; created: number; updated: number; travel: number; skipped: number; conflicts: number; error?: string }[] = []
+  const results: { member_id: string; scanned: number; created: number; updated: number; travel: number; skipped: number; conflicts: number; actions: number; error?: string }[] = []
 
   for (const tok of (tokens ?? [])) {
     const memberId = tok.family_member_id
@@ -284,7 +396,7 @@ Deno.serve(async (req) => {
     // Refresh if needed
     if (!accessToken || !tok.expires_at || new Date(tok.expires_at) < new Date(Date.now() + 60_000)) {
       const refreshed = await refreshToken(tok.refresh_token, clientId, clientSecret)
-      if (!refreshed) { results.push({ member_id: memberId, scanned: 0, created: 0, updated: 0, travel: 0, skipped: 0, conflicts: 0, error: 'token refresh failed' }); continue }
+      if (!refreshed) { results.push({ member_id: memberId, scanned: 0, created: 0, updated: 0, travel: 0, skipped: 0, conflicts: 0, actions: 0, error: 'token refresh failed' }); continue }
       accessToken = refreshed.access_token
       await sb.from('google_tokens').update({
         access_token: refreshed.access_token,
@@ -297,7 +409,7 @@ Deno.serve(async (req) => {
       await sb.from('google_tokens').update({ gmail_history_id: newHistoryId }).eq('family_member_id', memberId)
     }
 
-    let scanned = 0, created = 0, updated = 0, travel = 0, skipped = 0, conflicts = 0
+    let scanned = 0, created = 0, updated = 0, travel = 0, skipped = 0, conflicts = 0, actions = 0
 
     for (const { id: msgId } of messages) {
       // Skip already-processed
@@ -312,8 +424,9 @@ Deno.serve(async (req) => {
       const searchText = `${details.subject} ${details.snippet}`
       const isTravel = TRAVEL_KEYWORDS.test(searchText) || TRAVEL_SENDER_DOMAINS.some(d => details.from.toLowerCase().includes(d))
       const isCalendar = CALENDAR_KEYWORDS.test(searchText)
+      const isActionCandidate = ACTION_KEYWORDS.test(searchText)
 
-      if (!isTravel && !isCalendar) {
+      if (!isTravel && !isCalendar && !isActionCandidate) {
         await sb.from('gmail_processed_messages').upsert({
           family_member_id: memberId, gmail_message_id: msgId,
           subject: details.subject, email_subject: details.subject,
@@ -326,7 +439,24 @@ Deno.serve(async (req) => {
       }
 
       // ── AI classification ──────────────────────────────────────
-      const classified = await classifyEmail(details.subject, details.from, details.date, details.body, familyMembers, llm)
+      const [classified, extractedActions] = await Promise.all([
+        classifyEmail(details.subject, details.from, details.date, details.body, familyMembers, llm),
+        extractInboxActions(details.subject, details.from, details.date, details.body, familyMembers, llm),
+      ])
+
+      const emailReceivedAt = details.date ? new Date(details.date).toISOString() : new Date().toISOString()
+      const actionsFromEmail = await persistInboxActions(
+        sb,
+        memberId,
+        details.subject,
+        null,
+        details.subject.slice(0, 80),
+        null,
+        emailReceivedAt,
+        extractedActions,
+        familyMembers,
+      )
+      actions += actionsFromEmail
 
       if (!classified || classified.intent === 'skip') {
         await sb.from('gmail_processed_messages').upsert({
@@ -334,14 +464,13 @@ Deno.serve(async (req) => {
           subject: details.subject, email_subject: details.subject,
           from_email: details.from,
           received_at: details.date ? new Date(details.date).toISOString() : null,
-          intent: 'skip', skipped_reason: classified?.skip_reason ?? 'AI skipped',
+          intent: 'skip',
+          skipped_reason: actionsFromEmail > 0 ? 'non-calendar email with actionable tasks extracted' : (classified?.skip_reason ?? 'AI skipped'),
           email_body: details.body.slice(0, 8000),
         }, { onConflict: 'family_member_id,gmail_message_id' })
         skipped++
         continue
       }
-
-      const emailReceivedAt = details.date ? new Date(details.date).toISOString() : new Date().toISOString()
 
       // ── INTENT: travel_detail ──────────────────────────────────
       if (classified.intent === 'travel_detail' || isTravel) {
@@ -540,7 +669,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    results.push({ member_id: memberId, scanned, created, updated, travel, skipped, conflicts })
+    results.push({ member_id: memberId, scanned, created, updated, travel, skipped, conflicts, actions })
   }
 
   return new Response(JSON.stringify({ ok: true, results }), { headers: { ...CORS, 'content-type': 'application/json' } })

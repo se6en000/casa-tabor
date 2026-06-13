@@ -135,8 +135,11 @@ export default function GmailScanPage() {
       if (error) throw error
       const results = data?.results ?? []
       const totalCreated = results.reduce((s: number, r: { created: number }) => s + r.created, 0)
+      const totalActions = results.reduce((s: number, r: { actions?: number }) => s + (r.actions ?? 0), 0)
       const totalScanned = results.reduce((s: number, r: { scanned: number }) => s + r.scanned, 0)
-      setScanResult(`Scanned ${totalScanned} emails · ${totalCreated} event${totalCreated !== 1 ? 's' : ''} added`)
+      setScanResult(
+        `Scanned ${totalScanned} emails · ${totalCreated} event${totalCreated !== 1 ? 's' : ''} added · ${totalActions} action item${totalActions !== 1 ? 's' : ''} extracted`,
+      )
       await refetchMessages()
       qc.invalidateQueries({ queryKey: ['events'] })
     } catch (e) {
@@ -201,7 +204,7 @@ export default function GmailScanPage() {
         <p className="font-semibold text-casa-navy">How it works</p>
         <p>• Checks Gmail every 5 minutes for new emails that look like calendar events</p>
         <p>• Detects: appointments, bookings, reservations, invitations, reminders, doctor visits, concerts, flights, school events, and more</p>
-        <p>• Uses AI to extract the date, time, and location — then adds it directly to your calendar</p>
+        <p>• Uses AI to extract date/time/location and also pulls action tasks (forms, payments, RSVP, deadlines)</p>
         <p>• Each family member grants read-only Gmail access (no email is sent or modified)</p>
       </div>
 

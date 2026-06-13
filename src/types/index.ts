@@ -167,7 +167,7 @@ export interface SavedPlace {
 
 export interface PrepItem {
   id: string
-  event_id: string
+  event_id: string | null
   type: string
   emoji: string
   description: string
