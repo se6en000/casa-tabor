@@ -34,12 +34,13 @@ Deno.serve(async (req) => {
   const start = body.range_start ? new Date(body.range_start) : new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const end = body.range_end ? new Date(body.range_end) : new Date(start.getTime() + 14 * 24 * 60 * 60 * 1000)
 
-  const [conflictRun, prepRun, weatherRun] = await Promise.all([
+  const [conflictRun, prepRun, weatherRun, graphRun] = await Promise.all([
     sb.functions.invoke('analyze-conflicts', {
       body: { range_start: start.toISOString(), range_end: end.toISOString() },
     }),
     sb.functions.invoke('analyze-prep', { body: {} }),
     sb.functions.invoke('weather-pending', { body: {} }),
+    sb.functions.invoke('build-household-graph', { body: {} }),
   ])
 
   const { data: conflictsRaw } = await sb
@@ -163,6 +164,11 @@ Deno.serve(async (req) => {
     analyze_conflicts: { ok: !conflictRun.error, error: conflictRun.error?.message ?? null },
     analyze_prep: { ok: !prepRun.error, error: prepRun.error?.message ?? null },
     weather_pending: { ok: !weatherRun.error, error: weatherRun.error?.message ?? null },
+    household_graph: {
+      ok: !graphRun.error && !!graphRun.data?.ok,
+      error: graphRun.error?.message ?? graphRun.data?.error ?? null,
+      counts: graphRun.data?.counts ?? null,
+    },
   }
 
   return new Response(
@@ -173,6 +179,8 @@ Deno.serve(async (req) => {
         conflicts: (conflictsRaw ?? []).length,
         prep_items: (prepRaw ?? []).length,
         action_queue: actionQueue.length,
+        household_graph_nodes: graphRun.data?.counts?.nodes_total ?? null,
+        household_graph_edges: graphRun.data?.counts?.edges_total ?? null,
       },
       conflicts: conflictsRaw ?? [],
       prep_items: prepRaw ?? [],
