@@ -129,17 +129,19 @@ export default function HomePage() {
   useEffect(() => {
     if (shouldRunAI()) {
       markAIRan()
-      supabase.functions.invoke('analyze-conflicts', {})
-        .then(() => qc.invalidateQueries({ queryKey: ['conflicts'] }))
+      supabase.functions.invoke('orchestrate-household', {})
+        .then(() => Promise.all([
+          qc.invalidateQueries({ queryKey: ['conflicts'] }),
+          qc.invalidateQueries({ queryKey: ['prep-items'] }),
+          qc.invalidateQueries({ queryKey: ['events'] }),
+        ]))
         .catch(() => {})
-      supabase.functions.invoke('analyze-prep', {})
-        .then(() => qc.invalidateQueries({ queryKey: ['prep-items'] }))
+    } else {
+      // Keep weather fresh even when full orchestration is rate-limited.
+      supabase.functions.invoke('weather-pending', {})
+        .then(() => qc.invalidateQueries({ queryKey: ['events'] }))
         .catch(() => {})
     }
-    // Weather is cheap (no LLM) — always run
-    supabase.functions.invoke('weather-pending', {})
-      .then(() => qc.invalidateQueries({ queryKey: ['events'] }))
-      .catch(() => {})
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Pull-to-refresh ──────────────────────────────────────────
@@ -151,11 +153,7 @@ export default function HomePage() {
     try { navigator.vibrate?.(15) } catch (_) {}
     // Pull-to-refresh always runs AI (manual user action) and resets cooldown
     markAIRan()
-    await Promise.all([
-      supabase.functions.invoke('analyze-conflicts', {}).catch(() => {}),
-      supabase.functions.invoke('analyze-prep', {}).catch(() => {}),
-      supabase.functions.invoke('weather-pending', {}).catch(() => {}),
-    ])
+    await supabase.functions.invoke('orchestrate-household', {}).catch(() => {})
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['today-events'] }),
       qc.invalidateQueries({ queryKey: ['conflicts'] }),

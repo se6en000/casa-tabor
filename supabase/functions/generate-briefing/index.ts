@@ -31,6 +31,15 @@ Deno.serve(async (req) => {
   const { data: weatherSetting } = await sb.from('settings').select('value').eq('key', 'weather').maybeSingle()
   const weatherCity: string = weatherSetting?.value?.city ?? ''
 
+  // Run canonical orchestration pipeline first so conflicts/prep/weather are refreshed together.
+  const sevenDaysOut = new Date(new Date(dayStartUtc).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+  const { data: orchestrationData, error: orchestrationError } = await sb.functions.invoke('orchestrate-household', {
+    body: { range_start: dayStartUtc, range_end: sevenDaysOut },
+  })
+  if (orchestrationError) {
+    console.error('[generate-briefing] orchestration invoke failed:', orchestrationError.message)
+  }
+
   // Load today's events — use UTC boundaries computed by client for local-day accuracy
   const { data: events, error: evErr } = await sb
     .from('events')
@@ -66,8 +75,8 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Load active prep items for today or upcoming (not dismissed)
-  const { data: prepItems } = await sb
+  // Fallback prep query if orchestration didn't return prep items.
+  const { data: prepItemsFallback } = await sb
     .from('prep_items')
     .select('description, type, emoji, event_title, event_date, priority')
     .eq('dismissed', false)
@@ -76,11 +85,36 @@ Deno.serve(async (req) => {
     .order('priority', { ascending: false })
     .limit(5)
 
+  const prepItems = (orchestrationData?.prep_items as {
+    description: string
+    type: string
+    emoji: string
+    event_title: string
+    event_date: string
+    priority: number
+  }[] | undefined) ?? prepItemsFallback ?? []
+
+  const actionQueue = (orchestrationData?.action_queue as {
+    type: string
+    priority: number
+    title: string
+    description: string
+    due_at: string
+    event_id: string | null
+  }[] | undefined) ?? []
+
+  const conflicts = (orchestrationData?.conflicts as {
+    id: string
+    conflict_type: string
+    severity: number
+    description: string
+  }[] | undefined) ?? []
+
   // Generate AI summary if key is configured
   let summaryText = ''
   if (llmConfig?.api_key && llmConfig?.provider) {
     try {
-      summaryText = await callLLM(llmConfig, today, events ?? [], familyMembers ?? [], weatherCity, prepItems ?? [])
+      summaryText = await callLLM(llmConfig, today, events ?? [], familyMembers ?? [], weatherCity, prepItems, actionQueue)
     } catch (err) {
       console.error('LLM error:', err)
       summaryText = ''
@@ -91,9 +125,14 @@ Deno.serve(async (req) => {
   const briefingRow = {
     briefing_date: today,
     summary_text: summaryText,
-    content_json: { member_schedules: memberSchedules, events_count: (events ?? []).length },
+    content_json: {
+      member_schedules: memberSchedules,
+      events_count: (events ?? []).length,
+      action_queue: actionQueue,
+      orchestration_runs: orchestrationData?.runs ?? null,
+    },
     member_schedules: memberSchedules,
-    conflicts: [],
+    conflicts,
     generated_by: llmConfig?.provider ? `${llmConfig.provider}/${llmConfig.model}` : 'none',
     updated_at: new Date().toISOString(),
   }
@@ -114,6 +153,7 @@ async function callLLM(
   members: { name: string }[],
   weatherCity: string,
   prepItems: { description: string; type: string; emoji: string; event_title: string; event_date: string; priority: number }[],
+  actionQueue: { type: string; priority: number; title: string; description: string; due_at: string; event_id: string | null }[],
 ): Promise<string> {
   const dateLabel = new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
   const memberNames = members.map(m => m.name).join(', ')
@@ -159,19 +199,25 @@ async function callLLM(
     ? prepItems.map(p => `  ${p.emoji} ${p.description}`).join('\n')
     : ''
 
+  const actionLines = actionQueue.length > 0
+    ? actionQueue.slice(0, 6).map((a) => `  [P${a.priority}] ${a.title} — ${a.description}`).join('\n')
+    : ''
+
   const prompt = `You are the Casa Tabor family command center. Write a warm, smart morning briefing for ${dateLabel} for the ${memberNames} family.${weatherCity ? ` They live in ${weatherCity}.` : ''}
 
 TODAY'S SCHEDULE:
 ${eventLines || '  No events scheduled today.'}
 ${prepLines ? `\nACTIVE PREP REMINDERS (things that need attention soon):
 ${prepLines}` : ''}
+${actionLines ? `\nACTION QUEUE (highest-priority items from conflict + prep + weather orchestration):
+${actionLines}` : ''}
 
 Write a single flowing paragraph (4–6 sentences) that covers:
 1. A quick read of the day's energy — busy or calm?
 2. Who's going where and when — mention names, times, and locations naturally
 3. Any logistics or timing pressure (back-to-back events, driving needed, tight windows)
 4. Any weather-related considerations for outdoor events if relevant
-5. A nod to any prep reminders that need attention today or this week (only if prep items exist above)
+5. A nod to any prep/action items that need attention today or this week (only if prep/action inputs exist above)
 6. A closing note — encouraging, grounding, or practical
 
 Write in a warm, confident voice like a knowledgeable household manager. Use family member names. No bullet points. No headers. Just one great paragraph.`
