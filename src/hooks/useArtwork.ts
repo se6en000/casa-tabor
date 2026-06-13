@@ -1,16 +1,75 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 
 const MET_API = 'https://collectionapi.metmuseum.org/public/collection/v1'
+const ARTIC_API = 'https://api.artic.edu/api/v1'
+const ARTIC_IIIF = 'https://www.artic.edu/iiif/2'
 
-const FETCH_LIMIT = 50
+// ARTIC IDs are offset to avoid collisions with Met numeric IDs
+const ARTIC_OFFSET = 10_000_000
 
-// Hardcoded fallback artworks — guaranteed Met Museum images.
+// Curated Met Museum search queries — all yield Florida, tropical, coastal, ocean art
+const MET_QUERIES = [
+  'Winslow Homer',
+  'Martin Johnson Heade',
+  'Thomas Moran',
+  'William Merritt Chase beach',
+  'John Singer Sargent watercolor',
+  'George Inness landscape',
+  'Florida palm tropical ocean',
+  'sailing sea coast nautical',
+  'pelican heron egret bird watercolor',
+  'Bahamas Caribbean Nassau tropical',
+  'beach ocean sunset seascape',
+  'tropical flowers botanical watercolor',
+]
+
+// Art Institute of Chicago search queries
+const ARTIC_QUERIES = [
+  'florida tropical palm beach ocean',
+  'coastal landscape sailing watercolor',
+  'winslow homer beach sea',
+  'heade magnolia orchid tropical',
+  'george inness marsh landscape',
+  'american beach ocean impressionist',
+]
+
+// Only painted / drawn mediums — excludes prints, photos, ceramics, textiles
+const PAINTED_MEDIUM = /\boil\b|watercolou?r|gouache|pastel|tempera|acrylic|fresco|\bchalk\b|ink wash|\bgraphite\b|pencil on|paint/i
+
+// Known-good fallbacks — Florida/tropical/ocean themed public domain paintings
 const FALLBACKS: Artwork[] = [
-  { id: 1, title: 'A Sunday on La Grande Jatte', artist: 'Georges Seurat', imageUrl: 'https://images.metmuseum.org/CRDImages/dp/web-large/DP-14798-001.jpg' },
-  { id: 2, title: 'Nighthawks', artist: 'Edward Hopper', imageUrl: 'https://images.metmuseum.org/CRDImages/dp/web-large/DP-14760-001.jpg' },
-  { id: 3, title: 'Starry Night', artist: 'Vincent van Gogh', imageUrl: 'https://images.metmuseum.org/CRDImages/dp/web-large/DP-13286-001.jpg' },
-  { id: 4, title: 'The Death of Socrates', artist: 'Jacques-Louis David', imageUrl: 'https://images.metmuseum.org/CRDImages/dp/web-large/DP-13436-001.jpg' },
-  { id: 5, title: 'Lady Reading', artist: 'Jean-Honoré Fragonard', imageUrl: 'https://images.metmuseum.org/CRDImages/dp/web-large/DT1571.jpg' },
+  {
+    id: 11122,
+    title: 'The Gulf Stream',
+    artist: 'Winslow Homer',
+    imageUrl: 'https://images.metmuseum.org/CRDImages/ad/original/DP-20821-001.jpg',
+    date: '1899',
+    medium: 'Oil on canvas',
+  },
+  {
+    id: 11125,
+    title: 'Inside the Bar',
+    artist: 'Winslow Homer',
+    imageUrl: 'https://images.metmuseum.org/CRDImages/ad/original/ap54.183.jpg',
+    date: '1883',
+    medium: 'Watercolor',
+  },
+  {
+    id: 11051,
+    title: 'Hummingbird and Apple Blossoms',
+    artist: 'Martin Johnson Heade',
+    imageUrl: 'https://images.metmuseum.org/CRDImages/ad/original/DT9511.jpg',
+    date: '1875',
+    medium: 'Oil on canvas',
+  },
+  {
+    id: ARTIC_OFFSET + 64724,
+    title: 'The Home of the Heron',
+    artist: 'George Inness',
+    imageUrl: `${ARTIC_IIIF}/0f2d999d-0173-2935-a6d0-0175bb97b2a9/full/1200,/0/default.jpg`,
+    date: '1893',
+    medium: 'Oil on canvas',
+  },
 ]
 
 export interface Artwork {
@@ -30,10 +89,14 @@ const PREFS_KEY = 'artwork-preferences-v1'
 function shuffled<T>(arr: T[]): T[] {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]]
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
   }
   return a
+}
+
+function pickRandom<T>(arr: T[], n: number): T[] {
+  return shuffled(arr).slice(0, n)
 }
 
 function loadPrefs(): ArtworkPreferences {
@@ -60,42 +123,70 @@ function savePrefs(prefs: ArtworkPreferences) {
   }
 }
 
-async function fetchPage(): Promise<Artwork[]> {
-  const randomOffset = Math.floor(Math.random() * 10000)
-  const res = await fetch(
-    `${MET_API}/search?q=painting&hasImages=true&offset=${randomOffset}`,
-    { headers: { 'User-Agent': 'Casa-Tabor/1.0' } }
-  )
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const data = await res.json()
-  const objectIds = data.objectIDs || []
-  
-  // Fetch details for each object
-  const paintings = await Promise.all(
-    objectIds.slice(0, FETCH_LIMIT).map(async (id: number) => {
-      try {
-        const objRes = await fetch(`${MET_API}/objects/${id}`, {
-          headers: { 'User-Agent': 'Casa-Tabor/1.0' }
-        })
-        if (!objRes.ok) return null
-        const obj = await objRes.json()
-        if (!obj.primaryImage) return null
-        return {
-          id: obj.objectID,
-          title: obj.title || 'Untitled',
-          artist: obj.artistDisplayName || 'Unknown',
-          imageUrl: obj.primaryImage,
-          date: obj.objectDate || '',
-          medium: obj.medium || '',
-          origin: obj.culture || '',
+// ── Fetchers ──────────────────────────────────────────────────────────────────
+
+async function fetchFromMet(query: string): Promise<Artwork[]> {
+  try {
+    const res = await fetch(
+      `${MET_API}/search?q=${encodeURIComponent(query)}&hasImages=true&isPublicDomain=true`
+    )
+    if (!res.ok) return []
+    const data = await res.json()
+    const ids: number[] = shuffled((data.objectIDs as number[]) || []).slice(0, 18)
+
+    const results = await Promise.all(
+      ids.map(async (id) => {
+        try {
+          const r = await fetch(`${MET_API}/objects/${id}`)
+          if (!r.ok) return null
+          const obj = await r.json()
+          if (!obj.primaryImage || !obj.isPublicDomain) return null
+          if (obj.medium && !PAINTED_MEDIUM.test(obj.medium)) return null
+          return {
+            id: obj.objectID as number,
+            title: obj.title || 'Untitled',
+            artist: obj.artistDisplayName || 'Unknown',
+            imageUrl: obj.primaryImage as string,
+            date: obj.objectDate || '',
+            medium: obj.medium || '',
+            origin: obj.culture || '',
+          } as Artwork
+        } catch {
+          return null
         }
-      } catch {
-        return null
-      }
-    })
-  )
-  
-  return paintings.filter((p: Artwork | null): p is Artwork => p !== null)
+      })
+    )
+    return results.filter((a): a is Artwork => a !== null)
+  } catch {
+    return []
+  }
+}
+
+async function fetchFromArtic(query: string): Promise<Artwork[]> {
+  try {
+    const res = await fetch(
+      `${ARTIC_API}/artworks/search?q=${encodeURIComponent(query)}&fields=id,title,artist_display,image_id,medium_display,date_display,is_public_domain&limit=25`
+    )
+    if (!res.ok) return []
+    const data = await res.json()
+
+    const artworks: Artwork[] = []
+    for (const item of data.data || []) {
+      if (!item.is_public_domain || !item.image_id) continue
+      if (item.medium_display && !PAINTED_MEDIUM.test(item.medium_display)) continue
+      artworks.push({
+        id: (item.id as number) + ARTIC_OFFSET,
+        title: item.title || 'Untitled',
+        artist: (item.artist_display as string)?.split('\n')[0] || 'Unknown',
+        imageUrl: `${ARTIC_IIIF}/${item.image_id}/full/1200,/0/default.jpg`,
+        date: item.date_display || '',
+        medium: item.medium_display || '',
+      })
+    }
+    return artworks
+  } catch {
+    return []
+  }
 }
 
 export function useArtwork(rotateSecs = 240) {
@@ -115,10 +206,32 @@ export function useArtwork(rotateSecs = 240) {
     let cancelled = false
     async function load() {
       try {
-        const [p1, p2, p3] = await Promise.all([fetchPage(), fetchPage(), fetchPage()])
-        const all = [...p1, ...p2, ...p3]
+        // Pick 3 random Met queries + 2 random ARTIC queries each load cycle
+        const metQs = pickRandom(MET_QUERIES, 3)
+        const articQs = pickRandom(ARTIC_QUERIES, 2)
+
+        const [m1, m2, m3, a1, a2] = await Promise.all([
+          fetchFromMet(metQs[0]),
+          fetchFromMet(metQs[1]),
+          fetchFromMet(metQs[2]),
+          fetchFromArtic(articQs[0]),
+          fetchFromArtic(articQs[1]),
+        ])
+
+        const combined = [...m1, ...m2, ...m3, ...a1, ...a2]
+        // Deduplicate by id
+        const seen = new Set<number>()
+        const all = combined.filter(a => {
+          if (seen.has(a.id)) return false
+          seen.add(a.id)
+          return true
+        })
+
         if (!cancelled && all.length > 0) {
           setArtworks(shuffled(all))
+          setIndex(0)
+        } else if (!cancelled) {
+          setArtworks(FALLBACKS)
           setIndex(0)
         }
       } catch (e) {
