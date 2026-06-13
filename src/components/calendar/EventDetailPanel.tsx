@@ -1052,7 +1052,7 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
     return value !== null && value !== undefined
   }
   const hasDestinationExtras = hasText(enr?.parking_notes) || hasText(enr?.contact_name) || hasText(enr?.contact_phone)
-  const hasDestinationInfo = !!(event.location_name || event.address || hasDestinationExtras)
+  const hasDestinationInfo = !!(event.location_name || event.address || hasDestinationExtras || weatherAtVenue)
 
   return (
     <BounceScroll className="flex-1" innerClassName="p-6 space-y-6">
@@ -1068,6 +1068,7 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
             parkingNotes={shows('parking_notes') || hasText(enr?.parking_notes) ? enr?.parking_notes : null}
             contactName={shows('contact_name') || hasText(enr?.contact_name) ? enr?.contact_name : null}
             contactPhone={shows('contact_name') || hasText(enr?.contact_phone) ? enr?.contact_phone : null}
+            weatherAtVenue={weatherAtVenue}
           />
         </section>
       )}
@@ -1108,16 +1109,6 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
             {enr.route_summary && <p className="text-caption text-casa-muted">{enr.route_summary}</p>}
             {enr.drive_time_mins && <p className="text-caption text-casa-muted">{enr.drive_time_mins} min drive</p>}
           </InfoRow>
-        </section>
-      )}
-
-      {weatherAtVenue && (
-        <section>
-          <SectionLabel>Weather at Venue</SectionLabel>
-          <div className="flex items-center gap-2 bg-casa-bg rounded-button px-3 py-2 w-fit">
-            <Cloud size={16} className="text-casa-gold" />
-            <span className="text-body-sm text-casa-navy font-medium">{weatherAtVenue}</span>
-          </div>
         </section>
       )}
 
@@ -1252,12 +1243,13 @@ function ChecklistSection({ items }: { items: EventChecklistItem[]; eventId: str
 
 /* ── LocationBlock ──────────────────────────────────────────── */
 
-function LocationBlock({ locationName, address, parkingNotes, contactName, contactPhone }: {
+function LocationBlock({ locationName, address, parkingNotes, contactName, contactPhone, weatherAtVenue }: {
   locationName: string | null
   address: string | null
   parkingNotes?: string | null
   contactName?: string | null
   contactPhone?: string | null
+  weatherAtVenue?: string | null
 }) {
   const [copied, setCopied] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -1305,7 +1297,7 @@ function LocationBlock({ locationName, address, parkingNotes, contactName, conta
     setSaving(false)
   }
 
-  if (!locationName && !address && !parkingNotes && !contactName && !contactPhone) return null
+  if (!locationName && !address && !parkingNotes && !contactName && !contactPhone && !weatherAtVenue) return null
 
   return (
     <InfoRow icon={<MapPin size={16} className="text-casa-error" />}>
@@ -1329,6 +1321,12 @@ function LocationBlock({ locationName, address, parkingNotes, contactName, conta
           )}
           {copied && (
             <p className="text-caption text-emerald-600 mt-0.5">Copied!</p>
+          )}
+          {weatherAtVenue && (
+            <div className="mt-1 inline-flex items-center gap-1.5 bg-casa-bg rounded-button px-2.5 py-1">
+              <Cloud size={12} className="text-casa-gold" />
+              <span className="text-caption text-casa-navy font-medium">{weatherAtVenue}</span>
+            </div>
           )}
           {parkingNotes && (
             <p className="text-caption text-casa-muted mt-0.5">{parkingNotes}</p>
