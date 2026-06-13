@@ -14,6 +14,7 @@ import TabletPrototypePage from '../../pages/TabletPrototypePage'
 import TripDetailPage from '../../pages/TripDetailPage'
 import HomeSettingsPage from '../../pages/HomeSettingsPage'
 import StatusDashboardPage from '../../pages/StatusDashboardPage'
+import DataAnalyticsPage from '../../pages/DataAnalyticsPage'
 import SavedPlacesSettingsPage from '../../pages/SavedPlacesSettingsPage'
 import SettingsShell from '../settings/SettingsShell'
 import PageTransition from './PageTransition'
@@ -50,6 +51,7 @@ export default function AnimatedRoutes() {
           <Route path="screensaver" element={<Navigate to="/settings/display" replace />} />
           <Route path="theme"      element={<Navigate to="/settings/display" replace />} />
           <Route path="status"     element={<StatusDashboardPage />} />
+          <Route path="analytics"  element={<DataAnalyticsPage />} />
         </Route>
       </Routes>
     </AnimatePresence>
