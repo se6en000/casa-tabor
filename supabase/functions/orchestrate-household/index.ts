@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { getCorrelationId, invocationHeaders, withCorrelationHeaders } from '../_shared/correlation.ts'
+import { requireEnv } from '../_shared/env.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -28,23 +29,24 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
   const correlationId = getCorrelationId(req, 'orchestrate')
-  const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-  const body = await req.json().catch(() => ({}))
+  try {
+    const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
+    const body = await req.json().catch(() => ({}))
 
-  const now = new Date()
-  const nowIso = now.toISOString()
-  const start = body.range_start ? new Date(body.range_start) : new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const end = body.range_end ? new Date(body.range_end) : new Date(start.getTime() + 14 * 24 * 60 * 60 * 1000)
+    const now = new Date()
+    const nowIso = now.toISOString()
+    const start = body.range_start ? new Date(body.range_start) : new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const end = body.range_end ? new Date(body.range_end) : new Date(start.getTime() + 14 * 24 * 60 * 60 * 1000)
 
-  const [conflictRun, prepRun, weatherRun, graphRun] = await Promise.all([
-    sb.functions.invoke('analyze-conflicts', {
-      body: { range_start: start.toISOString(), range_end: end.toISOString() },
-      headers: invocationHeaders(correlationId),
-    }),
-    sb.functions.invoke('analyze-prep', { body: {}, headers: invocationHeaders(correlationId) }),
-    sb.functions.invoke('weather-pending', { body: {}, headers: invocationHeaders(correlationId) }),
-    sb.functions.invoke('build-household-graph', { body: {}, headers: invocationHeaders(correlationId) }),
-  ])
+    const [conflictRun, prepRun, weatherRun, graphRun] = await Promise.all([
+      sb.functions.invoke('analyze-conflicts', {
+        body: { range_start: start.toISOString(), range_end: end.toISOString() },
+        headers: invocationHeaders(correlationId),
+      }),
+      sb.functions.invoke('analyze-prep', { body: {}, headers: invocationHeaders(correlationId) }),
+      sb.functions.invoke('weather-pending', { body: {}, headers: invocationHeaders(correlationId) }),
+      sb.functions.invoke('build-household-graph', { body: {}, headers: invocationHeaders(correlationId) }),
+    ])
 
   const { data: conflictsRaw } = await sb
     .from('conflicts')
@@ -174,22 +176,28 @@ Deno.serve(async (req) => {
     },
   }
 
-  return new Response(
-    JSON.stringify({
-      ok: true,
-      correlation_id: correlationId,
-      runs,
-      counts: {
-        conflicts: (conflictsRaw ?? []).length,
-        prep_items: (prepRaw ?? []).length,
-        action_queue: actionQueue.length,
-        household_graph_nodes: graphRun.data?.counts?.nodes_total ?? null,
-        household_graph_edges: graphRun.data?.counts?.edges_total ?? null,
-      },
-      conflicts: conflictsRaw ?? [],
-      prep_items: prepRaw ?? [],
-      action_queue: actionQueue,
-    }),
-    { headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
-  )
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        correlation_id: correlationId,
+        runs,
+        counts: {
+          conflicts: (conflictsRaw ?? []).length,
+          prep_items: (prepRaw ?? []).length,
+          action_queue: actionQueue.length,
+          household_graph_nodes: graphRun.data?.counts?.nodes_total ?? null,
+          household_graph_edges: graphRun.data?.counts?.edges_total ?? null,
+        },
+        conflicts: conflictsRaw ?? [],
+        prep_items: prepRaw ?? [],
+        action_queue: actionQueue,
+      }),
+      { headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+    )
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ ok: false, correlation_id: correlationId, error: error instanceof Error ? error.message : String(error) }),
+      { status: 500, headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+    )
+  }
 })

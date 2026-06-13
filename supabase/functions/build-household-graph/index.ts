@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { getCorrelationId, withCorrelationHeaders } from '../_shared/correlation.ts'
+import { requireEnv } from '../_shared/env.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -49,7 +50,8 @@ function addEdge(edges: Map<string, GraphEdge>, edge: GraphEdge) {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const correlationId = getCorrelationId(req, 'graph')
-  const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+  try {
+    const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
 
   const now = new Date()
   const nowIso = now.toISOString()
@@ -330,18 +332,24 @@ Deno.serve(async (req) => {
   const { count: nodeCount } = await sb.from('household_graph_nodes').select('*', { count: 'exact', head: true })
   const { count: edgeCount } = await sb.from('household_graph_edges').select('*', { count: 'exact', head: true })
 
-  return new Response(
-    JSON.stringify({
-      ok: true,
-      correlation_id: correlationId,
-      window: { start: windowStart, end: windowEnd },
-      counts: {
-        nodes_upserted: nodeRows.length,
-        edges_upserted: edgeRows.length,
-        nodes_total: nodeCount ?? null,
-        edges_total: edgeCount ?? null,
-      },
-    }),
-    { headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
-  )
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        correlation_id: correlationId,
+        window: { start: windowStart, end: windowEnd },
+        counts: {
+          nodes_upserted: nodeRows.length,
+          edges_upserted: edgeRows.length,
+          nodes_total: nodeCount ?? null,
+          edges_total: edgeCount ?? null,
+        },
+      }),
+      { headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+    )
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ ok: false, correlation_id: correlationId, error: error instanceof Error ? error.message : String(error) }),
+      { status: 500, headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+    )
+  }
 })

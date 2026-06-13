@@ -5,14 +5,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { format } from 'https://esm.sh/date-fns@3'
 import { getCorrelationId, withCorrelationHeaders } from '../_shared/correlation.ts'
-
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-)
-
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
+import { requireEnv } from '../_shared/env.ts'
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -21,6 +14,9 @@ Deno.serve(async (req) => {
 
   const correlationId = getCorrelationId(req, 'notify')
   try {
+    const supabaseUrl = requireEnv('SUPABASE_URL')
+    const supabaseAnonKey = requireEnv('SUPABASE_ANON_KEY')
+    const supabase = createClient(supabaseUrl, requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
     const now = new Date()
     // Window: 25 to 35 minutes from now
     const windowStart = new Date(now.getTime() + 25 * 60 * 1000)
@@ -29,8 +25,7 @@ Deno.serve(async (req) => {
     const { data: events, error } = await supabase
       .from('events')
       .select(`
-        id, title, start_time, end_time, event_type, all_day,
-        enrichment:event_enrichments(location_name, address),
+        id, title, start_time, end_time, event_type, all_day, location_name,
         members:event_members(family_member:family_members(name))
       `)
       .gte('start_time', windowStart.toISOString())
@@ -42,7 +37,6 @@ Deno.serve(async (req) => {
     let fired = 0
     if (events && events.length > 0) {
       for (const event of events) {
-        const enr = Array.isArray(event.enrichment) ? event.enrichment[0] : event.enrichment
         const members = Array.isArray(event.members) ? event.members : []
         const peopleNames = members
           .map((m: { family_member: { name: string } }) => m.family_member?.name)
@@ -54,14 +48,14 @@ Deno.serve(async (req) => {
 
         let body = `${startStr}`
         if (peopleNames) body += ` · ${peopleNames}`
-        if (enr?.location_name) body += `\n📍 ${enr.location_name}`
+        if (event.location_name) body += `\n📍 ${event.location_name}`
 
         // Fire notification
-        await fetch(`${SUPABASE_URL}/functions/v1/send-push-notification`, {
+        await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Authorization': `Bearer ${supabaseAnonKey}`,
             'x-correlation-id': correlationId,
           },
           body: JSON.stringify({
@@ -83,11 +77,11 @@ Deno.serve(async (req) => {
     }
 
     // Always run policy layer each cycle (conflicts/prep routing + quiet-hours + escalation).
-    const policyRes = await fetch(`${SUPABASE_URL}/functions/v1/apply-notification-policy`, {
+    const policyRes = await fetch(`${supabaseUrl}/functions/v1/apply-notification-policy`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Authorization': `Bearer ${supabaseAnonKey}`,
         'x-correlation-id': correlationId,
       },
       body: JSON.stringify({}),
@@ -97,7 +91,7 @@ Deno.serve(async (req) => {
     return json({ ok: true, correlation_id: correlationId, fired, policy }, 200, correlationId)
   } catch (err) {
     console.error(`[notify-upcoming-events][${correlationId}]`, err)
-    return json({ ok: false, correlation_id: correlationId, error: String(err) }, 500, correlationId)
+    return json({ ok: false, correlation_id: correlationId, error: getErrorMessage(err) }, 500, correlationId)
   }
 })
 
@@ -116,4 +110,12 @@ function json(data: unknown, status = 200, correlationId?: string) {
     status,
     headers: withCorrelationHeaders({ ...corsHeaders, 'Content-Type': 'application/json' }, correlationId ?? `notify-${crypto.randomUUID()}`),
   })
+}
+
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message
+  if (typeof err === 'object' && err && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
+    return (err as { message: string }).message
+  }
+  return String(err)
 }

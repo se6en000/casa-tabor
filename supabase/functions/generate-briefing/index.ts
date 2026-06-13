@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { getCorrelationId, invocationHeaders, withCorrelationHeaders } from '../_shared/correlation.ts'
+import { requireEnv } from '../_shared/env.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -10,7 +11,8 @@ const CORS = {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const correlationId = getCorrelationId(req, 'briefing')
-  const sb = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))
+  try {
+    const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
 
   // Client sends UTC ISO strings for local-day boundaries so timezone is always correct.
   // e.g. for EDT (UTC-4): dayStartUtc = "2026-05-30T04:00:00.000Z", dayEndUtc = "2026-05-31T03:59:59.999Z"
@@ -152,10 +154,16 @@ Deno.serve(async (req) => {
     JSON.stringify({ error: bErr.message, correlation_id: correlationId }),
     { status: 500, headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
   )
-  return new Response(
-    JSON.stringify({ ok: true, correlation_id: correlationId, briefing }),
-    { headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
-  )
+    return new Response(
+      JSON.stringify({ ok: true, correlation_id: correlationId, briefing }),
+      { headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+    )
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ ok: false, correlation_id: correlationId, error: error instanceof Error ? error.message : String(error) }),
+      { status: 500, headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+    )
+  }
 })
 
 async function callLLM(

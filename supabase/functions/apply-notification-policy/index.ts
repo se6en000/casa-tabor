@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { getCorrelationId, invocationHeaders, withCorrelationHeaders } from '../_shared/correlation.ts'
+import { requireEnv } from '../_shared/env.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -50,9 +51,10 @@ function isQuietHours(now: Date, cfg: SmsConfig): boolean {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const correlationId = getCorrelationId(req, 'policy')
-  const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-  const now = new Date()
-  const nowIso = now.toISOString()
+  try {
+    const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
+    const now = new Date()
+    const nowIso = now.toISOString()
 
   const { data: smsSetting } = await sb.from('settings').select('value').eq('key', 'sms_config').single()
   const cfg = (smsSetting?.value ?? {}) as SmsConfig
@@ -175,15 +177,21 @@ Deno.serve(async (req) => {
     if (cfg.prep_alerts) await maybeSendSms(`Casa prep: ${p.description}`, p.priority >= 3 ? 3 : 2)
   }
 
-  return new Response(
-    JSON.stringify({
-      ok: true,
-      correlation_id: correlationId,
-      quiet_hours_active: quiet,
-      created_notifications: createdNotifications,
-      push_sent: sentPush,
-      sms_sent: sentSms,
-    }),
-    { headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
-  )
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        correlation_id: correlationId,
+        quiet_hours_active: quiet,
+        created_notifications: createdNotifications,
+        push_sent: sentPush,
+        sms_sent: sentSms,
+      }),
+      { headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+    )
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ ok: false, correlation_id: correlationId, error: error instanceof Error ? error.message : String(error) }),
+      { status: 500, headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+    )
+  }
 })
