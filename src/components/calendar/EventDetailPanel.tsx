@@ -1040,6 +1040,7 @@ function PanelBody({ event, onEventUpdated }: { event: EventWithDetails; onEvent
 
 function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlot?: React.ReactNode }) {
   const enr = event.enrichment
+  const weatherAtVenue = enr?.weather_at_event || enr?.weather_summary
   const reminder = event.event_type === 'reminder'
   const hasLogistics = !reminder && event.logistics?.length > 0
   const hasChecklist = event.checklist?.length > 0
@@ -1110,12 +1111,12 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
         </section>
       )}
 
-      {enr?.weather_summary && (
+      {weatherAtVenue && (
         <section>
           <SectionLabel>Weather at Venue</SectionLabel>
           <div className="flex items-center gap-2 bg-casa-bg rounded-button px-3 py-2 w-fit">
             <Cloud size={16} className="text-casa-gold" />
-            <span className="text-body-sm text-casa-navy font-medium">{enr.weather_summary}</span>
+            <span className="text-body-sm text-casa-navy font-medium">{weatherAtVenue}</span>
           </div>
         </section>
       )}

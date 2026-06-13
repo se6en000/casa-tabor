@@ -24,21 +24,20 @@ async function geocodeAddress(address: string, apiKey: string): Promise<{ lat: n
   } catch { return null }
 }
 
-async function fetchDailyForecast(lat: number, lng: number, _apiKey: string) {
+async function fetchHourlyForecast(lat: number, lng: number, _apiKey: string) {
   try {
     const res = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&temperature_unit=fahrenheit&forecast_days=5&timezone=auto`
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=weather_code,temperature_2m,precipitation_probability&temperature_unit=fahrenheit&forecast_days=5&timezone=GMT`
     )
     if (!res.ok) return null
     const data = await res.json()
-    const day = data.daily
-    if (!day) return null
+    const hourly = data.hourly
+    if (!hourly) return null
     return {
-      weatherCodes: day.weather_code as number[],
-      maxTemps: day.temperature_2m_max as number[],
-      minTemps: day.temperature_2m_min as number[],
-      precipProbs: day.precipitation_probability_max as number[],
-      dates: day.time as string[],
+      weatherCodes: hourly.weather_code as number[],
+      temps: hourly.temperature_2m as number[],
+      precipProbs: hourly.precipitation_probability as number[],
+      times: hourly.time as string[],
     }
   } catch { return null }
 }
@@ -121,21 +120,38 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ ok: false, error: `Could not geocode: ${location}` }), { headers: { ...CORS, 'content-type': 'application/json' } })
   }
 
-  const forecast = await fetchDailyForecast(loc.lat, loc.lng, apiKey)
+  const forecast = await fetchHourlyForecast(loc.lat, loc.lng, apiKey)
   if (!forecast) {
     return new Response(JSON.stringify({ ok: false, error: 'No forecast data returned' }), { headers: { ...CORS, 'content-type': 'application/json' } })
   }
 
-  // Find the forecast day matching the event date
-  const eventDateStr = new Date(event.start_time).toISOString().slice(0, 10)
-  const dayIndex = forecast.dates.indexOf(eventDateStr)
-  const idx = dayIndex >= 0 ? dayIndex : 0
+  // Match the forecast point closest to the event time (in UTC/GMT).
+  const eventTs = new Date(event.start_time).getTime()
+  const eventHour = new Date(event.start_time).toISOString().slice(0, 13)
+  const exactIdx = forecast.times.findIndex((t) => t.startsWith(eventHour))
+  let idx = exactIdx
+  if (idx < 0) {
+    let minDelta = Number.POSITIVE_INFINITY
+    for (let i = 0; i < forecast.times.length; i++) {
+      const ts = Date.parse(`${forecast.times[i]}:00Z`)
+      if (Number.isNaN(ts)) continue
+      const delta = Math.abs(ts - eventTs)
+      if (delta < minDelta) {
+        minDelta = delta
+        idx = i
+      }
+    }
+  }
+  if (idx < 0) {
+    return new Response(JSON.stringify({ ok: false, error: 'No matching hourly forecast found' }), { headers: { ...CORS, 'content-type': 'application/json' } })
+  }
+
   const code = forecast.weatherCodes[idx]
-  const maxTemp = Math.round(forecast.maxTemps[idx])
-  const minTemp = Math.round(forecast.minTemps[idx])
+  const temp = Math.round(forecast.temps[idx])
+  const precip = Math.round(forecast.precipProbs[idx] ?? 0)
   const condition = wmoCodeToCondition(code)
   const icon = wmoCodeToIcon(code)
-  const weatherText = `${condition}, ${maxTemp}°F / ${minTemp}°F`
+  const weatherText = `${condition}, ${temp}°F, ${precip}% rain chance`
 
   const { error: upsertErr } = await sb
     .from('event_enrichments')
@@ -143,6 +159,7 @@ Deno.serve(async (req) => {
       {
         event_id: event_id,
         weather_at_event: weatherText,
+        weather_summary: weatherText,
         weather_icon: icon,
         updated_at: new Date().toISOString(),
       },
