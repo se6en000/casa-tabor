@@ -600,16 +600,16 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       led.off()
       return
     }
-    if (loading) {
+    if (loading || speech.phase === 'processing') {
       led.processing()      // amber while AI is thinking
       return
     }
-    if (speech.phase === 'processing') {
-      led.processing()
-    } else {
+    if (speech.listening || speech.connecting) {
       led.listening()       // blue when mic is active
+      return
     }
-  }, [loading, speech.phase, open]) // eslint-disable-line react-hooks/exhaustive-deps
+    led.off()               // idle/typing mode keeps LEDs calm
+  }, [loading, open, speech.connecting, speech.listening, speech.phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const el = textareaRef.current
@@ -671,8 +671,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
   const handleInputChange = useCallback((value: string) => {
     if (value.trim()) markUserInteraction()
+    if (value.trim() && (speech.listening || speech.connecting)) {
+      speech.stop()
+    }
     setInput(value)
-  }, [markUserInteraction])
+  }, [markUserInteraction, speech.connecting, speech.listening, speech.stop])
 
   const handleKeyboardToggle = useCallback(() => {
     markUserInteraction()
@@ -685,6 +688,22 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   }, [markUserInteraction])
 
   const hasSession = !sessionLoading && !!session && session.messages.length > 0
+  const voiceLevel = Math.max(0, Math.min(1, speech.volume / 100))
+  const isVoiceActive = speech.listening && voiceLevel > 0.12
+  const hasTypedInput = input.trim().length > 0 && !loading && !speech.listening
+  const aiPresence: 'off' | 'idle' | 'listening' | 'voice_active' | 'processing' | 'typing' =
+    !open
+      ? 'off'
+      : loading || speech.phase === 'processing'
+        ? 'processing'
+        : hasTypedInput
+          ? 'typing'
+          : isVoiceActive
+            ? 'voice_active'
+            : speech.listening || speech.connecting
+              ? 'listening'
+              : 'idle'
+  const presenceStyle = { ['--voice-level' as '--voice-level']: String(voiceLevel) } as React.CSSProperties
 
   return (
     <AnimatePresence>
@@ -923,7 +942,17 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                 )}
               </AnimatePresence>
 
-              <div className="flex items-end gap-2 bg-casa-bg rounded-xl border border-casa-border px-3 py-2">
+              <div
+                className={cn(
+                  'ai-presence-composer relative overflow-hidden flex items-end gap-2 bg-casa-bg rounded-xl border border-casa-border px-3 py-2 transition-all duration-300',
+                  aiPresence === 'listening' && 'ai-presence-listening',
+                  aiPresence === 'voice_active' && 'ai-presence-voice',
+                  aiPresence === 'processing' && 'ai-presence-processing',
+                  aiPresence === 'typing' && 'ai-presence-typing',
+                  aiPresence === 'idle' && 'ai-presence-idle',
+                )}
+                style={presenceStyle}
+              >
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
                 <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
 
@@ -999,6 +1028,14 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                   <Send size={14} />
                 </button>
               </div>
+              {(aiPresence === 'listening' || aiPresence === 'voice_active' || aiPresence === 'processing') && (
+                <div className={cn('ai-presence-wave mt-1.5', aiPresence === 'voice_active' && 'active')}>
+                  <span className="bar" />
+                  <span className="bar" />
+                  <span className="bar" />
+                  <span className="bar" />
+                </div>
+              )}
               <p className="text-caption text-casa-muted mt-1.5 text-center opacity-60">
                 {IS_SAFE_MODE
                   ? 'Safe mode enabled: voice capture is disabled'
@@ -1009,6 +1046,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                     ? 'Connecting to mic…'
                     : speech.listening
                       ? 'Listening — pause to send · say "goodbye" to close'
+                      : hasTypedInput
+                        ? 'Typing mode active — voice paused'
                       : 'Tap 🎙 to start voice · pause to send'
                   : 'Tap ➤ to send · 📎 gallery · 📷 camera'}
               </p>
