@@ -4,7 +4,7 @@ import { generateAdaptiveMatColor } from '../../utils/colorUtils'
 import { getTextureStyle } from '../../utils/textureUtils'
 
 const SENSOR = 'http://127.0.0.1:8765'
-const EDGE_MAT_PX = 250
+const EDGE_MAT_PX = 100
 const MIN_FRAME_PX = 320
 
 interface Props {
