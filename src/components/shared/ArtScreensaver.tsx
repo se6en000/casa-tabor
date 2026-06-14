@@ -125,7 +125,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
           backgroundBlendMode: textureStyle.backgroundBlendMode,
           boxShadow: [
             'inset 0 36px 48px -12px rgba(0,0,0,0.50)',
-            'inset 36px 0 48px -12px rgba(0,0,0,0.38)',
+            'inset 18px 0 24px -12px rgba(0,0,0,0.10)',
             'inset -36px 0 48px -12px rgba(0,0,0,0.32)',
             'inset 0 -18px 24px -12px rgba(0,0,0,0.10)',
           ].join(', '),
