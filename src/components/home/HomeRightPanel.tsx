@@ -69,7 +69,7 @@ function SectionHeader({
 }) {
   return (
     <div className="w-full flex items-center justify-between">
-      <button onClick={onToggle} className="flex-1 flex items-center gap-1.5 text-body font-medium text-casa-navy text-left">
+      <button onClick={onToggle} className="flex-1 flex items-center gap-1.5 text-body font-semibold text-casa-text text-left">
         {icon}
         {label}
         {badge != null && badge > 0 && (
@@ -205,13 +205,13 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
                   'flex-1 flex flex-col items-center py-2.5 rounded-xl text-center cursor-pointer transition-colors',
                   isToday ? 'bg-casa-navy' : 'hover:bg-casa-bg',
                 )}>
-                  <span className={cn('text-caption uppercase tracking-wide', isToday ? 'text-white/60' : 'text-casa-muted')}>
+                  <span className={cn('text-caption uppercase tracking-wide font-semibold', isToday ? 'text-white/70' : 'text-casa-text')}>
                     {format(d, 'EEE')[0]}
                   </span>
-                  <span className={cn('text-body font-semibold mt-1', isToday ? 'text-white' : 'text-casa-navy')}>
+                  <span className={cn('text-body font-semibold mt-1', isToday ? 'text-white' : 'text-casa-text')}>
                     {format(d, 'd')}
                   </span>
-                  <span className={cn('text-caption font-bold mt-0.5 h-3.5', isToday ? 'text-casa-gold' : 'text-casa-muted/60')}>
+                  <span className={cn('text-caption font-bold mt-0.5 h-3.5', isToday ? 'text-casa-gold' : 'text-casa-muted')}>
                     {count > 0 ? count : ''}
                   </span>
                 </div>

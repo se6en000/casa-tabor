@@ -260,3 +260,22 @@ button:active, a:active, [role="button"]:active {
       repeating-linear-gradient(90deg, transparent, transparent 1px, rgba(0,0,0,.01) 1px, rgba(0,0,0,.01) 2px);
   }
 }
+
+/* ── Midnight Gallery readability + input surfaces ───────────────────── */
+html.midnight-gallery .text-casa-navy {
+  color: #dbe5f2 !important;
+}
+
+html.midnight-gallery input:not([type='color']):not([type='checkbox']):not([type='radio']):not([type='range']),
+html.midnight-gallery textarea,
+html.midnight-gallery select,
+html.midnight-gallery [contenteditable="true"] {
+  background-color: var(--color-casa-surface) !important;
+  color: var(--color-casa-text) !important;
+  border-color: var(--color-casa-border) !important;
+}
+
+html.midnight-gallery input::placeholder,
+html.midnight-gallery textarea::placeholder {
+  color: var(--color-casa-muted) !important;
+}

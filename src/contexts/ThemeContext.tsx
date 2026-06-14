@@ -153,7 +153,7 @@ function buildStyleContent(dayColors: ThemeColors, midnightColors: ThemeColors):
   return `:root {${styleVars(dayColors)}
 }
 html.midnight-gallery {${styleVars(midnightColors)}
-  --color-casa-muted: #99A5B8;
+  --color-casa-muted: #B2BED0;
   --color-casa-divider: #1B2635;
   --shadow-card: 0 1px 3px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.35);
   --shadow-card-hover: 0 6px 18px rgba(0,0,0,0.55);
