@@ -335,19 +335,25 @@ function useSpeechInput({
   const suppress  = useCallback(() => { suppressRef.current = true  }, [])
   const unsuppress = useCallback(() => { suppressRef.current = false }, [])
 
-  // Ensure mic is running — restarts WebSpeech if it naturally ended while suppressed.
-  // Reads phaseRef (not state) to avoid stale closure — ensureRunning is created once.
+  // Ensure mic is running — robust re-arm for iOS/WebSpeech after turn handoff.
+  // Reads refs (not state) to avoid stale closure.
   const ensureRunning = useCallback(() => {
     if (!activeRef.current) return  // fully stopped (drawer closed), don't restart
-    if (
-      modeRef.current === 'webspeech' &&
-      phaseRef.current !== 'listening' &&
-      phaseRef.current !== 'connecting'
-    ) {
-      startWebSpeech()
+
+    if (modeRef.current === 'webspeech') {
+      // On iOS Safari, phase can claim "listening" while the recognizer ended.
+      // Re-arm whenever the recognizer instance is missing OR we're not actively listening.
+      if (!recognitionRef.current || (phaseRef.current !== 'listening' && phaseRef.current !== 'connecting')) {
+        startWebSpeech()
+      }
+      return
     }
-    // Bridge stays running continuously — no action needed
-  }, [startWebSpeech]) // phase read via phaseRef, no stale closure
+
+    // Bridge mode: recover if websocket dropped between turns.
+    if (!wsRef.current && (phaseRef.current !== 'processing')) {
+      startBridge()
+    }
+  }, [startWebSpeech, startBridge]) // phase/resources read via refs
 
   // Ensure bridge/webspeech resources are always torn down on component unmount.
   useEffect(() => {
@@ -610,10 +616,13 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       speech.suppress()
     } else {
       speech.unsuppress()
-      // WebSpeech naturally ends after each utterance — restart it if it went idle while AI was thinking
-      if (open) setTimeout(() => speech.ensureRunning(), 300)
+      // Double re-arm pass for iOS/WebSpeech: immediate + delayed safety retry.
+      if (open) {
+        setTimeout(() => speech.ensureRunning(), 220)
+        setTimeout(() => speech.ensureRunning(), 950)
+      }
     }
-  }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading, open, speech]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
