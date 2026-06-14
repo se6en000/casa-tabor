@@ -4,6 +4,8 @@ import { generateAdaptiveMatColor } from '../../utils/colorUtils'
 import { getTextureStyle } from '../../utils/textureUtils'
 
 const SENSOR = 'http://127.0.0.1:8765'
+const EDGE_MAT_PX = 250
+const MIN_FRAME_PX = 320
 
 interface Props {
   onDismiss: () => void
@@ -17,18 +19,36 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   const { artwork, loaded, onLoad, onError, next } = useArtwork(rotationMins * 60)
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)
-  const [aspectRatio, setAspectRatio] = useState<string | undefined>('16 / 9')
-  const [isPortrait, setIsPortrait] = useState(false)
+  const [imageRatio, setImageRatio] = useState(16 / 9)
   const [matColor, setMatColor] = useState('#F5F0E8')
   const [matTransition, setMatTransition] = useState(false)
   const [driftIndex, setDriftIndex] = useState(0)
   const [swiping, setSwiping] = useState(false)
+  const [viewport, setViewport] = useState(() => ({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1920,
+    height: typeof window !== 'undefined' ? window.innerHeight : 1080,
+  }))
   
   // Previous artwork for cross-fade
   const [prevArtwork, setPrevArtwork] = useState<typeof artwork>(null)
   
   const touchStartXRef = useRef<number | null>(null)
   const textureStyle = useMemo(() => getTextureStyle(), [])
+  const frameSize = useMemo(() => {
+    const maxWidth = Math.max(viewport.width - EDGE_MAT_PX * 2, MIN_FRAME_PX)
+    const maxHeight = Math.max(viewport.height - EDGE_MAT_PX * 2, MIN_FRAME_PX)
+    const minWidth = Math.min(maxWidth, (viewport.width * minArtWidthVw) / 100)
+
+    let width = Math.max(maxWidth, minWidth)
+    let height = width / imageRatio
+
+    if (height > maxHeight) {
+      height = maxHeight
+      width = height * imageRatio
+    }
+
+    return { width: Math.round(width), height: Math.round(height) }
+  }, [viewport.width, viewport.height, imageRatio, minArtWidthVw])
 
   useEffect(() => {
     const t1 = setTimeout(() => setVisible(true), 50)
@@ -43,6 +63,14 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
       clearTimeout(t2)
       fetch(`${SENSOR}/display/art-mode-off`, { method: 'POST' }).catch(() => {})
     }
+  }, [])
+
+  useEffect(() => {
+    function updateViewport() {
+      setViewport({ width: window.innerWidth, height: window.innerHeight })
+    }
+    window.addEventListener('resize', updateViewport)
+    return () => window.removeEventListener('resize', updateViewport)
   }, [])
 
   useEffect(() => {
@@ -75,8 +103,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   function handleImgLoad(e: React.SyntheticEvent<HTMLImageElement>) {
     const img = e.currentTarget
     if (img.naturalWidth && img.naturalHeight) {
-      setAspectRatio(`${img.naturalWidth} / ${img.naturalHeight}`)
-      setIsPortrait(img.naturalHeight > img.naturalWidth)
+      setImageRatio(img.naturalWidth / img.naturalHeight)
     }
     onLoad()
   }
@@ -136,10 +163,10 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
         <div
           style={{
             position: 'relative',
-            aspectRatio: aspectRatio,
-            ...(isPortrait
-              ? { minHeight: '70vh', maxHeight: '100%', maxWidth: '100%' }
-              : { minWidth: `${minArtWidthVw}vw`, maxWidth: '100%', maxHeight: '100%' }),
+            width: `${frameSize.width}px`,
+            height: `${frameSize.height}px`,
+            maxWidth: '100%',
+            maxHeight: '100%',
             overflow: 'hidden',
             display: 'flex',
             transform: ['translate3d(0px,0px,0)', 'translate3d(1px,0px,0)', 'translate3d(0px,1px,0)', 'translate3d(-1px,0px,0)'][driftIndex],
@@ -202,7 +229,18 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
         </div>
 
         {!loaded && (
-          <div className="absolute inset-0 m-[3.5vw]" style={{ backgroundColor: matColor, backgroundImage: textureStyle.backgroundImage, backgroundSize: textureStyle.backgroundSize, backgroundPosition: textureStyle.backgroundPosition, animation: 'pulse 2s ease-in-out infinite' }} />
+          <div
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+            style={{
+              width: `${frameSize.width}px`,
+              height: `${frameSize.height}px`,
+              backgroundColor: matColor,
+              backgroundImage: textureStyle.backgroundImage,
+              backgroundSize: textureStyle.backgroundSize,
+              backgroundPosition: textureStyle.backgroundPosition,
+              animation: 'pulse 2s ease-in-out infinite',
+            }}
+          />
         )}
 
         {artwork && loaded && (
