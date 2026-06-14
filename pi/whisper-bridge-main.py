@@ -1,4 +1,5 @@
 import json, logging, math, struct, subprocess, threading, time
+from urllib import request as _urlrequest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import websocket
 from websockets.sync.server import serve as ws_serve
@@ -44,6 +45,24 @@ _rec_proc   = None
 _ws         = None          # current DeepGram WebSocketApp
 _ws_gen     = 0             # incremented on each start_recording(); guards stale _on_close
 _finals     = []
+
+# ── LED bridge state ──────────────────────────────────────────────────────────
+SENSOR_BRIDGE = 'http://127.0.0.1:8765'
+_led_mode = None
+_led_lock = threading.Lock()
+
+def _set_led_mode(mode: str):
+    """Set LED mode via sensor bridge; de-dupe repeat calls."""
+    global _led_mode
+    with _led_lock:
+        if _led_mode == mode:
+            return
+        _led_mode = mode
+    try:
+        req = _urlrequest.Request(f'{SENSOR_BRIDGE}/led/{mode}', method='POST')
+        _urlrequest.urlopen(req, timeout=0.35).read()
+    except Exception as e:
+        log.debug(f'[led] failed to set {mode}: {e}')
 
 def _set(**kw):
     with _state_lock:
@@ -245,6 +264,7 @@ def _wake_word_loop():
 
         _wake_last_chunk_ts = time.time()
         _clear_buffer()
+        _set_led_mode('listening')
         proc = subprocess.Popen(
             rec_cmd,
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
@@ -458,6 +478,7 @@ def start_recording():
     # Set recording=True NOW so the wake word loop immediately yields the mic.
     # ready=False still — browser waits for {type:'ready'} before showing listening state.
     _set(recording=True, ready=False, transcript=None, interim_transcript='', error=None, volume=0)
+    _set_led_mode('listening')
 
     # Clean up old DeepGram WS and arecord without triggering _on_close callback
     old_ws = _ws
@@ -526,6 +547,7 @@ def stop_recording():
         try: old_ws.close()
         except: pass
     _set(recording=False, ready=False, volume=0)
+    _set_led_mode('listening')
     log.info('[bridge] stopped')
 
 # ── HTTP server (kept for probeBridge /status and /display/off) ───────────────
