@@ -341,9 +341,9 @@ html.midnight-gallery .stacked-event-title {
 
 .ai-presence-listening::after,
 .ai-presence-voice::after {
-  opacity: 0.76;
-  background-image: linear-gradient(100deg, rgba(30, 58, 138, 0.25) 0%, rgba(34, 211, 238, 0.98) 22%, rgba(224, 242, 254, 0.95) 36%, rgba(34, 211, 238, 0.92) 52%, rgba(30, 58, 138, 0.35) 72%);
-  animation: ai-outline-race 1.08s linear infinite;
+  opacity: 0;
+  padding: 0;
+  animation: none;
 }
 
 .ai-presence-listening {
@@ -358,11 +358,6 @@ html.midnight-gallery .stacked-event-title {
   animation: ai-outline-breathe 1.6s ease-in-out infinite;
 }
 
-.ai-presence-voice::after {
-  padding: calc(2px + (var(--voice-level) * 1.2px));
-  opacity: calc(0.64 + (var(--voice-level) * 0.26));
-  animation-duration: 0.44s;
-}
 
 .ai-presence-voice {
   border-color: rgba(224, 242, 254, 0.9) !important;
