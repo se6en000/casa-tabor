@@ -10,6 +10,38 @@ const MIN_FRAME_PX = 320
 const MIDNIGHT_MAT_COLOR = '#07090D'
 const MIDNIGHT_MAT_TEXTURE = 'linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.22))'
 
+function isDarkColor(color: string): boolean {
+  const raw = color.trim()
+  if (!raw) return false
+
+  let r = 255
+  let g = 255
+  let b = 255
+
+  if (raw.startsWith('#')) {
+    const hex = raw.slice(1)
+    if (hex.length === 3) {
+      r = parseInt(hex[0] + hex[0], 16)
+      g = parseInt(hex[1] + hex[1], 16)
+      b = parseInt(hex[2] + hex[2], 16)
+    } else if (hex.length >= 6) {
+      r = parseInt(hex.slice(0, 2), 16)
+      g = parseInt(hex.slice(2, 4), 16)
+      b = parseInt(hex.slice(4, 6), 16)
+    }
+  } else {
+    const m = raw.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i)
+    if (m) {
+      r = Number(m[1])
+      g = Number(m[2])
+      b = Number(m[3])
+    }
+  }
+
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+  return luminance < 0.45
+}
+
 interface Props {
   onDismiss: () => void
   rotationMins?: number
@@ -38,8 +70,13 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   
   const touchStartXRef = useRef<number | null>(null)
   const textureStyle = useMemo(() => getTextureStyle(), [])
-  const matTexture = isMidnightActive ? MIDNIGHT_MAT_TEXTURE : textureStyle.backgroundImage
-  const matBlendMode = isMidnightActive ? 'normal' : textureStyle.backgroundBlendMode
+  const darkThemeActive = useMemo(() => {
+    if (typeof window === 'undefined') return isMidnightActive
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--color-casa-bg')
+    return isMidnightActive || isDarkColor(bg)
+  }, [isMidnightActive])
+  const matTexture = darkThemeActive ? MIDNIGHT_MAT_TEXTURE : textureStyle.backgroundImage
+  const matBlendMode = darkThemeActive ? 'normal' : textureStyle.backgroundBlendMode
   const frameSize = useMemo(() => {
     const maxWidth = Math.max(viewport.width - EDGE_MAT_PX * 2, MIN_FRAME_PX)
     const maxHeight = Math.max(viewport.height - EDGE_MAT_PX * 2, MIN_FRAME_PX)
@@ -92,7 +129,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   }, [])
 
   useEffect(() => {
-    if (isMidnightActive) {
+    if (darkThemeActive) {
       setMatTransition(false)
       setMatColor(MIDNIGHT_MAT_COLOR)
       setTimeout(() => setMatTransition(true), 50)
@@ -111,7 +148,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
       }
     }, 50)
     return () => clearTimeout(timeout)
-  }, [artwork?.id, artwork?.imageUrl, adaptiveMatColor, isMidnightActive])
+  }, [artwork?.id, artwork?.imageUrl, adaptiveMatColor, darkThemeActive])
 
   function handleImgLoad(e: React.SyntheticEvent<HTMLImageElement>) {
     const img = e.currentTarget
@@ -257,7 +294,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
         )}
 
         {artwork && loaded && (
-          <div className="absolute bottom-4 right-5 text-right pointer-events-none" style={{ color: isMidnightActive ? '#D7D2C8' : '#5a4f4a' }}>
+          <div className="absolute bottom-4 right-5 text-right pointer-events-none" style={{ color: darkThemeActive ? '#D7D2C8' : '#5a4f4a' }}>
             <p className="text-caption italic leading-tight" style={{ fontFamily: 'Georgia, serif', fontSize: '0.7rem', fontWeight: 500, letterSpacing: '0.3px' }}>
               {artwork.title}
             </p>
@@ -268,12 +305,12 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
         )}
 
         {artwork && loaded && (
-          <div className="absolute left-1/2 -translate-x-1/2 bottom-3 text-[0.55rem] pointer-events-none" style={{ color: isMidnightActive ? '#A59C8F' : '#8f8678' }}>
+          <div className="absolute left-1/2 -translate-x-1/2 bottom-3 text-[0.55rem] pointer-events-none" style={{ color: darkThemeActive ? '#A59C8F' : '#8f8678' }}>
             swipe left for next piece
           </div>
         )}
 
-        <div className="absolute bottom-3 left-4 pointer-events-none" style={{ color: isMidnightActive ? '#A89E90' : '#9b9285', fontSize: '0.55rem', fontFamily: 'Georgia, serif' }}>
+        <div className="absolute bottom-3 left-4 pointer-events-none" style={{ color: darkThemeActive ? '#A89E90' : '#9b9285', fontSize: '0.55rem', fontFamily: 'Georgia, serif' }}>
           tap to wake · say alexa
         </div>
       </div>
