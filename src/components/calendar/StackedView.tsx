@@ -114,7 +114,7 @@ export default function StackedView() {
                   </span>
                   <span className={cn(
                     'text-body font-semibold leading-none',
-                    today_ ? 'text-casa-gold' : 'text-casa-navy'
+                    today_ ? 'text-casa-gold' : 'text-casa-text'
                   )}>
                     {format(day, 'd')}
                   </span>
@@ -305,7 +305,7 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
           const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
           return (
             <>
-              <h3 className="text-body-sm font-semibold text-casa-navy leading-snug line-clamp-1 mb-1">
+              <h3 className="text-body-sm font-semibold text-casa-text leading-snug line-clamp-1 mb-1">
                 {cleanTitle}
               </h3>
               {/* Member pills/dots */}
@@ -364,7 +364,7 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
               <div className="flex gap-1.5 pt-1">
                 <button
                   onClick={(e) => { e.stopPropagation(); onDoubleClick() }}
-                  className="flex items-center gap-1 px-2 py-1 rounded border border-casa-border text-caption font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
+                  className="flex items-center gap-1 px-2 py-1 rounded border border-casa-border text-caption font-semibold text-casa-text hover:bg-casa-bg transition-colors"
                 >
                   <Pencil size={10} />
                   Edit
@@ -375,7 +375,7 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
                     target="_blank"
                     rel="noreferrer"
                     onClick={e => e.stopPropagation()}
-                    className="flex items-center gap-1 px-2 py-1 rounded border border-casa-border text-caption font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
+                    className="flex items-center gap-1 px-2 py-1 rounded border border-casa-border text-caption font-semibold text-casa-text hover:bg-casa-bg transition-colors"
                   >
                     <Navigation size={10} />
                     Directions

@@ -180,7 +180,7 @@ function DayEventCard({
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <p className="font-semibold text-body-sm text-casa-navy leading-snug">{cleanTitle}</p>
+          <p className="font-semibold text-body-sm text-casa-text leading-snug">{cleanTitle}</p>
           {!isAllDay && (
             <span className="flex items-center gap-1 text-caption text-casa-muted shrink-0 tabular-nums">
               {formatTime(event.start_time)}
@@ -239,7 +239,7 @@ function DayEventCard({
       {/* Edit on hover */}
       <button
         onClick={e => { e.stopPropagation(); onEdit() }}
-        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 self-start mt-0.5 text-casa-muted hover:text-casa-navy"
+        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 self-start mt-0.5 text-casa-muted hover:text-casa-text"
         title="Edit event"
       >
         <ChevronRight size={16} />
@@ -286,7 +286,7 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
             <div className="space-y-2">
               {awayEvents.map(e => (
                 <div key={e.id} className="px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200">
-                  <p className="text-body-sm font-medium text-casa-navy leading-snug">{e.title}</p>
+                  <p className="text-body-sm font-medium text-casa-text leading-snug">{e.title}</p>
                   <p className="text-caption text-amber-700 font-medium mt-0.5 flex items-center gap-1">
                     <Clock size={11} />
                     Leave by {format(parseISO(e.enrichment!.departure_time!), 'h:mm a')}
@@ -349,7 +349,7 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
                   >
                     <div className="flex items-start gap-2">
                       <span className="text-base leading-none shrink-0 mt-0.5">{item.emoji}</span>
-                      <p className="text-body-sm text-casa-navy leading-snug flex-1">{item.description}</p>
+                      <p className="text-body-sm text-casa-text leading-snug flex-1">{item.description}</p>
                     </div>
                     {daysLabel && (
                       <p className="text-caption text-casa-muted mt-1 ml-6">{daysLabel}</p>
@@ -357,7 +357,7 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
                     <div className="flex gap-2 mt-2 ml-6">
                       <button
                         onClick={() => snooze(item.id)}
-                        className="text-caption text-casa-muted hover:text-casa-navy transition-colors"
+                        className="text-caption text-casa-muted hover:text-casa-text transition-colors"
                       >
                         Snooze
                       </button>

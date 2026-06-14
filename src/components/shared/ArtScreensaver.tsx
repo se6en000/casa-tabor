@@ -7,7 +7,8 @@ import { useTheme } from '../../contexts/ThemeContext'
 const SENSOR = 'http://127.0.0.1:8765'
 const EDGE_MAT_PX = 100
 const MIN_FRAME_PX = 320
-const MIDNIGHT_MAT_COLOR = '#0F141B'
+const MIDNIGHT_MAT_COLOR = '#07090D'
+const MIDNIGHT_MAT_TEXTURE = 'linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.22))'
 
 interface Props {
   onDismiss: () => void
@@ -37,6 +38,8 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   
   const touchStartXRef = useRef<number | null>(null)
   const textureStyle = useMemo(() => getTextureStyle(), [])
+  const matTexture = isMidnightActive ? MIDNIGHT_MAT_TEXTURE : textureStyle.backgroundImage
+  const matBlendMode = isMidnightActive ? 'normal' : textureStyle.backgroundBlendMode
   const frameSize = useMemo(() => {
     const maxWidth = Math.max(viewport.width - EDGE_MAT_PX * 2, MIN_FRAME_PX)
     const maxHeight = Math.max(viewport.height - EDGE_MAT_PX * 2, MIN_FRAME_PX)
@@ -155,11 +158,11 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
         className="relative w-full h-full flex items-center justify-center"
         style={{
           backgroundColor: matColor,
-          backgroundImage: textureStyle.backgroundImage,
+          backgroundImage: matTexture,
           backgroundSize: textureStyle.backgroundSize,
           backgroundPosition: textureStyle.backgroundPosition,
           backgroundAttachment: textureStyle.backgroundAttachment,
-          backgroundBlendMode: textureStyle.backgroundBlendMode,
+          backgroundBlendMode: matBlendMode,
           boxShadow: [
             'inset 0 36px 48px -12px rgba(0,0,0,0.50)',
             'inset 18px 0 24px -12px rgba(0,0,0,0.10)',
@@ -245,7 +248,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
               width: `${frameSize.width}px`,
               height: `${frameSize.height}px`,
               backgroundColor: matColor,
-              backgroundImage: textureStyle.backgroundImage,
+              backgroundImage: matTexture,
               backgroundSize: textureStyle.backgroundSize,
               backgroundPosition: textureStyle.backgroundPosition,
               animation: 'pulse 2s ease-in-out infinite',
