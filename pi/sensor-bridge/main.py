@@ -1180,7 +1180,7 @@ PROCESSING_RGB = (80, 35, 0)    # amber
 
 def _spi_open():
     global _spi_last_target
-    targets = [(10, 0), (0, 0)]  # Pi 5 often maps GPIO10 MOSI to spidev10.0
+    targets = [(0, 0), (10, 0)]  # This strip is wired on spidev0.0; keep spidev10.0 fallback.
     last_error = None
     for bus, dev in targets:
         try:
