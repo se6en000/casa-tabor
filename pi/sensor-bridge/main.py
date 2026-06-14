@@ -1169,14 +1169,44 @@ _burst_active = threading.Event()        # comet pauses while a burst plays
 _led_thread: threading.Thread | None = None
 _burst_thread: threading.Thread | None = None
 
-# Live colour state — comet loop interpolates _led_current → _led_target
-_led_target   = [0, 0, 0]
-_led_current  = [0.0, 0.0, 0.0]
+# Live animation state
+_led_current_pixels = [[0.0, 0.0, 0.0] for _ in range(NUM_LEDS)]
+_led_mode = "off"  # off | listening | processing
+_voice_level = 0.0
+_voice_until = 0.0
 _color_lock   = threading.Lock()
 _spi_last_target = None
 
-LISTENING_RGB  = (0,  0,  70)   # blue
-PROCESSING_RGB = (80, 35, 0)    # amber
+DEEP_BLUE = (30, 58, 138)      # #1E3A8A
+CYAN = (34, 211, 238)          # #22D3EE
+SOFT_WHITE = (224, 242, 254)   # #E0F2FE
+PURPLE = (124, 58, 237)        # #7C3AED
+
+def _mix(c1: tuple[int, int, int], c2: tuple[int, int, int], a: float) -> tuple[float, float, float]:
+    a = max(0.0, min(1.0, a))
+    return (
+        c1[0] + (c2[0] - c1[0]) * a,
+        c1[1] + (c2[1] - c1[1]) * a,
+        c1[2] + (c2[2] - c1[2]) * a,
+    )
+
+def _scale(c: tuple[float, float, float], f: float) -> tuple[float, float, float]:
+    return (c[0] * f, c[1] * f, c[2] * f)
+
+def _add(c1: tuple[float, float, float], c2: tuple[float, float, float]) -> tuple[float, float, float]:
+    return (c1[0] + c2[0], c1[1] + c2[1], c1[2] + c2[2])
+
+def _set_mode(mode: str):
+    global _led_mode
+    with _color_lock:
+        _led_mode = mode
+
+def _set_voice_level(level: float):
+    global _voice_level, _voice_until
+    n = max(0.0, min(1.0, level))
+    with _color_lock:
+        _voice_level = max(_voice_level * 0.75, n)
+        _voice_until = time.time() + 0.35
 
 def _spi_open():
     global _spi_last_target
@@ -1217,55 +1247,79 @@ def _write_pixels(spi, pixels: list[tuple[int, int, int]]):
 def _clamp(val: int) -> int:
     return max(0, min(LED_MAX_BRIGHT, val))
 
-def _set_target(r: int, g: int, b: int):
-    """Update the comet target colour. The comet loop will smoothly fade to it."""
-    with _color_lock:
-        _led_target[0], _led_target[1], _led_target[2] = r, g, b
-
 def _comet_loop():
-    """Single persistent bouncing comet. Colour interpolates toward _led_target.
-    While _burst_active is set, the loop pauses drawing so a burst thread can
-    take over the strip."""
+    """Breathing halo + listening sweep + reactive ripple + processing pulse."""
     if not SPI_AVAILABLE:
         return
     try:
         spi = _spi_open()
-        pos = 0.0
-        direction = 1
-        speed = 1.1
-        tail = 12
-        FADE = 0.08   # per-frame interpolation factor (~12 frames to converge)
+        t0 = time.time()
+        voice_env = 0.0
         while not _led_stop.is_set():
             if _burst_active.is_set():
-                # Burst thread is drawing — sleep until it's done
                 _led_stop.wait(0.03)
                 continue
-            # Smoothly fade current colour toward target
-            with _color_lock:
-                tr, tg, tb = _led_target[0], _led_target[1], _led_target[2]
-            _led_current[0] += (tr - _led_current[0]) * FADE
-            _led_current[1] += (tg - _led_current[1]) * FADE
-            _led_current[2] += (tb - _led_current[2]) * FADE
-            cr, cg, cb = _led_current
 
-            pixels = []
+            now = time.time()
+            t = now - t0
+            with _color_lock:
+                mode = _led_mode
+                voice_target = _voice_level if now < _voice_until else 0.0
+            voice_env += (voice_target - voice_env) * 0.35
+
+            targets: list[tuple[float, float, float]] = []
+            breathing = 0.5 + 0.5 * math.sin((2 * math.pi * t) / 2.6)
             for i in range(NUM_LEDS):
-                dist = (pos - i) if direction == 1 else (i - pos)
-                if 0 <= dist < tail:
-                    frac = 1 - dist / tail
-                    pixels.append((_clamp(int(cr * frac)),
-                                   _clamp(int(cg * frac)),
-                                   _clamp(int(cb * frac))))
+                if mode == "listening":
+                    base_color = _mix(DEEP_BLUE, CYAN, 0.22 + 0.35 * breathing)
+                    base = _scale(base_color, 0.18 + 0.22 * breathing)
+
+                    sweep_head = (t / 1.25) * NUM_LEDS
+                    dist = abs(i - (sweep_head % NUM_LEDS))
+                    dist = min(dist, NUM_LEDS - dist)
+                    sweep = max(0.0, 1.0 - dist / 11.0)
+                    sweep_color = _mix(CYAN, SOFT_WHITE, 0.45)
+                    sweep_layer = _scale(sweep_color, 0.30 * sweep)
+
+                    # Voice ripple from strip center; loudness scales amplitude.
+                    center = (NUM_LEDS - 1) / 2.0
+                    d = abs(i - center) / max(center, 1.0)
+                    ripple = max(0.0, math.sin((d * 11.0) - (t * 16.0)))
+                    ripple_layer = _scale(SOFT_WHITE, (0.45 * voice_env) * ripple)
+
+                    targets.append(_add(_add(base, sweep_layer), ripple_layer))
+                elif mode == "processing":
+                    think = 0.5 + 0.5 * math.sin((2 * math.pi * t) / 0.95)
+                    base_color = _mix(DEEP_BLUE, PURPLE, 0.62)
+                    base = _scale(base_color, 0.18 + 0.28 * think)
+
+                    # Tight moving highlight so "thinking" feels active.
+                    head = (t / 0.85) * NUM_LEDS
+                    dist = abs(i - (head % NUM_LEDS))
+                    dist = min(dist, NUM_LEDS - dist)
+                    highlight = max(0.0, 1.0 - dist / 7.0)
+                    hl_color = _mix(PURPLE, SOFT_WHITE, 0.30)
+                    hl_layer = _scale(hl_color, 0.26 * highlight)
+
+                    targets.append(_add(base, hl_layer))
                 else:
-                    pixels.append((0, 0, 0))
+                    targets.append((0.0, 0.0, 0.0))
+
+            # Smooth frame-to-frame transitions.
+            pixels: list[tuple[int, int, int]] = []
+            smooth = 0.28
+            for idx, target in enumerate(targets):
+                cur = _led_current_pixels[idx]
+                cur[0] += (target[0] - cur[0]) * smooth
+                cur[1] += (target[1] - cur[1]) * smooth
+                cur[2] += (target[2] - cur[2]) * smooth
+                pixels.append((
+                    _clamp(int(cur[0])),
+                    _clamp(int(cur[1])),
+                    _clamp(int(cur[2])),
+                ))
+
             _write_pixels(spi, pixels)
-            pos += speed * direction
-            if pos >= NUM_LEDS - 1:
-                pos = NUM_LEDS - 1
-                direction = -1
-            elif pos <= 0:
-                pos = 0
-                direction = 1
             _led_stop.wait(0.03)
         _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
         spi.close()
@@ -1273,14 +1327,16 @@ def _comet_loop():
         log.warning(f"LED comet error: {e}")
 
 def _ensure_comet_running():
-    """Start the comet loop if it's not already running."""
+    """Start the LED animation loop if it's not already running."""
     global _led_thread
     if _led_thread is not None and _led_thread.is_alive():
         return
     _led_stop.clear()
     _burst_active.clear()
-    # Reset current colour so first run fades in from black
-    _led_current[0] = _led_current[1] = _led_current[2] = 0.0
+    for i in range(NUM_LEDS):
+        _led_current_pixels[i][0] = 0.0
+        _led_current_pixels[i][1] = 0.0
+        _led_current_pixels[i][2] = 0.0
     _led_thread = threading.Thread(target=_comet_loop, daemon=True)
     _led_thread.start()
 
@@ -1330,19 +1386,36 @@ def _start_burst(r: int, g: int, b: int):
 
 @app.post("/led/listening")
 def led_listening():
-    """Smoothly transition comet to blue (listening). Comet keeps flowing."""
+    """Listening mode: breathing halo + circular sweep + voice-reactive ripple."""
     with _led_lock:
-        _set_target(*LISTENING_RGB)
+        _set_mode("listening")
         _ensure_comet_running()
     return {"ok": True, "mode": "listening"}
 
 @app.post("/led/processing")
 def led_processing():
-    """Smoothly transition comet to amber (thinking). Comet keeps flowing."""
+    """Processing mode: tighter/faster pulse with purple tint."""
     with _led_lock:
-        _set_target(*PROCESSING_RGB)
+        _set_mode("processing")
         _ensure_comet_running()
     return {"ok": True, "mode": "processing"}
+
+@app.post("/led/voice-level")
+async def led_voice_level(req: Request):
+    """Update reactive ripple intensity from live voice level (0..100 or 0..1)."""
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    raw = body.get("level", 0)
+    try:
+        level = float(raw)
+    except Exception:
+        level = 0.0
+    if level > 1.0:
+        level = level / 100.0
+    _set_voice_level(level)
+    return {"ok": True, "level": max(0.0, min(1.0, level))}
 
 @app.post("/led/confirm")
 def led_confirm():
@@ -1358,8 +1431,11 @@ def led_cancel():
 
 @app.post("/led/off")
 def led_off():
-    """Stop the comet and turn all LEDs off."""
+    """Soft-fade LEDs down, then stop the animation loop."""
     with _led_lock:
+        _set_mode("off")
+        _set_voice_level(0.0)
+        time.sleep(0.65)
         _stop_comet()
         if SPI_AVAILABLE:
             try:

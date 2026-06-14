@@ -1,5 +1,6 @@
 import json, logging, math, struct, subprocess, threading, time
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib import request as _urlrequest
 import websocket
 from websockets.sync.server import serve as ws_serve
 
@@ -30,6 +31,7 @@ WAKE_WATCHDOG_SECS = 90
 WAKE_AUDIO_GAIN   = 3.0        # Amplify mic input before wake detection
 WAKE_SCORE_MIN = 0.10
 WAKE_SCORE_MAX = 0.60
+SENSOR_BRIDGE  = 'http://127.0.0.1:8765'
 
 # ── Audio buffering for wake word ─────────────────────────────────────────────
 # 0.3s post-wake buffer — just enough to capture the first word after "Alexa".
@@ -44,6 +46,19 @@ _rec_proc   = None
 _ws         = None          # current DeepGram WebSocketApp
 _ws_gen     = 0             # incremented on each start_recording(); guards stale _on_close
 _finals     = []
+
+def _push_voice_level(level: int):
+    try:
+        payload = json.dumps({'level': max(0, min(100, int(level)))}).encode('utf-8')
+        req = _urlrequest.Request(
+            f'{SENSOR_BRIDGE}/led/voice-level',
+            data=payload,
+            headers={'Content-Type': 'application/json'},
+            method='POST',
+        )
+        _urlrequest.urlopen(req, timeout=0.25).read()
+    except Exception:
+        pass
 
 def _set(**kw):
     with _state_lock:
@@ -401,6 +416,7 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
         except Exception as e:
             log.error(f'send initial buffer failed: {e}')
     
+    last_voice_push = 0.0
     try:
         while True:
             with _state_lock:
@@ -421,6 +437,10 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
             vol = int(min(rms / 70, 100))
             _set(volume=vol)
             _ws_push_stt({'type': 'volume', 'level': vol})
+            now = time.time()
+            if now - last_voice_push >= 0.08:
+                _push_voice_level(vol)
+                last_voice_push = now
             try:
                 ws_arg.send(raw, websocket.ABNF.OPCODE_BINARY)
             except Exception as e:
@@ -435,6 +455,7 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
             except: pass
         _set(volume=0)
         _ws_push_stt({'type': 'volume', 'level': 0})
+        _push_voice_level(0)
         log.info('[stream_audio] thread exited')
 
 def start_recording():
