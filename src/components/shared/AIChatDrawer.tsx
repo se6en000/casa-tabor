@@ -28,6 +28,7 @@ type STTMode = 'unknown' | 'bridge' | 'webspeech'
 const SILENCE_MS = 1500
 const CONNECT_TIMEOUT_MS = 5000
 const NO_ACTIVITY_AUTO_CLOSE_MS = 30_000
+const FEEDBACK_LOCK_MS = 2800
 
 /** Quick probe — resolves true if bridge is reachable within 800ms */
 async function probeBridge(): Promise<boolean> {
@@ -408,6 +409,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
   const pendingConfirmRef = useRef<(() => Promise<boolean>) | null>(null)
   const pendingCancelRef  = useRef<(() => Promise<boolean>) | null>(null)
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [uiFeedback, setUiFeedback] = useState<'none' | 'confirm' | 'cancel'>('none')
 
   const clearIdleAutoCloseTimer = useCallback(() => {
     if (idleAutoCloseTimerRef.current) {
@@ -423,6 +426,15 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
   // True when the latest assistant message has a pending tool action awaiting confirmation
   const hasPendingToolAction = messages.some(m => m.toolAction?.status === 'pending')
+
+  const triggerUiFeedback = useCallback((mode: 'confirm' | 'cancel') => {
+    setUiFeedback(mode)
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
+    feedbackTimerRef.current = setTimeout(() => {
+      setUiFeedback('none')
+      feedbackTimerRef.current = null
+    }, FEEDBACK_LOCK_MS)
+  }, [])
 
   const sendCurrentInput = useCallback((text: string) => {
     const trimmed = text.trim()
@@ -464,24 +476,26 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     },
     onConfirm: () => {
       markUserInteraction()
+      triggerUiFeedback('confirm')
       led.confirm()
       const run = pendingConfirmRef.current
       if (!run) return
       void Promise.resolve(run()).then((confirmed) => {
         if (!confirmed) return
         startFresh()
-        setTimeout(onClose, 350)
+        setTimeout(onClose, 700)
       })
     },
     onCancel:  () => {
       markUserInteraction()
+      triggerUiFeedback('cancel')
       led.cancel()
       const run = pendingCancelRef.current
       if (!run) return
       void Promise.resolve(run()).then((cancelled) => {
         if (!cancelled) return
         startFresh()
-        setTimeout(onClose, 350)
+        setTimeout(onClose, 700)
       })
     },
     hasPendingAction: hasPendingToolAction,
@@ -489,6 +503,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
   useEffect(() => {
     return () => {
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
       led.off()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -517,6 +532,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       setTimeout(() => textareaRef.current?.focus(), 300)
     } else {
       clearIdleAutoCloseTimer()
+      if (feedbackTimerRef.current) {
+        clearTimeout(feedbackTimerRef.current)
+        feedbackTimerRef.current = null
+      }
+      setUiFeedback('none')
       speech.stop()
       led.off()
       reset()
@@ -691,11 +711,15 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   const voiceLevel = Math.max(0, Math.min(1, speech.volume / 100))
   const isVoiceActive = speech.listening && voiceLevel > 0.12
   const hasTypedInput = input.trim().length > 0 && !loading && !speech.listening
-  const aiPresence: 'off' | 'idle' | 'listening' | 'voice_active' | 'processing' | 'typing' =
+  const aiPresence: 'off' | 'idle' | 'listening' | 'voice_active' | 'processing' | 'typing' | 'confirm' | 'cancel' =
     !open
       ? 'off'
-      : loading || speech.phase === 'processing'
-        ? 'processing'
+      : uiFeedback === 'confirm'
+        ? 'confirm'
+        : uiFeedback === 'cancel'
+          ? 'cancel'
+          : loading || speech.phase === 'processing'
+            ? 'processing'
         : hasTypedInput
           ? 'typing'
           : isVoiceActive
@@ -949,6 +973,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                   aiPresence === 'voice_active' && 'ai-presence-voice',
                   aiPresence === 'processing' && 'ai-presence-processing',
                   aiPresence === 'typing' && 'ai-presence-typing',
+                  aiPresence === 'confirm' && 'ai-presence-confirm',
+                  aiPresence === 'cancel' && 'ai-presence-cancel',
                   aiPresence === 'idle' && 'ai-presence-idle',
                 )}
                 style={presenceStyle}
