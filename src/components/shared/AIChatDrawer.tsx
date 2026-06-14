@@ -169,7 +169,6 @@ function useSpeechInput({
       if (finalAccum.trim()) {
         stopSilenceTimer()
         lastInterimRef.current = ''
-        onInterimRef.current(finalAccum.trim())
         try { recognition.stop() } catch { /* ignore */ }
         triggerFinal(finalAccum.trim())
         if (activeRef.current) setTimeout(() => startWebSpeech(), 300)
@@ -252,6 +251,7 @@ function useSpeechInput({
             setVolume(msg.level ?? 0)
             break
           case 'interim':
+            if (phaseRef.current === 'processing') break
             if (msg.text !== lastInterimRef.current) {
               lastInterimRef.current = msg.text
               lastInterimTimeRef.current = Date.now()
@@ -394,6 +394,7 @@ const SLEEP_PHRASES = /\b(sleep|goodnight|good night|art mode|screen saver|scree
 export default function AIChatDrawer({ open, onClose, anchor, page, events, family, homeCity, onSleepCommand, focusedEvent }: Props) {
   const [input, setInput] = useState('')
   const interimRef = useRef('')
+  const ignoreInterimUntilRef = useRef(0)
   const idleAutoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hadUserInteractionRef = useRef(false)
   const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; mimeType: string } | null>(null)
@@ -439,6 +440,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   const sendCurrentInput = useCallback((text: string) => {
     const trimmed = text.trim()
     if (!trimmed || loading) return
+    ignoreInterimUntilRef.current = Date.now() + 1200
     setInput('')
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
@@ -447,12 +449,14 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
   const speech = useSpeechInput({
     onInterim: (interim) => {
+      if (Date.now() < ignoreInterimUntilRef.current) return
       if (interim.trim()) markUserInteraction()
       interimRef.current = interim
       setInput(interim)
     },
     onFinalTranscript: (text) => {
       if (text === '__SEND__') {
+        ignoreInterimUntilRef.current = Date.now() + 1200
         const msg = interimRef.current || (textareaRef.current?.value ?? '')
         // Check for sleep command before sending to AI
         if (SLEEP_PHRASES.test(msg)) {
@@ -537,6 +541,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
         feedbackTimerRef.current = null
       }
       setUiFeedback('none')
+      ignoreInterimUntilRef.current = 0
       speech.stop()
       led.off()
       reset()
