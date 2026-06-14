@@ -6,15 +6,16 @@ import { format, parseISO } from 'date-fns'
 import { useWeekConflicts, useResolveConflict, useSnoozeConflict } from '../../hooks/useConflicts'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { cn } from '../../utils/cn'
+import { useTheme } from '../../contexts/ThemeContext'
 import type { Conflict } from '../../types'
 
-const TYPE_CONFIG: Record<string, { label: string; emoji: string; borderBg: string; badge: string }> = {
-  drive_time:    { label: 'Needs a Ride',   emoji: '🚗', borderBg: 'border-red-200 bg-red-50',    badge: 'bg-red-500 text-white' },
-  double_book:   { label: 'Double Booked',  emoji: '⚡', borderBg: 'border-amber-200 bg-amber-50', badge: 'bg-amber-400 text-white' },
-  overlap:       { label: 'Time Overlap',   emoji: '⏱',  borderBg: 'border-amber-200 bg-amber-50', badge: 'bg-amber-400 text-white' },
-  gear_conflict: { label: 'Gear Conflict',  emoji: '🎒', borderBg: 'border-blue-100 bg-blue-50',   badge: 'bg-blue-500 text-white' },
+const TYPE_CONFIG: Record<string, { label: string; emoji: string; borderBg: string; badge: string; accent: string }> = {
+  drive_time:    { label: 'Needs a Ride',   emoji: '🚗', borderBg: 'border-red-200 bg-red-50',    badge: 'bg-red-500 text-white', accent: '#ef4444' },
+  double_book:   { label: 'Double Booked',  emoji: '⚡', borderBg: 'border-amber-200 bg-amber-50', badge: 'bg-amber-400 text-white', accent: '#f59e0b' },
+  overlap:       { label: 'Time Overlap',   emoji: '⏱',  borderBg: 'border-amber-200 bg-amber-50', badge: 'bg-amber-400 text-white', accent: '#f59e0b' },
+  gear_conflict: { label: 'Gear Conflict',  emoji: '🎒', borderBg: 'border-blue-100 bg-blue-50',   badge: 'bg-blue-500 text-white', accent: '#3b82f6' },
 }
-const DEFAULT_CONFIG = { label: 'Conflict', emoji: '⚠️', borderBg: 'border-amber-200 bg-amber-50', badge: 'bg-amber-400 text-white' }
+const DEFAULT_CONFIG = { label: 'Conflict', emoji: '⚠️', borderBg: 'border-amber-200 bg-amber-50', badge: 'bg-amber-400 text-white', accent: '#f59e0b' }
 
 function shortTitle(raw: string): string {
   const stripped = raw.includes(' | ') ? raw.split(' | ').slice(1).join(' | ') : raw
@@ -32,15 +33,25 @@ function ConflictGroup({
 }) {
   const [open, setOpen] = useState(false)
   const cfg = TYPE_CONFIG[type] ?? DEFAULT_CONFIG
+  const { isMidnightActive } = useTheme()
 
   return (
-    <div className={cn('conflict-group rounded-card border overflow-hidden', cfg.borderBg)}>
+    <div
+      className={cn(
+        'rounded-card border border-l-4 overflow-hidden',
+        isMidnightActive ? 'bg-casa-surface border-casa-border shadow-card' : cfg.borderBg,
+      )}
+      style={{ borderLeftColor: cfg.accent }}
+    >
       <button
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:brightness-95 transition-all"
+        className={cn(
+          'w-full flex items-center gap-2.5 px-4 py-3 text-left transition-all',
+          isMidnightActive ? 'hover:bg-casa-bg/70' : 'hover:brightness-95',
+        )}
       >
         <span className="text-base leading-none select-none">{cfg.emoji}</span>
-        <span className="flex-1 font-semibold text-body-sm text-casa-navy">{cfg.label}</span>
+        <span className="flex-1 font-semibold text-body-sm text-casa-text">{cfg.label}</span>
         <span className={cn('text-caption font-bold px-2 py-0.5 rounded-full', cfg.badge)}>
           {conflicts.length}
         </span>
@@ -49,7 +60,7 @@ function ConflictGroup({
           tabIndex={0}
           onClick={(e) => { e.stopPropagation(); onDismissAll(conflicts.map((c) => c.id)) }}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onDismissAll(conflicts.map((c) => c.id)) } }}
-          className="text-caption text-casa-muted hover:text-casa-navy underline hover:no-underline ml-1 cursor-pointer"
+          className="text-caption text-casa-muted hover:text-casa-text underline hover:no-underline ml-1 cursor-pointer"
         >
           Dismiss all
         </span>
@@ -67,7 +78,7 @@ function ConflictGroup({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="border-t border-current/10 divide-y divide-current/10">
+            <div className="border-t border-casa-divider divide-y divide-casa-divider">
               {conflicts.map((c) => (
                 <ConflictRow key={c.id} conflict={c} type={type} onDismiss={onDismiss} onSnooze={onSnooze} />
               ))}
@@ -87,6 +98,7 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
 }) {
   const navigate = useNavigate()
   const { setSelectedDate } = useCalendarStore()
+  const { isMidnightActive } = useTheme()
   const desc = conflict.description
 
   const eventDate = conflict.event_a?.start_time ? parseISO(conflict.event_a.start_time) : null
@@ -107,9 +119,15 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
       person = match[1]
       detail = (
         <span className="flex items-center gap-1 flex-wrap">
-          <span className="px-1.5 py-0.5 bg-white/60 rounded border border-current/10 text-caption font-medium">{shortTitle(match[2])}</span>
+          <span className={cn(
+            'px-1.5 py-0.5 rounded border text-caption font-medium',
+            isMidnightActive ? 'bg-casa-bg border-casa-border text-casa-text' : 'bg-white/60 border-current/10',
+          )}>{shortTitle(match[2])}</span>
           <span className="text-caption text-casa-muted">↔</span>
-          <span className="px-1.5 py-0.5 bg-white/60 rounded border border-current/10 text-caption font-medium">{shortTitle(match[3])}</span>
+          <span className={cn(
+            'px-1.5 py-0.5 rounded border text-caption font-medium',
+            isMidnightActive ? 'bg-casa-bg border-casa-border text-casa-text' : 'bg-white/60 border-current/10',
+          )}>{shortTitle(match[3])}</span>
         </span>
       )
     }
@@ -118,7 +136,10 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
     if (match) {
       person = match[1]
       detail = (
-        <span className="px-1.5 py-0.5 bg-white/60 rounded border border-current/10 text-caption font-medium">
+        <span className={cn(
+          'px-1.5 py-0.5 rounded border text-caption font-medium',
+          isMidnightActive ? 'bg-casa-bg border-casa-border text-casa-text' : 'bg-white/60 border-current/10',
+        )}>
           {shortTitle(match[2])}
         </span>
       )
@@ -131,16 +152,22 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
       tabIndex={0}
       onClick={handleNavigate}
       onKeyDown={e => { if (e.key === 'Enter') handleNavigate(e as unknown as React.MouseEvent) }}
-      className="conflict-row w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-black/5 transition-colors group cursor-pointer"
+      className={cn(
+        'w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors group cursor-pointer',
+        isMidnightActive ? 'hover:bg-casa-bg/70' : 'hover:bg-black/5',
+      )}
       title="View in calendar"
     >
-      <span className="shrink-0 w-6 h-6 rounded-full bg-white/70 border border-current/15 flex items-center justify-center text-caption font-bold text-casa-navy">
+      <span className={cn(
+        'shrink-0 w-6 h-6 rounded-full border flex items-center justify-center text-caption font-bold',
+        isMidnightActive ? 'bg-casa-bg border-casa-border text-casa-text' : 'bg-white/70 border-current/15 text-casa-navy',
+      )}>
         {person ? person.charAt(0) : '?'}
       </span>
 
       <div className="flex-1 min-w-0 space-y-0.5">
         <div className="flex items-center gap-1.5 flex-wrap">
-          {person && <span className="text-caption font-semibold text-casa-navy">{person}</span>}
+          {person && <span className="text-caption font-semibold text-casa-text">{person}</span>}
           {detail ?? <span className="text-caption text-casa-muted truncate">{desc}</span>}
         </div>
         {dateLabel && (
@@ -153,7 +180,10 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
       <div className="shrink-0 flex items-center gap-1" onClick={e => e.stopPropagation()}>
         <button
           onClick={() => onSnooze(conflict.id)}
-          className="conflict-action text-caption font-medium px-2 py-1 rounded-md text-casa-muted hover:text-casa-navy hover:bg-white/60 transition-colors"
+          className={cn(
+            'text-caption font-medium px-2 py-1 rounded-md text-casa-muted transition-colors',
+            isMidnightActive ? 'hover:text-casa-text hover:bg-casa-bg' : 'hover:text-casa-navy hover:bg-white/60',
+          )}
           title="Snooze until tomorrow"
         >
           Snooze
@@ -161,7 +191,10 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
         <span className="text-casa-border text-caption">|</span>
         <button
           onClick={() => onDismiss(conflict.id)}
-          className="conflict-action text-caption font-medium px-2 py-1 rounded-md text-casa-muted hover:text-red-600 hover:bg-white/60 transition-colors"
+          className={cn(
+            'text-caption font-medium px-2 py-1 rounded-md text-casa-muted transition-colors',
+            isMidnightActive ? 'hover:text-red-400 hover:bg-casa-bg' : 'hover:text-red-600 hover:bg-white/60',
+          )}
           title="Dismiss permanently"
         >
           Dismiss

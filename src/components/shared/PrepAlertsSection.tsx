@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { differenceInDays, parseISO } from 'date-fns'
 import { usePrepItems, useDismissPrepItem, useSnoozePrepItem } from '../../hooks/usePrepItems'
 import { cn } from '../../utils/cn'
+import { useTheme } from '../../contexts/ThemeContext'
 
 const PRIORITY_BORDER: Record<number, string> = {
   3: 'border-red-200 bg-red-50',
@@ -21,6 +22,7 @@ export default function PrepAlertsSection({ className }: { className?: string })
   const { data: items } = usePrepItems()
   const dismiss = useDismissPrepItem()
   const snooze = useSnoozePrepItem()
+  const { isMidnightActive } = useTheme()
 
   if (!items || items.length === 0) return null
 
@@ -33,6 +35,7 @@ export default function PrepAlertsSection({ className }: { className?: string })
         {items.map((item) => {
           const borderBg = PRIORITY_BORDER[item.priority] ?? PRIORITY_BORDER[2]
           const days = daysLabel(item.event_date)
+          const accent = item.priority === 3 ? '#ef4444' : item.priority === 2 ? '#f59e0b' : '#3b82f6'
           return (
             <motion.div
               key={item.id}
@@ -41,9 +44,10 @@ export default function PrepAlertsSection({ className }: { className?: string })
               exit={{ opacity: 0, height: 0, marginTop: 0, overflow: 'hidden' }}
               transition={{ duration: 0.2 }}
               className={cn(
-                'prep-alert-card flex items-start gap-3 px-4 py-3 rounded-card border text-body-sm',
-                borderBg,
+                'flex items-start gap-3 px-4 py-3 rounded-card border border-l-4 text-body-sm shadow-card',
+                isMidnightActive ? 'bg-casa-surface border-casa-border' : borderBg,
               )}
+              style={{ borderLeftColor: accent }}
             >
               {/* Emoji */}
               <span className="shrink-0 mt-0.5 font-display text-heading leading-none select-none">
@@ -76,7 +80,10 @@ export default function PrepAlertsSection({ className }: { className?: string })
               <div className="shrink-0 flex items-center gap-1">
                 <button
                   onClick={() => snooze(item.id)}
-                  className="prep-alert-action text-caption font-medium px-2 py-1 rounded-md text-casa-muted hover:text-casa-navy hover:bg-white/60 transition-colors"
+                  className={cn(
+                    'text-caption font-medium px-2 py-1 rounded-md text-casa-muted transition-colors',
+                    isMidnightActive ? 'hover:text-casa-text hover:bg-casa-bg' : 'hover:text-casa-navy hover:bg-white/60',
+                  )}
                   title="Snooze until tomorrow morning"
                 >
                   Snooze
@@ -84,7 +91,10 @@ export default function PrepAlertsSection({ className }: { className?: string })
                 <span className="text-casa-border text-caption">|</span>
                 <button
                   onClick={() => dismiss(item.id)}
-                  className="prep-alert-action text-caption font-medium px-2 py-1 rounded-md text-casa-muted hover:text-red-600 hover:bg-white/60 transition-colors"
+                  className={cn(
+                    'text-caption font-medium px-2 py-1 rounded-md text-casa-muted transition-colors',
+                    isMidnightActive ? 'hover:text-red-400 hover:bg-casa-bg' : 'hover:text-red-600 hover:bg-white/60',
+                  )}
                   title="Permanently dismiss"
                 >
                   Dismiss
