@@ -327,21 +327,14 @@ html.midnight-gallery .stacked-event-title {
 
 .ai-presence-listening::after,
 .ai-presence-voice::after {
-  opacity: 0.88;
+  opacity: 0.52;
   padding: 1.5px;
   background:
-    conic-gradient(
-      from 0deg,
-      transparent 0 12%,
-      rgba(34, 211, 238, 0.95) 17%,
-      rgba(224, 242, 254, 0.85) 20%,
-      rgba(30, 58, 138, 0.8) 28%,
-      transparent 36%
-    );
+    linear-gradient(90deg, rgba(34, 211, 238, 0.56), rgba(224, 242, 254, 0.78), rgba(30, 58, 138, 0.58));
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  animation: ai-outline-scan 1.35s linear infinite;
+  animation: ai-outline-accent 1.35s ease-in-out infinite;
 }
 
 .ai-presence-listening {
@@ -357,8 +350,8 @@ html.midnight-gallery .stacked-event-title {
 }
 
 .ai-presence-voice::after {
-  opacity: calc(0.76 + (var(--voice-level) * 0.24));
-  animation-duration: 1s;
+  opacity: calc(0.5 + (var(--voice-level) * 0.35));
+  animation-duration: 0.72s;
 }
 
 .ai-presence-voice {
@@ -374,21 +367,14 @@ html.midnight-gallery .stacked-event-title {
 }
 
 .ai-presence-processing::after {
-  opacity: 0.92;
+  opacity: 0.7;
   padding: 1.5px;
   background:
-    conic-gradient(
-      from 0deg,
-      transparent 0 10%,
-      rgba(124, 58, 237, 0.98) 16%,
-      rgba(167, 139, 250, 0.88) 22%,
-      rgba(34, 211, 238, 0.45) 28%,
-      transparent 36%
-    );
+    linear-gradient(90deg, rgba(124, 58, 237, 0.9), rgba(167, 139, 250, 0.88), rgba(34, 211, 238, 0.5));
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  animation: ai-outline-scan 0.85s linear infinite;
+  animation: ai-outline-accent 0.85s ease-in-out infinite;
 }
 
 .ai-presence-processing {
@@ -423,8 +409,9 @@ html.midnight-gallery .stacked-event-title {
   50% { transform: scale(1.005); opacity: 1; }
 }
 
-@keyframes ai-outline-scan {
-  to { transform: rotate(360deg); }
+@keyframes ai-outline-accent {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.004); }
 }
 
 @keyframes ai-outline-voice {
