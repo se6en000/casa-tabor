@@ -351,30 +351,30 @@ html.midnight-gallery .stacked-event-title {
 }
 
 .ai-presence-listening::before {
-  opacity: 0.9;
+  opacity: 0.86;
   box-shadow:
-    0 0 0 1px rgba(34, 211, 238, 0.72),
-    0 0 24px rgba(34, 211, 238, 0.34);
+    0 0 22px rgba(34, 211, 238, 0.34),
+    0 0 34px rgba(30, 58, 138, 0.24);
   animation: ai-outline-breathe 1.6s ease-in-out infinite;
 }
 
 .ai-presence-voice::after {
-  padding: calc(2.5px + (var(--voice-level) * 2px));
-  opacity: calc(0.72 + (var(--voice-level) * 0.28));
+  padding: calc(2px + (var(--voice-level) * 1.2px));
+  opacity: calc(0.64 + (var(--voice-level) * 0.26));
   animation-duration: 0.44s;
 }
 
 .ai-presence-voice {
-  border-color: rgba(224, 242, 254, 0.95) !important;
-  border-width: calc(2px + (var(--voice-level) * 1.6px));
+  border-color: rgba(224, 242, 254, 0.9) !important;
+  border-width: 1px;
 }
 
 .ai-presence-voice::before {
   opacity: 1;
   box-shadow:
-    0 0 0 calc(8px + (var(--voice-level) * 4px)) rgba(34, 211, 238, calc(0.34 + (var(--voice-level) * 0.46))),
-    0 0 calc(24px + (var(--voice-level) * 40px)) rgba(34, 211, 238, calc(0.42 + (var(--voice-level) * 0.5))),
-    0 0 calc(34px + (var(--voice-level) * 48px)) rgba(30, 58, 138, calc(0.24 + (var(--voice-level) * 0.34)));
+    0 0 calc(16px + (var(--voice-level) * 30px)) rgba(34, 211, 238, calc(0.36 + (var(--voice-level) * 0.44))),
+    0 0 calc(30px + (var(--voice-level) * 48px)) rgba(34, 211, 238, calc(0.24 + (var(--voice-level) * 0.36))),
+    0 0 calc(44px + (var(--voice-level) * 60px)) rgba(30, 58, 138, calc(0.16 + (var(--voice-level) * 0.26)));
   animation: ai-outline-voice 0.42s ease-in-out infinite;
 }
 
@@ -465,8 +465,8 @@ html.midnight-gallery .stacked-event-title {
 }
 
 @keyframes ai-outline-voice {
-  0%, 100% { transform: scale(1); filter: saturate(1.05); }
-  50% { transform: scale(calc(1 + (var(--voice-level) * 0.016))); filter: saturate(calc(1.1 + (var(--voice-level) * 0.35))); }
+  0%, 100% { transform: scale(1); opacity: 0.78; filter: saturate(1.05); }
+  50% { transform: scale(calc(1 + (var(--voice-level) * 0.012))); opacity: 1; filter: saturate(calc(1.08 + (var(--voice-level) * 0.3))); }
 }
 
 @keyframes ai-outline-tight {
