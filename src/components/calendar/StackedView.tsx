@@ -305,9 +305,12 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
           const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
           return (
             <>
-              <h3 className="text-body-sm font-semibold text-casa-text leading-snug line-clamp-1 mb-1">
+              <p
+                className="stacked-event-title text-body-sm font-semibold text-casa-text leading-snug line-clamp-1 mb-1"
+                style={{ color: 'var(--color-casa-text)' }}
+              >
                 {cleanTitle}
-              </h3>
+              </p>
               {/* Member pills/dots */}
               <div className="flex items-center gap-1 flex-wrap">
                 {primary && (

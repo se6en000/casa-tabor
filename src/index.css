@@ -276,3 +276,7 @@ html.midnight-gallery input::placeholder,
 html.midnight-gallery textarea::placeholder {
   color: var(--color-casa-muted) !important;
 }
+
+html.midnight-gallery .stacked-event-title {
+  color: var(--color-casa-text) !important;
+}
