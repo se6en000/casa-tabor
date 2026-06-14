@@ -1173,16 +1173,28 @@ _burst_thread: threading.Thread | None = None
 _led_target   = [0, 0, 0]
 _led_current  = [0.0, 0.0, 0.0]
 _color_lock   = threading.Lock()
+_spi_last_target = None
 
 LISTENING_RGB  = (0,  0,  70)   # blue
 PROCESSING_RGB = (80, 35, 0)    # amber
 
 def _spi_open():
-    spi = _spidev.SpiDev()
-    spi.open(0, 0)
-    spi.max_speed_hz = 3_200_000
-    spi.mode = 0
-    return spi
+    global _spi_last_target
+    targets = [(10, 0), (0, 0)]  # Pi 5 often maps GPIO10 MOSI to spidev10.0
+    last_error = None
+    for bus, dev in targets:
+        try:
+            spi = _spidev.SpiDev()
+            spi.open(bus, dev)
+            spi.max_speed_hz = 3_200_000
+            spi.mode = 0
+            if _spi_last_target != (bus, dev):
+                log.info("LED SPI target: spidev%d.%d", bus, dev)
+                _spi_last_target = (bus, dev)
+            return spi
+        except Exception as e:
+            last_error = e
+    raise RuntimeError(f"Unable to open LED SPI device ({last_error})")
 
 def _encode_byte(b: int) -> list[int]:
     """Encode one byte as 8 SPI bytes using WS2812B bit timing."""
