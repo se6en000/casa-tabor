@@ -64,6 +64,7 @@ function useSpeechInput({
   const modeRef            = useRef<STTMode>('unknown')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef     = useRef<any>(null)
+  const webspeechRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const silenceTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastInterimRef     = useRef('')
   const lastInterimTimeRef = useRef(0)
@@ -108,6 +109,12 @@ function useSpeechInput({
     }
   }
   const stopSilenceTimer = () => { if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
+  const stopWebSpeechRestartTimer = useCallback(() => {
+    if (webspeechRestartTimerRef.current) {
+      clearTimeout(webspeechRestartTimerRef.current)
+      webspeechRestartTimerRef.current = null
+    }
+  }, [])
 
   // No deps — uses only refs, so triggerFinal/startBridge are created once and never stale
   const handleFinalTranscript = useCallback((transcript: string) => {
@@ -133,21 +140,19 @@ function useSpeechInput({
   const triggerFinal = useCallback((text: string) => {
     stopWS()
     stopSilenceTimer()
+    stopWebSpeechRestartTimer()
     setPhaseSync('processing')
     const finalText = text.trim() || lastInterimRef.current.trim()
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     handleFinalTranscript(finalText)
-  }, [handleFinalTranscript])
+  }, [handleFinalTranscript, stopWebSpeechRestartTimer])
 
   // ── Web Speech API path (Safari / iOS) ──────────────────────────────────
   const startWebSpeech = useCallback(() => {
     if (!WebSpeech || !activeRef.current) return
-    // Kill any lingering instance to prevent duplicate ghost listeners
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop() } catch { /* ignore */ }
-      recognitionRef.current = null
-    }
+    if (recognitionRef.current) return
+    stopWebSpeechRestartTimer()
     setPhaseSync('listening')
 
     const recognition = new WebSpeech()
@@ -171,7 +176,6 @@ function useSpeechInput({
         lastInterimRef.current = ''
         try { recognition.stop() } catch { /* ignore */ }
         triggerFinal(finalAccum.trim())
-        if (activeRef.current) setTimeout(() => startWebSpeech(), 300)
         return
       }
 
@@ -189,7 +193,6 @@ function useSpeechInput({
           lastInterimRef.current = ''
           try { recognition.stop() } catch { /* ignore */ }
           triggerFinal(toSend)
-          if (activeRef.current) setTimeout(() => startWebSpeech(), 300)
         }
       }, SILENCE_MS)
     }
@@ -199,14 +202,20 @@ function useSpeechInput({
         recognitionRef.current = null
       }
       // 'no-speech' and 'aborted' are expected — no-speech = silence, aborted = we called stop()
-      if (e.error === 'no-speech' || e.error === 'aborted') {
-        if (activeRef.current && phaseRef.current !== 'processing') {
-          setTimeout(() => startWebSpeech(), 250)
-        }
-        return
-      }
+      if (e.error === 'no-speech' || e.error === 'aborted') return
       console.warn('[WebSpeech] error', e.error)
-      if (activeRef.current) setTimeout(() => startWebSpeech(), 500)
+      if (
+        activeRef.current &&
+        phaseRef.current !== 'processing' &&
+        !webspeechRestartTimerRef.current
+      ) {
+        webspeechRestartTimerRef.current = setTimeout(() => {
+          webspeechRestartTimerRef.current = null
+          if (activeRef.current && phaseRef.current !== 'processing' && !recognitionRef.current) {
+            startWebSpeech()
+          }
+        }, 500)
+      }
     }
 
     recognition.onend = () => {
@@ -215,8 +224,17 @@ function useSpeechInput({
       }
       // continuous=true can still stop on silence — restart transparently
       // Use phaseRef (not phase) to avoid stale closure
-      if (activeRef.current && phaseRef.current !== 'processing') {
-        setTimeout(() => startWebSpeech(), 150)
+      if (
+        activeRef.current &&
+        phaseRef.current !== 'processing' &&
+        !webspeechRestartTimerRef.current
+      ) {
+        webspeechRestartTimerRef.current = setTimeout(() => {
+          webspeechRestartTimerRef.current = null
+          if (activeRef.current && phaseRef.current !== 'processing' && !recognitionRef.current) {
+            startWebSpeech()
+          }
+        }, 150)
       }
     }
 
@@ -227,17 +245,29 @@ function useSpeechInput({
         recognitionRef.current = null
       }
       console.warn('[WebSpeech] start failed', err)
-      if (activeRef.current) setTimeout(() => startWebSpeech(), 300)
+      if (
+        activeRef.current &&
+        phaseRef.current !== 'processing' &&
+        !webspeechRestartTimerRef.current
+      ) {
+        webspeechRestartTimerRef.current = setTimeout(() => {
+          webspeechRestartTimerRef.current = null
+          if (activeRef.current && phaseRef.current !== 'processing' && !recognitionRef.current) {
+            startWebSpeech()
+          }
+        }, 300)
+      }
     }
-  }, [WebSpeech, triggerFinal]) // all state accessed via refs
+  }, [WebSpeech, triggerFinal, stopWebSpeechRestartTimer]) // all state accessed via refs
 
   const stopWebSpeech = useCallback(() => {
     stopSilenceTimer()
+    stopWebSpeechRestartTimer()
     if (recognitionRef.current) {
       try { recognitionRef.current.stop() } catch { /* ignore */ }
       recognitionRef.current = null
     }
-  }, [])
+  }, [stopWebSpeechRestartTimer])
 
   // ── Bridge path (Pi / Chromium) ─────────────────────────────────────────
   const startBridge = useCallback(() => {
