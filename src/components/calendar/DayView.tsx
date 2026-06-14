@@ -285,9 +285,9 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
             </p>
             <div className="space-y-2">
               {awayEvents.map(e => (
-                <div key={e.id} className="px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200">
+                <div key={e.id} className="px-3 py-2.5 rounded-lg bg-casa-surface border border-casa-border">
                   <p className="text-body-sm font-medium text-casa-text leading-snug">{e.title}</p>
-                  <p className="text-caption text-amber-700 font-medium mt-0.5 flex items-center gap-1">
+                  <p className="text-caption text-casa-gold font-semibold mt-0.5 flex items-center gap-1">
                     <Clock size={11} />
                     Leave by {format(parseISO(e.enrichment!.departure_time!), 'h:mm a')}
                     {e.enrichment?.drive_time_mins && ` · ${e.enrichment.drive_time_mins} min drive`}
@@ -311,11 +311,11 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
             </p>
             <div className="space-y-2">
               {dayConflicts.map(c => (
-                <div key={c.id} className="px-3 py-2.5 rounded-lg bg-red-50 border border-red-200">
-                  <p className="text-body-sm text-red-800 leading-snug">{c.description}</p>
+                <div key={c.id} className="px-3 py-2.5 rounded-lg bg-casa-surface border border-casa-border border-l-4 border-l-casa-error">
+                  <p className="text-body-sm text-casa-text leading-snug">{c.description}</p>
                   <button
                     onClick={() => resolveConflict(c.id, 'dismissed from day view')}
-                    className="text-caption text-red-500 hover:text-red-700 mt-1 transition-colors"
+                    className="text-caption text-casa-muted hover:text-red-500 mt-1 transition-colors"
                   >
                     Dismiss
                   </button>
@@ -341,10 +341,10 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
                   <div
                     key={item.id}
                     className={cn(
-                      'px-3 py-2.5 rounded-lg border',
-                      item.priority === 3 ? 'bg-red-50 border-red-200' :
-                      item.priority === 2 ? 'bg-amber-50 border-amber-200' :
-                      'bg-blue-50 border-blue-100'
+                      'px-3 py-2.5 rounded-lg border border-l-4 bg-casa-surface border-casa-border',
+                      item.priority === 3 ? 'border-l-casa-error' :
+                      item.priority === 2 ? 'border-l-casa-gold' :
+                      'border-l-blue-500'
                     )}
                   >
                     <div className="flex items-start gap-2">
