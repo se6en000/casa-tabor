@@ -195,13 +195,24 @@ function useSpeechInput({
     }
 
     recognition.onerror = (e: any) => {
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null
+      }
       // 'no-speech' and 'aborted' are expected — no-speech = silence, aborted = we called stop()
-      if (e.error === 'no-speech' || e.error === 'aborted') return
+      if (e.error === 'no-speech' || e.error === 'aborted') {
+        if (activeRef.current && phaseRef.current !== 'processing') {
+          setTimeout(() => startWebSpeech(), 250)
+        }
+        return
+      }
       console.warn('[WebSpeech] error', e.error)
       if (activeRef.current) setTimeout(() => startWebSpeech(), 500)
     }
 
     recognition.onend = () => {
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null
+      }
       // continuous=true can still stop on silence — restart transparently
       // Use phaseRef (not phase) to avoid stale closure
       if (activeRef.current && phaseRef.current !== 'processing') {
@@ -209,7 +220,15 @@ function useSpeechInput({
       }
     }
 
-    recognition.start()
+    try {
+      recognition.start()
+    } catch (err) {
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null
+      }
+      console.warn('[WebSpeech] start failed', err)
+      if (activeRef.current) setTimeout(() => startWebSpeech(), 300)
+    }
   }, [WebSpeech, triggerFinal]) // all state accessed via refs
 
   const stopWebSpeech = useCallback(() => {
