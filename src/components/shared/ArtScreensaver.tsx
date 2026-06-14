@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useArtwork } from '../../hooks/useArtwork'
 import { generateAdaptiveMatColor } from '../../utils/colorUtils'
 import { getTextureStyle } from '../../utils/textureUtils'
+import { useTheme } from '../../contexts/ThemeContext'
 
 const SENSOR = 'http://127.0.0.1:8765'
 const EDGE_MAT_PX = 100
 const MIN_FRAME_PX = 320
+const MIDNIGHT_MAT_COLOR = '#0F141B'
 
 interface Props {
   onDismiss: () => void
@@ -17,6 +19,7 @@ interface Props {
 
 export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidthVw = 55, artDimOffset = 30, adaptiveMatColor = true }: Props) {
   const { artwork, loaded, onLoad, onError, next } = useArtwork(rotationMins * 60)
+  const { isMidnightActive } = useTheme()
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)
   const [imageRatio, setImageRatio] = useState(16 / 9)
@@ -86,6 +89,13 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   }, [])
 
   useEffect(() => {
+    if (isMidnightActive) {
+      setMatTransition(false)
+      setMatColor(MIDNIGHT_MAT_COLOR)
+      setTimeout(() => setMatTransition(true), 50)
+      return
+    }
+
     if (!artwork?.imageUrl || !adaptiveMatColor) return
     setMatTransition(false)
     const timeout = setTimeout(async () => {
@@ -98,7 +108,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
       }
     }, 50)
     return () => clearTimeout(timeout)
-  }, [artwork?.id, artwork?.imageUrl, adaptiveMatColor])
+  }, [artwork?.id, artwork?.imageUrl, adaptiveMatColor, isMidnightActive])
 
   function handleImgLoad(e: React.SyntheticEvent<HTMLImageElement>) {
     const img = e.currentTarget
@@ -244,7 +254,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
         )}
 
         {artwork && loaded && (
-          <div className="absolute bottom-4 right-5 text-right pointer-events-none" style={{ color: '#5a4f4a' }}>
+          <div className="absolute bottom-4 right-5 text-right pointer-events-none" style={{ color: isMidnightActive ? '#D7D2C8' : '#5a4f4a' }}>
             <p className="text-caption italic leading-tight" style={{ fontFamily: 'Georgia, serif', fontSize: '0.7rem', fontWeight: 500, letterSpacing: '0.3px' }}>
               {artwork.title}
             </p>
@@ -255,12 +265,12 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
         )}
 
         {artwork && loaded && (
-          <div className="absolute left-1/2 -translate-x-1/2 bottom-3 text-[0.55rem] text-[#8f8678] pointer-events-none">
+          <div className="absolute left-1/2 -translate-x-1/2 bottom-3 text-[0.55rem] pointer-events-none" style={{ color: isMidnightActive ? '#A59C8F' : '#8f8678' }}>
             swipe left for next piece
           </div>
         )}
 
-        <div className="absolute bottom-3 left-4 pointer-events-none" style={{ color: '#9b9285', fontSize: '0.55rem', fontFamily: 'Georgia, serif' }}>
+        <div className="absolute bottom-3 left-4 pointer-events-none" style={{ color: isMidnightActive ? '#A89E90' : '#9b9285', fontSize: '0.55rem', fontFamily: 'Georgia, serif' }}>
           tap to wake · say alexa
         </div>
       </div>

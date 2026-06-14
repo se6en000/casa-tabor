@@ -7,7 +7,7 @@ import TabletSidebar from './components/layout/TabletSidebar'
 import { useRoomTone } from './hooks/useRoomTone'
 import { useTravelScan } from './hooks/useTravelScan'
 import { usePushNotifications } from './hooks/usePushNotifications'
-import { ThemeProvider } from './contexts/ThemeContext'
+import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 import { TopBarC } from './components/shared/TopBar'
 import PinGate from './components/shared/PinGate'
 import AIChatDrawer from './components/shared/AIChatDrawer'
@@ -101,7 +101,8 @@ function GlobalAIDrawer({
 }
 
 function AppShell() {
-  useRoomTone()
+  const { currentZone } = useRoomTone()
+  const { setRoomToneZone } = useTheme()
   useTravelScan()
   usePushNotifications()
 
@@ -115,6 +116,10 @@ function AppShell() {
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
   const location = useLocation()
   const hideFab = location.pathname.startsWith('/settings') || screensaverActive
+
+  useEffect(() => {
+    setRoomToneZone(currentZone)
+  }, [currentZone, setRoomToneZone])
 
   useEffect(() => {
     const onSleep = () => setScreensaverActive(true)

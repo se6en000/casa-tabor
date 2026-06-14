@@ -3,7 +3,7 @@ import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Image,
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
-import { useTheme, PRESETS, DEFAULTS, type ThemeColors } from '../contexts/ThemeContext'
+import { useTheme, PRESETS, DEFAULTS, MIDNIGHT_GALLERY_DEFAULTS, type ThemeColors } from '../contexts/ThemeContext'
 import {
   useRoomTone,
   getZoneForHour,
@@ -232,7 +232,19 @@ export default function DisplaySettingsPage() {
   const qc = useQueryClient()
   const { cfg: liveCfg, currentZone, sensorData } = useRoomTone()
   const { settings, update: updateScreensaver } = useScreensaverSettings()
-  const { colors, setColor, applyPreset, resetToDefaults, isDefault } = useTheme()
+  const {
+    colors,
+    activeTarget,
+    autoMidnight,
+    forceMidnight,
+    setAutoMidnight,
+    setForceMidnight,
+    setActiveTarget,
+    setColor,
+    applyPreset,
+    resetToDefaults,
+    isDefault,
+  } = useTheme()
   const [config, setConfig] = useState<DisplayConfig>(DISPLAY_DEFAULTS)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [previewZone, setPreviewZone] = useState<RoomToneZone>('day')
@@ -318,6 +330,32 @@ export default function DisplaySettingsPage() {
         {/* Preset palettes */}
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
           <SectionHeader icon={Palette} label="Presets" />
+          <div className="flex items-center gap-2 mb-4">
+            <button
+              type="button"
+              onClick={() => setActiveTarget('day')}
+              className={cn(
+                'px-3 py-1.5 rounded-full text-caption font-medium border transition-colors',
+                activeTarget === 'day'
+                  ? 'bg-casa-navy text-white border-casa-navy'
+                  : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy'
+              )}
+            >
+              Day Palette
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTarget('midnight')}
+              className={cn(
+                'px-3 py-1.5 rounded-full text-caption font-medium border transition-colors',
+                activeTarget === 'midnight'
+                  ? 'bg-casa-navy text-white border-casa-navy'
+                  : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy'
+              )}
+            >
+              Midnight Gallery Palette
+            </button>
+          </div>
           <div className="grid grid-cols-3 gap-3">
             {PRESETS.map(preset => {
               const active = Object.entries(preset.colors).every(
@@ -350,9 +388,28 @@ export default function DisplaySettingsPage() {
           </div>
         </div>
 
+        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
+          <SectionHeader icon={Sunset} label="Midnight Gallery Activation" />
+          <Toggle
+            checked={autoMidnight}
+            onChange={setAutoMidnight}
+            label="Auto-switch at night"
+            desc="Automatically switch to Midnight Gallery during Night and Late-night zones."
+          />
+          <Toggle
+            checked={forceMidnight}
+            onChange={setForceMidnight}
+            label="Manual override: force Midnight Gallery"
+            desc="Keep Midnight Gallery on all day until you turn this off."
+          />
+        </div>
+
         {/* Individual color pickers */}
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
           <SectionHeader icon={Palette} label="Custom Colors" />
+          <p className="text-caption text-casa-muted mb-2">
+            Editing: <span className="font-medium text-casa-navy">{activeTarget === 'midnight' ? 'Midnight Gallery palette' : 'Day palette'}</span>
+          </p>
           <div className="divide-y divide-casa-divider">
             {COLOR_FIELDS.map(({ key, label, desc }) => (
               <div key={key} className="flex items-center gap-4 px-0 py-3.5">
@@ -379,9 +436,9 @@ export default function DisplaySettingsPage() {
                   <code className="text-caption font-mono text-casa-muted bg-casa-bg px-2 py-1 rounded-md">
                     {colors[key].toUpperCase()}
                   </code>
-                  {colors[key] !== DEFAULTS[key] && (
+                  {colors[key] !== (activeTarget === 'midnight' ? MIDNIGHT_GALLERY_DEFAULTS[key] : DEFAULTS[key]) && (
                     <button
-                      onClick={() => setColor(key, DEFAULTS[key])}
+                      onClick={() => setColor(key, activeTarget === 'midnight' ? MIDNIGHT_GALLERY_DEFAULTS[key] : DEFAULTS[key])}
                       title="Reset this color"
                       className="text-casa-muted hover:text-casa-gold transition-colors"
                     >
@@ -423,15 +480,17 @@ export default function DisplaySettingsPage() {
         {!isDefault && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-center justify-between">
             <div>
-              <p className="text-body-sm font-semibold text-amber-800">Custom theme active</p>
-              <p className="text-caption text-amber-600 mt-0.5">Restore original Casa Tabor colors</p>
+              <p className="text-body-sm font-semibold text-amber-800">Custom {activeTarget === 'midnight' ? 'Midnight Gallery' : 'day'} palette active</p>
+              <p className="text-caption text-amber-600 mt-0.5">
+                Restore original {activeTarget === 'midnight' ? 'Midnight Gallery' : 'Casa Tabor day'} colors
+              </p>
             </div>
             <button
               onClick={resetToDefaults}
               className="flex items-center gap-2 bg-white border border-amber-300 text-amber-700 text-body-sm font-semibold px-4 py-2 rounded-xl hover:bg-amber-50 transition-colors shadow-sm"
             >
               <RotateCcw size={14} />
-              Reset to defaults
+              Reset palette defaults
             </button>
           </div>
         )}
