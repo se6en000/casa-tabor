@@ -968,7 +968,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
               <div
                 className={cn(
-                  'ai-presence-composer relative overflow-hidden flex items-end gap-2 bg-casa-bg rounded-xl border border-casa-border px-3 py-2 transition-all duration-300',
+                  'ai-presence-composer relative flex items-end gap-2 bg-casa-bg rounded-xl border border-casa-border px-3 py-2 transition-all duration-300',
                   aiPresence === 'listening' && 'ai-presence-listening',
                   aiPresence === 'voice_active' && 'ai-presence-voice',
                   aiPresence === 'processing' && 'ai-presence-processing',
