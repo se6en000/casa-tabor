@@ -8,7 +8,7 @@ const RECONNECT_MS = 3000          // backoff before reconnecting WS
 /**
  * Connects to the STT bridge WebSocket while the AI drawer is closed.
  * Listens for {type: 'wake'} push events — no polling.
- * - If screensaver is active: wake word dismisses the screensaver
+ * - If screensaver is active: wake word dismisses screensaver and opens AI drawer
  * - Otherwise: wake word opens the AI drawer
  * Silently no-ops when the bridge is unreachable (non-Pi environments).
  */
@@ -71,9 +71,13 @@ export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean, ena
 
           if (screensaverActiveRef.current) {
             document.dispatchEvent(new CustomEvent('wake-kiosk'))
-          } else {
-            document.dispatchEvent(new CustomEvent('open-ai-chat'))
+            // Single wake phrase should both wake screen and start listening.
+            setTimeout(() => {
+              document.dispatchEvent(new CustomEvent('open-ai-chat'))
+            }, 120)
+            return
           }
+          document.dispatchEvent(new CustomEvent('open-ai-chat'))
         } catch { /* ignore */ }
       }
 
