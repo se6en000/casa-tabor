@@ -359,7 +359,7 @@ html.midnight-gallery .stacked-event-title {
 }
 
 .ai-presence-voice::after {
-  padding: calc(2px + (var(--voice-level) * 4px));
+  padding: 10px;
   opacity: calc(0.72 + (var(--voice-level) * 0.28));
   animation-duration: 0.44s;
 }
