@@ -1028,14 +1028,6 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                   <Send size={14} />
                 </button>
               </div>
-              {(aiPresence === 'listening' || aiPresence === 'voice_active' || aiPresence === 'processing') && (
-                <div className={cn('ai-presence-wave mt-1.5', aiPresence === 'voice_active' && 'active')}>
-                  <span className="bar" />
-                  <span className="bar" />
-                  <span className="bar" />
-                  <span className="bar" />
-                </div>
-              )}
               <p className="text-caption text-casa-muted mt-1.5 text-center opacity-60">
                 {IS_SAFE_MODE
                   ? 'Safe mode enabled: voice capture is disabled'
