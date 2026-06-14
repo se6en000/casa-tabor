@@ -42,7 +42,7 @@ function ItemRow({ item, onToggle, onDelete }: {
       </button>
       <div className="flex-1 min-w-0">
         <span className={cn(
-          'text-body text-casa-navy',
+          'text-body text-casa-text',
           item.checked && 'line-through text-casa-muted'
         )}>
           {item.name}
@@ -115,7 +115,7 @@ export default function GroceryPage() {
               <ShoppingCart size={20} className="text-casa-gold" />
             </div>
             <div>
-              <h1 className="font-display text-heading text-casa-navy">Grocery List</h1>
+              <h1 className="font-display text-heading text-casa-text">Grocery List</h1>
               <p className="text-caption text-casa-muted">
                 {uncheckedCount} item{uncheckedCount !== 1 ? 's' : ''} remaining
                 {checkedCount > 0 && ` · ${checkedCount} done`}
@@ -152,7 +152,7 @@ export default function GroceryPage() {
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center px-8">
             <ShoppingCart size={40} className="text-casa-gold opacity-40" />
-            <p className="text-body font-semibold text-casa-navy">Your list is empty</p>
+            <p className="text-body font-semibold text-casa-text">Your list is empty</p>
             <p className="text-body-sm text-casa-muted">Add items below or ask the AI.</p>
           </div>
         ) : (
@@ -191,7 +191,7 @@ export default function GroceryPage() {
             onChange={e => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Add an item…"
-            className="flex-1 bg-transparent text-body text-casa-navy placeholder:text-casa-muted outline-none"
+            className="flex-1 bg-transparent text-body text-casa-text placeholder:text-casa-muted outline-none"
           />
           <button
             type="button"

@@ -83,7 +83,7 @@ export default function PrepActionSection() {
         })}
         className="w-full flex items-center justify-between"
       >
-        <div className="flex items-center gap-1.5 text-body font-medium text-casa-navy">
+        <div className="flex items-center gap-1.5 text-body font-semibold text-casa-text">
           <ClipboardList size={15} className="text-casa-gold" />
           Prep &amp; Action
           <span className="ml-1 text-caption font-bold bg-casa-gold/20 text-casa-gold px-1.5 py-0.5 rounded-full">
@@ -168,7 +168,7 @@ export default function PrepActionSection() {
                       {/* Snooze */}
                       <button
                         onClick={() => snooze(item.id)}
-                        className="shrink-0 text-casa-muted hover:text-casa-navy transition-colors mt-0.5 px-1"
+                        className="shrink-0 text-casa-muted hover:text-casa-text transition-colors mt-0.5 px-1"
                         title="Snooze until tomorrow"
                       >
                         <Moon size={11} strokeWidth={1.8} />

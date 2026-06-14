@@ -262,9 +262,6 @@ button:active, a:active, [role="button"]:active {
 }
 
 /* ── Midnight Gallery readability + input surfaces ───────────────────── */
-html.midnight-gallery .text-casa-navy {
-  color: #dbe5f2 !important;
-}
 
 html.midnight-gallery input:not([type='color']):not([type='checkbox']):not([type='radio']):not([type='range']),
 html.midnight-gallery textarea,
@@ -278,4 +275,31 @@ html.midnight-gallery [contenteditable="true"] {
 html.midnight-gallery input::placeholder,
 html.midnight-gallery textarea::placeholder {
   color: var(--color-casa-muted) !important;
+}
+
+html.midnight-gallery .prep-alert-card,
+html.midnight-gallery .conflict-group {
+  background-color: #121923 !important;
+  border-color: #33435a !important;
+}
+
+html.midnight-gallery .prep-alert-card p,
+html.midnight-gallery .prep-alert-card span,
+html.midnight-gallery .conflict-group p,
+html.midnight-gallery .conflict-group span {
+  color: var(--color-casa-text);
+}
+
+html.midnight-gallery .prep-alert-card .text-casa-muted,
+html.midnight-gallery .conflict-group .text-casa-muted {
+  color: var(--color-casa-muted) !important;
+}
+
+html.midnight-gallery .prep-alert-action:hover,
+html.midnight-gallery .conflict-action:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+html.midnight-gallery .conflict-row:hover {
+  background-color: rgba(255, 255, 255, 0.04) !important;
 }

@@ -466,7 +466,7 @@ function TimelineRow({
 
             return (
               <>
-                <p className="font-body font-semibold text-casa-navy truncate">{cleanTitle}</p>
+                <p className="font-body font-semibold text-casa-text truncate">{cleanTitle}</p>
                 {event.members && event.members.length > 0 && (
                   <div className="flex items-center gap-1 shrink-0">
                     {/* Owner as full pill */}

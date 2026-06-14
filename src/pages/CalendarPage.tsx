@@ -102,7 +102,7 @@ export default function CalendarPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={goToToday}
-            className="px-3 py-1.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-surface transition-colors"
+            className="px-3 py-1.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-text hover:bg-casa-surface transition-colors"
           >
             Today
           </button>
@@ -116,20 +116,20 @@ export default function CalendarPage() {
               </button>
             </>
           )}
-          <h2 className="font-display text-heading text-casa-navy ml-2">
+          <h2 className="font-display text-heading text-casa-text ml-2">
             {headerLabel}
           </h2>
         </div>
 
-        <div className="hidden md:flex gap-1 bg-casa-divider rounded-button p-1">
+        <div className="hidden md:flex gap-1 bg-casa-surface border border-casa-border rounded-button p-1">
           {views.map((v) => (
             <button
               key={v.key}
               onClick={() => setActiveView(v.key)}
               className={`px-4 py-1.5 rounded-button text-body-sm font-medium transition-colors ${
                 activeView === v.key
-                  ? 'bg-casa-surface text-casa-navy shadow-card'
-                  : 'text-casa-muted hover:text-casa-text'
+                  ? 'bg-casa-navy text-white shadow-card'
+                  : 'text-casa-text hover:bg-casa-bg'
               }`}
             >
               {v.label}

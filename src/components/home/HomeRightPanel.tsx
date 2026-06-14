@@ -314,10 +314,10 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
                 {notifications.slice(0, 6).map(n => (
                   <div key={n.id} className="py-2.5 border-b border-casa-divider last:border-0 flex items-start gap-2 group">
                     <div className="flex-1 min-w-0">
-                      <p className={cn('text-body-sm font-medium leading-snug', n.read ? 'text-casa-muted' : 'text-casa-navy')}>
+                      <p className={cn('text-body-sm font-medium leading-snug', n.read ? 'text-casa-muted' : 'text-casa-text')}>
                         {n.body ?? n.title}
                       </p>
-                      <p className="text-caption text-casa-muted/60 mt-0.5">
+                      <p className="text-caption text-casa-muted mt-0.5">
                         {format(new Date(n.created_at), 'h:mm a')}
                       </p>
                     </div>

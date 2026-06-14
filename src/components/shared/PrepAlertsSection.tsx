@@ -41,7 +41,7 @@ export default function PrepAlertsSection({ className }: { className?: string })
               exit={{ opacity: 0, height: 0, marginTop: 0, overflow: 'hidden' }}
               transition={{ duration: 0.2 }}
               className={cn(
-                'flex items-start gap-3 px-4 py-3 rounded-card border text-body-sm',
+                'prep-alert-card flex items-start gap-3 px-4 py-3 rounded-card border text-body-sm',
                 borderBg,
               )}
             >
@@ -76,7 +76,7 @@ export default function PrepAlertsSection({ className }: { className?: string })
               <div className="shrink-0 flex items-center gap-1">
                 <button
                   onClick={() => snooze(item.id)}
-                  className="text-caption font-medium px-2 py-1 rounded-md text-casa-muted hover:text-casa-navy hover:bg-white/60 transition-colors"
+                  className="prep-alert-action text-caption font-medium px-2 py-1 rounded-md text-casa-muted hover:text-casa-navy hover:bg-white/60 transition-colors"
                   title="Snooze until tomorrow morning"
                 >
                   Snooze
@@ -84,7 +84,7 @@ export default function PrepAlertsSection({ className }: { className?: string })
                 <span className="text-casa-border text-caption">|</span>
                 <button
                   onClick={() => dismiss(item.id)}
-                  className="text-caption font-medium px-2 py-1 rounded-md text-casa-muted hover:text-red-600 hover:bg-white/60 transition-colors"
+                  className="prep-alert-action text-caption font-medium px-2 py-1 rounded-md text-casa-muted hover:text-red-600 hover:bg-white/60 transition-colors"
                   title="Permanently dismiss"
                 >
                   Dismiss

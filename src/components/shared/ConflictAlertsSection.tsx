@@ -34,7 +34,7 @@ function ConflictGroup({
   const cfg = TYPE_CONFIG[type] ?? DEFAULT_CONFIG
 
   return (
-    <div className={cn('rounded-card border overflow-hidden', cfg.borderBg)}>
+    <div className={cn('conflict-group rounded-card border overflow-hidden', cfg.borderBg)}>
       <button
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:brightness-95 transition-all"
@@ -131,7 +131,7 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
       tabIndex={0}
       onClick={handleNavigate}
       onKeyDown={e => { if (e.key === 'Enter') handleNavigate(e as unknown as React.MouseEvent) }}
-      className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-black/5 transition-colors group cursor-pointer"
+      className="conflict-row w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-black/5 transition-colors group cursor-pointer"
       title="View in calendar"
     >
       <span className="shrink-0 w-6 h-6 rounded-full bg-white/70 border border-current/15 flex items-center justify-center text-caption font-bold text-casa-navy">
@@ -153,7 +153,7 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
       <div className="shrink-0 flex items-center gap-1" onClick={e => e.stopPropagation()}>
         <button
           onClick={() => onSnooze(conflict.id)}
-          className="text-caption font-medium px-2 py-1 rounded-md text-casa-muted hover:text-casa-navy hover:bg-white/60 transition-colors"
+          className="conflict-action text-caption font-medium px-2 py-1 rounded-md text-casa-muted hover:text-casa-navy hover:bg-white/60 transition-colors"
           title="Snooze until tomorrow"
         >
           Snooze
@@ -161,7 +161,7 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
         <span className="text-casa-border text-caption">|</span>
         <button
           onClick={() => onDismiss(conflict.id)}
-          className="text-caption font-medium px-2 py-1 rounded-md text-casa-muted hover:text-red-600 hover:bg-white/60 transition-colors"
+          className="conflict-action text-caption font-medium px-2 py-1 rounded-md text-casa-muted hover:text-red-600 hover:bg-white/60 transition-colors"
           title="Dismiss permanently"
         >
           Dismiss
