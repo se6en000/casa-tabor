@@ -109,16 +109,34 @@ Deno.serve(async (req) => {
     const sent = results.filter(r => r.status === 'fulfilled').length
     const failed = results.length - sent
 
-    // Remove gone subscriptions (HTTP 410 = unsubscribed)
-    const gone = results
-      .map((r, i) => r.status === 'rejected' && (r as PromiseRejectedResult).reason?.status === 410 ? subs[i].endpoint : null)
-      .filter(Boolean)
+    const errors = results
+      .map((r, i) => {
+        if (r.status !== 'rejected') return null
+        const reason = (r as PromiseRejectedResult).reason as { status?: number; message?: string }
+        return {
+          endpoint: subs[i].endpoint,
+          status: reason?.status ?? 0,
+          message: reason?.message ?? String(reason),
+        }
+      })
+      .filter((e): e is { endpoint: string; status: number; message: string } => Boolean(e))
+
+    // Remove subscriptions that are no longer valid
+    const gone = errors
+      .filter(e => e.status === 404 || e.status === 410 || e.status === 400)
+      .map(e => e.endpoint)
 
     if (gone.length > 0) {
       await supabase.from('push_subscriptions').delete().in('endpoint', gone)
     }
 
-    return json({ ok: true, sent, failed })
+    const errorSummary = errors.reduce<Record<string, number>>((acc, e) => {
+      const key = String(e.status || 'unknown')
+      acc[key] = (acc[key] ?? 0) + 1
+      return acc
+    }, {})
+
+    return json({ ok: true, sent, failed, error_summary: errorSummary, sample_errors: errors.slice(0, 5) })
   } catch (err) {
     return json({ ok: false, error: String(err) }, 500)
   }
@@ -244,7 +262,7 @@ function concat(...arrays: Uint8Array[]): Uint8Array {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, content-type',
+  'Access-Control-Allow-Headers': 'authorization, content-type, x-client-info, apikey',
 }
 
 function json(data: unknown, status = 200) {
