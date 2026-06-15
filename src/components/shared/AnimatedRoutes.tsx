@@ -8,6 +8,7 @@ import GoogleServicesPage from '../../pages/GoogleServicesPage'
 import AISettingsPage from '../../pages/AISettingsPage'
 import FamilySettingsPage from '../../pages/FamilySettingsPage'
 import DisplaySettingsPage from '../../pages/DisplaySettingsPage'
+import ArtModeSettingsPage from '../../pages/ArtModeSettingsPage'
 import SmsSettingsPage from '../../pages/SmsSettingsPage'
 import MusicPage from '../../pages/MusicPage'
 import TabletPrototypePage from '../../pages/TabletPrototypePage'
@@ -48,6 +49,7 @@ export default function AnimatedRoutes() {
           <Route path="sms"        element={<SmsSettingsPage />} />
           <Route path="music"      element={<MusicPage />} />
           <Route path="display"    element={<DisplaySettingsPage />} />
+          <Route path="art-mode"   element={<ArtModeSettingsPage />} />
           <Route path="screensaver" element={<Navigate to="/settings/display" replace />} />
           <Route path="theme"      element={<Navigate to="/settings/display" replace />} />
           <Route path="status"     element={<StatusDashboardPage />} />

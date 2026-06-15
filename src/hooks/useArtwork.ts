@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { loadArtFeedPrefs, MEDIA_OPTIONS, type ArtFeedPrefs } from './useArtFeedPrefs'
 
 const MET_API = 'https://collectionapi.metmuseum.org/public/collection/v1'
 const ARTIC_API = 'https://api.artic.edu/api/v1'
@@ -35,6 +36,74 @@ const ARTIC_QUERIES = [
 
 // Only painted / drawn mediums — excludes prints, photos, ceramics, textiles
 const PAINTED_MEDIUM = /\boil\b|watercolou?r|gouache|pastel|tempera|acrylic|fresco|\bchalk\b|ink wash|\bgraphite\b|pencil on|paint/i
+
+// Build dynamic queries and filters from user art feed preferences
+function buildQueriesFromPrefs(prefs: ArtFeedPrefs): {
+  metQs: string[]
+  articQs: string[]
+  mediumFilter: RegExp
+  yearFrom: number | null
+  yearTo: number | null
+} {
+  // Medium regex from selected types, or fall back to broad painted filter
+  let mediumFilter: RegExp
+  if (prefs.mediaTypes.length > 0) {
+    const patterns = prefs.mediaTypes
+      .map(id => MEDIA_OPTIONS.find(o => o.id === id)?.pattern?.source)
+      .filter((s): s is string => Boolean(s))
+    mediumFilter = patterns.length > 0 ? new RegExp(patterns.join('|'), 'i') : PAINTED_MEDIUM
+  } else {
+    mediumFilter = PAINTED_MEDIUM
+  }
+
+  const mediaKeywords = prefs.mediaTypes.length > 0
+    ? prefs.mediaTypes
+        .map(id => MEDIA_OPTIONS.find(o => o.id === id)?.query || '')
+        .filter(Boolean)
+        .slice(0, 2)
+    : []
+
+  const cultureStr = prefs.cultures.length > 0 ? prefs.cultures[0] : ''
+
+  let metQs: string[]
+  let articQs: string[]
+
+  if (prefs.artists.length > 0) {
+    metQs = prefs.artists.slice(0, 5).map(artist => {
+      let q = artist
+      if (mediaKeywords.length > 0) q += ` ${mediaKeywords[0]}`
+      if (cultureStr) q += ` ${cultureStr}`
+      return q
+    })
+    articQs = prefs.artists.slice(0, 3).map(artist => {
+      let q = artist.toLowerCase()
+      if (mediaKeywords.length > 0) q += ` ${mediaKeywords[0]}`
+      return q
+    })
+  } else {
+    // Use curated fallback queries
+    metQs = pickRandom(MET_QUERIES, 3)
+    articQs = pickRandom(ARTIC_QUERIES, 2)
+    if (cultureStr) {
+      metQs = [...metQs, cultureStr]
+      articQs = [...articQs, cultureStr.toLowerCase()]
+    }
+    if (mediaKeywords.length > 0) {
+      metQs = [...metQs.slice(0, 2), ...mediaKeywords.map(m => `${m} landscape`)]
+    }
+  }
+
+  if (!prefs.useMet) metQs = []
+  if (!prefs.useArtic) articQs = []
+
+  return {
+    metQs: metQs.slice(0, 6),
+    articQs: articQs.slice(0, 4),
+    mediumFilter,
+    yearFrom: prefs.yearFrom,
+    yearTo: prefs.yearTo,
+  }
+}
 
 // Known-good fallbacks — Florida/tropical/ocean themed public domain paintings
 const FALLBACKS: Artwork[] = [
@@ -125,7 +194,7 @@ function savePrefs(prefs: ArtworkPreferences) {
 
 // ── Fetchers ──────────────────────────────────────────────────────────────────
 
-async function fetchFromMet(query: string): Promise<Artwork[]> {
+async function fetchFromMet(query: string, mediumFilter: RegExp): Promise<Artwork[]> {
   try {
     const res = await fetch(
       `${MET_API}/search?q=${encodeURIComponent(query)}&hasImages=true&isPublicDomain=true`
@@ -141,7 +210,7 @@ async function fetchFromMet(query: string): Promise<Artwork[]> {
           if (!r.ok) return null
           const obj = await r.json()
           if (!obj.primaryImage || !obj.isPublicDomain) return null
-          if (obj.medium && !PAINTED_MEDIUM.test(obj.medium)) return null
+          if (obj.medium && !mediumFilter.test(obj.medium)) return null
           return {
             id: obj.objectID as number,
             title: obj.title || 'Untitled',
@@ -162,7 +231,7 @@ async function fetchFromMet(query: string): Promise<Artwork[]> {
   }
 }
 
-async function fetchFromArtic(query: string): Promise<Artwork[]> {
+async function fetchFromArtic(query: string, mediumFilter: RegExp): Promise<Artwork[]> {
   try {
     const res = await fetch(
       `${ARTIC_API}/artworks/search?q=${encodeURIComponent(query)}&fields=id,title,artist_display,image_id,medium_display,date_display,is_public_domain&limit=25`
@@ -173,7 +242,7 @@ async function fetchFromArtic(query: string): Promise<Artwork[]> {
     const artworks: Artwork[] = []
     for (const item of data.data || []) {
       if (!item.is_public_domain || !item.image_id) continue
-      if (item.medium_display && !PAINTED_MEDIUM.test(item.medium_display)) continue
+      if (item.medium_display && !mediumFilter.test(item.medium_display)) continue
       artworks.push({
         id: (item.id as number) + ARTIC_OFFSET,
         title: item.title || 'Untitled',
@@ -206,29 +275,38 @@ export function useArtwork(rotateSecs = 240) {
     let cancelled = false
     async function load() {
       try {
-        // Pick 3 random Met queries + 2 random ARTIC queries each load cycle
-        const metQs = pickRandom(MET_QUERIES, 3)
-        const articQs = pickRandom(ARTIC_QUERIES, 2)
+        const prefs = loadArtFeedPrefs()
+        const { metQs, articQs, mediumFilter, yearFrom, yearTo } = buildQueriesFromPrefs(prefs)
 
-        const [m1, m2, m3, a1, a2] = await Promise.all([
-          fetchFromMet(metQs[0]),
-          fetchFromMet(metQs[1]),
-          fetchFromMet(metQs[2]),
-          fetchFromArtic(articQs[0]),
-          fetchFromArtic(articQs[1]),
-        ])
+        const fetches = [
+          ...metQs.map(q => fetchFromMet(q, mediumFilter)),
+          ...articQs.map(q => fetchFromArtic(q, mediumFilter)),
+        ]
+        const results = await Promise.all(fetches)
+        let combined = results.flat()
 
-        const combined = [...m1, ...m2, ...m3, ...a1, ...a2]
         // Deduplicate by id
         const seen = new Set<number>()
-        const all = combined.filter(a => {
+        combined = combined.filter(a => {
           if (seen.has(a.id)) return false
           seen.add(a.id)
           return true
         })
 
-        if (!cancelled && all.length > 0) {
-          setArtworks(shuffled(all))
+        // Year range filter
+        if (yearFrom !== null || yearTo !== null) {
+          combined = combined.filter(a => {
+            if (!a.date) return true
+            const year = parseInt(a.date)
+            if (isNaN(year)) return true
+            if (yearFrom !== null && year < yearFrom) return false
+            if (yearTo !== null && year > yearTo) return false
+            return true
+          })
+        }
+
+        if (!cancelled && combined.length > 0) {
+          setArtworks(shuffled(combined))
           setIndex(0)
         } else if (!cancelled) {
           setArtworks(FALLBACKS)

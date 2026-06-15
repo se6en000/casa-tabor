@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Image, ToggleLeft, Sun, RotateCcw } from 'lucide-react'
+import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, RotateCcw } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
@@ -13,7 +13,7 @@ import {
   type DisplayConfig,
   type RoomToneZone,
 } from '../hooks/useRoomTone'
-import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
+
 
 // ── Shared sub-components ──────────────────────────────────────────
 
@@ -168,42 +168,6 @@ function DayTimeline({ cfg }: { cfg: DisplayConfig }) {
   )
 }
 
-// ── Screensaver helper components ─────────────────────────────────
-
-function StepPicker({ value, onChange, min, max, step = 1, unit }: {
-  value: number; onChange: (v: number) => void
-  min: number; max: number; step?: number; unit: string
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <button
-        onClick={() => onChange(Math.max(min, value - step))}
-        className="w-9 h-9 rounded-full bg-casa-bg border border-casa-border text-casa-navy font-semibold font-display text-heading flex items-center justify-center active:scale-95 transition-transform"
-      >−</button>
-      <div className="min-w-[5rem] text-center">
-        <span className="font-display text-display-sm text-casa-navy">{value}</span>
-        <span className="text-caption text-casa-muted ml-1">{unit}</span>
-      </div>
-      <button
-        onClick={() => onChange(Math.min(max, value + step))}
-        className="w-9 h-9 rounded-full bg-casa-bg border border-casa-border text-casa-navy font-semibold font-display text-heading flex items-center justify-center active:scale-95 transition-transform"
-      >+</button>
-    </div>
-  )
-}
-
-function Row({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-4 border-b border-casa-border last:border-0">
-      <div className="flex-1 min-w-0">
-        <p className="text-body-sm font-medium text-casa-navy">{label}</p>
-        {desc && <p className="text-caption text-casa-muted mt-0.5">{desc}</p>}
-      </div>
-      {children}
-    </div>
-  )
-}
-
 // ── Main page ──────────────────────────────────────────────────────
 
 function SliderRow({ label, desc, value, min, max, onChange, unit = '%' }: {
@@ -231,7 +195,6 @@ function SliderRow({ label, desc, value, min, max, onChange, unit = '%' }: {
 export default function DisplaySettingsPage() {
   const qc = useQueryClient()
   const { cfg: liveCfg, currentZone, sensorData } = useRoomTone()
-  const { settings, update: updateScreensaver } = useScreensaverSettings()
   const {
     colors,
     activeTarget,
@@ -307,7 +270,7 @@ export default function DisplaySettingsPage() {
         </span>
         <div>
           <h1 className="font-display text-display-sm text-casa-navy">Display Settings</h1>
-          <p className="text-caption text-casa-muted">Customize colors, room tone, sensors, and art mode</p>
+          <p className="text-caption text-casa-muted">Customize colors, room tone, brightness, and sensors</p>
         </div>
       </div>
 
@@ -794,148 +757,6 @@ export default function DisplaySettingsPage() {
             </>
           )}
         </div>
-
-        {/* ─────────────────────────────────────────────────────────────────── */}
-        {/* 4. ART MODE ────────────────────────────────────────────────────── */}
-        {/* ─────────────────────────────────────────────────────────────────── */}
-        
-        <div className="mt-8 mb-4 flex items-center gap-3">
-         <div className="flex-1 h-px bg-casa-border" />
-         <span className="flex items-center gap-2 px-1">
-           <Image size={15} className="text-casa-gold" />
-           <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Art Mode &amp; Sleep</span>
-         </span>
-         <div className="flex-1 h-px bg-casa-border" />
-        </div>
-
-        {/* ── Master toggles ──────────────────────────── */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={ToggleLeft} label="Enable / Disable" />
-          <Toggle
-            checked={settings.enabled}
-            onChange={v => updateScreensaver({ enabled: v })}
-            label="Art Mode Screensaver"
-            desc="Show artwork after idle timeout"
-          />
-          <div className={cn('transition-opacity', !settings.enabled && 'opacity-40 pointer-events-none')}>
-            <Toggle
-              checked={settings.displaySleepEnabled}
-              onChange={v => updateScreensaver({ displaySleepEnabled: v })}
-              label="Monitor Sleep"
-              desc="Turn off display after a longer idle period"
-            />
-          </div>
-        </div>
-
-        {/* Show remaining Art Mode options only when enabled */}
-        {settings.enabled && (
-          <div className="space-y-4">
-
-        {/* ── Timing ──────────────────────────────────── */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Clock} label="Timers" />
-          <Row label="Art mode after" desc="How long before artwork appears">
-            <StepPicker
-              value={settings.screensaverMins}
-              onChange={v => updateScreensaver({ screensaverMins: v })}
-              min={1} max={60} unit="min"
-            />
-          </Row>
-          <Row label="Display off after" desc="How long before monitor turns off (must be > art mode)">
-            <StepPicker
-              value={settings.displayOffMins}
-              onChange={v => updateScreensaver({ displayOffMins: Math.max(settings.screensaverMins + 1, v) })}
-              min={2} max={120} unit="min"
-            />
-          </Row>
-          <Row label="Painting rotation" desc="How long each artwork is shown">
-            <StepPicker
-              value={settings.rotationMins}
-              onChange={v => updateScreensaver({ rotationMins: v })}
-              min={1} max={60} unit="min"
-            />
-          </Row>
-        </div>
-
-        {/* ── Art size ────────────────────────────────── */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Image} label="Artwork Size" />
-          <Row label="Minimum art width" desc="Portrait paintings won't be smaller than this">
-            <StepPicker
-              value={settings.minArtWidthVw}
-              onChange={v => updateScreensaver({ minArtWidthVw: v })}
-              min={30} max={90} step={5} unit="vw"
-            />
-          </Row>
-        </div>
-
-        {/* ── Current Schedule preview ─────────────────── */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Monitor} label="Current Schedule" />
-          <div className="space-y-2 text-body-sm text-casa-muted">
-            {settings.enabled ? (
-              <>
-                <p>🖼 Art mode starts after <span className="text-casa-navy font-medium">{settings.screensaverMins} min</span> idle</p>
-                <p>🎨 Painting rotates every <span className="text-casa-navy font-medium">{settings.rotationMins} min</span></p>
-                {settings.displaySleepEnabled && (
-                  <p>😴 Monitor sleeps after <span className="text-casa-navy font-medium">{settings.displayOffMins} min</span> idle</p>
-                )}
-                <p>🗣 Say <span className="text-casa-navy font-medium">"Alexa"</span> or tap screen to wake</p>
-              </>
-            ) : (
-              <p className="text-casa-muted">Art mode is disabled — screen will stay on.</p>
-            )}
-          </div>
-        </div>
-
-        {/* ── Display Brightness in Art Mode ───────────── */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Sun} label="Display Brightness in Art Mode" />
-          <p className="text-caption text-casa-muted mb-4">
-            Monitor dims to <span className="font-medium text-casa-navy">{settings.artDimOffset}% below</span> the ambient light level — so the painting feels lit by the room, not glowing.
-            Higher = darker relative to surroundings.
-          </p>
-          <Row label="Dim below ambient" desc="Relative to current room lux reading">
-            <StepPicker
-              value={settings.artDimOffset}
-              onChange={v => updateScreensaver({ artDimOffset: v })}
-              min={5} max={80} step={5} unit="%"
-            />
-          </Row>
-          <p className="text-caption text-casa-muted mt-2">
-            Example: room at 300 lux → auto brightness 70 → art mode at {settings.artDimOffset}% below = {Math.round(70 * (1 - settings.artDimOffset / 100))}
-          </p>
-        </div>
-
-        {/* ── Mat Style ───────────────────────────────── */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Palette} label="Mat Style" />
-          <p className="text-body-sm text-casa-muted">
-            Adaptive linen mat with subtle canvas grain texture. Each painting gets a complementary mat color extracted from the artwork itself — warm neutrals for bright pieces, cooler tones for darker works. Includes realistic bevel shadow, vignetting, and lighting simulation for museum-quality presentation.
-          </p>
-          <div className="mt-3 flex items-center gap-2 text-caption text-casa-muted">
-            <span className="text-casa-gold">✓</span> Adaptive color from artwork
-          </div>
-          <div className="flex items-center gap-2 text-caption text-casa-muted mt-1">
-            <span className="text-casa-gold">✓</span> Paper texture grain overlay
-          </div>
-          <div className="flex items-center gap-2 text-caption text-casa-muted mt-1">
-            <span className="text-casa-gold">✓</span> Realistic frame effect
-          </div>
-          <div className="flex items-center gap-2 text-caption text-casa-muted mt-1">
-            <span className="text-casa-gold">✓</span> Gallery label auto-fades after a few seconds
-          </div>
-          <button
-            type="button"
-            onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
-            className="mt-4 px-4 py-2 rounded-lg text-body-sm font-medium bg-casa-gold text-white hover:bg-casa-gold/90 transition-colors"
-          >
-            Preview Art Mode
-          </button>
-        </div>
-
-         </div>
-        )}
 
       </div>
 
