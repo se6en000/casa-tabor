@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { loadArtFeedPrefs, MEDIA_OPTIONS, type ArtFeedPrefs } from './useArtFeedPrefs'
+import {
+  loadArtFeedPrefs,
+  MEDIA_OPTIONS,
+  ART_FEED_PREFS_KEY,
+  ART_FEED_PREFS_UPDATED_EVENT,
+  type ArtFeedPrefs,
+} from './useArtFeedPrefs'
 
 const MET_API = 'https://collectionapi.metmuseum.org/public/collection/v1'
 const ARTIC_API = 'https://api.artic.edu/api/v1'
@@ -172,6 +178,12 @@ function pickRandom<T>(arr: T[], n: number): T[] {
   return shuffled(arr).slice(0, n)
 }
 
+function matchesAnyKeyword(artwork: Artwork, keywords: string[]): boolean {
+  if (keywords.length === 0) return true
+  const haystack = `${artwork.title} ${artwork.artist} ${artwork.medium ?? ''} ${artwork.origin ?? ''}`.toLowerCase()
+  return keywords.some(keyword => haystack.includes(keyword))
+}
+
 function loadPrefs(): ArtworkPreferences {
   try {
     const raw = localStorage.getItem(PREFS_KEY)
@@ -266,7 +278,8 @@ export function useArtwork(rotateSecs = 240) {
   const [artworks, setArtworks]   = useState<Artwork[]>([])
   const [index, setIndex]         = useState(0)
   const [loaded, setLoaded]       = useState(false)
-  const [, setPrefsVersion] = useState(0)
+  const [prefsVersion, setPrefsVersion] = useState(0)
+  const [, setPreferenceVersion] = useState(0)
   const rotateRef                 = useRef<ReturnType<typeof setInterval> | null>(null)
   const failedIdsRef              = useRef<Set<number>>(new Set())
   const prefsRef                  = useRef<ArtworkPreferences>({})
@@ -276,10 +289,37 @@ export function useArtwork(rotateSecs = 240) {
   }, [])
 
   useEffect(() => {
+    function handlePrefsChanged() {
+      setPrefsVersion(version => version + 1)
+    }
+
+    function handleStorage(event: StorageEvent) {
+      if (event.key === ART_FEED_PREFS_KEY) {
+        setPrefsVersion(version => version + 1)
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener(ART_FEED_PREFS_UPDATED_EVENT, handlePrefsChanged as EventListener)
+      window.addEventListener('storage', handleStorage)
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener(ART_FEED_PREFS_UPDATED_EVENT, handlePrefsChanged as EventListener)
+        window.removeEventListener('storage', handleStorage)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     let cancelled = false
     async function load() {
       try {
         const prefs = loadArtFeedPrefs()
+        const keywordTerms = prefs.keywords
+          .map(keyword => keyword.trim().toLowerCase())
+          .filter(Boolean)
         const { metQs, articQs, mediumFilter, yearFrom, yearTo } = buildQueriesFromPrefs(prefs)
 
         const fetches = [
@@ -309,6 +349,10 @@ export function useArtwork(rotateSecs = 240) {
           })
         }
 
+        if (keywordTerms.length > 0) {
+          combined = combined.filter(artwork => matchesAnyKeyword(artwork, keywordTerms))
+        }
+
         if (!cancelled && combined.length > 0) {
           setArtworks(shuffled(combined))
           setIndex(0)
@@ -326,7 +370,7 @@ export function useArtwork(rotateSecs = 240) {
     }
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [prefsVersion])
 
   // Auto-rotate — only starts once artworks are loaded
   useEffect(() => {
@@ -364,7 +408,7 @@ export function useArtwork(rotateSecs = 240) {
     const nextPrefs: ArtworkPreferences = { ...prefsRef.current, [artworkId]: preference }
     prefsRef.current = nextPrefs
     savePrefs(nextPrefs)
-    setPrefsVersion(v => v + 1)
+    setPreferenceVersion(v => v + 1)
   }, [])
 
   const currentPreference = current ? prefsRef.current[current.id] : undefined

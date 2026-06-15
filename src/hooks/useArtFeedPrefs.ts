@@ -40,11 +40,12 @@ const DEFAULT_PREFS: ArtFeedPrefs = {
   useArtic: true,
 }
 
-const KEY = 'art-feed-prefs-v1'
+export const ART_FEED_PREFS_KEY = 'art-feed-prefs-v1'
+export const ART_FEED_PREFS_UPDATED_EVENT = 'art-feed-prefs-updated'
 
 export function loadArtFeedPrefs(): ArtFeedPrefs {
   try {
-    const raw = localStorage.getItem(KEY)
+    const raw = localStorage.getItem(ART_FEED_PREFS_KEY)
     if (!raw) return { ...DEFAULT_PREFS }
     return { ...DEFAULT_PREFS, ...JSON.parse(raw) }
   } catch {
@@ -54,7 +55,10 @@ export function loadArtFeedPrefs(): ArtFeedPrefs {
 
 export function saveArtFeedPrefs(prefs: ArtFeedPrefs): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(prefs))
+    localStorage.setItem(ART_FEED_PREFS_KEY, JSON.stringify(prefs))
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(ART_FEED_PREFS_UPDATED_EVENT, { detail: prefs }))
+    }
   } catch {
     // ignore
   }
