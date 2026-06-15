@@ -16,22 +16,23 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
   const pillRef = useRef<HTMLDivElement>(null)
   const bgRef = useRef<HTMLDivElement>(null)
   const startX = useRef<number | null>(null)
+  const startY = useRef<number | null>(null)
   const committed = useRef(false)
   const moved = useRef(false)
+  const axis = useRef<'x' | 'y' | null>(null)
+  const pointerId = useRef<number | null>(null)
+  const usingPointer = useRef(false)
 
-  function onTouchStart(e: React.TouchEvent) {
+  function beginDrag(x: number, y: number) {
     if (committed.current) return
-    startX.current = e.touches[0].clientX
+    startX.current = x
+    startY.current = y
+    axis.current = null
     moved.current = false
     if (pillRef.current) pillRef.current.style.transition = ''
   }
 
-  function onTouchMove(e: React.TouchEvent) {
-    if (startX.current === null || committed.current) return
-    const delta = e.touches[0].clientX - startX.current
-    if (Math.abs(delta) < 4) return
-    moved.current = true
-
+  function updateDrag(delta: number) {
     const clamped = Math.max(-160, Math.min(160, delta))
     const progress = Math.min(1, Math.abs(clamped) / THRESHOLD)
 
@@ -50,19 +51,70 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
     }
   }
 
-  function onTouchEnd() {
+  function onTouchStart(e: React.TouchEvent) {
+    if (usingPointer.current) return
+    beginDrag(e.touches[0].clientX, e.touches[0].clientY)
+  }
+
+  function onTouchMove(e: React.TouchEvent) {
+    if (usingPointer.current) return
+    if (startX.current === null || startY.current === null || committed.current) return
+    const dx = e.touches[0].clientX - startX.current
+    const dy = e.touches[0].clientY - startY.current
+    const adx = Math.abs(dx)
+    const ady = Math.abs(dy)
+    if (axis.current === null) {
+      if (adx < 6 && ady < 6) return
+      axis.current = adx > ady ? 'x' : 'y'
+    }
+    if (axis.current !== 'x') return
+    e.preventDefault()
+    moved.current = true
+    updateDrag(dx)
+  }
+
+  function onPointerDown(e: React.PointerEvent) {
+    if (e.pointerType === 'mouse') return
+    usingPointer.current = true
+    pointerId.current = e.pointerId
+    pillRef.current?.setPointerCapture?.(e.pointerId)
+    beginDrag(e.clientX, e.clientY)
+  }
+
+  function onPointerMove(e: React.PointerEvent) {
+    if (!usingPointer.current || pointerId.current !== e.pointerId) return
+    if (startX.current === null || startY.current === null || committed.current) return
+    const dx = e.clientX - startX.current
+    const dy = e.clientY - startY.current
+    const adx = Math.abs(dx)
+    const ady = Math.abs(dy)
+    if (axis.current === null) {
+      if (adx < 6 && ady < 6) return
+      axis.current = adx > ady ? 'x' : 'y'
+    }
+    if (axis.current !== 'x') return
+    e.preventDefault()
+    moved.current = true
+    updateDrag(dx)
+  }
+
+  function readCurrentDelta() {
+    const transform = pillRef.current?.style.transform ?? ''
+    const match = transform.match(/translateX\((-?[\d.]+)px\)/)
+    return match ? parseFloat(match[1]) : 0
+  }
+
+  function endDrag() {
     if (committed.current) return
     const startXVal = startX.current
     startX.current = null
+    startY.current = null
+    axis.current = null
     if (startXVal === null) return
 
-    // Read transform to get current delta
-    const transform = pillRef.current?.style.transform ?? ''
-    const match = transform.match(/translateX\((-?[\d.]+)px\)/)
-    const delta = match ? parseFloat(match[1]) : 0
+    const delta = readCurrentDelta()
 
     if (!moved.current) {
-      // Treated as tap
       onClick?.()
       return
     }
@@ -109,6 +161,30 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
     }
   }
 
+  function onTouchEnd() {
+    if (usingPointer.current) return
+    endDrag()
+  }
+
+  function onTouchCancel() {
+    if (usingPointer.current) return
+    endDrag()
+  }
+
+  function onPointerUp(e: React.PointerEvent) {
+    if (!usingPointer.current || pointerId.current !== e.pointerId) return
+    endDrag()
+    pointerId.current = null
+    usingPointer.current = false
+  }
+
+  function onPointerCancel(e: React.PointerEvent) {
+    if (!usingPointer.current || pointerId.current !== e.pointerId) return
+    endDrag()
+    pointerId.current = null
+    usingPointer.current = false
+  }
+
   return (
     <div className="relative" style={{ display: 'inline-flex' }}>
       {/* Action hint icons behind the pill */}
@@ -123,6 +199,11 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchCancel}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
         onClick={() => { if (!moved.current) onClick?.() }}
         className="relative z-10 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-caption font-semibold select-none cursor-pointer"
         style={{
@@ -130,7 +211,7 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
           backgroundColor: '#FDFAF4',
           color: '#7A5520',
           willChange: 'transform',
-          touchAction: 'pan-y',
+          touchAction: 'pan-y pinch-zoom',
           WebkitUserSelect: 'none',
         }}
       >
