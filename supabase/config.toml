@@ -26,3 +26,9 @@ verify_jwt = false
 
 [functions.process-google-sync-jobs]
 verify_jwt = false
+
+[functions.register-push-subscription]
+verify_jwt = false
+
+[functions.send-push-notification]
+verify_jwt = false
