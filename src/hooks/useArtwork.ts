@@ -210,14 +210,14 @@ function savePrefs(prefs: ArtworkPreferences) {
 
 // ── Fetchers ──────────────────────────────────────────────────────────────────
 
-async function fetchFromMet(query: string, mediumFilter: RegExp): Promise<Artwork[]> {
+async function fetchFromMet(query: string, mediumFilter: RegExp | null): Promise<Artwork[]> {
   try {
     const res = await fetch(
       `${MET_API}/search?q=${encodeURIComponent(query)}&hasImages=true&isPublicDomain=true`
     )
     if (!res.ok) return []
     const data = await res.json()
-    const ids: number[] = shuffled((data.objectIDs as number[]) || []).slice(0, 18)
+    const ids: number[] = ((data.objectIDs as number[]) || []).slice(0, 30)
 
     const results = await Promise.all(
       ids.map(async (id) => {
@@ -226,7 +226,7 @@ async function fetchFromMet(query: string, mediumFilter: RegExp): Promise<Artwor
           if (!r.ok) return null
           const obj = await r.json()
           if (!obj.primaryImage || !obj.isPublicDomain) return null
-          if (obj.medium && !mediumFilter.test(obj.medium)) return null
+          if (mediumFilter && obj.medium && !mediumFilter.test(obj.medium)) return null
           return {
             id: obj.objectID as number,
             title: obj.title || 'Untitled',
@@ -247,10 +247,10 @@ async function fetchFromMet(query: string, mediumFilter: RegExp): Promise<Artwor
   }
 }
 
-async function fetchFromArtic(query: string, mediumFilter: RegExp): Promise<Artwork[]> {
+async function fetchFromArtic(query: string, mediumFilter: RegExp | null): Promise<Artwork[]> {
   try {
     const res = await fetch(
-      `${ARTIC_API}/artworks/search?q=${encodeURIComponent(query)}&fields=id,title,artist_display,image_id,medium_display,date_display,is_public_domain&limit=25`
+      `${ARTIC_API}/artworks/search?q=${encodeURIComponent(query)}&fields=id,title,artist_display,image_id,medium_display,date_display,is_public_domain&limit=50`
     )
     if (!res.ok) return []
     const data = await res.json()
@@ -258,7 +258,7 @@ async function fetchFromArtic(query: string, mediumFilter: RegExp): Promise<Artw
     const artworks: Artwork[] = []
     for (const item of data.data || []) {
       if (!item.is_public_domain || !item.image_id) continue
-      if (item.medium_display && !mediumFilter.test(item.medium_display)) continue
+      if (mediumFilter && item.medium_display && !mediumFilter.test(item.medium_display)) continue
       artworks.push({
         id: (item.id as number) + ARTIC_OFFSET,
         title: item.title || 'Untitled',
@@ -322,35 +322,46 @@ export function useArtwork(rotateSecs = 240) {
           .filter(Boolean)
         const { metQs, articQs, mediumFilter, yearFrom, yearTo } = buildQueriesFromPrefs(prefs)
 
-        const fetches = [
-          ...metQs.map(q => fetchFromMet(q, mediumFilter)),
-          ...articQs.map(q => fetchFromArtic(q, mediumFilter)),
-        ]
-        const results = await Promise.all(fetches)
-        let combined = results.flat()
+        const fetchCombined = async (activeMediumFilter: RegExp | null) => {
+          const fetches = [
+            ...metQs.map(q => fetchFromMet(q, activeMediumFilter)),
+            ...articQs.map(q => fetchFromArtic(q, activeMediumFilter)),
+          ]
+          const results = await Promise.all(fetches)
+          let merged = results.flat()
 
-        // Deduplicate by id
-        const seen = new Set<number>()
-        combined = combined.filter(a => {
-          if (seen.has(a.id)) return false
-          seen.add(a.id)
-          return true
-        })
-
-        // Year range filter
-        if (yearFrom !== null || yearTo !== null) {
-          combined = combined.filter(a => {
-            if (!a.date) return true
-            const year = parseInt(a.date)
-            if (isNaN(year)) return true
-            if (yearFrom !== null && year < yearFrom) return false
-            if (yearTo !== null && year > yearTo) return false
+          // Deduplicate by id
+          const seen = new Set<number>()
+          merged = merged.filter(a => {
+            if (seen.has(a.id)) return false
+            seen.add(a.id)
             return true
           })
+
+          // Year range filter
+          if (yearFrom !== null || yearTo !== null) {
+            merged = merged.filter(a => {
+              if (!a.date) return true
+              const year = parseInt(a.date)
+              if (isNaN(year)) return true
+              if (yearFrom !== null && year < yearFrom) return false
+              if (yearTo !== null && year > yearTo) return false
+              return true
+            })
+          }
+
+          if (keywordTerms.length > 0) {
+            merged = merged.filter(artwork => matchesAnyKeyword(artwork, keywordTerms))
+          }
+
+          return merged
         }
 
-        if (keywordTerms.length > 0) {
-          combined = combined.filter(artwork => matchesAnyKeyword(artwork, keywordTerms))
+        let combined = await fetchCombined(mediumFilter)
+
+        // If keyword-only search finds nothing under painted-medium defaults, retry without medium restriction.
+        if (combined.length === 0 && keywordTerms.length > 0 && prefs.mediaTypes.length === 0) {
+          combined = await fetchCombined(null)
         }
 
         if (!cancelled && combined.length > 0) {
