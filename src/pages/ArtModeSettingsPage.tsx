@@ -4,6 +4,33 @@ import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import { useArtFeedPrefs, MEDIA_OPTIONS } from '../hooks/useArtFeedPrefs'
 import { cn } from '../utils/cn'
 
+const COASTAL_STARTER_ARTISTS = [
+  'Winslow Homer',
+  'Martin Johnson Heade',
+  'Claude Monet',
+  'Childe Hassam',
+  'William Trost Richards',
+  'Emil Carlsen',
+  'John Singer Sargent',
+]
+
+const COASTAL_STARTER_KEYWORDS = [
+  'West Palm Beach',
+  'Tropical',
+  'Coastal',
+  'Beach',
+  'Sunshine',
+  'Palm trees',
+  'Caribbean',
+  'Ocean',
+  'Seascape',
+  'Florida',
+]
+
+function uniqueTrimmed(values: string[]): string[] {
+  return Array.from(new Set(values.map(value => value.trim()).filter(Boolean)))
+}
+
 // ── Shared helpers ──────────────────────────────────────────────────────────
 
 function Toggle({ checked, onChange, label, desc, disabled }: {
@@ -169,6 +196,13 @@ export default function ArtModeSettingsPage() {
     updatePrefs({ mediaTypes: next })
   }
 
+  const applyCoastalStarterTheme = () => {
+    updatePrefs({
+      artists: uniqueTrimmed(COASTAL_STARTER_ARTISTS).slice(0, 10),
+      keywords: uniqueTrimmed(COASTAL_STARTER_KEYWORDS).slice(0, 10),
+    })
+  }
+
   return (
     <>
       {/* Page header */}
@@ -244,6 +278,24 @@ export default function ArtModeSettingsPage() {
           Artwork is fetched live from the Met Museum and Art Institute of Chicago. All works are public domain. Changes take effect on the next rotation.
         </p>
 
+        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-body-sm font-semibold text-casa-navy">West Palm Coastal Starter</p>
+              <p className="text-caption text-casa-muted mt-0.5">
+                Prefill artists and keywords for a tropical, coastal, sunshine-forward feed. You can edit everything after loading.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={applyCoastalStarterTheme}
+              className="shrink-0 px-3.5 py-2 rounded-xl bg-casa-navy text-white text-body-sm font-semibold hover:bg-casa-navy/90 transition-colors"
+            >
+              Load Starter Theme
+            </button>
+          </div>
+        </div>
+
         {/* Artists */}
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
           <SectionHeader icon={Eye} label="Artists" />
@@ -259,7 +311,7 @@ export default function ArtModeSettingsPage() {
           />
           {prefs.artists.length === 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {['Winslow Homer', 'John Singer Sargent', 'Martin Johnson Heade', 'Thomas Moran'].map(a => (
+              {['Winslow Homer', 'Martin Johnson Heade', 'Claude Monet', 'Childe Hassam', 'William Trost Richards', 'Emil Carlsen'].map(a => (
                 <button
                   key={a}
                   type="button"
@@ -288,7 +340,7 @@ export default function ArtModeSettingsPage() {
           />
           {prefs.keywords.length === 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {['Beach', 'Key West', 'Cuba', 'Miami', 'Palm trees', 'Sailing'].map(keyword => (
+              {['West Palm Beach', 'Tropical', 'Coastal', 'Beach', 'Sunshine', 'Palm trees', 'Caribbean', 'Ocean', 'Seascape', 'Florida'].map(keyword => (
                 <button
                   key={keyword}
                   type="button"
