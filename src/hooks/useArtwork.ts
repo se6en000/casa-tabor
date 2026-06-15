@@ -64,22 +64,26 @@ function buildQueriesFromPrefs(prefs: ArtFeedPrefs): {
     : []
 
   const cultureStr = prefs.cultures.length > 0 ? prefs.cultures[0] : ''
+  const keywordTerms = prefs.keywords
+    .map(keyword => keyword.trim())
+    .filter(Boolean)
+    .slice(0, 4)
 
   let metQs: string[]
   let articQs: string[]
+  const withHints = (term: string, lowercase = false) =>
+    [lowercase ? term.toLowerCase() : term, mediaKeywords[0], cultureStr].filter(Boolean).join(' ')
 
   if (prefs.artists.length > 0) {
-    metQs = prefs.artists.slice(0, 5).map(artist => {
-      let q = artist
-      if (mediaKeywords.length > 0) q += ` ${mediaKeywords[0]}`
-      if (cultureStr) q += ` ${cultureStr}`
-      return q
-    })
-    articQs = prefs.artists.slice(0, 3).map(artist => {
-      let q = artist.toLowerCase()
-      if (mediaKeywords.length > 0) q += ` ${mediaKeywords[0]}`
-      return q
-    })
+    metQs = prefs.artists.slice(0, 4).map(artist => withHints(artist))
+    articQs = prefs.artists.slice(0, 3).map(artist => withHints(artist, true))
+    if (keywordTerms.length > 0) {
+      metQs = [...metQs, ...keywordTerms.slice(0, 2).map(keyword => withHints(keyword))]
+      articQs = [...articQs, ...keywordTerms.slice(0, 1).map(keyword => withHints(keyword, true))]
+    }
+  } else if (keywordTerms.length > 0) {
+    metQs = keywordTerms.slice(0, 4).map(keyword => withHints(keyword))
+    articQs = keywordTerms.slice(0, 3).map(keyword => withHints(keyword, true))
   } else {
     // Use curated fallback queries
     metQs = pickRandom(MET_QUERIES, 3)

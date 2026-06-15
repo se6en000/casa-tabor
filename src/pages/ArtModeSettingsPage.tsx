@@ -273,6 +273,35 @@ export default function ArtModeSettingsPage() {
           )}
         </div>
 
+        {/* Subjects / keywords */}
+        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
+          <SectionHeader icon={Eye} label="Subjects / Keywords" />
+          <p className="text-caption text-casa-muted mb-3">
+            Add places or themes (e.g. beach, Key West, Cuba, Miami) to guide the feed by subject, with or without artists.
+          </p>
+          <TagInput
+            tags={prefs.keywords}
+            onAdd={keyword => updatePrefs({ keywords: [...prefs.keywords, keyword] })}
+            onRemove={keyword => updatePrefs({ keywords: prefs.keywords.filter(k => k !== keyword) })}
+            placeholder="e.g. Beach, Key West, Cuba, Miami"
+            maxTags={10}
+          />
+          {prefs.keywords.length === 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {['Beach', 'Key West', 'Cuba', 'Miami', 'Palm trees', 'Sailing'].map(keyword => (
+                <button
+                  key={keyword}
+                  type="button"
+                  onClick={() => updatePrefs({ keywords: [...prefs.keywords, keyword] })}
+                  className="text-caption px-2.5 py-1 rounded-full border border-casa-border text-casa-muted hover:border-casa-navy/30 hover:text-casa-navy transition-colors"
+                >
+                  + {keyword}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Media types */}
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
           <SectionHeader icon={Palette} label="Media Types" />
@@ -509,6 +538,7 @@ export default function ArtModeSettingsPage() {
               <p className="text-caption font-semibold text-casa-navy mb-1">Active Feed Config</p>
               <div className="space-y-1 text-caption text-casa-muted">
                 <p>🎨 Artists: <span className="text-casa-navy font-medium">{prefs.artists.length > 0 ? prefs.artists.join(', ') : 'Curated tropical & coastal'}</span></p>
+                <p>🧭 Subjects: <span className="text-casa-navy font-medium">{prefs.keywords.length > 0 ? prefs.keywords.join(', ') : 'Any subject'}</span></p>
                 <p>🖌 Media: <span className="text-casa-navy font-medium">{prefs.mediaTypes.length > 0 ? prefs.mediaTypes.map(id => MEDIA_OPTIONS.find(o => o.id === id)?.label).filter(Boolean).join(', ') : 'Any painted medium'}</span></p>
                 {(prefs.yearFrom !== null || prefs.yearTo !== null) && (
                   <p>📅 Period: <span className="text-casa-navy font-medium">{prefs.yearFrom ?? '–'} → {prefs.yearTo ?? 'present'}</span></p>

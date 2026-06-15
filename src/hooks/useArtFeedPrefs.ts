@@ -20,6 +20,7 @@ export const MEDIA_OPTIONS: MediaOption[] = [
 
 export interface ArtFeedPrefs {
   artists: string[]
+  keywords: string[]
   mediaTypes: string[]      // ids from MEDIA_OPTIONS
   yearFrom: number | null
   yearTo: number | null
@@ -30,6 +31,7 @@ export interface ArtFeedPrefs {
 
 const DEFAULT_PREFS: ArtFeedPrefs = {
   artists: [],
+  keywords: [],
   mediaTypes: [],
   yearFrom: null,
   yearTo: null,
