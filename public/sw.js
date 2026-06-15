@@ -15,7 +15,7 @@ self.addEventListener('push', function (event) {
     payload = { title: 'Casa Tabor', body: event.data.text() };
   }
 
-  const { title = 'Casa Tabor', body = '', url = '/', tag, icon } = payload;
+  const { title = 'Casa Tabor', body = '', url = '/', tag, icon, actions = [], data = {} } = payload;
 
   const options = {
     body,
@@ -24,7 +24,8 @@ self.addEventListener('push', function (event) {
     tag: tag || 'casa-tabor-default',
     renotify: true,
     requireInteraction: false,
-    data: { url },
+    actions,
+    data: { url, ...data },
     vibrate: [200, 100, 200],
   };
 
@@ -34,7 +35,10 @@ self.addEventListener('push', function (event) {
 // ── Notification click — open/focus the app ──────────────────────────────────
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
-  const targetUrl = (event.notification.data && event.notification.data.url) || '/';
+  const data = event.notification.data || {};
+  const targetUrl = data.url || '/';
+  const action = event.action || 'open';
+  const eventId = data.eventId || null;
 
   event.waitUntil(
     self.clients
@@ -43,13 +47,18 @@ self.addEventListener('notificationclick', function (event) {
         // If app is already open, focus it
         for (const client of clients) {
           if (client.url.includes(self.location.origin) && 'focus' in client) {
-            client.postMessage({ type: 'NOTIFICATION_CLICK', url: targetUrl });
+            client.postMessage({ type: 'PUSH_NOTIFICATION_ACTION', action, url: targetUrl, eventId });
             return client.focus();
           }
         }
         // Otherwise open a new window
         if (self.clients.openWindow) {
-          return self.clients.openWindow(targetUrl);
+          const u = new URL(targetUrl, self.location.origin);
+          if (action && action !== 'open') {
+            u.searchParams.set('push_action', action);
+            if (eventId) u.searchParams.set('event_id', eventId);
+          }
+          return self.clients.openWindow(u.toString());
         }
       })
   );

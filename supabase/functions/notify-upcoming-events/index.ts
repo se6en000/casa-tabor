@@ -1,11 +1,42 @@
 // notify-upcoming-events
 // Called by pg_cron every 5 minutes.
-// Finds events starting in ~25-35 min (or tomorrow morning for all-day)
-// and fires push notifications for each unnotified event.
+// Sends push-first reminders at ~30m and ~5m before event start.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { format } from 'https://esm.sh/date-fns@3'
 import { getCorrelationId, withCorrelationHeaders } from '../_shared/correlation.ts'
 import { requireEnv } from '../_shared/env.ts'
+
+type SmsConfig = {
+  quiet_hours_enabled?: boolean
+  quiet_hours_start?: string
+  quiet_hours_end?: string
+  push_quiet_hours_enabled?: boolean
+}
+
+function toMinutes(hhmm: string | undefined, fallback: number): number {
+  if (!hhmm || !hhmm.includes(':')) return fallback
+  const [h, m] = hhmm.split(':').map(Number)
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return fallback
+  return h * 60 + m
+}
+
+function isQuietHours(now: Date, cfg: SmsConfig): boolean {
+  if (!cfg.quiet_hours_enabled) return false
+  const minutes = Number(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(now).replace(':', ''),
+  )
+  const nowMins = Math.floor(minutes / 100) * 60 + (minutes % 100)
+  const start = toMinutes(cfg.quiet_hours_start, 22 * 60)
+  const end = toMinutes(cfg.quiet_hours_end, 7 * 60)
+  if (start === end) return false
+  if (start < end) return nowMins >= start && nowMins < end
+  return nowMins >= start || nowMins < end
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -18,9 +49,12 @@ Deno.serve(async (req) => {
     const supabaseAnonKey = requireEnv('SUPABASE_ANON_KEY')
     const supabase = createClient(supabaseUrl, requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
     const now = new Date()
-    // Window: 25 to 35 minutes from now
-    const windowStart = new Date(now.getTime() + 25 * 60 * 1000)
-    const windowEnd = new Date(now.getTime() + 35 * 60 * 1000)
+    const lookAheadEnd = new Date(now.getTime() + 36 * 60 * 1000)
+
+    const { data: smsSetting } = await supabase.from('settings').select('value').eq('key', 'sms_config').single()
+    const cfg = (smsSetting?.value ?? {}) as SmsConfig
+    const quiet = isQuietHours(now, cfg)
+    const applyQuietToPush = cfg.push_quiet_hours_enabled ?? true
 
     const { data: events, error } = await supabase
       .from('events')
@@ -28,30 +62,48 @@ Deno.serve(async (req) => {
         id, title, start_time, end_time, event_type, all_day, location_name,
         members:event_members(family_member:family_members(name))
       `)
-      .gte('start_time', windowStart.toISOString())
-      .lte('start_time', windowEnd.toISOString())
+      .gte('start_time', now.toISOString())
+      .lte('start_time', lookAheadEnd.toISOString())
       .neq('event_type', 'reminder')
-      .is('notified_at', null)
 
     if (error) throw error
     let fired = 0
+
     if (events && events.length > 0) {
       for (const event of events) {
+        const eventStart = new Date(event.start_time)
+        const minsToStart = Math.round((eventStart.getTime() - now.getTime()) / 60000)
+        const bucket = minsToStart >= 25 && minsToStart <= 35
+          ? 30
+          : minsToStart >= 3 && minsToStart <= 7
+          ? 5
+          : null
+
+        if (!bucket) continue
+        if (applyQuietToPush && quiet) continue
+
+        const notifType = bucket === 30 ? 'push_event_30' : 'push_event_5'
+        const { data: existing } = await supabase
+          .from('notifications')
+          .select('id')
+          .eq('type', notifType)
+          .eq('event_id', event.id)
+          .limit(1)
+        if ((existing?.length ?? 0) > 0) continue
+
         const members = Array.isArray(event.members) ? event.members : []
         const peopleNames = members
           .map((m: { family_member: { name: string } }) => m.family_member?.name)
           .filter(Boolean)
           .join(', ')
 
-        const startStr = format(new Date(event.start_time), 'h:mm a')
+        const startStr = format(eventStart, 'h:mm a')
         const title = stripPersonPrefix(event.title)
-
         let body = `${startStr}`
         if (peopleNames) body += ` · ${peopleNames}`
         if (event.location_name) body += `\n📍 ${event.location_name}`
 
-        // Fire notification
-        await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
+        const pushRes = await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -59,24 +111,35 @@ Deno.serve(async (req) => {
             'x-correlation-id': correlationId,
           },
           body: JSON.stringify({
-            title: `⏰ ${title} in ~30 min`,
+            title: bucket === 30 ? `⏰ ${title} in ~30 min` : `⏳ ${title} in ~5 min`,
             body,
-            url: '/',
-            tag: `event-${event.id}`,
+            url: '/calendar',
+            tag: `event-${bucket}-${event.id}`,
+            data: { eventId: event.id, url: '/calendar' },
+            actions: [
+              { action: 'open', title: 'Open Event' },
+              { action: 'snooze', title: 'Snooze 10m' },
+              { action: 'done', title: 'Mark Done' },
+            ],
           }),
         })
 
-        // Mark notified so it doesn't fire again
-        await supabase
-          .from('events')
-          .update({ notified_at: now.toISOString() })
-          .eq('id', event.id)
+        const pushJson = await pushRes.json().catch(() => null) as { sent?: number } | null
+        const sent = Number(pushJson?.sent ?? 0)
+        if (sent <= 0) continue
+
+        await supabase.from('notifications').insert({
+          type: notifType,
+          title: bucket === 30 ? `Upcoming: ${title}` : `Starting soon: ${title}`,
+          body,
+          event_id: event.id,
+          source: 'system',
+        })
 
         fired++
       }
     }
 
-    // Always run policy layer each cycle (conflicts/prep routing + quiet-hours + escalation).
     const policyRes = await fetch(`${supabaseUrl}/functions/v1/apply-notification-policy`, {
       method: 'POST',
       headers: {
@@ -88,7 +151,7 @@ Deno.serve(async (req) => {
     }).catch(() => null)
     const policy = policyRes?.ok ? await policyRes.json().catch(() => null) : null
 
-    return json({ ok: true, correlation_id: correlationId, fired, policy }, 200, correlationId)
+    return json({ ok: true, correlation_id: correlationId, fired, quiet_hours_active: quiet, policy }, 200, correlationId)
   } catch (err) {
     console.error(`[notify-upcoming-events][${correlationId}]`, err)
     return json({ ok: false, correlation_id: correlationId, error: getErrorMessage(err) }, 500, correlationId)

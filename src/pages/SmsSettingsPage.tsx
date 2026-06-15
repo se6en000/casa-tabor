@@ -17,6 +17,8 @@ interface SmsConfig {
   quiet_hours_enabled: boolean
   quiet_hours_start: string      // HH:mm local
   quiet_hours_end: string        // HH:mm local
+  push_quiet_hours_enabled: boolean
+  sms_escalation_only: boolean
   escalation_enabled: boolean
   escalation_minutes: number
   notify_members: string[]       // family_member ids to text
@@ -34,6 +36,8 @@ const DEFAULTS: SmsConfig = {
   quiet_hours_enabled: true,
   quiet_hours_start: '22:00',
   quiet_hours_end: '07:00',
+  push_quiet_hours_enabled: true,
+  sms_escalation_only: true,
   escalation_enabled: true,
   escalation_minutes: 90,
   notify_members: [],
@@ -403,8 +407,22 @@ export default function SmsSettingsPage() {
                   </div>
                 </div>
               )}
+              <div className="pb-3">
+                <Toggle
+                  checked={config.push_quiet_hours_enabled}
+                  onChange={v => set('push_quiet_hours_enabled', v)}
+                  label="Apply quiet hours to push reminders"
+                  desc="When enabled, upcoming event push reminders are also suppressed during quiet hours."
+                />
+              </div>
             </div>
             <div>
+              <Toggle
+                checked={config.sms_escalation_only}
+                onChange={v => set('sms_escalation_only', v)}
+                label="SMS escalation only (Recommended)"
+                desc="Only send SMS for high-severity conflicts and due-soon prep items. Push remains the primary channel."
+              />
               <Toggle
                 checked={config.escalation_enabled}
                 onChange={v => set('escalation_enabled', v)}

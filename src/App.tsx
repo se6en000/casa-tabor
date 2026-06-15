@@ -1,4 +1,4 @@
-import { useState, useEffect, Component, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, Component, type ReactNode } from 'react'
 import { BrowserRouter, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import NavBar from './components/shared/NavBar'
@@ -21,6 +21,7 @@ import { useLiveClock } from './hooks/useLiveClock'
 import { useWakeWord } from './hooks/useWakeWord'
 import { useIdleTimer } from './hooks/useIdleTimer'
 import { useScreensaverSettings } from './hooks/useScreensaverSettings'
+import { supabase } from './lib/supabase'
 
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
 const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
@@ -115,6 +116,13 @@ function AppShell() {
   const location = useLocation()
   const hideFab = location.pathname.startsWith('/settings') || screensaverActive
 
+  const handlePushAction = useCallback(async (action: string, eventId?: string | null) => {
+    if (!eventId || action === 'open') return
+    await supabase.functions.invoke('notification-action', {
+      body: { action, event_id: eventId },
+    }).catch(() => {})
+  }, [])
+
   useEffect(() => {
     setRoomToneZone(currentZone)
   }, [currentZone, setRoomToneZone])
@@ -143,6 +151,29 @@ function AppShell() {
       body: JSON.stringify({ score: settings.wakeWordSensitivity }),
     }).catch(() => {})
   }, [settings.wakeWordSensitivity])
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; action?: string; eventId?: string | null; url?: string } | null
+      if (!data || data.type !== 'PUSH_NOTIFICATION_ACTION') return
+      if (data.url) window.location.assign(data.url)
+      handlePushAction(data.action ?? 'open', data.eventId ?? null)
+    }
+    navigator.serviceWorker?.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker?.removeEventListener('message', onMessage)
+  }, [handlePushAction])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const action = params.get('push_action')
+    const eventId = params.get('event_id')
+    if (!action) return
+    handlePushAction(action, eventId)
+    params.delete('push_action')
+    params.delete('event_id')
+    const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash}`
+    window.history.replaceState({}, '', next)
+  }, [handlePushAction])
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-casa-bg">

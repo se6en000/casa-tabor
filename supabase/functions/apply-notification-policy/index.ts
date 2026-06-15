@@ -21,6 +21,8 @@ type SmsConfig = {
   quiet_hours_end?: string // HH:mm
   escalation_enabled?: boolean
   escalation_minutes?: number
+  sms_escalation_only?: boolean
+  push_quiet_hours_enabled?: boolean
 }
 
 function toMinutes(hhmm: string | undefined, fallback: number): number {
@@ -61,6 +63,8 @@ Deno.serve(async (req) => {
   const notifyMembers = cfg.notify_members ?? []
   const quiet = isQuietHours(now, cfg)
   const escalateMinutes = Number.isFinite(cfg.escalation_minutes) ? Number(cfg.escalation_minutes) : 90
+  const smsEscalationOnly = cfg.sms_escalation_only ?? true
+  const applyQuietToPush = cfg.push_quiet_hours_enabled ?? true
 
   const [conflictsRes, prepRes, membersRes] = await Promise.all([
     sb.from('conflicts')
@@ -103,6 +107,7 @@ Deno.serve(async (req) => {
   let sentSms = 0
 
   async function maybeSendPush(title: string, body: string, tag: string) {
+    if (quiet && applyQuietToPush) return
     const { error } = await sb.functions.invoke('send-push-notification', {
       body: { title, body, tag, url: '/' },
       headers: invocationHeaders(correlationId),
@@ -144,7 +149,9 @@ Deno.serve(async (req) => {
     })
     createdNotifications++
     await maybeSendPush(`⚠️ Conflict: ${eventTitle}`, c.description, `policy-conflict-${c.id}`)
-    if (cfg.conflict_alerts) await maybeSendSms(`Casa alert: ${c.description}`, c.severity)
+    if (cfg.conflict_alerts && (!smsEscalationOnly || c.severity >= 3)) {
+      await maybeSendSms(`Casa alert: ${c.description}`, c.severity)
+    }
   }
 
   // Prep: only escalate when due soon or high priority.
