@@ -18,11 +18,21 @@ Deno.serve(async (req) => {
     const { action, event_id } = await req.json() as { action?: string; event_id?: string }
     if (!action || !event_id) return json({ ok: false, error: 'Missing action or event_id' }, 400)
 
-    if (action === 'done') {
-      await sb.from('events').update({ notified_at: new Date().toISOString() }).eq('id', event_id)
+    const { data: eventRow } = await sb
+      .from('events')
+      .select('id, title, event_type')
+      .eq('id', event_id)
+      .single()
+
+    if (action === 'done' || action === 'complete') {
+      if (eventRow?.event_type === 'reminder') {
+        await sb.from('events').update({ status: 'cancelled' }).eq('id', event_id)
+      } else {
+        await sb.from('events').update({ notified_at: new Date().toISOString() }).eq('id', event_id)
+      }
       await sb.from('notifications').insert({
         type: 'push_action_done',
-        title: 'Marked done',
+        title: eventRow?.event_type === 'reminder' ? 'Reminder completed' : 'Marked done',
         body: 'Notification acknowledged from push action.',
         event_id,
         source: 'system',
@@ -31,12 +41,6 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'snooze') {
-      const { data: eventRow } = await sb
-        .from('events')
-        .select('id, title')
-        .eq('id', event_id)
-        .single()
-
       const now = new Date()
       const start = new Date(now.getTime() + 10 * 60 * 1000)
       const end = new Date(now.getTime() + 15 * 60 * 1000)

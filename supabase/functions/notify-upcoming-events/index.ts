@@ -59,12 +59,12 @@ Deno.serve(async (req) => {
     const { data: events, error } = await supabase
       .from('events')
       .select(`
-        id, title, start_time, end_time, event_type, all_day, location_name,
+        id, title, start_time, end_time, event_type, all_day, location_name, status,
         members:event_members(family_member:family_members(name))
       `)
       .gte('start_time', now.toISOString())
       .lte('start_time', lookAheadEnd.toISOString())
-      .neq('event_type', 'reminder')
+      .or('status.is.null,status.neq.cancelled')
 
     if (error) throw error
     let fired = 0
@@ -82,7 +82,10 @@ Deno.serve(async (req) => {
         if (!bucket) continue
         if (applyQuietToPush && quiet) continue
 
-        const notifType = bucket === 30 ? 'push_event_30' : 'push_event_5'
+        const isReminder = event.event_type === 'reminder'
+        const notifType = isReminder
+          ? bucket === 30 ? 'push_reminder_30' : 'push_reminder_5'
+          : bucket === 30 ? 'push_event_30' : 'push_event_5'
         const { data: existing } = await supabase
           .from('notifications')
           .select('id')
@@ -111,15 +114,17 @@ Deno.serve(async (req) => {
             'x-correlation-id': correlationId,
           },
           body: JSON.stringify({
-            title: bucket === 30 ? `⏰ ${title} in ~30 min` : `⏳ ${title} in ~5 min`,
+            title: isReminder
+              ? (bucket === 30 ? `🔔 Reminder in ~30 min` : `🔔 Reminder in ~5 min`)
+              : (bucket === 30 ? `⏰ ${title} in ~30 min` : `⏳ ${title} in ~5 min`),
             body,
             url: '/calendar',
             tag: `event-${bucket}-${event.id}`,
-            data: { eventId: event.id, url: '/calendar' },
+            data: { eventId: event.id, eventType: event.event_type, url: '/calendar' },
             actions: [
-              { action: 'open', title: 'Open Event' },
+              { action: 'open', title: isReminder ? 'Open Reminder' : 'Open Event' },
               { action: 'snooze', title: 'Snooze 10m' },
-              { action: 'done', title: 'Mark Done' },
+              { action: 'done', title: isReminder ? 'Complete' : 'Mark Done' },
             ],
           }),
         })
@@ -130,7 +135,9 @@ Deno.serve(async (req) => {
 
         await supabase.from('notifications').insert({
           type: notifType,
-          title: bucket === 30 ? `Upcoming: ${title}` : `Starting soon: ${title}`,
+          title: isReminder
+            ? (bucket === 30 ? `Reminder soon: ${title}` : `Reminder now: ${title}`)
+            : (bucket === 30 ? `Upcoming: ${title}` : `Starting soon: ${title}`),
           body,
           event_id: event.id,
           source: 'system',
