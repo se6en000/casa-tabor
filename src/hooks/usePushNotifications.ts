@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const VAPID_PUBLIC_KEY = 'BCZWz_dMYnBkaJcwFy8u9vB6KkXXaWHGfsaeULb4tWOZo0hGSth4gWFtil8L86hjUOiRVnncAeKLlcFHU8xI6CQ'
@@ -11,60 +11,109 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 export function usePushNotifications() {
-  const registered = useRef(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [subscribed, setSubscribed] = useState(false)
+  const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+  )
 
-  useEffect(() => {
-    if (registered.current) return
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+  const supported =
+    typeof window !== 'undefined' &&
+    'serviceWorker' in navigator &&
+    'PushManager' in window &&
+    'Notification' in window
 
-    register()
-    registered.current = true
-  }, [])
+  const deviceLabel =
+    /iPhone|iPad/.test(navigator.userAgent)
+      ? 'iPhone'
+      : /Android/.test(navigator.userAgent)
+      ? 'Android'
+      : /Pi|Linux arm/.test(navigator.userAgent)
+      ? 'Pi Kiosk'
+      : 'Browser'
 
-  async function register() {
+  const refreshStatus = useCallback(async () => {
+    if (!supported) return
+    try {
+      setPermission(Notification.permission)
+      const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      await navigator.serviceWorker.ready
+      const sub = await reg.pushManager.getSubscription()
+      setSubscribed(Boolean(sub))
+    } catch {
+      setSubscribed(false)
+    }
+  }, [supported])
+
+  const enablePush = useCallback(async () => {
+    if (!supported) {
+      setError('Push is not supported in this browser.')
+      return false
+    }
+    setBusy(true)
+    setError(null)
+
     try {
       const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
       await navigator.serviceWorker.ready
 
-      // Only request if not already granted
-      const permission = await Notification.requestPermission()
-      if (permission !== 'granted') return
+      let currentPermission = Notification.permission
+      if (currentPermission === 'default') {
+        currentPermission = await Notification.requestPermission()
+      }
+      setPermission(currentPermission)
+      if (currentPermission !== 'granted') {
+        setSubscribed(false)
+        return false
+      }
 
       let sub = await reg.pushManager.getSubscription()
       if (!sub) {
         sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource,
         })
       }
 
       const json = sub.toJSON()
-      if (!json.keys) return
+      if (!json.keys?.p256dh || !json.keys.auth) {
+        throw new Error('Invalid push subscription keys.')
+      }
 
-      // Detect device label
-      const ua = navigator.userAgent
-      const label = /iPhone|iPad/.test(ua)
-        ? 'iPhone'
-        : /Android/.test(ua)
-        ? 'Android'
-        : /Pi|Linux arm/.test(ua)
-        ? 'Pi Kiosk'
-        : 'Browser'
-
-      // Upsert — endpoint is unique key so re-subscribing is idempotent
-      await supabase.from('push_subscriptions').upsert(
-        {
+      const { error: registerError } = await supabase.functions.invoke('register-push-subscription', {
+        body: {
           endpoint: sub.endpoint,
           p256dh: json.keys.p256dh,
           auth: json.keys.auth,
-          device_label: label,
+          device_label: deviceLabel,
         },
-        { onConflict: 'endpoint' }
-      )
+      })
+      if (registerError) throw registerError
 
-      console.log('[Push] Subscribed —', label)
+      setSubscribed(true)
+      return true
     } catch (err) {
-      console.warn('[Push] Registration failed:', err)
+      setError(err instanceof Error ? err.message : String(err))
+      setSubscribed(false)
+      return false
+    } finally {
+      setBusy(false)
     }
+  }, [deviceLabel, supported])
+
+  useEffect(() => {
+    refreshStatus()
+  }, [refreshStatus])
+
+  return {
+    supported,
+    permission,
+    subscribed,
+    busy,
+    error,
+    deviceLabel,
+    enablePush,
+    refreshStatus,
   }
 }

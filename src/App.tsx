@@ -6,7 +6,6 @@ import AnimatedRoutes from './components/shared/AnimatedRoutes'
 import TabletSidebar from './components/layout/TabletSidebar'
 import { useRoomTone } from './hooks/useRoomTone'
 import { useTravelScan } from './hooks/useTravelScan'
-import { usePushNotifications } from './hooks/usePushNotifications'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 import { TopBarC } from './components/shared/TopBar'
 import PinGate from './components/shared/PinGate'
@@ -104,7 +103,6 @@ function AppShell() {
   const { currentZone } = useRoomTone()
   const { setRoomToneZone } = useTheme()
   useTravelScan()
-  usePushNotifications()
 
   const { settings } = useScreensaverSettings()
   const ssMs   = settings.enabled && !IS_SAFE_MODE ? settings.screensaverMins * 60_000 : Infinity
