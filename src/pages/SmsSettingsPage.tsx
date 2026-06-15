@@ -148,7 +148,7 @@ export default function SmsSettingsPage() {
   const sendTestPush = async () => {
     setPushTestStatus('sending')
     try {
-      const { error } = await supabase.functions.invoke('send-push-notification', {
+      const { data, error } = await supabase.functions.invoke('send-push-notification', {
         body: {
           title: 'Casa Tabor test',
           body: `Push is working on ${deviceLabel}.`,
@@ -156,7 +156,12 @@ export default function SmsSettingsPage() {
           tag: 'push-test',
         },
       })
-      setPushTestStatus(error ? 'error' : 'ok')
+      if (error) {
+        setPushTestStatus('error')
+      } else {
+        const sent = Number((data as { sent?: number } | null)?.sent ?? 0)
+        setPushTestStatus(sent > 0 ? 'ok' : 'error')
+      }
     } catch {
       setPushTestStatus('error')
     }
