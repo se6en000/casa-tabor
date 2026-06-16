@@ -633,7 +633,9 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, pag
     markUserInteraction()
     ignoreInterimUntilRef.current = Date.now() + 1500
     startFresh()
-    if (launchRequest.autoSend) setTimeout(() => send(launchRequest.prompt), 120)
+    if (launchRequest.autoSend) {
+      setTimeout(() => send(launchRequest.prompt, undefined, { skipGoodbyeCheck: true }), 120)
+    }
   }, [open, launchRequest, send, startFresh, markUserInteraction])
 
   // Once session is fresh (no messages), inject a deterministic event summary greeting

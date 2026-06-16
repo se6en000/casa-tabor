@@ -118,12 +118,18 @@ export function useAIAssistant(ctx: AssistantContext) {
     return `${sid}:${messageId}:${Date.now().toString(36)}`
   }, [])
 
-  const send = useCallback(async (text: string, image?: { dataUrl: string; mimeType: string }) => {
+  const send = useCallback(async (
+    text: string,
+    image?: { dataUrl: string; mimeType: string },
+    options?: { skipGoodbyeCheck?: boolean },
+  ) => {
+    const trimmedText = text.trim()
     // Check for goodbye phrase → end session
-    if (GOODBYE_PHRASES.test(text)) {
+    const looksLikeShortGoodbye = GOODBYE_PHRASES.test(trimmedText) && trimmedText.split(/\s+/).length <= 6
+    if (!options?.skipGoodbyeCheck && looksLikeShortGoodbye) {
       const farewell: AIMessage = { id: genId(), role: 'assistant', content: "You're welcome! Session saved. Say hi when you need me 👋" }
       setMessages(prev => {
-        const updated = [...prev, { id: genId(), role: 'user' as const, content: text }, farewell]
+        const updated = [...prev, { id: genId(), role: 'user' as const, content: trimmedText }, farewell]
         if (sessionRef.current) saveMessages(sessionRef.current.id, updated)
         return updated
       })
@@ -133,7 +139,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       return
     }
 
-    const userMsg: AIMessage = { id: genId(), role: 'user', content: text, imageDataUrl: image?.dataUrl }
+    const userMsg: AIMessage = { id: genId(), role: 'user', content: trimmedText, imageDataUrl: image?.dataUrl }
     setMessages(prev => [...prev, userMsg])
     setLoading(true)
 
