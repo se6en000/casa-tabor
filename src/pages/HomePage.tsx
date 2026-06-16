@@ -473,7 +473,7 @@ function DesktopHeroCard({
     : null
 
   return (
-    <section className="hidden lg:block mt-2 mb-6">
+    <section className="hidden lg:block mt-2 mb-6" onClick={(e) => e.stopPropagation()}>
       <div className="relative rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-6 grid grid-cols-[1fr_236px] xl:grid-cols-[1fr_248px] gap-6 overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/8 via-transparent to-black/10" />
         <div className="pointer-events-none absolute inset-0 ring-1 ring-white/10 rounded-[22px]" />
