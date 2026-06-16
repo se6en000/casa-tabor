@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 
 export interface Notification {
   id: string
-  type: 'event_added' | 'event_updated' | 'event_enriched' | 'gmail_import' | 'conflict' | 'briefing_ready'
+  type: string
   title: string
   body: string | null
   event_id: string | null
@@ -61,4 +61,3 @@ export function useNotifications() {
 
   return { notifications, unreadCount, isLoading, markRead, markAllRead, clearAll, addNotification }
 }
-

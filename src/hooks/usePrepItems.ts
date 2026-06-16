@@ -6,7 +6,7 @@ import type { PrepItem } from '../types'
 /** Returns all undismissed, un-snoozed prep/action items ordered by urgency */
 export function usePrepItems() {
   const qc = useQueryClient()
-  const channelRef = useRef(`prep_items_realtime_${Math.random().toString(36).slice(2)}`)
+  const channelRef = useRef('prep_items_realtime')
 
   useEffect(() => {
     const channel = supabase
@@ -155,4 +155,69 @@ export function useDownvotePrepItem() {
 
     qc.invalidateQueries({ queryKey: ['prep-items'] })
   }
+}
+
+interface GmailContext {
+  subject: string | null
+  from_email: string | null
+  received_at: string | null
+  processed_at: string
+  email_body: string | null
+}
+
+interface PrepItemDetails {
+  relatedItems: PrepItem[]
+  gmailContext: GmailContext | null
+}
+
+function getGmailMessageId(sourceRef: string | null | undefined): string | null {
+  if (!sourceRef) return null
+  if (!sourceRef.startsWith('gmail:')) return null
+  const [, messageId] = sourceRef.split(':')
+  return messageId || null
+}
+
+export function usePrepItemDetails(item: PrepItem | null) {
+  return useQuery({
+    queryKey: ['prep-item-details', item?.id ?? null, item?.source_ref ?? null],
+    enabled: !!item,
+    queryFn: async (): Promise<PrepItemDetails> => {
+      if (!item) return { relatedItems: [], gmailContext: null }
+
+      const relatedPromise = item.source_ref
+        ? supabase
+            .from('prep_items')
+            .select('*')
+            .eq('source_ref', item.source_ref)
+            .order('priority', { ascending: false })
+            .order('due_by', { ascending: true })
+            .limit(12)
+        : Promise.resolve({ data: [], error: null } as const)
+
+      const messageId = getGmailMessageId(item.source_ref)
+      const gmailPromise = messageId
+        ? supabase
+            .from('gmail_processed_messages')
+            .select('subject, from_email, received_at, processed_at, email_body')
+            .eq('gmail_message_id', messageId)
+            .order('processed_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null } as const)
+
+      const [{ data: relatedItems, error: relatedErr }, { data: gmailContext, error: gmailErr }] = await Promise.all([
+        relatedPromise,
+        gmailPromise,
+      ])
+
+      if (relatedErr) throw relatedErr
+      if (gmailErr) throw gmailErr
+
+      return {
+        relatedItems: (relatedItems ?? []) as PrepItem[],
+        gmailContext: (gmailContext ?? null) as GmailContext | null,
+      }
+    },
+    staleTime: 60_000,
+  })
 }

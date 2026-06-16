@@ -68,7 +68,11 @@ function groupItems(items: PrepItem[]) {
   return grouped
 }
 
-export default function PrepActionSection() {
+interface PrepActionSectionProps {
+  onSelectItem?: (item: PrepItem) => void
+}
+
+export default function PrepActionSection({ onSelectItem }: PrepActionSectionProps) {
   const { data: items = [] } = usePrepItems()
   const dismiss = useDismissPrepItem()
   const snooze = useSnoozePrepItem()
@@ -119,7 +123,10 @@ export default function PrepActionSection() {
               className="flex items-start gap-2.5"
             >
               <button
-                onClick={() => handleCheck(item.id)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleCheck(item.id)
+                }}
                 className="shrink-0 mt-0.5 flex flex-col items-center gap-1 group"
                 title="Mark done"
               >
@@ -138,7 +145,14 @@ export default function PrepActionSection() {
                 <div className={cn('w-1.5 h-1.5 rounded-full', urg.dot)} />
               </button>
 
-              <div className="flex-1 min-w-0">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onSelectItem?.(item)
+                }}
+                className="flex-1 min-w-0 text-left rounded-lg px-1 -mx-1 hover:bg-casa-bg/70 transition-colors"
+              >
                 <p
                   className={cn(isDone && 'line-through text-casa-muted')}
                   style={{ fontSize: '0.8125rem', lineHeight: '1.5', fontFamily: "'DM Sans', system-ui, sans-serif", color: isDone ? undefined : 'var(--color-casa-text)' }}
@@ -160,18 +174,24 @@ export default function PrepActionSection() {
                     {urg.badgeText}
                   </span>
                 </div>
-              </div>
+              </button>
 
               <div className="shrink-0 flex items-center gap-0.5 mt-0.5">
                 <button
-                  onClick={() => snooze(item.id)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    snooze(item.id)
+                  }}
                   className="text-casa-muted hover:text-casa-text transition-colors px-1"
                   title="Snooze until tomorrow"
                 >
                   <Moon size={11} strokeWidth={1.8} />
                 </button>
                 <button
-                  onClick={() => handleDownvote(item.id)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleDownvote(item.id)
+                  }}
                   className={cn(
                     'transition-colors px-1',
                     isDownvoting ? 'text-red-500' : 'text-casa-muted hover:text-red-500',
@@ -193,7 +213,11 @@ export default function PrepActionSection() {
       <button
         onClick={() => setOpen(v => {
           const next = !v
-          try { localStorage.setItem(PREP_SECTION_KEY, next ? '1' : '0') } catch {}
+          try {
+            localStorage.setItem(PREP_SECTION_KEY, next ? '1' : '0')
+          } catch {
+            // ignore localStorage failures
+          }
           return next
         })}
         className="w-full flex items-center justify-between"

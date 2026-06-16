@@ -14,10 +14,12 @@ import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import EventDetailPanel from '../components/calendar/EventDetailPanel'
 import MiniPlayer from '../components/music/MiniPlayer'
 import HomeRightPanel from '../components/home/HomeRightPanel'
+import PrepItemDetailPanel from '../components/home/PrepItemDetailPanel'
 import { isAllDayReminder, isTimedReminder } from '../utils/holidays'
 import SwipeableReminderPill from '../components/shared/SwipeableReminderPill'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import { WeatherIcon } from '../components/shared/WeatherIcon'
+import type { PrepItem } from '../types'
 
 const SHARED_GOLD = '#C9A96E'
 
@@ -35,6 +37,7 @@ export default function HomePage() {
   const { data: allTomorrowEvents } = useTodayEvents(tomorrow)
   const { visibleMembers, toggleMember } = useCalendarStore()
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [selectedPrepItem, setSelectedPrepItem] = useState<PrepItem | null>(null)
   const scrollRef = useRef<HTMLElement | null>(null)
   const nowLineRef = useRef<HTMLLIElement | null>(null)
   const homeFamily = useMemo(
@@ -84,6 +87,9 @@ export default function HomePage() {
   const selectedEvent = selectedEventId
     ? (events.find(e => e.id === selectedEventId) ?? tomorrowEvents.find(e => e.id === selectedEventId) ?? reminders.find(e => e.id === selectedEventId) ?? null)
     : null
+  useEffect(() => {
+    if (selectedEventId) setSelectedPrepItem(null)
+  }, [selectedEventId])
   const qc = useQueryClient()
 
   const completeReminder = useCallback(async (id: string) => {
@@ -174,7 +180,13 @@ export default function HomePage() {
 
   return (
     // lg: side-by-side with right panel. Mobile: single column.
-    <div className="flex h-full overflow-hidden" onClick={() => setSelectedEventId(null)}>
+    <div
+      className="flex h-full overflow-hidden"
+      onClick={() => {
+        setSelectedEventId(null)
+        setSelectedPrepItem(null)
+      }}
+    >
 
       {/* ── Center content ─────────────────────────────────── */}
       <div
@@ -339,11 +351,25 @@ export default function HomePage() {
           />
         </div>
 
+        <div onClick={e => e.stopPropagation()}>
+          <PrepItemDetailPanel
+            item={selectedPrepItem}
+            onClose={() => setSelectedPrepItem(null)}
+          />
+        </div>
+
 
       </div>
 
       {/* ── Right panel (tablet only) ──────────────────────── */}
-      <HomeRightPanel now={now} allTodayEvents={allTodayEvents ?? []} />
+      <HomeRightPanel
+        now={now}
+        allTodayEvents={allTodayEvents ?? []}
+        onSelectPrepItem={(item) => {
+          setSelectedEventId(null)
+          setSelectedPrepItem(item)
+        }}
+      />
     </div>
   )
 }

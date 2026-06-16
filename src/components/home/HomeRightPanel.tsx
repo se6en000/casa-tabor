@@ -2,10 +2,11 @@
  * HomeRightPanel — shown on tablet (lg:) to the right of today's timeline.
  * Week strip, daily briefing, alerts, recent activity — all collapsible.
  */
-import { useEffect, useState, useCallback } from 'react'
-import { format, startOfWeek, addDays } from 'date-fns'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import { format, formatDistanceToNow, startOfWeek, addDays } from 'date-fns'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, Sun, ChevronRight, Bot, CalendarDays, Bell, ChevronDown, Plane, X } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useWeekEvents } from '../../hooks/useCalendarEvents'
@@ -18,10 +19,12 @@ import { useWeekConflicts } from '../../hooks/useConflicts'
 import PrepActionSection from './PrepActionSection'
 import { useCalendarStore } from '../../stores/calendarStore'
 import BounceScroll from '../shared/BounceScroll'
+import type { PrepItem } from '../../types'
 
 interface Props {
   now: Date
   allTodayEvents: EventWithDetails[]
+  onSelectPrepItem?: (item: PrepItem) => void
 }
 
 interface Briefing {
@@ -112,7 +115,145 @@ function parseParagraphs(text: string): string[] {
   return chunks.filter(Boolean)
 }
 
-export default function HomeRightPanel({ now, allTodayEvents }: Props) {
+type ActivityOutcome = 'Created' | 'Updated' | 'Skipped' | 'Conflict' | 'Alert' | 'Completed' | 'Snoozed' | 'Error' | 'Info'
+
+interface GmailConnectionStatus {
+  family_member_id: string
+  google_email: string
+  gmail_scan_enabled: boolean
+  last_sync_at: string | null
+  last_sync_error: string | null
+}
+
+interface FamilyMemberSummary {
+  id: string
+  name: string
+}
+
+interface GmailProcessedMessage {
+  id: string
+  family_member_id: string
+  subject: string | null
+  from_email: string | null
+  intent: string | null
+  created_event_id: string | null
+  updated_event_id: string | null
+  skipped_reason: string | null
+  processed_at: string
+}
+
+interface ActivityEntry {
+  id: string
+  title: string
+  source: string
+  createdAt: string
+  outcome: ActivityOutcome
+  reason: string | null
+  summary: string | null
+  read: boolean
+  count: number
+  notificationId?: string
+}
+
+interface ActivityHealth {
+  scannersEnabled: number
+  scannersHealthy: number
+  scannersWithErrors: number
+  lastScanAt: string | null
+  scanned: number
+  created: number
+  updated: number
+  skipped: number
+  memberStates: string[]
+  entries: ActivityEntry[]
+}
+
+const OUTCOME_STYLES: Record<ActivityOutcome, string> = {
+  Created: 'bg-emerald-100 text-emerald-700',
+  Updated: 'bg-blue-100 text-blue-700',
+  Skipped: 'bg-slate-100 text-slate-600',
+  Conflict: 'bg-red-100 text-red-700',
+  Alert: 'bg-amber-100 text-amber-700',
+  Completed: 'bg-emerald-100 text-emerald-700',
+  Snoozed: 'bg-purple-100 text-purple-700',
+  Error: 'bg-red-100 text-red-700',
+  Info: 'bg-slate-100 text-slate-600',
+}
+
+function sourceLabel(source: string | null): string {
+  switch (source) {
+    case 'gmail': return 'Gmail'
+    case 'ai': return 'AI'
+    case 'policy': return 'Policy'
+    case 'google_sync': return 'Google Sync'
+    case 'sms': return 'SMS'
+    case 'system': return 'System'
+    case 'manual': return 'Manual'
+    default: return 'System'
+  }
+}
+
+function outcomeFromNotificationType(type: string): ActivityOutcome {
+  if (type.includes('error')) return 'Error'
+  if (type.includes('conflict')) return 'Conflict'
+  if (type.includes('snooze')) return 'Snoozed'
+  if (type.includes('done')) return 'Completed'
+  if (type.includes('updated')) return 'Updated'
+  if (type.includes('added') || type.includes('import')) return 'Created'
+  if (type.startsWith('push_') || type.includes('reminder') || type.includes('prep')) return 'Alert'
+  return 'Info'
+}
+
+function summaryFromNotificationType(type: string): string | null {
+  if (type.includes('added') || type === 'gmail_import') return '+1 event'
+  if (type.includes('updated')) return 'event changed'
+  if (type.includes('conflict')) return 'conflict flagged'
+  if (type.includes('prep')) return 'prep escalation'
+  if (type.startsWith('push_')) return 'push sent'
+  return null
+}
+
+function normalizeActivityTitle(title: string): string {
+  return title
+    .replace(/^(new event added|event updated|upcoming:|starting soon:|reminder soon:|reminder now:|conflict:|prep due:)\s*/i, '')
+    .trim()
+    .toLowerCase()
+}
+
+function groupActivities(entries: ActivityEntry[]): ActivityEntry[] {
+  const sorted = [...entries].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
+  const grouped: ActivityEntry[] = []
+  const indexByKey = new Map<string, number>()
+  const windowMs = 90 * 60 * 1000
+
+  for (const entry of sorted) {
+    const key = `${entry.outcome}|${entry.source}|${normalizeActivityTitle(entry.title)}`
+    const groupedIdx = indexByKey.get(key)
+    if (groupedIdx == null) {
+      indexByKey.set(key, grouped.length)
+      grouped.push(entry)
+      continue
+    }
+
+    const candidate = grouped[groupedIdx]
+    if (Math.abs(+new Date(candidate.createdAt) - +new Date(entry.createdAt)) > windowMs) {
+      indexByKey.set(`${key}|${entry.createdAt}`, grouped.length)
+      grouped.push(entry)
+      continue
+    }
+
+    grouped[groupedIdx] = {
+      ...candidate,
+      count: candidate.count + 1,
+      reason: candidate.reason ?? entry.reason,
+      read: candidate.read && entry.read,
+    }
+  }
+
+  return grouped
+}
+
+export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }: Props) {
   const { notifications, markRead, clearAll } = useNotifications()
   const { data: conflicts = [] } = useWeekConflicts()
   const weekStart = startOfWeek(now, { weekStartsOn: 0 })
@@ -152,6 +293,112 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
   const paragraphs = briefing?.summary_text ? parseParagraphs(briefing.summary_text) : []
   const { visible, rest } = truncateToWords(paragraphs)
   const hasMore = rest.length > 0
+  const notificationEntries = useMemo<ActivityEntry[]>(() => (
+    notifications.map(n => ({
+      id: `notif:${n.id}`,
+      title: n.body ?? n.title,
+      source: sourceLabel(n.source),
+      createdAt: n.created_at,
+      outcome: outcomeFromNotificationType(n.type),
+      reason: n.body && n.title !== n.body ? n.title : null,
+      summary: summaryFromNotificationType(n.type),
+      read: n.read,
+      count: 1,
+      notificationId: n.id,
+    }))
+  ), [notifications])
+  const { data: gmailActivity } = useQuery<ActivityHealth>({
+    queryKey: ['recent-activity-health'],
+    queryFn: async () => {
+      const [
+        { data: statuses, error: statusesError },
+        { data: members, error: membersError },
+        { data: messages, error: messagesError },
+      ] = await Promise.all([
+        supabase.from('google_connection_status').select('family_member_id, google_email, gmail_scan_enabled, last_sync_at, last_sync_error'),
+        supabase.from('family_members').select('id, name'),
+        supabase
+          .from('gmail_processed_messages')
+          .select('id, family_member_id, subject, from_email, intent, created_event_id, updated_event_id, skipped_reason, processed_at')
+          .order('processed_at', { ascending: false })
+          .limit(40),
+      ])
+      if (statusesError) throw statusesError
+      if (membersError) throw membersError
+      if (messagesError) throw messagesError
+
+      const statusRows = (statuses ?? []) as GmailConnectionStatus[]
+      const memberRows = (members ?? []) as FamilyMemberSummary[]
+      const messageRows = (messages ?? []) as GmailProcessedMessage[]
+      const memberById = new Map(memberRows.map(m => [m.id, m.name]))
+      const enabled = statusRows.filter(s => s.gmail_scan_enabled)
+
+      const healthyThresholdMs = 90 * 60 * 1000
+      const scannersHealthy = enabled.filter(s => {
+        if (s.last_sync_error) return false
+        if (!s.last_sync_at) return false
+        return (Date.now() - +new Date(s.last_sync_at)) <= healthyThresholdMs
+      }).length
+
+      const memberStates = enabled.map(s => {
+        const name = memberById.get(s.family_member_id) ?? 'Unknown'
+        if (s.last_sync_error) return `${name} error`
+        if (!s.last_sync_at || (Date.now() - +new Date(s.last_sync_at)) > healthyThresholdMs) return `${name} stale`
+        return `${name} ok`
+      })
+
+      const activityWindowMs = 6 * 60 * 60 * 1000
+      const recentMessages = messageRows.filter(m => (Date.now() - +new Date(m.processed_at)) <= activityWindowMs)
+      const created = recentMessages.filter(m => !!m.created_event_id).length
+      const updated = recentMessages.filter(m => !!m.updated_event_id).length
+      const skipped = recentMessages.filter(m => m.intent === 'skip' || !!m.skipped_reason).length
+
+      const entries: ActivityEntry[] = recentMessages.map(m => {
+        const outcome: ActivityOutcome = m.created_event_id
+          ? 'Created'
+          : m.updated_event_id
+          ? 'Updated'
+          : (m.intent === 'skip' || m.skipped_reason)
+          ? 'Skipped'
+          : 'Info'
+        return {
+          id: `gmail:${m.id}`,
+          title: m.subject?.trim() || '(no subject)',
+          source: `Gmail • ${memberById.get(m.family_member_id) ?? 'Unknown'}`,
+          createdAt: m.processed_at,
+          outcome,
+          reason: m.skipped_reason ?? m.from_email ?? null,
+          summary: m.created_event_id ? '+1 event' : m.updated_event_id ? 'event updated' : null,
+          read: true,
+          count: 1,
+        }
+      })
+
+      const lastScanAt = enabled
+        .map(s => s.last_sync_at)
+        .filter((value): value is string => !!value)
+        .sort((a, b) => +new Date(b) - +new Date(a))[0] ?? null
+
+      return {
+        scannersEnabled: enabled.length,
+        scannersHealthy,
+        scannersWithErrors: enabled.filter(s => !!s.last_sync_error).length,
+        lastScanAt,
+        scanned: recentMessages.length,
+        created,
+        updated,
+        skipped,
+        memberStates,
+        entries,
+      }
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  })
+  const activityEntries = useMemo(
+    () => groupActivities([...notificationEntries, ...(gmailActivity?.entries ?? [])]).slice(0, 10),
+    [notificationEntries, gmailActivity],
+  )
 
   return (
     <aside className="hidden lg:flex w-72 flex-shrink-0 flex-col border-l border-casa-border bg-casa-surface self-stretch overflow-hidden">
@@ -268,7 +515,7 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
       </div>
 
       {/* ── Prep & Action ─────────────────────────────────────── */}
-      <PrepActionSection />
+      <PrepActionSection onSelectItem={onSelectPrepItem} />
 
       {/* ── Heads Up (only when active conflicts exist) ───────── */}
       {conflicts.length > 0 && (
@@ -307,27 +554,69 @@ export default function HomeRightPanel({ now, allTodayEvents }: Props) {
         />
         {openActivity && (
           <div className="mt-3">
-            {notifications.length === 0 ? (
+            {gmailActivity && (
+              <div className="mb-3 rounded-xl border border-casa-border bg-casa-bg px-3 py-2.5">
+                <p className="text-caption text-casa-text">
+                  Last scan {gmailActivity.lastScanAt ? formatDistanceToNow(new Date(gmailActivity.lastScanAt), { addSuffix: true }) : 'not available'}
+                </p>
+                <p className="text-caption text-casa-muted mt-0.5">
+                  Scanners {gmailActivity.scannersHealthy}/{gmailActivity.scannersEnabled} healthy
+                  {gmailActivity.scannersWithErrors > 0 && ` · ${gmailActivity.scannersWithErrors} error`}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <span className="text-caption rounded-full bg-slate-200/70 text-slate-700 px-2 py-0.5">{gmailActivity.scanned} scanned</span>
+                  <span className="text-caption rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5">{gmailActivity.created} created</span>
+                  <span className="text-caption rounded-full bg-blue-100 text-blue-700 px-2 py-0.5">{gmailActivity.updated} updated</span>
+                  <span className="text-caption rounded-full bg-slate-100 text-slate-600 px-2 py-0.5">{gmailActivity.skipped} skipped</span>
+                </div>
+                {gmailActivity.memberStates.length > 0 && (
+                  <p className="text-caption text-casa-muted mt-2 truncate">
+                    {gmailActivity.memberStates.join(' • ')}
+                  </p>
+                )}
+              </div>
+            )}
+            {activityEntries.length === 0 ? (
               <p className="text-caption text-casa-muted">No recent activity</p>
             ) : (
               <div>
-                {notifications.slice(0, 6).map(n => (
-                  <div key={n.id} className="py-2.5 border-b border-casa-divider last:border-0 flex items-start gap-2 group">
+                {activityEntries.map(item => (
+                  <div key={item.id} className="py-2.5 border-b border-casa-divider last:border-0 flex items-start gap-2 group">
                     <div className="flex-1 min-w-0">
-                      <p className={cn('text-body-sm font-medium leading-snug', n.read ? 'text-casa-muted' : 'text-casa-text')}>
-                        {n.body ?? n.title}
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide', OUTCOME_STYLES[item.outcome])}>
+                          {item.outcome}
+                        </span>
+                        {item.count > 1 && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-casa-gold/20 text-casa-gold">
+                            x{item.count}
+                          </span>
+                        )}
+                      </div>
+                      <p className={cn('text-body-sm font-medium leading-snug truncate', item.read ? 'text-casa-muted' : 'text-casa-text')}>
+                        {item.title}
                       </p>
+                      {item.reason && (
+                        <p className="text-caption text-casa-muted/90 mt-0.5 line-clamp-2">{item.reason}</p>
+                      )}
                       <p className="text-caption text-casa-muted mt-0.5">
-                        {format(new Date(n.created_at), 'h:mm a')}
+                        {item.source} · {format(new Date(item.createdAt), 'h:mm a')}
                       </p>
+                      {item.summary && (
+                        <p className="text-caption text-casa-muted mt-0.5">{item.summary}</p>
+                      )}
                     </div>
-                    <button
-                      onClick={() => markRead.mutate(n.id)}
-                      className="shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity text-casa-muted hover:text-red-400"
-                      title="Dismiss"
-                    >
-                      <X size={12} />
-                    </button>
+                    {item.notificationId && !item.read && (
+                      <button
+                        onClick={() => {
+                          if (item.notificationId) markRead.mutate(item.notificationId)
+                        }}
+                        className="shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity text-casa-muted hover:text-red-400"
+                        title="Dismiss"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
