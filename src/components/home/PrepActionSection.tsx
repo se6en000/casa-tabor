@@ -180,16 +180,16 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
                 </div>
               </button>
 
-              <div className="shrink-0 flex items-center gap-0.5 mt-0.5">
+              <div className="shrink-0 flex flex-col items-center gap-1 mt-0.5 ml-1">
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
                     snooze(item.id)
                   }}
-                  className="text-casa-muted hover:text-casa-text transition-colors px-1"
+                  className="w-7 h-7 rounded-full flex items-center justify-center border border-casa-border bg-white text-casa-muted hover:text-casa-text hover:bg-casa-bg transition-colors"
                   title="Snooze until tomorrow"
                 >
-                  <Moon size={11} strokeWidth={1.8} />
+                  <Moon size={15} strokeWidth={2} />
                 </button>
                 <button
                   onClick={(e) => {
@@ -197,12 +197,14 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
                     handleDownvote(item.id)
                   }}
                   className={cn(
-                    'transition-colors px-1',
-                    isDownvoting ? 'text-red-500' : 'text-casa-muted hover:text-red-500',
+                    'w-7 h-7 rounded-full flex items-center justify-center border bg-white transition-colors',
+                    isDownvoting
+                      ? 'border-red-300 text-red-500'
+                      : 'border-casa-border text-casa-muted hover:text-red-500 hover:bg-red-50',
                   )}
                   title="Not relevant — teach AI"
                 >
-                  <ThumbsDown size={11} strokeWidth={1.8} />
+                  <ThumbsDown size={15} strokeWidth={2} />
                 </button>
               </div>
             </motion.div>
