@@ -504,7 +504,8 @@ function TimelineRow({
                       <div className="flex items-center gap-1 shrink-0 pt-0.5">
                         {primary && (
                           <span
-                            className="px-2 py-0.5 rounded-full text-caption font-semibold leading-none whitespace-nowrap text-casa-navy bg-casa-bg"
+                            className="px-2 py-0.5 rounded-full text-caption font-bold leading-none whitespace-nowrap text-white"
+                            style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
                             title={ownerName}
                           >
                             {ownerName}
@@ -513,7 +514,8 @@ function TimelineRow({
                         {others.slice(0, 3).map((m) => (
                           <span
                             key={m.id}
-                            className="px-2 py-0.5 rounded-full text-caption font-semibold leading-none whitespace-nowrap text-casa-navy bg-casa-bg"
+                            className="px-2 py-0.5 rounded-full text-caption font-bold leading-none whitespace-nowrap text-white"
+                            style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
                           >
                             {m.family_member?.name}
                           </span>
