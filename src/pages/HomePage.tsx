@@ -23,6 +23,20 @@ import type { PrepItem } from '../types'
 
 const SHARED_GOLD = '#C9A96E'
 
+function cleanEventTitle(title: string): string {
+  const pipeIdx = title.indexOf(' | ')
+  return pipeIdx !== -1 ? title.slice(pipeIdx + 3) : title
+}
+
+function mapsUrlForEvent(event: EventWithDetails): string | null {
+  const mapsQuery = event.address
+    ? (event.location_name ? `${event.location_name}, ${event.address}` : event.address)
+    : (event.location_name ?? '')
+  return mapsQuery
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
+    : null
+}
+
 function eventColor(ev: EventWithDetails): string {
   if (!ev.members || ev.members.length === 0) return SHARED_GOLD
   const primary = ev.members.find((m) => m.role === 'primary')
@@ -74,6 +88,11 @@ export default function HomePage() {
       return isTimedReminder(ev) && memberOk(ev)
     })
   }, [allTomorrowEvents, visibleMembers])
+
+  const nextTodayEvent = useMemo(
+    () => events.find((e) => isAfter(new Date(e.end_time), now)) ?? null,
+    [events, now],
+  )
 
   // Show tomorrow section always (not just when today is done)
 
@@ -220,8 +239,18 @@ export default function HomePage() {
           )}
         </AnimatePresence>
 
+        <DesktopHeroCard
+          now={now}
+          nextTodayEvent={nextTodayEvent}
+          fallbackTomorrowEvent={tomorrowEvents[0] ?? null}
+          onViewDetails={(event) => {
+            setSelectedPrepItem(null)
+            setSelectedEventId(event.id)
+          }}
+        />
+
         {/* ── Today's timeline — first, front and center ──── */}
-        <section className="mt-2">
+        <section className="mt-4">
           <div className="flex items-baseline justify-between mb-3">
             <h2 className="font-display text-heading text-casa-navy">Today</h2>
             <Link
@@ -376,6 +405,120 @@ export default function HomePage() {
   )
 }
 
+function DesktopHeroCard({
+  now,
+  nextTodayEvent,
+  fallbackTomorrowEvent,
+  onViewDetails,
+}: {
+  now: Date
+  nextTodayEvent: EventWithDetails | null
+  fallbackTomorrowEvent: EventWithDetails | null
+  onViewDetails: (event: EventWithDetails) => void
+}) {
+  const focusEvent = nextTodayEvent ?? fallbackTomorrowEvent
+  if (!focusEvent) return null
+
+  const focusStart = new Date(focusEvent.start_time)
+  const isTodayFocus = !!nextTodayEvent
+  const minutesUntil = Math.max(0, Math.round((focusStart.getTime() - now.getTime()) / 60000))
+  const hours = Math.floor(minutesUntil / 60)
+  const mins = minutesUntil % 60
+  const countdown = hours > 0 ? `${hours}H ${mins}M` : `${mins}M`
+  const dayHour = now.getHours()
+  const daypart = dayHour < 12 ? 'MORNING' : dayHour < 17 ? 'MIDDAY' : 'TONIGHT'
+  const leadLabel = isTodayFocus
+    ? `UP NEXT · IN ${countdown}`
+    : `${daypart} · YOU'RE CLEAR`
+
+  const primary = focusEvent.members?.find((m) => m.role === 'primary')
+  const orderedMembers = [
+    ...(primary ? [primary] : []),
+    ...((focusEvent.members ?? []).filter((m) => m.role !== 'primary').slice(0, 3)),
+  ]
+  const heroTitle = isTodayFocus
+    ? cleanEventTitle(focusEvent.title)
+    : `Nothing left today — first move is ${format(new Date(focusEvent.start_time), 'h:mm a')}`
+  const detailText = focusEvent.enrichment?.prep_notes
+    ?? focusEvent.description
+    ?? (isTodayFocus
+      ? `${primary?.family_member?.name ?? 'You'} has ${cleanEventTitle(focusEvent.title).toLowerCase()} at ${format(new Date(focusEvent.start_time), 'h:mm a')}.`
+      : `${cleanEventTitle(focusEvent.title)} is tomorrow at ${format(new Date(focusEvent.start_time), 'h:mm a')}.`)
+
+  const leaveAt = focusEvent.enrichment?.departure_time
+    ? new Date(focusEvent.enrichment.departure_time)
+    : new Date(focusEvent.start_time)
+  const leaveLabel = focusEvent.enrichment?.departure_time ? 'LEAVE BY' : 'STARTS AT'
+  const mapsUrl = mapsUrlForEvent(focusEvent)
+  const weatherLabel = focusEvent.enrichment?.weather_at_event
+  const locationLabel = focusEvent.location_name
+  const driveLabel = focusEvent.enrichment?.drive_time_mins
+    ? `${focusEvent.enrichment.drive_time_mins} min drive`
+    : null
+
+  return (
+    <section className="hidden lg:block mt-2 mb-6">
+      <div className="rounded-[22px] border border-casa-navy/20 bg-casa-navy text-white shadow-card p-6 grid grid-cols-[1fr_180px] gap-6">
+        <div className="min-w-0">
+          <p className="text-caption font-bold tracking-[0.16em] text-casa-gold">{leadLabel}</p>
+          <h1 className="font-display text-[2.1rem] leading-[1.04] mt-2 text-white">{heroTitle}</h1>
+          <p className="text-body mt-3 text-white/85 max-w-[60ch] line-clamp-2">{detailText}</p>
+
+          {orderedMembers.length > 0 && (
+            <div className="mt-4 flex items-center gap-2">
+              {orderedMembers.map((m) => (
+                <span
+                  key={m.id}
+                  className="px-3 py-1 rounded-full text-caption font-bold leading-none whitespace-nowrap text-white"
+                  style={{ backgroundColor: m.family_member?.color_hex ?? '#62708F' }}
+                >
+                  {m.family_member?.name}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-4 flex items-center flex-wrap gap-x-3 gap-y-1 text-body-sm text-white/88">
+            {driveLabel && <span>{driveLabel}</span>}
+            {locationLabel && <><span>•</span><span>{locationLabel}</span></>}
+            {weatherLabel && <><span>•</span><span>{weatherLabel}</span></>}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <div className="rounded-card border border-white/20 bg-white/8 px-4 py-3 text-right">
+            <p className="text-caption font-semibold tracking-wide text-white/80">{leaveLabel}</p>
+            <p className="font-display text-[2rem] leading-none text-casa-gold mt-1">{format(leaveAt, 'h:mm a')}</p>
+          </div>
+          {mapsUrl ? (
+            <a
+              href={mapsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="h-11 rounded-button bg-casa-gold text-casa-navy font-semibold flex items-center justify-center hover:brightness-110 transition-all"
+            >
+              Get directions
+            </a>
+          ) : (
+            <button
+              disabled
+              className="h-11 rounded-button border border-white/20 text-white/60 font-semibold"
+            >
+              Get directions
+            </button>
+          )}
+          <button
+            onClick={() => onViewDetails(focusEvent)}
+            className="h-11 rounded-button border border-white/25 text-white font-semibold hover:bg-white/10 transition-all"
+          >
+            View details
+          </button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 /* ── Timeline row ─────────────────────────────────────────────── */
 
 function TimelineRow({
@@ -496,8 +639,7 @@ function TimelineRow({
                 const primary = event.members?.find(m => m.role === 'primary')
                 const others = event.members?.filter(m => m.role !== 'primary') ?? []
                 const ownerName = primary?.family_member?.name ?? ''
-                const pipeIdx = event.title.indexOf(' | ')
-                const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
+                const cleanTitle = cleanEventTitle(event.title)
 
                 return (
                   <>
