@@ -436,18 +436,22 @@ function DesktopHeroCard({
     ...(primary ? [primary] : []),
     ...((focusEvent.members ?? []).filter((m) => m.role !== 'primary').slice(0, 3)),
   ]
-  const heroTitle = isTodayFocus
-    ? cleanEventTitle(focusEvent.title)
-    : `Nothing left today — first move is ${format(new Date(focusEvent.start_time), 'h:mm a')}`
-  const detailText = focusEvent.enrichment?.prep_notes
-    ?? focusEvent.description
-    ?? (isTodayFocus
-      ? `${primary?.family_member?.name ?? 'You'} has ${cleanEventTitle(focusEvent.title).toLowerCase()} at ${format(new Date(focusEvent.start_time), 'h:mm a')}.`
-      : `${cleanEventTitle(focusEvent.title)} is tomorrow at ${format(new Date(focusEvent.start_time), 'h:mm a')}.`)
-
   const leaveAt = focusEvent.enrichment?.departure_time
     ? new Date(focusEvent.enrichment.departure_time)
     : new Date(focusEvent.start_time)
+  const eventLabel = cleanEventTitle(focusEvent.title)
+  const primaryName = primary?.family_member?.name ?? 'You'
+  const heroTitle = isTodayFocus
+    ? (focusEvent.enrichment?.departure_time
+      ? `Leave by ${format(leaveAt, 'h:mm a')} for ${primaryName.toLowerCase() === 'you' ? 'your' : `${primaryName}'s`} ${eventLabel.toLowerCase()}`
+      : `${primaryName}'s ${eventLabel.toLowerCase()} starts at ${format(new Date(focusEvent.start_time), 'h:mm a')}`)
+    : `Nothing left today — first move is ${format(new Date(focusEvent.start_time), 'h:mm a')} tomorrow`
+  const detailText = focusEvent.enrichment?.prep_notes
+    ?? focusEvent.description
+    ?? (isTodayFocus
+      ? `${eventLabel} is at ${format(new Date(focusEvent.start_time), 'h:mm a')}${focusEvent.location_name ? ` at ${focusEvent.location_name}` : ''}.`
+      : `${eventLabel} is queued for tomorrow${focusEvent.location_name ? ` at ${focusEvent.location_name}` : ''}.`)
+
   const leaveLabel = focusEvent.enrichment?.departure_time ? 'LEAVE BY' : 'STARTS AT'
   const mapsUrl = mapsUrlForEvent(focusEvent)
   const weatherLabel = focusEvent.enrichment?.weather_at_event
@@ -458,23 +462,34 @@ function DesktopHeroCard({
 
   return (
     <section className="hidden lg:block mt-2 mb-6">
-      <div className="rounded-[22px] border border-casa-navy/20 bg-casa-navy text-white shadow-card p-6 grid grid-cols-[1fr_180px] gap-6">
-        <div className="min-w-0">
+      <div className="relative rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-6 grid grid-cols-[1fr_180px] gap-6 overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/8 via-transparent to-black/10" />
+        <div className="pointer-events-none absolute inset-0 ring-1 ring-white/10 rounded-[22px]" />
+
+        <div className="relative min-w-0">
           <p className="text-caption font-bold tracking-[0.16em] text-casa-gold">{leadLabel}</p>
-          <h1 className="font-display text-[2.1rem] leading-[1.04] mt-2 text-white">{heroTitle}</h1>
-          <p className="text-body mt-3 text-white/85 max-w-[60ch] line-clamp-2">{detailText}</p>
+          <h1 className="font-display text-[3rem] leading-[0.98] mt-2 text-white max-w-[16ch]">{heroTitle}</h1>
+          <p className="text-body mt-3 text-white/86 max-w-[60ch] line-clamp-2">{detailText}</p>
 
           {orderedMembers.length > 0 && (
             <div className="mt-4 flex items-center gap-2">
               {orderedMembers.map((m) => (
                 <span
                   key={m.id}
-                  className="px-3 py-1 rounded-full text-caption font-bold leading-none whitespace-nowrap text-white"
-                  style={{ backgroundColor: m.family_member?.color_hex ?? '#62708F' }}
+                  className="px-2.5 py-1 rounded-full text-caption font-bold leading-none whitespace-nowrap text-white border flex items-center gap-1.5"
+                  style={{
+                    background: `linear-gradient(180deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.08) 100%)`,
+                    borderColor: `${m.family_member?.color_hex ?? '#62708F'}AA`,
+                  }}
                 >
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: m.family_member?.color_hex ?? '#62708F' }}
+                  />
                   {m.family_member?.name}
                 </span>
               ))}
+              <span className="text-white/35 text-caption">•</span>
             </div>
           )}
 
@@ -485,31 +500,31 @@ function DesktopHeroCard({
           </div>
         </div>
 
-        <div className="flex flex-col gap-3">
-          <div className="rounded-card border border-white/20 bg-white/8 px-4 py-3 text-right">
-            <p className="text-caption font-semibold tracking-wide text-white/80">{leaveLabel}</p>
-            <p className="font-display text-[2rem] leading-none text-casa-gold mt-1">{format(leaveAt, 'h:mm a')}</p>
+        <div className="relative flex flex-col gap-3">
+          <div className="rounded-card border border-white/20 bg-gradient-to-b from-white/10 to-white/5 px-4 py-3 text-right shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
+            <p className="text-caption font-semibold tracking-[0.08em] text-white/80">{leaveLabel}</p>
+            <p className="font-display text-[2.05rem] leading-none text-casa-gold mt-1">{format(leaveAt, 'h:mm a')}</p>
           </div>
           {mapsUrl ? (
             <a
               href={mapsUrl}
               target="_blank"
               rel="noreferrer"
-              className="h-11 rounded-button bg-casa-gold text-casa-navy font-semibold flex items-center justify-center hover:brightness-110 transition-all"
+              className="h-11 rounded-button bg-casa-gold text-casa-navy font-semibold flex items-center justify-center hover:brightness-110 transition-all border border-casa-gold/50 shadow-[0_1px_0_rgba(255,255,255,0.25)_inset]"
             >
               Get directions
             </a>
           ) : (
             <button
               disabled
-              className="h-11 rounded-button border border-white/20 text-white/60 font-semibold"
+              className="h-11 rounded-button border border-white/20 bg-white/5 text-white/60 font-semibold"
             >
               Get directions
             </button>
           )}
           <button
             onClick={() => onViewDetails(focusEvent)}
-            className="h-11 rounded-button border border-white/25 text-white font-semibold hover:bg-white/10 transition-all"
+            className="h-11 rounded-button border border-white/25 bg-gradient-to-b from-white/6 to-white/[0.03] text-white font-semibold hover:from-white/12 hover:to-white/[0.06] transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
           >
             View details
           </button>
