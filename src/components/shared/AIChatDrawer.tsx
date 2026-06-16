@@ -629,9 +629,12 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, pag
     if (!open || !launchRequest || !launchRequest.prompt) return
     if (handledLaunchRef.current === launchRequest.nonce) return
     handledLaunchRef.current = launchRequest.nonce
+    // Treat AI-launched drafts as active interaction so the idle auto-close timer doesn't shut the drawer.
+    markUserInteraction()
+    ignoreInterimUntilRef.current = Date.now() + 1500
     startFresh()
     if (launchRequest.autoSend) setTimeout(() => send(launchRequest.prompt), 120)
-  }, [open, launchRequest, send, startFresh])
+  }, [open, launchRequest, send, startFresh, markUserInteraction])
 
   // Once session is fresh (no messages), inject a deterministic event summary greeting
   // so the user immediately sees what event the AI has loaded — no API round-trip needed.
