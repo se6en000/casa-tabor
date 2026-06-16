@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { format, isAfter, isBefore, addDays } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronRight, RefreshCw, MapPin, Clock, Navigation, Bell } from 'lucide-react'
+import { ChevronRight, RefreshCw, Navigation, Bell } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
@@ -224,7 +224,7 @@ export default function HomePage() {
             <h2 className="font-display text-heading text-casa-navy">Today</h2>
             <Link
               to="/calendar"
-              className="text-body-sm text-casa-muted hover:text-casa-navy flex items-center gap-0.5"
+              className="text-body-sm text-casa-gold hover:brightness-110 flex items-center gap-0.5 font-medium"
             >
               Full calendar <ChevronRight size={14} />
             </Link>
@@ -466,90 +466,89 @@ function TimelineRow({
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: past ? 0.45 : 1, x: 0 }}
       transition={{ duration: 0.3, delay: index * 0.04 }}
-      className="flex items-center gap-3 cursor-pointer"
+      className="cursor-pointer"
       onClick={e => { e.stopPropagation(); onClick() }}
     >
-      <div className="w-16 shrink-0 text-right">
-        <p className="text-body-sm font-semibold text-casa-navy tabular-nums">
-          {format(start, 'h:mm')}
-          <span className="text-caption text-casa-muted ml-0.5">{format(start, 'a')}</span>
-        </p>
-      </div>
-      <span
-        className={cn('w-2 rounded-full self-stretch', happening && 'animate-pulse-gold')}
-        style={{ backgroundColor: color }}
-      />
-      <div className="flex-1 min-w-0 bg-casa-surface rounded-card border border-casa-border px-4 py-3 shadow-card">
-        {/* Row 1: title + members */}
-        <div className="flex items-center justify-between gap-3">
-          {(() => {
-            // Strip "OwnerName | " prefix from title if it matches the primary member
-            const primary = event.members?.find(m => m.role === 'primary')
-            const others = event.members?.filter(m => m.role !== 'primary') ?? []
-            const ownerName = primary?.family_member?.name ?? ''
-            const pipeIdx = event.title.indexOf(' | ')
-            const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
-
-            return (
-              <>
-                <p className="font-body font-semibold text-casa-text truncate">{cleanTitle}</p>
-                {event.members && event.members.length > 0 && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    {/* Owner as full pill */}
-                    {primary && (
-                      <span
-                        className="px-2 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
-                        style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
-                        title={ownerName}
-                      >
-                        {ownerName}
-                      </span>
-                    )}
-                    {/* Other attendees as name pills */}
-                    {others.slice(0, 3).map((m) => (
-                      <span
-                        key={m.id}
-                        className="px-2 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
-                        style={{ backgroundColor: m.family_member?.color_hex }}
-                      >
-                        {m.family_member?.name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </>
-            )
-          })()}
-        </div>
-
-        {/* Row 2: time range + location */}
-        <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1">
-          <span className="flex items-center gap-1 text-caption text-casa-muted tabular-nums">
-            <Clock size={11} className="shrink-0" />
-            {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
-            {event.location_name && (
-              <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
-            )}
-          </span>
-          {event.location_name && (
-            <span className="flex items-center gap-1 text-caption text-casa-muted truncate max-w-[180px]">
-              <MapPin size={11} className="shrink-0 text-casa-error" />
-              {event.location_name}
-            </span>
-          )}
-        </div>
-
-        {/* Row 3: departure alert or prep note */}
-        {event.enrichment?.departure_time && !happening && (
-          <div className="flex items-center gap-1 mt-1.5 text-caption font-semibold text-amber-700">
-            <Navigation size={11} className="shrink-0" />
-            Leave by {format(new Date(event.enrichment.departure_time), 'h:mm a')}
-            {event.enrichment.drive_time_mins && ` · ${event.enrichment.drive_time_mins} min`}
+      <div
+        className={cn(
+          'min-w-0 bg-casa-surface rounded-card border border-casa-border shadow-card overflow-hidden',
+          happening && 'animate-pulse-gold',
+        )}
+        style={{ borderLeft: `4px solid ${color}` }}
+      >
+        <div className="grid grid-cols-[96px_1fr] min-h-[98px]">
+          <div className="flex flex-col items-center justify-center px-2 border-r border-casa-divider/70">
+            <p className="text-heading font-display text-casa-navy tabular-nums leading-none">
+              {format(start, 'h:mm')}
+            </p>
+            <p className="text-caption text-casa-muted font-semibold uppercase mt-1">
+              {format(start, 'a')}
+            </p>
           </div>
-        )}
-        {!event.enrichment?.departure_time && event.enrichment?.prep_notes && (
-          <p className="text-caption text-casa-muted mt-1 line-clamp-1">{event.enrichment.prep_notes}</p>
-        )}
+
+          <div className="px-4 py-3 min-w-0">
+            <div className="flex items-start justify-between gap-3">
+              {(() => {
+                const primary = event.members?.find(m => m.role === 'primary')
+                const others = event.members?.filter(m => m.role !== 'primary') ?? []
+                const ownerName = primary?.family_member?.name ?? ''
+                const pipeIdx = event.title.indexOf(' | ')
+                const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
+
+                return (
+                  <>
+                    <p className="font-body font-semibold text-casa-text text-[1.12rem] leading-snug truncate">{cleanTitle}</p>
+                    {event.members && event.members.length > 0 && (
+                      <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                        {primary && (
+                          <span
+                            className="px-2 py-0.5 rounded-full text-caption font-semibold leading-none whitespace-nowrap text-casa-navy bg-casa-bg"
+                            title={ownerName}
+                          >
+                            {ownerName}
+                          </span>
+                        )}
+                        {others.slice(0, 3).map((m) => (
+                          <span
+                            key={m.id}
+                            className="px-2 py-0.5 rounded-full text-caption font-semibold leading-none whitespace-nowrap text-casa-navy bg-casa-bg"
+                          >
+                            {m.family_member?.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+            </div>
+
+            <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1">
+              <span className="flex items-center gap-1 text-body-sm text-casa-muted tabular-nums">
+                {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
+              </span>
+              {event.location_name && (
+                <span className="flex items-center gap-1 text-body-sm text-casa-muted truncate max-w-[280px]">
+                  {event.location_name}
+                </span>
+              )}
+              {event.location_name && (
+                <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
+              )}
+            </div>
+
+            {event.enrichment?.departure_time && !happening && (
+              <div className="flex items-center gap-1 mt-1.5 text-body-sm font-semibold text-casa-gold">
+                <Navigation size={12} className="shrink-0" />
+                Leave by {format(new Date(event.enrichment.departure_time), 'h:mm a')}
+                {event.enrichment.drive_time_mins && ` · ${event.enrichment.drive_time_mins} min drive`}
+              </div>
+            )}
+            {!event.enrichment?.departure_time && event.enrichment?.prep_notes && (
+              <p className="text-body-sm text-casa-muted mt-1 line-clamp-1">{event.enrichment.prep_notes}</p>
+            )}
+          </div>
+        </div>
       </div>
     </motion.li>
   )
