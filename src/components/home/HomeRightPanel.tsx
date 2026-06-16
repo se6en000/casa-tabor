@@ -1,24 +1,23 @@
 /**
- * HomeRightPanel — shown on tablet (lg:) to the right of today's timeline.
- * Week strip, daily briefing, alerts, recent activity — all collapsible.
+ * HomeRightPanel — redesigned desktop rail with week-jump, needs-you cards,
+ * and inbox intelligence while reusing existing data/actions.
  */
-import { useEffect, useState, useCallback, useMemo } from 'react'
-import { format, formatDistanceToNow, startOfWeek, addDays } from 'date-fns'
-import { Link } from 'react-router-dom'
-import { AlertTriangle, Sun, ChevronRight, Bot, CalendarDays, Bell, ChevronDown, Plane, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { addDays, differenceInDays, format, formatDistanceToNow, parseISO, startOfWeek } from 'date-fns'
+import { Link, useNavigate } from 'react-router-dom'
+import { AlertTriangle, Bot, Check, ChevronRight, CloudSun, Moon, Search, Sparkles, ThumbsDown, X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useWeekEvents } from '../../hooks/useCalendarEvents'
+import { useDismissPrepItem, useDownvotePrepItem, usePrepItems, useSnoozePrepItem } from '../../hooks/usePrepItems'
+import { useHomeWeather } from '../../hooks/useHomeWeather'
+import { useWeekConflicts } from '../../hooks/useConflicts'
 import { supabase } from '../../lib/supabase'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
-import { useUpcomingTrips } from '../../hooks/useTrips'
-import TripCard from './TripCard'
-import ConflictAlertsSection from '../shared/ConflictAlertsSection'
-import { useWeekConflicts } from '../../hooks/useConflicts'
-import PrepActionSection from './PrepActionSection'
 import { useCalendarStore } from '../../stores/calendarStore'
 import BounceScroll from '../shared/BounceScroll'
+import ConflictAlertsSection from '../shared/ConflictAlertsSection'
 import type { PrepItem } from '../../types'
 
 interface Props {
@@ -27,99 +26,10 @@ interface Props {
   onSelectPrepItem?: (item: PrepItem) => void
 }
 
-interface Briefing {
-  summary_text: string | null
-  generated_by: string | null
-}
-
-interface HomePanelSectionState {
-  trips: boolean
-  week: boolean
-  briefing: boolean
-  alerts: boolean
-  activity: boolean
-}
-
-const HOME_PANEL_SECTIONS_KEY = 'casa-home-right-panel-sections-v1'
-const DEFAULT_SECTION_STATE: HomePanelSectionState = {
-  trips: true,
-  week: false,
-  briefing: true,
-  alerts: true,
-  activity: false,
-}
-
-function loadSectionState(): HomePanelSectionState {
-  try {
-    const raw = localStorage.getItem(HOME_PANEL_SECTIONS_KEY)
-    if (!raw) return DEFAULT_SECTION_STATE
-    return { ...DEFAULT_SECTION_STATE, ...JSON.parse(raw) }
-  } catch {
-    return DEFAULT_SECTION_STATE
-  }
-}
-
-/** Shared collapsible section header — gold icon + label + chevron */
-function SectionHeader({
-  icon, label, open, onToggle, action, badge,
-}: {
-  icon: React.ReactNode
-  label: string
-  open: boolean
-  onToggle: () => void
-  action?: React.ReactNode
-  badge?: number
-}) {
-  return (
-    <div className="w-full flex items-center justify-between">
-      <button onClick={onToggle} className="flex-1 flex items-center gap-1.5 text-body font-semibold text-casa-text text-left">
-        {icon}
-        {label}
-        {badge != null && badge > 0 && (
-          <span className="ml-1 text-caption font-bold bg-casa-gold/20 text-casa-gold px-1.5 py-0.5 rounded-full">
-            {badge}
-          </span>
-        )}
-        <ChevronDown
-          size={13}
-          className={cn('ml-auto text-casa-muted transition-transform duration-200', open ? 'rotate-0' : '-rotate-90')}
-        />
-      </button>
-      {action && <div className="ml-2 shrink-0">{action}</div>}
-    </div>
-  )
-}
-
-function wordCount(text: string) { return text.trim().split(/\s+/).length }
-
-function truncateToWords(paragraphs: string[], limit = 500) {
-  let count = 0
-  let cutIdx = paragraphs.length
-  for (let i = 0; i < paragraphs.length; i++) {
-    const w = wordCount(paragraphs[i])
-    if (count + w > limit && i > 0) { cutIdx = i; break }
-    count += w
-  }
-  return { visible: paragraphs.slice(0, cutIdx), rest: paragraphs.slice(cutIdx) }
-}
-
-function parseParagraphs(text: string): string[] {
-  if (text.includes('\n\n')) {
-    return text.split('\n\n').map(p => p.replace(/\n/g, ' ').trim()).filter(Boolean)
-  }
-  const sentences = text.match(/[^.!?]+[.!?]+["']?/g) ?? [text]
-  const chunks: string[] = []
-  for (let i = 0; i < sentences.length; i += 2) {
-    chunks.push(sentences.slice(i, i + 2).join(' ').trim())
-  }
-  return chunks.filter(Boolean)
-}
-
 type ActivityOutcome = 'Created' | 'Updated' | 'Skipped' | 'Conflict' | 'Alert' | 'Completed' | 'Snoozed' | 'Error' | 'Info'
 
 interface GmailConnectionStatus {
   family_member_id: string
-  google_email: string
   gmail_scan_enabled: boolean
   last_sync_at: string | null
   last_sync_error: string | null
@@ -253,46 +163,42 @@ function groupActivities(entries: ActivityEntry[]): ActivityEntry[] {
   return grouped
 }
 
+function daysUntil(eventDate: string | null): number {
+  if (!eventDate) return 99
+  return differenceInDays(parseISO(eventDate), new Date())
+}
+
+function urgencyLabel(days: number) {
+  if (days <= 0) return { label: 'Today', tone: 'bg-red-500 text-white' }
+  if (days === 1) return { label: 'Tomorrow', tone: 'bg-red-400 text-white' }
+  if (days <= 4) return { label: `In ${days}d`, tone: 'bg-amber-400 text-white' }
+  return { label: `In ${days}d`, tone: 'bg-emerald-400 text-white' }
+}
+
+function sourceBadge(item: PrepItem) {
+  if (item.source_type === 'gmail') return { label: 'Email', tone: 'text-purple-700 bg-purple-50 border-purple-200' }
+  if (item.source_type === 'calendar_ai') return { label: 'Calendar', tone: 'text-sky-700 bg-sky-50 border-sky-200' }
+  return { label: 'System', tone: 'text-casa-muted bg-casa-bg border-casa-border' }
+}
+
 export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }: Props) {
-  const { notifications, markRead, clearAll } = useNotifications()
+  const navigate = useNavigate()
+  const { notifications, markRead } = useNotifications()
+  const { data: weather } = useHomeWeather()
   const { data: conflicts = [] } = useWeekConflicts()
-  const weekStart = startOfWeek(now, { weekStartsOn: 0 })
+  const { data: prepItems = [] } = usePrepItems()
+  const dismissPrepItem = useDismissPrepItem()
+  const snoozePrepItem = useSnoozePrepItem()
+  const downvotePrepItem = useDownvotePrepItem()
   const { data: weekEvents } = useWeekEvents(now)
-  const { data: upcomingTrips } = useUpcomingTrips()
-  const [briefing, setBriefing] = useState<Briefing | null>(null)
-  const [briefingExpanded, setBriefingExpanded] = useState(false)
+  const setSelectedDate = useCalendarStore(s => s.setSelectedDate)
   const setActiveView = useCalendarStore(s => s.setActiveView)
+  const [checkingItemId, setCheckingItemId] = useState<string | null>(null)
+  const [downvotingItemId, setDownvotingItemId] = useState<string | null>(null)
 
-  const [sectionState, setSectionState] = useState<HomePanelSectionState>(loadSectionState)
-  const { trips: openTrips, week: openWeek, briefing: openBriefing, alerts: openAlerts, activity: openActivity } = sectionState
-
-  const handleSeeAllWeek = useCallback(() => {
-    setActiveView('stacked')
-  }, [setActiveView])
-
+  const weekStart = startOfWeek(now, { weekStartsOn: 0 })
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
 
-  useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    supabase
-      .from('daily_briefings')
-      .select('summary_text, generated_by')
-      .eq('briefing_date', today)
-      .maybeSingle()
-      .then(({ data }) => { if (data) setBriefing(data as Briefing) })
-  }, [])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(HOME_PANEL_SECTIONS_KEY, JSON.stringify(sectionState))
-    } catch {
-      // Ignore storage failures.
-    }
-  }, [sectionState])
-
-  const paragraphs = briefing?.summary_text ? parseParagraphs(briefing.summary_text) : []
-  const { visible, rest } = truncateToWords(paragraphs)
-  const hasMore = rest.length > 0
   const notificationEntries = useMemo<ActivityEntry[]>(() => (
     notifications.map(n => ({
       id: `notif:${n.id}`,
@@ -307,6 +213,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
       notificationId: n.id,
     }))
   ), [notifications])
+
   const { data: gmailActivity } = useQuery<ActivityHealth>({
     queryKey: ['recent-activity-health'],
     queryFn: async () => {
@@ -315,7 +222,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
         { data: members, error: membersError },
         { data: messages, error: messagesError },
       ] = await Promise.all([
-        supabase.from('google_connection_status').select('family_member_id, google_email, gmail_scan_enabled, last_sync_at, last_sync_error'),
+        supabase.from('google_connection_status').select('family_member_id, gmail_scan_enabled, last_sync_at, last_sync_error'),
         supabase.from('family_members').select('id, name'),
         supabase
           .from('gmail_processed_messages')
@@ -395,240 +302,276 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
     refetchInterval: 60_000,
     staleTime: 30_000,
   })
+
   const activityEntries = useMemo(
-    () => groupActivities([...notificationEntries, ...(gmailActivity?.entries ?? [])]).slice(0, 10),
+    () => groupActivities([...notificationEntries, ...(gmailActivity?.entries ?? [])]).slice(0, 6),
     [notificationEntries, gmailActivity],
   )
 
+  const nextEvent = allTodayEvents.find(event => new Date(event.end_time) >= now) ?? null
+
+  async function handleDone(item: PrepItem) {
+    setCheckingItemId(item.id)
+    await dismissPrepItem(item.id)
+    setCheckingItemId(null)
+  }
+
+  async function handleDownvote(item: PrepItem) {
+    setDownvotingItemId(item.id)
+    await downvotePrepItem(item.id)
+    setDownvotingItemId(null)
+  }
+
+  function handleWeekDayClick(day: Date) {
+    setSelectedDate(day)
+    setActiveView('stacked')
+    navigate('/calendar')
+  }
+
   return (
-    <aside className="hidden lg:flex w-72 flex-shrink-0 flex-col border-l border-casa-border bg-casa-surface self-stretch overflow-hidden">
+    <aside className="hidden lg:flex w-[22rem] flex-shrink-0 flex-col border-l border-casa-border bg-casa-surface self-stretch overflow-hidden">
       <BounceScroll className="flex-1 min-h-0">
-
-      {/* ── Upcoming Trips ────────────────────────────────────── */}
-      {upcomingTrips && upcomingTrips.length > 0 && (
-        <div className="px-5 pt-6 pb-5 border-b border-casa-border">
-          <SectionHeader
-            icon={<Plane size={15} className="text-casa-gold" />}
-            label="Upcoming Trips"
-            open={openTrips}
-            onToggle={() => setSectionState(v => ({ ...v, trips: !v.trips }))}
-          />
-          {openTrips && (
-            <div className="mt-3 space-y-2.5">
-              {upcomingTrips.map(trip => (
-                <TripCard key={trip.id} trip={trip} />
-              ))}
+        <div className="px-4 pt-4 pb-2 border-b border-casa-border bg-gradient-to-b from-casa-navy/95 to-casa-navy">
+          <div className="flex items-center justify-between gap-2 text-white">
+            <div className="flex items-center gap-2 min-w-0">
+              <CloudSun size={14} className="text-casa-gold shrink-0" />
+              <p className="text-[11px] font-semibold tracking-wide truncate">
+                {weather ? `${weather.temp}° · ${weather.condition}` : 'Home'}
+              </p>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* ── This Week ─────────────────────────────────────────── */}
-      <div className="px-5 pt-6 pb-5 border-b border-casa-border">
-        <SectionHeader
-          icon={<CalendarDays size={15} className="text-casa-gold" />}
-          label="This Week"
-          open={openWeek}
-          onToggle={() => setSectionState(v => ({ ...v, week: !v.week }))}
-          action={
-            <Link
-              to="/calendar"
-              onClick={handleSeeAllWeek}
-              className="text-caption text-casa-gold hover:brightness-110 flex items-center gap-0.5"
+            <p className="text-[11px] font-semibold tracking-wide whitespace-nowrap">{format(now, 'h:mm a')}</p>
+          </div>
+          <div className="mt-2.5 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate('/calendar')}
+              className="h-8 flex-1 rounded-xl border border-white/20 bg-white/[0.08] px-2.5 text-left text-[11px] text-white/85 flex items-center gap-2 hover:bg-white/[0.12] transition-colors"
             >
+              <Search size={13} className="shrink-0" />
+              Search calendar
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/briefing')}
+              className="h-8 w-8 rounded-xl border border-white/20 bg-white/[0.08] text-white/90 flex items-center justify-center hover:bg-white/[0.12] transition-colors"
+              aria-label="Open briefing"
+            >
+              <Sparkles size={13} />
+            </button>
+          </div>
+        </div>
+
+        <section className="px-4 py-4 border-b border-casa-border">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[13px] font-semibold text-casa-text tracking-wide uppercase">This week</h3>
+            <Link to="/calendar" className="text-[11px] font-semibold text-casa-gold inline-flex items-center gap-1">
               See all <ChevronRight size={11} />
             </Link>
-          }
-        />
-        {openWeek && (
-          <div className="flex gap-1.5 mt-4">
-            {days.map((d, i) => {
-              const isToday = d.toDateString() === now.toDateString()
-              const count = weekEvents?.filter(e =>
-                new Date(e.start_time).toDateString() === d.toDateString()
-              ).length ?? 0
+          </div>
+          <div className="mt-3 grid grid-cols-7 gap-1.5">
+            {days.map(day => {
+              const isToday = day.toDateString() === now.toDateString()
+              const eventCount = weekEvents?.filter(event => (
+                new Date(event.start_time).toDateString() === day.toDateString()
+              )).length ?? 0
+
               return (
-                <div key={i} className={cn(
-                  'flex-1 flex flex-col items-center py-2.5 rounded-xl text-center cursor-pointer transition-colors',
-                  isToday ? 'bg-casa-navy' : 'hover:bg-casa-bg',
-                )}>
-                  <span className={cn('text-caption uppercase tracking-wide font-semibold', isToday ? 'text-white/70' : 'text-casa-text')}>
-                    {format(d, 'EEE')[0]}
-                  </span>
-                  <span className={cn('text-body font-semibold mt-1', isToday ? 'text-white' : 'text-casa-text')}>
-                    {format(d, 'd')}
-                  </span>
-                  <span className={cn('text-caption font-bold mt-0.5 h-3.5', isToday ? 'text-casa-gold' : 'text-casa-muted')}>
-                    {count > 0 ? count : ''}
-                  </span>
-                </div>
+                <button
+                  key={day.toISOString()}
+                  type="button"
+                  onClick={() => handleWeekDayClick(day)}
+                  className={cn(
+                    'rounded-xl px-1 py-2 text-center border transition-colors',
+                    isToday
+                      ? 'bg-casa-navy border-casa-navy text-white'
+                      : 'bg-casa-bg border-casa-divider text-casa-text hover:bg-casa-surface',
+                  )}
+                >
+                  <p className={cn('text-[10px] font-semibold uppercase', isToday ? 'text-white/70' : 'text-casa-muted')}>
+                    {format(day, 'EEE')[0]}
+                  </p>
+                  <p className="text-[13px] font-semibold leading-tight mt-0.5">{format(day, 'd')}</p>
+                  <p className={cn('text-[10px] mt-0.5 min-h-3', isToday ? 'text-casa-gold' : 'text-casa-muted')}>
+                    {eventCount > 0 ? eventCount : ''}
+                  </p>
+                </button>
               )
             })}
           </div>
-        )}
-      </div>
+        </section>
 
-      {/* ── Daily Briefing ────────────────────────────────────── */}
-      <div className="px-5 py-5 border-b border-casa-border">
-        <SectionHeader
-          icon={<Sun size={15} className="text-casa-gold" />}
-          label="Daily Briefing"
-          open={openBriefing}
-          onToggle={() => setSectionState(v => ({ ...v, briefing: !v.briefing }))}
-          action={
-            <Link to="/briefing" className="text-caption text-casa-gold hover:brightness-110">Full →</Link>
-          }
-        />
-        {openBriefing && (
-          <div className="mt-3">
-            {paragraphs.length > 0 ? (
-              <div className="space-y-2.5">
-                {visible.map((p, i) => (
-                  <p key={i} className="text-body-sm text-casa-text leading-relaxed">{p}</p>
-                ))}
-                {hasMore && briefingExpanded && rest.map((p, i) => (
-                  <p key={`r${i}`} className="text-body-sm text-casa-text leading-relaxed">{p}</p>
-                ))}
-                {hasMore && (
-                  <button
-                    onClick={() => setBriefingExpanded(e => !e)}
-                    className="text-caption text-casa-gold hover:brightness-110 font-medium flex items-center gap-1"
-                  >
-                    {briefingExpanded ? '↑ Show less' : '↓ Show more'}
-                  </button>
-                )}
-                {briefing?.generated_by && (
-                  <p className="text-caption text-casa-muted flex items-center gap-1 pt-2 border-t border-casa-divider">
-                    <Bot size={10} className="text-casa-gold" />
-                    {briefing.generated_by}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <p className="text-body-sm text-casa-muted italic leading-relaxed">
-                {allTodayEvents.length} event{allTodayEvents.length !== 1 ? 's' : ''} scheduled today.{' '}
-                <Link to="/briefing" className="text-casa-gold hover:brightness-110">Generate briefing →</Link>
+        <section className="px-4 py-4 border-b border-casa-border">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="text-[13px] font-semibold text-casa-text tracking-wide uppercase">Needs you</h3>
+              <p className="text-[11px] text-casa-muted mt-0.5 truncate">
+                {nextEvent ? `Up next: ${nextEvent.title}` : 'Nothing left today'}
               </p>
-            )}
+            </div>
+            <Link to="/actions" className="text-[11px] font-semibold text-casa-gold whitespace-nowrap">
+              See all
+            </Link>
           </div>
+
+          {prepItems.length === 0 ? (
+            <div className="mt-3 rounded-2xl border border-casa-border bg-casa-bg px-3 py-3">
+              <p className="text-[12px] text-casa-muted">All clear. No urgent prep actions right now.</p>
+            </div>
+          ) : (
+            <div className="mt-3 space-y-2.5">
+              {prepItems.slice(0, 4).map(item => {
+                const urgency = urgencyLabel(daysUntil(item.event_date))
+                const source = sourceBadge(item)
+                const isDone = checkingItemId === item.id
+                const isDownvoting = downvotingItemId === item.id
+
+                return (
+                  <div
+                    key={item.id}
+                    className={cn(
+                      'rounded-2xl border border-casa-border bg-casa-bg/80 backdrop-blur-[1px] px-3 py-3',
+                      (isDone || isDownvoting) && 'opacity-60',
+                    )}
+                  >
+                    <button type="button" onClick={() => onSelectPrepItem?.(item)} className="w-full text-left">
+                      <div className="flex items-start gap-2">
+                        <span className="text-sm mt-0.5">{item.emoji}</span>
+                        <p className={cn('text-[13px] leading-snug text-casa-text', isDone && 'line-through text-casa-muted')}>
+                          {item.description}
+                        </p>
+                      </div>
+                    </button>
+                    <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
+                      <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full border', source.tone)}>
+                        {source.label}
+                      </span>
+                      {item.event_title && (
+                        <span className="text-[10px] text-casa-muted truncate max-w-[150px]">
+                          {item.event_title}
+                        </span>
+                      )}
+                      <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full', urgency.tone)}>
+                        {urgency.label}
+                      </span>
+                    </div>
+                    <div className="mt-2.5 flex items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleDone(item)}
+                        className="h-7 w-7 rounded-full border border-casa-border bg-casa-surface text-casa-muted hover:text-emerald-600 hover:border-emerald-300 transition-colors flex items-center justify-center"
+                        title="Mark done"
+                      >
+                        <Check size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => snoozePrepItem(item.id)}
+                        className="h-7 w-7 rounded-full border border-casa-border bg-casa-surface text-casa-muted hover:text-casa-text transition-colors flex items-center justify-center"
+                        title="Snooze until tomorrow"
+                      >
+                        <Moon size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDownvote(item)}
+                        className="h-7 w-7 rounded-full border border-casa-border bg-casa-surface text-casa-muted hover:text-red-500 hover:border-red-300 transition-colors flex items-center justify-center"
+                        title="Not relevant"
+                      >
+                        <ThumbsDown size={13} />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </section>
+
+        {conflicts.length > 0 && (
+          <section className="px-4 py-4 border-b border-casa-border">
+            <div className="flex items-center gap-2 mb-2.5">
+              <AlertTriangle size={14} className="text-amber-500" />
+              <h3 className="text-[13px] font-semibold text-casa-text tracking-wide uppercase">Heads up</h3>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{conflicts.length}</span>
+            </div>
+            <ConflictAlertsSection />
+          </section>
         )}
-      </div>
 
-      {/* ── Prep & Action ─────────────────────────────────────── */}
-      <PrepActionSection onSelectItem={onSelectPrepItem} />
-
-      {/* ── Heads Up (only when active conflicts exist) ───────── */}
-      {conflicts.length > 0 && (
-        <div className="px-5 py-5 border-b border-casa-border">
-          <SectionHeader
-            icon={<AlertTriangle size={15} className="text-amber-500" />}
-            label="Heads Up"
-            badge={conflicts.length}
-            open={openAlerts}
-            onToggle={() => setSectionState(v => ({ ...v, alerts: !v.alerts }))}
-          />
-          {openAlerts && (
-            <div className="mt-3">
-              <ConflictAlertsSection />
+        <section className="px-4 py-4">
+          <div className="rounded-2xl border border-casa-border bg-gradient-to-b from-casa-surface to-casa-bg px-3 py-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="text-[13px] font-semibold text-casa-text">Casa sorted your inbox</h3>
+                <p className="text-[11px] text-casa-muted mt-0.5 truncate">
+                  {gmailActivity?.lastScanAt
+                    ? `Last scan ${formatDistanceToNow(new Date(gmailActivity.lastScanAt), { addSuffix: true })}`
+                    : 'Waiting for scanner activity'}
+                </p>
+              </div>
+              <Link to="/actions" className="text-[11px] font-semibold text-casa-gold whitespace-nowrap">
+                See all
+              </Link>
             </div>
-          )}
-        </div>
-      )}
 
-      {/* ── Recent Activity ───────────────────────────────────── */}
-      <div className="px-5 py-5 flex-1">
-        <SectionHeader
-          icon={<Bell size={15} className="text-casa-gold" />}
-          label="Recent Activity"
-          badge={notifications.filter(n => !n.read).length || undefined}
-          open={openActivity}
-          onToggle={() => setSectionState(v => ({ ...v, activity: !v.activity }))}
-          action={(
-            <div className="flex items-center gap-2">
-              <Link to="/actions" className="text-caption text-casa-gold hover:brightness-110">See all</Link>
-              {notifications.length > 0 && (
-                <button
-                  onClick={() => clearAll.mutate()}
-                  className="text-caption text-casa-muted hover:text-red-500 transition-colors font-medium"
-                >
-                  Clear all
-                </button>
-              )}
-            </div>
-          )}
-        />
-        {openActivity && (
-          <div className="mt-3">
             {gmailActivity && (
-              <div className="mb-3 rounded-xl border border-casa-border bg-casa-bg px-3 py-2.5">
-                <p className="text-caption text-casa-text">
-                  Last scan {gmailActivity.lastScanAt ? formatDistanceToNow(new Date(gmailActivity.lastScanAt), { addSuffix: true }) : 'not available'}
-                </p>
-                <p className="text-caption text-casa-muted mt-0.5">
-                  Scanners {gmailActivity.scannersHealthy}/{gmailActivity.scannersEnabled} healthy
-                  {gmailActivity.scannersWithErrors > 0 && ` · ${gmailActivity.scannersWithErrors} error`}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <span className="text-caption rounded-full bg-slate-200/70 text-slate-700 px-2 py-0.5">{gmailActivity.scanned} scanned</span>
-                  <span className="text-caption rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5">{gmailActivity.created} created</span>
-                  <span className="text-caption rounded-full bg-blue-100 text-blue-700 px-2 py-0.5">{gmailActivity.updated} updated</span>
-                  <span className="text-caption rounded-full bg-slate-100 text-slate-600 px-2 py-0.5">{gmailActivity.skipped} skipped</span>
-                </div>
-                {gmailActivity.memberStates.length > 0 && (
-                  <p className="text-caption text-casa-muted mt-2 truncate">
-                    {gmailActivity.memberStates.join(' • ')}
-                  </p>
-                )}
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                <span className="text-[10px] rounded-full bg-slate-200/70 text-slate-700 px-2 py-0.5">{gmailActivity.scanned} scanned</span>
+                <span className="text-[10px] rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5">{gmailActivity.created} created</span>
+                <span className="text-[10px] rounded-full bg-blue-100 text-blue-700 px-2 py-0.5">{gmailActivity.updated} updated</span>
+                <span className="text-[10px] rounded-full bg-slate-100 text-slate-600 px-2 py-0.5">{gmailActivity.skipped} skipped</span>
               </div>
             )}
-            {activityEntries.length === 0 ? (
-              <p className="text-caption text-casa-muted">No recent activity</p>
-            ) : (
-              <div>
-                {activityEntries.map(item => (
-                  <div key={item.id} className="py-2.5 border-b border-casa-divider last:border-0 flex items-start gap-2 group">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide', OUTCOME_STYLES[item.outcome])}>
-                          {item.outcome}
-                        </span>
-                        {item.count > 1 && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-casa-gold/20 text-casa-gold">
-                            x{item.count}
+
+            <div className="mt-3 space-y-2">
+              {activityEntries.length === 0 ? (
+                <p className="text-[12px] text-casa-muted">No recent inbox or notification activity.</p>
+              ) : (
+                activityEntries.map(entry => (
+                  <div key={entry.id} className="rounded-xl border border-casa-divider bg-casa-surface px-2.5 py-2">
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide', OUTCOME_STYLES[entry.outcome])}>
+                            {entry.outcome}
                           </span>
-                        )}
+                          {entry.count > 1 && (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-casa-gold/20 text-casa-gold">
+                              x{entry.count}
+                            </span>
+                          )}
+                        </div>
+                        <p className={cn('text-[12px] font-medium leading-snug truncate', entry.read ? 'text-casa-muted' : 'text-casa-text')}>
+                          {entry.title}
+                        </p>
+                        <p className="text-[10px] text-casa-muted mt-0.5">
+                          {entry.source} · {format(new Date(entry.createdAt), 'h:mm a')}
+                        </p>
                       </div>
-                      <p className={cn('text-body-sm font-medium leading-snug truncate', item.read ? 'text-casa-muted' : 'text-casa-text')}>
-                        {item.title}
-                      </p>
-                      {item.reason && (
-                        <p className="text-caption text-casa-muted/90 mt-0.5 line-clamp-2">{item.reason}</p>
-                      )}
-                      <p className="text-caption text-casa-muted mt-0.5">
-                        {item.source} · {format(new Date(item.createdAt), 'h:mm a')}
-                      </p>
-                      {item.summary && (
-                        <p className="text-caption text-casa-muted mt-0.5">{item.summary}</p>
+                      {entry.notificationId && !entry.read && (
+                        <button
+                          type="button"
+                          onClick={() => markRead.mutate(entry.notificationId!)}
+                          className="shrink-0 text-casa-muted hover:text-red-400 transition-colors"
+                          title="Dismiss"
+                        >
+                          <X size={12} />
+                        </button>
                       )}
                     </div>
-                    {item.notificationId && !item.read && (
-                      <button
-                        onClick={() => {
-                          if (item.notificationId) markRead.mutate(item.notificationId)
-                        }}
-                        className="shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity text-casa-muted hover:text-red-400"
-                        title="Dismiss"
-                      >
-                        <X size={12} />
-                      </button>
-                    )}
                   </div>
-                ))}
-              </div>
-            )}
+                ))
+              )}
+            </div>
+
+            {gmailActivity?.memberStates.length ? (
+              <p className="text-[10px] text-casa-muted mt-2.5 pt-2 border-t border-casa-divider truncate inline-flex items-center gap-1.5 w-full">
+                <Bot size={10} className="text-casa-gold shrink-0" />
+                {gmailActivity.memberStates.join(' • ')}
+              </p>
+            ) : null}
           </div>
-        )}
-      </div>
+        </section>
       </BounceScroll>
     </aside>
   )
