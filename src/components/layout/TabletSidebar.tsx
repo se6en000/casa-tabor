@@ -130,17 +130,21 @@ export default function TabletSidebar() {
                         key={m.id}
                         onClick={() => toggleMember(m.id)}
                         className={cn(
-                          'w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl border transition-all text-left',
+                          'w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all text-left',
                           active
-                            ? 'bg-casa-bg border-casa-border'
-                            : 'bg-casa-surface border-transparent hover:bg-casa-bg/60 hover:border-casa-border/70',
+                            ? 'bg-transparent hover:bg-casa-bg'
+                            : 'opacity-40 hover:opacity-70 hover:bg-casa-bg/60',
                         )}
                       >
                         <span
-                          className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-body-sm font-bold text-white"
+                          className="relative w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-body-sm font-bold text-white"
                           style={{ backgroundColor: m.color_hex }}
                         >
                           {m.name[0]}
+                          <span className={cn(
+                            'absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-casa-surface',
+                            !active ? 'bg-casa-muted/40' : busy ? 'bg-amber-400' : 'bg-emerald-400',
+                          )} />
                         </span>
                         <div className="flex-1 min-w-0">
                           <p className={cn('text-body font-semibold leading-tight', active ? 'text-casa-navy' : 'text-casa-text')}>
@@ -150,10 +154,6 @@ export default function TabletSidebar() {
                             {statusLabel}
                           </p>
                         </div>
-                        <span className={cn(
-                          'w-3.5 h-3.5 rounded-full flex-shrink-0 border-2 border-casa-surface',
-                          !active ? 'bg-casa-muted/30' : busy ? 'bg-amber-400' : 'bg-emerald-400',
-                        )} />
                       </button>
                     )
                   })}
