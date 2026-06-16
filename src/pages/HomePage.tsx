@@ -523,17 +523,17 @@ function TimelineRow({
               })()}
             </div>
 
-            <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1">
+            <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1 min-w-0">
               <span className="flex items-center gap-1 text-body-sm text-casa-muted tabular-nums">
                 {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
               </span>
-              {event.location_name && (
-                <span className="flex items-center gap-1 text-body-sm text-casa-muted truncate max-w-[280px]">
-                  {event.location_name}
-                </span>
+              {event.enrichment?.weather_at_event && (
+                <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
               )}
               {event.location_name && (
-                <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
+                <span className="flex items-center gap-1 text-body-sm text-casa-muted min-w-0 break-words">
+                  {event.location_name}
+                </span>
               )}
             </div>
 
