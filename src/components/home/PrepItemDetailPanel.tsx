@@ -74,14 +74,20 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
     }
   }
 
-  function launchCreate(kind: 'event' | 'reminder') {
-    if (!item) return
+  async function launchCreate(kind: 'event' | 'reminder') {
+    if (!item || acting) return
+    setActing(`create-${kind}`)
     const bodyContext = emailParagraphs.slice(0, 6).join('\n')
     const prompt = kind === 'event'
       ? `Create a calendar event from this prep/action item as a draft and ask me to confirm before saving.\n\nAction title: ${item.event_title ?? item.description}\nAction details: ${item.description}\nDue by: ${item.due_by ?? 'unknown'}\nSource: ${sourceLabel(item.source_type)}\nEmail context:\n${bodyContext || 'No email body available'}`
       : `Create a reminder from this prep/action item as a draft and ask me to confirm before saving.\n\nReminder title: ${item.event_title ?? item.description}\nReminder details: ${item.description}\nDue by: ${item.due_by ?? 'unknown'}\nSource: ${sourceLabel(item.source_type)}\nEmail context:\n${bodyContext || 'No email body available'}`
-    document.dispatchEvent(new CustomEvent('open-ai-chat', { detail: { prompt, autoSend: true } }))
-    onClose()
+    try {
+      await dismiss(item.id)
+      document.dispatchEvent(new CustomEvent('open-ai-chat', { detail: { prompt, autoSend: true } }))
+      onClose()
+    } finally {
+      setActing(null)
+    }
   }
 
   return (
@@ -165,13 +171,15 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
                     </button>
                     <button
                       onClick={() => launchCreate('event')}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-caption font-semibold border border-casa-gold/40 text-casa-navy hover:bg-casa-gold/10"
+                      disabled={!!acting}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-caption font-semibold border border-casa-gold/40 text-casa-navy hover:bg-casa-gold/10 disabled:opacity-60"
                     >
                       <CalendarPlus size={13} /> Create event
                     </button>
                     <button
                       onClick={() => launchCreate('reminder')}
-                      className="col-span-2 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-caption font-semibold border border-casa-gold/40 text-casa-navy hover:bg-casa-gold/10"
+                      disabled={!!acting}
+                      className="col-span-2 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-caption font-semibold border border-casa-gold/40 text-casa-navy hover:bg-casa-gold/10 disabled:opacity-60"
                     >
                       <BellPlus size={13} /> Create reminder
                     </button>
