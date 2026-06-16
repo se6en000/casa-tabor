@@ -82,17 +82,25 @@ export default function TabletSidebar() {
         {/* Family — collapsible filter + who's home */}
         {!sidebarCollapsed && (
           <div className="flex-shrink-0 border-b border-casa-border">
-            <button
-              onClick={() => setFamilyOpen(o => !o)}
-              className="w-full flex items-center gap-1.5 px-6 pt-5 pb-3 text-caption text-casa-muted uppercase tracking-wider hover:text-casa-navy transition-colors"
-            >
-              <Users size={12} className="shrink-0" />
-              Family
-              <ChevronDown
-                size={13}
-                className={cn('ml-auto transition-transform duration-200', familyOpen ? 'rotate-0' : '-rotate-90')}
-              />
-            </button>
+            <div className="flex items-center justify-between px-6 pt-5 pb-3">
+              <button
+                onClick={() => setFamilyOpen(o => !o)}
+                className="flex items-center gap-1.5 text-caption text-casa-muted uppercase tracking-wider hover:text-casa-navy transition-colors"
+              >
+                <Users size={12} className="shrink-0" />
+                Family
+                <ChevronDown
+                  size={13}
+                  className={cn('ml-1 transition-transform duration-200', familyOpen ? 'rotate-0' : '-rotate-90')}
+                />
+              </button>
+              <NavLink
+                to="/settings/family"
+                className="text-body-sm text-casa-muted hover:text-casa-navy transition-colors"
+              >
+                Manage
+              </NavLink>
+            </div>
 
             <AnimatePresence initial={false}>
               {familyOpen && (
@@ -104,7 +112,7 @@ export default function TabletSidebar() {
                   transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
                   style={{ overflow: 'hidden' }}
                 >
-                  <div className="px-4 pb-4 flex flex-col gap-0.5">
+                  <div className="px-4 pb-4 flex flex-col gap-1.5">
                   {homeFamily.map(m => {
                     const active = visibleMembers.length === 0 || visibleMembers.includes(m.id)
                     const status = whoStatus.find(s => s.member.id === m.id)
@@ -122,24 +130,28 @@ export default function TabletSidebar() {
                         key={m.id}
                         onClick={() => toggleMember(m.id)}
                         className={cn(
-                          'flex items-center gap-3 px-2 py-2.5 rounded-xl transition-all text-left w-full',
-                          active ? 'bg-casa-bg' : 'opacity-35 hover:opacity-60',
+                          'w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl border transition-all text-left',
+                          active
+                            ? 'bg-casa-bg border-casa-border'
+                            : 'bg-casa-surface border-transparent hover:bg-casa-bg/60 hover:border-casa-border/70',
                         )}
                       >
                         <span
-                          className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-caption font-bold text-white"
+                          className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-body-sm font-bold text-white"
                           style={{ backgroundColor: m.color_hex }}
                         >
                           {m.name[0]}
                         </span>
                         <div className="flex-1 min-w-0">
-                          <p className={cn('text-body font-medium leading-tight', active ? 'text-casa-navy' : 'text-casa-muted')}>
+                          <p className={cn('text-body font-semibold leading-tight', active ? 'text-casa-navy' : 'text-casa-text')}>
                             {m.name}
                           </p>
-                          <p className="text-caption text-casa-muted truncate mt-0.5">{statusLabel}</p>
+                          <p className={cn('text-body-sm truncate mt-0.5', busy ? 'text-casa-gold' : 'text-casa-muted')}>
+                            {statusLabel}
+                          </p>
                         </div>
                         <span className={cn(
-                          'w-2.5 h-2.5 rounded-full flex-shrink-0',
+                          'w-3.5 h-3.5 rounded-full flex-shrink-0 border-2 border-casa-surface',
                           !active ? 'bg-casa-muted/30' : busy ? 'bg-amber-400' : 'bg-emerald-400',
                         )} />
                       </button>
@@ -153,7 +165,7 @@ export default function TabletSidebar() {
         )}
 
         {/* Nav */}
-        <BounceScroll className="flex-1 min-h-0" innerClassName={cn('flex flex-col gap-0.5', sidebarCollapsed ? 'px-2 py-4' : 'px-4 py-4')}>
+        <BounceScroll className="flex-1 min-h-0" innerClassName={cn('flex flex-col gap-1.5', sidebarCollapsed ? 'px-2 py-4' : 'px-4 py-4')}>
           {NAV.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
@@ -162,10 +174,10 @@ export default function TabletSidebar() {
               onClick={to === '/calendar' ? () => setActiveView('stacked') : undefined}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3 rounded-xl transition-colors font-medium justify-center',
-                  sidebarCollapsed ? 'p-3 aspect-square' : 'px-4 py-3 text-body',
+                  'w-full flex items-center rounded-2xl transition-colors font-medium',
+                  sidebarCollapsed ? 'justify-center p-3 aspect-square' : 'justify-start gap-3 px-4 py-3 text-body',
                   isActive
-                    ? 'bg-casa-navy text-white'
+                    ? 'bg-casa-navy text-white shadow-sm'
                     : 'text-casa-muted hover:text-casa-navy hover:bg-casa-bg',
                 )
               }
