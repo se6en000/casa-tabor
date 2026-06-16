@@ -462,13 +462,13 @@ function DesktopHeroCard({
 
   return (
     <section className="hidden lg:block mt-2 mb-6">
-      <div className="relative rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-6 grid grid-cols-[1fr_180px] gap-6 overflow-hidden">
+      <div className="relative rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-6 grid grid-cols-[1fr_220px] xl:grid-cols-[1fr_236px] gap-6 overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/8 via-transparent to-black/10" />
         <div className="pointer-events-none absolute inset-0 ring-1 ring-white/10 rounded-[22px]" />
 
         <div className="relative min-w-0">
           <p className="text-caption font-bold tracking-[0.16em] text-casa-gold">{leadLabel}</p>
-          <h1 className="font-display text-[3rem] leading-[0.98] mt-2 text-white max-w-[16ch]">{heroTitle}</h1>
+          <h1 className="font-display text-[2.35rem] xl:text-[2.55rem] leading-[1.02] mt-2 !text-white max-w-[16ch]">{heroTitle}</h1>
           <p className="text-body mt-3 text-white/86 max-w-[60ch] line-clamp-2">{detailText}</p>
 
           {orderedMembers.length > 0 && (
@@ -500,7 +500,7 @@ function DesktopHeroCard({
           </div>
         </div>
 
-        <div className="relative flex flex-col gap-3">
+        <div className="relative flex flex-col gap-3 min-w-[220px]">
           <div className="rounded-card border border-white/20 bg-gradient-to-b from-white/10 to-white/5 px-4 py-3 text-right shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
             <p className="text-caption font-semibold tracking-[0.08em] text-white/80">{leaveLabel}</p>
             <p className="font-display text-[2.05rem] leading-none text-casa-gold mt-1">{format(leaveAt, 'h:mm a')}</p>
@@ -510,21 +510,21 @@ function DesktopHeroCard({
               href={mapsUrl}
               target="_blank"
               rel="noreferrer"
-              className="h-11 rounded-button bg-casa-gold text-casa-navy font-semibold flex items-center justify-center hover:brightness-110 transition-all border border-casa-gold/50 shadow-[0_1px_0_rgba(255,255,255,0.25)_inset]"
+              className="h-11 rounded-button bg-casa-gold text-casa-navy font-semibold flex items-center justify-center whitespace-nowrap hover:brightness-110 transition-all border border-casa-gold/50 shadow-[0_1px_0_rgba(255,255,255,0.25)_inset]"
             >
               Get directions
             </a>
           ) : (
             <button
               disabled
-              className="h-11 rounded-button border border-white/20 bg-white/5 text-white/60 font-semibold"
+              className="h-11 rounded-button border border-white/20 bg-white/5 text-white/60 font-semibold whitespace-nowrap"
             >
               Get directions
             </button>
           )}
           <button
             onClick={() => onViewDetails(focusEvent)}
-            className="h-11 rounded-button border border-white/25 bg-gradient-to-b from-white/6 to-white/[0.03] text-white font-semibold hover:from-white/12 hover:to-white/[0.06] transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
+            className="h-11 rounded-button border border-white/25 bg-gradient-to-b from-white/6 to-white/[0.03] text-white font-semibold whitespace-nowrap hover:from-white/12 hover:to-white/[0.06] transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
           >
             View details
           </button>
