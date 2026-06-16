@@ -25,6 +25,8 @@ const SHARED_GOLD = '#C9A96E'
 
 function eventColor(ev: EventWithDetails): string {
   if (!ev.members || ev.members.length === 0) return SHARED_GOLD
+  const primary = ev.members.find((m) => m.role === 'primary')
+  if (primary?.family_member?.color_hex) return primary.family_member.color_hex
   if (ev.members.length >= 4) return SHARED_GOLD
   return ev.members[0].family_member?.color_hex ?? SHARED_GOLD
 }
