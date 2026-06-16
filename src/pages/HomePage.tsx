@@ -416,10 +416,12 @@ function TimelineRow({
         className="flex items-center gap-3 cursor-pointer"
         onClick={e => { e.stopPropagation(); onClick() }}
       >
-        <div className="w-16 shrink-0 text-right">
-          <p className="text-body-sm font-semibold text-casa-navy tabular-nums">
+        <div className="w-16 shrink-0 flex flex-col items-end justify-center">
+          <p className="text-body-sm font-semibold text-casa-navy tabular-nums leading-none text-right w-full">
             {format(start, 'h:mm')}
-            <span className="text-caption text-casa-muted ml-0.5">{format(start, 'a')}</span>
+          </p>
+          <p className="text-caption text-casa-muted font-semibold uppercase mt-1 leading-none text-right w-full">
+            {format(start, 'a')}
           </p>
         </div>
         <span className="w-2 rounded-full self-stretch" style={{ backgroundColor: '#C4893A' }} />
