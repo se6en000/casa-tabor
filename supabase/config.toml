@@ -35,3 +35,7 @@ verify_jwt = false
 
 [functions.notification-action]
 verify_jwt = false
+
+[functions.get-home-schedule]
+verify_jwt = false
+
