@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Home, CheckCircle, AlertCircle, Cloud, BookOpen, AlertTriangle, CheckSquare } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 
@@ -13,6 +14,7 @@ interface HomeConfig {
 export default function HomeSettingsPage() {
   const [home, setHome] = useState<HomeConfig>({ address: '', city: '', state: '', zip: '' })
   const [homeScreenLayout, setHomeScreenLayout] = useState({
+    show_home_hero: true,
     show_weather: true,
     show_briefing: true,
     show_conflicts: true,
@@ -21,6 +23,7 @@ export default function HomeSettingsPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [isLoading, setIsLoading] = useState(true)
   const hydratedRef = useRef(false)
+  const qc = useQueryClient()
 
   useEffect(() => {
     Promise.all([
@@ -31,6 +34,7 @@ export default function HomeSettingsPage() {
       if (displayRes.data?.value) {
         const cfg = displayRes.data.value as any
         setHomeScreenLayout({
+          show_home_hero: cfg.show_home_hero ?? true,
           show_weather: cfg.show_weather ?? true,
           show_briefing: cfg.show_briefing ?? true,
           show_conflicts: cfg.show_conflicts ?? true,
@@ -58,6 +62,7 @@ export default function HomeSettingsPage() {
           key: 'display_config',
           value: {
             ...currentCfg,
+            show_home_hero: homeScreenLayout.show_home_hero,
             show_weather: homeScreenLayout.show_weather,
             show_briefing: homeScreenLayout.show_briefing,
             show_conflicts: homeScreenLayout.show_conflicts,
@@ -72,6 +77,7 @@ export default function HomeSettingsPage() {
 
     const hasError = homeError || layoutError
     setSaveStatus(hasError ? 'error' : 'saved')
+    if (!hasError) qc.invalidateQueries({ queryKey: ['settings', 'display_config'] })
     if (!hasError) setTimeout(() => setSaveStatus('idle'), 3000)
   }
 
@@ -160,6 +166,33 @@ export default function HomeSettingsPage() {
           </div>
 
           <div className="space-y-3 pt-2 border-t border-casa-border">
+            {/* Hero card toggle */}
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-2">
+                <Home size={16} className="text-casa-gold mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-body-sm font-medium text-casa-navy">Homepage Hero</p>
+                  <p className="text-caption text-casa-muted">Large up-next summary card on desktop</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setHomeScreenLayout(prev => ({ ...prev, show_home_hero: !prev.show_home_hero }))
+                  setSaveStatus('idle')
+                }}
+                className={cn(
+                  'relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 focus:outline-none',
+                  homeScreenLayout.show_home_hero ? 'bg-casa-navy' : 'bg-casa-border'
+                )}
+              >
+                <span className={cn(
+                  'inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200 mt-0.5',
+                  homeScreenLayout.show_home_hero ? 'translate-x-5 ml-0.5' : 'translate-x-0.5'
+                )} />
+              </button>
+            </div>
+
             {/* Weather toggle */}
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-2">

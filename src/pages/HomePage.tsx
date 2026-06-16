@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { format, isAfter, isBefore, addDays } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronRight, RefreshCw, Navigation, Bell } from 'lucide-react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { useTodayEvents } from '../hooks/useCalendarEvents'
@@ -112,6 +112,16 @@ export default function HomePage() {
     if (selectedEventId) setSelectedPrepItem(null)
   }, [selectedEventId])
   const qc = useQueryClient()
+  const { data: displayConfig } = useQuery<Record<string, unknown> | null>({
+    queryKey: ['settings', 'display_config'],
+    queryFn: async () => {
+      const { data } = await supabase.from('settings').select('value').eq('key', 'display_config').single()
+      return (data?.value as Record<string, unknown>) ?? null
+    },
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  })
+  const showHomeHero = (displayConfig?.show_home_hero as boolean | undefined) ?? true
 
   const completeReminder = useCallback(async (id: string) => {
     await supabase.from('events').update({ status: 'cancelled' }).eq('id', id)
@@ -239,15 +249,17 @@ export default function HomePage() {
           )}
         </AnimatePresence>
 
-        <DesktopHeroCard
-          now={now}
-          nextTodayEvent={nextTodayEvent}
-          fallbackTomorrowEvent={tomorrowEvents[0] ?? null}
-          onViewDetails={(event) => {
-            setSelectedPrepItem(null)
-            setSelectedEventId(event.id)
-          }}
-        />
+        {showHomeHero && (
+          <DesktopHeroCard
+            now={now}
+            nextTodayEvent={nextTodayEvent}
+            fallbackTomorrowEvent={tomorrowEvents[0] ?? null}
+            onViewDetails={(event) => {
+              setSelectedPrepItem(null)
+              setSelectedEventId(event.id)
+            }}
+          />
+        )}
 
         {/* ── Today's timeline — first, front and center ──── */}
         <section className="mt-4">
@@ -462,13 +474,13 @@ function DesktopHeroCard({
 
   return (
     <section className="hidden lg:block mt-2 mb-6">
-      <div className="relative rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-6 grid grid-cols-[1fr_220px] xl:grid-cols-[1fr_236px] gap-6 overflow-hidden">
+      <div className="relative rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-6 grid grid-cols-[1fr_236px] xl:grid-cols-[1fr_248px] gap-6 overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/8 via-transparent to-black/10" />
         <div className="pointer-events-none absolute inset-0 ring-1 ring-white/10 rounded-[22px]" />
 
         <div className="relative min-w-0">
           <p className="text-caption font-bold tracking-[0.16em] text-casa-gold">{leadLabel}</p>
-          <h1 className="font-display text-[2.35rem] xl:text-[2.55rem] leading-[1.02] mt-2 !text-white max-w-[16ch]">{heroTitle}</h1>
+          <h1 className="font-display text-[2.15rem] xl:text-[2.35rem] leading-[1.02] mt-2 !text-white max-w-none pr-1">{heroTitle}</h1>
           <p className="text-body mt-3 text-white/86 max-w-[60ch] line-clamp-2">{detailText}</p>
 
           {orderedMembers.length > 0 && (
@@ -500,10 +512,10 @@ function DesktopHeroCard({
           </div>
         </div>
 
-        <div className="relative flex flex-col gap-3 min-w-[220px]">
+        <div className="relative flex flex-col gap-3 min-w-[236px]">
           <div className="rounded-card border border-white/20 bg-gradient-to-b from-white/10 to-white/5 px-4 py-3 text-right shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
             <p className="text-caption font-semibold tracking-[0.08em] text-white/80">{leaveLabel}</p>
-            <p className="font-display text-[2.05rem] leading-none text-casa-gold mt-1">{format(leaveAt, 'h:mm a')}</p>
+            <p className="font-display text-[1.9rem] leading-none text-casa-gold mt-1 whitespace-nowrap">{format(leaveAt, 'h:mm a')}</p>
           </div>
           {mapsUrl ? (
             <a
