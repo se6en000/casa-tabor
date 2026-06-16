@@ -17,6 +17,7 @@ import HomeSettingsPage from '../../pages/HomeSettingsPage'
 import StatusDashboardPage from '../../pages/StatusDashboardPage'
 import DataAnalyticsPage from '../../pages/DataAnalyticsPage'
 import SavedPlacesSettingsPage from '../../pages/SavedPlacesSettingsPage'
+import ActionHubPage from '../../pages/ActionHubPage'
 import SettingsShell from '../settings/SettingsShell'
 import PageTransition from './PageTransition'
 
@@ -32,6 +33,7 @@ export default function AnimatedRoutes() {
         <Route path="/grocery" element={<PageTransition><GroceryPage /></PageTransition>} />
         <Route path="/music" element={<PageTransition><MusicPage /></PageTransition>} />
         <Route path="/briefing" element={<PageTransition><BriefingPage /></PageTransition>} />
+        <Route path="/actions" element={<PageTransition><ActionHubPage /></PageTransition>} />
         <Route path="/prototype" element={<TabletPrototypePage />} />
         <Route path="/trips/:id" element={<PageTransition><TripDetailPage /></PageTransition>} />
 

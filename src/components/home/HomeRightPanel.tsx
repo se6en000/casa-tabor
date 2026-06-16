@@ -543,14 +543,19 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
           badge={notifications.filter(n => !n.read).length || undefined}
           open={openActivity}
           onToggle={() => setSectionState(v => ({ ...v, activity: !v.activity }))}
-          action={notifications.length > 0 ? (
-            <button
-              onClick={() => clearAll.mutate()}
-              className="text-caption text-casa-muted hover:text-red-500 transition-colors font-medium"
-            >
-              Clear all
-            </button>
-          ) : undefined}
+          action={(
+            <div className="flex items-center gap-2">
+              <Link to="/actions" className="text-caption text-casa-gold hover:brightness-110">See all</Link>
+              {notifications.length > 0 && (
+                <button
+                  onClick={() => clearAll.mutate()}
+                  className="text-caption text-casa-muted hover:text-red-500 transition-colors font-medium"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+          )}
         />
         {openActivity && (
           <div className="mt-3">

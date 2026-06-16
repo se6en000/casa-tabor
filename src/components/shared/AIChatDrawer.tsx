@@ -436,6 +436,7 @@ interface Props {
   open: boolean
   onClose: () => void
   anchor?: { right: number; top: number }
+  launchRequest?: { prompt: string; autoSend: boolean; nonce: string }
   page: string
   events: EventWithDetails[]
   family: FamilyMember[]
@@ -446,7 +447,7 @@ interface Props {
 
 const SLEEP_PHRASES = /\b(sleep|goodnight|good night|art mode|screen saver|screensaver|night mode)\b/i
 
-export default function AIChatDrawer({ open, onClose, anchor, page, events, family, homeCity, onSleepCommand, focusedEvent }: Props) {
+export default function AIChatDrawer({ open, onClose, anchor, launchRequest, page, events, family, homeCity, onSleepCommand, focusedEvent }: Props) {
   const [input, setInput] = useState('')
   const interimRef = useRef('')
   const ignoreInterimUntilRef = useRef(0)
@@ -615,6 +616,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   // When in event-edit mode, always start a fresh session so old conversations don't bleed in.
   const firedEventGreetRef = useRef<string | null>(null)
   const freshStartedRef = useRef<string | null>(null)
+  const handledLaunchRef = useRef<string | null>(null)
   useEffect(() => {
     if (!open || !focusedEvent) return
     if (freshStartedRef.current === focusedEvent.id) return
@@ -622,6 +624,14 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
     firedEventGreetRef.current = null  // reset so greet fires after fresh start
     startFresh()
   }, [open, focusedEvent?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open || !launchRequest || !launchRequest.prompt) return
+    if (handledLaunchRef.current === launchRequest.nonce) return
+    handledLaunchRef.current = launchRequest.nonce
+    startFresh()
+    if (launchRequest.autoSend) setTimeout(() => send(launchRequest.prompt), 120)
+  }, [open, launchRequest, send, startFresh])
 
   // Once session is fresh (no messages), inject a deterministic event summary greeting
   // so the user immediately sees what event the AI has loaded — no API round-trip needed.

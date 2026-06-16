@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X, Mail, ClipboardList, CalendarDays, Clock3 } from 'lucide-react'
+import { X, Mail, ClipboardList, CalendarDays, Clock3, TimerReset, Ban, ThumbsDown, CalendarPlus, BellPlus } from 'lucide-react'
 import { cn } from '../../utils/cn'
-import { usePrepItemDetails } from '../../hooks/usePrepItems'
+import { useDismissPrepItem, useDownvotePrepItem, usePrepItemDetails, useSnoozePrepItem } from '../../hooks/usePrepItems'
 import type { PrepItem } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
 
@@ -46,6 +46,10 @@ function useIsMobile() {
 export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPanelProps) {
   const isMobile = useIsMobile()
   const { data, isLoading } = usePrepItemDetails(item)
+  const snooze = useSnoozePrepItem()
+  const dismiss = useDismissPrepItem()
+  const downvote = useDownvotePrepItem()
+  const [acting, setActing] = useState<string | null>(null)
   const emailParagraphs = useMemo(() => formatEmailBody(data?.gmailContext?.email_body), [data?.gmailContext?.email_body])
 
   useEffect(() => {
@@ -56,6 +60,29 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
       document.body.style.overflow = prev
     }
   }, [item])
+
+  async function runAction(action: 'snooze' | 'dismiss' | 'downvote') {
+    if (!item || acting) return
+    setActing(action)
+    try {
+      if (action === 'snooze') await snooze(item.id)
+      if (action === 'dismiss') await dismiss(item.id)
+      if (action === 'downvote') await downvote(item.id)
+      onClose()
+    } finally {
+      setActing(null)
+    }
+  }
+
+  function launchCreate(kind: 'event' | 'reminder') {
+    if (!item) return
+    const bodyContext = emailParagraphs.slice(0, 6).join('\n')
+    const prompt = kind === 'event'
+      ? `Create a calendar event from this prep/action item as a draft and ask me to confirm before saving.\n\nAction title: ${item.event_title ?? item.description}\nAction details: ${item.description}\nDue by: ${item.due_by ?? 'unknown'}\nSource: ${sourceLabel(item.source_type)}\nEmail context:\n${bodyContext || 'No email body available'}`
+      : `Create a reminder from this prep/action item as a draft and ask me to confirm before saving.\n\nReminder title: ${item.event_title ?? item.description}\nReminder details: ${item.description}\nDue by: ${item.due_by ?? 'unknown'}\nSource: ${sourceLabel(item.source_type)}\nEmail context:\n${bodyContext || 'No email body available'}`
+    document.dispatchEvent(new CustomEvent('open-ai-chat', { detail: { prompt, autoSend: true } }))
+    onClose()
+  }
 
   return (
     <AnimatePresence>
@@ -113,6 +140,41 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
                     <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption bg-casa-surface border border-casa-border text-casa-muted">
                       <Clock3 size={11} /> Added {formatWhen(item.created_at)}
                     </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => runAction('snooze')}
+                      disabled={!!acting}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-caption font-semibold border border-casa-border text-casa-text hover:bg-casa-surface disabled:opacity-60"
+                    >
+                      <TimerReset size={13} /> Snooze
+                    </button>
+                    <button
+                      onClick={() => runAction('dismiss')}
+                      disabled={!!acting}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-caption font-semibold border border-casa-border text-casa-text hover:bg-casa-surface disabled:opacity-60"
+                    >
+                      <Ban size={13} /> Dismiss
+                    </button>
+                    <button
+                      onClick={() => runAction('downvote')}
+                      disabled={!!acting}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-caption font-semibold border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60"
+                    >
+                      <ThumbsDown size={13} /> Downvote
+                    </button>
+                    <button
+                      onClick={() => launchCreate('event')}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-caption font-semibold border border-casa-gold/40 text-casa-navy hover:bg-casa-gold/10"
+                    >
+                      <CalendarPlus size={13} /> Create event
+                    </button>
+                    <button
+                      onClick={() => launchCreate('reminder')}
+                      className="col-span-2 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-caption font-semibold border border-casa-gold/40 text-casa-navy hover:bg-casa-gold/10"
+                    >
+                      <BellPlus size={13} /> Create reminder
+                    </button>
                   </div>
                 </section>
 

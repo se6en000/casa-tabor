@@ -3,6 +3,7 @@
  * Unified across sources (calendar AI + Gmail) with relevance feedback.
  */
 import { useMemo, useState, type ElementType } from 'react'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ClipboardList, ChevronDown, Gift, Plane, Stethoscope, CreditCard, ShoppingBag, Moon, ThumbsDown, Mail, Bot } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
@@ -70,9 +71,10 @@ function groupItems(items: PrepItem[]) {
 
 interface PrepActionSectionProps {
   onSelectItem?: (item: PrepItem) => void
+  seeAllHref?: string
 }
 
-export default function PrepActionSection({ onSelectItem }: PrepActionSectionProps) {
+export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions' }: PrepActionSectionProps) {
   const { data: items = [] } = usePrepItems()
   const dismiss = useDismissPrepItem()
   const snooze = useSnoozePrepItem()
@@ -210,30 +212,33 @@ export default function PrepActionSection({ onSelectItem }: PrepActionSectionPro
 
   return (
     <div className="px-5 py-5 border-b border-casa-border">
-      <button
-        onClick={() => setOpen(v => {
-          const next = !v
-          try {
-            localStorage.setItem(PREP_SECTION_KEY, next ? '1' : '0')
-          } catch {
-            // ignore localStorage failures
-          }
-          return next
-        })}
-        className="w-full flex items-center justify-between"
-      >
-        <div className="flex items-center gap-1.5 text-body font-semibold text-casa-text">
+      <div className="w-full flex items-center justify-between">
+        <button
+          onClick={() => setOpen(v => {
+            const next = !v
+            try {
+              localStorage.setItem(PREP_SECTION_KEY, next ? '1' : '0')
+            } catch {
+              // ignore localStorage failures
+            }
+            return next
+          })}
+          className="flex-1 flex items-center gap-1.5 text-body font-semibold text-casa-text text-left"
+        >
           <ClipboardList size={15} className="text-casa-gold" />
           Prep &amp; Action
           <span className="ml-1 text-caption font-bold bg-casa-gold/20 text-casa-gold px-1.5 py-0.5 rounded-full">
             {items.length}
           </span>
-        </div>
-        <ChevronDown
-          size={13}
-          className={cn('text-casa-muted transition-transform duration-200', open ? 'rotate-0' : '-rotate-90')}
-        />
-      </button>
+          <ChevronDown
+            size={13}
+            className={cn('ml-auto text-casa-muted transition-transform duration-200', open ? 'rotate-0' : '-rotate-90')}
+          />
+        </button>
+        <Link to={seeAllHref} className="ml-2 text-caption text-casa-gold hover:brightness-110">
+          See all <span aria-hidden>→</span>
+        </Link>
+      </div>
 
       <AnimatePresence initial={false}>
         {open && (

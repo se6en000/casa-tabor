@@ -70,6 +70,7 @@ function GlobalAIDrawer({
   safeMode: boolean
 }) {
   const [anchor, setAnchor] = useState<{ right: number; top: number } | undefined>()
+  const [launchRequest, setLaunchRequest] = useState<{ prompt: string; autoSend: boolean; nonce: string } | null>(null)
   const now = useLiveClock(60_000)
   const { data: events = [] } = useRollingEvents(now)
   const { data: family = [] } = useFamilyMembers()
@@ -78,8 +79,19 @@ function GlobalAIDrawer({
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail
-      if (detail) setAnchor(detail)
+      const detail = (e as CustomEvent<{ right?: number; top?: number; prompt?: string; autoSend?: boolean } | undefined>).detail
+      if (detail && typeof detail.right === 'number' && typeof detail.top === 'number') {
+        setAnchor({ right: detail.right, top: detail.top })
+      }
+      if (detail?.prompt) {
+        setLaunchRequest({
+          prompt: detail.prompt,
+          autoSend: detail.autoSend ?? false,
+          nonce: crypto.randomUUID(),
+        })
+      } else {
+        setLaunchRequest(null)
+      }
       setOpen(true)
     }
     document.addEventListener('open-ai-chat', handler)
@@ -96,6 +108,7 @@ function GlobalAIDrawer({
       family={family}
       homeCity={weather?.city}
       onSleepCommand={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
+      launchRequest={launchRequest ?? undefined}
     />
   )
 }
