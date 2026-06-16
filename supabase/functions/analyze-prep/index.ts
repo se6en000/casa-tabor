@@ -63,6 +63,15 @@ Deno.serve(async (req) => {
   // ── Build event context for LLM ──
   const familyNames = members.map((m: { name: string; role: string }) => `${m.name} (${m.role})`).join(', ')
 
+  const { data: suppressions } = await sb
+    .from('prep_item_suppressions')
+    .select('pattern_key, strength, hard_suppressed')
+
+  const suppressionMap = new Map<string, { strength: number; hard_suppressed: boolean }>()
+  for (const row of (suppressions ?? []) as { pattern_key: string; strength: number; hard_suppressed: boolean }[]) {
+    suppressionMap.set(row.pattern_key, { strength: row.strength ?? 0, hard_suppressed: !!row.hard_suppressed })
+  }
+
   type EventRow = {
     id: string; title: string; start_time: string; end_time: string;
     location_name: string | null; description: string | null;
@@ -181,10 +190,14 @@ If nothing clears the bar, return [].`
       .in('event_id', [...validEventIds])
   }
 
-  // ── Insert new items, skipping anything already dismissed ──
-  const newItems = validItems.filter(
-    (item) => !dismissedKeys.has(`${item.event_id}::${item.type}`)
-  )
+  // ── Insert new items, skipping anything already dismissed/suppressed ──
+  const newItems = validItems.filter((item) => {
+    if (dismissedKeys.has(`${item.event_id}::${item.type}`)) return false
+    const pattern = `action:${item.type || 'general'}`
+    const suppression = suppressionMap.get(pattern)
+    if (!suppression) return true
+    return !(suppression.hard_suppressed || suppression.strength >= 2)
+  })
 
   if (newItems.length > 0) {
     const rows = newItems.map((item) => {
@@ -199,6 +212,10 @@ If nothing clears the bar, return [].`
         due_by: ev.start_time,
         priority: item.priority ?? 2,
         dismissed: false,
+        source_type: 'calendar_ai',
+        source_ref: `event:${item.event_id}`,
+        source_pattern_key: `action:${item.type || 'general'}`,
+        source_confidence: item.priority === 3 ? 0.9 : item.priority === 2 ? 0.75 : 0.6,
       }
     })
     await sb.from('prep_items').insert(rows)

@@ -26,6 +26,8 @@ type OrchestrationResponse = {
     conflicts?: number
     prep_items?: number
     action_queue?: number
+    relevance_feedback_30d?: number
+    suppressed_patterns?: number
     household_graph_nodes?: number | null
     household_graph_edges?: number | null
   }
@@ -143,10 +145,12 @@ export default function DataAnalyticsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <ValueCard label="Conflicts" value={String(result?.counts?.conflicts ?? 0)} icon={<Activity size={16} />} />
         <ValueCard label="Prep Items" value={String(result?.counts?.prep_items ?? 0)} icon={<ListChecks size={16} />} />
         <ValueCard label="Action Queue" value={String(result?.counts?.action_queue ?? 0)} icon={<ListChecks size={16} />} />
+        <ValueCard label="Downvotes (30d)" value={String(result?.counts?.relevance_feedback_30d ?? 0)} icon={<AlertTriangle size={16} />} />
+        <ValueCard label="Suppressed Patterns" value={String(result?.counts?.suppressed_patterns ?? 0)} icon={<CheckCircle2 size={16} />} />
         <ValueCard label="Graph Nodes" value={String(result?.counts?.household_graph_nodes ?? '—')} icon={<Network size={16} />} />
       </div>
 

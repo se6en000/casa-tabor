@@ -30,7 +30,7 @@ const TRAVEL_KEYWORDS = /itinerary|e-ticket|eticket|boarding pass|flight confirm
 
 // Keywords that suggest calendar relevance
 const CALENDAR_KEYWORDS = /appointment|appt|booking|reservation|confirm|invite|invitation|reminder|rsvp|meeting|schedule|event|registration|playdate|dentist|doctor|physician|clinic|hospital|therapy|checkup|concert|show|performance|game|match|tournament|practice|party|birthday|celebration|dinner|lunch|brunch|flight|hotel|check-in|checkout|school|class|lesson|camp|workshop|conference/i
-const ACTION_KEYWORDS = /permission slip|consent form|waiver|due date|deadline|invoice|payment due|pay by|tuition|fee|balance due|rsvp|respond by|register by|submit by|application/i
+const ACTION_KEYWORDS = /permission slip|consent form|waiver|due date|deadline|invoice|payment due|pay by|tuition|fee|balance due|rsvp|respond by|register by|submit by|application|delivery|arriving|out for delivery|tracking|return by|exchange by|call us|confirm by|bring|pack|pickup/i
 
 // ── Gmail helpers ─────────────────────────────────────────────────
 
@@ -152,7 +152,7 @@ interface EmailIntent {
 }
 
 interface InboxActionItem {
-  type: 'forms' | 'payment' | 'rsvp' | 'deadline' | 'general'
+  type: 'forms' | 'payment' | 'rsvp' | 'deadline' | 'delivery' | 'return' | 'prep' | 'response' | 'general'
   title: string
   description: string
   due_datetime?: string // ISO8601 or empty
@@ -221,8 +221,11 @@ Family members: ${familyMembers.map(m => `${m.name} (${m.role})`).join(', ')}
 Return ONLY tasks that require action to avoid problems:
 - forms (permission slips, waivers, docs)
 - payment (fee, tuition, invoice, balance due)
-- rsvp (respond/confirm attendance)
+- rsvp/response (respond/confirm/call back)
 - deadline (submit/apply/register by date)
+- delivery (package arriving / pickup needed)
+- return (return/exchange window)
+- prep (bring/pack/print/confirm logistics)
 
 EMAIL:
 Subject: ${subject}
@@ -234,7 +237,7 @@ Respond ONLY JSON:
 {
   "actions": [
     {
-      "type": "forms|payment|rsvp|deadline|general",
+      "type": "forms|payment|rsvp|deadline|delivery|return|prep|response|general",
       "title": "short title",
       "description": "what needs to be done and why",
       "due_datetime": "ISO8601 with timezone offset or empty",
@@ -255,6 +258,14 @@ If no actionable task exists, return {"actions":[]}.`
   }
 }
 
+function extractSenderDomain(from: string): string | null {
+  const bracketMatch = from.match(/<([^>]+)>/)
+  const email = (bracketMatch?.[1] ?? from).trim().toLowerCase()
+  const at = email.lastIndexOf('@')
+  if (at < 0) return null
+  return email.slice(at + 1).replace(/[^a-z0-9.-]/g, '') || null
+}
+
 function parseDueDateOrFallback(due: string | undefined, receivedAtIso: string, eventStartIso?: string | null): string {
   if (due) {
     const parsed = new Date(due)
@@ -270,6 +281,8 @@ function parseDueDateOrFallback(due: string | undefined, receivedAtIso: string, 
 async function persistInboxActions(
   sb: ReturnType<typeof createClient>,
   memberId: string,
+  messageId: string,
+  fromEmail: string,
   subject: string,
   eventId: string | null,
   eventTitle: string | null,
@@ -277,33 +290,50 @@ async function persistInboxActions(
   receivedAtIso: string,
   actions: InboxActionItem[],
   familyMembers: { id: string; name: string; role: string }[],
+  suppressions: Map<string, { strength: number; hard_suppressed: boolean }>,
 ): Promise<number> {
   if (actions.length === 0) return 0
-  const rows = actions.map((a) => {
-    const owner = familyMembers.find((m) =>
-      a.assigned_member && m.name.toLowerCase().includes(a.assigned_member.toLowerCase()),
-    )
-    const dueBy = parseDueDateOrFallback(a.due_datetime, receivedAtIso, eventDate)
-    const title = a.title?.trim() || subject.slice(0, 80)
-    const description = a.description.trim()
-    const emoji = a.type === 'payment' ? '💳'
-      : a.type === 'rsvp' ? '📩'
-      : a.type === 'forms' ? '📝'
-      : a.type === 'deadline' ? '⏰'
-      : '📌'
-    const normalizedPriority: 1 | 2 | 3 = a.priority === 3 ? 3 : a.priority === 1 ? 1 : 2
-    return {
-      event_id: eventId,
-      type: a.type,
-      emoji,
-      description,
-      event_title: eventTitle ?? `${owner?.name ?? familyMembers.find(f => f.id === memberId)?.name ?? 'Family'} · ${title}`,
-      event_date: eventDate ?? dueBy,
-      due_by: dueBy,
-      priority: normalizedPriority,
-    }
-  })
-  await sb.from('prep_items').insert(rows)
+  const senderDomain = extractSenderDomain(fromEmail)
+  const rows = actions
+    .filter((a) => {
+      const patternKey = `action:${a.type || 'general'}`
+      const suppression = suppressions.get(patternKey)
+      if (!suppression) return true
+      return !(suppression.hard_suppressed || suppression.strength >= 2)
+    })
+    .map((a) => {
+      const owner = familyMembers.find((m) =>
+        a.assigned_member && m.name.toLowerCase().includes(a.assigned_member.toLowerCase()),
+      )
+      const dueBy = parseDueDateOrFallback(a.due_datetime, receivedAtIso, eventDate)
+      const title = a.title?.trim() || subject.slice(0, 80)
+      const description = a.description.trim()
+      const emoji = a.type === 'payment' ? '💳'
+        : a.type === 'rsvp' ? '📩'
+        : a.type === 'forms' ? '📝'
+        : a.type === 'deadline' ? '⏰'
+        : a.type === 'delivery' ? '📦'
+        : a.type === 'return' ? '↩️'
+        : a.type === 'prep' ? '🧳'
+        : a.type === 'response' ? '📞'
+        : '📌'
+      const normalizedPriority: 1 | 2 | 3 = a.priority === 3 ? 3 : a.priority === 1 ? 1 : 2
+      return {
+        event_id: eventId,
+        type: a.type,
+        emoji,
+        description,
+        event_title: eventTitle ?? `${owner?.name ?? familyMembers.find(f => f.id === memberId)?.name ?? 'Family'} · ${title}`,
+        event_date: eventDate ?? dueBy,
+        due_by: dueBy,
+        priority: normalizedPriority,
+        source_type: 'gmail',
+        source_ref: `gmail:${messageId}:${senderDomain ?? 'unknown'}`,
+        source_pattern_key: `action:${a.type || 'general'}`,
+        source_confidence: normalizedPriority === 3 ? 0.9 : normalizedPriority === 2 ? 0.75 : 0.6,
+      }
+    })
+  if (rows.length > 0) await sb.from('prep_items').insert(rows)
   return rows.length
 }
 
@@ -368,15 +398,20 @@ Deno.serve(async (req) => {
   const clientId     = Deno.env.get('GOOGLE_CLIENT_ID')!
   const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')!
 
-  const [llmRes, familyRes] = await Promise.all([
+  const [llmRes, familyRes, suppressionRes] = await Promise.all([
     sb.from('settings').select('value').eq('key', 'llm_config').single(),
     sb.from('family_members').select('id, name, role').order('sort_order'),
+    sb.from('prep_item_suppressions').select('pattern_key, strength, hard_suppressed'),
   ])
   const llm = llmRes.data?.value as { api_key: string; model?: string; provider?: string } | null
   if (!llm?.api_key) {
     return new Response(JSON.stringify({ error: 'AI not configured' }), { status: 400, headers: { ...CORS, 'content-type': 'application/json' } })
   }
   const familyMembers = (familyRes.data ?? []) as { id: string; name: string; role: string }[]
+  const suppressionMap = new Map<string, { strength: number; hard_suppressed: boolean }>()
+  for (const row of (suppressionRes.data ?? []) as { pattern_key: string; strength: number; hard_suppressed: boolean }[]) {
+    suppressionMap.set(row.pattern_key, { strength: row.strength ?? 0, hard_suppressed: !!row.hard_suppressed })
+  }
 
   const body = await req.json().catch(() => ({}))
   const targetMemberId: string | null = body.family_member_id ?? null
@@ -448,6 +483,8 @@ Deno.serve(async (req) => {
       const actionsFromEmail = await persistInboxActions(
         sb,
         memberId,
+        msgId,
+        details.from,
         details.subject,
         null,
         details.subject.slice(0, 80),
@@ -455,6 +492,7 @@ Deno.serve(async (req) => {
         emailReceivedAt,
         extractedActions,
         familyMembers,
+        suppressionMap,
       )
       actions += actionsFromEmail
 

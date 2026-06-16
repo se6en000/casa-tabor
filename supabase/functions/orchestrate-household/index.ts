@@ -75,6 +75,12 @@ Deno.serve(async (req) => {
     .eq('status', 'confirmed')
     .order('start_time')
 
+  const feedbackWindowStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const [{ count: downvotes30d }, { data: suppressionsRaw }] = await Promise.all([
+    sb.from('prep_item_feedback').select('*', { count: 'exact', head: true }).gte('created_at', feedbackWindowStart),
+    sb.from('prep_item_suppressions').select('hard_suppressed, strength'),
+  ])
+
   const actions: ActionItem[] = []
 
   type ConflictRow = {
@@ -185,6 +191,8 @@ Deno.serve(async (req) => {
           conflicts: (conflictsRaw ?? []).length,
           prep_items: (prepRaw ?? []).length,
           action_queue: actionQueue.length,
+          relevance_feedback_30d: downvotes30d ?? 0,
+          suppressed_patterns: (suppressionsRaw ?? []).filter((r) => (r.hard_suppressed ?? false) || (r.strength ?? 0) >= 2).length,
           household_graph_nodes: graphRun.data?.counts?.nodes_total ?? null,
           household_graph_edges: graphRun.data?.counts?.edges_total ?? null,
         },
