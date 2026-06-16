@@ -108,16 +108,22 @@ export default function ActionHubPage() {
             <h2 className="font-semibold text-casa-navy flex items-center gap-2"><ClipboardList size={16} className="text-casa-gold" /> Prep &amp; Action</h2>
             <span className="text-caption rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">{prepItems.length}</span>
           </div>
-          <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+          <div className="max-h-[70vh] overflow-y-auto pr-1">
             {prepItems.map((item) => {
               const src = sourceBadge(item)
               const SourceIcon = src.icon
               const busy = actingId === item.id
               return (
-                <div key={item.id} className={cn('border border-casa-border rounded-xl p-3', busy && 'opacity-60')}>
-                  <button className="text-left w-full" onClick={() => setSelected(item)}>
+                <div
+                  key={item.id}
+                  className={cn(
+                    'py-2.5 border-b border-casa-divider last:border-0 flex items-start gap-2.5',
+                    busy && 'opacity-60',
+                  )}
+                >
+                  <button className="flex-1 min-w-0 text-left" onClick={() => setSelected(item)}>
                     <p className="text-body-sm text-casa-text leading-relaxed">{item.description}</p>
-                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                       <span className={cn('inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border', src.tone)}>
                         <SourceIcon size={10} /> {src.label}
                       </span>
@@ -128,12 +134,22 @@ export default function ActionHubPage() {
                       )}
                     </div>
                   </button>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <button onClick={() => run('snooze', item.id)} className="text-caption px-2 py-1 rounded-md border border-casa-border text-casa-muted hover:text-casa-text"><Moon size={11} className="inline mr-1" />Snooze</button>
-                    <button onClick={() => run('dismiss', item.id)} className="text-caption px-2 py-1 rounded-md border border-casa-border text-casa-muted hover:text-casa-text"><Check size={11} className="inline mr-1" />Dismiss</button>
-                    <button onClick={() => run('downvote', item.id)} className="text-caption px-2 py-1 rounded-md border border-red-200 text-red-600 hover:bg-red-50"><ThumbsDown size={11} className="inline mr-1" />Downvote</button>
-                    <button onClick={() => launchCreate(item, 'event')} className="text-caption px-2 py-1 rounded-md border border-casa-gold/40 text-casa-navy hover:bg-casa-gold/10"><CalendarPlus size={11} className="inline mr-1" />Event</button>
-                    <button onClick={() => launchCreate(item, 'reminder')} className="text-caption px-2 py-1 rounded-md border border-casa-gold/40 text-casa-navy hover:bg-casa-gold/10"><BellPlus size={11} className="inline mr-1" />Reminder</button>
+                  <div className="shrink-0 flex flex-col items-center gap-1">
+                    <button onClick={() => run('dismiss', item.id)} className="w-8 h-8 rounded-full flex items-center justify-center border border-casa-border bg-white text-casa-muted hover:text-casa-navy hover:bg-casa-bg" title="Done">
+                      <Check size={15} />
+                    </button>
+                    <button onClick={() => run('snooze', item.id)} className="w-8 h-8 rounded-full flex items-center justify-center border border-casa-border bg-white text-casa-muted hover:text-casa-text hover:bg-casa-bg" title="Snooze">
+                      <Moon size={15} />
+                    </button>
+                    <button onClick={() => run('downvote', item.id)} className="w-8 h-8 rounded-full flex items-center justify-center border border-casa-border bg-white text-casa-muted hover:text-red-500 hover:bg-red-50" title="Downvote">
+                      <ThumbsDown size={15} />
+                    </button>
+                    <button onClick={() => launchCreate(item, 'event')} className="w-8 h-8 rounded-full flex items-center justify-center border border-casa-gold/40 bg-white text-casa-navy hover:bg-casa-gold/10" title="Event">
+                      <CalendarPlus size={15} />
+                    </button>
+                    <button onClick={() => launchCreate(item, 'reminder')} className="w-8 h-8 rounded-full flex items-center justify-center border border-casa-gold/40 bg-white text-casa-navy hover:bg-casa-gold/10" title="Reminder">
+                      <BellPlus size={15} />
+                    </button>
                   </div>
                 </div>
               )

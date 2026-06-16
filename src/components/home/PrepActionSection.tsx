@@ -5,7 +5,7 @@
 import { useMemo, useState, type ElementType } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ClipboardList, ChevronDown, Gift, Plane, Stethoscope, CreditCard, ShoppingBag, Ban, Moon, ThumbsDown, Mail, Bot } from 'lucide-react'
+import { ClipboardList, ChevronDown, Gift, Plane, Stethoscope, CreditCard, ShoppingBag, Ban, Moon, ThumbsDown, Mail, Bot, Check } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { usePrepItems, useDismissPrepItem, useSnoozePrepItem, useDownvotePrepItem } from '../../hooks/usePrepItems'
@@ -106,7 +106,7 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
     if (groupItems.length === 0) return null
 
     return (
-      <div key={label} className="space-y-2">
+      <div key={label} className="space-y-1">
         <p className="text-[10px] font-bold uppercase tracking-wide text-casa-muted px-0.5">{label}</p>
         {groupItems.map((item) => {
           const days = daysUntil(item.event_date)
@@ -124,45 +124,19 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
               animate={{ opacity: isDone || isDownvoting ? 0.45 : 1, y: 0 }}
               exit={{ opacity: 0, height: 0, marginTop: 0, overflow: 'hidden' }}
               transition={{ duration: 0.25 }}
-              className={cn(
-                'rounded-2xl border border-casa-border/70 bg-white/80 px-3 py-3 shadow-sm transition-all',
-                'hover:border-casa-gold/30 hover:bg-white hover:shadow-md',
-                isDone && 'opacity-80',
-              )}
+              className={cn('py-2.5 border-b border-casa-divider last:border-0 group')}
             >
-              <div className="grid grid-cols-[auto_1fr_auto] gap-3 items-start">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleCheck(item.id)
-                  }}
-                  className="shrink-0 mt-0.5 flex flex-col items-center gap-1 group"
-                  title="Mark done"
-                >
-                  <div className={cn(
-                    'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors',
-                    isDone
-                      ? 'bg-green-500 border-green-500'
-                      : 'border-casa-border group-hover:border-casa-gold bg-white',
-                  )}>
-                    {isDone && (
-                      <svg width="10" height="8" viewBox="0 0 9 7" fill="none">
-                        <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    )}
-                  </div>
-                  <div className={cn('w-1.5 h-1.5 rounded-full', urg.dot)} />
-                </button>
-
+              <div className="flex items-start gap-2.5">
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation()
                     onSelectItem?.(item)
                   }}
-                  className="min-w-0 text-left"
+                  className="flex-1 min-w-0 text-left"
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-1.5">
+                    <span className={cn('mt-1.5 h-2.5 w-2.5 rounded-full shrink-0', urg.dot)} />
                     <p
                       className={cn(
                         'text-body-sm leading-relaxed',
@@ -175,7 +149,7 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
                     </p>
                   </div>
 
-                  <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                  <div className="mt-2 flex items-center gap-1.5 flex-wrap pl-4">
                     <span className={cn('inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border', src.tone)}>
                       <SourceIcon size={9} /> {src.label}
                     </span>
@@ -190,7 +164,22 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
                   </div>
                 </button>
 
-                <div className="shrink-0 flex flex-col items-center gap-1 pl-1 border-l border-casa-border/60">
+                <div className="shrink-0 flex flex-col items-center gap-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleCheck(item.id)
+                    }}
+                    className={cn(
+                      'w-8 h-8 rounded-full flex items-center justify-center border bg-white transition-colors',
+                      isDone
+                        ? 'border-green-500 text-green-600'
+                        : 'border-casa-border text-casa-muted hover:text-casa-navy hover:bg-casa-bg',
+                    )}
+                    title="Mark done"
+                  >
+                    <Check size={15} strokeWidth={2.2} />
+                  </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
@@ -199,7 +188,7 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
                     className="w-8 h-8 rounded-full flex items-center justify-center border border-casa-border bg-white text-casa-muted hover:text-casa-text hover:bg-casa-bg transition-colors"
                     title="Snooze until tomorrow"
                   >
-                    <Moon size={16} strokeWidth={2.1} />
+                    <Moon size={15} strokeWidth={2.1} />
                   </button>
                   <button
                     onClick={(e) => {
@@ -214,7 +203,7 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
                     )}
                     title="Not relevant — teach AI"
                   >
-                    <ThumbsDown size={16} strokeWidth={2.1} />
+                    <ThumbsDown size={15} strokeWidth={2.1} />
                   </button>
                 </div>
               </div>
