@@ -478,7 +478,7 @@ function TimelineRow({
           'min-w-0 bg-casa-surface rounded-card border border-casa-border shadow-card overflow-hidden',
           happening && 'animate-pulse-gold',
         )}
-        style={{ borderLeft: `4px solid ${color}` }}
+        style={{ borderLeft: `6px solid ${color}` }}
       >
         <div className="grid grid-cols-[96px_1fr] min-h-[98px]">
           <div className="flex flex-col items-end justify-center px-3 border-r border-casa-divider/70">
