@@ -23,10 +23,40 @@ function formatWhen(value: string | null | undefined): string {
   return format(new Date(value), 'EEE, MMM d · h:mm a')
 }
 
+function toReadableEmailText(raw: string): string {
+  const input = raw.replace(/\r\n/g, '\n').trim()
+  if (!input) return ''
+
+  const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(input) || /&(?:nbsp|amp|lt|gt|quot|#\d+);/i.test(input)
+  if (!looksLikeHtml || typeof window === 'undefined') {
+    return input
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  }
+
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(input, 'text/html')
+  doc.querySelectorAll('script, style, noscript, svg, math, iframe').forEach((node) => node.remove())
+  doc.querySelectorAll('br').forEach((node) => node.replaceWith('\n'))
+  doc
+    .querySelectorAll('p, div, li, tr, td, h1, h2, h3, h4, h5, h6, blockquote, pre, section, article')
+    .forEach((node) => {
+      if (node.textContent?.trim()) node.append('\n\n')
+    })
+
+  return (doc.body.textContent ?? '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[^\S\n]{2,}/g, ' ')
+    .trim()
+}
+
 function formatEmailBody(body: string | null | undefined): string[] {
   if (!body) return []
-  return body
-    .replace(/\r\n/g, '\n')
+  return toReadableEmailText(body)
     .split(/\n{2,}/)
     .map(part => part.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim())
     .filter(Boolean)
