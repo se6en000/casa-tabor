@@ -51,8 +51,12 @@ export default function ActionHubPage() {
   const suggestions = useMemo(() => {
     const nowTs = now.getTime()
     const dueSoon = prepItems.filter(item => item.due_by && +new Date(item.due_by) - nowTs < 48 * 60 * 60 * 1000).length
+    const billingQueue = prepItems.filter(item => item.type === 'billing' || item.type === 'payment').length
+    const cancellations = prepItems.filter(item => item.type === 'cancellation').length
     return [
       `${dueSoon} due soon`,
+      `${billingQueue} billing items`,
+      `${cancellations} cancellations`,
       `${unreadCount} unread activity`,
       `${gmailHealth?.recentProcessed ?? 0} messages processed in 6h`,
     ]

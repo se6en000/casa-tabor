@@ -30,7 +30,7 @@ const TRAVEL_KEYWORDS = /itinerary|e-ticket|eticket|boarding pass|flight confirm
 
 // Keywords that suggest calendar relevance
 const CALENDAR_KEYWORDS = /appointment|appt|booking|reservation|confirm|invite|invitation|reminder|rsvp|meeting|schedule|event|registration|playdate|dentist|doctor|physician|clinic|hospital|therapy|checkup|concert|show|performance|game|match|tournament|practice|party|birthday|celebration|dinner|lunch|brunch|flight|hotel|check-in|checkout|school|class|lesson|camp|workshop|conference/i
-const ACTION_KEYWORDS = /permission slip|consent form|waiver|due date|deadline|invoice|payment due|pay by|tuition|fee|balance due|rsvp|respond by|register by|submit by|application|delivery|arriving|out for delivery|tracking|return by|exchange by|call us|confirm by|bring|pack|pickup/i
+const ACTION_KEYWORDS = /permission slip|consent form|waiver|due date|deadline|invoice|payment due|pay by|tuition|fee|balance due|bill ready|statement available|payment reminder|autopay|auto-pay|statement|past due|overdue|late fee|refund|refund issued|charge|receipt|receipt for|payment received|cancelled|canceled|cancellation|subscription ended|rsvp|respond by|register by|submit by|application|delivery|arriving|out for delivery|tracking|ready for pickup|pick up|pickup|return by|exchange by|call us|confirm by|bring|pack|board meeting|hoa|neighborhood meeting|community meeting|avenue pottery|pottery/i
 
 // ── Gmail helpers ─────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ async function gmailFetch(path: string, token: string) {
   })
 }
 
-async function getRecentMessages(accessToken: string, historyId: string | null): Promise<{ messages: { id: string }[]; newHistoryId: string | null }> {
+async function getRecentMessages(accessToken: string, historyId: string | null, lookbackHours = 72): Promise<{ messages: { id: string }[]; newHistoryId: string | null }> {
   if (historyId) {
     const res = await gmailFetch(`/users/me/history?startHistoryId=${historyId}&historyTypes=messageAdded&labelId=INBOX&maxResults=50`, accessToken)
     if (res.status === 404) return getRecentMessages(accessToken, null)
@@ -54,7 +54,7 @@ async function getRecentMessages(accessToken: string, historyId: string | null):
     }
     return { messages, newHistoryId: data.historyId ?? historyId }
   } else {
-    const after = Math.floor((Date.now() - 72 * 3600 * 1000) / 1000)
+    const after = Math.floor((Date.now() - lookbackHours * 3600 * 1000) / 1000)
     const res = await gmailFetch(`/users/me/messages?labelIds=INBOX&q=after:${after}&maxResults=50`, accessToken)
     if (!res.ok) return { messages: [], newHistoryId: null }
     const data = await res.json()
@@ -152,7 +152,7 @@ interface EmailIntent {
 }
 
 interface InboxActionItem {
-  type: 'forms' | 'payment' | 'rsvp' | 'deadline' | 'delivery' | 'return' | 'prep' | 'response' | 'general'
+  type: 'forms' | 'payment' | 'billing' | 'cancellation' | 'rsvp' | 'deadline' | 'delivery' | 'return' | 'prep' | 'response' | 'general'
   title: string
   description: string
   due_datetime?: string // ISO8601 or empty
@@ -218,9 +218,10 @@ async function extractInboxActions(
   const prompt = `You extract actionable family inbox tasks. Today is ${today}.
 Family members: ${familyMembers.map(m => `${m.name} (${m.role})`).join(', ')}
 
-Return ONLY tasks that require action to avoid problems:
+Return actionable household tasks, including medium-confidence items that likely need follow-through:
 - forms (permission slips, waivers, docs)
-- payment (fee, tuition, invoice, balance due)
+- billing/payment (bill, invoice, statement, overdue, receipt/refund to review)
+- cancellation (booking/subscription canceled or changed and needs acknowledgement/follow-up)
 - rsvp/response (respond/confirm/call back)
 - deadline (submit/apply/register by date)
 - delivery (package arriving / pickup needed)
@@ -237,7 +238,7 @@ Respond ONLY JSON:
 {
   "actions": [
     {
-      "type": "forms|payment|rsvp|deadline|delivery|return|prep|response|general",
+      "type": "forms|payment|billing|cancellation|rsvp|deadline|delivery|return|prep|response|general",
       "title": "short title",
       "description": "what needs to be done and why",
       "due_datetime": "ISO8601 with timezone offset or empty",
@@ -247,7 +248,7 @@ Respond ONLY JSON:
   ]
 }
 
-If no actionable task exists, return {"actions":[]}.`
+Be slightly inclusive: if an email likely needs follow-up, return one low-priority action instead of empty.\n\nIf no plausible task exists, return {"actions":[]}.`
 
   try {
     const raw = await callLLM(llmConfig, prompt)
@@ -264,6 +265,19 @@ function extractSenderDomain(from: string): string | null {
   const at = email.lastIndexOf('@')
   if (at < 0) return null
   return email.slice(at + 1).replace(/[^a-z0-9.-]/g, '') || null
+}
+
+function inferActionTypeFromText(text: string): InboxActionItem['type'] {
+  const t = text.toLowerCase()
+  if (/cancelled|canceled|cancellation|subscription ended|service terminated|booking canceled/.test(t)) return 'cancellation'
+  if (/invoice|bill|payment|fee|balance due|statement|autopay|auto-pay|overdue|past due|late fee|charge|receipt|refund/.test(t)) return 'billing'
+  if (/delivery|arriving|tracking|pickup|pick up/.test(t)) return 'delivery'
+  if (/return|exchange/.test(t)) return 'return'
+  if (/rsvp|respond|confirm attendance|call back/.test(t)) return 'response'
+  if (/deadline|due date|submit by|register by|application/.test(t)) return 'deadline'
+  if (/permission slip|consent|waiver|form/.test(t)) return 'forms'
+  if (/bring|pack|print|prepare|prep|board meeting|neighborhood|hoa/.test(t)) return 'prep'
+  return 'general'
 }
 
 function parseDueDateOrFallback(due: string | undefined, receivedAtIso: string, eventStartIso?: string | null): string {
@@ -299,7 +313,7 @@ async function persistInboxActions(
       const patternKey = `action:${a.type || 'general'}`
       const suppression = suppressions.get(patternKey)
       if (!suppression) return true
-      return !(suppression.hard_suppressed || suppression.strength >= 2)
+      return !(suppression.hard_suppressed || suppression.strength >= 4)
     })
     .map((a) => {
       const owner = familyMembers.find((m) =>
@@ -308,7 +322,9 @@ async function persistInboxActions(
       const dueBy = parseDueDateOrFallback(a.due_datetime, receivedAtIso, eventDate)
       const title = a.title?.trim() || subject.slice(0, 80)
       const description = a.description.trim()
-      const emoji = a.type === 'payment' ? '💳'
+      const emoji = a.type === 'billing' ? '🧾'
+        : a.type === 'cancellation' ? '🚫'
+        : a.type === 'payment' ? '💳'
         : a.type === 'rsvp' ? '📩'
         : a.type === 'forms' ? '📝'
         : a.type === 'deadline' ? '⏰'
@@ -415,6 +431,8 @@ Deno.serve(async (req) => {
 
   const body = await req.json().catch(() => ({}))
   const targetMemberId: string | null = body.family_member_id ?? null
+  const forceLookbackHours = Number(body.lookback_hours ?? 0)
+  const forceReprocess = !!body.force_reprocess
 
   let query = sb.from('google_tokens')
     .select('family_member_id, refresh_token, access_token, expires_at, gmail_history_id')
@@ -439,7 +457,9 @@ Deno.serve(async (req) => {
       }).eq('family_member_id', memberId)
     }
 
-    const { messages, newHistoryId } = await getRecentMessages(accessToken, tok.gmail_history_id)
+    const effectiveHistoryId = forceLookbackHours > 0 ? null : tok.gmail_history_id
+    const lookbackHours = forceLookbackHours > 0 ? Math.min(24 * 14, Math.max(24, forceLookbackHours)) : 72
+    const { messages, newHistoryId } = await getRecentMessages(accessToken, effectiveHistoryId, lookbackHours)
     if (newHistoryId) {
       await sb.from('google_tokens').update({ gmail_history_id: newHistoryId }).eq('family_member_id', memberId)
     }
@@ -449,14 +469,14 @@ Deno.serve(async (req) => {
     for (const { id: msgId } of messages) {
       // Skip already-processed
       const { data: alreadyDone } = await sb.from('gmail_processed_messages')
-        .select('id').eq('family_member_id', memberId).eq('gmail_message_id', msgId).maybeSingle()
-      if (alreadyDone) continue
+        .select('id,intent,created_event_id,updated_event_id').eq('family_member_id', memberId).eq('gmail_message_id', msgId).maybeSingle()
+      if (alreadyDone && !forceReprocess) continue
 
       const details = await getMessageDetails(msgId, accessToken)
       if (!details) continue
       scanned++
 
-      const searchText = `${details.subject} ${details.snippet}`
+      const searchText = `${details.subject} ${details.snippet} ${details.body.slice(0, 800)}`
       const isTravel = TRAVEL_KEYWORDS.test(searchText) || TRAVEL_SENDER_DOMAINS.some(d => details.from.toLowerCase().includes(d))
       const isCalendar = CALENDAR_KEYWORDS.test(searchText)
       const isActionCandidate = ACTION_KEYWORDS.test(searchText)
@@ -479,6 +499,17 @@ Deno.serve(async (req) => {
         extractInboxActions(details.subject, details.from, details.date, details.body, familyMembers, llm),
       ])
 
+      let actionCandidates = extractedActions
+      if (actionCandidates.length === 0 && isActionCandidate) {
+        const inferredType = inferActionTypeFromText(`${details.subject} ${details.snippet} ${details.body.slice(0, 400)}`)
+        actionCandidates = [{
+          type: inferredType,
+          title: details.subject.slice(0, 80),
+          description: `Follow up from email: ${details.subject}`,
+          priority: 1,
+        }]
+      }
+
       const emailReceivedAt = details.date ? new Date(details.date).toISOString() : new Date().toISOString()
       const actionsFromEmail = await persistInboxActions(
         sb,
@@ -490,11 +521,26 @@ Deno.serve(async (req) => {
         details.subject.slice(0, 80),
         null,
         emailReceivedAt,
-        extractedActions,
+        actionCandidates,
         familyMembers,
         suppressionMap,
       )
       actions += actionsFromEmail
+
+      const actionOnlyRescan = !!alreadyDone && forceReprocess
+      if (actionOnlyRescan) {
+        await sb.from('gmail_processed_messages').upsert({
+          family_member_id: memberId, gmail_message_id: msgId,
+          subject: details.subject, email_subject: details.subject,
+          from_email: details.from, received_at: emailReceivedAt,
+          intent: alreadyDone.intent ?? 'skip',
+          skipped_reason: actionsFromEmail > 0
+            ? 'rescan: updated action extraction'
+            : 'rescan: no new actions',
+          email_body: details.body.slice(0, 8000),
+        }, { onConflict: 'family_member_id,gmail_message_id' })
+        continue
+      }
 
       if (!classified || classified.intent === 'skip') {
         await sb.from('gmail_processed_messages').upsert({
@@ -707,7 +753,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    results.push({ member_id: memberId, scanned, created, updated, travel, skipped, conflicts, actions })
+    results.push({ member_id: memberId, scanned, created, updated, travel, skipped, conflicts, actions, lookback_hours_used: lookbackHours })
   }
 
   return new Response(JSON.stringify({ ok: true, results }), { headers: { ...CORS, 'content-type': 'application/json' } })
