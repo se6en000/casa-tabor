@@ -2,10 +2,10 @@
  * PrepActionSection — right-panel collapsible "Prep & Action" section.
  * Unified across sources (calendar AI + Gmail) with relevance feedback.
  */
-import { useMemo, useState, type ElementType } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ClipboardList, ChevronDown, Gift, Plane, Stethoscope, CreditCard, ShoppingBag, Ban, Moon, ThumbsDown, Mail, Bot, Check } from 'lucide-react'
+import { ClipboardList, ChevronDown, Moon, ThumbsDown, Mail, Bot, Check } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { usePrepItems, useDismissPrepItem, useSnoozePrepItem, useDownvotePrepItem } from '../../hooks/usePrepItems'
@@ -26,22 +26,6 @@ function loadOpenState() {
 function daysUntil(eventDate: string | null): number {
   if (!eventDate) return 99
   return differenceInDays(parseISO(eventDate), new Date())
-}
-
-const TYPE_ICON: Record<string, ElementType> = {
-  gift: Gift,
-  travel: Plane,
-  medical: Stethoscope,
-  payment: CreditCard,
-  billing: CreditCard,
-  cancellation: Ban,
-  delivery: ShoppingBag,
-  return: ShoppingBag,
-}
-
-function PrepTypeIcon({ type }: { type: string }) {
-  const Icon = TYPE_ICON[type] ?? ShoppingBag
-  return <Icon size={12} className="text-casa-gold shrink-0 mt-[1px]" strokeWidth={1.8} />
 }
 
 function sourceBadge(item: PrepItem) {
@@ -144,7 +128,6 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
                       )}
                       style={{ fontFamily: "'DM Sans', system-ui, sans-serif", color: isDone ? undefined : 'var(--color-casa-text)' }}
                     >
-                      <span className="mr-1 inline-flex align-top"><PrepTypeIcon type={item.type} /></span>
                       {item.description}
                     </p>
                   </div>
@@ -153,11 +136,6 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
                     <span className={cn('inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border', src.tone)}>
                       <SourceIcon size={9} /> {src.label}
                     </span>
-                    {item.event_title && (
-                      <span className="text-caption text-casa-muted truncate max-w-[150px]">
-                        {item.event_title}
-                      </span>
-                    )}
                     <span className={cn('text-[9px] font-bold leading-none px-1.5 py-0.5 rounded-full whitespace-nowrap shrink-0', urg.badge)}>
                       {urg.badgeText}
                     </span>
