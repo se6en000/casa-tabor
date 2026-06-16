@@ -477,11 +477,11 @@ function TimelineRow({
         style={{ borderLeft: `4px solid ${color}` }}
       >
         <div className="grid grid-cols-[96px_1fr] min-h-[98px]">
-          <div className="flex flex-col items-center justify-center px-2 border-r border-casa-divider/70">
-            <p className="text-heading font-display text-casa-navy tabular-nums leading-none">
+          <div className="flex flex-col items-end justify-center px-3 border-r border-casa-divider/70">
+            <p className="text-heading font-display text-casa-navy tabular-nums leading-none text-right w-full">
               {format(start, 'h:mm')}
             </p>
-            <p className="text-caption text-casa-muted font-semibold uppercase mt-1">
+            <p className="text-caption text-casa-muted font-semibold uppercase mt-1 text-right w-full">
               {format(start, 'a')}
             </p>
           </div>
