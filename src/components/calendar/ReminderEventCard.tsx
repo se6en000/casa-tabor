@@ -1,5 +1,4 @@
 import { Check, TimerReset } from 'lucide-react'
-import { useState } from 'react'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 
@@ -23,21 +22,18 @@ export default function ReminderEventCard({
   onComplete,
   onSnooze,
 }: ReminderEventCardProps) {
-  const [isDismissing, setIsDismissing] = useState(false)
   const members = event.members ?? []
   const primary = members.find((m) => m.role === 'primary') ?? members[0]
   const others = members.filter((m) => m !== primary)
 
   const handleComplete = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    setIsDismissing(true)
     await new Promise(resolve => setTimeout(resolve, 300))
     onComplete?.()
   }
 
   const handleSnooze = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    setIsDismissing(true)
     await new Promise(resolve => setTimeout(resolve, 300))
     onSnooze?.()
   }
