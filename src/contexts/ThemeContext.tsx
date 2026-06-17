@@ -72,6 +72,19 @@ export interface ThemePreset {
 export const PRESETS: ThemePreset[] = [
   { id: 'default', label: 'Default', emoji: '🏡', colors: { ...DEFAULTS } },
   {
+    id: 'comfort',
+    label: 'Comfort',
+    emoji: '🤎',
+    colors: {
+      'casa-gold': '#D2B166',
+      'casa-navy': '#132B60',
+      'casa-bg': '#F3F0E8',
+      'casa-surface': '#FCFAF5',
+      'casa-text': '#322A24',
+      'casa-border': '#D9D2C5',
+    },
+  },
+  {
     id: 'espresso',
     label: 'Espresso',
     emoji: '☕',
