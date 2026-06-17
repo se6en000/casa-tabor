@@ -81,6 +81,17 @@ _sleep_lux_threshold    = 0.5   # lux below which display sleeps
 _wake_lux_threshold     = 3.0   # lux above which display wakes
 _sleep_delay_s          = 30    # seconds in darkness before sleeping
 
+# Warmth tuning from Supabase display_config (DDC/CI layer)
+_cct_bias_k = 0
+_zone_cct_bias = {
+    "day": 0,
+    "afternoon": 0,
+    "evening": -250,
+    "night": -500,
+    "late-night": -800,
+}
+_rgb_trim = (0, 0, 0)  # (r, g, b) channel trims, each -15..15
+
 def _disable_push_remotely():
     """Set sensor_push_enabled=false in Supabase display_config + clear sensor row."""
     if not REQUESTS_AVAILABLE:
@@ -126,6 +137,7 @@ def _is_push_enabled() -> bool:
     global _push_enabled, _push_checked_at, _push_enabled_since
     global _brightness_min, _brightness_max
     global _auto_sleep_enabled, _sleep_lux_threshold, _wake_lux_threshold, _sleep_delay_s
+    global _cct_bias_k, _zone_cct_bias, _rgb_trim
     now = time.time()
     if now - _push_checked_at < PUSH_CHECK_INTERVAL:
         # Still apply auto-disable timer between fetches
@@ -161,14 +173,29 @@ def _is_push_enabled() -> bool:
             _sleep_lux_threshold = float(cfg.get("sleep_lux_threshold", 0.5))
             _wake_lux_threshold  = float(cfg.get("wake_lux_threshold", 3.0))
             _sleep_delay_s       = int(cfg.get("sleep_delay_s", 30))
+            _cct_bias_k = int(cfg.get("cct_bias_k", 0))
+            _zone_cct_bias = {
+                "day": int(cfg.get("zone_cct_bias_day", 0)),
+                "afternoon": int(cfg.get("zone_cct_bias_afternoon", 0)),
+                "evening": int(cfg.get("zone_cct_bias_evening", -250)),
+                "night": int(cfg.get("zone_cct_bias_night", -500)),
+                "late-night": int(cfg.get("zone_cct_bias_late_night", -800)),
+            }
+            _rgb_trim = (
+                int(cfg.get("rgb_trim_r", 0)),
+                int(cfg.get("rgb_trim_g", 0)),
+                int(cfg.get("rgb_trim_b", 0)),
+            )
         # Auto-disable check
         if _push_enabled and _push_enabled_since and (now - _push_enabled_since) > PUSH_AUTO_DISABLE_S:
             log.info("Push auto-disabled after %ds — clearing DB", PUSH_AUTO_DISABLE_S)
             _push_enabled = False
             _push_enabled_since = 0.0
             threading.Thread(target=_disable_push_remotely, daemon=True).start()
-        log.info("Push config refreshed — sensor_push_enabled=%s min=%d max=%d auto_sleep=%s",
-                 _push_enabled, _brightness_min, _brightness_max, _auto_sleep_enabled)
+        log.info(
+            "Push config refreshed — sensor_push_enabled=%s min=%d max=%d auto_sleep=%s cct_bias=%d zone_bias=%s rgb_trim=%s",
+            _push_enabled, _brightness_min, _brightness_max, _auto_sleep_enabled, _cct_bias_k, _zone_cct_bias, _rgb_trim
+        )
     except Exception as exc:
         log.warning("Push config check failed: %s", exc)
     _push_checked_at = now
@@ -488,16 +515,25 @@ def set_color_target(cct: float):
     global _target_rgb
     if cct is not None:
         adjusted_cct = cct
+        with _lock:
+            lux_now = _latest.get("lux")
+        lux_for_zone = lux_now if isinstance(lux_now, (int, float)) else 100.0
+        zone = cct_to_zone(cct, lux_for_zone)
+        adjusted_cct = cct + _cct_bias_k + int(_zone_cct_bias.get(zone, 0))
         if _art_mode_active:
-            with _lock:
-                lux_now = _latest.get("lux")
             # In art mode, keep warmth slightly below ambient CCT at night
             # so the panel feels reflected, not self-emissive.
             lux_for_warmth = lux_now if isinstance(lux_now, (int, float)) else 30.0
             night_factor = 1.0 - min(max(lux_for_warmth, 0.0), 80.0) / 80.0  # 0..1
             warm_shift_k = 250 + (night_factor * 850)  # 250K day, ~1100K at very low lux
-            adjusted_cct = max(2400.0, min(6500.0, cct - warm_shift_k))
-        _target_rgb = cct_to_rgb_gains(adjusted_cct)
+            adjusted_cct = max(2400.0, min(8000.0, adjusted_cct - warm_shift_k))
+        adjusted_cct = max(2400.0, min(8000.0, adjusted_cct))
+        base_rgb = cct_to_rgb_gains(adjusted_cct)
+        _target_rgb = (
+            max(0, min(100, base_rgb[0] + _rgb_trim[0])),
+            max(0, min(100, base_rgb[1] + _rgb_trim[1])),
+            max(0, min(100, base_rgb[2] + _rgb_trim[2])),
+        )
 
 
 def _touch_wake_loop():
@@ -852,6 +888,14 @@ def cct_to_zone(cct: float, lux: float) -> str:
 class AS7343Reader:
     def __init__(self):
         self.bus = None
+        self._avalid_timeouts = 0
+        self._last_avalid_warn_at = 0.0
+
+    def _arm_spectral_cycle(self):
+        """Force a fresh integration cycle (SP_EN off→on)."""
+        self.bus.write_byte_data(AS7343_ADDR, REG_ENABLE, 0x01)  # PON only
+        time.sleep(0.005)
+        self.bus.write_byte_data(AS7343_ADDR, REG_ENABLE, 0x03)  # PON + SP_EN
 
     def _open(self):
         self.bus = smbus2.SMBus(I2C_BUS)
@@ -887,29 +931,43 @@ class AS7343Reader:
         time.sleep(0.1)  # let first integration cycle complete (~50ms)
         log.info("AS7343 initialised")
 
-    def _wait_data_ready(self, timeout=2.0):
-        """Wait for AVALID on STATUS (0x93) or STATUS2 (0xA3) bit 6."""
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            s1 = self.bus.read_byte_data(AS7343_ADDR, REG_STATUS)
-            s2 = self.bus.read_byte_data(AS7343_ADDR, REG_STATUS2)
-            if (s1 | s2) & 0x40:
-                return True
-            time.sleep(0.02)
-        # AVALID never set — read anyway (data still valid on this chip)
-        log.warning("AVALID timeout — reading raw data anyway")
-        return True
+    def _wait_data_ready(self, timeout=0.8, retries=2):
+        """Wait for AVALID, retrying with a fresh SP_EN arm before fallback read."""
+        for attempt in range(retries + 1):
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                s1 = self.bus.read_byte_data(AS7343_ADDR, REG_STATUS)
+                s2 = self.bus.read_byte_data(AS7343_ADDR, REG_STATUS2)
+                if (s1 | s2) & 0x40:
+                    return True
+                time.sleep(0.01)
+
+            if attempt < retries:
+                # Re-arm integration and try again before falling back.
+                self._arm_spectral_cycle()
+
+        self._avalid_timeouts += 1
+        now = time.time()
+        # Throttle warning spam; keep periodic visibility into fault rate.
+        if now - self._last_avalid_warn_at > 30:
+            log.warning(
+                "AVALID timeout (x%d) — using fallback channel read",
+                self._avalid_timeouts,
+            )
+            self._last_avalid_warn_at = now
+        return False
 
     def read(self) -> dict:
         if self.bus is None:
             self._open()
 
         try:
-            # Restart spectral measurement: SP_EN off→on forces a fresh integration
-            self.bus.write_byte_data(AS7343_ADDR, REG_ENABLE, 0x01)  # PON only
-            time.sleep(0.005)
-            self.bus.write_byte_data(AS7343_ADDR, REG_ENABLE, 0x03)  # PON + SP_EN
-            self._wait_data_ready()
+            # Restart spectral measurement with retries around AVALID handshakes.
+            self._arm_spectral_cycle()
+            ready = self._wait_data_ready(timeout=0.8, retries=2)
+            if not ready:
+                # One final settle before raw read to reduce stale-frame risk.
+                time.sleep(0.02)
 
             # Read 18 bytes = 9 × 16-bit channels (LE pairs)
             raw = self.bus.read_i2c_block_data(AS7343_ADDR, REG_CH0_LOW, 18)
@@ -1350,37 +1408,54 @@ def _stop_comet():
     _burst_active.clear()
 
 def _run_burst(r: int, g: int, b: int, duration: float = 2.0):
-    """Sine-envelope full-strip burst (used for confirm/cancel).
-    Pauses the comet loop, draws the burst, then resumes the comet — which
-    will smoothly fade back toward the current target colour."""
+    """Full-strip glow with an elegant fade-out (used for confirm/cancel).
+    Runs independently of comet mode so feedback never flashes back to white."""
     if not SPI_AVAILABLE:
         return
     import math
-    _burst_active.set()
-    time.sleep(0.05)  # let comet loop see the flag
     try:
         spi = _spi_open()
-        steps = 60
-        for i in range(steps):
+        up_steps = 16
+        hold_steps = 18
+        down_steps = 32
+        total_steps = up_steps + hold_steps + down_steps
+        step_wait = max(0.005, duration / total_steps)
+
+        for i in range(total_steps):
             if _led_stop.is_set():
                 break
-            frac = math.sin(math.pi * i / steps)
+
+            if i < up_steps:
+                t = (i + 1) / up_steps
+                frac = math.sin((math.pi / 2.0) * t)  # smooth attack
+            elif i < up_steps + hold_steps:
+                frac = 1.0  # hold peak color briefly
+            else:
+                t = (i - up_steps - hold_steps + 1) / down_steps
+                frac = math.cos((math.pi / 2.0) * t)  # smooth release
+
             color = (_clamp(int(r * frac)), _clamp(int(g * frac)), _clamp(int(b * frac)))
             _write_pixels(spi, [color] * NUM_LEDS)
-            _led_stop.wait(duration / steps)
+            _led_stop.wait(step_wait)
+
+        _write_pixels(spi, [(0, 0, 0)] * NUM_LEDS)
+        for i in range(NUM_LEDS):
+            _led_current_pixels[i][0] = 0.0
+            _led_current_pixels[i][1] = 0.0
+            _led_current_pixels[i][2] = 0.0
         spi.close()
     except Exception as e:
         log.warning(f"LED burst error: {e}")
-    finally:
-        _burst_active.clear()
 
 def _start_burst(r: int, g: int, b: int):
     global _burst_thread
-    # Make sure comet is running so we have something to fade back to
-    _ensure_comet_running()
     if _burst_thread and _burst_thread.is_alive():
         # Let the previous burst finish naturally; ignore overlapping requests
         return
+    # Feedback should end cleanly at black (no handoff back to comet highlights).
+    _set_mode("off")
+    _set_voice_level(0.0)
+    _stop_comet()
     _burst_thread = threading.Thread(target=_run_burst, args=(r, g, b, 2.0), daemon=True)
     _burst_thread.start()
 
@@ -1419,13 +1494,13 @@ async def led_voice_level(req: Request):
 
 @app.post("/led/confirm")
 def led_confirm():
-    """Green burst overlays the comet, then comet resumes with current target."""
+    """Green confirm glow that fades smoothly to black."""
     _start_burst(0, 100, 0)
     return {"ok": True, "mode": "confirm"}
 
 @app.post("/led/cancel")
 def led_cancel():
-    """Red burst overlays the comet, then comet resumes with current target."""
+    """Red cancel glow that fades smoothly to black."""
     _start_burst(100, 0, 0)
     return {"ok": True, "mode": "cancel"}
 
