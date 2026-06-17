@@ -655,7 +655,7 @@ function DesktopHeroCard({
 
         <div className="relative min-w-0">
           <p className="text-caption font-bold tracking-[0.16em] text-casa-gold">{leadLabel}</p>
-          <h1 className="font-display text-[2.15rem] xl:text-[2.35rem] leading-[1.02] mt-2 !text-white max-w-none pr-1">{heroTitle}</h1>
+          <h1 className="font-display text-display-md leading-[1.02] mt-2 !text-white max-w-none pr-1">{heroTitle}</h1>
           <p className="text-body mt-3 text-white/86 max-w-[60ch] line-clamp-2">{detailText}</p>
 
           {orderedMembers.length > 0 && (
@@ -690,7 +690,7 @@ function DesktopHeroCard({
         <div className="relative flex flex-col gap-3 min-w-[236px]">
           <div className="rounded-card border border-white/20 bg-gradient-to-b from-white/10 to-white/5 px-4 py-3 text-right shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
             <p className="text-caption font-semibold tracking-[0.08em] text-white/80">{leaveLabel}</p>
-            <p className="font-display text-[1.9rem] leading-none text-casa-gold mt-1 whitespace-nowrap">{format(leaveAt, 'h:mm a')}</p>
+            <p className="font-display text-display-sm leading-none text-casa-gold mt-1 whitespace-nowrap">{format(leaveAt, 'h:mm a')}</p>
           </div>
           {mapsUrl ? (
             <a
@@ -764,7 +764,7 @@ function TimelineRow({
         onClick={e => { e.stopPropagation(); onClick() }}
       >
         <div className="w-16 shrink-0 flex flex-col items-end justify-center">
-          <p className="text-body-sm font-semibold text-casa-navy tabular-nums leading-none text-right w-full">
+          <p className="text-display-sm font-semibold text-casa-navy tabular-nums leading-none text-right w-full">
             {format(start, 'h:mm')}
           </p>
           <p className="text-caption text-casa-muted font-semibold uppercase mt-1 leading-none text-right w-full">
@@ -797,7 +797,7 @@ function TimelineRow({
               {event.members.slice(0, 4).map(m => (
                 <span
                   key={m.id}
-                  className="px-1.5 py-0.5 rounded-full text-white text-[9px] font-bold leading-none whitespace-nowrap"
+                  className="px-1.5 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
                   style={{ backgroundColor: m.family_member?.color_hex }}
                 >
                   {m.family_member?.name}
@@ -827,7 +827,7 @@ function TimelineRow({
       >
         <div className="grid grid-cols-[96px_1fr] min-h-[98px]">
           <div className="flex flex-col items-end justify-center px-3 border-r border-casa-divider/70">
-            <p className="text-heading font-display text-casa-navy tabular-nums leading-none text-right w-full">
+            <p className="text-display-sm font-display text-casa-navy tabular-nums leading-none text-right w-full">
               {format(start, 'h:mm')}
             </p>
             <p className="text-caption text-casa-muted font-semibold uppercase mt-1 text-right w-full">
@@ -845,7 +845,7 @@ function TimelineRow({
 
                 return (
                   <>
-                    <p className="font-body font-semibold text-casa-text text-[1.12rem] leading-snug truncate">{cleanTitle}</p>
+                    <p className="font-body font-semibold text-casa-text text-heading leading-snug truncate">{cleanTitle}</p>
                     {event.members && event.members.length > 0 && (
                       <div className="flex items-center gap-1 shrink-0 pt-0.5">
                         {primary && (
