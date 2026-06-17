@@ -220,7 +220,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                           <span className={cn('h-2.5 w-2.5 rounded-full', urgency.dotTone)} />
                           <span className="text-body-sm font-semibold text-casa-muted">{urgency.section}</span>
                         </div>
-                        <span className={cn('text-caption font-medium leading-none whitespace-nowrap px-1.5 py-px rounded-full capitalize', urgency.badgeTone)}>
+                        <span className={cn('text-[10px] font-semibold leading-none whitespace-nowrap px-1.5 py-px rounded-full capitalize', urgency.badgeTone)}>
                           {urgency.badge}
                         </span>
                       </div>
