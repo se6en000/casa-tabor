@@ -40,14 +40,14 @@ function getSnippet(event: EventWithDetails): { icon: React.ReactNode; text: str
 }
 
 export default function StackedView() {
-  const { visibleMembers } = useCalendarStore()
-  const today = startOfDay(new Date())
-  // 8 days: today → today+7
-  const days  = Array.from({ length: 8 }, (_, i) => addDays(today, i))
+  const { selectedDate, visibleMembers } = useCalendarStore()
+  const anchorDay = startOfDay(selectedDate)
+  // 8 days: anchor day → anchor day+7
+  const days  = Array.from({ length: 8 }, (_, i) => addDays(anchorDay, i))
   const row1  = days.slice(0, 4)
   const row2  = days.slice(4, 8)
 
-  const { data: allEvents } = useRollingEvents(today)
+  const { data: allEvents } = useRollingEvents(anchorDay)
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [editEventId,     setEditEventId]     = useState<string | null>(null)
