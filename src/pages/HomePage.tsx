@@ -28,6 +28,38 @@ function cleanEventTitle(title: string): string {
   return pipeIdx !== -1 ? title.slice(pipeIdx + 3) : title
 }
 
+function normalizeForMatch(value: string | null | undefined): string {
+  return (value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function findMatchingEventIdForPrepItem(
+  item: PrepItem,
+  candidateEvents: EventWithDetails[],
+): string | null {
+  if (item.event_id) return item.event_id
+
+  const itemTitle = normalizeForMatch(item.event_title)
+  const itemDescription = normalizeForMatch(item.description)
+  const itemDate = item.event_date ? new Date(item.event_date).toDateString() : null
+
+  for (const event of candidateEvents) {
+    const eventTitle = normalizeForMatch(cleanEventTitle(event.title))
+    const titleMatch = (
+      (itemTitle.length > 0 && eventTitle.length > 0 && (eventTitle.includes(itemTitle) || itemTitle.includes(eventTitle))) ||
+      (itemDescription.length > 0 && eventTitle.length > 0 && itemDescription.includes(eventTitle))
+    )
+    if (!titleMatch) continue
+    if (itemDate && new Date(event.start_time).toDateString() !== itemDate) continue
+    return event.id
+  }
+
+  return null
+}
+
 function mapsUrlForEvent(event: EventWithDetails): string | null {
   const mapsQuery = event.address
     ? (event.location_name ? `${event.location_name}, ${event.address}` : event.address)
@@ -88,6 +120,14 @@ export default function HomePage() {
       return isTimedReminder(ev) && memberOk(ev)
     })
   }, [allTomorrowEvents, visibleMembers])
+
+  const prepEventCandidates = useMemo<EventWithDetails[]>(() => {
+    const unique = new Map<string, EventWithDetails>()
+    for (const event of [...(allTodayEvents ?? []), ...(allTomorrowEvents ?? [])]) {
+      unique.set(event.id, event)
+    }
+    return [...unique.values()]
+  }, [allTodayEvents, allTomorrowEvents])
 
   const nextTodayEvent = useMemo(
     () => events.find((e) => isAfter(new Date(e.end_time), now)) ?? null,
@@ -477,9 +517,10 @@ export default function HomePage() {
         now={now}
         allTodayEvents={allTodayEvents ?? []}
         onSelectPrepItem={(item) => {
-          if (item.event_id) {
+          const matchedEventId = findMatchingEventIdForPrepItem(item, prepEventCandidates)
+          if (matchedEventId) {
             setSelectedPrepItem(null)
-            setSelectedEventId(item.event_id)
+            setSelectedEventId(matchedEventId)
             return
           }
           setSelectedEventId(null)
