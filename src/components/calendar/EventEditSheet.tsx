@@ -885,7 +885,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                 </div>
                 {eventType === 'reminder' && (
                   <p className="text-caption text-casa-muted mt-2">
-                    Reminders appear as a banner on the day — no time slot or travel needed.
+                    Reminders use the same timeline card style as events, with reminder accents and quick actions.
                   </p>
                 )}
               </div>

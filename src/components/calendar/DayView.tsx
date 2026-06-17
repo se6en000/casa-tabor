@@ -1,9 +1,9 @@
 import { useState, useRef, useCallback } from 'react'
-import { format, isSameDay, parseISO } from 'date-fns'
+import { addDays, addMinutes, format, isSameDay, parseISO, startOfDay } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Clock, MapPin, Navigation,
-  Calendar, AlertTriangle, ClipboardList, Bell,
+  Calendar, AlertTriangle, ClipboardList,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useCalendarStore } from '../../stores/calendarStore'
@@ -15,11 +15,12 @@ import EventDetailPanel from './EventDetailPanel'
 import EventEditSheet from './EventEditSheet'
 import EventContextMenu from '../shared/EventContextMenu'
 import { differenceInDays } from 'date-fns'
-import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, isTimedReminder, REMINDER_COLOR } from '../../utils/holidays'
+import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, isTimedReminder } from '../../utils/holidays'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import BounceScroll from '../shared/BounceScroll'
 import LargeEventCard from './LargeEventCard'
+import ReminderEventCard from './ReminderEventCard'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -37,20 +38,22 @@ function DayEventCard({
   onSelect,
   onEdit,
   onLongPress,
+  onCompleteReminder,
+  onDismissReminder,
+  onSnoozeReminder,
 }: {
   event: EventWithDetails
   selected: boolean
   onSelect: () => void
   onEdit: () => void
   onLongPress: (event: EventWithDetails, x: number, y: number) => void
+  onCompleteReminder: (event: EventWithDetails) => void
+  onDismissReminder: (event: EventWithDetails) => void
+  onSnoozeReminder: (event: EventWithDetails) => void
 }) {
   const holiday = isHoliday(event)
   const reminder = !holiday && isReminder(event)
-  const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(event)
-  const primary = event.members.find(m => m.role === 'primary') ?? event.members[0]
-
-  const pipeIdx = event.title.indexOf(' | ')
-  const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
+  const color = holiday ? HOLIDAY_COLOR : getPrimaryColor(event)
 
   // Long-press detection
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -103,27 +106,6 @@ function DayEventCard({
 
   if (reminder) {
     const timed = isTimedReminder(event)
-    if (timed) {
-      // Slim pill for timed reminders in the timeline
-      return (
-        <motion.div
-          layout
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -4 }}
-          transition={{ duration: 0.18 }}
-          onClick={e => { e.stopPropagation(); onSelect() }}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer hover:opacity-80 transition-opacity"
-          style={{ border: '1.5px solid #C4893A', backgroundColor: '#FDFAF4' }}
-        >
-          <Bell size={13} style={{ color: '#C4893A' }} className="shrink-0" />
-          <span className="text-caption font-semibold" style={{ color: '#7A5520' }}>{event.title}</span>
-          <span className="text-caption ml-1" style={{ color: '#C4893A' }}>
-            {format(new Date(event.start_time), 'h:mm a')}
-          </span>
-        </motion.div>
-      )
-    }
     return (
       <motion.div
         layout
@@ -132,17 +114,17 @@ function DayEventCard({
         exit={{ opacity: 0, y: -4 }}
         transition={{ duration: 0.18 }}
         onClick={e => { e.stopPropagation(); onSelect() }}
-        className="flex items-center gap-3 px-4 py-2.5 rounded-card border border-amber-200 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors"
-        style={{ borderLeftColor: REMINDER_COLOR, borderLeftWidth: 4 }}
+        className="cursor-pointer transition-all hover:shadow-card"
       >
-        <Bell size={18} className="text-casa-gold shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-body-sm text-amber-800 leading-snug">{cleanTitle}</p>
-          {primary && <p className="text-caption text-amber-600 mt-0.5">{primary.family_member?.name}</p>}
-        </div>
-        <span className="text-caption font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 shrink-0">
-          Reminder
-        </span>
+        <ReminderEventCard
+          event={event}
+          timed={timed}
+          selected={selected}
+          onClick={onSelect}
+          onComplete={() => onCompleteReminder(event)}
+          onSnooze={() => onSnoozeReminder(event)}
+          onDismiss={() => onDismissReminder(event)}
+        />
       </motion.div>
     )
   }
@@ -349,6 +331,32 @@ export default function DayView() {
     qc.invalidateQueries({ queryKey: ['events'] })
   }, [qc])
 
+  const completeReminder = useCallback(async (ev: EventWithDetails) => {
+    await supabase.from('events').update({ status: 'cancelled' }).eq('id', ev.id)
+    qc.invalidateQueries({ queryKey: ['events'] })
+  }, [qc])
+
+  const dismissReminder = useCallback(async (ev: EventWithDetails) => {
+    await supabase.from('events').update({ status: 'cancelled' }).eq('id', ev.id)
+    qc.invalidateQueries({ queryKey: ['events'] })
+  }, [qc])
+
+  const snoozeReminder = useCallback(async (ev: EventWithDetails) => {
+    const start = new Date(ev.start_time)
+    const end = new Date(ev.end_time)
+    const durationMs = Math.max(15 * 60_000, end.getTime() - start.getTime())
+    const timed = isTimedReminder(ev)
+    const nextStart = timed
+      ? addMinutes(start, 30)
+      : startOfDay(addDays(start, 1))
+    const nextEnd = new Date(nextStart.getTime() + durationMs)
+    await supabase
+      .from('events')
+      .update({ start_time: nextStart.toISOString(), end_time: nextEnd.toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', ev.id)
+    qc.invalidateQueries({ queryKey: ['events'] })
+  }, [qc])
+
   return (
     <div className="flex h-full overflow-hidden" onClick={() => setSelectedEventId(null)}>
 
@@ -380,6 +388,9 @@ export default function DayView() {
                     onSelect={() => setSelectedEventId(prev => prev === event.id ? null : event.id)}
                     onEdit={() => setEditEventId(event.id)}
                     onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
+                    onCompleteReminder={completeReminder}
+                    onDismissReminder={dismissReminder}
+                    onSnoozeReminder={snoozeReminder}
                   />
                 ))}
               </div>

@@ -1,8 +1,8 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { format, isAfter, isBefore, addDays } from 'date-fns'
+import { format, isAfter, isBefore, addDays, addMinutes, startOfDay } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronRight, RefreshCw, Bell } from 'lucide-react'
+import { ChevronRight, RefreshCw } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
@@ -13,11 +13,11 @@ import { cn } from '../utils/cn'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import EventDetailPanel from '../components/calendar/EventDetailPanel'
 import LargeEventCard from '../components/calendar/LargeEventCard'
+import ReminderEventCard from '../components/calendar/ReminderEventCard'
 import MiniPlayer from '../components/music/MiniPlayer'
 import HomeRightPanel from '../components/home/HomeRightPanel'
 import PrepItemDetailPanel from '../components/home/PrepItemDetailPanel'
 import { isAllDayReminder, isTimedReminder } from '../utils/holidays'
-import SwipeableReminderPill from '../components/shared/SwipeableReminderPill'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import type { PrepItem } from '../types'
 
@@ -301,12 +301,28 @@ export default function HomePage() {
 
   const completeReminder = useCallback(async (id: string) => {
     await supabase.from('events').update({ status: 'cancelled' }).eq('id', id)
-    qc.invalidateQueries({ queryKey: ['today-events'] })
+    qc.invalidateQueries({ queryKey: ['events'] })
   }, [qc])
 
   const dismissReminder = useCallback(async (id: string) => {
     await supabase.from('events').update({ status: 'cancelled' }).eq('id', id)
-    qc.invalidateQueries({ queryKey: ['today-events'] })
+    qc.invalidateQueries({ queryKey: ['events'] })
+  }, [qc])
+
+  const snoozeReminder = useCallback(async (event: EventWithDetails) => {
+    const start = new Date(event.start_time)
+    const end = new Date(event.end_time)
+    const durationMs = Math.max(15 * 60_000, end.getTime() - start.getTime())
+    const timed = isTimedReminder(event)
+    const nextStart = timed
+      ? addMinutes(start, 30)
+      : startOfDay(addDays(start, 1))
+    const nextEnd = new Date(nextStart.getTime() + durationMs)
+    await supabase
+      .from('events')
+      .update({ start_time: nextStart.toISOString(), end_time: nextEnd.toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', event.id)
+    qc.invalidateQueries({ queryKey: ['events'] })
   }, [qc])
 
   // ── Scheduled AI analysis: max 5x/day between 6am–10pm, ~3h cooldown ──
@@ -448,6 +464,23 @@ export default function HomePage() {
               Full calendar <ChevronRight size={14} />
             </Link>
           </div>
+          {!isLoading && reminders.length > 0 && (
+            <ol className="space-y-2 mb-3">
+              {reminders.map((r) => (
+                <li key={r.id}>
+                  <ReminderEventCard
+                    event={r}
+                    timed={false}
+                    selected={selectedEventId === r.id}
+                    onClick={() => setSelectedEventId(r.id)}
+                    onComplete={() => completeReminder(r.id)}
+                    onSnooze={() => snoozeReminder(r)}
+                    onDismiss={() => dismissReminder(r.id)}
+                  />
+                </li>
+              ))}
+            </ol>
+          )}
 
           {isLoading ? (
             <div className="text-casa-muted text-body animate-breathe py-8 text-center">
@@ -461,7 +494,17 @@ export default function HomePage() {
             <ol className="space-y-2">
               {/* Past events */}
               {events.filter(e => isBefore(new Date(e.end_time), now)).map((ev, i) => (
-                <TimelineRow key={ev.id} event={ev} now={now} index={i} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
+                <TimelineRow
+                  key={ev.id}
+                  event={ev}
+                  now={now}
+                  index={i}
+                  selected={selectedEventId === ev.id}
+                  onClick={() => setSelectedEventId(ev.id)}
+                  onComplete={completeReminder}
+                  onDismiss={dismissReminder}
+                  onSnooze={snoozeReminder}
+                />
               ))}
 
               {/* ── Now line ── */}
@@ -482,7 +525,17 @@ export default function HomePage() {
 
               {/* Upcoming events */}
               {events.filter(e => isAfter(new Date(e.end_time), now)).map((ev, i) => (
-                <TimelineRow key={ev.id} event={ev} now={now} index={i} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
+                <TimelineRow
+                  key={ev.id}
+                  event={ev}
+                  now={now}
+                  index={i}
+                  selected={selectedEventId === ev.id}
+                  onClick={() => setSelectedEventId(ev.id)}
+                  onComplete={completeReminder}
+                  onDismiss={dismissReminder}
+                  onSnooze={snoozeReminder}
+                />
               ))}
             </ol>
           )}
@@ -506,31 +559,22 @@ export default function HomePage() {
               </div>
               <ol className="space-y-2">
                 {tomorrowEvents.map((ev, i) => (
-                  <TimelineRow key={ev.id} event={ev} now={now} index={i} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
+                  <TimelineRow
+                    key={ev.id}
+                    event={ev}
+                    now={now}
+                    index={i}
+                    selected={selectedEventId === ev.id}
+                    onClick={() => setSelectedEventId(ev.id)}
+                    onComplete={completeReminder}
+                    onDismiss={dismissReminder}
+                    onSnooze={snoozeReminder}
+                  />
                 ))}
               </ol>
             </motion.section>
           )}
         </AnimatePresence>
-
-        {/* ── Reminders ────────────────────────────────────── */}
-        {reminders.length > 0 && (
-          <section className="mt-6">
-            <div className="flex flex-wrap gap-2">
-              {reminders.map(r => (
-                <SwipeableReminderPill
-                  key={r.id}
-                  id={r.id}
-                  title={r.title}
-                  members={r.members}
-                  onClick={() => { setSelectedEventId(r.id) }}
-                  onComplete={completeReminder}
-                  onDismiss={dismissReminder}
-                />
-              ))}
-            </div>
-          </section>
-        )}
 
         {/* ── Family filter + music player ─────────────────── */}
         <div className="mt-6 space-y-4">
@@ -727,84 +771,45 @@ function TimelineRow({
   event,
   now,
   index,
+  selected,
   onClick,
   onComplete,
+  onDismiss,
+  onSnooze,
 }: {
   event: EventWithDetails
   now: Date
   index: number
+  selected: boolean
   onClick: () => void
   onComplete?: (id: string) => void
+  onDismiss?: (id: string) => void
+  onSnooze?: (event: EventWithDetails) => void
 }) {
-  const start = new Date(event.start_time)
   const end = new Date(event.end_time)
   const past = isBefore(end, now)
   const color = eventColor(event)
   const timed = isTimedReminder(event)
 
-  const [checking, setChecking] = useState(false)
-
-  // Timed reminder — slim amber pill in the timeline with dismiss checkbox
+  // Timed reminders use the same card shell and time rail as normal events.
   if (timed) {
-    async function handleCheck(e: React.MouseEvent) {
-      e.stopPropagation()
-      if (checking || !onComplete) return
-      setChecking(true)
-      await new Promise(r => setTimeout(r, 320))
-      onComplete(event.id)
-    }
     return (
       <motion.li
         initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: past ? 0.4 : 1, x: 0 }}
-        exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
         transition={{ duration: 0.3, delay: index * 0.04 }}
-        className="flex items-center gap-3 cursor-pointer"
+        className="cursor-pointer"
         onClick={e => { e.stopPropagation(); onClick() }}
       >
-        <div className="w-16 shrink-0 flex flex-col items-end justify-center">
-          <p className="text-display-sm font-semibold text-casa-navy tabular-nums leading-none text-right w-full">
-            {format(start, 'h:mm')}
-          </p>
-          <p className="text-caption text-casa-muted font-semibold uppercase mt-1 leading-none text-right w-full">
-            {format(start, 'a')}
-          </p>
-        </div>
-        <span className="w-2 rounded-full self-stretch" style={{ backgroundColor: '#C4893A' }} />
-        <div
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-caption font-semibold"
-          style={{ border: '1.5px solid #C4893A', backgroundColor: '#FDFAF4', color: '#7A5520' }}
-        >
-          {/* Dismiss checkbox */}
-          <button
-            onClick={handleCheck}
-            className={`shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
-              checking ? 'bg-green-500 border-green-500' : 'border-amber-400 hover:border-green-400 bg-transparent'
-            }`}
-            title="Mark done"
-          >
-            {checking && (
-              <svg width="8" height="6" viewBox="0 0 9 7" fill="none">
-                <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            )}
-          </button>
-          <Bell size={13} style={{ color: '#C4893A' }} className="shrink-0" />
-          <span className={checking ? 'line-through opacity-50' : ''}>{event.title}</span>
-          {event.members.length > 0 && (
-            <div className="flex gap-1 ml-0.5">
-              {event.members.slice(0, 4).map(m => (
-                <span
-                  key={m.id}
-                  className="px-1.5 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
-                  style={{ backgroundColor: m.family_member?.color_hex }}
-                >
-                  {m.family_member?.name}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
+        <ReminderEventCard
+          event={event}
+          timed
+          selected={selected}
+          onClick={onClick}
+          onComplete={onComplete ? () => onComplete(event.id) : undefined}
+          onSnooze={onSnooze ? () => onSnooze(event) : undefined}
+          onDismiss={onDismiss ? () => onDismiss(event.id) : undefined}
+        />
       </motion.li>
     )
   }
