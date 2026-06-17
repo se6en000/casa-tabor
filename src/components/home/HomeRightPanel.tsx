@@ -5,7 +5,7 @@
 import { useMemo, useState } from 'react'
 import { addDays, differenceInDays, format, formatDistanceToNow, parseISO, startOfWeek } from 'date-fns'
 import { Link, useNavigate } from 'react-router-dom'
-import { AlertTriangle, Bot, Check, ChevronRight, CloudSun, Moon, Sparkles, ThumbsDown, X } from 'lucide-react'
+import { AlertTriangle, Bot, ChevronRight, CloudSun, Sparkles, X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -169,10 +169,10 @@ function daysUntil(eventDate: string | null): number {
 }
 
 function urgencyLabel(days: number) {
-  if (days <= 0) return { label: 'Today', tone: 'bg-red-500 text-white' }
-  if (days === 1) return { label: 'Tomorrow', tone: 'bg-red-400 text-white' }
-  if (days <= 4) return { label: `In ${days}d`, tone: 'bg-amber-400 text-white' }
-  return { label: `In ${days}d`, tone: 'bg-emerald-400 text-white' }
+  if (days <= 0) return { section: 'TODAY', badge: 'today', dotTone: 'bg-red-500', badgeTone: 'bg-red-100 text-red-700' }
+  if (days === 1) return { section: 'SOON', badge: 'tomorrow', dotTone: 'bg-amber-500', badgeTone: 'bg-amber-100 text-amber-700' }
+  if (days <= 4) return { section: 'SOON', badge: `in ${days}d`, dotTone: 'bg-amber-500', badgeTone: 'bg-amber-100 text-amber-700' }
+  return { section: 'LATER', badge: `in ${days}d`, dotTone: 'bg-emerald-500', badgeTone: 'bg-emerald-100 text-emerald-700' }
 }
 
 function sourceBadge(item: PrepItem) {
@@ -421,56 +421,70 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                   <div
                     key={item.id}
                     className={cn(
-                      'rounded-2xl border border-casa-border bg-casa-bg/80 backdrop-blur-[1px] px-3 py-3',
+                      'rounded-[1.35rem] border border-casa-border/85 bg-casa-surface px-3.5 py-3.5 shadow-sm',
                       (isDone || isDownvoting) && 'opacity-60',
                     )}
                   >
                     <button type="button" onClick={() => onSelectPrepItem?.(item)} className="w-full text-left">
-                      <div className="flex items-start gap-2">
-                        <span className="text-sm mt-0.5">{item.emoji}</span>
-                        <p className={cn('text-body-sm leading-snug text-casa-text', isDone && 'line-through text-casa-muted')}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="inline-flex items-center gap-2">
+                          <span className={cn('h-2.5 w-2.5 rounded-full', urgency.dotTone)} />
+                          <span className="text-body-sm font-semibold tracking-[0.14em] text-casa-muted">{urgency.section}</span>
+                        </div>
+                        <span className={cn('text-body-sm font-semibold px-3 py-1 rounded-pill capitalize', urgency.badgeTone)}>
+                          {urgency.badge}
+                        </span>
+                      </div>
+                      <div className="mt-2.5">
+                        <p className={cn('text-heading leading-snug text-casa-text', isDone && 'line-through text-casa-muted')}>
                           {item.description}
                         </p>
                       </div>
-                    </button>
-                    <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
-                      <span className={cn('text-caption font-semibold px-1.5 py-0.5 rounded-full border', source.tone)}>
-                        {source.label}
-                      </span>
-                      {item.event_title && (
-                        <span className="text-caption text-casa-muted truncate max-w-[150px]">
-                          {item.event_title}
+                      <div className="mt-2.5 flex items-center gap-2.5">
+                        <span className={cn('text-body-sm font-semibold px-2.5 py-1 rounded-button border', source.tone)}>
+                          {source.label}
                         </span>
-                      )}
-                      <span className={cn('text-caption font-semibold px-1.5 py-0.5 rounded-full', urgency.tone)}>
-                        {urgency.label}
-                      </span>
-                    </div>
-                    <div className="mt-2.5 flex items-center justify-end gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleDone(item)}
-                        className="h-7 w-7 rounded-full border border-casa-border bg-casa-surface text-casa-muted hover:text-emerald-600 hover:border-emerald-300 transition-colors flex items-center justify-center"
-                        title="Mark done"
-                      >
-                        <Check size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => snoozePrepItem(item.id)}
-                        className="h-7 w-7 rounded-full border border-casa-border bg-casa-surface text-casa-muted hover:text-casa-text transition-colors flex items-center justify-center"
-                        title="Snooze until tomorrow"
-                      >
-                        <Moon size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDownvote(item)}
-                        className="h-7 w-7 rounded-full border border-casa-border bg-casa-surface text-casa-muted hover:text-red-500 hover:border-red-300 transition-colors flex items-center justify-center"
-                        title="Not relevant"
-                      >
-                        <ThumbsDown size={13} />
-                      </button>
+                        <span className="text-[1rem] text-casa-muted truncate">
+                          {item.event_title || 'Casa Tabor'}
+                        </span>
+                      </div>
+                    </button>
+                    <div className="mt-3 border-t border-casa-border/80 pt-3">
+                      <div className="grid grid-cols-[1.7fr_0.85fr_auto_auto_auto] items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleDone(item)}
+                          className="h-10 rounded-[1rem] bg-casa-navy text-white font-semibold text-[1.12rem] hover:brightness-105 transition"
+                          title="Mark done"
+                        >
+                          Mark done
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => snoozePrepItem(item.id)}
+                          className="h-10 rounded-[1rem] border border-casa-border bg-casa-surface text-casa-muted font-semibold text-[1.12rem] hover:text-casa-text transition-colors"
+                          title="Snooze until tomorrow"
+                        >
+                          Snooze
+                        </button>
+                        <div className="h-8 w-px bg-casa-border/80 mx-1" />
+                        <button
+                          type="button"
+                          onClick={() => handleDone(item)}
+                          className="h-10 w-10 rounded-[1rem] border border-casa-border bg-casa-surface text-xl hover:bg-casa-bg transition-colors"
+                          title="Helpful"
+                        >
+                          👍
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDownvote(item)}
+                          className="h-10 w-10 rounded-[1rem] border border-casa-border bg-casa-surface text-xl hover:bg-casa-bg transition-colors"
+                          title="Not relevant"
+                        >
+                          👎
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )
