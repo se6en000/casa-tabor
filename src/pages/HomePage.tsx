@@ -100,6 +100,7 @@ export default function HomePage() {
   const { data: allTomorrowEvents } = useTodayEvents(tomorrow)
   const { visibleMembers, toggleMember } = useCalendarStore()
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [expandedReminderId, setExpandedReminderId] = useState<string | null>(null)
   const [selectedPrepItem, setSelectedPrepItem] = useState<PrepItem | null>(null)
   const scrollRef = useRef<HTMLElement | null>(null)
   const nowLineRef = useRef<HTMLLIElement | null>(null)
@@ -304,11 +305,6 @@ export default function HomePage() {
     qc.invalidateQueries({ queryKey: ['events'] })
   }, [qc])
 
-  const dismissReminder = useCallback(async (id: string) => {
-    await supabase.from('events').update({ status: 'cancelled' }).eq('id', id)
-    qc.invalidateQueries({ queryKey: ['events'] })
-  }, [qc])
-
   const snoozeReminder = useCallback(async (event: EventWithDetails) => {
     const start = new Date(event.start_time)
     const end = new Date(event.end_time)
@@ -471,11 +467,10 @@ export default function HomePage() {
                   <ReminderEventCard
                     event={r}
                     timed={false}
-                    selected={selectedEventId === r.id}
-                    onClick={() => setSelectedEventId(r.id)}
+                    expanded={expandedReminderId === r.id}
+                    onToggleExpand={() => setExpandedReminderId(prev => prev === r.id ? null : r.id)}
                     onComplete={() => completeReminder(r.id)}
                     onSnooze={() => snoozeReminder(r)}
-                    onDismiss={() => dismissReminder(r.id)}
                   />
                 </li>
               ))}
@@ -499,10 +494,10 @@ export default function HomePage() {
                   event={ev}
                   now={now}
                   index={i}
-                  selected={selectedEventId === ev.id}
-                  onClick={() => setSelectedEventId(ev.id)}
+                  reminderExpanded={expandedReminderId === ev.id}
+                  onToggleReminder={() => setExpandedReminderId(prev => prev === ev.id ? null : ev.id)}
+                  onClick={() => { setExpandedReminderId(null); setSelectedEventId(ev.id) }}
                   onComplete={completeReminder}
-                  onDismiss={dismissReminder}
                   onSnooze={snoozeReminder}
                 />
               ))}
@@ -530,10 +525,10 @@ export default function HomePage() {
                   event={ev}
                   now={now}
                   index={i}
-                  selected={selectedEventId === ev.id}
-                  onClick={() => setSelectedEventId(ev.id)}
+                  reminderExpanded={expandedReminderId === ev.id}
+                  onToggleReminder={() => setExpandedReminderId(prev => prev === ev.id ? null : ev.id)}
+                  onClick={() => { setExpandedReminderId(null); setSelectedEventId(ev.id) }}
                   onComplete={completeReminder}
-                  onDismiss={dismissReminder}
                   onSnooze={snoozeReminder}
                 />
               ))}
@@ -564,10 +559,10 @@ export default function HomePage() {
                     event={ev}
                     now={now}
                     index={i}
-                    selected={selectedEventId === ev.id}
-                    onClick={() => setSelectedEventId(ev.id)}
+                    reminderExpanded={expandedReminderId === ev.id}
+                    onToggleReminder={() => setExpandedReminderId(prev => prev === ev.id ? null : ev.id)}
+                    onClick={() => { setExpandedReminderId(null); setSelectedEventId(ev.id) }}
                     onComplete={completeReminder}
-                    onDismiss={dismissReminder}
                     onSnooze={snoozeReminder}
                   />
                 ))}
@@ -771,19 +766,19 @@ function TimelineRow({
   event,
   now,
   index,
-  selected,
+  reminderExpanded,
+  onToggleReminder,
   onClick,
   onComplete,
-  onDismiss,
   onSnooze,
 }: {
   event: EventWithDetails
   now: Date
   index: number
-  selected: boolean
+  reminderExpanded: boolean
+  onToggleReminder: () => void
   onClick: () => void
   onComplete?: (id: string) => void
-  onDismiss?: (id: string) => void
   onSnooze?: (event: EventWithDetails) => void
 }) {
   const end = new Date(event.end_time)
@@ -799,16 +794,15 @@ function TimelineRow({
         animate={{ opacity: past ? 0.4 : 1, x: 0 }}
         transition={{ duration: 0.3, delay: index * 0.04 }}
         className="cursor-pointer"
-        onClick={e => { e.stopPropagation(); onClick() }}
+        onClick={e => { e.stopPropagation(); onToggleReminder() }}
       >
         <ReminderEventCard
           event={event}
           timed
-          selected={selected}
-          onClick={onClick}
+          expanded={reminderExpanded}
+          onToggleExpand={onToggleReminder}
           onComplete={onComplete ? () => onComplete(event.id) : undefined}
           onSnooze={onSnooze ? () => onSnooze(event) : undefined}
-          onDismiss={onDismiss ? () => onDismiss(event.id) : undefined}
         />
       </motion.li>
     )

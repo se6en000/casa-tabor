@@ -35,20 +35,20 @@ function getPrimaryColor(event: EventWithDetails): string {
 function DayEventCard({
   event,
   selected,
+  reminderExpanded,
   onSelect,
   onEdit,
   onLongPress,
   onCompleteReminder,
-  onDismissReminder,
   onSnoozeReminder,
 }: {
   event: EventWithDetails
   selected: boolean
+  reminderExpanded: boolean
   onSelect: () => void
   onEdit: () => void
   onLongPress: (event: EventWithDetails, x: number, y: number) => void
   onCompleteReminder: (event: EventWithDetails) => void
-  onDismissReminder: (event: EventWithDetails) => void
   onSnoozeReminder: (event: EventWithDetails) => void
 }) {
   const holiday = isHoliday(event)
@@ -119,11 +119,10 @@ function DayEventCard({
         <ReminderEventCard
           event={event}
           timed={timed}
-          selected={selected}
-          onClick={onSelect}
+          expanded={reminderExpanded}
+          onToggleExpand={onSelect}
           onComplete={() => onCompleteReminder(event)}
           onSnooze={() => onSnoozeReminder(event)}
-          onDismiss={() => onDismissReminder(event)}
         />
       </motion.div>
     )
@@ -300,6 +299,7 @@ export default function DayView() {
   const qc = useQueryClient()
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [expandedReminderId, setExpandedReminderId] = useState<string | null>(null)
   const [editEventId, setEditEventId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ event: EventWithDetails; x: number; y: number } | null>(null)
 
@@ -336,11 +336,6 @@ export default function DayView() {
     qc.invalidateQueries({ queryKey: ['events'] })
   }, [qc])
 
-  const dismissReminder = useCallback(async (ev: EventWithDetails) => {
-    await supabase.from('events').update({ status: 'cancelled' }).eq('id', ev.id)
-    qc.invalidateQueries({ queryKey: ['events'] })
-  }, [qc])
-
   const snoozeReminder = useCallback(async (ev: EventWithDetails) => {
     const start = new Date(ev.start_time)
     const end = new Date(ev.end_time)
@@ -358,7 +353,7 @@ export default function DayView() {
   }, [qc])
 
   return (
-    <div className="flex h-full overflow-hidden" onClick={() => setSelectedEventId(null)}>
+    <div className="flex h-full overflow-hidden" onClick={() => { setSelectedEventId(null); setExpandedReminderId(null) }}>
 
       {/* ── Main column ─────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -367,7 +362,7 @@ export default function DayView() {
         <BounceScroll
           className="flex-1"
           innerClassName="px-5 py-4"
-          onClick={() => setSelectedEventId(null)}
+          onClick={() => { setSelectedEventId(null); setExpandedReminderId(null) }}
         >
           {dayEvents.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-casa-muted gap-2">
@@ -385,11 +380,19 @@ export default function DayView() {
                     key={event.id}
                     event={event}
                     selected={selectedEventId === event.id}
-                    onSelect={() => setSelectedEventId(prev => prev === event.id ? null : event.id)}
+                    reminderExpanded={expandedReminderId === event.id}
+                    onSelect={() => {
+                      if (isReminder(event)) {
+                        setSelectedEventId(null)
+                        setExpandedReminderId(prev => prev === event.id ? null : event.id)
+                      } else {
+                        setExpandedReminderId(null)
+                        setSelectedEventId(prev => prev === event.id ? null : event.id)
+                      }
+                    }}
                     onEdit={() => setEditEventId(event.id)}
                     onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
                     onCompleteReminder={completeReminder}
-                    onDismissReminder={dismissReminder}
                     onSnoozeReminder={snoozeReminder}
                   />
                 ))}
