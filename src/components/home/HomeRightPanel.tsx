@@ -278,32 +278,34 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                   </div>
                 )
               })}
-              <Link
-                to="/actions#recent-activity"
-                className="mt-1 block rounded-[1.8rem] bg-casa-navy px-3.5 pb-3.5 pt-4 text-white shadow-md hover:brightness-[1.04] transition"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Sparkles size={15} className="text-white/90 shrink-0" />
-                  <h4 className="text-body-sm leading-tight font-semibold tracking-tight truncate">Casa sorted your inbox</h4>
-                </div>
-                <div className="mt-4 grid grid-cols-3 gap-2.5">
-                  <div className="rounded-3xl bg-white/10 px-3 py-4 text-center">
-                    <p className="text-display-sm leading-none font-semibold">{gmailActivity?.scanned ?? 0}</p>
-                    <p className="text-body font-semibold text-white/70 mt-1">scanned</p>
+              <div className="mt-4 pt-4 border-t border-casa-border">
+                <Link
+                  to="/actions#recent-activity"
+                  className="block rounded-[1.8rem] bg-casa-navy px-3.5 pb-3.5 pt-4 text-white shadow-md hover:brightness-[1.04] transition"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Sparkles size={15} className="text-white/90 shrink-0" />
+                    <h4 className="text-body-sm leading-tight font-semibold tracking-tight truncate">Casa sorted your inbox</h4>
                   </div>
-                  <div className="rounded-3xl border border-casa-gold/65 bg-white/12 px-3 py-4 text-center">
-                    <p className="text-display-sm leading-none font-semibold text-casa-gold">{prepItems.length}</p>
-                    <p className="text-body font-semibold text-white/80 mt-1">need you</p>
+                  <div className="mt-4 grid grid-cols-3 gap-2.5">
+                    <div className="rounded-3xl bg-white/10 px-3 py-4 text-center">
+                      <p className="text-display-sm leading-none font-semibold">{gmailActivity?.scanned ?? 0}</p>
+                      <p className="text-body font-semibold text-white/70 mt-1">scanned</p>
+                    </div>
+                    <div className="rounded-3xl border border-casa-gold/65 bg-white/12 px-3 py-4 text-center">
+                      <p className="text-display-sm leading-none font-semibold text-casa-gold">{prepItems.length}</p>
+                      <p className="text-body font-semibold text-white/80 mt-1">need you</p>
+                    </div>
+                    <div className="rounded-3xl bg-white/10 px-3 py-4 text-center">
+                      <p className="text-display-sm leading-none font-semibold">{gmailActivity?.skipped ?? 0}</p>
+                      <p className="text-body font-semibold text-white/70 mt-1">filtered</p>
+                    </div>
                   </div>
-                  <div className="rounded-3xl bg-white/10 px-3 py-4 text-center">
-                    <p className="text-display-sm leading-none font-semibold">{gmailActivity?.skipped ?? 0}</p>
-                    <p className="text-body font-semibold text-white/70 mt-1">filtered</p>
+                  <div className="mt-3.5 h-11 rounded-[1rem] border border-white/22 bg-white/9 text-white text-body-sm font-semibold inline-flex items-center justify-center w-full">
+                    See what Casa filtered &rarr;
                   </div>
-                </div>
-                <div className="mt-3.5 h-11 rounded-[1rem] border border-white/22 bg-white/9 text-white text-body-sm font-semibold inline-flex items-center justify-center w-full">
-                  See what Casa filtered &rarr;
-                </div>
-              </Link>
+                </Link>
+              </div>
             </div>
           )}
         </section>
