@@ -145,7 +145,7 @@ export default function HomePage() {
   }, [allTodayEvents, allTomorrowEvents])
 
   const nextTodayEvent = useMemo(
-    () => events.find((e) => isAfter(new Date(e.end_time), now)) ?? null,
+    () => events.find((e) => isAfter(new Date(e.start_time), now)) ?? null,
     [events, now],
   )
 
