@@ -36,9 +36,21 @@ function normalizeForMatch(value: string | null | undefined): string {
     .trim()
 }
 
+interface EventMatchCandidate {
+  id: string
+  title: string
+  start_time: string
+}
+
+function extractEventIdFromSourceRef(sourceRef: string | null | undefined): string | null {
+  if (!sourceRef?.startsWith('event:')) return null
+  const [, eventId] = sourceRef.split(':')
+  return eventId || null
+}
+
 function findMatchingEventIdForPrepItem(
   item: PrepItem,
-  candidateEvents: EventWithDetails[],
+  candidateEvents: EventMatchCandidate[],
 ): string | null {
   if (item.event_id) return item.event_id
 
@@ -46,10 +58,13 @@ function findMatchingEventIdForPrepItem(
   const itemDescription = normalizeForMatch(item.description)
   const itemDate = item.event_date ? new Date(item.event_date).toDateString() : null
 
+  const sourceTitle = itemTitle || itemDescription
+  if (!sourceTitle) return null
+
   for (const event of candidateEvents) {
     const eventTitle = normalizeForMatch(cleanEventTitle(event.title))
     const titleMatch = (
-      (itemTitle.length > 0 && eventTitle.length > 0 && (eventTitle.includes(itemTitle) || itemTitle.includes(eventTitle))) ||
+      (eventTitle.length > 0 && (eventTitle.includes(sourceTitle) || sourceTitle.includes(eventTitle))) ||
       (itemDescription.length > 0 && eventTitle.length > 0 && itemDescription.includes(eventTitle))
     )
     if (!titleMatch) continue
@@ -220,6 +235,59 @@ export default function HomePage() {
     if (selectedEventId) setSelectedPrepItem(null)
   }, [selectedEventId])
   const qc = useQueryClient()
+
+  const handlePrepItemSelect = useCallback(async (item: PrepItem) => {
+    const linkedEventId = extractEventIdFromSourceRef(item.source_ref) ?? item.event_id
+    if (linkedEventId) {
+      setSelectedPrepItem(null)
+      setSelectedEventId(linkedEventId)
+      return
+    }
+
+    const localMatch = findMatchingEventIdForPrepItem(item, prepEventCandidates)
+    if (localMatch) {
+      setSelectedPrepItem(null)
+      setSelectedEventId(localMatch)
+      return
+    }
+
+    const anchorDate = item.event_date ?? item.due_by ?? null
+    const date = anchorDate ? new Date(anchorDate) : null
+    const isValidDate = !!date && !Number.isNaN(date.getTime())
+
+    const lower = isValidDate ? new Date(date) : addDays(new Date(), -7)
+    const upper = isValidDate ? new Date(date) : addDays(new Date(), 30)
+    if (isValidDate) {
+      lower.setHours(0, 0, 0, 0)
+      upper.setHours(23, 59, 59, 999)
+    }
+
+    const { data: dbCandidates, error } = await supabase
+      .from('events')
+      .select('id, title, start_time')
+      .neq('status', 'cancelled')
+      .gte('start_time', lower.toISOString())
+      .lte('start_time', upper.toISOString())
+      .order('start_time', { ascending: true })
+      .limit(200)
+
+    if (error) {
+      console.error('[home] failed to resolve prep item event', error)
+      setSelectedEventId(null)
+      setSelectedPrepItem(item)
+      return
+    }
+
+    const dbMatch = findMatchingEventIdForPrepItem(item, (dbCandidates ?? []) as EventMatchCandidate[])
+    if (dbMatch) {
+      setSelectedPrepItem(null)
+      setSelectedEventId(dbMatch)
+      return
+    }
+
+    setSelectedEventId(null)
+    setSelectedPrepItem(item)
+  }, [prepEventCandidates])
   const { data: displayConfig } = useQuery<Record<string, unknown> | null>({
     queryKey: ['settings', 'display_config'],
     queryFn: async () => {
@@ -517,14 +585,7 @@ export default function HomePage() {
         now={now}
         allTodayEvents={allTodayEvents ?? []}
         onSelectPrepItem={(item) => {
-          const matchedEventId = findMatchingEventIdForPrepItem(item, prepEventCandidates)
-          if (matchedEventId) {
-            setSelectedPrepItem(null)
-            setSelectedEventId(matchedEventId)
-            return
-          }
-          setSelectedEventId(null)
-          setSelectedPrepItem(item)
+          void handlePrepItemSelect(item)
         }}
       />
     </div>
