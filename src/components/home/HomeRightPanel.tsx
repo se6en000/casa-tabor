@@ -220,12 +220,12 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                           <span className={cn('h-2.5 w-2.5 rounded-full', urgency.dotTone)} />
                           <span className="text-body-sm font-semibold tracking-[0.14em] text-casa-muted">{urgency.section}</span>
                         </div>
-                        <span className={cn('text-caption font-semibold px-2.5 py-1 rounded-pill capitalize', urgency.badgeTone)}>
+                        <span className={cn('text-caption font-bold leading-none whitespace-nowrap px-2.5 py-1 rounded-pill capitalize', urgency.badgeTone)}>
                           {urgency.badge}
                         </span>
                       </div>
                       <div className="mt-2.5">
-                        <p className={cn('text-heading leading-snug text-casa-text', isDone && 'line-through text-casa-muted')}>
+                        <p className={cn('text-body-sm leading-snug text-casa-text', isDone && 'line-through text-casa-muted')}>
                           {item.description}
                         </p>
                       </div>
@@ -233,7 +233,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                         <span className={cn('text-body-sm font-semibold px-2.5 py-1 rounded-button border', source.tone)}>
                           {source.label}
                         </span>
-                        <span className="text-body text-casa-muted truncate">
+                        <span className="text-body-sm text-casa-muted truncate">
                           {item.event_title || 'Casa Tabor'}
                         </span>
                       </div>
@@ -243,7 +243,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                         <button
                           type="button"
                           onClick={() => handleDone(item)}
-                          className="h-9 rounded-[0.9rem] bg-casa-navy text-white font-semibold text-body hover:brightness-105 transition"
+                          className="h-9 rounded-[0.9rem] bg-casa-navy text-white font-semibold text-body-sm hover:brightness-105 transition"
                           title="Mark done"
                         >
                           Mark done
@@ -251,7 +251,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                         <button
                           type="button"
                           onClick={() => snoozePrepItem(item.id)}
-                          className="h-9 rounded-[0.9rem] border border-casa-border bg-casa-card text-casa-muted font-semibold text-body hover:text-casa-text transition-colors"
+                          className="h-9 rounded-[0.9rem] border border-casa-border bg-casa-card text-casa-muted font-semibold text-body-sm hover:text-casa-text transition-colors"
                           title="Snooze until tomorrow"
                         >
                           Snooze
