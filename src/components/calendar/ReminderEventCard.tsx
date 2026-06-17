@@ -1,4 +1,5 @@
 import { Check, TimerReset } from 'lucide-react'
+import { useState } from 'react'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 
@@ -22,9 +23,18 @@ export default function ReminderEventCard({
   onComplete,
   onSnooze,
 }: ReminderEventCardProps) {
+  const [isDismissing, setIsDismissing] = useState(false)
   const members = event.members ?? []
   const primary = members.find((m) => m.role === 'primary') ?? members[0]
   const others = members.filter((m) => m !== primary)
+
+  const handleComplete = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsDismissing(true)
+    // Wait for animation to complete (300ms) before calling handler
+    await new Promise(resolve => setTimeout(resolve, 300))
+    onComplete?.()
+  }
 
   return (
     <div
@@ -36,6 +46,8 @@ export default function ReminderEventCard({
         'min-w-0 bg-amber-50/60 rounded-card border border-amber-200',
         'flex items-center gap-3 px-3 py-2.5',
         'cursor-pointer',
+        'transition-all duration-300',
+        isDismissing && 'opacity-0 scale-95 -translate-x-2',
         className,
       )}
     >
@@ -51,7 +63,7 @@ export default function ReminderEventCard({
       <div className="flex items-center gap-1 shrink-0">
         {onComplete && (
           <button
-           onClick={(e) => { e.stopPropagation(); onComplete() }}
+           onClick={handleComplete}
            className="h-6 px-2 rounded-button border border-casa-border bg-casa-surface text-body-sm font-semibold text-casa-text hover:bg-casa-bg transition-colors inline-flex items-center gap-1"
           >
            <Check size={11} />
