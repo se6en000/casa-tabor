@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useCalendarStore } from '../../stores/calendarStore'
-import { useWeekEvents } from '../../hooks/useCalendarEvents'
+import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { usePrepItems, useDismissPrepItem, useSnoozePrepItem } from '../../hooks/usePrepItems'
 import { useWeekConflicts, useResolveConflict } from '../../hooks/useConflicts'
@@ -314,26 +314,19 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
 export default function DayView() {
   const { selectedDate, visibleMembers } = useCalendarStore()
 
-  // Use the week that contains the selected date to get events
-  const { data: weekEvents } = useWeekEvents(selectedDate)
+  const { data: dayRangeEvents } = useTodayEvents(selectedDate)
   const qc = useQueryClient()
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [editEventId, setEditEventId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ event: EventWithDetails; x: number; y: number } | null>(null)
 
-  const allEvents = (weekEvents ?? []).filter(e =>
+  const allEvents = (dayRangeEvents ?? []).filter(e =>
     isHoliday(e) || isReminder(e) || visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
   )
 
   // Events for the currently selected day
   const dayEvents = allEvents
-    .filter(e => {
-      const start = parseISO(e.start_time)
-      const end = e.end_time ? parseISO(e.end_time) : start
-      return isSameDay(start, selectedDate) ||
-        (start <= selectedDate && end >= selectedDate)
-    })
     .sort((a, b) => {
       const aAllDay = a.start_time.endsWith('00:00:00+00:00')
       const bAllDay = b.start_time.endsWith('00:00:00+00:00')

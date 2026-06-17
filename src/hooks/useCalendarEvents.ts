@@ -161,6 +161,8 @@ export function useTodayEvents(date: Date) {
   const dayEnd = new Date(date)
   dayEnd.setHours(23, 59, 59, 999)
 
+  useRealtimeEventInvalidation()
+
   return useQuery({
     queryKey: ['events', 'today', dayStart.toISOString()],
     queryFn: () => fetchEventsForRange(dayStart, dayEnd),

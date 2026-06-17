@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useCalendarStore } from '../stores/calendarStore'
-import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays, subDays, addMonths, subMonths, isValid } from 'date-fns'
+import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays, subDays, addMonths, subMonths, isValid, startOfDay } from 'date-fns'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import WeekView from '../components/calendar/WeekView'
 import StackedView from '../components/calendar/StackedView'
@@ -32,16 +32,16 @@ export default function CalendarPage() {
   const weekStart = startOfWeek(headerBase, { weekStartsOn: 0 })
   const stackedEnd = addDays(headerBase, 7)
 
-  const goToToday = () => { setDirection(0); setSelectedDate(new Date()) }
+  const goToToday = () => { setDirection(0); setSelectedDate(startOfDay(new Date())) }
   const goPrev = useCallback(() => {
     setDirection(-1)
-    if (isDay || isStacked) setSelectedDate(subDays(safeSelectedDate, 1))
+    if (isDay || isStacked) setSelectedDate(startOfDay(subDays(safeSelectedDate, 1)))
     else if (isMonth) setSelectedDate(subMonths(safeSelectedDate, 1))
     else setSelectedDate(subWeeks(safeSelectedDate, 1))
   }, [isDay, isMonth, isStacked, safeSelectedDate, setSelectedDate])
   const goNext = useCallback(() => {
     setDirection(1)
-    if (isDay || isStacked) setSelectedDate(addDays(safeSelectedDate, 1))
+    if (isDay || isStacked) setSelectedDate(startOfDay(addDays(safeSelectedDate, 1)))
     else if (isMonth) setSelectedDate(addMonths(safeSelectedDate, 1))
     else setSelectedDate(addWeeks(safeSelectedDate, 1))
   }, [isDay, isMonth, isStacked, safeSelectedDate, setSelectedDate])
