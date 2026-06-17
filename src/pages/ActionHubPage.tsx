@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
-import { ClipboardList, Bell, ChevronLeft, Mail, Bot, Moon, Check, ThumbsDown, CalendarPlus, BellPlus } from 'lucide-react'
+import { ClipboardList, Bell, ChevronLeft, Mail, Bot, ThumbsDown, CalendarPlus, BellPlus } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../utils/cn'
 import { supabase } from '../lib/supabase'
@@ -16,6 +16,16 @@ function sourceBadge(item: PrepItem) {
   if (source === 'gmail') return { label: 'Email', icon: Mail, tone: 'text-purple-700 bg-purple-50 border-purple-200' }
   if (source === 'calendar_ai') return { label: 'Calendar', icon: Bot, tone: 'text-sky-700 bg-sky-50 border-sky-200' }
   return { label: 'System', icon: ClipboardList, tone: 'text-casa-muted bg-casa-bg border-casa-border' }
+}
+
+function dueBadge(item: PrepItem, now: Date): { label: string; tone: string } | null {
+  if (!item.due_by) return null
+  const due = new Date(item.due_by)
+  const diff = due.getTime() - now.getTime()
+  if (diff < 0) return { label: 'Overdue', tone: 'text-red-700 bg-red-50 border-red-200' }
+  if (diff < 24 * 60 * 60 * 1000) return { label: 'Due today', tone: 'text-amber-700 bg-amber-50 border-amber-200' }
+  if (diff < 48 * 60 * 60 * 1000) return { label: 'Due tomorrow', tone: 'text-casa-gold bg-casa-gold/15 border-casa-gold/35' }
+  return { label: `Due ${format(due, 'EEE h:mm a')}`, tone: 'text-casa-muted bg-casa-bg border-casa-border' }
 }
 
 export default function ActionHubPage() {
@@ -38,10 +48,16 @@ export default function ActionHubPage() {
       ])
       const enabled = (status ?? []).filter((s: { gmail_scan_enabled?: boolean }) => !!s.gmail_scan_enabled)
       const healthy = enabled.filter((s: { last_sync_error?: string | null }) => !s.last_sync_error).length
+      const lastSyncAt = (status ?? [])
+        .map((s: { last_sync_at?: string | null }) => s.last_sync_at)
+        .filter((v): v is string => !!v)
+        .sort()
+        .at(-1) ?? null
       return {
         enabled: enabled.length,
         healthy,
         recentProcessed: (processed ?? []).length,
+        lastSyncAt,
       }
     },
     staleTime: 60_000,
@@ -87,100 +103,112 @@ export default function ActionHubPage() {
         <ChevronLeft size={16} /> Home
       </Link>
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="font-display text-display-md text-casa-navy">Action &amp; Activity Hub</h1>
-          <p className="text-body-sm text-casa-muted mt-1">Process prep items quickly, review context, and monitor what automation is doing.</p>
-          <div className="mt-2 flex flex-wrap gap-2">
+        <div className="rounded-[1.2rem] border border-casa-border bg-casa-surface px-4 py-3.5 shadow-card flex-1 min-w-[320px]">
+          <h1 className="font-display text-display-sm text-casa-navy">Action &amp; Activity Hub</h1>
+          <p className="text-body-sm text-casa-muted mt-1">Process prep quickly, keep context visible, and stay ahead of what automation is doing.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
             {suggestions.map((text) => (
-              <span key={text} className="text-caption rounded-full bg-casa-gold/15 text-casa-navy px-2 py-0.5">{text}</span>
+              <span key={text} className="text-caption font-semibold rounded-full bg-casa-gold/15 text-casa-navy px-2 py-0.5 border border-casa-gold/25">{text}</span>
             ))}
           </div>
         </div>
-        <div className="rounded-card border border-casa-border bg-casa-surface px-4 py-3">
+        <div className="rounded-[1.2rem] border border-casa-border bg-casa-surface px-4 py-3.5 min-w-[180px] shadow-card">
           <p className="text-caption text-casa-muted">Scanner health</p>
-          <p className="text-body-sm font-semibold text-casa-text">{gmailHealth?.healthy ?? 0}/{gmailHealth?.enabled ?? 0} healthy</p>
+          <p className="text-body-sm font-semibold text-casa-text mt-0.5">{gmailHealth?.healthy ?? 0}/{gmailHealth?.enabled ?? 0} healthy</p>
+          <p className="text-caption text-casa-muted mt-1">
+            {gmailHealth?.lastSyncAt ? `Synced ${formatDistanceToNow(new Date(gmailHealth.lastSyncAt), { addSuffix: true })}` : 'Waiting for sync'}
+          </p>
         </div>
       </div>
 
       <div className="mt-6 grid grid-cols-1 xl:grid-cols-2 gap-5">
-        <section id="recent-activity" className="rounded-card border border-casa-border bg-casa-surface p-4 scroll-mt-6">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-casa-navy flex items-center gap-2"><ClipboardList size={16} className="text-casa-gold" /> Prep &amp; Action</h2>
-            <span className="text-caption rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">{prepItems.length}</span>
+        <section id="recent-activity" className="rounded-[1.2rem] border border-casa-border bg-casa-surface p-4 scroll-mt-6 shadow-card">
+          <div className="flex items-center justify-between mb-3.5">
+            <h2 className="font-display text-heading text-casa-navy flex items-center gap-2"><ClipboardList size={16} className="text-casa-gold" /> Prep &amp; Action</h2>
+            <span className="text-caption font-semibold rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">{prepItems.length}</span>
           </div>
-          <div className="max-h-[70vh] overflow-y-auto pr-1">
+          <div className="max-h-[70vh] overflow-y-auto pr-1 space-y-2.5">
             {prepItems.map((item) => {
               const src = sourceBadge(item)
               const SourceIcon = src.icon
               const busy = actingId === item.id
+              const due = dueBadge(item, now)
               return (
                 <div
                   key={item.id}
                   className={cn(
-                    'py-2.5 border-b border-casa-divider last:border-0 flex items-start gap-2.5',
+                    'rounded-[1rem] border border-casa-border bg-casa-card px-3.5 py-3',
+                    'hover:shadow-card-hover transition-all',
                     busy && 'opacity-60',
                   )}
                 >
-                  <button className="flex-1 min-w-0 text-left" onClick={() => setSelected(item)}>
-                    <p className="text-body-sm text-casa-text leading-relaxed">{item.description}</p>
+                  <div className="flex-1 min-w-0">
+                    <button className="w-full text-left" onClick={() => setSelected(item)}>
+                      <p className="text-heading text-casa-text leading-snug line-clamp-2">{item.description}</p>
+                    </button>
                     <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                      <span className={cn('inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border', src.tone)}>
+                      <span className={cn('inline-flex items-center gap-1 text-caption font-bold px-2 py-0.5 rounded-full border leading-none', src.tone)}>
                         <SourceIcon size={10} /> {src.label}
                       </span>
-                      {item.due_by && (
-                        <span className="text-caption text-casa-muted">
-                          Due {format(new Date(item.due_by), 'EEE h:mm a')}
+                      {due && (
+                        <span className={cn('text-caption font-semibold px-2 py-0.5 rounded-full border leading-none', due.tone)}>
+                          {due.label}
                         </span>
                       )}
+                      <span className="text-body-sm text-casa-muted truncate">{item.event_title || 'Casa Tabor'}</span>
                     </div>
-                  </button>
-                  <div className="shrink-0 flex flex-col items-center gap-1">
-                    <button onClick={() => run('dismiss', item.id)} className="w-8 h-8 rounded-full flex items-center justify-center border border-casa-border bg-white text-casa-muted hover:text-casa-navy hover:bg-casa-bg" title="Done">
-                      <Check size={15} />
-                    </button>
-                    <button onClick={() => run('snooze', item.id)} className="w-8 h-8 rounded-full flex items-center justify-center border border-casa-border bg-white text-casa-muted hover:text-casa-text hover:bg-casa-bg" title="Snooze">
-                      <Moon size={15} />
-                    </button>
-                    <button onClick={() => run('downvote', item.id)} className="w-8 h-8 rounded-full flex items-center justify-center border border-casa-border bg-white text-casa-muted hover:text-red-500 hover:bg-red-50" title="Downvote">
-                      <ThumbsDown size={15} />
-                    </button>
-                    <button onClick={() => launchCreate(item, 'event')} className="w-8 h-8 rounded-full flex items-center justify-center border border-casa-gold/40 bg-white text-casa-navy hover:bg-casa-gold/10" title="Event">
-                      <CalendarPlus size={15} />
-                    </button>
-                    <button onClick={() => launchCreate(item, 'reminder')} className="w-8 h-8 rounded-full flex items-center justify-center border border-casa-gold/40 bg-white text-casa-navy hover:bg-casa-gold/10" title="Reminder">
-                      <BellPlus size={15} />
-                    </button>
+                    <div className="mt-3 pt-3 border-t border-casa-divider/70 flex items-center gap-1.5 flex-wrap">
+                      <button onClick={() => run('dismiss', item.id)} className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition" title="Done">
+                        Done
+                      </button>
+                      <button onClick={() => run('snooze', item.id)} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-casa-card text-casa-muted text-body-sm font-semibold hover:text-casa-text transition-colors" title="Snooze">
+                        Snooze
+                      </button>
+                      <button onClick={() => run('downvote', item.id)} className="h-9 w-9 rounded-[0.8rem] border border-casa-border bg-casa-card text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center" title="Downvote">
+                        <ThumbsDown size={15} />
+                      </button>
+                      <button onClick={() => launchCreate(item, 'event')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create event draft">
+                        <CalendarPlus size={14} /> Event
+                      </button>
+                      <button onClick={() => launchCreate(item, 'reminder')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create reminder draft">
+                        <BellPlus size={14} /> Reminder
+                      </button>
+                    </div>
                   </div>
                 </div>
               )
             })}
-            {prepItems.length === 0 && <p className="text-caption text-casa-muted">No active prep items.</p>}
+            {prepItems.length === 0 && <p className="text-body-sm text-casa-muted">No active prep items.</p>}
           </div>
         </section>
 
-        <section className="rounded-card border border-casa-border bg-casa-surface p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-casa-navy flex items-center gap-2"><Bell size={16} className="text-casa-gold" /> Recent Activity</h2>
+        <section className="rounded-[1.2rem] border border-casa-border bg-casa-surface p-4 shadow-card">
+          <div className="flex items-center justify-between mb-3.5">
+            <h2 className="font-display text-heading text-casa-navy flex items-center gap-2"><Bell size={16} className="text-casa-gold" /> Recent Activity</h2>
             <div className="flex items-center gap-2">
-              <span className="text-caption rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">{unreadCount}</span>
+              <span className="text-caption font-semibold rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">{unreadCount}</span>
               {notifications.length > 0 && (
-                <button onClick={() => clearAll.mutate()} className="text-caption text-casa-muted hover:text-red-500">Clear all</button>
+                <button onClick={() => clearAll.mutate()} className="h-8 px-2.5 rounded-button border border-casa-border text-caption text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors">Clear all</button>
               )}
             </div>
           </div>
-          <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+          <div className="space-y-2.5 max-h-[70vh] overflow-y-auto pr-1">
             {notifications.map((n) => (
-              <div key={n.id} className={cn('border rounded-xl p-3', n.read ? 'border-casa-border' : 'border-casa-gold/50 bg-casa-gold/5')}>
-                <p className={cn('text-body-sm leading-relaxed', n.read ? 'text-casa-muted' : 'text-casa-text font-medium')}>{n.body ?? n.title}</p>
-                <p className="text-caption text-casa-muted mt-1">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })} · {n.source ?? 'system'}</p>
+              <div key={n.id} className={cn('border rounded-[1rem] p-3.5', n.read ? 'border-casa-border bg-casa-card' : 'border-casa-gold/45 bg-casa-gold/5')}>
+                <p className={cn('text-body leading-relaxed', n.read ? 'text-casa-text' : 'text-casa-text font-semibold')}>{n.body ?? n.title}</p>
+                <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                  <span className="text-caption text-casa-muted">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}</span>
+                  <span className="text-caption text-casa-muted">•</span>
+                  <span className="text-caption font-semibold px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border text-casa-muted">{n.source ?? 'system'}</span>
+                </div>
                 {!n.read && (
-                  <button onClick={() => markRead.mutate(n.id)} className="mt-2 text-caption text-casa-navy hover:text-casa-gold">
+                  <button onClick={() => markRead.mutate(n.id)} className="mt-2 text-body-sm font-semibold text-casa-navy hover:text-casa-gold">
                     Mark read
                   </button>
                 )}
               </div>
             ))}
-            {notifications.length === 0 && <p className="text-caption text-casa-muted">No recent activity.</p>}
+            {notifications.length === 0 && <p className="text-body-sm text-casa-muted">No recent activity.</p>}
           </div>
         </section>
       </div>
