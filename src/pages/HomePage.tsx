@@ -592,22 +592,21 @@ export default function HomePage() {
           </div>
         </div>
 
+      </div>
 
-        <div onClick={e => e.stopPropagation()}>
-          <EventDetailPanel
-            event={selectedEventResolved}
-            onClose={() => setSelectedEventId(null)}
-          />
-        </div>
+      {/* ── Event & Prep detail panels (outside scroll container) ─── */}
+      <div onClick={e => e.stopPropagation()}>
+        <EventDetailPanel
+          event={selectedEventResolved}
+          onClose={() => setSelectedEventId(null)}
+        />
+      </div>
 
-        <div onClick={e => e.stopPropagation()}>
-          <PrepItemDetailPanel
-            item={selectedPrepItem}
-            onClose={() => setSelectedPrepItem(null)}
-          />
-        </div>
-
-
+      <div onClick={e => e.stopPropagation()}>
+        <PrepItemDetailPanel
+          item={selectedPrepItem}
+          onClose={() => setSelectedPrepItem(null)}
+        />
       </div>
 
       {/* ── Right panel (tablet only) ──────────────────────── */}
