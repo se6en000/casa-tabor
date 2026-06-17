@@ -50,10 +50,10 @@ export default function ReminderEventCard({
       }}
     >
       <div className="grid grid-cols-[74px_1fr] min-h-[58px]">
-        <div className="grid content-center justify-items-end pr-2 pl-1.5 border-r border-casa-divider/60">
+      <div className="grid content-start justify-items-end pr-2 pl-1.5 pt-2 border-r border-casa-divider/60">
           {timed ? (
             <>
-              <p className="text-heading font-display text-casa-navy tabular-nums leading-none text-right">
+            <p className="text-heading font-display font-bold text-casa-navy tabular-nums leading-none text-right">
                 {format(start, 'h:mm')}
               </p>
               <p className="text-caption text-casa-muted font-semibold uppercase mt-0.5 text-right">

@@ -44,8 +44,8 @@ export default function LargeEventCard({
       style={{ borderLeft: `6px solid ${color}` }}
     >
       <div className="grid grid-cols-[96px_1fr] min-h-[98px]">
-        <div className="grid content-center justify-items-end pr-3 pl-2 border-r border-casa-divider/70">
-          <p className="text-display-sm font-display text-casa-navy tabular-nums leading-none text-right">
+        <div className="grid content-start justify-items-end pr-3 pl-2 pt-3 border-r border-casa-divider/70">
+          <p className="text-display-sm font-display font-bold text-casa-navy tabular-nums leading-none text-right">
             {format(start, 'h:mm')}
           </p>
           <p className="text-caption text-casa-muted font-semibold uppercase mt-1 text-right">
