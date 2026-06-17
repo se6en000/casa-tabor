@@ -144,14 +144,14 @@ export default function ActionHubPage() {
                 >
                   <div className="flex-1 min-w-0">
                     <button className="w-full text-left" onClick={() => setSelected(item)}>
-                      <p className="text-heading text-casa-text leading-snug line-clamp-2">{item.description}</p>
+                      <p className="text-body-sm font-semibold text-casa-text leading-snug line-clamp-2">{item.description}</p>
                     </button>
                     <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                      <span className={cn('inline-flex items-center gap-1 text-caption font-bold px-2 py-0.5 rounded-full border leading-none', src.tone)}>
+                      <span className={cn('inline-flex items-center gap-1 text-body-sm font-semibold px-2 py-0.5 rounded-full border leading-none', src.tone)}>
                         <SourceIcon size={10} /> {src.label}
                       </span>
                       {due && (
-                        <span className={cn('text-caption font-semibold px-2 py-0.5 rounded-full border leading-none', due.tone)}>
+                        <span className={cn('text-body-sm font-semibold px-2 py-0.5 rounded-full border leading-none', due.tone)}>
                           {due.label}
                         </span>
                       )}
@@ -195,11 +195,11 @@ export default function ActionHubPage() {
           <div className="space-y-2.5 max-h-[70vh] overflow-y-auto pr-1">
             {notifications.map((n) => (
               <div key={n.id} className={cn('border rounded-[1rem] p-3.5', n.read ? 'border-casa-border bg-casa-card' : 'border-casa-gold/45 bg-casa-gold/5')}>
-                <p className={cn('text-body leading-relaxed', n.read ? 'text-casa-text' : 'text-casa-text font-semibold')}>{n.body ?? n.title}</p>
+                <p className={cn('text-body-sm leading-relaxed', n.read ? 'text-casa-text' : 'text-casa-text font-semibold')}>{n.body ?? n.title}</p>
                 <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                  <span className="text-caption text-casa-muted">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}</span>
-                  <span className="text-caption text-casa-muted">•</span>
-                  <span className="text-caption font-semibold px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border text-casa-muted">{n.source ?? 'system'}</span>
+                  <span className="text-body-sm text-casa-muted">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}</span>
+                  <span className="text-body-sm text-casa-muted">•</span>
+                  <span className="text-body-sm font-semibold px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border text-casa-muted leading-none">{n.source ?? 'system'}</span>
                 </div>
                 {!n.read && (
                   <button onClick={() => markRead.mutate(n.id)} className="mt-2 text-body-sm font-semibold text-casa-navy hover:text-casa-gold">
