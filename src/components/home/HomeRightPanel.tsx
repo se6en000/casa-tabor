@@ -5,13 +5,12 @@
 import { useMemo, useState } from 'react'
 import { addDays, differenceInDays, format, formatDistanceToNow, parseISO, startOfWeek } from 'date-fns'
 import { Link, useNavigate } from 'react-router-dom'
-import { AlertTriangle, Bot, ChevronRight, CloudSun, Sparkles, X } from 'lucide-react'
+import { AlertTriangle, Bot, ChevronRight, X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useWeekEvents } from '../../hooks/useCalendarEvents'
 import { useDismissPrepItem, useDownvotePrepItem, usePrepItems, useSnoozePrepItem } from '../../hooks/usePrepItems'
-import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { useWeekConflicts } from '../../hooks/useConflicts'
 import { supabase } from '../../lib/supabase'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
@@ -184,7 +183,6 @@ function sourceBadge(item: PrepItem) {
 export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }: Props) {
   const navigate = useNavigate()
   const { notifications, markRead } = useNotifications()
-  const { data: weather } = useHomeWeather()
   const { data: conflicts = [] } = useWeekConflicts()
   const { data: prepItems = [] } = usePrepItems()
   const dismissPrepItem = useDismissPrepItem()
@@ -331,28 +329,6 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   return (
     <aside className="hidden lg:flex w-[22rem] flex-shrink-0 flex-col border-l border-casa-border bg-casa-surface self-stretch overflow-hidden">
       <BounceScroll className="flex-1 min-h-0">
-        <div className="px-4 pt-4 pb-2 border-b border-casa-border bg-gradient-to-b from-casa-navy/95 to-casa-navy">
-          <div className="flex items-center justify-between gap-2 text-white">
-            <div className="flex items-center gap-2 min-w-0">
-              <CloudSun size={14} className="text-casa-gold shrink-0" />
-              <p className="text-caption font-semibold tracking-wide truncate">
-                {weather ? `${weather.temp}° · ${weather.condition}` : 'Home'}
-              </p>
-            </div>
-            <p className="text-caption font-semibold tracking-wide whitespace-nowrap">{format(now, 'h:mm a')}</p>
-          </div>
-          <div className="mt-2.5 flex items-center justify-end">
-            <button
-              type="button"
-              onClick={() => navigate('/briefing')}
-              className="h-8 w-8 rounded-xl border border-white/20 bg-white/[0.08] text-white/90 flex items-center justify-center hover:bg-white/[0.12] transition-colors"
-              aria-label="Open briefing"
-            >
-              <Sparkles size={13} />
-            </button>
-          </div>
-        </div>
-
         <section className="px-4 py-4 border-b border-casa-border">
           <div className="flex items-center justify-between">
             <h3 className="text-body-sm font-semibold text-casa-text tracking-wide uppercase">This week</h3>
