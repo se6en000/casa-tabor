@@ -142,7 +142,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   return (
     <aside className="hidden lg:flex w-[22rem] flex-shrink-0 flex-col border-l border-casa-border bg-casa-rail self-stretch overflow-hidden">
       <BounceScroll className="flex-1 min-h-0">
-        <section className="px-4 py-4 border-b border-casa-border">
+        <section className="px-4 py-4">
           <div className="flex items-center justify-between">
             <h3 className="text-body-sm font-semibold text-casa-text tracking-wide uppercase">This week</h3>
             <Link to="/calendar" className="text-caption font-semibold text-casa-gold inline-flex items-center gap-1">
@@ -181,7 +181,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
           </div>
         </section>
 
-        <section className="px-4 py-4 border-b border-casa-border">
+        <section className="px-4 py-4">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <h3 className="text-body-sm font-semibold text-casa-text tracking-wide uppercase">Needs you</h3>
@@ -311,7 +311,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
         </section>
 
         {conflicts.length > 0 && (
-          <section className="px-4 py-4 border-b border-casa-border">
+          <section className="px-4 py-4">
             <div className="flex items-center gap-2 mb-2.5">
               <AlertTriangle size={14} className="text-amber-500" />
               <h3 className="text-body-sm font-semibold text-casa-text tracking-wide uppercase">Heads up</h3>
