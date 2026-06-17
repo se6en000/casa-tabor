@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from 'react'
 import { format, isSameDay, parseISO } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Clock, MapPin, ChevronRight, Navigation,
+  Clock, MapPin, Navigation,
   Calendar, AlertTriangle, ClipboardList, Bell,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
@@ -14,12 +14,12 @@ import { useWeekConflicts, useResolveConflict } from '../../hooks/useConflicts'
 import EventDetailPanel from './EventDetailPanel'
 import EventEditSheet from './EventEditSheet'
 import EventContextMenu from '../shared/EventContextMenu'
-import { WeatherIcon } from '../shared/WeatherIcon'
 import { differenceInDays } from 'date-fns'
-import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, isAllDayReminder, isTimedReminder, REMINDER_COLOR } from '../../utils/holidays'
+import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, isTimedReminder, REMINDER_COLOR } from '../../utils/holidays'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import BounceScroll from '../shared/BounceScroll'
+import LargeEventCard from './LargeEventCard'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -27,10 +27,6 @@ function getPrimaryColor(event: EventWithDetails): string {
   if (!event.members?.length || event.members.length >= 5) return SHARED_COLOR
   const primary = event.members.find(m => m.role === 'primary') ?? event.members[0]
   return primary.family_member?.color_hex || SHARED_COLOR
-}
-
-function formatTime(iso: string) {
-  return format(parseISO(iso), 'h:mm a')
 }
 
 // ── Event card (stacked, not time-distributed) ─────────────────────
@@ -51,13 +47,8 @@ function DayEventCard({
   const holiday = isHoliday(event)
   const reminder = !holiday && isReminder(event)
   const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(event)
-  const enr = event.enrichment
-  const d = new Date(event.start_time)
-  const isAllDay = holiday || isAllDayReminder(event) || !event.start_time.includes('T') ||
-    (d.getHours() === 0 && d.getMinutes() === 0 && event.end_time && (() => { const e = new Date(event.end_time!); return e.getHours() === 23 && e.getMinutes() === 59 })())
+  const primary = event.members.find(m => m.role === 'primary') ?? event.members[0]
 
-  const primary = event.members.find(m => m.role === 'primary')
-  const otherMembers = event.members.filter(m => m.role !== 'primary')
   const pipeIdx = event.title.indexOf(' | ')
   const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
 
@@ -164,86 +155,16 @@ function DayEventCard({
       exit={{ opacity: 0, y: -4 }}
       transition={{ duration: 0.18 }}
       onClick={e => { e.stopPropagation(); onSelect() }}
+      onDoubleClick={e => { e.stopPropagation(); onEdit() }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       className={cn(
-        'group relative flex gap-3 px-4 py-3.5 rounded-card border cursor-pointer transition-all touch-pan-y',
-        'bg-casa-surface border-casa-border hover:shadow-card',
-        selected && 'shadow-card-hover border-l-4',
+        'cursor-pointer transition-all touch-pan-y',
+        'hover:shadow-card',
       )}
-      style={selected ? { borderLeftColor: color } : {}}
     >
-      {/* Color strip */}
-      <div className="w-1 rounded-full shrink-0 self-stretch" style={{ background: color }} />
-
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <p className="font-semibold text-body-sm text-casa-text leading-snug">{cleanTitle}</p>
-          {!isAllDay && (
-            <span className="flex items-center gap-1 text-caption text-casa-muted shrink-0 tabular-nums">
-              {formatTime(event.start_time)}
-              {event.end_time ? ` – ${formatTime(event.end_time)}` : ''}
-              {event.location_name && (
-                <WeatherIcon condition={enr?.weather_at_event} size={12} />
-              )}
-            </span>
-          )}
-          {isAllDay && (
-            <span className="text-caption font-semibold px-2 py-0.5 rounded-full bg-casa-divider text-casa-muted shrink-0">
-              All day
-            </span>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-x-2 gap-y-1 mt-1 items-center">
-          {/* Owner as full pill */}
-          {primary && (
-            <span
-              className="px-2 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
-              style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
-            >
-              {primary.family_member?.name}
-            </span>
-          )}
-          {/* Other attendees as name pills */}
-          {otherMembers.slice(0, 3).map(m => (
-            <span
-              key={m.id}
-              className="px-2 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
-              style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
-            >
-              {m.family_member?.name ?? '?'}
-            </span>
-          ))}
-          {event.location_name && (
-            <span className="flex items-center gap-1 text-caption text-casa-muted">
-              <MapPin size={11} />
-              {event.location_name}
-            </span>
-          )}
-          {enr?.departure_time && (
-            <span className="flex items-center gap-1 text-caption text-amber-700 font-medium">
-              <Navigation size={11} />
-              Leave by {format(parseISO(enr.departure_time), 'h:mm a')}
-            </span>
-          )}
-        </div>
-
-        {enr?.prep_notes && (
-          <p className="text-caption text-casa-muted mt-1 line-clamp-2">{enr.prep_notes}</p>
-        )}
-      </div>
-
-      {/* Edit on hover */}
-      <button
-        onClick={e => { e.stopPropagation(); onEdit() }}
-        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 self-start mt-0.5 text-casa-muted hover:text-casa-text"
-        title="Edit event"
-      >
-        <ChevronRight size={16} />
-      </button>
+      <LargeEventCard event={event} color={color} selected={selected} />
     </motion.div>
   )
 }
