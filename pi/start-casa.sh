@@ -28,6 +28,8 @@ if ! flock -n 9; then
   exit 0
 fi
 
+echo "$(date): Casa Tabor launcher starting (KIOSK=$KIOSK)" >> "$HOME/launcher.log"
+
 # ── Kiosk toggle ──────────────────────────────────────────────────────────
 # Set to "1" for locked-down fullscreen kiosk (production on the wall).
 # Set to "0" for a normal windowed browser while testing/building (tabs,
@@ -103,6 +105,7 @@ fi
 
 chromium-browser \
   $KIOSK_FLAG \
+  --force-device-scale-factor=2 \
   --password-store=basic \
   --no-sandbox \
   --touch-events=enabled \
@@ -118,4 +121,4 @@ chromium-browser \
   --check-for-update-interval=31536000 \
   --start-maximized \
   --window-position=0,0 \
-  https://casa-tabor.vercel.app
+  https://casa-tabor.vercel.app 2>&1 | tee -a "$HOME/chromium.log"
