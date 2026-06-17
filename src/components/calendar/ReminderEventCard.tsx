@@ -31,43 +31,20 @@ export default function ReminderEventCard({
       onClick={onClick}
       className={cn(
         'min-w-0 bg-amber-50/60 rounded-card border border-amber-200',
-        'inline-flex items-start gap-3 px-3 py-2.5',
+        'flex items-center gap-3 px-3 py-2.5',
         'cursor-pointer',
         className,
       )}
     >
       {/* Simple divider */}
-      <div className="w-0.5 rounded-full self-stretch bg-amber-300/80 shrink-0 mt-0.5" />
+      <div className="w-0.5 rounded-full self-stretch bg-amber-300/80 shrink-0" />
 
-      <div className="min-w-0 flex-1">
-        <p className="font-semibold text-body-sm text-casa-text truncate">{cleanEventTitle(event.title)}</p>
-        
-        {/* Owner pills */}
-        {members.length > 0 && (
-          <div className="flex items-center gap-1 mt-1.5 shrink-0">
-           {primary && (
-             <span
-               className="px-1.5 py-0.5 rounded-full text-caption font-bold leading-none whitespace-nowrap text-white"
-               style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
-               title={primary.family_member?.name ?? ''}
-             >
-               {primary.family_member?.name}
-             </span>
-           )}
-           {others.slice(0, 1).map((m) => (
-             <span
-               key={m.id}
-               className="px-1.5 py-0.5 rounded-full text-caption font-bold leading-none whitespace-nowrap text-white"
-               style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
-             >
-               {m.family_member?.name}
-             </span>
-           ))}
-          </div>
-        )}
-      </div>
+      {/* Title */}
+      <p className="font-semibold text-body-sm text-casa-text truncate min-w-0">
+        {cleanEventTitle(event.title)}
+      </p>
 
-      {/* Action buttons */}
+      {/* Action buttons (next to title) */}
       <div className="flex items-center gap-1 shrink-0">
         {onComplete && (
           <button
@@ -88,6 +65,33 @@ export default function ReminderEventCard({
           </button>
         )}
       </div>
+
+      {/* Spacer to push owners to right */}
+      <div className="flex-1" />
+
+      {/* Owner pills (right side) */}
+      {members.length > 0 && (
+        <div className="flex items-center gap-1 shrink-0">
+          {primary && (
+           <span
+             className="px-1.5 py-0.5 rounded-full text-caption font-bold leading-none whitespace-nowrap text-white"
+             style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
+             title={primary.family_member?.name ?? ''}
+           >
+             {primary.family_member?.name}
+           </span>
+          )}
+          {others.slice(0, 1).map((m) => (
+           <span
+             key={m.id}
+             className="px-1.5 py-0.5 rounded-full text-caption font-bold leading-none whitespace-nowrap text-white"
+             style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
+           >
+             {m.family_member?.name}
+           </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
