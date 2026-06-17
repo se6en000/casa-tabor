@@ -67,17 +67,9 @@ export default function TabletSidebar() {
         'hidden lg:flex flex-shrink-0 bg-casa-rail border-r border-casa-border flex-col h-screen sticky top-0 overflow-hidden z-30 transition-all duration-300 relative',
         sidebarCollapsed ? 'w-20' : 'w-72'
       )}>
-        <button
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="absolute top-2 right-2 z-10 p-1.5 rounded-md hover:bg-casa-bg transition-colors text-casa-muted hover:text-casa-navy"
-          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-        </button>
-
         <BounceScroll
           className="flex-1 min-h-0"
-          innerClassName={cn('flex flex-col gap-2 pt-8', sidebarCollapsed ? 'px-2 pb-4' : 'px-4 pb-4')}
+          innerClassName={cn('flex flex-col gap-2 pt-3', sidebarCollapsed ? 'px-2 pb-4' : 'px-4 pb-4')}
         >
           {!sidebarCollapsed && (
             <>
@@ -163,9 +155,20 @@ export default function TabletSidebar() {
                 </AnimatePresence>
               </div>
 
-              <div className="mx-2 h-px bg-casa-border/70" aria-hidden />
             </>
           )}
+
+          <div className={cn('flex items-center py-1', sidebarCollapsed ? 'justify-center' : 'mx-2 gap-2')}>
+            {!sidebarCollapsed && <div className="h-px flex-1 bg-casa-border/70" aria-hidden />}
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="p-1.5 rounded-md hover:bg-casa-bg transition-colors text-casa-muted hover:text-casa-navy"
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
+            {!sidebarCollapsed && <div className="h-px flex-1 bg-casa-border/70" aria-hidden />}
+          </div>
 
           {NAV.map(({ to, icon: Icon, label }) => (
             <NavLink
