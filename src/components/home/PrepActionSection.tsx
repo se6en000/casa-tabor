@@ -94,6 +94,7 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
     setChecking(id)
     await new Promise(r => setTimeout(r, 300))
     await dismiss(id)
+    await new Promise(r => setTimeout(r, 180))
     setChecking(null)
   }
 
@@ -101,6 +102,7 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
     setSnoozingId(id)
     await new Promise(r => setTimeout(r, 300))
     await snooze(id)
+    await new Promise(r => setTimeout(r, 180))
     setSnoozingId(null)
   }
 

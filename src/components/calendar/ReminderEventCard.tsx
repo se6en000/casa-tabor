@@ -1,4 +1,5 @@
 import { Check, TimerReset } from 'lucide-react'
+import { useState } from 'react'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 
@@ -6,8 +7,8 @@ interface ReminderEventCardProps {
   event: EventWithDetails
   className?: string
   onClick?: () => void
-  onComplete?: () => void
-  onSnooze?: () => void
+  onComplete?: () => void | Promise<void>
+  onSnooze?: () => void | Promise<void>
 }
 
 function cleanEventTitle(title: string): string {
@@ -22,20 +23,26 @@ export default function ReminderEventCard({
   onComplete,
   onSnooze,
 }: ReminderEventCardProps) {
+  const [isAnimatingOut, setIsAnimatingOut] = useState(false)
   const members = event.members ?? []
   const primary = members.find((m) => m.role === 'primary') ?? members[0]
   const others = members.filter((m) => m !== primary)
 
   const handleComplete = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    await new Promise(resolve => setTimeout(resolve, 300))
-    onComplete?.()
+    setIsAnimatingOut(true)
+    await new Promise(resolve => setTimeout(resolve, 220))
+    await onComplete?.()
   }
 
   const handleSnooze = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    await new Promise(resolve => setTimeout(resolve, 300))
-    onSnooze?.()
+    setIsAnimatingOut(true)
+    await new Promise(resolve => setTimeout(resolve, 220))
+    await onSnooze?.()
+    // Timed reminders remain in the same list; reset so they can reappear at the new time.
+    await new Promise(resolve => setTimeout(resolve, 220))
+    setIsAnimatingOut(false)
   }
 
   return (
@@ -46,8 +53,9 @@ export default function ReminderEventCard({
       }}
       className={cn(
         'min-w-0 bg-amber-50/60 rounded-card border border-amber-200',
-        'flex items-center gap-3 px-3 py-2.5',
+        'flex items-center gap-3 px-3 py-2.5 transition-all duration-300',
         'cursor-pointer',
+        isAnimatingOut && 'opacity-0 scale-95 -translate-x-2 pointer-events-none',
         className,
       )}
     >
