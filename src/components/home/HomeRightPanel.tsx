@@ -5,7 +5,7 @@
 import { useMemo, useState } from 'react'
 import { addDays, differenceInDays, format, formatDistanceToNow, parseISO, startOfWeek } from 'date-fns'
 import { Link, useNavigate } from 'react-router-dom'
-import { AlertTriangle, Bot, Check, ChevronRight, CloudSun, Moon, Search, Sparkles, ThumbsDown, X } from 'lucide-react'
+import { AlertTriangle, Bot, Check, ChevronRight, CloudSun, Moon, Sparkles, ThumbsDown, X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -341,15 +341,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
             </div>
             <p className="text-caption font-semibold tracking-wide whitespace-nowrap">{format(now, 'h:mm a')}</p>
           </div>
-          <div className="mt-2.5 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => navigate('/calendar')}
-              className="h-8 flex-1 rounded-xl border border-white/20 bg-white/[0.08] px-2.5 text-left text-caption text-white/85 flex items-center gap-2 hover:bg-white/[0.12] transition-colors"
-            >
-              <Search size={13} className="shrink-0" />
-              Search calendar
-            </button>
+          <div className="mt-2.5 flex items-center justify-end">
             <button
               type="button"
               onClick={() => navigate('/briefing')}
