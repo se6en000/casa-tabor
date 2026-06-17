@@ -5,7 +5,7 @@
 import { useMemo, useState } from 'react'
 import { addDays, differenceInDays, format, formatDistanceToNow, parseISO, startOfWeek } from 'date-fns'
 import { Link, useNavigate } from 'react-router-dom'
-import { AlertTriangle, Bot, ChevronRight, ThumbsDown, ThumbsUp, X } from 'lucide-react'
+import { AlertTriangle, Bot, ChevronRight, Plus, Sparkles, ThumbsDown, ThumbsUp, X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -467,9 +467,32 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
               })}
               <Link
                 to="/actions#recent-activity"
-                className="h-11 rounded-[1rem] border border-casa-border bg-casa-navy/90 text-white text-[1.06rem] font-semibold inline-flex items-center justify-center w-full hover:bg-casa-navy transition-colors"
+                className="relative mt-1 block rounded-[1.8rem] bg-casa-navy px-3.5 pb-3.5 pt-5 text-white shadow-md hover:brightness-[1.04] transition"
               >
-                See what Casa filtered &rarr;
+                <div className="flex items-center gap-2.5 pr-20">
+                  <Sparkles size={15} className="text-white/90 shrink-0" />
+                  <h4 className="text-[2rem] leading-none font-semibold tracking-tight truncate">Casa sorted your inbox</h4>
+                </div>
+                <span className="absolute -top-4 left-1/2 -translate-x-1/2 h-16 w-16 rounded-full bg-[#05265f] text-white inline-flex items-center justify-center border border-white/5 shadow-lg">
+                  <Plus size={26} strokeWidth={2.4} />
+                </span>
+                <div className="mt-4 grid grid-cols-3 gap-2.5">
+                  <div className="rounded-3xl bg-white/10 px-3 py-4 text-center">
+                    <p className="text-[2.4rem] leading-none font-semibold">{gmailActivity?.scanned ?? 0}</p>
+                    <p className="text-[1.45rem] font-semibold text-white/70 mt-1">scanned</p>
+                  </div>
+                  <div className="rounded-3xl border border-casa-gold/65 bg-white/12 px-3 py-4 text-center">
+                    <p className="text-[2.4rem] leading-none font-semibold text-casa-gold">{prepItems.length}</p>
+                    <p className="text-[1.45rem] font-semibold text-white/80 mt-1">need you</p>
+                  </div>
+                  <div className="rounded-3xl bg-white/10 px-3 py-4 text-center">
+                    <p className="text-[2.4rem] leading-none font-semibold">{gmailActivity?.skipped ?? 0}</p>
+                    <p className="text-[1.45rem] font-semibold text-white/70 mt-1">filtered</p>
+                  </div>
+                </div>
+                <div className="mt-3.5 h-11 rounded-[1rem] border border-white/22 bg-white/9 text-white text-[1.06rem] font-semibold inline-flex items-center justify-center w-full">
+                  See what Casa filtered &rarr;
+                </div>
               </Link>
             </div>
           )}
