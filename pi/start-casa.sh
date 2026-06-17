@@ -105,7 +105,7 @@ fi
 
 chromium-browser \
   $KIOSK_FLAG \
-  --force-device-scale-factor=2 \
+  --force-device-scale-factor=1.5 \
   --password-store=basic \
   --no-sandbox \
   --touch-events=enabled \
