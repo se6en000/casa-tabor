@@ -104,6 +104,8 @@ function DayEventCard({
 
   if (reminder) {
     const timed = isTimedReminder(event)
+    const start = new Date(event.start_time)
+    
     return (
       <motion.div
         layout
@@ -111,27 +113,28 @@ function DayEventCard({
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -4 }}
         transition={{ duration: 0.18 }}
-        className="flex items-center gap-3"
+        className="grid grid-cols-[96px_1fr] min-h-[80px]"
       >
+        {/* Time column */}
         {timed ? (
-          <>
-            <div className="w-16 shrink-0 flex flex-col items-end justify-start pt-1">
-              <p className="text-display-sm font-display font-bold text-casa-navy tabular-nums leading-none text-right w-full">
-                {format(new Date(event.start_time), 'h:mm')}
-              </p>
-              <p className="text-caption text-casa-muted font-semibold uppercase mt-0.5 leading-none text-right w-full">
-                {format(new Date(event.start_time), 'a')}
-              </p>
-            </div>
-            <span className="w-2 rounded-full self-stretch bg-amber-300/80" />
-          </>
+          <div className="grid content-start justify-items-end pr-3 pl-2 pt-3 border-r border-casa-divider/70">
+            <p className="text-display-sm font-display font-bold text-casa-navy tabular-nums leading-none text-right">
+              {format(start, 'h:mm')}
+            </p>
+            <p className="text-caption text-casa-muted font-semibold uppercase mt-1 text-right">
+              {format(start, 'a')}
+            </p>
+          </div>
         ) : (
-          <div className="w-16 shrink-0 text-caption font-semibold text-casa-muted pt-1 text-right">All day</div>
+          <div className="grid content-start justify-items-end pr-3 pl-2 pt-3 border-r border-casa-divider/70">
+            <p className="text-caption font-semibold text-casa-muted text-right">All day</p>
+          </div>
         )}
+
+        {/* Reminder card */}
         <ReminderEventCard
           event={event}
-          timed={timed}
-          className="flex-1 min-w-0"
+          onClick={() => onSelect()}
           onComplete={() => onCompleteReminder(event)}
           onSnooze={() => onSnoozeReminder(event)}
         />
@@ -391,7 +394,6 @@ export default function DayView() {
                     event={event}
                     selected={selectedEventId === event.id}
                     onSelect={() => {
-                      if (isReminder(event)) return
                       setSelectedEventId(prev => prev === event.id ? null : event.id)
                     }}
                     onEdit={() => setEditEventId(event.id)}

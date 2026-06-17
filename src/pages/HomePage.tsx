@@ -465,7 +465,7 @@ export default function HomePage() {
                 <li key={r.id}>
                   <ReminderEventCard
                     event={r}
-                    timed={false}
+                    onClick={() => setSelectedEventId(r.id)}
                     onComplete={() => completeReminder(r.id)}
                     onSnooze={() => snoozeReminder(r)}
                   />
@@ -780,21 +780,20 @@ function TimelineRow({
         initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: past ? 0.4 : 1, x: 0 }}
         transition={{ duration: 0.3, delay: index * 0.04 }}
-        className="flex items-center gap-3"
+        className="grid grid-cols-[96px_1fr] min-h-[80px]"
       >
-        <div className="w-16 shrink-0 flex flex-col items-end justify-start pt-1">
-          <p className="text-display-sm font-display font-bold text-casa-navy tabular-nums leading-none text-right w-full">
+        <div className="grid content-start justify-items-end pr-3 pl-2 pt-3 border-r border-casa-divider/70">
+          <p className="text-display-sm font-display font-bold text-casa-navy tabular-nums leading-none text-right">
             {format(new Date(event.start_time), 'h:mm')}
           </p>
-          <p className="text-caption text-casa-muted font-semibold uppercase mt-0.5 leading-none text-right w-full">
+          <p className="text-caption text-casa-muted font-semibold uppercase mt-1 text-right">
             {format(new Date(event.start_time), 'a')}
           </p>
         </div>
-        <span className="w-2 rounded-full self-stretch bg-amber-300/80" />
+
         <ReminderEventCard
           event={event}
-          timed
-          className="flex-1 min-w-0"
+          onClick={() => onClick()}
           onComplete={onComplete ? () => onComplete(event.id) : undefined}
           onSnooze={onSnooze ? () => onSnooze(event) : undefined}
         />
