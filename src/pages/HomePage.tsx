@@ -108,6 +108,74 @@ export default function HomePage() {
   const selectedEvent = selectedEventId
     ? (events.find(e => e.id === selectedEventId) ?? tomorrowEvents.find(e => e.id === selectedEventId) ?? reminders.find(e => e.id === selectedEventId) ?? null)
     : null
+  const { data: selectedEventFromDb } = useQuery<EventWithDetails | null>({
+    queryKey: ['events', 'single', selectedEventId],
+    enabled: !!selectedEventId && !selectedEvent,
+    queryFn: async () => {
+      if (!selectedEventId) return null
+      const enrichmentSelect = `
+        id,
+        event_id,
+        category,
+        confidence,
+        what_to_bring,
+        outfit_suggestion,
+        parking_notes,
+        contact_name,
+        contact_phone,
+        cost_estimate,
+        dietary_notes,
+        meal_impact,
+        prep_notes,
+        departure_time,
+        drive_time_mins,
+        route_summary,
+        weather_at_event,
+        weather_summary,
+        enriched_by,
+        enriched_at,
+        created_at,
+        updated_at
+      `
+      const { data, error } = await supabase
+        .from('events')
+        .select(`
+          *,
+          event_members (
+            id,
+            role,
+            family_member:family_members (*)
+          ),
+          event_enrichments (${enrichmentSelect}),
+          event_logistics ( * ),
+          event_checklist_items ( * ),
+          event_action_items ( * )
+        `)
+        .eq('id', selectedEventId)
+        .neq('status', 'cancelled')
+        .maybeSingle()
+
+      if (error) throw error
+      if (!data) return null
+
+      return {
+        ...data,
+        members: data.event_members?.map((em: any) => ({
+          id: em.id,
+          role: em.role,
+          family_member: em.family_member,
+        })) ?? [],
+        enrichment: Array.isArray(data.event_enrichments)
+          ? data.event_enrichments[0] ?? null
+          : (data.event_enrichments ?? null),
+        logistics: (data.event_logistics ?? []).sort((a: any, b: any) => a.sort_order - b.sort_order),
+        checklist: (data.event_checklist_items ?? []).sort((a: any, b: any) => a.sort_order - b.sort_order),
+        actions: data.event_action_items ?? [],
+      } as EventWithDetails
+    },
+    staleTime: 60_000,
+  })
+  const selectedEventResolved = selectedEvent ?? selectedEventFromDb ?? null
   useEffect(() => {
     if (selectedEventId) setSelectedPrepItem(null)
   }, [selectedEventId])
@@ -389,7 +457,7 @@ export default function HomePage() {
 
         <div onClick={e => e.stopPropagation()}>
           <EventDetailPanel
-            event={selectedEvent}
+            event={selectedEventResolved}
             onClose={() => setSelectedEventId(null)}
           />
         </div>
@@ -409,6 +477,11 @@ export default function HomePage() {
         now={now}
         allTodayEvents={allTodayEvents ?? []}
         onSelectPrepItem={(item) => {
+          if (item.event_id) {
+            setSelectedPrepItem(null)
+            setSelectedEventId(item.event_id)
+            return
+          }
           setSelectedEventId(null)
           setSelectedPrepItem(item)
         }}
