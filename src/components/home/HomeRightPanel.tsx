@@ -225,15 +225,15 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                         </span>
                       </div>
                       <div className="mt-2.5">
-                        <p className={cn('text-body-sm leading-snug text-casa-text', isDone && 'line-through text-casa-muted')}>
+                        <p className={cn('!text-body-sm leading-snug text-casa-text', isDone && 'line-through text-casa-muted')}>
                           {item.description}
                         </p>
                       </div>
                       <div className="mt-2.5 flex items-center gap-2.5">
-                        <span className={cn('text-caption font-bold leading-none whitespace-nowrap px-2 py-0.5 rounded-full border', source.tone)}>
+                        <span className={cn('!text-body-sm font-semibold leading-none whitespace-nowrap px-2 py-0.5 rounded-full border', source.tone)}>
                           {source.label}
                         </span>
-                        <span className="text-body-sm text-casa-muted truncate">
+                        <span className="!text-body-sm text-casa-muted truncate">
                           {item.event_title || 'Casa Tabor'}
                         </span>
                       </div>
