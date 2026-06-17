@@ -103,7 +103,7 @@ export default function ActionHubPage() {
       </div>
 
       <div className="mt-6 grid grid-cols-1 xl:grid-cols-2 gap-5">
-        <section className="rounded-card border border-casa-border bg-casa-surface p-4">
+        <section id="recent-activity" className="rounded-card border border-casa-border bg-casa-surface p-4 scroll-mt-6">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold text-casa-navy flex items-center gap-2"><ClipboardList size={16} className="text-casa-gold" /> Prep &amp; Action</h2>
             <span className="text-caption rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">{prepItems.length}</span>

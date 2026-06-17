@@ -465,6 +465,12 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                   </div>
                 )
               })}
+              <Link
+                to="/actions#recent-activity"
+                className="h-11 rounded-[1rem] border border-casa-border bg-casa-navy/90 text-white text-[1.06rem] font-semibold inline-flex items-center justify-center w-full hover:bg-casa-navy transition-colors"
+              >
+                See what Casa filtered &rarr;
+              </Link>
             </div>
           )}
         </section>
