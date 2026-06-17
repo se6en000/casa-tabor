@@ -31,7 +31,6 @@ export default function ReminderEventCard({
   const handleComplete = async (e: React.MouseEvent) => {
     e.stopPropagation()
     setIsDismissing(true)
-    // Wait for animation to complete (300ms) before calling handler
     await new Promise(resolve => setTimeout(resolve, 300))
     onComplete?.()
   }
@@ -53,8 +52,6 @@ export default function ReminderEventCard({
         'min-w-0 bg-amber-50/60 rounded-card border border-amber-200',
         'flex items-center gap-3 px-3 py-2.5',
         'cursor-pointer',
-        'transition-all duration-300',
-        isDismissing && 'opacity-0 scale-95 -translate-x-2',
         className,
       )}
     >

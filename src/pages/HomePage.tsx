@@ -461,16 +461,24 @@ export default function HomePage() {
           </div>
           {!isLoading && reminders.length > 0 && (
             <ol className="space-y-1.5 mb-3">
-              {reminders.map((r) => (
-                <li key={r.id}>
-                  <ReminderEventCard
-                    event={r}
-                    onClick={() => setSelectedEventId(r.id)}
-                    onComplete={() => completeReminder(r.id)}
-                    onSnooze={() => snoozeReminder(r)}
-                  />
-                </li>
-              ))}
+              <AnimatePresence>
+                {reminders.map((r) => (
+                  <motion.li
+                    key={r.id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, x: -8 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <ReminderEventCard
+                      event={r}
+                      onClick={() => setSelectedEventId(r.id)}
+                      onComplete={() => completeReminder(r.id)}
+                      onSnooze={() => snoozeReminder(r)}
+                    />
+                  </motion.li>
+                ))}
+              </AnimatePresence>
             </ol>
           )}
 
@@ -484,47 +492,49 @@ export default function HomePage() {
             </div>
           ) : (
             <ol className="space-y-2">
-              {/* Past events */}
-              {events.filter(e => isBefore(new Date(e.end_time), now)).map((ev, i) => (
-                <TimelineRow
-                  key={ev.id}
-                  event={ev}
-                  now={now}
-                  index={i}
-                  onClick={() => setSelectedEventId(ev.id)}
-                  onComplete={completeReminder}
-                  onSnooze={snoozeReminder}
-                />
-              ))}
+              <AnimatePresence>
+                {/* Past events */}
+                {events.filter(e => isBefore(new Date(e.end_time), now)).map((ev, i) => (
+                  <TimelineRow
+                    key={ev.id}
+                    event={ev}
+                    now={now}
+                    index={i}
+                    onClick={() => setSelectedEventId(ev.id)}
+                    onComplete={completeReminder}
+                    onSnooze={snoozeReminder}
+                  />
+                ))}
 
-              {/* ── Now line ── */}
-              {events.some(e => isAfter(new Date(e.end_time), now)) && (
-                <li ref={nowLineRef} className="flex items-center gap-3 py-0.5 select-none pointer-events-none" aria-hidden>
-                  <div className="w-16 shrink-0" />
-                  <span className="w-2 shrink-0" />
-                  <div className="flex-1 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)] animate-pulse flex-shrink-0" />
-                    <div className="flex-1 h-px bg-red-400/50" />
-                    <span className="text-caption font-bold text-red-500 tabular-nums flex-shrink-0">
-                      {format(now, 'h:mm a')}
-                    </span>
-                    <div className="flex-1 h-px bg-red-400/50" />
-                  </div>
-                </li>
-              )}
+                {/* ── Now line ── */}
+                {events.some(e => isAfter(new Date(e.end_time), now)) && (
+                  <li ref={nowLineRef} className="flex items-center gap-3 py-0.5 select-none pointer-events-none" aria-hidden>
+                    <div className="w-16 shrink-0" />
+                    <span className="w-2 shrink-0" />
+                    <div className="flex-1 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)] animate-pulse flex-shrink-0" />
+                      <div className="flex-1 h-px bg-red-400/50" />
+                      <span className="text-caption font-bold text-red-500 tabular-nums flex-shrink-0">
+                        {format(now, 'h:mm a')}
+                      </span>
+                      <div className="flex-1 h-px bg-red-400/50" />
+                    </div>
+                  </li>
+                )}
 
-              {/* Upcoming events */}
-              {events.filter(e => isAfter(new Date(e.end_time), now)).map((ev, i) => (
-                <TimelineRow
-                  key={ev.id}
-                  event={ev}
-                  now={now}
-                  index={i}
-                  onClick={() => setSelectedEventId(ev.id)}
-                  onComplete={completeReminder}
-                  onSnooze={snoozeReminder}
-                />
-              ))}
+                {/* Upcoming events */}
+                {events.filter(e => isAfter(new Date(e.end_time), now)).map((ev, i) => (
+                  <TimelineRow
+                    key={ev.id}
+                    event={ev}
+                    now={now}
+                    index={i}
+                    onClick={() => setSelectedEventId(ev.id)}
+                    onComplete={completeReminder}
+                    onSnooze={snoozeReminder}
+                  />
+                ))}
+              </AnimatePresence>
             </ol>
           )}
         </section>
@@ -778,6 +788,7 @@ function TimelineRow({
       <motion.li
         initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: past ? 0.4 : 1, x: 0 }}
+        exit={{ opacity: 0, scale: 0.95, x: -8 }}
         transition={{ duration: 0.3, delay: index * 0.04 }}
         className="grid grid-cols-[96px_1fr] min-h-[80px]"
       >

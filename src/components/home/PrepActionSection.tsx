@@ -131,10 +131,10 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
               key={item.id}
               layout
               initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: isDismissing || isDownvoting ? 0.45 : 1, y: 0 }}
+             animate={isDismissing ? { opacity: 0, scale: 0.95, x: -8 } : (isDownvoting ? { opacity: 0.45 } : { opacity: 1, y: 0 })}
               exit={{ opacity: 0, height: 0, marginTop: 0, overflow: 'hidden' }}
-              transition={{ duration: 0.25 }}
-              className={cn('py-2.5 border-b border-casa-divider last:border-0 group transition-all duration-300', isDismissing && 'opacity-0 scale-95 -translate-x-2')}
+             transition={{ duration: isDismissing ? 0.3 : 0.25 }}
+             className={cn('py-2.5 border-b border-casa-divider last:border-0 group')}
             >
               <div className="flex items-start gap-2.5">
                 <button
