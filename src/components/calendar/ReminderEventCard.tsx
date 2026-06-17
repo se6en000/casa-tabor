@@ -36,6 +36,13 @@ export default function ReminderEventCard({
     onComplete?.()
   }
 
+  const handleSnooze = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsDismissing(true)
+    await new Promise(resolve => setTimeout(resolve, 300))
+    onSnooze?.()
+  }
+
   return (
     <div
       onClick={(e) => {
@@ -72,7 +79,7 @@ export default function ReminderEventCard({
         )}
         {onSnooze && (
           <button
-           onClick={(e) => { e.stopPropagation(); onSnooze() }}
+           onClick={handleSnooze}
            className="h-6 px-2 rounded-button border border-casa-border bg-casa-surface text-body-sm font-semibold text-casa-text hover:bg-casa-bg transition-colors inline-flex items-center gap-1"
           >
            <TimerReset size={11} />

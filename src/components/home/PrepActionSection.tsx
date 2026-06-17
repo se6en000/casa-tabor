@@ -83,6 +83,7 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
   const downvote = useDownvotePrepItem()
   const [open, setOpen] = useState(loadOpenState)
   const [checking, setChecking] = useState<string | null>(null)
+  const [snoozingId, setSnoozingId] = useState<string | null>(null)
   const [downvoting, setDownvoting] = useState<string | null>(null)
 
   const grouped = useMemo(() => groupItems(items), [items])
@@ -91,9 +92,16 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
 
   async function handleCheck(id: string) {
     setChecking(id)
-    await new Promise(r => setTimeout(r, 250))
+    await new Promise(r => setTimeout(r, 300))
     await dismiss(id)
     setChecking(null)
+  }
+
+  async function handleSnooze(id: string) {
+    setSnoozingId(id)
+    await new Promise(r => setTimeout(r, 300))
+    await snooze(id)
+    setSnoozingId(null)
   }
 
   async function handleDownvote(id: string) {
@@ -113,7 +121,9 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
           const urg = urgencyConfig(days)
           const src = sourceBadge(item)
           const isDone = checking === item.id
+          const isSnoozed = snoozingId === item.id
           const isDownvoting = downvoting === item.id
+          const isDismissing = isDone || isSnoozed
           const SourceIcon = src.icon
 
           return (
@@ -121,10 +131,10 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
               key={item.id}
               layout
               initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: isDone || isDownvoting ? 0.45 : 1, y: 0 }}
+              animate={{ opacity: isDismissing || isDownvoting ? 0.45 : 1, y: 0 }}
               exit={{ opacity: 0, height: 0, marginTop: 0, overflow: 'hidden' }}
               transition={{ duration: 0.25 }}
-              className={cn('py-2.5 border-b border-casa-divider last:border-0 group')}
+              className={cn('py-2.5 border-b border-casa-divider last:border-0 group transition-all duration-300', isDismissing && 'opacity-0 scale-95 -translate-x-2')}
             >
               <div className="flex items-start gap-2.5">
                 <button
@@ -183,7 +193,7 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      snooze(item.id)
+                      handleSnooze(item.id)
                     }}
                     className="w-8 h-8 rounded-full flex items-center justify-center border border-casa-border bg-white text-casa-muted hover:text-casa-text hover:bg-casa-bg transition-colors"
                     title="Snooze until tomorrow"
