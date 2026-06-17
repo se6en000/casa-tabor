@@ -1,26 +1,51 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { PrepItem } from '../types'
 
-/** Returns all undismissed, un-snoozed prep/action items ordered by urgency */
-export function usePrepItems() {
+let _prepRealtimeSubscribers = 0
+let _prepRealtimeChannel: ReturnType<typeof supabase.channel> | null = null
+const _prepInvalidateCallbacks = new Set<() => void>()
+let _prepDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+function _firePrepInvalidation() {
+  if (_prepDebounceTimer) clearTimeout(_prepDebounceTimer)
+  _prepDebounceTimer = setTimeout(() => {
+    _prepDebounceTimer = null
+    _prepInvalidateCallbacks.forEach((f) => f())
+  }, 400)
+}
+
+function useRealtimePrepInvalidation() {
   const qc = useQueryClient()
-  const channelRef = useRef('prep_items_realtime')
 
   useEffect(() => {
-    const channel = supabase
-      .channel(channelRef.current)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'prep_items' }, () => {
-        qc.invalidateQueries({ queryKey: ['prep-items'] })
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'prep_item_suppressions' }, () => {
-        qc.invalidateQueries({ queryKey: ['prep-items'] })
-      })
-      .subscribe()
+    const cb = () => qc.invalidateQueries({ queryKey: ['prep-items'] })
+    _prepInvalidateCallbacks.add(cb)
+    _prepRealtimeSubscribers++
 
-    return () => { supabase.removeChannel(channel) }
+    if (_prepRealtimeSubscribers === 1) {
+      _prepRealtimeChannel = supabase
+        .channel('prep_items_realtime_singleton')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'prep_items' }, _firePrepInvalidation)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'prep_item_suppressions' }, _firePrepInvalidation)
+        .subscribe()
+    }
+
+    return () => {
+      _prepInvalidateCallbacks.delete(cb)
+      _prepRealtimeSubscribers--
+      if (_prepRealtimeSubscribers === 0 && _prepRealtimeChannel) {
+        supabase.removeChannel(_prepRealtimeChannel)
+        _prepRealtimeChannel = null
+      }
+    }
   }, [qc])
+}
+
+/** Returns all undismissed, un-snoozed prep/action items ordered by urgency */
+export function usePrepItems() {
+  useRealtimePrepInvalidation()
 
   return useQuery({
     queryKey: ['prep-items'],
