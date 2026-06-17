@@ -12,6 +12,9 @@ export interface ThemeColors {
   'casa-navy':    string
   'casa-bg':      string
   'casa-surface': string
+  'casa-rail':    string
+  'casa-main':    string
+  'casa-card':    string
   'casa-text':    string
   'casa-border':  string
 }
@@ -30,6 +33,9 @@ export const DEFAULTS: ThemeColors = {
   'casa-navy':    '#1B2A4A',
   'casa-bg':      '#FAF8F5',
   'casa-surface': '#FFFFFF',
+  'casa-rail':    '#F7F3EC',
+  'casa-main':    '#F3F0E8',
+  'casa-card':    '#FFFFFF',
   'casa-text':    '#2D2D2D',
   'casa-border':  '#E8E2D9',
 }
@@ -39,6 +45,9 @@ export const MIDNIGHT_GALLERY_DEFAULTS: ThemeColors = {
   'casa-navy':    '#0E1218',
   'casa-bg':      '#090C11',
   'casa-surface': '#121923',
+  'casa-rail':    '#0F1620',
+  'casa-main':    '#090C11',
+  'casa-card':    '#121923',
   'casa-text':    '#E3DDD1',
   'casa-border':  '#263244',
 }
@@ -80,6 +89,9 @@ export const PRESETS: ThemePreset[] = [
       'casa-navy': '#132B60',
       'casa-bg': '#F3F0E8',
       'casa-surface': '#FCFAF5',
+      'casa-rail': '#F6F2E9',
+      'casa-main': '#F3F0E8',
+      'casa-card': '#FCFAF5',
       'casa-text': '#322A24',
       'casa-border': '#D9D2C5',
     },
@@ -93,6 +105,9 @@ export const PRESETS: ThemePreset[] = [
       'casa-navy': '#3A2812',
       'casa-bg': '#EDE5D8',
       'casa-surface': '#F7F2EA',
+      'casa-rail': '#EFE6D8',
+      'casa-main': '#EDE5D8',
+      'casa-card': '#F7F2EA',
       'casa-text': '#2C1A0E',
       'casa-border': '#D4C8B8',
     },
@@ -106,6 +121,9 @@ export const PRESETS: ThemePreset[] = [
       'casa-navy': '#1A5C2E',
       'casa-bg': '#FDF6F0',
       'casa-surface': '#FFFFFF',
+      'casa-rail': '#F6EFE9',
+      'casa-main': '#FDF6F0',
+      'casa-card': '#FFFFFF',
       'casa-text': '#2D2D2D',
       'casa-border': '#D5E8D4',
     },
@@ -119,6 +137,9 @@ export const PRESETS: ThemePreset[] = [
       'casa-navy': '#3D2B1F',
       'casa-bg': '#FBF5EE',
       'casa-surface': '#FFFFFF',
+      'casa-rail': '#F3EBDD',
+      'casa-main': '#FBF5EE',
+      'casa-card': '#FFFFFF',
       'casa-text': '#2D2D2D',
       'casa-border': '#E8D8C8',
     },
@@ -132,6 +153,9 @@ export const PRESETS: ThemePreset[] = [
       'casa-navy': '#1E4B6E',
       'casa-bg': '#F5FBFD',
       'casa-surface': '#FFFFFF',
+      'casa-rail': '#ECF4F7',
+      'casa-main': '#F5FBFD',
+      'casa-card': '#FFFFFF',
       'casa-text': '#1C2B36',
       'casa-border': '#C8E4EE',
     },
@@ -145,6 +169,9 @@ export const PRESETS: ThemePreset[] = [
       'casa-navy': '#2C3E50',
       'casa-bg': '#F7F8F9',
       'casa-surface': '#FFFFFF',
+      'casa-rail': '#F1F3F5',
+      'casa-main': '#F7F8F9',
+      'casa-card': '#FFFFFF',
       'casa-text': '#2C3E50',
       'casa-border': '#DDE1E5',
     },
@@ -201,6 +228,9 @@ function styleVars(colors: ThemeColors): string {
   --color-casa-navy: ${colors['casa-navy']};
   --color-casa-bg: ${colors['casa-bg']};
   --color-casa-surface: ${colors['casa-surface']};
+  --color-casa-rail: ${colors['casa-rail']};
+  --color-casa-main: ${colors['casa-main']};
+  --color-casa-card: ${colors['casa-card']};
   --color-casa-text: ${colors['casa-text']};
   --color-casa-border: ${colors['casa-border']};`
 }

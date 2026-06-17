@@ -290,7 +290,7 @@ export default function HomePage() {
       {/* ── Center content ─────────────────────────────────── */}
       <div
         ref={(el) => { ptrRef(el); scrollRef.current = el }}
-        className="flex-1 min-w-0 overflow-y-auto overscroll-contain touch-pan-y px-6 pt-8 pb-12 lg:px-8"
+        className="flex-1 min-w-0 overflow-y-auto overscroll-contain touch-pan-y px-6 pt-8 pb-12 lg:px-8 bg-casa-main"
       >
         {/* ── Pull-to-refresh indicator ─────────────────────── */}
         <AnimatePresence>
@@ -346,7 +346,7 @@ export default function HomePage() {
               Loading…
             </div>
           ) : events.length === 0 ? (
-            <div className="bg-casa-surface rounded-card border border-casa-border p-8 text-center text-casa-muted text-body">
+            <div className="bg-casa-card rounded-card border border-casa-border p-8 text-center text-casa-muted text-body">
               Nothing scheduled. Enjoy the quiet.
             </div>
           ) : (
@@ -436,7 +436,7 @@ export default function HomePage() {
                   className={cn(
                     'flex items-center gap-2 px-3 py-1.5 rounded-pill border text-body-sm font-medium transition-all',
                     active
-                      ? 'bg-casa-surface border-casa-border shadow-card'
+                      ? 'bg-casa-card border-casa-border shadow-card'
                       : 'bg-transparent border-casa-divider text-casa-muted opacity-60',
                   )}
                 >
@@ -718,7 +718,7 @@ function TimelineRow({
     >
       <div
         className={cn(
-          'min-w-0 bg-casa-surface rounded-card border border-casa-border shadow-card overflow-hidden',
+          'min-w-0 bg-casa-card rounded-card border border-casa-border shadow-card overflow-hidden',
           happening && 'animate-pulse-gold',
         )}
         style={{ borderLeft: `6px solid ${color}` }}

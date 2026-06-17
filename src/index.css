@@ -21,6 +21,9 @@
   /* ── Core Palette ──────────────────────────────────────────── */
   --color-casa-bg:        #FAF8F5;
   --color-casa-surface:   #FFFFFF;
+  --color-casa-rail:      #F7F3EC;
+  --color-casa-main:      #F3F0E8;
+  --color-casa-card:      #FFFFFF;
   --color-casa-navy:      #1B2A4A;
   --color-casa-gold:      #C9A96E;
   --color-casa-text:      #2D2D2D;

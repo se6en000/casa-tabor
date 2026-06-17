@@ -64,7 +64,7 @@ export default function TabletSidebar() {
   return (
     <>
       <aside className={cn(
-        'hidden lg:flex flex-shrink-0 bg-casa-surface border-r border-casa-border flex-col h-screen sticky top-0 overflow-hidden z-30 transition-all duration-300',
+        'hidden lg:flex flex-shrink-0 bg-casa-rail border-r border-casa-border flex-col h-screen sticky top-0 overflow-hidden z-30 transition-all duration-300',
         sidebarCollapsed ? 'w-20' : 'w-72'
       )}>
 

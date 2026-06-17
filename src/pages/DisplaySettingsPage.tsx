@@ -29,7 +29,10 @@ const COLOR_FIELDS: { key: keyof ThemeColors; label: string; desc: string }[] = 
   { key: 'casa-gold',    label: 'Accent Color',       desc: 'Icons, highlights, buttons, badges' },
   { key: 'casa-navy',    label: 'Primary Color',      desc: 'Navigation, headers, dark elements' },
   { key: 'casa-bg',      label: 'Background',         desc: 'Main page background' },
-  { key: 'casa-surface', label: 'Card / Panel',       desc: 'Cards, panels, input backgrounds' },
+  { key: 'casa-surface', label: 'Surface Base',       desc: 'Base surface tone for panels and overlays' },
+  { key: 'casa-rail',    label: 'Side Rails',         desc: 'Left and right rail background color' },
+  { key: 'casa-main',    label: 'Center Rail',        desc: 'Main center content background color' },
+  { key: 'casa-card',    label: 'Cards',              desc: 'Event cards and list card backgrounds' },
   { key: 'casa-text',    label: 'Body Text',          desc: 'Primary text color' },
   { key: 'casa-border',  label: 'Borders & Dividers', desc: 'Card borders, divider lines' },
 ]

@@ -327,7 +327,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   }
 
   return (
-    <aside className="hidden lg:flex w-[22rem] flex-shrink-0 flex-col border-l border-casa-border bg-casa-surface self-stretch overflow-hidden">
+    <aside className="hidden lg:flex w-[22rem] flex-shrink-0 flex-col border-l border-casa-border bg-casa-rail self-stretch overflow-hidden">
       <BounceScroll className="flex-1 min-h-0">
         <section className="px-4 py-4 border-b border-casa-border">
           <div className="flex items-center justify-between">
@@ -352,7 +352,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                     'rounded-xl px-1 py-2 text-center border transition-colors',
                     isToday
                       ? 'bg-casa-navy border-casa-navy text-white'
-                      : 'bg-casa-bg border-casa-divider text-casa-text hover:bg-casa-surface',
+                      : 'bg-casa-main border-casa-divider text-casa-text hover:bg-casa-card',
                   )}
                 >
                   <p className={cn('text-caption font-semibold uppercase', isToday ? 'text-white/70' : 'text-casa-muted')}>
@@ -382,7 +382,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
           </div>
 
           {prepItems.length === 0 ? (
-            <div className="mt-3 rounded-2xl border border-casa-border bg-casa-bg px-3 py-3">
+            <div className="mt-3 rounded-2xl border border-casa-border bg-casa-card px-3 py-3">
               <p className="text-caption text-casa-muted">All clear. No urgent prep actions right now.</p>
             </div>
           ) : (
@@ -397,7 +397,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                   <div
                     key={item.id}
                     className={cn(
-                      'rounded-[1.35rem] border border-casa-border/85 bg-casa-surface px-3.5 py-3.5 shadow-sm',
+                      'rounded-[1.35rem] border border-casa-border/85 bg-casa-card px-3.5 py-3.5 shadow-sm',
                       (isDone || isDownvoting) && 'opacity-60',
                     )}
                   >
@@ -438,7 +438,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                         <button
                           type="button"
                           onClick={() => snoozePrepItem(item.id)}
-                          className="h-9 rounded-[0.9rem] border border-casa-border bg-casa-surface text-casa-muted font-semibold text-body hover:text-casa-text transition-colors"
+                          className="h-9 rounded-[0.9rem] border border-casa-border bg-casa-card text-casa-muted font-semibold text-body hover:text-casa-text transition-colors"
                           title="Snooze until tomorrow"
                         >
                           Snooze
@@ -447,7 +447,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                         <button
                           type="button"
                           onClick={() => handleDone(item)}
-                          className="h-9 w-9 rounded-[0.9rem] border border-casa-border bg-casa-surface text-casa-gold hover:bg-casa-bg transition-colors flex items-center justify-center"
+                          className="h-9 w-9 rounded-[0.9rem] border border-casa-border bg-casa-card text-casa-gold hover:bg-casa-main transition-colors flex items-center justify-center"
                           title="Helpful"
                         >
                           <ThumbsUp size={15} strokeWidth={2.1} />
@@ -455,7 +455,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                         <button
                           type="button"
                           onClick={() => handleDownvote(item)}
-                          className="h-9 w-9 rounded-[0.9rem] border border-casa-border bg-casa-surface text-casa-muted hover:text-red-500 hover:bg-casa-bg transition-colors flex items-center justify-center"
+                          className="h-9 w-9 rounded-[0.9rem] border border-casa-border bg-casa-card text-casa-muted hover:text-red-500 hover:bg-casa-main transition-colors flex items-center justify-center"
                           title="Not relevant"
                         >
                           <ThumbsDown size={15} strokeWidth={2.1} />
@@ -510,7 +510,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                 <p className="text-caption text-casa-muted">No recent inbox or notification activity.</p>
               ) : (
                 activityEntries.map(entry => (
-                  <div key={entry.id} className="rounded-xl border border-casa-divider bg-casa-surface px-2.5 py-2">
+                  <div key={entry.id} className="rounded-xl border border-casa-divider bg-casa-card px-2.5 py-2">
                     <div className="flex items-start gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 mb-1">

@@ -189,7 +189,7 @@ function AppShell() {
   }, [handlePushAction])
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-casa-bg">
+    <div className="flex flex-col h-screen overflow-hidden bg-casa-main">
       {/* Full-width top bar — sticky, never scrolls */}
       <TopBarC />
 
