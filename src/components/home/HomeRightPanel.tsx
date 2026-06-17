@@ -5,7 +5,7 @@
 import { useMemo, useState } from 'react'
 import { addDays, differenceInDays, format, formatDistanceToNow, parseISO, startOfWeek } from 'date-fns'
 import { Link, useNavigate } from 'react-router-dom'
-import { AlertTriangle, Bot, ChevronRight, X } from 'lucide-react'
+import { AlertTriangle, Bot, ChevronRight, ThumbsDown, ThumbsUp, X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -426,11 +426,11 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                       </div>
                     </button>
                     <div className="mt-3 border-t border-casa-border/80 pt-3">
-                      <div className="grid grid-cols-[1.7fr_0.85fr_auto_auto_auto] items-center gap-2">
+                      <div className="grid grid-cols-[1.7fr_0.85fr_auto_auto_auto] items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => handleDone(item)}
-                          className="h-10 rounded-[1rem] bg-casa-navy text-white font-semibold text-[1.12rem] hover:brightness-105 transition"
+                          className="h-9 rounded-[0.9rem] bg-casa-navy text-white font-semibold text-body hover:brightness-105 transition"
                           title="Mark done"
                         >
                           Mark done
@@ -438,27 +438,27 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                         <button
                           type="button"
                           onClick={() => snoozePrepItem(item.id)}
-                          className="h-10 rounded-[1rem] border border-casa-border bg-casa-surface text-casa-muted font-semibold text-[1.12rem] hover:text-casa-text transition-colors"
+                          className="h-9 rounded-[0.9rem] border border-casa-border bg-casa-surface text-casa-muted font-semibold text-body hover:text-casa-text transition-colors"
                           title="Snooze until tomorrow"
                         >
                           Snooze
                         </button>
-                        <div className="h-8 w-px bg-casa-border/80 mx-1" />
+                        <div className="h-7 w-px bg-casa-border/80 mx-1" />
                         <button
                           type="button"
                           onClick={() => handleDone(item)}
-                          className="h-10 w-10 rounded-[1rem] border border-casa-border bg-casa-surface text-xl hover:bg-casa-bg transition-colors"
+                          className="h-9 w-9 rounded-[0.9rem] border border-casa-border bg-casa-surface text-casa-gold hover:bg-casa-bg transition-colors flex items-center justify-center"
                           title="Helpful"
                         >
-                          👍
+                          <ThumbsUp size={15} strokeWidth={2.1} />
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDownvote(item)}
-                          className="h-10 w-10 rounded-[1rem] border border-casa-border bg-casa-surface text-xl hover:bg-casa-bg transition-colors"
+                          className="h-9 w-9 rounded-[0.9rem] border border-casa-border bg-casa-surface text-casa-muted hover:text-red-500 hover:bg-casa-bg transition-colors flex items-center justify-center"
                           title="Not relevant"
                         >
-                          👎
+                          <ThumbsDown size={15} strokeWidth={2.1} />
                         </button>
                       </div>
                     </div>
