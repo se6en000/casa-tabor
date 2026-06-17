@@ -151,6 +151,14 @@ html {
   font-size: clamp(1rem, calc(0.818rem + 0.777vw), 1.75rem);
 }
 
+/* Desktop (mouse/trackpad) density tuning:
+   keep Pi touch + mobile unchanged, but render tighter on Mac/desktop. */
+@media (hover: hover) and (pointer: fine) {
+  html {
+    font-size: clamp(0.75rem, calc(0.70rem + 0.32vw), 1.1rem);
+  }
+}
+
 body {
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
