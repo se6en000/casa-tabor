@@ -274,6 +274,66 @@ export default function DisplaySettingsPage() {
     setDirty(true)
   }
 
+  const applyWarmthScenario = (scenario: 'balanced' | 'golden-hour' | 'movie-night' | 'night-owl') => {
+    if (scenario === 'balanced') {
+      setConfig(prev => ({
+        ...prev,
+        cct_bias_k: 0,
+        zone_cct_bias_day: 0,
+        zone_cct_bias_afternoon: 0,
+        zone_cct_bias_evening: -250,
+        zone_cct_bias_night: -500,
+        zone_cct_bias_late_night: -800,
+        rgb_trim_r: 0,
+        rgb_trim_g: 0,
+        rgb_trim_b: 0,
+      }))
+    }
+    if (scenario === 'golden-hour') {
+      setConfig(prev => ({
+        ...prev,
+        cct_bias_k: -220,
+        zone_cct_bias_day: -80,
+        zone_cct_bias_afternoon: -180,
+        zone_cct_bias_evening: -420,
+        zone_cct_bias_night: -650,
+        zone_cct_bias_late_night: -950,
+        rgb_trim_r: 2,
+        rgb_trim_g: 0,
+        rgb_trim_b: -2,
+      }))
+    }
+    if (scenario === 'movie-night') {
+      setConfig(prev => ({
+        ...prev,
+        cct_bias_k: -320,
+        zone_cct_bias_day: -50,
+        zone_cct_bias_afternoon: -120,
+        zone_cct_bias_evening: -500,
+        zone_cct_bias_night: -780,
+        zone_cct_bias_late_night: -1100,
+        rgb_trim_r: 3,
+        rgb_trim_g: -1,
+        rgb_trim_b: -4,
+      }))
+    }
+    if (scenario === 'night-owl') {
+      setConfig(prev => ({
+        ...prev,
+        cct_bias_k: -120,
+        zone_cct_bias_day: 0,
+        zone_cct_bias_afternoon: -80,
+        zone_cct_bias_evening: -220,
+        zone_cct_bias_night: -350,
+        zone_cct_bias_late_night: -450,
+        rgb_trim_r: 1,
+        rgb_trim_g: 0,
+        rgb_trim_b: -1,
+      }))
+    }
+    setDirty(true)
+  }
+
   // Live preview filter
   const previewFilter = config.manual_override
     ? `sepia(${config.manual_warmth.toFixed(2)}) brightness(${config.manual_brightness.toFixed(2)})`
@@ -814,6 +874,125 @@ export default function DisplaySettingsPage() {
             min={50}
             max={100}
             onChange={v => set('brightness_max', v)}
+          />
+
+          <div className="pt-3 border-t border-casa-divider">
+            <p className="text-body-sm font-semibold text-casa-navy">Warmth scenarios</p>
+            <p className="text-caption text-casa-muted mt-0.5 mb-2.5">
+              Save/train tone behavior by scenario. These presets tune Pi DDC warmth + RGB gains and persist in settings.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => applyWarmthScenario('balanced')}
+                className="px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors"
+              >
+                Balanced
+              </button>
+              <button
+                type="button"
+                onClick={() => applyWarmthScenario('golden-hour')}
+                className="px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors"
+              >
+                Golden hour
+              </button>
+              <button
+                type="button"
+                onClick={() => applyWarmthScenario('movie-night')}
+                className="px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors"
+              >
+                Movie night
+              </button>
+              <button
+                type="button"
+                onClick={() => applyWarmthScenario('night-owl')}
+                className="px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors"
+              >
+                Night owl
+              </button>
+            </div>
+          </div>
+
+          <SliderRow
+            label="Global warmth bias"
+            desc="Direct DDC CCT shift in Kelvin (negative = warmer, positive = cooler)."
+            value={config.cct_bias_k}
+            min={-1500}
+            max={800}
+            unit="K"
+            onChange={v => set('cct_bias_k', v)}
+          />
+          <SliderRow
+            label="Day bias"
+            desc="Scenario training for bright daylight conditions."
+            value={config.zone_cct_bias_day}
+            min={-1200}
+            max={800}
+            unit="K"
+            onChange={v => set('zone_cct_bias_day', v)}
+          />
+          <SliderRow
+            label="Afternoon bias"
+            desc="Scenario training for afternoon/indoor mixed light."
+            value={config.zone_cct_bias_afternoon}
+            min={-1200}
+            max={800}
+            unit="K"
+            onChange={v => set('zone_cct_bias_afternoon', v)}
+          />
+          <SliderRow
+            label="Evening bias"
+            desc="Scenario training for sunset/golden-hour warmth."
+            value={config.zone_cct_bias_evening}
+            min={-1600}
+            max={600}
+            unit="K"
+            onChange={v => set('zone_cct_bias_evening', v)}
+          />
+          <SliderRow
+            label="Night bias"
+            desc="Scenario training for darker evening scenes."
+            value={config.zone_cct_bias_night}
+            min={-1800}
+            max={400}
+            unit="K"
+            onChange={v => set('zone_cct_bias_night', v)}
+          />
+          <SliderRow
+            label="Late-night bias"
+            desc="Scenario training for deepest night ambiance."
+            value={config.zone_cct_bias_late_night}
+            min={-2200}
+            max={300}
+            unit="K"
+            onChange={v => set('zone_cct_bias_late_night', v)}
+          />
+          <SliderRow
+            label="Red channel trim"
+            desc="Fine trim for DDC red gain."
+            value={config.rgb_trim_r}
+            min={-15}
+            max={15}
+            unit=""
+            onChange={v => set('rgb_trim_r', v)}
+          />
+          <SliderRow
+            label="Green channel trim"
+            desc="Fine trim for DDC green gain."
+            value={config.rgb_trim_g}
+            min={-15}
+            max={15}
+            unit=""
+            onChange={v => set('rgb_trim_g', v)}
+          />
+          <SliderRow
+            label="Blue channel trim"
+            desc="Fine trim for DDC blue gain."
+            value={config.rgb_trim_b}
+            min={-15}
+            max={15}
+            unit=""
+            onChange={v => set('rgb_trim_b', v)}
           />
 
           <Toggle
