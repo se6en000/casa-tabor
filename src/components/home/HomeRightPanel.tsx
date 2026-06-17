@@ -335,17 +335,17 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
           <div className="flex items-center justify-between gap-2 text-white">
             <div className="flex items-center gap-2 min-w-0">
               <CloudSun size={14} className="text-casa-gold shrink-0" />
-              <p className="text-[11px] font-semibold tracking-wide truncate">
+              <p className="text-caption font-semibold tracking-wide truncate">
                 {weather ? `${weather.temp}° · ${weather.condition}` : 'Home'}
               </p>
             </div>
-            <p className="text-[11px] font-semibold tracking-wide whitespace-nowrap">{format(now, 'h:mm a')}</p>
+            <p className="text-caption font-semibold tracking-wide whitespace-nowrap">{format(now, 'h:mm a')}</p>
           </div>
           <div className="mt-2.5 flex items-center gap-2">
             <button
               type="button"
               onClick={() => navigate('/calendar')}
-              className="h-8 flex-1 rounded-xl border border-white/20 bg-white/[0.08] px-2.5 text-left text-[11px] text-white/85 flex items-center gap-2 hover:bg-white/[0.12] transition-colors"
+              className="h-8 flex-1 rounded-xl border border-white/20 bg-white/[0.08] px-2.5 text-left text-caption text-white/85 flex items-center gap-2 hover:bg-white/[0.12] transition-colors"
             >
               <Search size={13} className="shrink-0" />
               Search calendar
@@ -363,8 +363,8 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
 
         <section className="px-4 py-4 border-b border-casa-border">
           <div className="flex items-center justify-between">
-            <h3 className="text-[13px] font-semibold text-casa-text tracking-wide uppercase">This week</h3>
-            <Link to="/calendar" className="text-[11px] font-semibold text-casa-gold inline-flex items-center gap-1">
+            <h3 className="text-body-sm font-semibold text-casa-text tracking-wide uppercase">This week</h3>
+            <Link to="/calendar" className="text-caption font-semibold text-casa-gold inline-flex items-center gap-1">
               See all <ChevronRight size={11} />
             </Link>
           </div>
@@ -387,11 +387,11 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                       : 'bg-casa-bg border-casa-divider text-casa-text hover:bg-casa-surface',
                   )}
                 >
-                  <p className={cn('text-[10px] font-semibold uppercase', isToday ? 'text-white/70' : 'text-casa-muted')}>
+                  <p className={cn('text-caption font-semibold uppercase', isToday ? 'text-white/70' : 'text-casa-muted')}>
                     {format(day, 'EEE')[0]}
                   </p>
-                  <p className="text-[13px] font-semibold leading-tight mt-0.5">{format(day, 'd')}</p>
-                  <p className={cn('text-[10px] mt-0.5 min-h-3', isToday ? 'text-casa-gold' : 'text-casa-muted')}>
+                  <p className="text-body-sm font-semibold leading-tight mt-0.5">{format(day, 'd')}</p>
+                  <p className={cn('text-caption mt-0.5 min-h-3', isToday ? 'text-casa-gold' : 'text-casa-muted')}>
                     {eventCount > 0 ? eventCount : ''}
                   </p>
                 </button>
@@ -403,19 +403,19 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
         <section className="px-4 py-4 border-b border-casa-border">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <h3 className="text-[13px] font-semibold text-casa-text tracking-wide uppercase">Needs you</h3>
-              <p className="text-[11px] text-casa-muted mt-0.5 truncate">
+              <h3 className="text-body-sm font-semibold text-casa-text tracking-wide uppercase">Needs you</h3>
+              <p className="text-caption text-casa-muted mt-0.5 truncate">
                 {nextEvent ? `Up next: ${nextEvent.title}` : 'Nothing left today'}
               </p>
             </div>
-            <Link to="/actions" className="text-[11px] font-semibold text-casa-gold whitespace-nowrap">
+            <Link to="/actions" className="text-caption font-semibold text-casa-gold whitespace-nowrap">
               See all
             </Link>
           </div>
 
           {prepItems.length === 0 ? (
             <div className="mt-3 rounded-2xl border border-casa-border bg-casa-bg px-3 py-3">
-              <p className="text-[12px] text-casa-muted">All clear. No urgent prep actions right now.</p>
+              <p className="text-caption text-casa-muted">All clear. No urgent prep actions right now.</p>
             </div>
           ) : (
             <div className="mt-3 space-y-2.5">
@@ -436,21 +436,21 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                     <button type="button" onClick={() => onSelectPrepItem?.(item)} className="w-full text-left">
                       <div className="flex items-start gap-2">
                         <span className="text-sm mt-0.5">{item.emoji}</span>
-                        <p className={cn('text-[13px] leading-snug text-casa-text', isDone && 'line-through text-casa-muted')}>
+                        <p className={cn('text-body-sm leading-snug text-casa-text', isDone && 'line-through text-casa-muted')}>
                           {item.description}
                         </p>
                       </div>
                     </button>
                     <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
-                      <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full border', source.tone)}>
+                      <span className={cn('text-caption font-semibold px-1.5 py-0.5 rounded-full border', source.tone)}>
                         {source.label}
                       </span>
                       {item.event_title && (
-                        <span className="text-[10px] text-casa-muted truncate max-w-[150px]">
+                        <span className="text-caption text-casa-muted truncate max-w-[150px]">
                           {item.event_title}
                         </span>
                       )}
-                      <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full', urgency.tone)}>
+                      <span className={cn('text-caption font-semibold px-1.5 py-0.5 rounded-full', urgency.tone)}>
                         {urgency.label}
                       </span>
                     </div>
@@ -491,8 +491,8 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
           <section className="px-4 py-4 border-b border-casa-border">
             <div className="flex items-center gap-2 mb-2.5">
               <AlertTriangle size={14} className="text-amber-500" />
-              <h3 className="text-[13px] font-semibold text-casa-text tracking-wide uppercase">Heads up</h3>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{conflicts.length}</span>
+              <h3 className="text-body-sm font-semibold text-casa-text tracking-wide uppercase">Heads up</h3>
+              <span className="text-caption font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{conflicts.length}</span>
             </div>
             <ConflictAlertsSection />
           </section>
@@ -502,49 +502,49 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
           <div className="rounded-2xl border border-casa-border bg-gradient-to-b from-casa-surface to-casa-bg px-3 py-3">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <h3 className="text-[13px] font-semibold text-casa-text">Casa sorted your inbox</h3>
-                <p className="text-[11px] text-casa-muted mt-0.5 truncate">
+                <h3 className="text-body-sm font-semibold text-casa-text">Casa sorted your inbox</h3>
+                <p className="text-caption text-casa-muted mt-0.5 truncate">
                   {gmailActivity?.lastScanAt
                     ? `Last scan ${formatDistanceToNow(new Date(gmailActivity.lastScanAt), { addSuffix: true })}`
                     : 'Waiting for scanner activity'}
                 </p>
               </div>
-              <Link to="/actions" className="text-[11px] font-semibold text-casa-gold whitespace-nowrap">
+              <Link to="/actions" className="text-caption font-semibold text-casa-gold whitespace-nowrap">
                 See all
               </Link>
             </div>
 
             {gmailActivity && (
               <div className="mt-2.5 flex flex-wrap gap-1.5">
-                <span className="text-[10px] rounded-full bg-slate-200/70 text-slate-700 px-2 py-0.5">{gmailActivity.scanned} scanned</span>
-                <span className="text-[10px] rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5">{gmailActivity.created} created</span>
-                <span className="text-[10px] rounded-full bg-blue-100 text-blue-700 px-2 py-0.5">{gmailActivity.updated} updated</span>
-                <span className="text-[10px] rounded-full bg-slate-100 text-slate-600 px-2 py-0.5">{gmailActivity.skipped} skipped</span>
+                <span className="text-caption rounded-full bg-slate-200/70 text-slate-700 px-2 py-0.5">{gmailActivity.scanned} scanned</span>
+                <span className="text-caption rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5">{gmailActivity.created} created</span>
+                <span className="text-caption rounded-full bg-blue-100 text-blue-700 px-2 py-0.5">{gmailActivity.updated} updated</span>
+                <span className="text-caption rounded-full bg-slate-100 text-slate-600 px-2 py-0.5">{gmailActivity.skipped} skipped</span>
               </div>
             )}
 
             <div className="mt-3 space-y-2">
               {activityEntries.length === 0 ? (
-                <p className="text-[12px] text-casa-muted">No recent inbox or notification activity.</p>
+                <p className="text-caption text-casa-muted">No recent inbox or notification activity.</p>
               ) : (
                 activityEntries.map(entry => (
                   <div key={entry.id} className="rounded-xl border border-casa-divider bg-casa-surface px-2.5 py-2">
                     <div className="flex items-start gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 mb-1">
-                          <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide', OUTCOME_STYLES[entry.outcome])}>
+                          <span className={cn('text-caption font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide', OUTCOME_STYLES[entry.outcome])}>
                             {entry.outcome}
                           </span>
                           {entry.count > 1 && (
-                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-casa-gold/20 text-casa-gold">
+                            <span className="text-caption font-semibold px-1.5 py-0.5 rounded-full bg-casa-gold/20 text-casa-gold">
                               x{entry.count}
                             </span>
                           )}
                         </div>
-                        <p className={cn('text-[12px] font-medium leading-snug truncate', entry.read ? 'text-casa-muted' : 'text-casa-text')}>
+                        <p className={cn('text-body-sm font-medium leading-snug truncate', entry.read ? 'text-casa-muted' : 'text-casa-text')}>
                           {entry.title}
                         </p>
-                        <p className="text-[10px] text-casa-muted mt-0.5">
+                        <p className="text-caption text-casa-muted mt-0.5">
                           {entry.source} · {format(new Date(entry.createdAt), 'h:mm a')}
                         </p>
                       </div>
@@ -565,7 +565,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
             </div>
 
             {gmailActivity?.memberStates.length ? (
-              <p className="text-[10px] text-casa-muted mt-2.5 pt-2 border-t border-casa-divider truncate inline-flex items-center gap-1.5 w-full">
+              <p className="text-caption text-casa-muted mt-2.5 pt-2 border-t border-casa-divider truncate inline-flex items-center gap-1.5 w-full">
                 <Bot size={10} className="text-casa-gold shrink-0" />
                 {gmailActivity.memberStates.join(' • ')}
               </p>

@@ -3,7 +3,15 @@ import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Rotate
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
-import { useTheme, PRESETS, DEFAULTS, MIDNIGHT_GALLERY_DEFAULTS, type ThemeColors } from '../contexts/ThemeContext'
+import {
+  useTheme,
+  PRESETS,
+  DEFAULTS,
+  MIDNIGHT_GALLERY_DEFAULTS,
+  DISPLAY_FONT_OPTIONS,
+  BODY_FONT_OPTIONS,
+  type ThemeColors,
+} from '../contexts/ThemeContext'
 import {
   useRoomTone,
   getZoneForHour,
@@ -206,6 +214,13 @@ export default function DisplaySettingsPage() {
     setColor,
     applyPreset,
     resetToDefaults,
+    typography,
+    setDisplayFont,
+    setBodyFont,
+    setHeadingScale,
+    setBodyScale,
+    resetTypography,
+    isTypographyDefault,
     isDefault,
   } = useTheme()
   const [config, setConfig] = useState<DisplayConfig>(DISPLAY_DEFAULTS)
@@ -410,7 +425,86 @@ export default function DisplaySettingsPage() {
                   )}
                 </div>
               </div>
+
             ))}
+          </div>
+        </div>
+
+        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
+          <SectionHeader icon={Sliders} label="Typography" />
+
+          <div className="space-y-4">
+            <div>
+              <p className="text-body-sm font-semibold text-casa-navy mb-2">Header font</p>
+              <div className="flex flex-wrap gap-2">
+                {DISPLAY_FONT_OPTIONS.map(option => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setDisplayFont(option.css)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-full border text-caption font-medium transition-colors',
+                      typography.displayFont === option.css
+                        ? 'bg-casa-navy text-white border-casa-navy'
+                        : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy',
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-body-sm font-semibold text-casa-navy mb-2">Body font</p>
+              <div className="flex flex-wrap gap-2">
+                {BODY_FONT_OPTIONS.map(option => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setBodyFont(option.css)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-full border text-caption font-medium transition-colors',
+                      typography.bodyFont === option.css
+                        ? 'bg-casa-navy text-white border-casa-navy'
+                        : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy',
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <SliderRow
+              label="Header text size"
+              desc="Scales display + heading typography across the app"
+              value={typography.headingScale}
+              min={85}
+              max={120}
+              onChange={setHeadingScale}
+            />
+            <SliderRow
+              label="Body text size"
+              desc="Scales body, small body, and caption text"
+              value={typography.bodyScale}
+              min={85}
+              max={120}
+              onChange={setBodyScale}
+            />
+
+            {!isTypographyDefault && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={resetTypography}
+                  className="inline-flex items-center gap-2 bg-white border border-casa-border text-casa-navy text-body-sm font-semibold px-3 py-1.5 rounded-xl hover:bg-casa-bg transition-colors"
+                >
+                  <RotateCcw size={13} />
+                  Reset typography defaults
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

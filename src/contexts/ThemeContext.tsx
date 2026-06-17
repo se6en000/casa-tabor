@@ -16,6 +16,13 @@ export interface ThemeColors {
   'casa-border':  string
 }
 
+export interface ThemeTypography {
+  displayFont: string
+  bodyFont: string
+  headingScale: number
+  bodyScale: number
+}
+
 export type ThemeTarget = 'day' | 'midnight'
 
 export const DEFAULTS: ThemeColors = {
@@ -34,6 +41,25 @@ export const MIDNIGHT_GALLERY_DEFAULTS: ThemeColors = {
   'casa-surface': '#121923',
   'casa-text':    '#E3DDD1',
   'casa-border':  '#263244',
+}
+
+export const DISPLAY_FONT_OPTIONS = [
+  { id: 'cormorant', label: 'Cormorant Garamond', css: "'Cormorant Garamond', Georgia, serif" },
+  { id: 'playfair', label: 'Playfair Display', css: "'Playfair Display', Georgia, serif" },
+  { id: 'dm-serif', label: 'DM Serif Display', css: "'DM Serif Display', Georgia, serif" },
+] as const
+
+export const BODY_FONT_OPTIONS = [
+  { id: 'dm-sans', label: 'DM Sans', css: "'DM Sans', system-ui, sans-serif" },
+  { id: 'inter', label: 'Inter', css: "'Inter', system-ui, sans-serif" },
+  { id: 'lato', label: 'Lato', css: "'Lato', system-ui, sans-serif" },
+] as const
+
+export const DEFAULT_TYPOGRAPHY: ThemeTypography = {
+  displayFont: DISPLAY_FONT_OPTIONS[0].css,
+  bodyFont: BODY_FONT_OPTIONS[0].css,
+  headingScale: 100,
+  bodyScale: 100,
 }
 
 export interface ThemePreset {
@@ -122,6 +148,7 @@ const STORAGE_DAY = 'casa-theme-day-colors'
 const STORAGE_MIDNIGHT = 'casa-theme-midnight-colors'
 const STORAGE_AUTO_MIDNIGHT = 'casa-theme-auto-midnight'
 const STORAGE_FORCE_MIDNIGHT = 'casa-theme-force-midnight'
+const STORAGE_TYPOGRAPHY = 'casa-theme-typography'
 
 function loadColors(storageKey: string, fallback: ThemeColors): ThemeColors {
   try {
@@ -139,6 +166,22 @@ function loadBool(storageKey: string, fallback: boolean): boolean {
   return raw === '1'
 }
 
+function loadTypography(): ThemeTypography {
+  try {
+    const raw = localStorage.getItem(STORAGE_TYPOGRAPHY)
+    if (!raw) return { ...DEFAULT_TYPOGRAPHY }
+    const parsed = JSON.parse(raw) as Partial<ThemeTypography>
+    return {
+      displayFont: parsed.displayFont ?? DEFAULT_TYPOGRAPHY.displayFont,
+      bodyFont: parsed.bodyFont ?? DEFAULT_TYPOGRAPHY.bodyFont,
+      headingScale: Math.min(120, Math.max(85, Number(parsed.headingScale ?? DEFAULT_TYPOGRAPHY.headingScale))),
+      bodyScale: Math.min(120, Math.max(85, Number(parsed.bodyScale ?? DEFAULT_TYPOGRAPHY.bodyScale))),
+    }
+  } catch {
+    return { ...DEFAULT_TYPOGRAPHY }
+  }
+}
+
 function styleVars(colors: ThemeColors): string {
   return `
   --color-casa-gold: ${colors['casa-gold']};
@@ -149,8 +192,28 @@ function styleVars(colors: ThemeColors): string {
   --color-casa-border: ${colors['casa-border']};`
 }
 
-function buildStyleContent(dayColors: ThemeColors, midnightColors: ThemeColors): string {
+function toScaledRem(baseRem: number, scalePct: number): string {
+  return `${(baseRem * (scalePct / 100)).toFixed(4)}rem`
+}
+
+function typographyVars(typography: ThemeTypography): string {
+  return `
+  --font-display: ${typography.displayFont};
+  --font-body: ${typography.bodyFont};
+  --text-display-xl: ${toScaledRem(3, typography.headingScale)};
+  --text-display-lg: ${toScaledRem(2.25, typography.headingScale)};
+  --text-display-md: ${toScaledRem(1.75, typography.headingScale)};
+  --text-display-sm: ${toScaledRem(1.375, typography.headingScale)};
+  --text-heading: ${toScaledRem(1.25, typography.headingScale)};
+  --text-body-lg: ${toScaledRem(1.0625, typography.bodyScale)};
+  --text-body: ${toScaledRem(0.9375, typography.bodyScale)};
+  --text-body-sm: ${toScaledRem(0.8125, typography.bodyScale)};
+  --text-caption: ${toScaledRem(0.75, typography.bodyScale)};`
+}
+
+function buildStyleContent(dayColors: ThemeColors, midnightColors: ThemeColors, typography: ThemeTypography): string {
   return `:root {${styleVars(dayColors)}
+${typographyVars(typography)}
 }
 html.midnight-gallery {${styleVars(midnightColors)}
   --color-casa-muted: #B2BED0;
@@ -164,13 +227,13 @@ html.midnight-gallery {${styleVars(midnightColors)}
 
 let styleTag: HTMLStyleElement | null = null
 
-function applyToDOM(dayColors: ThemeColors, midnightColors: ThemeColors) {
+function applyToDOM(dayColors: ThemeColors, midnightColors: ThemeColors, typography: ThemeTypography) {
   if (!styleTag) {
     styleTag = document.createElement('style')
     styleTag.id = 'casa-theme-override'
     document.head.appendChild(styleTag)
   }
-  styleTag.textContent = buildStyleContent(dayColors, midnightColors)
+  styleTag.textContent = buildStyleContent(dayColors, midnightColors, typography)
 }
 
 function shouldEnableMidnight(forceMidnight: boolean, autoMidnight: boolean, roomToneZone: RoomToneZone): boolean {
@@ -193,6 +256,13 @@ interface ThemeContextValue {
   setColor: (key: keyof ThemeColors, value: string) => void
   applyPreset: (preset: ThemePreset) => void
   resetToDefaults: () => void
+  typography: ThemeTypography
+  setDisplayFont: (value: string) => void
+  setBodyFont: (value: string) => void
+  setHeadingScale: (value: number) => void
+  setBodyScale: (value: number) => void
+  resetTypography: () => void
+  isTypographyDefault: boolean
   setRoomToneZone: (zone: RoomToneZone) => void
   isDefault: boolean
 }
@@ -202,6 +272,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null)
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [dayColors, setDayColors] = useState<ThemeColors>(() => loadColors(STORAGE_DAY, DEFAULTS))
   const [midnightColors, setMidnightColors] = useState<ThemeColors>(() => loadColors(STORAGE_MIDNIGHT, MIDNIGHT_GALLERY_DEFAULTS))
+  const [typography, setTypography] = useState<ThemeTypography>(() => loadTypography())
   const [activeTarget, setActiveTarget] = useState<ThemeTarget>('day')
   const [autoMidnight, setAutoMidnightState] = useState<boolean>(() => loadBool(STORAGE_AUTO_MIDNIGHT, true))
   const [forceMidnight, setForceMidnightState] = useState<boolean>(() => loadBool(STORAGE_FORCE_MIDNIGHT, false))
@@ -211,11 +282,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const colors = activeTarget === 'midnight' ? midnightColors : dayColors
   const defaults = activeTarget === 'midnight' ? MIDNIGHT_GALLERY_DEFAULTS : DEFAULTS
   const isDefault = Object.entries(defaults).every(([k, v]) => colors[k as keyof ThemeColors] === v)
+  const isTypographyDefault = typography.displayFont === DEFAULT_TYPOGRAPHY.displayFont
+    && typography.bodyFont === DEFAULT_TYPOGRAPHY.bodyFont
+    && typography.headingScale === DEFAULT_TYPOGRAPHY.headingScale
+    && typography.bodyScale === DEFAULT_TYPOGRAPHY.bodyScale
 
-  const persistPalettes = useCallback((nextDay: ThemeColors, nextMidnight: ThemeColors) => {
+  const persistTheme = useCallback((nextDay: ThemeColors, nextMidnight: ThemeColors, nextTypography: ThemeTypography) => {
     localStorage.setItem(STORAGE_DAY, JSON.stringify(nextDay))
     localStorage.setItem(STORAGE_MIDNIGHT, JSON.stringify(nextMidnight))
-    applyToDOM(nextDay, nextMidnight)
+    localStorage.setItem(STORAGE_TYPOGRAPHY, JSON.stringify(nextTypography))
+    applyToDOM(nextDay, nextMidnight, nextTypography)
   }, [])
 
   const setAutoMidnight = useCallback((enabled: boolean) => {
@@ -232,7 +308,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (activeTarget === 'midnight') {
       setMidnightColors(prev => {
         const nextMidnight = { ...prev, [key]: value }
-        persistPalettes(dayColors, nextMidnight)
+        persistTheme(dayColors, nextMidnight, typography)
         return nextMidnight
       })
       return
@@ -240,40 +316,78 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
     setDayColors(prev => {
       const nextDay = { ...prev, [key]: value }
-      persistPalettes(nextDay, midnightColors)
+      persistTheme(nextDay, midnightColors, typography)
       return nextDay
     })
-  }, [activeTarget, dayColors, midnightColors, persistPalettes])
+  }, [activeTarget, dayColors, midnightColors, persistTheme, typography])
 
   const applyPreset = useCallback((preset: ThemePreset) => {
     if (activeTarget === 'midnight') {
       const nextMidnight = { ...preset.colors }
       setMidnightColors(nextMidnight)
-      persistPalettes(dayColors, nextMidnight)
+      persistTheme(dayColors, nextMidnight, typography)
       return
     }
 
     const nextDay = { ...preset.colors }
     setDayColors(nextDay)
-    persistPalettes(nextDay, midnightColors)
-  }, [activeTarget, dayColors, midnightColors, persistPalettes])
+    persistTheme(nextDay, midnightColors, typography)
+  }, [activeTarget, dayColors, midnightColors, persistTheme, typography])
 
   const resetToDefaults = useCallback(() => {
     if (activeTarget === 'midnight') {
       const nextMidnight = { ...MIDNIGHT_GALLERY_DEFAULTS }
       setMidnightColors(nextMidnight)
-      persistPalettes(dayColors, nextMidnight)
+      persistTheme(dayColors, nextMidnight, typography)
       return
     }
 
     const nextDay = { ...DEFAULTS }
     setDayColors(nextDay)
-    persistPalettes(nextDay, midnightColors)
-  }, [activeTarget, dayColors, midnightColors, persistPalettes])
+    persistTheme(nextDay, midnightColors, typography)
+  }, [activeTarget, dayColors, midnightColors, persistTheme, typography])
+
+  const setDisplayFont = useCallback((value: string) => {
+    setTypography(prev => {
+      const next = { ...prev, displayFont: value }
+      persistTheme(dayColors, midnightColors, next)
+      return next
+    })
+  }, [dayColors, midnightColors, persistTheme])
+
+  const setBodyFont = useCallback((value: string) => {
+    setTypography(prev => {
+      const next = { ...prev, bodyFont: value }
+      persistTheme(dayColors, midnightColors, next)
+      return next
+    })
+  }, [dayColors, midnightColors, persistTheme])
+
+  const setHeadingScale = useCallback((value: number) => {
+    setTypography(prev => {
+      const next = { ...prev, headingScale: Math.min(120, Math.max(85, Math.round(value))) }
+      persistTheme(dayColors, midnightColors, next)
+      return next
+    })
+  }, [dayColors, midnightColors, persistTheme])
+
+  const setBodyScale = useCallback((value: number) => {
+    setTypography(prev => {
+      const next = { ...prev, bodyScale: Math.min(120, Math.max(85, Math.round(value))) }
+      persistTheme(dayColors, midnightColors, next)
+      return next
+    })
+  }, [dayColors, midnightColors, persistTheme])
+
+  const resetTypography = useCallback(() => {
+    const next = { ...DEFAULT_TYPOGRAPHY }
+    setTypography(next)
+    persistTheme(dayColors, midnightColors, next)
+  }, [dayColors, midnightColors, persistTheme])
 
   useEffect(() => {
-    applyToDOM(dayColors, midnightColors)
-  }, [dayColors, midnightColors])
+    applyToDOM(dayColors, midnightColors, typography)
+  }, [dayColors, midnightColors, typography])
 
   useEffect(() => {
     document.documentElement.classList.toggle('midnight-gallery', isMidnightActive)
@@ -293,6 +407,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setColor,
     applyPreset,
     resetToDefaults,
+    typography,
+    setDisplayFont,
+    setBodyFont,
+    setHeadingScale,
+    setBodyScale,
+    resetTypography,
+    isTypographyDefault,
     setRoomToneZone,
     isDefault,
   }), [
@@ -308,6 +429,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setColor,
     applyPreset,
     resetToDefaults,
+    typography,
+    setDisplayFont,
+    setBodyFont,
+    setHeadingScale,
+    setBodyScale,
+    resetTypography,
+    isTypographyDefault,
     isDefault,
   ])
 
