@@ -100,7 +100,6 @@ export default function HomePage() {
   const { data: allTomorrowEvents } = useTodayEvents(tomorrow)
   const { visibleMembers, toggleMember } = useCalendarStore()
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
-  const [expandedReminderId, setExpandedReminderId] = useState<string | null>(null)
   const [selectedPrepItem, setSelectedPrepItem] = useState<PrepItem | null>(null)
   const scrollRef = useRef<HTMLElement | null>(null)
   const nowLineRef = useRef<HTMLLIElement | null>(null)
@@ -461,14 +460,12 @@ export default function HomePage() {
             </Link>
           </div>
           {!isLoading && reminders.length > 0 && (
-            <ol className="space-y-2 mb-3">
+            <ol className="space-y-1.5 mb-3">
               {reminders.map((r) => (
                 <li key={r.id}>
                   <ReminderEventCard
                     event={r}
                     timed={false}
-                    expanded={expandedReminderId === r.id}
-                    onToggleExpand={() => setExpandedReminderId(prev => prev === r.id ? null : r.id)}
                     onComplete={() => completeReminder(r.id)}
                     onSnooze={() => snoozeReminder(r)}
                   />
@@ -494,9 +491,7 @@ export default function HomePage() {
                   event={ev}
                   now={now}
                   index={i}
-                  reminderExpanded={expandedReminderId === ev.id}
-                  onToggleReminder={() => setExpandedReminderId(prev => prev === ev.id ? null : ev.id)}
-                  onClick={() => { setExpandedReminderId(null); setSelectedEventId(ev.id) }}
+                  onClick={() => setSelectedEventId(ev.id)}
                   onComplete={completeReminder}
                   onSnooze={snoozeReminder}
                 />
@@ -525,9 +520,7 @@ export default function HomePage() {
                   event={ev}
                   now={now}
                   index={i}
-                  reminderExpanded={expandedReminderId === ev.id}
-                  onToggleReminder={() => setExpandedReminderId(prev => prev === ev.id ? null : ev.id)}
-                  onClick={() => { setExpandedReminderId(null); setSelectedEventId(ev.id) }}
+                  onClick={() => setSelectedEventId(ev.id)}
                   onComplete={completeReminder}
                   onSnooze={snoozeReminder}
                 />
@@ -559,9 +552,7 @@ export default function HomePage() {
                     event={ev}
                     now={now}
                     index={i}
-                    reminderExpanded={expandedReminderId === ev.id}
-                    onToggleReminder={() => setExpandedReminderId(prev => prev === ev.id ? null : ev.id)}
-                    onClick={() => { setExpandedReminderId(null); setSelectedEventId(ev.id) }}
+                    onClick={() => setSelectedEventId(ev.id)}
                     onComplete={completeReminder}
                     onSnooze={snoozeReminder}
                   />
@@ -766,8 +757,6 @@ function TimelineRow({
   event,
   now,
   index,
-  reminderExpanded,
-  onToggleReminder,
   onClick,
   onComplete,
   onSnooze,
@@ -775,8 +764,6 @@ function TimelineRow({
   event: EventWithDetails
   now: Date
   index: number
-  reminderExpanded: boolean
-  onToggleReminder: () => void
   onClick: () => void
   onComplete?: (id: string) => void
   onSnooze?: (event: EventWithDetails) => void
@@ -793,14 +780,21 @@ function TimelineRow({
         initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: past ? 0.4 : 1, x: 0 }}
         transition={{ duration: 0.3, delay: index * 0.04 }}
-        className="cursor-pointer"
-        onClick={e => { e.stopPropagation(); onToggleReminder() }}
+        className="flex items-center gap-3"
       >
+        <div className="w-16 shrink-0 flex flex-col items-end justify-start pt-1">
+          <p className="text-display-sm font-display font-bold text-casa-navy tabular-nums leading-none text-right w-full">
+            {format(new Date(event.start_time), 'h:mm')}
+          </p>
+          <p className="text-caption text-casa-muted font-semibold uppercase mt-0.5 leading-none text-right w-full">
+            {format(new Date(event.start_time), 'a')}
+          </p>
+        </div>
+        <span className="w-2 rounded-full self-stretch bg-amber-300/80" />
         <ReminderEventCard
           event={event}
           timed
-          expanded={reminderExpanded}
-          onToggleExpand={onToggleReminder}
+          className="flex-1 min-w-0"
           onComplete={onComplete ? () => onComplete(event.id) : undefined}
           onSnooze={onSnooze ? () => onSnooze(event) : undefined}
         />

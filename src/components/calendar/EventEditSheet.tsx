@@ -885,7 +885,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                 </div>
                 {eventType === 'reminder' && (
                   <p className="text-caption text-casa-muted mt-2">
-                    Reminders use the same timeline card style as events, with reminder accents and quick actions.
+                    Reminders appear as slim timeline pills with quick Done and Snooze actions.
                   </p>
                 )}
               </div>

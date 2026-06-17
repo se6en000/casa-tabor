@@ -35,7 +35,6 @@ function getPrimaryColor(event: EventWithDetails): string {
 function DayEventCard({
   event,
   selected,
-  reminderExpanded,
   onSelect,
   onEdit,
   onLongPress,
@@ -44,7 +43,6 @@ function DayEventCard({
 }: {
   event: EventWithDetails
   selected: boolean
-  reminderExpanded: boolean
   onSelect: () => void
   onEdit: () => void
   onLongPress: (event: EventWithDetails, x: number, y: number) => void
@@ -113,14 +111,27 @@ function DayEventCard({
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -4 }}
         transition={{ duration: 0.18 }}
-        onClick={e => { e.stopPropagation(); onSelect() }}
-        className="cursor-pointer transition-all hover:shadow-card"
+        className="flex items-center gap-3"
       >
+        {timed ? (
+          <>
+            <div className="w-16 shrink-0 flex flex-col items-end justify-start pt-1">
+              <p className="text-display-sm font-display font-bold text-casa-navy tabular-nums leading-none text-right w-full">
+                {format(new Date(event.start_time), 'h:mm')}
+              </p>
+              <p className="text-caption text-casa-muted font-semibold uppercase mt-0.5 leading-none text-right w-full">
+                {format(new Date(event.start_time), 'a')}
+              </p>
+            </div>
+            <span className="w-2 rounded-full self-stretch bg-amber-300/80" />
+          </>
+        ) : (
+          <div className="w-16 shrink-0 text-caption font-semibold text-casa-muted pt-1 text-right">All day</div>
+        )}
         <ReminderEventCard
           event={event}
           timed={timed}
-          expanded={reminderExpanded}
-          onToggleExpand={onSelect}
+          className="flex-1 min-w-0"
           onComplete={() => onCompleteReminder(event)}
           onSnooze={() => onSnoozeReminder(event)}
         />
@@ -299,7 +310,6 @@ export default function DayView() {
   const qc = useQueryClient()
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
-  const [expandedReminderId, setExpandedReminderId] = useState<string | null>(null)
   const [editEventId, setEditEventId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ event: EventWithDetails; x: number; y: number } | null>(null)
 
@@ -353,7 +363,7 @@ export default function DayView() {
   }, [qc])
 
   return (
-    <div className="flex h-full overflow-hidden" onClick={() => { setSelectedEventId(null); setExpandedReminderId(null) }}>
+    <div className="flex h-full overflow-hidden" onClick={() => setSelectedEventId(null)}>
 
       {/* ── Main column ─────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -362,7 +372,7 @@ export default function DayView() {
         <BounceScroll
           className="flex-1"
           innerClassName="px-5 py-4"
-          onClick={() => { setSelectedEventId(null); setExpandedReminderId(null) }}
+          onClick={() => setSelectedEventId(null)}
         >
           {dayEvents.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-casa-muted gap-2">
@@ -380,15 +390,9 @@ export default function DayView() {
                     key={event.id}
                     event={event}
                     selected={selectedEventId === event.id}
-                    reminderExpanded={expandedReminderId === event.id}
                     onSelect={() => {
-                      if (isReminder(event)) {
-                        setSelectedEventId(null)
-                        setExpandedReminderId(prev => prev === event.id ? null : event.id)
-                      } else {
-                        setExpandedReminderId(null)
-                        setSelectedEventId(prev => prev === event.id ? null : event.id)
-                      }
+                      if (isReminder(event)) return
+                      setSelectedEventId(prev => prev === event.id ? null : event.id)
                     }}
                     onEdit={() => setEditEventId(event.id)}
                     onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
