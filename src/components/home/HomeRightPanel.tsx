@@ -218,9 +218,9 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                       <div className="flex items-center justify-between gap-2">
                         <div className="inline-flex items-center gap-2">
                           <span className={cn('h-2.5 w-2.5 rounded-full', urgency.dotTone)} />
-                          <span className="text-body-sm font-semibold tracking-[0.14em] text-casa-muted">{urgency.section}</span>
+                          <span className="text-body-sm font-semibold text-casa-muted">{urgency.section}</span>
                         </div>
-                        <span className={cn('text-caption font-bold leading-none whitespace-nowrap px-2.5 py-1 rounded-pill capitalize', urgency.badgeTone)}>
+                        <span className={cn('text-caption font-bold leading-none whitespace-nowrap px-2 py-0.5 rounded-full capitalize', urgency.badgeTone)}>
                           {urgency.badge}
                         </span>
                       </div>
@@ -230,7 +230,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                         </p>
                       </div>
                       <div className="mt-2.5 flex items-center gap-2.5">
-                        <span className={cn('text-body-sm font-semibold px-2.5 py-1 rounded-button border', source.tone)}>
+                        <span className={cn('text-caption font-bold leading-none whitespace-nowrap px-2 py-0.5 rounded-full border', source.tone)}>
                           {source.label}
                         </span>
                         <span className="text-body-sm text-casa-muted truncate">
@@ -290,15 +290,15 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                   <div className="mt-4 grid grid-cols-3 gap-2.5">
                     <div className="rounded-3xl bg-white/10 px-3 py-4 text-center">
                       <p className="text-display-sm leading-none font-semibold">{gmailActivity?.scanned ?? 0}</p>
-                      <p className="text-body font-semibold text-white/70 mt-1">scanned</p>
+                      <p className="text-body-sm font-semibold text-white/70 mt-1">scanned</p>
                     </div>
                     <div className="rounded-3xl border border-casa-gold/65 bg-white/12 px-3 py-4 text-center">
                       <p className="text-display-sm leading-none font-semibold text-casa-gold">{prepItems.length}</p>
-                      <p className="text-body font-semibold text-white/80 mt-1">need you</p>
+                      <p className="text-body-sm font-semibold text-white/80 mt-1">need you</p>
                     </div>
                     <div className="rounded-3xl bg-white/10 px-3 py-4 text-center">
                       <p className="text-display-sm leading-none font-semibold">{gmailActivity?.skipped ?? 0}</p>
-                      <p className="text-body font-semibold text-white/70 mt-1">filtered</p>
+                      <p className="text-body-sm font-semibold text-white/70 mt-1">filtered</p>
                     </div>
                   </div>
                   <div className="mt-3.5 h-11 rounded-[1rem] border border-white/22 bg-white/9 text-white text-body-sm font-semibold inline-flex items-center justify-center w-full">
