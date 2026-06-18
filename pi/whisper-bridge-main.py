@@ -25,18 +25,18 @@ DG_URL = (
 )
 
 WAKE_MODEL    = 'alexa'
-WAKE_SCORE    = 0.07           # More sensitive wake threshold for quiet-room speech
+WAKE_SCORE    = 0.12           # Reliable trigger without excessive false positives
 WAKE_COOLDOWN = 2.0
 WAKE_WATCHDOG_SECS = 90
 WAKE_AUDIO_GAIN   = 3.0        # Amplify mic input before wake detection
-WAKE_SCORE_MIN = 0.10
+WAKE_SCORE_MIN = 0.08
 WAKE_SCORE_MAX = 0.60
 SENSOR_BRIDGE  = 'http://127.0.0.1:8765'
 
 # ── Audio buffering for wake word ─────────────────────────────────────────────
-# 0.3s post-wake buffer — just enough to capture the first word after "Alexa".
-# Using a short buffer means "Alexa" itself is NOT sent to DeepGram (stripped naturally).
-BUFFER_SECS = 0.3
+# Keep a true pre-roll so users can speak naturally in one breath.
+# We still strip leading "Alexa" from transcript text in _strip_wake().
+BUFFER_SECS = 2.0
 
 # ── STT state ────────────────────────────────────────────────────────────────
 _state      = dict(recording=False, ready=False, volume=0, transcript=None,
@@ -154,6 +154,7 @@ _wake_proc           = None
 _wake_last_chunk_ts  = time.time()
 _audio_buffer        = []  # Circular buffer of audio chunks
 _audio_buffer_lock   = threading.Lock()
+WAKE_CHUNK_SECS      = 0.08  # 2560 bytes @ 16kHz, 16-bit mono
 
 # ── Display sleep/wake ───────────────────────────────────────────────────────
 _DISPLAY = ':0'
@@ -162,9 +163,7 @@ def _add_to_buffer(raw_bytes):
     """Add audio chunk to circular buffer, maintaining BUFFER_SECS of audio."""
     with _audio_buffer_lock:
         _audio_buffer.append(raw_bytes)
-        # Each chunk is 1280 bytes at 16kHz (16-bit mono) = 40ms
-        # For 2 seconds: 2.0 / 0.04 = 50 chunks
-        max_chunks = int(BUFFER_SECS / 0.04) + 1
+        max_chunks = int(BUFFER_SECS / WAKE_CHUNK_SECS) + 1
         while len(_audio_buffer) > max_chunks:
             _audio_buffer.pop(0)
 

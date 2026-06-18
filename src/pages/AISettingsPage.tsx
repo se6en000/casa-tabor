@@ -243,8 +243,8 @@ export default function AISettingsPage() {
               <p className="text-body-sm font-medium text-casa-navy">Sensitivity</p>
               <p className="text-caption text-casa-muted mt-0.5">
                 {screensaverSettings.wakeWordSensitivity <= 0.15 ? 'Very sensitive — fires easily' :
-                 screensaverSettings.wakeWordSensitivity <= 0.25 ? 'High — good for quiet rooms' :
-                 screensaverSettings.wakeWordSensitivity <= 0.35 ? 'Balanced (default)' :
+                 screensaverSettings.wakeWordSensitivity <= 0.25 ? 'Balanced (default)' :
+                 screensaverSettings.wakeWordSensitivity <= 0.35 ? 'Slightly strict — speak clearly' :
                  screensaverSettings.wakeWordSensitivity <= 0.45 ? 'Strict — speak clearly' :
                  'Very strict — nearly shout-level'}
               </p>
