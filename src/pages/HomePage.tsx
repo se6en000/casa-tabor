@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { format, isAfter, isBefore, addDays, addMinutes, startOfDay } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronRight, RefreshCw } from 'lucide-react'
@@ -101,12 +101,26 @@ export default function HomePage() {
   const { visibleMembers, toggleMember } = useCalendarStore()
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [selectedPrepItem, setSelectedPrepItem] = useState<PrepItem | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
   const scrollRef = useRef<HTMLElement | null>(null)
   const nowLineRef = useRef<HTMLLIElement | null>(null)
   const homeFamily = useMemo(
     () => (family ?? []).filter(m => m.role === 'parent' || m.role === 'child'),
     [family],
   )
+
+  // Handle event_id query param from notification deep-links
+  useEffect(() => {
+    const eventId = searchParams.get('event_id')
+    if (eventId) {
+      setSelectedEventId(eventId)
+      // Clean up the query param
+      setSearchParams(prev => {
+        prev.delete('event_id')
+        return prev
+      })
+    }
+  }, [searchParams, setSearchParams])
 
   const events = useMemo<EventWithDetails[]>(() => {
     if (!allTodayEvents) return []
