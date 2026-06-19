@@ -156,8 +156,9 @@ export default function SmsSettingsPage() {
         body: {
           title: 'Casa Tabor test',
           body: `Push is working on ${deviceLabel}.`,
-          url: '/settings/sms',
+          url: '/',
           tag: 'push-test',
+          eventId: 'test-notification-event',
         },
       })
       if (error) {

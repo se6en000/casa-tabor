@@ -63,11 +63,15 @@ function GlobalAIDrawer({
   open,
   setOpen,
   safeMode,
+  focusedEventId,
+  onFocusedEventChange,
 }: {
   screensaverActive: boolean
   open: boolean
   setOpen: (open: boolean) => void
   safeMode: boolean
+  focusedEventId?: string | null
+  onFocusedEventChange?: (id: string | null) => void
 }) {
   const [anchor, setAnchor] = useState<{ right: number; top: number } | undefined>()
   const [launchRequest, setLaunchRequest] = useState<{ prompt: string; autoSend: boolean; nonce: string } | null>(null)
@@ -75,6 +79,7 @@ function GlobalAIDrawer({
   const { data: events = [] } = useRollingEvents(now)
   const { data: family = [] } = useFamilyMembers()
   const { data: weather } = useHomeWeather()
+  const focusedEvent = focusedEventId ? events.find(e => e.id === focusedEventId) : undefined
   useWakeWord(open, screensaverActive, !safeMode)
 
   useEffect(() => {
@@ -101,7 +106,10 @@ function GlobalAIDrawer({
   return (
     <AIChatDrawer
       open={open}
-      onClose={() => setOpen(false)}
+      onClose={() => {
+        setOpen(false)
+        onFocusedEventChange?.(null)
+      }}
       anchor={anchor}
       page="app"
       events={events}
@@ -109,6 +117,7 @@ function GlobalAIDrawer({
       homeCity={weather?.city}
       onSleepCommand={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
       launchRequest={launchRequest ?? undefined}
+      focusedEvent={focusedEvent}
     />
   )
 }
@@ -126,11 +135,19 @@ function AppShell() {
   const [screensaverActive, setScreensaverActive] = useState(false)
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
+  const [focusedEventId, setFocusedEventId] = useState<string | null>(null)
   const location = useLocation()
   const hideFab = location.pathname.startsWith('/settings') || screensaverActive
 
   const handlePushAction = useCallback(async (action: string, eventId?: string | null) => {
-    if (!eventId || action === 'open') return
+    // If action is 'open', just open the drawer with the event focused
+    if (action === 'open' && eventId) {
+      setFocusedEventId(eventId)
+      setAiDrawerOpen(true)
+      return
+    }
+    // For other actions (done, snooze), invoke the backend
+    if (!eventId) return
     await supabase.functions.invoke('notification-action', {
       body: { action, event_id: eventId },
     }).catch(() => {})
@@ -220,6 +237,8 @@ function AppShell() {
         open={aiDrawerOpen}
         setOpen={setAiDrawerOpen}
         safeMode={IS_SAFE_MODE}
+        focusedEventId={focusedEventId}
+        onFocusedEventChange={setFocusedEventId}
       />
 
       {/* Art screensaver overlay — always available when triggered manually; idle auto-fire respects settings.enabled */}
