@@ -114,11 +114,9 @@ export default function HomePage() {
     const eventId = searchParams.get('event_id')
     if (eventId) {
       setSelectedEventId(eventId)
-      // Clean up the query param
-      setSearchParams(prev => {
-        prev.delete('event_id')
-        return prev
-      })
+      const next = new URLSearchParams(searchParams)
+      next.delete('event_id')
+      setSearchParams(next, { replace: true })
     }
   }, [searchParams, setSearchParams])
 

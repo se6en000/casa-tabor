@@ -2,7 +2,6 @@
 // Called by pg_cron every 5 minutes.
 // Sends push-first reminders at ~30m and ~5m before event start.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { format } from 'https://esm.sh/date-fns@3'
 import { getCorrelationId, withCorrelationHeaders } from '../_shared/correlation.ts'
 import { requireEnv } from '../_shared/env.ts'
 
@@ -36,6 +35,15 @@ function isQuietHours(now: Date, cfg: SmsConfig): boolean {
   if (start === end) return false
   if (start < end) return nowMins >= start && nowMins < end
   return nowMins >= start || nowMins < end
+}
+
+function formatEasternTime(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(date)
 }
 
 Deno.serve(async (req) => {
@@ -100,7 +108,7 @@ Deno.serve(async (req) => {
           .filter(Boolean)
           .join(', ')
 
-        const startStr = format(eventStart, 'h:mm a')
+        const startStr = formatEasternTime(eventStart)
         const title = stripPersonPrefix(event.title)
         let body = `${startStr}`
         if (peopleNames) body += ` · ${peopleNames}`
@@ -118,9 +126,9 @@ Deno.serve(async (req) => {
               ? (bucket === 30 ? `🔔 Reminder in ~30 min` : `🔔 Reminder in ~5 min`)
               : (bucket === 30 ? `⏰ ${title} in ~30 min` : `⏳ ${title} in ~5 min`),
             body,
-            url: '/calendar',
+            url: '/',
             tag: `event-${bucket}-${event.id}`,
-            data: { eventId: event.id, eventType: event.event_type, url: '/calendar' },
+            data: { eventId: event.id, eventType: event.event_type, url: '/' },
             actions: [
               { action: 'open', title: isReminder ? 'Open Reminder' : 'Open Event' },
               { action: 'snooze', title: 'Snooze 10m' },

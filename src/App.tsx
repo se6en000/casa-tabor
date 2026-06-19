@@ -130,10 +130,13 @@ function AppShell() {
   const hideFab = location.pathname.startsWith('/settings') || screensaverActive
   const navigate = useNavigate()
 
-  const handlePushAction = useCallback(async (action: string, eventId?: string | null) => {
-    // For 'open' action with eventId, navigate to home with event_id query param
-    if (action === 'open' && eventId) {
-      navigate(`/?event_id=${encodeURIComponent(eventId)}`)
+  const handlePushAction = useCallback(async (action: string, eventId?: string | null, url?: string) => {
+    if (action === 'open') {
+      if (eventId) {
+        navigate(`/?event_id=${encodeURIComponent(eventId)}`)
+      } else if (url) {
+        window.location.assign(url)
+      }
       return
     }
     // For other actions (done, snooze), invoke the backend
@@ -176,8 +179,7 @@ function AppShell() {
     const onMessage = (event: MessageEvent) => {
       const data = event.data as { type?: string; action?: string; eventId?: string | null; url?: string } | null
       if (!data || data.type !== 'PUSH_NOTIFICATION_ACTION') return
-      if (data.url) window.location.assign(data.url)
-      handlePushAction(data.action ?? 'open', data.eventId ?? null)
+      handlePushAction(data.action ?? 'open', data.eventId ?? null, data.url)
     }
     navigator.serviceWorker?.addEventListener('message', onMessage)
     return () => navigator.serviceWorker?.removeEventListener('message', onMessage)
@@ -188,7 +190,7 @@ function AppShell() {
     const action = params.get('push_action')
     const eventId = params.get('event_id')
     if (!action) return
-    handlePushAction(action, eventId)
+    handlePushAction(action, eventId, undefined)
     params.delete('push_action')
     params.delete('event_id')
     const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash}`

@@ -21,8 +21,14 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { title, body, url = '/', tag, actions, data } = await req.json()
-    const payload = JSON.stringify({ title, body, url, tag, actions, data })
+    const { title, body, url = '/', tag, actions, data = {}, eventId } = await req.json()
+    const payloadData = {
+      ...(typeof data === 'object' && data !== null ? data : {}),
+      eventId: (typeof data === 'object' && data !== null && 'eventId' in data)
+        ? (data as Record<string, unknown>).eventId
+        : eventId,
+    }
+    const payload = JSON.stringify({ title, body, url, tag, actions, data: payloadData, eventId: payloadData.eventId })
 
     const { data: subs, error } = await supabase
       .from('push_subscriptions')
