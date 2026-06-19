@@ -107,7 +107,6 @@ chromium-browser \
   $KIOSK_FLAG \
   --force-device-scale-factor=1 \
   --password-store=basic \
-  --no-sandbox \
   --touch-events=enabled \
   --enable-touch-drag-drop \
   --disable-pinch \
