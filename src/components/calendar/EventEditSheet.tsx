@@ -18,6 +18,7 @@ import { useSavedPlaces } from '../../hooks/useSavedPlaces'
 import BounceScroll from '../shared/BounceScroll'
 
 const ALL_CATEGORIES = Object.keys(CATEGORY_LABEL) as string[]
+const MINUTE_OPTIONS = [0, 15, 30, 45] as const
 
 type EnrichStatus = 'idle' | 'loading' | 'success' | 'error'
 
@@ -94,6 +95,38 @@ function expandRrule(masterStart: string, masterEnd: string, rrule: string): Arr
 function toGoogleUntil(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}T${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`
+}
+
+function toLocalDTFromDate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function snapMinuteToQuarter(minute: number): number {
+  let closest: number = MINUTE_OPTIONS[0]
+  let distance = Math.abs(minute - closest)
+  for (const option of MINUTE_OPTIONS) {
+    const nextDistance = Math.abs(minute - option)
+    if (nextDistance < distance) {
+      closest = option
+      distance = nextDistance
+    }
+  }
+  return closest
+}
+
+function getPickerParts(value: string) {
+  const d = new Date(value)
+  const safe = Number.isNaN(d.getTime()) ? new Date() : d
+  const hour24 = safe.getHours()
+  return {
+    year: safe.getFullYear(),
+    month: safe.getMonth(),
+    day: safe.getDate(),
+    hour12: ((hour24 + 11) % 12) + 1,
+    minute: snapMinuteToQuarter(safe.getMinutes()),
+    ampm: hour24 >= 12 ? 'PM' as const : 'AM' as const,
+  }
 }
 
 interface Props {
@@ -282,6 +315,22 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   }
   const [startDT, setStartDT] = useState(toLocalDT(event.start_time))
   const [endDT, setEndDT] = useState(toLocalDT(event.end_time))
+  const updateStartParts = (patch: Partial<ReturnType<typeof getPickerParts>>) => {
+    const parts = { ...getPickerParts(startDT), ...patch }
+    const safeDay = Math.min(parts.day, new Date(parts.year, parts.month + 1, 0).getDate())
+    const hour24 = (parts.hour12 % 12) + (parts.ampm === 'PM' ? 12 : 0)
+    const next = new Date(parts.year, parts.month, safeDay, hour24, snapMinuteToQuarter(parts.minute), 0, 0)
+    setStartDT(toLocalDTFromDate(next))
+    markDirty()
+  }
+  const updateEndParts = (patch: Partial<ReturnType<typeof getPickerParts>>) => {
+    const parts = { ...getPickerParts(endDT), ...patch }
+    const safeDay = Math.min(parts.day, new Date(parts.year, parts.month + 1, 0).getDate())
+    const hour24 = (parts.hour12 % 12) + (parts.ampm === 'PM' ? 12 : 0)
+    const next = new Date(parts.year, parts.month, safeDay, hour24, snapMinuteToQuarter(parts.minute), 0, 0)
+    setEndDT(toLocalDTFromDate(next))
+    markDirty()
+  }
   const fields = getFieldsForCategory(category)
 
   function buildForm(enrichment: typeof enr, fieldList: EnrichmentFieldKey[]) {
@@ -1054,23 +1103,67 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <p className="text-caption text-casa-muted mb-1">Start</p>
-                      <input
-                        type="datetime-local"
-                        step={900}
-                        value={startDT}
-                        onChange={e => { setStartDT(e.target.value); markDirty() }}
-                        className={inputCls}
-                      />
+                      {(() => {
+                        const p = getPickerParts(startDT)
+                        return (
+                          <div className="space-y-2">
+                            <input
+                              type="date"
+                              value={startDT.slice(0, 10)}
+                              onChange={e => {
+                                const next = `${e.target.value}T${startDT.slice(11, 16) || '00:00'}`
+                                setStartDT(next)
+                                markDirty()
+                              }}
+                              className={inputCls}
+                            />
+                            <div className="grid grid-cols-3 gap-2">
+                              <select value={p.hour12} onChange={e => updateStartParts({ hour12: Number(e.target.value) })} className={inputCls}>
+                                {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
+                              </select>
+                              <select value={p.minute} onChange={e => updateStartParts({ minute: Number(e.target.value) })} className={inputCls}>
+                                {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
+                              </select>
+                              <select value={p.ampm} onChange={e => updateStartParts({ ampm: e.target.value as 'AM' | 'PM' })} className={inputCls}>
+                                <option value="AM">AM</option>
+                                <option value="PM">PM</option>
+                              </select>
+                            </div>
+                          </div>
+                        )
+                      })()}
                     </div>
                     <div>
                       <p className="text-caption text-casa-muted mb-1">End</p>
-                      <input
-                        type="datetime-local"
-                        step={900}
-                        value={endDT}
-                        onChange={e => { setEndDT(e.target.value); markDirty() }}
-                        className={inputCls}
-                      />
+                      {(() => {
+                        const p = getPickerParts(endDT)
+                        return (
+                          <div className="space-y-2">
+                            <input
+                              type="date"
+                              value={endDT.slice(0, 10)}
+                              onChange={e => {
+                                const next = `${e.target.value}T${endDT.slice(11, 16) || '00:00'}`
+                                setEndDT(next)
+                                markDirty()
+                              }}
+                              className={inputCls}
+                            />
+                            <div className="grid grid-cols-3 gap-2">
+                              <select value={p.hour12} onChange={e => updateEndParts({ hour12: Number(e.target.value) })} className={inputCls}>
+                                {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
+                              </select>
+                              <select value={p.minute} onChange={e => updateEndParts({ minute: Number(e.target.value) })} className={inputCls}>
+                                {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
+                              </select>
+                              <select value={p.ampm} onChange={e => updateEndParts({ ampm: e.target.value as 'AM' | 'PM' })} className={inputCls}>
+                                <option value="AM">AM</option>
+                                <option value="PM">PM</option>
+                              </select>
+                            </div>
+                          </div>
+                        )
+                      })()}
                     </div>
                   </div>
                 )}
