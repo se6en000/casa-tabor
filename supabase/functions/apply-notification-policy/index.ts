@@ -112,7 +112,6 @@ Deno.serve(async (req) => {
     tag: string,
     url = '/',
     eventId?: string | null,
-    prepItemId?: string | null,
   ) {
     if (quiet && applyQuietToPush) return
     const { error } = await sb.functions.invoke('send-push-notification', {
@@ -121,7 +120,7 @@ Deno.serve(async (req) => {
         body,
         tag,
         url,
-        data: { url, eventId: eventId ?? null, prepItemId: prepItemId ?? null },
+        data: { url, eventId: eventId ?? null },
         actions: [
           { action: 'done', title: 'Done' },
           { action: 'thumbs_down', title: 'Thumbs down' },
@@ -197,7 +196,6 @@ Deno.serve(async (req) => {
       source: 'policy',
     })
     createdNotifications++
-    await maybeSendPush(`📝 Prep due: ${title}`, p.description, `policy-prep-${p.id}`, '/', p.event_id, p.id)
     if (cfg.prep_alerts) await maybeSendSms(`Casa prep: ${p.description}`, p.priority >= 3 ? 3 : 2)
   }
 
