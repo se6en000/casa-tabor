@@ -130,9 +130,8 @@ Deno.serve(async (req) => {
             tag: `event-${bucket}-${event.id}`,
             data: { eventId: event.id, eventType: event.event_type, url: '/' },
             actions: [
-              { action: 'open', title: isReminder ? 'Open Reminder' : 'Open Event' },
-              { action: 'snooze', title: 'Snooze 10m' },
               { action: 'done', title: isReminder ? 'Complete' : 'Mark Done' },
+              { action: 'thumbs_down', title: 'Thumbs down' },
             ],
           }),
         })

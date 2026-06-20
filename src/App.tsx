@@ -130,7 +130,7 @@ function AppShell() {
   const hideFab = location.pathname.startsWith('/settings') || screensaverActive
   const navigate = useNavigate()
 
-  const handlePushAction = useCallback(async (action: string, eventId?: string | null, url?: string) => {
+  const handlePushAction = useCallback(async (action: string, eventId?: string | null, url?: string, prepItemId?: string | null) => {
     if (action === 'open') {
       if (eventId) {
         navigate(`/?event_id=${encodeURIComponent(eventId)}`)
@@ -140,9 +140,9 @@ function AppShell() {
       return
     }
     // For other actions (done, snooze), invoke the backend
-    if (!eventId) return
+    if (!eventId && !prepItemId) return
     await supabase.functions.invoke('notification-action', {
-      body: { action, event_id: eventId },
+      body: { action, event_id: eventId, prep_item_id: prepItemId },
     }).catch(() => {})
   }, [navigate])
 
@@ -177,9 +177,9 @@ function AppShell() {
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      const data = event.data as { type?: string; action?: string; eventId?: string | null; url?: string } | null
+      const data = event.data as { type?: string; action?: string; eventId?: string | null; prepItemId?: string | null; url?: string } | null
       if (!data || data.type !== 'PUSH_NOTIFICATION_ACTION') return
-      handlePushAction(data.action ?? 'open', data.eventId ?? null, data.url)
+      handlePushAction(data.action ?? 'open', data.eventId ?? null, data.url, data.prepItemId ?? null)
     }
     navigator.serviceWorker?.addEventListener('message', onMessage)
     return () => navigator.serviceWorker?.removeEventListener('message', onMessage)
@@ -189,10 +189,12 @@ function AppShell() {
     const params = new URLSearchParams(window.location.search)
     const action = params.get('push_action')
     const eventId = params.get('event_id')
+    const prepItemId = params.get('prep_item_id')
     if (!action) return
-    handlePushAction(action, eventId, undefined)
+    handlePushAction(action, eventId, undefined, prepItemId)
     params.delete('push_action')
     params.delete('event_id')
+    params.delete('prep_item_id')
     const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash}`
     window.history.replaceState({}, '', next)
   }, [handlePushAction])

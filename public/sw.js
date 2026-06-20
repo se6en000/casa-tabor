@@ -15,7 +15,7 @@ self.addEventListener('push', function (event) {
     payload = { title: 'Casa Tabor', body: event.data.text() };
   }
 
-  const { title = 'Casa Tabor', body = '', url = '/', tag, icon, actions = [], data = {}, eventId } = payload;
+  const { title = 'Casa Tabor', body = '', url = '/', tag, icon, actions = [], data = {}, eventId, prepItemId } = payload;
 
   const options = {
     body,
@@ -25,7 +25,7 @@ self.addEventListener('push', function (event) {
     renotify: true,
     requireInteraction: false,
     actions,
-    data: { url, eventId, ...data },
+    data: { url, eventId, prepItemId, ...data },
     vibrate: [200, 100, 200],
   };
 
@@ -39,6 +39,7 @@ self.addEventListener('notificationclick', function (event) {
   const targetUrl = data.url || '/';
   const action = event.action || 'open';
   const eventId = data.eventId || null;
+  const prepItemId = data.prepItemId || null;
 
   event.waitUntil(
     self.clients
@@ -47,7 +48,7 @@ self.addEventListener('notificationclick', function (event) {
         // If app is already open, focus it and send the notification event
         for (const client of clients) {
           if (client.url.includes(self.location.origin) && 'focus' in client) {
-            client.postMessage({ type: 'PUSH_NOTIFICATION_ACTION', action, url: targetUrl, eventId });
+            client.postMessage({ type: 'PUSH_NOTIFICATION_ACTION', action, url: targetUrl, eventId, prepItemId });
             return client.focus();
           }
         }
@@ -55,6 +56,7 @@ self.addEventListener('notificationclick', function (event) {
         if (self.clients.openWindow) {
           const u = new URL(targetUrl, self.location.origin);
           if (eventId) u.searchParams.set('event_id', eventId);
+          if (prepItemId) u.searchParams.set('prep_item_id', prepItemId);
           if (action && action !== 'open') u.searchParams.set('push_action', action);
           return self.clients.openWindow(u.toString());
         }

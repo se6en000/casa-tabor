@@ -106,10 +106,27 @@ Deno.serve(async (req) => {
   let sentPush = 0
   let sentSms = 0
 
-  async function maybeSendPush(title: string, body: string, tag: string) {
+  async function maybeSendPush(
+    title: string,
+    body: string,
+    tag: string,
+    url = '/',
+    eventId?: string | null,
+    prepItemId?: string | null,
+  ) {
     if (quiet && applyQuietToPush) return
     const { error } = await sb.functions.invoke('send-push-notification', {
-      body: { title, body, tag, url: '/' },
+      body: {
+        title,
+        body,
+        tag,
+        url,
+        data: { url, eventId: eventId ?? null, prepItemId: prepItemId ?? null },
+        actions: [
+          { action: 'done', title: 'Done' },
+          { action: 'thumbs_down', title: 'Thumbs down' },
+        ],
+      },
       headers: invocationHeaders(correlationId),
     })
     if (!error) sentPush++
@@ -148,7 +165,7 @@ Deno.serve(async (req) => {
       source: 'policy',
     })
     createdNotifications++
-    await maybeSendPush(`⚠️ Conflict: ${eventTitle}`, c.description, `policy-conflict-${c.id}`)
+    await maybeSendPush(`⚠️ Conflict: ${eventTitle}`, c.description, `policy-conflict-${c.id}`, '/', c.event_a_id)
     if (cfg.conflict_alerts && (!smsEscalationOnly || c.severity >= 3)) {
       await maybeSendSms(`Casa alert: ${c.description}`, c.severity)
     }
@@ -180,7 +197,7 @@ Deno.serve(async (req) => {
       source: 'policy',
     })
     createdNotifications++
-    await maybeSendPush(`📝 Prep due: ${title}`, p.description, `policy-prep-${p.id}`)
+    await maybeSendPush(`📝 Prep due: ${title}`, p.description, `policy-prep-${p.id}`, '/', p.event_id, p.id)
     if (cfg.prep_alerts) await maybeSendSms(`Casa prep: ${p.description}`, p.priority >= 3 ? 3 : 2)
   }
 

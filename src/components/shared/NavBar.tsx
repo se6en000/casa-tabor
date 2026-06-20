@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Home, Calendar, ShoppingCart, Sun, Settings, Music, MoreHorizontal, Bell } from 'lucide-react'
+import { Home, Calendar, ShoppingCart, Sun, Settings, Music, MoreHorizontal, Bell, Sparkles } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useNotifications } from '../../hooks/useNotifications'
 import NotificationDrawer from './NotificationDrawer'
@@ -113,6 +113,16 @@ export default function NavBar() {
                     <Music size={18} strokeWidth={1.8} className="text-casa-gold" />
                   </div>
                   <span className="text-body-md font-medium text-casa-navy">Music</span>
+                </button>
+
+                <button
+                  className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors"
+                  onClick={() => { navigate('/actions'); setMoreOpen(false) }}
+                >
+                  <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                    <Sparkles size={18} strokeWidth={1.8} className="text-blue-600" />
+                  </div>
+                  <span className="text-body-md font-medium text-casa-navy">Action Hub</span>
                 </button>
 
                 <button
