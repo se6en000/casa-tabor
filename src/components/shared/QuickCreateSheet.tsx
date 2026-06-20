@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Plus } from 'lucide-react'
-import { addHours } from 'date-fns'
+import { addMinutes } from 'date-fns'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -63,7 +63,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
   const sheetRef = useRef<HTMLDivElement>(null)
 
   const defaultStart = initialStart ?? new Date()
-  const defaultEnd   = addHours(defaultStart, 1)
+  const defaultEnd   = addMinutes(defaultStart, 30)
 
   const [title,   setTitle]   = useState('')
   const [startDT, setStartDT] = useState(toLocalDT(defaultStart))
@@ -76,7 +76,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     const s = initialStart ?? new Date()
     setTitle('')
     setStartDT(toLocalDT(s))
-    setEndDT(toLocalDT(addHours(s, 1)))
+    setEndDT(toLocalDT(addMinutes(s, 30)))
     setSaving(false)
   }, [open, initialStart])
 
@@ -138,7 +138,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     const parts = { ...getPickerParts(startDT), ...patch }
     const nextStart = fromPickerParts(parts)
     setStartDT(toLocalDT(nextStart))
-    setEndDT(toLocalDT(addHours(nextStart, 1)))
+    setEndDT(toLocalDT(addMinutes(nextStart, 30)))
   }
 
   const updateEndParts = (patch: Partial<ReturnType<typeof getPickerParts>>) => {

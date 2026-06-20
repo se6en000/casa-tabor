@@ -129,6 +129,10 @@ function getPickerParts(value: string) {
   }
 }
 
+function addThirtyMinutesLocal(date: Date): Date {
+  return new Date(date.getTime() + 30 * 60 * 1000)
+}
+
 interface Props {
   event: EventWithDetails
   open: boolean
@@ -315,13 +319,17 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   }
   const [startDT, setStartDT] = useState(toLocalDT(event.start_time))
   const [endDT, setEndDT] = useState(toLocalDT(event.end_time))
+  const setStartAndAutoEnd = (start: Date) => {
+    setStartDT(toLocalDTFromDate(start))
+    setEndDT(toLocalDTFromDate(addThirtyMinutesLocal(start)))
+    markDirty()
+  }
   const updateStartParts = (patch: Partial<ReturnType<typeof getPickerParts>>) => {
     const parts = { ...getPickerParts(startDT), ...patch }
     const safeDay = Math.min(parts.day, new Date(parts.year, parts.month + 1, 0).getDate())
     const hour24 = (parts.hour12 % 12) + (parts.ampm === 'PM' ? 12 : 0)
     const next = new Date(parts.year, parts.month, safeDay, hour24, snapMinuteToQuarter(parts.minute), 0, 0)
-    setStartDT(toLocalDTFromDate(next))
-    markDirty()
+    setStartAndAutoEnd(next)
   }
   const updateEndParts = (patch: Partial<ReturnType<typeof getPickerParts>>) => {
     const parts = { ...getPickerParts(endDT), ...patch }
@@ -464,8 +472,14 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
         if (result.title) setDisplayTitle(result.title)
 
         // Apply AI-parsed time updates (when extra_context contained time info)
-        if (result.start_time) setStartDT(toLocalDT(result.start_time as string))
-        if (result.end_time)   setEndDT(toLocalDT(result.end_time as string))
+        if (result.start_time) {
+          const parsedStart = new Date(result.start_time as string)
+          if (!Number.isNaN(parsedStart.getTime())) {
+            setStartDT(toLocalDTFromDate(parsedStart))
+            setEndDT(toLocalDTFromDate(addThirtyMinutesLocal(parsedStart)))
+          }
+        }
+        if (!result.start_time && result.end_time) setEndDT(toLocalDT(result.end_time as string))
 
         // Sync member roles if AI returned attendees
         if (result.attendees !== undefined || result.primary_attendee !== undefined) {
@@ -1111,9 +1125,9 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                               type="date"
                               value={startDT.slice(0, 10)}
                               onChange={e => {
-                                const next = `${e.target.value}T${startDT.slice(11, 16) || '00:00'}`
-                                setStartDT(next)
-                                markDirty()
+                                const candidate = new Date(`${e.target.value}T${startDT.slice(11, 16) || '00:00'}`)
+                                if (Number.isNaN(candidate.getTime())) return
+                                setStartAndAutoEnd(candidate)
                               }}
                               className={inputCls}
                             />
