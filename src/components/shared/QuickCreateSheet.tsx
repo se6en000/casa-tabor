@@ -18,6 +18,20 @@ function toLocalDT(d: Date): string {
 }
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MINUTE_OPTIONS = [0, 15, 30, 45] as const
+
+function snapMinuteToQuarter(minute: number): number {
+  let closest: number = MINUTE_OPTIONS[0]
+  let distance = Math.abs(minute - closest)
+  for (const option of MINUTE_OPTIONS) {
+    const nextDistance = Math.abs(minute - option)
+    if (nextDistance < distance) {
+      closest = option
+      distance = nextDistance
+    }
+  }
+  return closest
+}
 
 function parseLocalDT(value: string): Date {
   const parsed = new Date(value)
@@ -32,7 +46,7 @@ function getPickerParts(value: string) {
     month: d.getMonth(),
     day: d.getDate(),
     hour12: ((hour24 + 11) % 12) + 1,
-    minute: d.getMinutes(),
+    minute: snapMinuteToQuarter(d.getMinutes()),
     ampm: hour24 >= 12 ? 'PM' as const : 'AM' as const,
   }
 }
@@ -40,7 +54,7 @@ function getPickerParts(value: string) {
 function fromPickerParts(parts: { year: number; month: number; day: number; hour12: number; minute: number; ampm: 'AM' | 'PM' }) {
   const safeDay = Math.min(parts.day, new Date(parts.year, parts.month + 1, 0).getDate())
   const hour24 = (parts.hour12 % 12) + (parts.ampm === 'PM' ? 12 : 0)
-  return new Date(parts.year, parts.month, safeDay, hour24, parts.minute, 0, 0)
+  return new Date(parts.year, parts.month, safeDay, hour24, snapMinuteToQuarter(parts.minute), 0, 0)
 }
 
 export default function QuickCreateSheet({ open, onClose, initialStart }: Props) {
@@ -281,7 +295,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                             onChange={e => updateStartParts({ minute: Number(e.target.value) })}
                             className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
                           >
-                            {Array.from({ length: 60 }, (_, i) => i).map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
+                            {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
                           </select>
                           <select
                             data-vk-nav="true"
@@ -347,7 +361,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                             onChange={e => updateEndParts({ minute: Number(e.target.value) })}
                             className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
                           >
-                            {Array.from({ length: 60 }, (_, i) => i).map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
+                            {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
                           </select>
                           <select
                             data-vk-nav="true"

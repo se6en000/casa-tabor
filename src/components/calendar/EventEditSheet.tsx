@@ -1056,6 +1056,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                       <p className="text-caption text-casa-muted mb-1">Start</p>
                       <input
                         type="datetime-local"
+                        step={900}
                         value={startDT}
                         onChange={e => { setStartDT(e.target.value); markDirty() }}
                         className={inputCls}
@@ -1065,6 +1066,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                       <p className="text-caption text-casa-muted mb-1">End</p>
                       <input
                         type="datetime-local"
+                        step={900}
                         value={endDT}
                         onChange={e => { setEndDT(e.target.value); markDirty() }}
                         className={inputCls}
