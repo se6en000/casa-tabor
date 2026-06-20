@@ -98,7 +98,7 @@ export default function ActionHubPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="h-full overflow-y-auto touch-pan-y max-w-7xl mx-auto p-4 sm:p-6 pb-28 lg:pb-6">
       <Link to="/" className="inline-flex items-center gap-1 text-body-sm text-casa-muted hover:text-casa-navy mb-4">
         <ChevronLeft size={16} /> Home
       </Link>
@@ -127,7 +127,7 @@ export default function ActionHubPage() {
             <h2 className="font-display text-heading text-casa-navy flex items-center gap-2"><ClipboardList size={16} className="text-casa-gold" /> Prep &amp; Action</h2>
             <span className="text-caption font-semibold rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">{prepItems.length}</span>
           </div>
-          <div className="max-h-[70vh] overflow-y-auto pr-1 space-y-2.5">
+          <div className="space-y-2.5 pr-1 xl:max-h-[70vh] xl:overflow-y-auto">
             {prepItems.map((item) => {
               const src = sourceBadge(item)
               const SourceIcon = src.icon
@@ -192,7 +192,7 @@ export default function ActionHubPage() {
               )}
             </div>
           </div>
-          <div className="space-y-2.5 max-h-[70vh] overflow-y-auto pr-1">
+          <div className="space-y-2.5 pr-1 xl:max-h-[70vh] xl:overflow-y-auto">
             {notifications.map((n) => (
               <div key={n.id} className={cn('border rounded-[1rem] p-3.5', n.read ? 'border-casa-border bg-casa-card' : 'border-casa-gold/45 bg-casa-gold/5')}>
                 <p className={cn('text-body-sm leading-relaxed', n.read ? 'text-casa-text' : 'text-casa-text font-semibold')}>{n.body ?? n.title}</p>
