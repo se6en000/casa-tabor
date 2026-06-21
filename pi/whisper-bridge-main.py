@@ -30,7 +30,7 @@ WAKE_COOLDOWN = 2.0
 WAKE_WATCHDOG_SECS = 90
 WAKE_AUDIO_GAIN   = 3.0        # Amplify mic input before wake detection
 WAKE_SCORE_MIN = 0.08
-WAKE_SCORE_MAX = 0.60
+WAKE_SCORE_MAX = 0.90
 SENSOR_BRIDGE  = 'http://127.0.0.1:8765'
 
 # ── Audio buffering for wake word ─────────────────────────────────────────────

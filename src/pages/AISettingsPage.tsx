@@ -246,7 +246,8 @@ export default function AISettingsPage() {
                  screensaverSettings.wakeWordSensitivity <= 0.25 ? 'Balanced (default)' :
                  screensaverSettings.wakeWordSensitivity <= 0.35 ? 'Slightly strict — speak clearly' :
                  screensaverSettings.wakeWordSensitivity <= 0.45 ? 'Strict — speak clearly' :
-                 'Very strict — nearly shout-level'}
+                 screensaverSettings.wakeWordSensitivity <= 0.70 ? 'Very strict — nearly shout-level' :
+                 'Maximum strictness — only very clear wake words'}
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -262,7 +263,7 @@ export default function AISettingsPage() {
               </span>
               <button
                 onClick={() => {
-                  const next = Math.min(0.60, Math.round((screensaverSettings.wakeWordSensitivity + 0.05) * 100) / 100)
+                  const next = Math.min(0.90, Math.round((screensaverSettings.wakeWordSensitivity + 0.05) * 100) / 100)
                   setWakeWordSensitivity(next)
                 }}
                 className="w-8 h-8 rounded-button border border-casa-border bg-white text-casa-navy font-semibold text-lg flex items-center justify-center hover:bg-casa-bg active:scale-95 transition-all"

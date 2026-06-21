@@ -8,7 +8,7 @@ export interface ScreensaverSettings {
   enabled: boolean          // master toggle for screensaver
   displaySleepEnabled: boolean
   artDimOffset: number      // how much dimmer than ambient lux in art mode (0–80, default 30%)
-  wakeWordSensitivity: number // 0.1 (very sensitive) – 0.6 (strict), default 0.2
+  wakeWordSensitivity: number // 0.1 (very sensitive) – 0.9 (strict), default 0.2
 }
 
 const DEFAULTS: ScreensaverSettings = {
