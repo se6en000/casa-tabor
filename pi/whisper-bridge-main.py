@@ -46,6 +46,7 @@ _rec_proc   = None
 _ws         = None          # current DeepGram WebSocketApp
 _ws_gen     = 0             # incremented on each start_recording(); guards stale _on_close
 _finals     = []
+_final_conf = []
 
 def _push_voice_level(level: int):
     try:
@@ -341,7 +342,7 @@ def _strip_wake(text: str) -> str:
     return _WAKE_STRIP.sub('', text).strip()
 
 def _on_message(ws_arg, message):
-    global _finals
+    global _finals, _final_conf
     try:
         data = json.loads(message)
         msg_type = data.get('type', '')
@@ -352,11 +353,13 @@ def _on_message(ws_arg, message):
 
         if msg_type == 'UtteranceEnd':
             full = _strip_wake(' '.join(_finals).strip())
+            conf = (sum(_final_conf) / len(_final_conf)) if _final_conf else None
             if full:
                 log.info(f'[DG] UtteranceEnd -> "{full}"')
                 _finals = []
+                _final_conf = []
                 _set(transcript=full, interim_transcript='', recording=False)
-                _ws_push_stt({'type': 'final', 'text': full})
+                _ws_push_stt({'type': 'final', 'text': full, 'confidence': conf})
             return
 
         if msg_type != 'Results':
@@ -364,20 +367,27 @@ def _on_message(ws_arg, message):
 
         alt        = data['channel']['alternatives'][0]
         text       = alt.get('transcript', '').strip()
+        confidence = alt.get('confidence')
         is_final   = data.get('is_final', False)
         spch_final = data.get('speech_final', False)
 
         if spch_final:
             if text:
                 _finals.append(text)
+                if isinstance(confidence, (int, float)):
+                    _final_conf.append(float(confidence))
             full = _strip_wake(' '.join(_finals).strip())
+            conf = (sum(_final_conf) / len(_final_conf)) if _final_conf else confidence
             _finals = []
+            _final_conf = []
             if full:
                 log.info(f'[DG] speech_final -> "{full}"')
                 _set(transcript=full, interim_transcript='', recording=False)
-                _ws_push_stt({'type': 'final', 'text': full})
+                _ws_push_stt({'type': 'final', 'text': full, 'confidence': conf})
         elif is_final and text:
             _finals.append(text)
+            if isinstance(confidence, (int, float)):
+                _final_conf.append(float(confidence))
             interim = _strip_wake(' '.join(_finals))
             _set(interim_transcript=interim)
             _ws_push_stt({'type': 'interim', 'text': interim})
@@ -458,7 +468,7 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
         log.info('[stream_audio] thread exited')
 
 def start_recording():
-    global _rec_proc, _ws, _finals, _wake_proc, _ws_gen
+    global _rec_proc, _ws, _finals, _final_conf, _wake_proc, _ws_gen
 
     if _wake_proc:
         try:
@@ -473,6 +483,7 @@ def start_recording():
     log.info(f'[start_recording] captured {len(initial_buffer)} bytes for pre-fill')
     
     _finals = []
+    _final_conf = []
     _ws_gen += 1          # invalidate any in-flight _on_close / _stream_audio from old session
     current_gen = _ws_gen
     # Set recording=True NOW so the wake word loop immediately yields the mic.

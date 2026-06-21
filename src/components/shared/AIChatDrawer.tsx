@@ -29,6 +29,26 @@ const SILENCE_MS = 1500
 const CONNECT_TIMEOUT_MS = 5000
 const NO_ACTIVITY_AUTO_CLOSE_MS = 30_000
 const FEEDBACK_LOCK_MS = 2800
+const MIN_FINAL_CONFIDENCE = 0.55
+
+function isLikelyNoiseTranscript(text: string, confidence?: number | null): boolean {
+  const trimmed = text.trim()
+  if (!trimmed) return true
+
+  const words = trimmed.split(/\s+/).filter(Boolean)
+  const alphaChars = (trimmed.match(/[a-z]/gi) ?? []).length
+  const singleWord = words.length === 1
+  const single = words[0] ?? ''
+
+  if (singleWord && alphaChars <= 2) return true
+  if (singleWord && /^([a-z])\1+$/i.test(single)) return true
+
+  if (typeof confidence === 'number' && confidence < MIN_FINAL_CONFIDENCE && words.length <= 4) {
+    return true
+  }
+
+  return false
+}
 
 /** Quick probe — resolves true if bridge is reachable within 800ms */
 async function probeBridge(): Promise<boolean> {
@@ -52,7 +72,7 @@ function useSpeechInput({
   hasPendingAction,
 }: {
   onInterim: (text: string) => void
-  onFinalTranscript: (text: string) => void
+  onFinalTranscript: (text: string, confidence?: number | null) => void
   onDismiss: () => void
   onConfirm: () => void
   onCancel: () => void
@@ -117,7 +137,7 @@ function useSpeechInput({
   }, [])
 
   // No deps — uses only refs, so triggerFinal/startBridge are created once and never stale
-  const handleFinalTranscript = useCallback((transcript: string) => {
+  const handleFinalTranscript = useCallback((transcript: string, confidence?: number | null) => {
     if (!transcript.trim()) return
     if (suppressRef.current) return
     if (DISMISS_PHRASES.test(transcript)) {
@@ -134,10 +154,10 @@ function useSpeechInput({
       onCancelRef.current(); onInterimRef.current('')
       return
     }
-    onFinalRef.current(transcript.trim()); onFinalRef.current('__SEND__')
+    onFinalRef.current(transcript.trim(), confidence); onFinalRef.current('__SEND__', confidence)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const triggerFinal = useCallback((text: string) => {
+  const triggerFinal = useCallback((text: string, confidence?: number | null) => {
     stopWS()
     stopSilenceTimer()
     stopWebSpeechRestartTimer()
@@ -145,7 +165,7 @@ function useSpeechInput({
     const finalText = text.trim() || lastInterimRef.current.trim()
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
-    handleFinalTranscript(finalText)
+    handleFinalTranscript(finalText, confidence)
   }, [handleFinalTranscript, stopWebSpeechRestartTimer])
 
   // ── Web Speech API path (Safari / iOS) ──────────────────────────────────
@@ -309,7 +329,7 @@ function useSpeechInput({
             break
           case 'final':
             if (phaseRef.current !== 'processing') {
-              triggerFinal(msg.text)
+              triggerFinal(msg.text, typeof msg.confidence === 'number' ? msg.confidence : null)
               if (activeRef.current) setTimeout(() => startBridge(), 300)
             }
             break
@@ -495,25 +515,31 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, pag
 
   const sendCurrentInput = useCallback((text: string) => {
     const trimmed = text.trim()
-    if (!trimmed || loading) return
+    if (!trimmed || loading) return false
     ignoreInterimUntilRef.current = Date.now() + 1200
+    markUserInteraction()
     setInput('')
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
     send(trimmed)
-  }, [loading, send])
+    return true
+  }, [loading, send, markUserInteraction])
 
   const speech = useSpeechInput({
     onInterim: (interim) => {
       if (Date.now() < ignoreInterimUntilRef.current) return
-      if (interim.trim()) markUserInteraction()
       interimRef.current = interim
       setInput(interim)
     },
-    onFinalTranscript: (text) => {
+    onFinalTranscript: (text, confidence) => {
       if (text === '__SEND__') {
         ignoreInterimUntilRef.current = Date.now() + 1200
         const msg = interimRef.current || (textareaRef.current?.value ?? '')
+        if (isLikelyNoiseTranscript(msg, confidence)) {
+          interimRef.current = ''
+          setInput('')
+          return
+        }
         // Check for sleep command before sending to AI
         if (SLEEP_PHRASES.test(msg)) {
           onSleepCommand?.()
@@ -523,7 +549,6 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, pag
         sendCurrentInput(msg)
         interimRef.current = ''
       } else {
-        if (text.trim()) markUserInteraction()
         interimRef.current = text
         setInput(text)
       }
