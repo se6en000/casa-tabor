@@ -27,6 +27,7 @@ DG_URL = (
 WAKE_MODEL    = 'alexa'
 WAKE_SCORE    = 0.12           # Reliable trigger without excessive false positives
 WAKE_COOLDOWN = 2.0
+WAKE_MISFIRE_COOLDOWN = 6.0
 WAKE_WATCHDOG_SECS = 90
 WAKE_AUDIO_GAIN   = 3.0        # Amplify mic input before wake detection
 WAKE_SCORE_MIN = 0.08
@@ -150,6 +151,7 @@ def _run_ws_server():
 # ── Wake word state ──────────────────────────────────────────────────────────
 _wake_triggered      = False
 _wake_ts             = 0.0
+_wake_cooldown_until = 0.0
 _wake_lock           = threading.Lock()
 _wake_proc           = None
 _wake_last_chunk_ts  = time.time()
@@ -227,7 +229,7 @@ def _make_recorder_cmd():
     return ['arecord', '-D', ALSA_DEVICE, '-f', 'S16_LE', '-r', str(RATE), '-c', '1', '-']
 
 def _wake_word_loop():
-    global _wake_triggered, _wake_ts, _wake_last_chunk_ts
+    global _wake_triggered, _wake_ts, _wake_last_chunk_ts, _wake_cooldown_until
     try:
         import numpy as np
         from openwakeword.model import Model as WakeModel
@@ -303,6 +305,8 @@ def _wake_word_loop():
                     log.info(f'[wake] score={score:.3f}')
                 if score >= WAKE_SCORE:
                     now = time.time()
+                    if now < _wake_cooldown_until:
+                        continue
                     if now - _wake_ts >= WAKE_COOLDOWN:
                         log.info(f'[wake] triggered! score={score:.2f}')
                         _display_on()
@@ -316,7 +320,12 @@ def _wake_word_loop():
                             _wake_ts = now
                         
                         # Send wake event with buffered audio
-                        msg = {'type': 'wake', 'buffer': len(buffer_audio)}
+                        msg = {
+                            'type': 'wake',
+                            'buffer': len(buffer_audio),
+                            'score': float(score),
+                            'threshold': float(WAKE_SCORE),
+                        }
                         _ws_push_all(msg)
                         
                         # If an STT client gets created immediately, the buffer will be
@@ -575,7 +584,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200); self._cors(); self.end_headers()
 
     def do_POST(self):
-        global WAKE_SCORE
+        global WAKE_SCORE, _wake_cooldown_until, _wake_ts
         if self.path == '/start':
             stop_recording(); start_recording()
             self.send_response(200); self._cors()
@@ -601,6 +610,29 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200); self._cors()
             self.send_header('Content-Type', 'application/json'); self.end_headers()
             self.wfile.write(json.dumps({'ok': True, 'score': WAKE_SCORE}).encode())
+        elif self.path == '/wake-misfire':
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+            except ValueError:
+                length = 0
+            raw = self.rfile.read(length) if length > 0 else b'{}'
+            try:
+                body = json.loads(raw.decode('utf-8'))
+            except (ValueError, TypeError, json.JSONDecodeError):
+                body = {}
+            try:
+                seconds = float(body.get('seconds', WAKE_MISFIRE_COOLDOWN))
+            except (ValueError, TypeError):
+                seconds = WAKE_MISFIRE_COOLDOWN
+            seconds = max(1.0, min(15.0, seconds))
+            now = time.time()
+            _wake_ts = now
+            _wake_cooldown_until = max(_wake_cooldown_until, now + seconds)
+            remaining = max(0.0, _wake_cooldown_until - now)
+            log.info(f'[wake] misfire cooldown set ({remaining:.1f}s)')
+            self.send_response(200); self._cors()
+            self.send_header('Content-Type', 'application/json'); self.end_headers()
+            self.wfile.write(json.dumps({'ok': True, 'cooldown_seconds': round(remaining, 2)}).encode())
         elif self.path == '/display/off':
             _display_off()
             self.send_response(200); self._cors()
@@ -617,6 +649,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith('/status'):
             s = _get()
+            s['wake_cooldown_remaining'] = max(0.0, _wake_cooldown_until - time.time())
             self.send_response(200); self._cors()
             self.send_header('Content-Type', 'application/json'); self.end_headers()
             self.wfile.write(json.dumps(s).encode())

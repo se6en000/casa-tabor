@@ -28,6 +28,8 @@ type STTMode = 'unknown' | 'bridge' | 'webspeech'
 const SILENCE_MS = 1500
 const CONNECT_TIMEOUT_MS = 5000
 const NO_ACTIVITY_AUTO_CLOSE_MS = 30_000
+const WAKE_FOLLOWUP_GRACE_MS = 2000
+const WAKE_MISFIRE_COOLDOWN_SECS = 6
 const FEEDBACK_LOCK_MS = 2800
 const MIN_FINAL_CONFIDENCE = 0.55
 
@@ -39,9 +41,13 @@ function isLikelyNoiseTranscript(text: string, confidence?: number | null): bool
   const alphaChars = (trimmed.match(/[a-z]/gi) ?? []).length
   const singleWord = words.length === 1
   const single = words[0] ?? ''
+  const normalizedWords = words.map(word => word.toLowerCase().replace(/[^a-z0-9']/gi, '')).filter(Boolean)
+  const uniqueWords = new Set(normalizedWords).size
 
   if (singleWord && alphaChars <= 2) return true
   if (singleWord && /^([a-z])\1+$/i.test(single)) return true
+  if (words.length <= 4 && uniqueWords <= 1) return true
+  if (words.length >= 3 && uniqueWords <= 1) return true
 
   if (typeof confidence === 'number' && confidence < MIN_FINAL_CONFIDENCE && words.length <= 4) {
     return true
@@ -457,6 +463,7 @@ interface Props {
   onClose: () => void
   anchor?: { right: number; top: number }
   launchRequest?: { prompt: string; autoSend: boolean; nonce: string }
+  wakeSessionNonce?: string
   page: string
   events: EventWithDetails[]
   family: FamilyMember[]
@@ -467,13 +474,16 @@ interface Props {
 
 const SLEEP_PHRASES = /\b(sleep|goodnight|good night|art mode|screen saver|screensaver|night mode)\b/i
 
-export default function AIChatDrawer({ open, onClose, anchor, launchRequest, page, events, family, homeCity, onSleepCommand, focusedEvent }: Props) {
+export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wakeSessionNonce, page, events, family, homeCity, onSleepCommand, focusedEvent }: Props) {
   const [input, setInput] = useState('')
   const interimRef = useRef('')
   const ignoreInterimUntilRef = useRef(0)
-  const idleAutoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const hadUserInteractionRef = useRef(false)
   const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; mimeType: string } | null>(null)
+  const lastActivityAtRef = useRef(0)
+  const hadMeaningfulProgressRef = useRef(false)
+  const wakeSessionActiveRef = useRef(false)
+  const autoDismissingRef = useRef(false)
+  const handledWakeNonceRef = useRef<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -489,17 +499,30 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, pag
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [uiFeedback, setUiFeedback] = useState<'none' | 'confirm' | 'cancel'>('none')
 
-  const clearIdleAutoCloseTimer = useCallback(() => {
-    if (idleAutoCloseTimerRef.current) {
-      clearTimeout(idleAutoCloseTimerRef.current)
-      idleAutoCloseTimerRef.current = null
-    }
+  const pingWakeMisfireCooldown = useCallback((seconds = WAKE_MISFIRE_COOLDOWN_SECS) => {
+    void fetch('http://127.0.0.1:8766/wake-misfire', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seconds }),
+    }).catch(() => {})
   }, [])
 
+  const markConversationProgress = useCallback((meaningful = true) => {
+    lastActivityAtRef.current = Date.now()
+    if (meaningful) hadMeaningfulProgressRef.current = true
+  }, [])
+
+  const autoDismissDrawer = useCallback((wakeMisfire: boolean) => {
+    if (autoDismissingRef.current) return
+    autoDismissingRef.current = true
+    if (wakeMisfire) pingWakeMisfireCooldown()
+    startFresh()
+    onClose()
+  }, [onClose, pingWakeMisfireCooldown, startFresh])
+
   const markUserInteraction = useCallback(() => {
-    hadUserInteractionRef.current = true
-    clearIdleAutoCloseTimer()
-  }, [clearIdleAutoCloseTimer])
+    markConversationProgress(true)
+  }, [markConversationProgress])
 
   // True when the latest assistant message has a pending tool action awaiting confirmation
   const hasPendingToolAction = messages.some(m => m.toolAction?.status === 'pending')
@@ -538,6 +561,9 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, pag
         if (isLikelyNoiseTranscript(msg, confidence)) {
           interimRef.current = ''
           setInput('')
+          if (wakeSessionActiveRef.current && !hadMeaningfulProgressRef.current) {
+            autoDismissDrawer(true)
+          }
           return
         }
         // Check for sleep command before sending to AI
@@ -594,21 +620,11 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, pag
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    return () => {
-      clearIdleAutoCloseTimer()
-    }
-  }, [clearIdleAutoCloseTimer])
-
-  useEffect(() => {
     if (open) {
-      hadUserInteractionRef.current = false
-      clearIdleAutoCloseTimer()
-      idleAutoCloseTimerRef.current = setTimeout(() => {
-        if (!hadUserInteractionRef.current) {
-          startFresh()
-          onClose()
-        }
-      }, NO_ACTIVITY_AUTO_CLOSE_MS)
+      autoDismissingRef.current = false
+      wakeSessionActiveRef.current = Boolean(wakeSessionNonce)
+      hadMeaningfulProgressRef.current = false
+      markConversationProgress(false)
       if (IS_SAFE_MODE) return
       // Start connecting immediately — don't wait for animation.
       // Bridge buffers audio from /start so by the time the user speaks it's ready.
@@ -616,7 +632,6 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, pag
       // Focus textarea slightly after animation settles (UI only, doesn't affect mic)
       setTimeout(() => textareaRef.current?.focus(), 300)
     } else {
-      clearIdleAutoCloseTimer()
       if (feedbackTimerRef.current) {
         clearTimeout(feedbackTimerRef.current)
         feedbackTimerRef.current = null
@@ -631,7 +646,38 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, pag
       setAttachedImage(null)
       freshStartedRef.current = null  // allow fresh start next time this event is opened
     }
-  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, markConversationProgress, wakeSessionNonce]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open) return
+    const interval = setInterval(() => {
+      if (Date.now() - lastActivityAtRef.current < NO_ACTIVITY_AUTO_CLOSE_MS) return
+      const wakeMisfire = wakeSessionActiveRef.current && !hadMeaningfulProgressRef.current
+      autoDismissDrawer(wakeMisfire)
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [open, autoDismissDrawer])
+
+  useEffect(() => {
+    if (!open || !wakeSessionNonce) return
+    wakeSessionActiveRef.current = true
+    if (handledWakeNonceRef.current === wakeSessionNonce) return
+    handledWakeNonceRef.current = wakeSessionNonce
+    hadMeaningfulProgressRef.current = false
+    markConversationProgress(false)
+    const timer = setTimeout(() => {
+      if (!open) return
+      if (!hadMeaningfulProgressRef.current) {
+        autoDismissDrawer(true)
+      }
+    }, WAKE_FOLLOWUP_GRACE_MS)
+    return () => clearTimeout(timer)
+  }, [open, wakeSessionNonce, autoDismissDrawer, markConversationProgress])
+
+  useEffect(() => {
+    if (!open || messages.length === 0) return
+    markConversationProgress(true)
+  }, [open, messages.length, markConversationProgress])
 
   const buildCorrelationId = useCallback((suffix: string) => {
     const sessionPart = session?.id ?? 'no-session'

@@ -71,6 +71,7 @@ function GlobalAIDrawer({
 }) {
   const [anchor, setAnchor] = useState<{ right: number; top: number } | undefined>()
   const [launchRequest, setLaunchRequest] = useState<{ prompt: string; autoSend: boolean; nonce: string } | null>(null)
+  const [wakeSessionNonce, setWakeSessionNonce] = useState<string | undefined>(undefined)
   const now = useLiveClock(60_000)
   const { data: events = [] } = useRollingEvents(now)
   const { data: family = [] } = useFamilyMembers()
@@ -79,10 +80,11 @@ function GlobalAIDrawer({
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ right?: number; top?: number; prompt?: string; autoSend?: boolean } | undefined>).detail
+      const detail = (e as CustomEvent<{ right?: number; top?: number; prompt?: string; autoSend?: boolean; source?: string } | undefined>).detail
       if (detail && typeof detail.right === 'number' && typeof detail.top === 'number') {
         setAnchor({ right: detail.right, top: detail.top })
       }
+      setWakeSessionNonce(detail?.source === 'wake' ? crypto.randomUUID() : undefined)
       if (detail?.prompt) {
         setLaunchRequest({
           prompt: detail.prompt,
@@ -109,6 +111,7 @@ function GlobalAIDrawer({
       homeCity={weather?.city}
       onSleepCommand={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
       launchRequest={launchRequest ?? undefined}
+      wakeSessionNonce={wakeSessionNonce}
     />
   )
 }

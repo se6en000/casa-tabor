@@ -700,15 +700,16 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       return { type: 'text', text: `I had trouble processing that (${finishReason}). Could you rephrase?` }
     }
 
-    const parts = candidate.content?.parts ?? []
-    const funcCallPart = parts.find((p: { functionCall?: { name: string; args: Record<string, unknown> } }) => p.functionCall)
-    const textPart = parts.find((p: { text?: string }) => p.text)
+    const resolveModelParts = async (parts: GeminiPart[]) => {
+      const funcCallPart = parts.find((p: { functionCall?: { name: string; args: Record<string, unknown> } }) => p.functionCall)
+      const textPart = parts.find((p: { text?: string }) => p.text)
 
-    if (!funcCallPart && textPart) {
-      return { type: 'text', text: (textPart as { text: string }).text }
-    }
+      if (!funcCallPart && textPart) {
+        return { type: 'text', text: (textPart as { text: string }).text }
+      }
 
-    if (funcCallPart) {
+      if (!funcCallPart) return null
+
       const { name, args } = (funcCallPart as { functionCall: { name: string; args: Record<string, unknown> } }).functionCall
 
       // Read-only tools: execute server-side, feed result back for final answer
@@ -742,9 +743,25 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       }
     }
 
-    // Neither text nor function call — Gemini returned empty parts
-    console.error('[ai-assistant] Empty Gemini response. finishReason:', finishReason, 'parts:', JSON.stringify(parts))
-    return { type: 'text', text: "I'm not sure I caught that. Could you say it again?" }
+    const initialParts = candidate.content?.parts ?? []
+    const initialResolved = await resolveModelParts(initialParts)
+    if (initialResolved) return initialResolved
+
+    // Rare provider edge case: retry once before surfacing fallback copy.
+    console.error('[ai-assistant] Empty Gemini response. finishReason:', finishReason, 'parts:', JSON.stringify(initialParts))
+    const retryRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
+    )
+    if (retryRes.ok) {
+      const retryData = await retryRes.json()
+      const retryParts = retryData.candidates?.[0]?.content?.parts ?? []
+      const retryResolved = await resolveModelParts(retryParts)
+      if (retryResolved) return retryResolved
+      console.error('[ai-assistant] Empty retry response. finishReason:', retryData.candidates?.[0]?.finishReason, 'parts:', JSON.stringify(retryParts))
+    }
+
+    return { type: 'text', text: 'I heard you, but I hit a brief response issue. Please continue and I will keep going.' }
   }
 
   function buildDisplayText(name: string, args: Record<string, unknown>): string {

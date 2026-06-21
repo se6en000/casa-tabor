@@ -69,15 +69,22 @@ export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean, ena
           if (now - drawerClosedAtRef.current < DRAWER_CLOSE_GRACE_MS) return
           if (screensaverActiveRef.current && now - screensaverActiveAtRef.current < SCREENSAVER_GRACE_MS) return
 
+          const wakeDetail = {
+            source: 'wake' as const,
+            wakeScore: typeof msg.score === 'number' ? msg.score : null,
+            wakeThreshold: typeof msg.threshold === 'number' ? msg.threshold : null,
+            wakeAt: now,
+          }
+
           if (screensaverActiveRef.current) {
             document.dispatchEvent(new CustomEvent('wake-kiosk'))
             // Single wake phrase should both wake screen and start listening.
             setTimeout(() => {
-              document.dispatchEvent(new CustomEvent('open-ai-chat'))
+              document.dispatchEvent(new CustomEvent('open-ai-chat', { detail: wakeDetail }))
             }, 120)
             return
           }
-          document.dispatchEvent(new CustomEvent('open-ai-chat'))
+          document.dispatchEvent(new CustomEvent('open-ai-chat', { detail: wakeDetail }))
         } catch { /* ignore */ }
       }
 
