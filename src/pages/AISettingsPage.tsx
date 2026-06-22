@@ -44,6 +44,8 @@ const DEFAULT_FAST_MODEL: Record<string, string> = {
   anthropic: 'claude-haiku-4-5',
 }
 
+const VOICE_TELEMETRY_KEY = 'casa-voice-telemetry'
+
 export default function AISettingsPage() {
   const [config, setConfig] = useState<LLMConfig>({ provider: 'gemini', model: 'gemini-2.0-flash', api_key: '' })
   const [customInstructions, setCustomInstructions] = useState('')
@@ -51,6 +53,7 @@ export default function AISettingsPage() {
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const [testMessage, setTestMessage] = useState('')
   const [isLoading, setIsLoading] = useState(true)
+  const [voiceTelemetry, setVoiceTelemetry] = useState<{ counts: Record<string, number>; updatedAt?: string }>({ counts: {} })
   const hydratedRef = useRef(false)
   const { settings: screensaverSettings, update: updateScreensaver } = useScreensaverSettings()
 
@@ -64,6 +67,33 @@ export default function AISettingsPage() {
       if (ciVal) setCustomInstructions(ciVal)
       setIsLoading(false)
     })
+  }, [])
+
+  useEffect(() => {
+    const read = () => {
+      try {
+        const raw = localStorage.getItem(VOICE_TELEMETRY_KEY)
+        if (!raw) {
+          setVoiceTelemetry({ counts: {} })
+          return
+        }
+
+        const parsed = JSON.parse(raw) as { counts?: Record<string, number>; updatedAt?: string }
+        setVoiceTelemetry({ counts: parsed.counts ?? {}, updatedAt: parsed.updatedAt })
+      } catch {
+        setVoiceTelemetry({ counts: {} })
+      }
+    }
+    read()
+    const timer = setInterval(read, 5000)
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === VOICE_TELEMETRY_KEY) read()
+    }
+    window.addEventListener('storage', onStorage)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('storage', onStorage)
+    }
   }, [])
 
   function handleProviderChange(provider: string) {
@@ -234,6 +264,28 @@ export default function AISettingsPage() {
             <Mic size={15} className="text-casa-gold" />
             <label className="text-body-sm font-semibold text-casa-navy">Wake Word — "Alexa"</label>
           </div>
+
+          {/* Voice Quality Telemetry */}
+          <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-3">
+            <div className="flex items-center gap-2">
+              <Mic size={15} className="text-casa-gold" />
+              <label className="text-body-sm font-semibold text-casa-navy">Voice Quality Telemetry</label>
+            </div>
+            <p className="text-caption text-casa-muted">
+              Local on-device counters to tune wake reliability and auto-dismiss behavior.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-caption">
+              <Metric label="Wake starts" value={voiceTelemetry.counts.wake_session_started ?? 0} />
+              <Metric label="Wake success" value={voiceTelemetry.counts.wake_session_success ?? 0} />
+              <Metric label="Wake misfires" value={voiceTelemetry.counts.wake_misfire_autodismiss ?? 0} />
+              <Metric label="Inactivity closes" value={voiceTelemetry.counts.inactivity_autodismiss ?? 0} />
+              <Metric label="Bridge offline" value={voiceTelemetry.counts.bridge_offline ?? 0} />
+              <Metric label="Retries tapped" value={voiceTelemetry.counts.retry_last_clicked ?? 0} />
+            </div>
+            <p className="text-caption text-casa-muted">
+              Last updated: {voiceTelemetry.updatedAt ? new Date(voiceTelemetry.updatedAt).toLocaleString() : '—'}
+            </p>
+          </div>
           <p className="text-caption text-casa-muted">
             How confidently the mic must hear "Alexa" before activating.{' '}
             Lower = triggers more easily (more false positives). Higher = requires a clearer utterance.
@@ -311,5 +363,14 @@ export default function AISettingsPage() {
         )}
       </div>
     </>
+  )
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-button border border-casa-border bg-casa-bg/60 px-2.5 py-2">
+      <p className="text-casa-muted">{label}</p>
+      <p className="text-body-sm font-semibold text-casa-navy tabular-nums">{value}</p>
+    </div>
   )
 }

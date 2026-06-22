@@ -93,6 +93,11 @@ export function useAIAssistant(ctx: AssistantContext) {
   const sessionRef = useRef(session)
   const messagesRef = useRef(messages)
   const ctxRef = useRef(ctx)
+  const lastRequestRef = useRef<{
+    text: string
+    image?: { dataUrl: string; mimeType: string }
+    options?: { skipGoodbyeCheck?: boolean }
+  } | null>(null)
   useEffect(() => { sessionRef.current = session }, [session])
   useEffect(() => { messagesRef.current = messages }, [messages])
   useEffect(() => { ctxRef.current = ctx })
@@ -140,6 +145,7 @@ export function useAIAssistant(ctx: AssistantContext) {
     }
 
     const userMsg: AIMessage = { id: genId(), role: 'user', content: trimmedText, imageDataUrl: image?.dataUrl }
+    lastRequestRef.current = { text: trimmedText, image, options }
     setMessages(prev => [...prev, userMsg])
     setLoading(true)
 
@@ -221,6 +227,13 @@ export function useAIAssistant(ctx: AssistantContext) {
     }
   }, [startNewSession, endSession, saveMessages, buildCorrelationId])
 
+  const retryLast = useCallback(async () => {
+    const last = lastRequestRef.current
+    if (!last) return false
+    await send(last.text, last.image, last.options)
+    return true
+  }, [send])
+
   const updateMessageToolStatus = useCallback((
     messageId: string,
     status: NonNullable<AIMessage['toolAction']>['status'],
@@ -263,5 +276,6 @@ export function useAIAssistant(ctx: AssistantContext) {
     startFresh,
     primeMessages,
     updateMessageToolStatus,
+    retryLast,
   }
 }

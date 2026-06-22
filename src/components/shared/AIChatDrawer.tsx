@@ -33,6 +33,43 @@ const WAKE_MISFIRE_COOLDOWN_SECS = 6
 const TRANSCRIPT_SETTLE_BEFORE_SEND_MS = 250
 const FEEDBACK_LOCK_MS = 2800
 const MIN_FINAL_CONFIDENCE = 0.55
+const VOICE_TELEMETRY_KEY = 'casa-voice-telemetry'
+
+type VoiceUxProfile = {
+  inactivityMs: number
+  wakeFollowupGraceMs: number
+  wakeMisfireCooldownSecs: number
+}
+
+function getVoiceUxProfile(): VoiceUxProfile {
+  if (typeof window === 'undefined') {
+    return {
+      inactivityMs: NO_ACTIVITY_AUTO_CLOSE_MS,
+      wakeFollowupGraceMs: WAKE_FOLLOWUP_GRACE_MS,
+      wakeMisfireCooldownSecs: WAKE_MISFIRE_COOLDOWN_SECS,
+    }
+  }
+  const handheld = window.innerWidth < 900
+  return handheld
+    ? { inactivityMs: 35_000, wakeFollowupGraceMs: 5200, wakeMisfireCooldownSecs: 5 }
+    : { inactivityMs: 30_000, wakeFollowupGraceMs: 4500, wakeMisfireCooldownSecs: 6 }
+}
+
+function trackVoiceMetric(metric: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    const raw = localStorage.getItem(VOICE_TELEMETRY_KEY)
+    const parsed = raw ? JSON.parse(raw) as { counts?: Record<string, number> } : {}
+    const counts = parsed.counts ?? {}
+    counts[metric] = (counts[metric] ?? 0) + 1
+    localStorage.setItem(VOICE_TELEMETRY_KEY, JSON.stringify({
+      counts,
+      updatedAt: new Date().toISOString(),
+    }))
+  } catch {
+    // ignore local telemetry write failures
+  }
+}
 
 function isLikelyNoiseTranscript(text: string, confidence?: number | null): boolean {
   const trimmed = text.trim()
@@ -110,6 +147,8 @@ function useSpeechInput({
   const setPhaseSync = (p: VoicePhase) => { phaseRef.current = p; setPhase(p) }
   const [volume, setVolume] = useState(0)
   const [bridgeDown, setBridgeDown] = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
+  const [wakeCooldownRemaining, setWakeCooldownRemaining] = useState(0)
   const supported = !IS_SAFE_MODE
 
   // ── Stable callback refs — always current, never stale inside setInterval ──
@@ -318,6 +357,7 @@ function useSpeechInput({
     wsRef.current = ws
 
     ws.onopen = () => {
+      setReconnecting(false)
       setBridgeDown(false)
       ws.send(JSON.stringify({ type: 'start' }))
     }
@@ -331,6 +371,7 @@ function useSpeechInput({
             setPhaseSync('listening')
             connectStartRef.current = 0
             setBridgeDown(false)
+            setReconnecting(false)
             break
           case 'volume':
             setVolume(msg.level ?? 0)
@@ -364,6 +405,9 @@ function useSpeechInput({
     ws.onclose = () => {
       wsRef.current = null
       setVolume(0)
+      if (activeRef.current && phaseRef.current !== 'processing') {
+        setReconnecting(true)
+      }
       if (connectStartRef.current > 0 && Date.now() - connectStartRef.current > CONNECT_TIMEOUT_MS) {
         console.warn('[STT] connect timeout, retrying')
         setBridgeDown(true)
@@ -389,6 +433,7 @@ function useSpeechInput({
     connectStartRef.current = 0
     setPhaseSync('idle')
     setVolume(0)
+    setReconnecting(false)
     onInterimRef.current('')
     if (modeRef.current === 'webspeech') stopWebSpeech()
     else stopBridge()
@@ -450,11 +495,33 @@ function useSpeechInput({
     }
   }, [stopWebSpeech, stopBridge])
 
+  useEffect(() => {
+    if (!activeRef.current) {
+      setWakeCooldownRemaining(0)
+      return
+    }
+    if (modeRef.current !== 'bridge') return
+    const timer = setInterval(() => {
+      fetch(`${BRIDGE}/status`)
+        .then((res) => res.ok ? res.json() : null)
+        .then((status: { wake_cooldown_remaining?: number } | null) => {
+          const next = typeof status?.wake_cooldown_remaining === 'number'
+            ? Math.max(0, status.wake_cooldown_remaining)
+            : 0
+          setWakeCooldownRemaining(next)
+        })
+        .catch(() => {})
+    }, 1200)
+    return () => clearInterval(timer)
+  }, [phase])
+
   return {
     phase,
     volume,
     supported,
     bridgeDown,
+    reconnecting,
+    wakeCooldownRemaining,
     start,
     stop,
     toggle,
@@ -492,15 +559,19 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const lastActivityAtRef = useRef(0)
   const hadMeaningfulProgressRef = useRef(false)
   const wakeSessionActiveRef = useRef(false)
+  const wakeStartedRef = useRef(false)
   const autoDismissingRef = useRef(false)
   const handledWakeNonceRef = useRef<string | null>(null)
+  const bridgeDownLoggedRef = useRef(false)
+  const voiceProfileRef = useRef<VoiceUxProfile>(getVoiceUxProfile())
+  const [inactivityCountdown, setInactivityCountdown] = useState<number | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
 
-  const { messages, loading, send, reset, session, sessionLoading, startFresh, primeMessages, updateMessageToolStatus } = useAIAssistant({ page, events, family, homeCity, focusedEvent, onSessionEnd: onClose })
+  const { messages, loading, send, retryLast, reset, session, sessionLoading, startFresh, primeMessages, updateMessageToolStatus } = useAIAssistant({ page, events, family, homeCity, focusedEvent, onSessionEnd: onClose })
 
   const led = useLedStrip()
 
@@ -510,7 +581,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [uiFeedback, setUiFeedback] = useState<'none' | 'confirm' | 'cancel'>('none')
 
-  const pingWakeMisfireCooldown = useCallback((seconds = WAKE_MISFIRE_COOLDOWN_SECS) => {
+  const pingWakeMisfireCooldown = useCallback((seconds = voiceProfileRef.current.wakeMisfireCooldownSecs) => {
     void fetch('http://127.0.0.1:8766/wake-misfire', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -526,6 +597,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const autoDismissDrawer = useCallback((wakeMisfire: boolean) => {
     if (autoDismissingRef.current) return
     autoDismissingRef.current = true
+    trackVoiceMetric(wakeMisfire ? 'wake_misfire_autodismiss' : 'inactivity_autodismiss')
     if (wakeMisfire) pingWakeMisfireCooldown()
     startFresh()
     onClose()
@@ -654,7 +726,10 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     if (open) {
       autoDismissingRef.current = false
       wakeSessionActiveRef.current = Boolean(wakeSessionNonce)
+      wakeStartedRef.current = Boolean(wakeSessionNonce)
       hadMeaningfulProgressRef.current = false
+      setInactivityCountdown(null)
+      if (wakeSessionNonce) trackVoiceMetric('wake_session_started')
       markConversationProgress(false)
       if (IS_SAFE_MODE) return
       // Start connecting immediately — don't wait for animation.
@@ -664,6 +739,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       setTimeout(() => textareaRef.current?.focus(), 300)
     } else {
       clearAutoSendTimer()
+      setInactivityCountdown(null)
       if (feedbackTimerRef.current) {
         clearTimeout(feedbackTimerRef.current)
         feedbackTimerRef.current = null
@@ -682,8 +758,28 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
 
   useEffect(() => {
     if (!open) return
+    if (speech.bridgeDown && !bridgeDownLoggedRef.current) {
+      trackVoiceMetric('bridge_offline')
+      bridgeDownLoggedRef.current = true
+    }
+    if (!speech.bridgeDown) {
+      bridgeDownLoggedRef.current = false
+    }
+  }, [open, speech.bridgeDown])
+
+  useEffect(() => {
+    if (!open) return
     const interval = setInterval(() => {
-      if (Date.now() - lastActivityAtRef.current < NO_ACTIVITY_AUTO_CLOSE_MS) return
+      const elapsed = Date.now() - lastActivityAtRef.current
+      const remaining = voiceProfileRef.current.inactivityMs - elapsed
+      if (remaining > 0) {
+        if (remaining <= 3000) {
+          setInactivityCountdown(Math.max(1, Math.ceil(remaining / 1000)))
+        } else {
+          setInactivityCountdown(null)
+        }
+        return
+      }
       const wakeMisfire = wakeSessionActiveRef.current && !hadMeaningfulProgressRef.current
       autoDismissDrawer(wakeMisfire)
     }, 1000)
@@ -702,13 +798,17 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       if (!hadMeaningfulProgressRef.current) {
         autoDismissDrawer(true)
       }
-    }, WAKE_FOLLOWUP_GRACE_MS)
+    }, voiceProfileRef.current.wakeFollowupGraceMs)
     return () => clearTimeout(timer)
   }, [open, wakeSessionNonce, autoDismissDrawer, markConversationProgress])
 
   useEffect(() => {
     if (!open || messages.length === 0) return
     markConversationProgress(true)
+    if (wakeStartedRef.current) {
+      trackVoiceMetric('wake_session_success')
+      wakeStartedRef.current = false
+    }
   }, [open, messages.length, markConversationProgress])
 
   const buildCorrelationId = useCallback((suffix: string) => {
@@ -892,6 +992,26 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const voiceLevel = Math.max(0, Math.min(1, speech.volume / 100))
   const isVoiceActive = speech.listening && voiceLevel > 0.12
   const hasTypedInput = input.trim().length > 0 && !loading && !speech.listening
+  const latestAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
+  const showRetryLast = !!latestAssistant && /try again|something went wrong|timed out|quota/i.test(latestAssistant.content)
+  const cooldownSeconds = Math.ceil(speech.wakeCooldownRemaining ?? 0)
+  const diagnosticsLabel = IS_SAFE_MODE
+    ? 'Safe mode'
+    : speech.bridgeDown
+      ? 'Bridge offline'
+      : cooldownSeconds > 0
+        ? `Wake cooldown ${cooldownSeconds}s`
+        : speech.reconnecting
+          ? 'Reconnecting mic'
+          : speech.connecting
+            ? 'Connecting mic'
+            : loading || speech.phase === 'processing'
+              ? 'Processing'
+              : speech.listening
+                ? 'Listening'
+                : hasTypedInput
+                  ? 'Typing'
+                  : 'Idle'
   const aiPresence: 'off' | 'idle' | 'listening' | 'voice_active' | 'processing' | 'typing' | 'confirm' | 'cancel' =
     !open
       ? 'off'
@@ -1109,7 +1229,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
               {loading && (
                 <div className="flex items-center gap-2 text-casa-muted pl-1">
                   <Loader2 size={15} className="animate-spin text-casa-gold" />
-                  <span className="text-caption">Thinking…</span>
+                  <span className="text-caption">Got it — working on that…</span>
                 </div>
               )}
               <div ref={bottomRef} />
@@ -1250,6 +1370,29 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                       : 'Tap 🎙 to start voice · pause to send'
                   : 'Tap ➤ to send · 📎 gallery · 📷 camera'}
               </p>
+              <div className="mt-1 flex items-center justify-center gap-2 text-[11px] text-casa-muted/80">
+                <span className="inline-flex items-center gap-1 rounded-full border border-casa-border/70 px-2 py-0.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-casa-gold/80" />
+                  {diagnosticsLabel}
+                </span>
+                {inactivityCountdown !== null && (
+                  <span className="inline-flex items-center rounded-full border border-casa-border/70 px-2 py-0.5">
+                    Auto-close in {inactivityCountdown}s
+                  </span>
+                )}
+                {showRetryLast && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      trackVoiceMetric('retry_last_clicked')
+                      void retryLast()
+                    }}
+                    className="inline-flex items-center rounded-full border border-casa-border bg-casa-bg px-2 py-0.5 hover:bg-white transition-colors"
+                  >
+                    Retry last
+                  </button>
+                )}
+              </div>
 
 
             </div>
