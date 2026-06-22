@@ -30,6 +30,7 @@ const CONNECT_TIMEOUT_MS = 5000
 const NO_ACTIVITY_AUTO_CLOSE_MS = 30_000
 const WAKE_FOLLOWUP_GRACE_MS = 4500
 const WAKE_MISFIRE_COOLDOWN_SECS = 6
+const TRANSCRIPT_SETTLE_BEFORE_SEND_MS = 250
 const FEEDBACK_LOCK_MS = 2800
 const MIN_FINAL_CONFIDENCE = 0.55
 
@@ -505,6 +506,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
 
   const pendingConfirmRef = useRef<(() => Promise<boolean>) | null>(null)
   const pendingCancelRef  = useRef<(() => Promise<boolean>) | null>(null)
+  const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [uiFeedback, setUiFeedback] = useState<'none' | 'confirm' | 'cancel'>('none')
 
@@ -533,6 +535,13 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     markConversationProgress(true)
   }, [markConversationProgress])
 
+  const clearAutoSendTimer = useCallback(() => {
+    if (autoSendTimerRef.current) {
+      clearTimeout(autoSendTimerRef.current)
+      autoSendTimerRef.current = null
+    }
+  }, [])
+
   // True when the latest assistant message has a pending tool action awaiting confirmation
   const hasPendingToolAction = messages.some(m => m.toolAction?.status === 'pending')
 
@@ -548,6 +557,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const sendCurrentInput = useCallback((text: string) => {
     const trimmed = text.trim()
     if (!trimmed || loading) return false
+    clearAutoSendTimer()
     ignoreInterimUntilRef.current = Date.now() + 1200
     markUserInteraction()
     setInput('')
@@ -555,7 +565,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     if (textareaRef.current) textareaRef.current.value = ''
     send(trimmed)
     return true
-  }, [loading, send, markUserInteraction])
+  }, [loading, send, markUserInteraction, clearAutoSendTimer])
 
   const speech = useSpeechInput({
     onInterim: (interim) => {
@@ -570,6 +580,10 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       if (text === '__SEND__') {
         ignoreInterimUntilRef.current = Date.now() + 1200
         const msg = interimRef.current || (textareaRef.current?.value ?? '')
+        const finalized = msg.trim()
+        if (!finalized) return
+        interimRef.current = finalized
+        setInput(finalized)
         if (isLikelyNoiseTranscript(msg, confidence)) {
           interimRef.current = ''
           setInput('')
@@ -584,8 +598,12 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
           setTimeout(onClose, 300)
           return
         }
-        sendCurrentInput(msg)
-        interimRef.current = ''
+        clearAutoSendTimer()
+        autoSendTimerRef.current = setTimeout(() => {
+          autoSendTimerRef.current = null
+          sendCurrentInput(finalized)
+          interimRef.current = ''
+        }, TRANSCRIPT_SETTLE_BEFORE_SEND_MS)
       } else {
         interimRef.current = text
         setInput(text)
@@ -627,9 +645,10 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   useEffect(() => {
     return () => {
       if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
+      clearAutoSendTimer()
       led.off()
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [clearAutoSendTimer]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (open) {
@@ -644,6 +663,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       // Focus textarea slightly after animation settles (UI only, doesn't affect mic)
       setTimeout(() => textareaRef.current?.focus(), 300)
     } else {
+      clearAutoSendTimer()
       if (feedbackTimerRef.current) {
         clearTimeout(feedbackTimerRef.current)
         feedbackTimerRef.current = null
@@ -658,7 +678,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       setAttachedImage(null)
       freshStartedRef.current = null  // allow fresh start next time this event is opened
     }
-  }, [open, markConversationProgress, wakeSessionNonce]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, markConversationProgress, wakeSessionNonce, clearAutoSendTimer]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open) return
