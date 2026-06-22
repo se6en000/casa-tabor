@@ -91,6 +91,7 @@ _zone_cct_bias = {
     "late-night": -800,
 }
 _rgb_trim = (0, 0, 0)  # (r, g, b) channel trims, each -15..15
+_ambient_auto_mode = True
 
 def _disable_push_remotely():
     """Set sensor_push_enabled=false in Supabase display_config + clear sensor row."""
@@ -138,6 +139,7 @@ def _is_push_enabled() -> bool:
     global _brightness_min, _brightness_max
     global _auto_sleep_enabled, _sleep_lux_threshold, _wake_lux_threshold, _sleep_delay_s
     global _cct_bias_k, _zone_cct_bias, _rgb_trim
+    global _ambient_auto_mode
     now = time.time()
     if now - _push_checked_at < PUSH_CHECK_INTERVAL:
         # Still apply auto-disable timer between fetches
@@ -157,7 +159,8 @@ def _is_push_enabled() -> bool:
         rows = res.json()
         if rows and isinstance(rows, list):
             cfg = rows[0].get("value", {})
-            new_push_enabled     = bool(cfg.get("sensor_push_enabled", False))
+            _ambient_auto_mode   = bool(cfg.get("ambient_auto_mode", True))
+            new_push_enabled     = True if _ambient_auto_mode else bool(cfg.get("sensor_push_enabled", False))
             # Track when push was turned on (for auto-disable timer)
             if new_push_enabled and not _push_enabled:
                 _push_enabled_since = now
@@ -167,25 +170,42 @@ def _is_push_enabled() -> bool:
                 # User disabled — clear the row
                 threading.Thread(target=_disable_push_remotely, daemon=True).start()
             _push_enabled        = new_push_enabled
-            _brightness_min      = int(cfg.get("brightness_min", BRIGHTNESS_MIN_DEFAULT))
-            _brightness_max      = int(cfg.get("brightness_max", BRIGHTNESS_MAX_DEFAULT))
-            _auto_sleep_enabled  = bool(cfg.get("auto_sleep_enabled", True))
-            _sleep_lux_threshold = float(cfg.get("sleep_lux_threshold", 0.5))
-            _wake_lux_threshold  = float(cfg.get("wake_lux_threshold", 3.0))
-            _sleep_delay_s       = int(cfg.get("sleep_delay_s", 30))
-            _cct_bias_k = int(cfg.get("cct_bias_k", 0))
-            _zone_cct_bias = {
-                "day": int(cfg.get("zone_cct_bias_day", 0)),
-                "afternoon": int(cfg.get("zone_cct_bias_afternoon", 0)),
-                "evening": int(cfg.get("zone_cct_bias_evening", -250)),
-                "night": int(cfg.get("zone_cct_bias_night", -500)),
-                "late-night": int(cfg.get("zone_cct_bias_late_night", -800)),
-            }
-            _rgb_trim = (
-                int(cfg.get("rgb_trim_r", 0)),
-                int(cfg.get("rgb_trim_g", 0)),
-                int(cfg.get("rgb_trim_b", 0)),
-            )
+            if _ambient_auto_mode:
+                _brightness_min      = BRIGHTNESS_MIN_DEFAULT
+                _brightness_max      = BRIGHTNESS_MAX_DEFAULT
+                _auto_sleep_enabled  = True
+                _sleep_lux_threshold = 0.5
+                _wake_lux_threshold  = 3.0
+                _sleep_delay_s       = 30
+                _cct_bias_k = 0
+                _zone_cct_bias = {
+                    "day": 0,
+                    "afternoon": 0,
+                    "evening": -250,
+                    "night": -500,
+                    "late-night": -800,
+                }
+                _rgb_trim = (0, 0, 0)
+            else:
+                _brightness_min      = int(cfg.get("brightness_min", BRIGHTNESS_MIN_DEFAULT))
+                _brightness_max      = int(cfg.get("brightness_max", BRIGHTNESS_MAX_DEFAULT))
+                _auto_sleep_enabled  = bool(cfg.get("auto_sleep_enabled", True))
+                _sleep_lux_threshold = float(cfg.get("sleep_lux_threshold", 0.5))
+                _wake_lux_threshold  = float(cfg.get("wake_lux_threshold", 3.0))
+                _sleep_delay_s       = int(cfg.get("sleep_delay_s", 30))
+                _cct_bias_k = int(cfg.get("cct_bias_k", 0))
+                _zone_cct_bias = {
+                    "day": int(cfg.get("zone_cct_bias_day", 0)),
+                    "afternoon": int(cfg.get("zone_cct_bias_afternoon", 0)),
+                    "evening": int(cfg.get("zone_cct_bias_evening", -250)),
+                    "night": int(cfg.get("zone_cct_bias_night", -500)),
+                    "late-night": int(cfg.get("zone_cct_bias_late_night", -800)),
+                }
+                _rgb_trim = (
+                    int(cfg.get("rgb_trim_r", 0)),
+                    int(cfg.get("rgb_trim_g", 0)),
+                    int(cfg.get("rgb_trim_b", 0)),
+                )
         # Auto-disable check
         if _push_enabled and _push_enabled_since and (now - _push_enabled_since) > PUSH_AUTO_DISABLE_S:
             log.info("Push auto-disabled after %ds — clearing DB", PUSH_AUTO_DISABLE_S)
@@ -193,8 +213,8 @@ def _is_push_enabled() -> bool:
             _push_enabled_since = 0.0
             threading.Thread(target=_disable_push_remotely, daemon=True).start()
         log.info(
-            "Push config refreshed — sensor_push_enabled=%s min=%d max=%d auto_sleep=%s cct_bias=%d zone_bias=%s rgb_trim=%s",
-            _push_enabled, _brightness_min, _brightness_max, _auto_sleep_enabled, _cct_bias_k, _zone_cct_bias, _rgb_trim
+            "Push config refreshed — ambient_auto_mode=%s sensor_push_enabled=%s min=%d max=%d auto_sleep=%s cct_bias=%d zone_bias=%s rgb_trim=%s",
+            _ambient_auto_mode, _push_enabled, _brightness_min, _brightness_max, _auto_sleep_enabled, _cct_bias_k, _zone_cct_bias, _rgb_trim
         )
     except Exception as exc:
         log.warning("Push config check failed: %s", exc)

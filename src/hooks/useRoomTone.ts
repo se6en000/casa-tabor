@@ -32,6 +32,7 @@ export interface DisplayConfig {
 
   // Room Tone
   room_tone_enabled: boolean
+  ambient_auto_mode: boolean // true = pure ambient matching, disables custom override group
   // Schedule — hour boundaries (24h, local time)
   schedule_afternoon_hour: number  // default 15 (3pm)
   schedule_evening_hour: number    // default 19 (7pm)
@@ -73,6 +74,7 @@ export const DISPLAY_DEFAULTS: DisplayConfig = {
   clock_format: '12h',
 
   room_tone_enabled: true,
+  ambient_auto_mode: true,
   schedule_afternoon_hour: 15,
   schedule_evening_hour: 19,
   schedule_night_hour: 21,

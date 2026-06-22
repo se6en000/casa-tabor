@@ -181,12 +181,12 @@ function DayTimeline({ cfg }: { cfg: DisplayConfig }) {
 
 // ── Main page ──────────────────────────────────────────────────────
 
-function SliderRow({ label, desc, value, min, max, onChange, unit = '%' }: {
+function SliderRow({ label, desc, value, min, max, onChange, unit = '%', disabled = false }: {
   label: string; desc: string; value: number; min: number; max: number
-  onChange: (v: number) => void; unit?: string
+  onChange: (v: number) => void; unit?: string; disabled?: boolean
 }) {
   return (
-    <div className="py-3 border-t border-casa-divider">
+    <div className={cn('py-3 border-t border-casa-divider', disabled && 'opacity-45')}>
       <div className="flex items-center justify-between mb-1.5">
         <div>
           <p className="text-body-sm font-semibold text-casa-navy">{label}</p>
@@ -195,7 +195,7 @@ function SliderRow({ label, desc, value, min, max, onChange, unit = '%' }: {
         <span className="text-body-sm font-semibold text-casa-navy tabular-nums w-14 text-right">{value}{unit}</span>
       </div>
       <input
-        type="range" min={min} max={max} value={value}
+        type="range" min={min} max={max} value={value} disabled={disabled}
         onChange={e => onChange(Number(e.target.value))}
         className="w-full accent-casa-gold"
       />
@@ -233,9 +233,20 @@ export default function DisplaySettingsPage() {
   const [dirty, setDirty] = useState(false)
 
   useEffect(() => {
-    setConfig({ ...DISPLAY_DEFAULTS, ...liveCfg })
+    const merged = { ...DISPLAY_DEFAULTS, ...liveCfg }
+    const normalized = merged.ambient_auto_mode
+      ? {
+          ...merged,
+          room_tone_enabled: true,
+          sensor_push_enabled: true,
+          manual_override: false,
+          override_expires_at: null,
+        }
+      : merged
+    setConfig(normalized)
     setPreviewZone(currentZone === 'manual' ? 'evening' : currentZone)
-    setDirty(false)
+    const needsPersist = JSON.stringify(normalized) !== JSON.stringify(merged)
+    setDirty(needsPersist)
   }, [liveCfg, currentZone])
 
   const saveMutation = useMutation({
@@ -266,6 +277,42 @@ export default function DisplaySettingsPage() {
   const set = <K extends keyof DisplayConfig>(key: K, value: DisplayConfig[K]) => {
     setConfig(prev => ({ ...prev, [key]: value }))
     setDirty(true)
+  }
+
+  const disableAdvancedOverrides = () => {
+    setConfig(prev => ({
+      ...prev,
+      ambient_auto_mode: true,
+      room_tone_enabled: true,
+      sensor_push_enabled: true,
+      manual_override: false,
+      override_expires_at: null,
+      brightness_min: DISPLAY_DEFAULTS.brightness_min,
+      brightness_max: DISPLAY_DEFAULTS.brightness_max,
+      cct_bias_k: DISPLAY_DEFAULTS.cct_bias_k,
+      zone_cct_bias_day: DISPLAY_DEFAULTS.zone_cct_bias_day,
+      zone_cct_bias_afternoon: DISPLAY_DEFAULTS.zone_cct_bias_afternoon,
+      zone_cct_bias_evening: DISPLAY_DEFAULTS.zone_cct_bias_evening,
+      zone_cct_bias_night: DISPLAY_DEFAULTS.zone_cct_bias_night,
+      zone_cct_bias_late_night: DISPLAY_DEFAULTS.zone_cct_bias_late_night,
+      rgb_trim_r: DISPLAY_DEFAULTS.rgb_trim_r,
+      rgb_trim_g: DISPLAY_DEFAULTS.rgb_trim_g,
+      rgb_trim_b: DISPLAY_DEFAULTS.rgb_trim_b,
+      auto_sleep_enabled: DISPLAY_DEFAULTS.auto_sleep_enabled,
+      sleep_lux_threshold: DISPLAY_DEFAULTS.sleep_lux_threshold,
+      wake_lux_threshold: DISPLAY_DEFAULTS.wake_lux_threshold,
+      sleep_delay_s: DISPLAY_DEFAULTS.sleep_delay_s,
+    }))
+    setDirty(true)
+  }
+
+  const setAdvancedOverridesEnabled = (enabled: boolean) => {
+    if (enabled) {
+      setConfig(prev => ({ ...prev, ambient_auto_mode: false }))
+      setDirty(true)
+      return
+    }
+    disableAdvancedOverrides()
   }
 
   const enableManualOverride = (on: boolean) => {
@@ -632,11 +679,23 @@ export default function DisplaySettingsPage() {
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
           <SectionHeader icon={Sunset} label="Adaptive Room Tone" />
           <Toggle
+            checked={!config.ambient_auto_mode}
+            onChange={setAdvancedOverridesEnabled}
+            label="Advanced ambient overrides"
+            desc="OFF (recommended): pure ambient auto-match. ON: unlock manual override and custom warmth/brightness tuning."
+          />
+          <Toggle
             checked={config.room_tone_enabled}
             onChange={v => set('room_tone_enabled', v)}
             label="Adaptive warm display"
             desc="Shifts the screen to warm amber tones as daylight fades — like a painting illuminated by the room's own light"
+            disabled={config.ambient_auto_mode}
           />
+          {config.ambient_auto_mode && (
+            <p className="text-caption text-casa-muted mt-1">
+              Ambient Auto mode is locking adaptive controls to safe defaults (room tone on, live sensor push on, no manual lock).
+            </p>
+          )}
 
           {/* Live status badge */}
           {config.room_tone_enabled && (
@@ -706,6 +765,7 @@ export default function DisplaySettingsPage() {
               onChange={enableManualOverride}
               label="Lock warmth & brightness"
               desc="Hold the display at a specific setting. Auto-expires after 2 hours."
+              disabled={config.ambient_auto_mode}
             />
             {config.manual_override && (
               <div className="mt-4 space-y-5 pt-4 border-t border-casa-divider">
@@ -771,6 +831,7 @@ export default function DisplaySettingsPage() {
             onChange={v => set('sensor_push_enabled', v)}
             label="Live sensor push"
             desc="Pi bridge streams readings to Supabase. Turn off to stop recording when not needed."
+            disabled={config.ambient_auto_mode}
           />
 
           {/* Keep live sensor feedback directly under the toggle */}
@@ -865,6 +926,7 @@ export default function DisplaySettingsPage() {
             value={config.brightness_min}
             min={0}
             max={40}
+            disabled={config.ambient_auto_mode}
             onChange={v => set('brightness_min', v)}
           />
           <SliderRow
@@ -873,6 +935,7 @@ export default function DisplaySettingsPage() {
             value={config.brightness_max}
             min={50}
             max={100}
+            disabled={config.ambient_auto_mode}
             onChange={v => set('brightness_max', v)}
           />
 
@@ -885,6 +948,7 @@ export default function DisplaySettingsPage() {
               <button
                 type="button"
                 onClick={() => applyWarmthScenario('balanced')}
+                disabled={config.ambient_auto_mode}
                 className="px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors"
               >
                 Balanced
@@ -892,6 +956,7 @@ export default function DisplaySettingsPage() {
               <button
                 type="button"
                 onClick={() => applyWarmthScenario('golden-hour')}
+                disabled={config.ambient_auto_mode}
                 className="px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors"
               >
                 Golden hour
@@ -899,6 +964,7 @@ export default function DisplaySettingsPage() {
               <button
                 type="button"
                 onClick={() => applyWarmthScenario('movie-night')}
+                disabled={config.ambient_auto_mode}
                 className="px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors"
               >
                 Movie night
@@ -906,6 +972,7 @@ export default function DisplaySettingsPage() {
               <button
                 type="button"
                 onClick={() => applyWarmthScenario('night-owl')}
+                disabled={config.ambient_auto_mode}
                 className="px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors"
               >
                 Night owl
@@ -920,6 +987,7 @@ export default function DisplaySettingsPage() {
             min={-1500}
             max={800}
             unit="K"
+            disabled={config.ambient_auto_mode}
             onChange={v => set('cct_bias_k', v)}
           />
           <SliderRow
@@ -929,6 +997,7 @@ export default function DisplaySettingsPage() {
             min={-1200}
             max={800}
             unit="K"
+            disabled={config.ambient_auto_mode}
             onChange={v => set('zone_cct_bias_day', v)}
           />
           <SliderRow
@@ -938,6 +1007,7 @@ export default function DisplaySettingsPage() {
             min={-1200}
             max={800}
             unit="K"
+            disabled={config.ambient_auto_mode}
             onChange={v => set('zone_cct_bias_afternoon', v)}
           />
           <SliderRow
@@ -947,6 +1017,7 @@ export default function DisplaySettingsPage() {
             min={-1600}
             max={600}
             unit="K"
+            disabled={config.ambient_auto_mode}
             onChange={v => set('zone_cct_bias_evening', v)}
           />
           <SliderRow
@@ -956,6 +1027,7 @@ export default function DisplaySettingsPage() {
             min={-1800}
             max={400}
             unit="K"
+            disabled={config.ambient_auto_mode}
             onChange={v => set('zone_cct_bias_night', v)}
           />
           <SliderRow
@@ -965,6 +1037,7 @@ export default function DisplaySettingsPage() {
             min={-2200}
             max={300}
             unit="K"
+            disabled={config.ambient_auto_mode}
             onChange={v => set('zone_cct_bias_late_night', v)}
           />
           <SliderRow
@@ -974,6 +1047,7 @@ export default function DisplaySettingsPage() {
             min={-15}
             max={15}
             unit=""
+            disabled={config.ambient_auto_mode}
             onChange={v => set('rgb_trim_r', v)}
           />
           <SliderRow
@@ -983,6 +1057,7 @@ export default function DisplaySettingsPage() {
             min={-15}
             max={15}
             unit=""
+            disabled={config.ambient_auto_mode}
             onChange={v => set('rgb_trim_g', v)}
           />
           <SliderRow
@@ -992,6 +1067,7 @@ export default function DisplaySettingsPage() {
             min={-15}
             max={15}
             unit=""
+            disabled={config.ambient_auto_mode}
             onChange={v => set('rgb_trim_b', v)}
           />
 
@@ -1000,6 +1076,7 @@ export default function DisplaySettingsPage() {
             onChange={v => set('auto_sleep_enabled', v)}
             label="Auto-sleep display"
             desc="Blanks the monitor when the room is very dark. Wakes on ambient light."
+            disabled={config.ambient_auto_mode}
           />
           {config.auto_sleep_enabled && (
             <>
@@ -1010,6 +1087,7 @@ export default function DisplaySettingsPage() {
                 min={1}
                 max={30}
                 unit=" ×0.1lux"
+                disabled={config.ambient_auto_mode}
                 onChange={v => set('sleep_lux_threshold', v / 10)}
               />
               <SliderRow
@@ -1019,6 +1097,7 @@ export default function DisplaySettingsPage() {
                 min={5}
                 max={100}
                 unit=" ×0.1lux"
+                disabled={config.ambient_auto_mode}
                 onChange={v => set('wake_lux_threshold', v / 10)}
               />
               <SliderRow
@@ -1028,6 +1107,7 @@ export default function DisplaySettingsPage() {
                 min={5}
                 max={120}
                 unit="s"
+                disabled={config.ambient_auto_mode}
                 onChange={v => set('sleep_delay_s', v)}
               />
             </>
