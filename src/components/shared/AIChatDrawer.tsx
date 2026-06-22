@@ -28,7 +28,7 @@ type STTMode = 'unknown' | 'bridge' | 'webspeech'
 const SILENCE_MS = 1500
 const CONNECT_TIMEOUT_MS = 5000
 const NO_ACTIVITY_AUTO_CLOSE_MS = 30_000
-const WAKE_FOLLOWUP_GRACE_MS = 2000
+const WAKE_FOLLOWUP_GRACE_MS = 4500
 const WAKE_MISFIRE_COOLDOWN_SECS = 6
 const FEEDBACK_LOCK_MS = 2800
 const MIN_FINAL_CONFIDENCE = 0.55
@@ -54,6 +54,15 @@ function isLikelyNoiseTranscript(text: string, confidence?: number | null): bool
   }
 
   return false
+}
+
+function isMeaningfulInterimSpeech(text: string): boolean {
+  const trimmed = text.trim()
+  if (!trimmed) return false
+  if (isLikelyNoiseTranscript(trimmed, null)) return false
+  const words = trimmed.split(/\s+/).filter(Boolean)
+  if (words.length >= 2) return true
+  return trimmed.length >= 10
 }
 
 /** Quick probe — resolves true if bridge is reachable within 800ms */
@@ -553,6 +562,9 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       if (Date.now() < ignoreInterimUntilRef.current) return
       interimRef.current = interim
       setInput(interim)
+      if (wakeSessionActiveRef.current && isMeaningfulInterimSpeech(interim)) {
+        markConversationProgress(true)
+      }
     },
     onFinalTranscript: (text, confidence) => {
       if (text === '__SEND__') {
