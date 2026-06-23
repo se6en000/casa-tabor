@@ -70,9 +70,9 @@ function buildQueriesFromPrefs(prefs: ArtFeedPrefs): {
   const cultures = isCurated ? prefs.cultures : []
   const yearFrom = isCurated ? prefs.yearFrom : null
   const yearTo = isCurated ? prefs.yearTo : null
-  const useMet = isCurated ? prefs.useMet : true
-  const useArtic = isCurated ? prefs.useArtic : true
-  const useEuropeana = isCurated ? prefs.useEuropeana : true
+  const useMet = prefs.useMet
+  const useArtic = prefs.useArtic
+  const useEuropeana = prefs.useEuropeana
 
   // Medium regex from selected types, or fall back to broad painted filter
   let mediumFilter: RegExp
