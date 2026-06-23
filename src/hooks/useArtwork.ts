@@ -407,11 +407,14 @@ export function useArtwork(rotateSecs = 240) {
         const { metQs, articQs, europeanaQs, mediumFilter, yearFrom, yearTo } = buildQueriesFromPrefs(prefs)
         const strictMediaFilter = prefs.mediaTypes.length > 0
 
-        const fetchCombined = async (activeMediumFilter: RegExp | null) => {
+        const fetchCombined = async (
+          activeMediumFilter: RegExp | null,
+          querySet: { metQs: string[]; articQs: string[]; europeanaQs: string[] }
+        ) => {
           const fetches = [
-            ...metQs.map(q => fetchFromMet(q, activeMediumFilter)),
-            ...articQs.map(q => fetchFromArtic(q, activeMediumFilter)),
-            ...europeanaQs.map(q => fetchFromEuropeana(q, activeMediumFilter, strictMediaFilter)),
+            ...querySet.metQs.map(q => fetchFromMet(q, activeMediumFilter)),
+            ...querySet.articQs.map(q => fetchFromArtic(q, activeMediumFilter)),
+            ...querySet.europeanaQs.map(q => fetchFromEuropeana(q, activeMediumFilter, strictMediaFilter)),
           ]
           const results = await Promise.all(fetches)
           let merged: Artwork[] = results.flat()
@@ -444,11 +447,17 @@ export function useArtwork(rotateSecs = 240) {
           return merged
         }
 
-        let combined = await fetchCombined(mediumFilter)
+        let combined = await fetchCombined(mediumFilter, { metQs, articQs, europeanaQs })
 
-        // If keyword-only search finds nothing under painted-medium defaults, retry without medium restriction.
-        if (combined.length === 0 && prefs.mediaTypes.length === 0) {
-          combined = await fetchCombined(null)
+        // If strict medium choices produce no results, retry without medium restriction.
+        if (combined.length === 0) {
+          combined = await fetchCombined(null, { metQs, articQs, europeanaQs })
+        }
+
+        // If media hints in curated queries are too restrictive, rebuild queries without media hints.
+        if (combined.length === 0 && prefs.feedMode === 'curated' && prefs.mediaTypes.length > 0) {
+          const relaxed = buildQueriesFromPrefs({ ...prefs, mediaTypes: [] })
+          combined = await fetchCombined(null, relaxed)
         }
 
         if (!cancelled && combined.length > 0) {
