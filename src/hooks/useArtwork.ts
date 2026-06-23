@@ -401,9 +401,9 @@ export function useArtwork(rotateSecs = 240) {
     async function load() {
       try {
         const prefs = loadArtFeedPrefs()
-        const keywordTerms = prefs.keywords
-          .map(keyword => keyword.trim().toLowerCase())
-          .filter(Boolean)
+        const keywordTerms = prefs.feedMode === 'curated'
+          ? prefs.keywords.map(keyword => keyword.trim().toLowerCase()).filter(Boolean)
+          : []
         const { metQs, articQs, europeanaQs, mediumFilter, yearFrom, yearTo } = buildQueriesFromPrefs(prefs)
         const strictMediaFilter = prefs.mediaTypes.length > 0
 
@@ -437,7 +437,8 @@ export function useArtwork(rotateSecs = 240) {
           }
 
           if (keywordTerms.length > 0) {
-            merged = merged.filter((artwork: Artwork) => matchesAnyKeyword(artwork, keywordTerms))
+            const keywordMatched = merged.filter((artwork: Artwork) => matchesAnyKeyword(artwork, keywordTerms))
+            if (keywordMatched.length > 0) merged = keywordMatched
           }
 
           return merged
