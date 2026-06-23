@@ -313,6 +313,40 @@ function normalizeImageUrl(url: string): string {
   return url.startsWith('http://') ? `https://${url.slice(7)}` : url
 }
 
+function upscaleIiifUrl(url: string): string {
+  return url.replace(/\/full\/(\d+),\/0\/default\.jpg/i, (_match, sizeStr: string) => {
+    const size = Number(sizeStr)
+    const target = Number.isFinite(size) && size >= 1200 ? size : 1200
+    return `/full/${target},/0/default.jpg`
+  })
+}
+
+function pickBestEuropeanaImageUrl(item: Record<string, unknown>): string | null {
+  const shownBy = Array.isArray(item.edmIsShownBy) ? (item.edmIsShownBy as unknown[]) : []
+  const edmObject = Array.isArray(item.edmObject) ? (item.edmObject as unknown[]) : []
+  const preview = Array.isArray(item.edmPreview) ? (item.edmPreview as unknown[]) : []
+  const candidates = [...shownBy, ...edmObject, ...preview]
+    .filter((url): url is string => typeof url === 'string' && url.length > 0)
+    .map(normalizeImageUrl)
+    .filter(url => url.startsWith('https://'))
+
+  if (candidates.length === 0) return null
+
+  const scored = candidates
+    .map((url) => {
+      let score = 0
+      if (!url.includes('api.europeana.eu/thumbnail')) score += 100
+      if (/\/full\/\d+,\/0\/default\.jpg/i.test(url)) score += 20
+      if (url.includes('/zoom/')) score += 10
+      if (/thumbnail|thumb|small|icon/i.test(url)) score -= 30
+      if (/\/full\/(5\d{2}),\/0\/default\.jpg/i.test(url)) score -= 20
+      return { url: upscaleIiifUrl(url), score }
+    })
+    .sort((a, b) => b.score - a.score)
+
+  return scored[0]?.url ?? null
+}
+
 async function fetchFromEuropeana(
   query: string,
   mediumFilter: RegExp | null,
@@ -320,17 +354,15 @@ async function fetchFromEuropeana(
 ): Promise<Artwork[]> {
   try {
     const res = await fetch(
-      `${EUROPEANA_API}?wskey=${EUROPEANA_WSKEY}&query=${encodeURIComponent(query)}&rows=50&profile=standard`
+      `${EUROPEANA_API}?wskey=${EUROPEANA_WSKEY}&query=${encodeURIComponent(query)}&rows=50&profile=standard&qf=TYPE:IMAGE`
     )
     if (!res.ok) return []
     const data = await res.json()
 
     const artworks: Artwork[] = []
     for (const item of data.items || []) {
-      const rawImageUrl = item?.edmPreview?.[0] || item?.edmIsShownBy?.[0]
-      if (!rawImageUrl) continue
-      const imageUrl = normalizeImageUrl(rawImageUrl)
-      if (!imageUrl.startsWith('https://')) continue
+      const imageUrl = pickBestEuropeanaImageUrl(item as Record<string, unknown>)
+      if (!imageUrl) continue
       const title = item?.title?.[0] || item?.dcTitleLangAware?.def?.[0] || 'Untitled'
       const artist = item?.dcCreator?.[0] || 'Unknown'
       const medium = item?.dcFormat?.[0] || item?.type || ''
