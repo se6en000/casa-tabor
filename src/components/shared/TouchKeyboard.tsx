@@ -160,6 +160,43 @@ function nextSize(size: KeyboardSize): KeyboardSize {
   return 'compact'
 }
 
+function canUseRangeText(el: HTMLInputElement | HTMLTextAreaElement): boolean {
+  if (el instanceof HTMLTextAreaElement) return true
+  const type = (el.type || 'text').toLowerCase()
+  return ['text', 'search', 'url', 'tel', 'password'].includes(type)
+}
+
+function spliceValue(
+  el: HTMLInputElement | HTMLTextAreaElement,
+  text: string,
+  mode: 'insert' | 'backspace'
+) {
+  const value = el.value
+  const start = typeof el.selectionStart === 'number' ? el.selectionStart : value.length
+  const end = typeof el.selectionEnd === 'number' ? el.selectionEnd : value.length
+
+  let nextValue = value
+  let caret = start
+
+  if (mode === 'insert') {
+    nextValue = value.slice(0, start) + text + value.slice(end)
+    caret = start + text.length
+  } else if (start !== end) {
+    nextValue = value.slice(0, start) + value.slice(end)
+    caret = start
+  } else if (start > 0) {
+    nextValue = value.slice(0, start - 1) + value.slice(end)
+    caret = start - 1
+  }
+
+  el.value = nextValue
+  try {
+    el.setSelectionRange(caret, caret)
+  } catch {
+    // Some input types (e.g. number) do not support selection APIs.
+  }
+}
+
 export default function TouchKeyboard() {
   const [enabled, setEnabled] = useState(false)
   const [visible, setVisible] = useState(false)
@@ -393,9 +430,13 @@ export default function TouchKeyboard() {
     if (!text) return
     withTarget((el) => {
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-        const start = el.selectionStart ?? el.value.length
-        const end = el.selectionEnd ?? el.value.length
-        el.setRangeText(text, start, end, 'end')
+        if (canUseRangeText(el)) {
+          const start = el.selectionStart ?? el.value.length
+          const end = el.selectionEnd ?? el.value.length
+          el.setRangeText(text, start, end, 'end')
+        } else {
+          spliceValue(el, text, 'insert')
+        }
         emitInput(el)
       } else {
         document.execCommand('insertText', false, text)
@@ -409,10 +450,14 @@ export default function TouchKeyboard() {
     tapFeedback()
     withTarget((el) => {
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-        const start = el.selectionStart ?? el.value.length
-        const end = el.selectionEnd ?? el.value.length
-        if (start !== end) el.setRangeText('', start, end, 'end')
-        else if (start > 0) el.setRangeText('', start - 1, start, 'end')
+        if (canUseRangeText(el)) {
+          const start = el.selectionStart ?? el.value.length
+          const end = el.selectionEnd ?? el.value.length
+          if (start !== end) el.setRangeText('', start, end, 'end')
+          else if (start > 0) el.setRangeText('', start - 1, start, 'end')
+        } else {
+          spliceValue(el, '', 'backspace')
+        }
         emitInput(el)
       } else {
         emitKey(el, 'Backspace')
