@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Image, Clock, Sun, Palette, Monitor, Plus, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import { useArtFeedPrefs, MEDIA_OPTIONS } from '../hooks/useArtFeedPrefs'
@@ -183,8 +183,18 @@ export default function ArtModeSettingsPage() {
   const { settings, update: updateScreensaver } = useScreensaverSettings()
   const { prefs, update: updatePrefs } = useArtFeedPrefs()
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [yearFromInput, setYearFromInput] = useState('')
+  const [yearToInput, setYearToInput] = useState('')
 
   const curatedMode = prefs.feedMode === 'curated'
+
+  useEffect(() => {
+    setYearFromInput(prefs.yearFrom != null ? String(prefs.yearFrom) : '')
+  }, [prefs.yearFrom])
+
+  useEffect(() => {
+    setYearToInput(prefs.yearTo != null ? String(prefs.yearTo) : '')
+  }, [prefs.yearTo])
 
   const setFeedMode = (mode: 'auto' | 'curated') => {
     updatePrefs({ feedMode: mode })
@@ -204,6 +214,16 @@ export default function ArtModeSettingsPage() {
       artists: uniqueTrimmed(COASTAL_STARTER_ARTISTS).slice(0, 10),
       keywords: uniqueTrimmed(COASTAL_STARTER_KEYWORDS).slice(0, 10),
     })
+  }
+
+  const commitYear = (key: 'yearFrom' | 'yearTo', raw: string) => {
+    const trimmed = raw.trim()
+    if (!trimmed) {
+      updatePrefs({ [key]: null })
+      return
+    }
+    const parsed = parseInt(trimmed, 10)
+    updatePrefs({ [key]: Number.isFinite(parsed) ? parsed : null })
   }
 
   return (
@@ -443,9 +463,18 @@ export default function ArtModeSettingsPage() {
                       <div className="flex-1">
                         <label className="text-caption text-casa-muted block mb-1">From year</label>
                         <input
-                          type="number" min={1000} max={2025} placeholder="e.g. 1900"
-                          value={prefs.yearFrom ?? ''}
-                          onChange={e => updatePrefs({ yearFrom: e.target.value ? parseInt(e.target.value, 10) : null })}
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="e.g. 1900"
+                          value={yearFromInput}
+                          onChange={e => setYearFromInput(e.target.value)}
+                          onBlur={() => commitYear('yearFrom', yearFromInput)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              commitYear('yearFrom', yearFromInput)
+                              ;(e.currentTarget as HTMLInputElement).blur()
+                            }
+                          }}
                           className="w-full text-body-sm bg-casa-bg border border-casa-border rounded-xl px-3 py-2 text-casa-navy placeholder:text-casa-muted focus:outline-none focus:border-casa-navy/40"
                         />
                       </div>
@@ -453,9 +482,18 @@ export default function ArtModeSettingsPage() {
                       <div className="flex-1">
                         <label className="text-caption text-casa-muted block mb-1">To year</label>
                         <input
-                          type="number" min={1000} max={2026} placeholder="e.g. 2020"
-                          value={prefs.yearTo ?? ''}
-                          onChange={e => updatePrefs({ yearTo: e.target.value ? parseInt(e.target.value, 10) : null })}
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="e.g. 2020"
+                          value={yearToInput}
+                          onChange={e => setYearToInput(e.target.value)}
+                          onBlur={() => commitYear('yearTo', yearToInput)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              commitYear('yearTo', yearToInput)
+                              ;(e.currentTarget as HTMLInputElement).blur()
+                            }
+                          }}
                           className="w-full text-body-sm bg-casa-bg border border-casa-border rounded-xl px-3 py-2 text-casa-navy placeholder:text-casa-muted focus:outline-none focus:border-casa-navy/40"
                         />
                       </div>
