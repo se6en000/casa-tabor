@@ -10,6 +10,8 @@ import {
 const MET_API = 'https://collectionapi.metmuseum.org/public/collection/v1'
 const ARTIC_API = 'https://api.artic.edu/api/v1'
 const ARTIC_IIIF = 'https://www.artic.edu/iiif/2'
+const EUROPEANA_API = 'https://api.europeana.eu/record/v2/search.json'
+const EUROPEANA_WSKEY = 'apidemo'
 
 // ARTIC IDs are offset to avoid collisions with Met numeric IDs
 const ARTIC_OFFSET = 10_000_000
@@ -40,6 +42,15 @@ const ARTIC_QUERIES = [
   'american beach ocean impressionist',
 ]
 
+const EUROPEANA_QUERIES = [
+  'modern painting',
+  'contemporary landscape',
+  'abstract color field',
+  'city night painting',
+  'coastal modern art',
+  'minimalist painting',
+]
+
 // Only painted / drawn mediums — excludes prints, photos, ceramics, textiles
 const PAINTED_MEDIUM = /\boil\b|watercolou?r|gouache|pastel|tempera|acrylic|fresco|\bchalk\b|ink wash|\bgraphite\b|pencil on|paint/i
 
@@ -47,14 +58,26 @@ const PAINTED_MEDIUM = /\boil\b|watercolou?r|gouache|pastel|tempera|acrylic|fres
 function buildQueriesFromPrefs(prefs: ArtFeedPrefs): {
   metQs: string[]
   articQs: string[]
+  europeanaQs: string[]
   mediumFilter: RegExp
   yearFrom: number | null
   yearTo: number | null
 } {
+  const isCurated = prefs.feedMode === 'curated'
+  const artists = isCurated ? prefs.artists : []
+  const keywords = isCurated ? prefs.keywords : []
+  const mediaTypes = isCurated ? prefs.mediaTypes : []
+  const cultures = isCurated ? prefs.cultures : []
+  const yearFrom = isCurated ? prefs.yearFrom : null
+  const yearTo = isCurated ? prefs.yearTo : null
+  const useMet = isCurated ? prefs.useMet : true
+  const useArtic = isCurated ? prefs.useArtic : true
+  const useEuropeana = isCurated ? prefs.useEuropeana : true
+
   // Medium regex from selected types, or fall back to broad painted filter
   let mediumFilter: RegExp
-  if (prefs.mediaTypes.length > 0) {
-    const patterns = prefs.mediaTypes
+  if (mediaTypes.length > 0) {
+    const patterns = mediaTypes
       .map(id => MEDIA_OPTIONS.find(o => o.id === id)?.pattern?.source)
       .filter((s): s is string => Boolean(s))
     mediumFilter = patterns.length > 0 ? new RegExp(patterns.join('|'), 'i') : PAINTED_MEDIUM
@@ -62,56 +85,65 @@ function buildQueriesFromPrefs(prefs: ArtFeedPrefs): {
     mediumFilter = PAINTED_MEDIUM
   }
 
-  const mediaKeywords = prefs.mediaTypes.length > 0
-    ? prefs.mediaTypes
+  const mediaKeywords = mediaTypes.length > 0
+    ? mediaTypes
         .map(id => MEDIA_OPTIONS.find(o => o.id === id)?.query || '')
         .filter(Boolean)
         .slice(0, 2)
     : []
 
-  const cultureStr = prefs.cultures.length > 0 ? prefs.cultures[0] : ''
-  const keywordTerms = prefs.keywords
+  const cultureStr = cultures.length > 0 ? cultures[0] : ''
+  const keywordTerms = keywords
     .map(keyword => keyword.trim())
     .filter(Boolean)
     .slice(0, 4)
 
   let metQs: string[]
   let articQs: string[]
+  let europeanaQs: string[]
   const withHints = (term: string, lowercase = false) =>
     [lowercase ? term.toLowerCase() : term, mediaKeywords[0], cultureStr].filter(Boolean).join(' ')
 
-  if (prefs.artists.length > 0) {
-    metQs = prefs.artists.slice(0, 4).map(artist => withHints(artist))
-    articQs = prefs.artists.slice(0, 3).map(artist => withHints(artist, true))
+  if (artists.length > 0) {
+    metQs = artists.slice(0, 4).map(artist => withHints(artist))
+    articQs = artists.slice(0, 3).map(artist => withHints(artist, true))
+    europeanaQs = artists.slice(0, 3).map(artist => withHints(artist, true))
     if (keywordTerms.length > 0) {
       metQs = [...metQs, ...keywordTerms.slice(0, 2).map(keyword => withHints(keyword))]
       articQs = [...articQs, ...keywordTerms.slice(0, 1).map(keyword => withHints(keyword, true))]
+      europeanaQs = [...europeanaQs, ...keywordTerms.slice(0, 2).map(keyword => withHints(keyword, true))]
     }
   } else if (keywordTerms.length > 0) {
     metQs = keywordTerms.slice(0, 4).map(keyword => withHints(keyword))
     articQs = keywordTerms.slice(0, 3).map(keyword => withHints(keyword, true))
+    europeanaQs = keywordTerms.slice(0, 4).map(keyword => withHints(keyword, true))
   } else {
     // Use curated fallback queries
     metQs = pickRandom(MET_QUERIES, 3)
     articQs = pickRandom(ARTIC_QUERIES, 2)
+    europeanaQs = pickRandom(EUROPEANA_QUERIES, 3)
     if (cultureStr) {
       metQs = [...metQs, cultureStr]
       articQs = [...articQs, cultureStr.toLowerCase()]
+      europeanaQs = [...europeanaQs, cultureStr.toLowerCase()]
     }
     if (mediaKeywords.length > 0) {
       metQs = [...metQs.slice(0, 2), ...mediaKeywords.map(m => `${m} landscape`)]
+      europeanaQs = [...europeanaQs.slice(0, 2), ...mediaKeywords.map(m => `${m} modern`)]
     }
   }
 
-  if (!prefs.useMet) metQs = []
-  if (!prefs.useArtic) articQs = []
+  if (!useMet) metQs = []
+  if (!useArtic) articQs = []
+  if (!useEuropeana) europeanaQs = []
 
   return {
     metQs: metQs.slice(0, 6),
     articQs: articQs.slice(0, 4),
+    europeanaQs: europeanaQs.slice(0, 5),
     mediumFilter,
-    yearFrom: prefs.yearFrom,
-    yearTo: prefs.yearTo,
+    yearFrom,
+    yearTo,
   }
 }
 
@@ -274,6 +306,44 @@ async function fetchFromArtic(query: string, mediumFilter: RegExp | null): Promi
   }
 }
 
+async function fetchFromEuropeana(query: string, mediumFilter: RegExp | null): Promise<Artwork[]> {
+  try {
+    const res = await fetch(
+      `${EUROPEANA_API}?wskey=${EUROPEANA_WSKEY}&query=${encodeURIComponent(query)}&rows=50&profile=standard`
+    )
+    if (!res.ok) return []
+    const data = await res.json()
+
+    const artworks: Artwork[] = []
+    for (const item of data.items || []) {
+      const imageUrl = item?.edmIsShownBy?.[0] || item?.edmPreview?.[0]
+      if (!imageUrl) continue
+      const title = item?.title?.[0] || item?.dcTitleLangAware?.def?.[0] || 'Untitled'
+      const artist = item?.dcCreator?.[0] || 'Unknown'
+      const medium = item?.dcFormat?.[0] || item?.type || ''
+      if (mediumFilter && medium && !mediumFilter.test(medium)) continue
+
+      const idStr = String(item?.id || imageUrl)
+      let hash = 0
+      for (let i = 0; i < idStr.length; i += 1) hash = (hash * 31 + idStr.charCodeAt(i)) | 0
+      const stableId = 20_000_000 + Math.abs(hash)
+
+      artworks.push({
+        id: stableId,
+        title,
+        artist,
+        imageUrl,
+        date: item?.year?.[0] || '',
+        medium,
+        origin: item?.dataProvider?.[0] || item?.edmProvider?.[0] || '',
+      })
+    }
+    return artworks
+  } catch {
+    return []
+  }
+}
+
 export function useArtwork(rotateSecs = 240) {
   const [artworks, setArtworks]   = useState<Artwork[]>([])
   const [index, setIndex]         = useState(0)
@@ -320,19 +390,20 @@ export function useArtwork(rotateSecs = 240) {
         const keywordTerms = prefs.keywords
           .map(keyword => keyword.trim().toLowerCase())
           .filter(Boolean)
-        const { metQs, articQs, mediumFilter, yearFrom, yearTo } = buildQueriesFromPrefs(prefs)
+        const { metQs, articQs, europeanaQs, mediumFilter, yearFrom, yearTo } = buildQueriesFromPrefs(prefs)
 
         const fetchCombined = async (activeMediumFilter: RegExp | null) => {
           const fetches = [
             ...metQs.map(q => fetchFromMet(q, activeMediumFilter)),
             ...articQs.map(q => fetchFromArtic(q, activeMediumFilter)),
+            ...europeanaQs.map(q => fetchFromEuropeana(q, activeMediumFilter)),
           ]
           const results = await Promise.all(fetches)
-          let merged = results.flat()
+          let merged: Artwork[] = results.flat()
 
           // Deduplicate by id
           const seen = new Set<number>()
-          merged = merged.filter(a => {
+          merged = merged.filter((a: Artwork) => {
             if (seen.has(a.id)) return false
             seen.add(a.id)
             return true
@@ -340,7 +411,7 @@ export function useArtwork(rotateSecs = 240) {
 
           // Year range filter
           if (yearFrom !== null || yearTo !== null) {
-            merged = merged.filter(a => {
+            merged = merged.filter((a: Artwork) => {
               if (!a.date) return true
               const year = parseInt(a.date)
               if (isNaN(year)) return true
@@ -351,7 +422,7 @@ export function useArtwork(rotateSecs = 240) {
           }
 
           if (keywordTerms.length > 0) {
-            merged = merged.filter(artwork => matchesAnyKeyword(artwork, keywordTerms))
+            merged = merged.filter((artwork: Artwork) => matchesAnyKeyword(artwork, keywordTerms))
           }
 
           return merged

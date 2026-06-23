@@ -19,6 +19,7 @@ export const MEDIA_OPTIONS: MediaOption[] = [
 ]
 
 export interface ArtFeedPrefs {
+  feedMode: 'auto' | 'curated'
   artists: string[]
   keywords: string[]
   mediaTypes: string[]      // ids from MEDIA_OPTIONS
@@ -27,9 +28,11 @@ export interface ArtFeedPrefs {
   cultures: string[]
   useMet: boolean
   useArtic: boolean
+  useEuropeana: boolean
 }
 
 const DEFAULT_PREFS: ArtFeedPrefs = {
+  feedMode: 'auto',
   artists: [],
   keywords: [],
   mediaTypes: [],
@@ -38,6 +41,7 @@ const DEFAULT_PREFS: ArtFeedPrefs = {
   cultures: [],
   useMet: true,
   useArtic: true,
+  useEuropeana: true,
 }
 
 export const ART_FEED_PREFS_KEY = 'art-feed-prefs-v1'
