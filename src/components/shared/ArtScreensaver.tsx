@@ -294,13 +294,22 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
         )}
 
         {artwork && loaded && (
-          <div className="absolute bottom-4 right-5 text-right pointer-events-none" style={{ color: darkThemeActive ? '#D7D2C8' : '#5a4f4a' }}>
+          <div className="absolute bottom-4 right-5 text-right pointer-events-none max-w-[42vw]" style={{ color: darkThemeActive ? '#D7D2C8' : '#5a4f4a' }}>
             <p className="text-caption italic leading-tight" style={{ fontFamily: 'Georgia, serif', fontSize: '0.7rem', fontWeight: 500, letterSpacing: '0.3px' }}>
               {artwork.title}
             </p>
             <p className="text-caption leading-tight mt-0.5" style={{ fontFamily: 'Georgia, serif', fontSize: '0.62rem', opacity: 0.7, letterSpacing: '0.2px' }}>
               {artwork.artist}
             </p>
+            {(artwork.source || artwork.origin) && (
+              <p
+                className="leading-tight mt-0.5 truncate"
+                style={{ fontFamily: 'Georgia, serif', fontSize: '0.54rem', opacity: 0.45, letterSpacing: '0.2px' }}
+              >
+                {artwork.source ?? 'Source'}
+                {artwork.source === 'Europeana' && artwork.origin ? ` · ${artwork.origin}` : ''}
+              </p>
+            )}
           </div>
         )}
 

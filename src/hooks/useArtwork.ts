@@ -191,6 +191,7 @@ export interface Artwork {
   date?: string
   medium?: string
   origin?: string
+  source?: string
 }
 
 type ArtworkPreference = 'up' | 'down'
@@ -267,6 +268,7 @@ async function fetchFromMet(query: string, mediumFilter: RegExp | null): Promise
             date: obj.objectDate || '',
             medium: obj.medium || '',
             origin: obj.culture || '',
+            source: 'The Met',
           } as Artwork
         } catch {
           return null
@@ -298,6 +300,7 @@ async function fetchFromArtic(query: string, mediumFilter: RegExp | null): Promi
         imageUrl: `${ARTIC_IIIF}/${item.image_id}/full/1200,/0/default.jpg`,
         date: item.date_display || '',
         medium: item.medium_display || '',
+        source: 'Art Institute of Chicago',
       })
     }
     return artworks
@@ -306,7 +309,15 @@ async function fetchFromArtic(query: string, mediumFilter: RegExp | null): Promi
   }
 }
 
-async function fetchFromEuropeana(query: string, mediumFilter: RegExp | null): Promise<Artwork[]> {
+function normalizeImageUrl(url: string): string {
+  return url.startsWith('http://') ? `https://${url.slice(7)}` : url
+}
+
+async function fetchFromEuropeana(
+  query: string,
+  mediumFilter: RegExp | null,
+  strictMediumFilter = false
+): Promise<Artwork[]> {
   try {
     const res = await fetch(
       `${EUROPEANA_API}?wskey=${EUROPEANA_WSKEY}&query=${encodeURIComponent(query)}&rows=50&profile=standard`
@@ -316,12 +327,14 @@ async function fetchFromEuropeana(query: string, mediumFilter: RegExp | null): P
 
     const artworks: Artwork[] = []
     for (const item of data.items || []) {
-      const imageUrl = item?.edmIsShownBy?.[0] || item?.edmPreview?.[0]
-      if (!imageUrl) continue
+      const rawImageUrl = item?.edmPreview?.[0] || item?.edmIsShownBy?.[0]
+      if (!rawImageUrl) continue
+      const imageUrl = normalizeImageUrl(rawImageUrl)
+      if (!imageUrl.startsWith('https://')) continue
       const title = item?.title?.[0] || item?.dcTitleLangAware?.def?.[0] || 'Untitled'
       const artist = item?.dcCreator?.[0] || 'Unknown'
       const medium = item?.dcFormat?.[0] || item?.type || ''
-      if (mediumFilter && medium && !mediumFilter.test(medium)) continue
+      if (strictMediumFilter && mediumFilter && medium && !mediumFilter.test(medium)) continue
 
       const idStr = String(item?.id || imageUrl)
       let hash = 0
@@ -336,6 +349,7 @@ async function fetchFromEuropeana(query: string, mediumFilter: RegExp | null): P
         date: item?.year?.[0] || '',
         medium,
         origin: item?.dataProvider?.[0] || item?.edmProvider?.[0] || '',
+        source: 'Europeana',
       })
     }
     return artworks
@@ -391,12 +405,13 @@ export function useArtwork(rotateSecs = 240) {
           .map(keyword => keyword.trim().toLowerCase())
           .filter(Boolean)
         const { metQs, articQs, europeanaQs, mediumFilter, yearFrom, yearTo } = buildQueriesFromPrefs(prefs)
+        const strictMediaFilter = prefs.mediaTypes.length > 0
 
         const fetchCombined = async (activeMediumFilter: RegExp | null) => {
           const fetches = [
             ...metQs.map(q => fetchFromMet(q, activeMediumFilter)),
             ...articQs.map(q => fetchFromArtic(q, activeMediumFilter)),
-            ...europeanaQs.map(q => fetchFromEuropeana(q, activeMediumFilter)),
+            ...europeanaQs.map(q => fetchFromEuropeana(q, activeMediumFilter, strictMediaFilter)),
           ]
           const results = await Promise.all(fetches)
           let merged: Artwork[] = results.flat()
@@ -431,7 +446,7 @@ export function useArtwork(rotateSecs = 240) {
         let combined = await fetchCombined(mediumFilter)
 
         // If keyword-only search finds nothing under painted-medium defaults, retry without medium restriction.
-        if (combined.length === 0 && keywordTerms.length > 0 && prefs.mediaTypes.length === 0) {
+        if (combined.length === 0 && prefs.mediaTypes.length === 0) {
           combined = await fetchCombined(null)
         }
 
