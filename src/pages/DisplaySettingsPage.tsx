@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, RotateCcw } from 'lucide-react'
+import { CheckCircle, Monitor, Clock, Eye, Sunset, Cpu, Palette, RotateCcw } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
@@ -231,6 +231,8 @@ export default function DisplaySettingsPage() {
   const [previewZone, setPreviewZone] = useState<RoomToneZone>('day')
   // Track whether config has been user-modified (vs just loaded from DB)
   const [dirty, setDirty] = useState(false)
+  const [appearanceAdvancedOpen, setAppearanceAdvancedOpen] = useState(false)
+  const [ambientAdvancedOpen, setAmbientAdvancedOpen] = useState(false)
 
   useEffect(() => {
     const merged = { ...DISPLAY_DEFAULTS, ...liveCfg }
@@ -306,18 +308,32 @@ export default function DisplaySettingsPage() {
     setDirty(true)
   }
 
-  const setAdvancedOverridesEnabled = (enabled: boolean) => {
-    if (enabled) {
-      setConfig(prev => ({ ...prev, ambient_auto_mode: false }))
+  const setAmbientMode = (mode: 'auto' | 'manual' | 'custom') => {
+    if (mode === 'auto') {
+      disableAdvancedOverrides()
+      return
+    }
+
+    if (mode === 'manual') {
+      setConfig(prev => ({
+        ...prev,
+        ambient_auto_mode: false,
+        room_tone_enabled: true,
+        sensor_push_enabled: true,
+        manual_override: true,
+        override_expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      }))
       setDirty(true)
       return
     }
-    disableAdvancedOverrides()
-  }
 
-  const enableManualOverride = (on: boolean) => {
-    const expires = on ? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() : null
-    setConfig(prev => ({ ...prev, manual_override: on, override_expires_at: expires }))
+    setConfig(prev => ({
+      ...prev,
+      ambient_auto_mode: false,
+      room_tone_enabled: true,
+      manual_override: false,
+      override_expires_at: null,
+    }))
     setDirty(true)
   }
 
@@ -386,39 +402,32 @@ export default function DisplaySettingsPage() {
     ? `sepia(${config.manual_warmth.toFixed(2)}) brightness(${config.manual_brightness.toFixed(2)})`
     : ZONE_FILTER[previewZone]
 
+  const ambientMode: 'auto' | 'manual' | 'custom' = config.ambient_auto_mode
+    ? 'auto'
+    : config.manual_override
+      ? 'manual'
+      : 'custom'
+
+  useEffect(() => {
+    if (ambientMode !== 'custom' || !config.room_tone_enabled) setAmbientAdvancedOpen(false)
+  }, [ambientMode, config.room_tone_enabled])
+
   return (
     <>
-      {/* Page header */}
       <div className="flex items-center gap-3 mb-6">
         <span className="w-10 h-10 rounded-full bg-casa-bg border border-casa-border flex items-center justify-center text-casa-gold">
           <Monitor size={18} />
         </span>
         <div>
           <h1 className="font-display text-display-sm text-casa-navy">Display Settings</h1>
-          <p className="text-caption text-casa-muted">Customize colors, room tone, brightness, and sensors</p>
+          <p className="text-caption text-casa-muted">Simple by default, advanced only when needed</p>
         </div>
       </div>
 
       <div className="space-y-4">
-
-        {/* ─────────────────────────────────────────────────────────────────── */}
-        {/* 1. THEME & COLORS ──────────────────────────────────────────────── */}
-        {/* ─────────────────────────────────────────────────────────────────── */}
-        
-        {/* Section header with icon */}
-        <div className="mt-6 mb-4 flex items-center gap-3">
-          <div className="flex-1 h-px bg-casa-border" />
-          <span className="flex items-center gap-2 px-1">
-            <Palette size={15} className="text-casa-gold" />
-            <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Theme &amp; Colors</span>
-          </span>
-          <div className="flex-1 h-px bg-casa-border" />
-        </div>
-
-        {/* Preset palettes */}
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Palette} label="Presets" />
-          <div className="flex items-center gap-2 mb-4">
+          <SectionHeader icon={Palette} label="Appearance" />
+          <div className="flex items-center gap-2 mb-3">
             <button
               type="button"
               onClick={() => setActiveTarget('day')}
@@ -429,7 +438,7 @@ export default function DisplaySettingsPage() {
                   : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy'
               )}
             >
-              Day Palette
+              Day
             </button>
             <button
               type="button"
@@ -441,10 +450,10 @@ export default function DisplaySettingsPage() {
                   : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy'
               )}
             >
-              Midnight Gallery Palette
+              Midnight
             </button>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {PRESETS.map(preset => {
               const active = Object.entries(preset.colors).every(
                 ([k, v]) => colors[k as keyof ThemeColors] === v
@@ -474,137 +483,136 @@ export default function DisplaySettingsPage() {
               )
             })}
           </div>
-        </div>
-
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Sunset} label="Midnight Gallery Activation" />
           <Toggle
             checked={autoMidnight}
             onChange={setAutoMidnight}
-            label="Auto-switch at night"
-            desc="Automatically switch to Midnight Gallery during Night and Late-night zones."
+            label="Auto Midnight Gallery"
+            desc="Switches to the Midnight palette at night."
           />
           <Toggle
             checked={forceMidnight}
             onChange={setForceMidnight}
-            label="Manual override: force Midnight Gallery"
-            desc="Keep Midnight Gallery on all day until you turn this off."
+            label="Force Midnight now"
+            desc="Keeps Midnight palette on all day."
           />
-        </div>
+          <SliderRow
+            label="Header text size"
+            desc="Scales display + heading typography across the app"
+            value={typography.headingScale}
+            min={85}
+            max={120}
+            onChange={setHeadingScale}
+          />
+          <SliderRow
+            label="Body text size"
+            desc="Scales body, small body, and caption text"
+            value={typography.bodyScale}
+            min={85}
+            max={120}
+            onChange={setBodyScale}
+          />
+          <button
+            type="button"
+            onClick={() => setAppearanceAdvancedOpen(v => !v)}
+            className="mt-3 px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors"
+          >
+            {appearanceAdvancedOpen ? 'Hide advanced appearance' : 'Show advanced appearance'}
+          </button>
 
-        {/* Individual color pickers */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Palette} label="Custom Colors" />
-          <p className="text-caption text-casa-muted mb-2">
-            Editing: <span className="font-medium text-casa-navy">{activeTarget === 'midnight' ? 'Midnight Gallery palette' : 'Day palette'}</span>
-          </p>
-          <div className="divide-y divide-casa-divider">
-            {COLOR_FIELDS.map(({ key, label, desc }) => (
-              <div key={key} className="flex items-center gap-4 px-0 py-3.5">
-                {/* Color swatch + picker */}
-                <label className="relative cursor-pointer flex-shrink-0">
-                  <div
-                    className="w-10 h-10 rounded-xl border-2 border-casa-border shadow-sm transition-transform hover:scale-105"
-                    style={{ background: colors[key] }}
-                  />
-                  <input
-                    type="color"
-                    value={colors[key]}
-                    onChange={e => setColor(key, e.target.value)}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  />
-                </label>
-
-                <div className="flex-1 min-w-0">
-                  <p className="text-body-sm font-semibold text-casa-navy leading-tight">{label}</p>
-                  <p className="text-caption text-casa-muted mt-0.5">{desc}</p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <code className="text-caption font-mono text-casa-muted bg-casa-bg px-2 py-1 rounded-md">
-                    {colors[key].toUpperCase()}
-                  </code>
-                  {colors[key] !== (activeTarget === 'midnight' ? MIDNIGHT_GALLERY_DEFAULTS[key] : DEFAULTS[key]) && (
+          {appearanceAdvancedOpen && (
+            <div className="mt-4 pt-4 border-t border-casa-divider space-y-4">
+              <div>
+                <p className="text-body-sm font-semibold text-casa-navy mb-2">Header font</p>
+                <div className="flex flex-wrap gap-2">
+                  {DISPLAY_FONT_OPTIONS.map(option => (
                     <button
-                      onClick={() => setColor(key, activeTarget === 'midnight' ? MIDNIGHT_GALLERY_DEFAULTS[key] : DEFAULTS[key])}
-                      title="Reset this color"
-                      className="text-casa-muted hover:text-casa-gold transition-colors"
+                      key={option.id}
+                      type="button"
+                      onClick={() => setDisplayFont(option.css)}
+                      className={cn(
+                        'px-3 py-1.5 rounded-full border text-caption font-medium transition-colors',
+                        typography.displayFont === option.css
+                          ? 'bg-casa-navy text-white border-casa-navy'
+                          : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy',
+                      )}
                     >
-                      <RotateCcw size={13} />
+                      {option.label}
                     </button>
-                  )}
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-body-sm font-semibold text-casa-navy mb-2">Body font</p>
+                <div className="flex flex-wrap gap-2">
+                  {BODY_FONT_OPTIONS.map(option => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setBodyFont(option.css)}
+                      className={cn(
+                        'px-3 py-1.5 rounded-full border text-caption font-medium transition-colors',
+                        typography.bodyFont === option.css
+                          ? 'bg-casa-navy text-white border-casa-navy'
+                          : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy',
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Sliders} label="Typography" />
-
-          <div className="space-y-4">
-            <div>
-              <p className="text-body-sm font-semibold text-casa-navy mb-2">Header font</p>
-              <div className="flex flex-wrap gap-2">
-                {DISPLAY_FONT_OPTIONS.map(option => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => setDisplayFont(option.css)}
-                    className={cn(
-                      'px-3 py-1.5 rounded-full border text-caption font-medium transition-colors',
-                      typography.displayFont === option.css
-                        ? 'bg-casa-navy text-white border-casa-navy'
-                        : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy',
-                    )}
-                  >
-                    {option.label}
-                  </button>
+              <div className="divide-y divide-casa-divider">
+                {COLOR_FIELDS.map(({ key, label, desc }) => (
+                  <div key={key} className="flex items-center gap-4 px-0 py-3.5">
+                    <label className="relative cursor-pointer flex-shrink-0">
+                      <div
+                        className="w-10 h-10 rounded-xl border-2 border-casa-border shadow-sm transition-transform hover:scale-105"
+                        style={{ background: colors[key] }}
+                      />
+                      <input
+                        type="color"
+                        value={colors[key]}
+                        onChange={e => setColor(key, e.target.value)}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      />
+                    </label>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-body-sm font-semibold text-casa-navy leading-tight">{label}</p>
+                      <p className="text-caption text-casa-muted mt-0.5">{desc}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <code className="text-caption font-mono text-casa-muted bg-casa-bg px-2 py-1 rounded-md">
+                        {colors[key].toUpperCase()}
+                      </code>
+                      {colors[key] !== (activeTarget === 'midnight' ? MIDNIGHT_GALLERY_DEFAULTS[key] : DEFAULTS[key]) && (
+                        <button
+                          onClick={() => setColor(key, activeTarget === 'midnight' ? MIDNIGHT_GALLERY_DEFAULTS[key] : DEFAULTS[key])}
+                          title="Reset this color"
+                          className="text-casa-muted hover:text-casa-gold transition-colors"
+                        >
+                          <RotateCcw size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
+          )}
 
-            <div>
-              <p className="text-body-sm font-semibold text-casa-navy mb-2">Body font</p>
-              <div className="flex flex-wrap gap-2">
-                {BODY_FONT_OPTIONS.map(option => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => setBodyFont(option.css)}
-                    className={cn(
-                      'px-3 py-1.5 rounded-full border text-caption font-medium transition-colors',
-                      typography.bodyFont === option.css
-                        ? 'bg-casa-navy text-white border-casa-navy'
-                        : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy',
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <SliderRow
-              label="Header text size"
-              desc="Scales display + heading typography across the app"
-              value={typography.headingScale}
-              min={85}
-              max={120}
-              onChange={setHeadingScale}
-            />
-            <SliderRow
-              label="Body text size"
-              desc="Scales body, small body, and caption text"
-              value={typography.bodyScale}
-              min={85}
-              max={120}
-              onChange={setBodyScale}
-            />
-
-            {!isTypographyDefault && (
-              <div className="pt-2">
+          {(!isDefault || !isTypographyDefault) && (
+            <div className="mt-4 pt-4 border-t border-casa-divider flex flex-wrap gap-2">
+              {!isDefault && (
+                <button
+                  onClick={resetToDefaults}
+                  className="inline-flex items-center gap-2 bg-white border border-casa-border text-casa-navy text-body-sm font-semibold px-3 py-1.5 rounded-xl hover:bg-casa-bg transition-colors"
+                >
+                  <RotateCcw size={13} />
+                  Reset palette defaults
+                </button>
+              )}
+              {!isTypographyDefault && (
                 <button
                   type="button"
                   onClick={resetTypography}
@@ -613,510 +621,247 @@ export default function DisplaySettingsPage() {
                   <RotateCcw size={13} />
                   Reset typography defaults
                 </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Live preview strip */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Eye} label="Preview" />
-          <div className="rounded-2xl overflow-hidden border border-casa-border shadow-sm">
-            {/* Header bar */}
-            <div className="px-4 py-3 flex items-center justify-between" style={{ background: colors['casa-navy'] }}>
-              <span className="font-display text-body-sm font-semibold text-white">Casa Tabor</span>
-              <div className="w-2 h-2 rounded-full" style={{ background: colors['casa-gold'] }} />
-            </div>
-            {/* Card */}
-            <div className="p-4" style={{ background: colors['casa-bg'] }}>
-              <div className="rounded-xl p-3 border" style={{ background: colors['casa-surface'], borderColor: colors['casa-border'] }}>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-caption font-bold" style={{ background: colors['casa-gold'] }}>J</div>
-                  <span className="text-body-sm font-semibold" style={{ color: colors['casa-navy'] }}>Jake's Event</span>
-                </div>
-                <p className="text-caption" style={{ color: colors['casa-text'] }}>Thursday · 3:00 PM – 4:00 PM</p>
-                <div className="mt-2 pt-2 border-t" style={{ borderColor: colors['casa-border'] }}>
-                  <span className="text-caption font-semibold px-2 py-0.5 rounded-full text-white" style={{ background: colors['casa-gold'] }}>Work</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Reset to defaults */}
-        {!isDefault && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-center justify-between">
-            <div>
-              <p className="text-body-sm font-semibold text-amber-800">Custom {activeTarget === 'midnight' ? 'Midnight Gallery' : 'day'} palette active</p>
-              <p className="text-caption text-amber-600 mt-0.5">
-                Restore original {activeTarget === 'midnight' ? 'Midnight Gallery' : 'Casa Tabor day'} colors
-              </p>
-            </div>
-            <button
-              onClick={resetToDefaults}
-              className="flex items-center gap-2 bg-white border border-amber-300 text-amber-700 text-body-sm font-semibold px-4 py-2 rounded-xl hover:bg-amber-50 transition-colors shadow-sm"
-            >
-              <RotateCcw size={14} />
-              Reset palette defaults
-            </button>
-          </div>
-        )}
-
-        {/* ─────────────────────────────────────────────────────────────────── */}
-        {/* 2. DISPLAY SETTINGS ────────────────────────────────────────────── */}
-        {/* ─────────────────────────────────────────────────────────────────── */}
-        
-        <div className="mt-8 mb-4 flex items-center gap-3">
-          <div className="flex-1 h-px bg-casa-border" />
-          <span className="flex items-center gap-2 px-1">
-            <Sunset size={15} className="text-casa-gold" />
-            <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Display Settings</span>
-          </span>
-          <div className="flex-1 h-px bg-casa-border" />
-        </div>
-
-        {/* Room Tone Master */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Sunset} label="Adaptive Room Tone" />
-          <Toggle
-            checked={!config.ambient_auto_mode}
-            onChange={setAdvancedOverridesEnabled}
-            label="Advanced ambient overrides"
-            desc="OFF (recommended): pure ambient auto-match. ON: unlock manual override and custom warmth/brightness tuning."
-          />
-          <Toggle
-            checked={config.room_tone_enabled}
-            onChange={v => set('room_tone_enabled', v)}
-            label="Adaptive warm display"
-            desc="Shifts the screen to warm amber tones as daylight fades — like a painting illuminated by the room's own light"
-            disabled={config.ambient_auto_mode}
-          />
-          {config.ambient_auto_mode && (
-            <p className="text-caption text-casa-muted mt-1">
-              Ambient Auto mode is locking adaptive controls to safe defaults (room tone on, live sensor push on, no manual lock).
-            </p>
-          )}
-
-          {/* Live status badge */}
-          {config.room_tone_enabled && (
-            <div className="mt-2 mb-1 flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-casa-gold animate-pulse" />
-              <span className="text-caption text-casa-muted">
-                Now: <span className="text-casa-navy font-medium">{ZONE_LABELS[currentZone]}</span>
-              </span>
+              )}
             </div>
           )}
         </div>
 
-        {/* ── Preview + Zone selector ──────────────────── */}
-        {config.room_tone_enabled && (
-          <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-            <SectionHeader icon={Eye} label="Preview" />
-
-            {/* Zone tabs */}
-            <div className="flex gap-1.5 flex-wrap mb-4">
-              {ZONES_IN_ORDER.map(z => (
-                <button
-                  key={z}
-                  type="button"
-                  onClick={() => setPreviewZone(z)}
-                  className={cn(
-                    'px-3 py-1.5 rounded-full text-caption font-medium border transition-colors',
-                    previewZone === z
-                      ? 'bg-casa-navy text-white border-casa-navy'
-                      : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy'
-                  )}
-                >
-                  {z.charAt(0).toUpperCase() + z.slice(1).replace('-', ' ')}
-                </button>
-              ))}
-            </div>
-
-            <WarmthPreview filter={previewFilter} />
-
-            {/* 24h timeline */}
-            <DayTimeline cfg={config} />
+        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
+          <SectionHeader icon={Sunset} label="Ambient Behavior" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
+            {(['auto', 'manual', 'custom'] as const).map(mode => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setAmbientMode(mode)}
+                className={cn(
+                  'px-3 py-2 rounded-xl border text-body-sm font-semibold transition-colors',
+                  ambientMode === mode
+                    ? 'bg-casa-navy text-white border-casa-navy'
+                    : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy'
+                )}
+              >
+                {mode === 'auto' ? 'Auto (Recommended)' : mode === 'manual' ? 'Manual Hold' : 'Custom Tuning'}
+              </button>
+            ))}
           </div>
-        )}
+          <p className="text-caption text-casa-muted">
+            Active mode: <span className="font-semibold text-casa-navy">{ambientMode === 'auto' ? 'Auto' : ambientMode === 'manual' ? 'Manual Hold' : 'Custom Tuning'}</span>
+          </p>
 
-        {/* ── Schedule ─────────────────────────────────── */}
-        {config.room_tone_enabled && (
-          <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-            <SectionHeader icon={Clock} label="Warmth Schedule" />
-            <p className="text-caption text-casa-muted mb-3">
-              Adjust when each warmth zone begins. The Pi sensor array will override these with real lux/CCT readings once connected.
-            </p>
-            <div className="divide-y divide-casa-divider">
-              <HourPicker label="☀️  Day begins" value={config.schedule_day_hour} onChange={v => set('schedule_day_hour', v)} />
-              <HourPicker label="🌤  Afternoon begins" value={config.schedule_afternoon_hour} onChange={v => set('schedule_afternoon_hour', v)} />
-              <HourPicker label="🌇  Evening begins" value={config.schedule_evening_hour} onChange={v => set('schedule_evening_hour', v)} />
-              <HourPicker label="🌙  Night begins" value={config.schedule_night_hour} onChange={v => set('schedule_night_hour', v)} />
-              <HourPicker label="🕯  Late Night begins" value={config.schedule_late_night_hour} onChange={v => set('schedule_late_night_hour', v)} />
+          {ambientMode === 'auto' && (
+            <div className="mt-3 rounded-xl bg-casa-bg border border-casa-divider p-3">
+              <p className="text-body-sm font-semibold text-casa-navy">Ambient automation is fully managed</p>
+              <p className="text-caption text-casa-muted mt-0.5">Warmth, sensor push, and safety limits are locked to recommended defaults.</p>
+              {sensorData && (
+                <div className="grid grid-cols-2 gap-2 mt-3">
+                  <div className="rounded-lg border border-casa-divider bg-white px-3 py-2">
+                    <p className="text-caption text-casa-muted uppercase tracking-wide">Color Temp</p>
+                    <p className="text-body-sm font-semibold text-casa-navy tabular-nums">{Math.round(sensorData.cct).toLocaleString()} K</p>
+                  </div>
+                  <div className="rounded-lg border border-casa-divider bg-white px-3 py-2">
+                    <p className="text-caption text-casa-muted uppercase tracking-wide">Illuminance</p>
+                    <p className="text-body-sm font-semibold text-casa-navy tabular-nums">{sensorData.lux.toFixed(1)} lux</p>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          )}
+          {ambientMode === 'manual' && (
+            <div className="mt-3 pt-3 border-t border-casa-divider space-y-5">
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-body-sm font-medium text-casa-navy">Warmth</label>
+                  <span className="text-caption text-casa-muted">{Math.round(config.manual_warmth * 100)}%</span>
+                </div>
+                <input
+                  type="range" min={0} max={0.5} step={0.01}
+                  value={config.manual_warmth}
+                  onChange={e => set('manual_warmth', Number(e.target.value))}
+                  className="w-full accent-casa-gold"
+                />
+              </div>
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-body-sm font-medium text-casa-navy">Brightness</label>
+                  <span className="text-caption text-casa-muted">{Math.round(config.manual_brightness * 100)}%</span>
+                </div>
+                <input
+                  type="range" min={0.15} max={1} step={0.01}
+                  value={config.manual_brightness}
+                  onChange={e => set('manual_brightness', Number(e.target.value))}
+                  className="w-full accent-casa-navy"
+                />
+              </div>
+              {config.override_expires_at && (
+                <p className="text-caption text-casa-muted">
+                  Auto-clears at {new Date(config.override_expires_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                </p>
+              )}
+            </div>
+          )}
 
-        {/* ── Manual Override ───────────────────────────── */}
-        {config.room_tone_enabled && (
+          {ambientMode === 'custom' && (
+            <div className="mt-3 pt-3 border-t border-casa-divider">
+              <Toggle
+                checked={config.room_tone_enabled}
+                onChange={v => set('room_tone_enabled', v)}
+                label="Adaptive warm display"
+                desc="Enable ambient warmth response."
+              />
+
+              {config.room_tone_enabled && (
+                <>
+                  <div className="mt-3">
+                    <SectionHeader icon={Eye} label="Preview" />
+                    <div className="flex gap-1.5 flex-wrap mb-4">
+                      {ZONES_IN_ORDER.map(z => (
+                        <button
+                          key={z}
+                          type="button"
+                          onClick={() => setPreviewZone(z)}
+                          className={cn(
+                            'px-3 py-1.5 rounded-full text-caption font-medium border transition-colors',
+                            previewZone === z
+                              ? 'bg-casa-navy text-white border-casa-navy'
+                              : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy'
+                          )}
+                        >
+                          {z.charAt(0).toUpperCase() + z.slice(1).replace('-', ' ')}
+                        </button>
+                      ))}
+                    </div>
+                    <WarmthPreview filter={previewFilter} />
+                    <DayTimeline cfg={config} />
+                  </div>
+
+                  <div className="mt-4 pt-4 border-t border-casa-divider">
+                    <SectionHeader icon={Clock} label="Schedule" />
+                    <div className="divide-y divide-casa-divider">
+                      <HourPicker label="☀️ Day begins" value={config.schedule_day_hour} onChange={v => set('schedule_day_hour', v)} />
+                      <HourPicker label="🌤 Afternoon begins" value={config.schedule_afternoon_hour} onChange={v => set('schedule_afternoon_hour', v)} />
+                      <HourPicker label="🌇 Evening begins" value={config.schedule_evening_hour} onChange={v => set('schedule_evening_hour', v)} />
+                      <HourPicker label="🌙 Night begins" value={config.schedule_night_hour} onChange={v => set('schedule_night_hour', v)} />
+                      <HourPicker label="🕯 Late night begins" value={config.schedule_late_night_hour} onChange={v => set('schedule_late_night_hour', v)} />
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setAmbientAdvancedOpen(v => !v)}
+                    className="mt-4 px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors"
+                  >
+                    {ambientAdvancedOpen ? 'Hide advanced ambient controls' : 'Show advanced ambient controls'}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {ambientMode === 'custom' && config.room_tone_enabled && ambientAdvancedOpen && (
           <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-            <SectionHeader icon={Sliders} label="Manual Override" />
+            <SectionHeader icon={Cpu} label="Advanced & Diagnostics" />
             <Toggle
-              checked={config.manual_override}
-              onChange={enableManualOverride}
-              label="Lock warmth & brightness"
-              desc="Hold the display at a specific setting. Auto-expires after 2 hours."
-              disabled={config.ambient_auto_mode}
+              checked={config.sensor_push_enabled}
+              onChange={v => set('sensor_push_enabled', v)}
+              label="Live sensor push"
+              desc="Pi bridge streams readings to Supabase."
             />
-            {config.manual_override && (
-              <div className="mt-4 space-y-5 pt-4 border-t border-casa-divider">
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="text-body-sm font-medium text-casa-navy">Warmth</label>
-                    <span className="text-caption text-casa-muted">{Math.round(config.manual_warmth * 100)}%</span>
+
+            {config.sensor_push_enabled && sensorData && (
+              <div className="mt-3 pt-3 border-t border-casa-divider">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl bg-casa-bg border border-casa-divider px-3 py-2.5">
+                    <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-0.5">Color Temp</p>
+                    <p className="text-body-sm font-semibold text-casa-navy tabular-nums">{Math.round(sensorData.cct).toLocaleString()} K</p>
                   </div>
-                  <input
-                    type="range" min={0} max={0.5} step={0.01}
-                    value={config.manual_warmth}
-                    onChange={e => set('manual_warmth', Number(e.target.value))}
-                    className="w-full accent-casa-gold"
-                    style={{ background: `linear-gradient(to right, #FAF8F5, #D4845A ${config.manual_warmth * 200}%, #E8E2D9 ${config.manual_warmth * 200}%)` }}
-                  />
-                  <div className="flex justify-between text-caption text-casa-muted mt-1">
-                    <span>Cool (daylight)</span><span>Warm (candlelight)</span>
+                  <div className="rounded-xl bg-casa-bg border border-casa-divider px-3 py-2.5">
+                    <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-0.5">Illuminance</p>
+                    <p className="text-body-sm font-semibold text-casa-navy tabular-nums">{sensorData.lux.toFixed(1)} lux</p>
                   </div>
                 </div>
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="text-body-sm font-medium text-casa-navy">Brightness</label>
-                    <span className="text-caption text-casa-muted">{Math.round(config.manual_brightness * 100)}%</span>
-                  </div>
-                  <input
-                    type="range" min={0.15} max={1} step={0.01}
-                    value={config.manual_brightness}
-                    onChange={e => set('manual_brightness', Number(e.target.value))}
-                    className="w-full accent-casa-navy"
-                  />
-                  <div className="flex justify-between text-caption text-casa-muted mt-1">
-                    <span>Dark</span><span>Full brightness</span>
-                  </div>
-                </div>
-                {config.override_expires_at && (
-                  <p className="text-caption text-casa-muted">
-                    Auto-clears at{' '}
-                    {new Date(config.override_expires_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                  </p>
-                )}
               </div>
+            )}
+
+            <SliderRow
+              label="Min Brightness"
+              desc="Floor when room is very dark (DDC 0–100)."
+              value={config.brightness_min}
+              min={0}
+              max={40}
+              onChange={v => set('brightness_min', v)}
+            />
+            <SliderRow
+              label="Max Brightness"
+              desc="Ceiling for daylight (DDC 0–100)."
+              value={config.brightness_max}
+              min={50}
+              max={100}
+              onChange={v => set('brightness_max', v)}
+            />
+
+            <div className="pt-3 border-t border-casa-divider">
+              <p className="text-body-sm font-semibold text-casa-navy">Warmth scenarios</p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <button type="button" onClick={() => applyWarmthScenario('balanced')} className="px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors">Balanced</button>
+                <button type="button" onClick={() => applyWarmthScenario('golden-hour')} className="px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors">Golden hour</button>
+                <button type="button" onClick={() => applyWarmthScenario('movie-night')} className="px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors">Movie night</button>
+                <button type="button" onClick={() => applyWarmthScenario('night-owl')} className="px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors">Night owl</button>
+              </div>
+            </div>
+
+            <SliderRow label="Global warmth bias" desc="DDC CCT shift in Kelvin." value={config.cct_bias_k} min={-1500} max={800} unit="K" onChange={v => set('cct_bias_k', v)} />
+            <SliderRow label="Day bias" desc="Daylight condition bias." value={config.zone_cct_bias_day} min={-1200} max={800} unit="K" onChange={v => set('zone_cct_bias_day', v)} />
+            <SliderRow label="Afternoon bias" desc="Afternoon condition bias." value={config.zone_cct_bias_afternoon} min={-1200} max={800} unit="K" onChange={v => set('zone_cct_bias_afternoon', v)} />
+            <SliderRow label="Evening bias" desc="Evening condition bias." value={config.zone_cct_bias_evening} min={-1600} max={600} unit="K" onChange={v => set('zone_cct_bias_evening', v)} />
+            <SliderRow label="Night bias" desc="Night condition bias." value={config.zone_cct_bias_night} min={-1800} max={400} unit="K" onChange={v => set('zone_cct_bias_night', v)} />
+            <SliderRow label="Late-night bias" desc="Late-night condition bias." value={config.zone_cct_bias_late_night} min={-2200} max={300} unit="K" onChange={v => set('zone_cct_bias_late_night', v)} />
+            <SliderRow label="Red channel trim" desc="Fine trim for red gain." value={config.rgb_trim_r} min={-15} max={15} unit="" onChange={v => set('rgb_trim_r', v)} />
+            <SliderRow label="Green channel trim" desc="Fine trim for green gain." value={config.rgb_trim_g} min={-15} max={15} unit="" onChange={v => set('rgb_trim_g', v)} />
+            <SliderRow label="Blue channel trim" desc="Fine trim for blue gain." value={config.rgb_trim_b} min={-15} max={15} unit="" onChange={v => set('rgb_trim_b', v)} />
+
+            <Toggle
+              checked={config.auto_sleep_enabled}
+              onChange={v => set('auto_sleep_enabled', v)}
+              label="Auto-sleep display"
+              desc="Blank display in very dark rooms and wake on light."
+            />
+            {config.auto_sleep_enabled && (
+              <>
+                <SliderRow
+                  label="Sleep threshold"
+                  desc={`Room must drop below ${(config.sleep_lux_threshold).toFixed(1)} lux for ${config.sleep_delay_s}s.`}
+                  value={Math.round(config.sleep_lux_threshold * 10)}
+                  min={1}
+                  max={30}
+                  unit=" ×0.1lux"
+                  onChange={v => set('sleep_lux_threshold', v / 10)}
+                />
+                <SliderRow
+                  label="Wake threshold"
+                  desc={`Wakes when lux rises above ${(config.wake_lux_threshold).toFixed(1)}.`}
+                  value={Math.round(config.wake_lux_threshold * 10)}
+                  min={5}
+                  max={100}
+                  unit=" ×0.1lux"
+                  onChange={v => set('wake_lux_threshold', v / 10)}
+                />
+                <SliderRow
+                  label="Sleep delay"
+                  desc="Seconds in darkness before sleeping."
+                  value={config.sleep_delay_s}
+                  min={5}
+                  max={120}
+                  unit="s"
+                  onChange={v => set('sleep_delay_s', v)}
+                />
+              </>
             )}
           </div>
         )}
-
-        {/* ─────────────────────────────────────────────────────────────────── */}
-        {/* 3. SENSOR ARRAY ────────────────────────────────────────────────── */}
-        {/* ─────────────────────────────────────────────────────────────────── */}
-        
-        <div className="mt-8 mb-4 flex items-center gap-3">
-          <div className="flex-1 h-px bg-casa-border" />
-          <span className="flex items-center gap-2 px-1">
-            <Cpu size={15} className="text-casa-gold" />
-            <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Sensor Array</span>
-          </span>
-          <div className="flex-1 h-px bg-casa-border" />
-        </div>
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Cpu} label="Sensor Array" />
-
-          <Toggle
-            checked={config.sensor_push_enabled}
-            onChange={v => set('sensor_push_enabled', v)}
-            label="Live sensor push"
-            desc="Pi bridge streams readings to Supabase. Turn off to stop recording when not needed."
-            disabled={config.ambient_auto_mode}
-          />
-
-          {/* Keep live sensor feedback directly under the toggle */}
-          {config.sensor_push_enabled && sensorData ? (
-            <div className="mt-3 pt-3 border-t border-casa-divider">
-              {/* Live readings grid */}
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <div className="rounded-xl bg-casa-bg border border-casa-divider px-3 py-2.5">
-                  <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-0.5">Color Temp</p>
-                  <p className="text-body-sm font-semibold text-casa-navy tabular-nums">{Math.round(sensorData.cct).toLocaleString()} K</p>
-                  <p className="text-caption text-casa-muted mt-0.5">
-                    {sensorData.cct < 3000 ? 'Warm candlelight' : sensorData.cct < 4000 ? 'Warm white' : sensorData.cct < 5500 ? 'Natural daylight' : 'Cool daylight'}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-casa-bg border border-casa-divider px-3 py-2.5">
-                  <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-0.5">Illuminance</p>
-                  <p className="text-body-sm font-semibold text-casa-navy tabular-nums">{sensorData.lux.toFixed(1)} lux</p>
-                  <p className="text-caption text-casa-muted mt-0.5">
-                    {sensorData.lux < 5 ? 'Very dark' : sensorData.lux < 30 ? 'Dim room' : sensorData.lux < 200 ? 'Indoor lit' : 'Bright / daylight'}
-                  </p>
-                </div>
-                {sensorData.brightness != null && (
-                  <div className="rounded-xl bg-casa-bg border border-casa-divider px-3 py-2.5">
-                    <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-0.5">DDC Brightness</p>
-                    <p className="text-body-sm font-semibold text-casa-navy tabular-nums mb-1">{sensorData.brightness}%</p>
-                    <div className="h-1.5 w-full rounded-full bg-casa-border overflow-hidden">
-                      <div className="h-full rounded-full bg-casa-gold transition-all duration-700" style={{ width: `${sensorData.brightness}%` }} />
-                    </div>
-                  </div>
-                )}
-                {sensorData.rgb && (
-                  <div className="rounded-xl bg-casa-bg border border-casa-divider px-3 py-2.5">
-                    <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-0.5">Monitor RGB Gains</p>
-                    <div className="flex gap-2 mt-1">
-                      {(['R', 'G', 'B'] as const).map((ch, i) => {
-                        const val = sensorData.rgb![i]
-                        const color = ch === 'R' ? '#E05050' : ch === 'G' ? '#4CAF72' : '#5080E0'
-                        return (
-                          <div key={ch} className="flex-1 text-center">
-                            <div className="text-caption font-bold mb-0.5" style={{ color }}>{ch}</div>
-                            <div className="text-body-sm font-semibold text-casa-navy tabular-nums">{val}</div>
-                            <div className="h-1 rounded-full bg-casa-border overflow-hidden mt-1">
-                              <div className="h-full rounded-full transition-all duration-700" style={{ width: `${val}%`, background: color }} />
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Sensor rows */}
-              <div className="space-y-2 mb-3">
-                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-casa-bg border border-casa-divider">
-                  <span className="text-caption text-casa-navy">AS7343 — 14-channel spectral (color temp)</span>
-                  <span className="flex items-center gap-1.5 text-caption text-emerald-600 font-medium">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    live
-                  </span>
-                </div>
-                {(['LTR390 — Precision lux + UV index', 'APDS9960 — Proximity wake detection'] as const).map(name => (
-                  <div key={name} className="flex items-center justify-between px-3 py-2 rounded-lg bg-casa-bg border border-casa-divider">
-                    <span className="text-caption text-casa-navy">{name}</span>
-                    <span className="text-caption text-casa-muted italic">not connected</span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-caption text-casa-muted">
-                Sensor active — real-time readings overriding time-of-day schedule.
-              </p>
-            </div>
-          ) : config.sensor_push_enabled ? (
-            <div className="mt-3 pt-3 border-t border-casa-divider">
-              <div className="space-y-2">
-                {['AS7343 — 14-channel spectral (color temp)', 'LTR390 — Precision lux + UV index', 'APDS9960 — Proximity wake detection'].map(name => (
-                  <div key={name} className="flex items-center justify-between px-3 py-2 rounded-lg bg-casa-bg border border-casa-divider">
-                    <span className="text-caption text-casa-navy">{name}</span>
-                    <span className="text-caption text-casa-muted italic">not connected</span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-caption text-casa-muted mt-3">
-                Push enabled — waiting for Pi bridge. Using <span className="font-medium text-casa-navy">time-of-day schedule</span> as proxy.
-              </p>
-            </div>
-          ) : null}
-
-          <SliderRow
-            label="Min Brightness"
-            desc="Floor when room is very dark (lux < 1). DDC scale 0–100."
-            value={config.brightness_min}
-            min={0}
-            max={40}
-            disabled={config.ambient_auto_mode}
-            onChange={v => set('brightness_min', v)}
-          />
-          <SliderRow
-            label="Max Brightness"
-            desc="Ceiling for full daylight. DDC scale 0–100."
-            value={config.brightness_max}
-            min={50}
-            max={100}
-            disabled={config.ambient_auto_mode}
-            onChange={v => set('brightness_max', v)}
-          />
-
-          <div className="pt-3 border-t border-casa-divider">
-            <p className="text-body-sm font-semibold text-casa-navy">Warmth scenarios</p>
-            <p className="text-caption text-casa-muted mt-0.5 mb-2.5">
-              Save/train tone behavior by scenario. These presets tune Pi DDC warmth + RGB gains and persist in settings.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => applyWarmthScenario('balanced')}
-                disabled={config.ambient_auto_mode}
-                className="px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors"
-              >
-                Balanced
-              </button>
-              <button
-                type="button"
-                onClick={() => applyWarmthScenario('golden-hour')}
-                disabled={config.ambient_auto_mode}
-                className="px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors"
-              >
-                Golden hour
-              </button>
-              <button
-                type="button"
-                onClick={() => applyWarmthScenario('movie-night')}
-                disabled={config.ambient_auto_mode}
-                className="px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors"
-              >
-                Movie night
-              </button>
-              <button
-                type="button"
-                onClick={() => applyWarmthScenario('night-owl')}
-                disabled={config.ambient_auto_mode}
-                className="px-3 py-1.5 rounded-full border text-caption font-medium bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy transition-colors"
-              >
-                Night owl
-              </button>
-            </div>
-          </div>
-
-          <SliderRow
-            label="Global warmth bias"
-            desc="Direct DDC CCT shift in Kelvin (negative = warmer, positive = cooler)."
-            value={config.cct_bias_k}
-            min={-1500}
-            max={800}
-            unit="K"
-            disabled={config.ambient_auto_mode}
-            onChange={v => set('cct_bias_k', v)}
-          />
-          <SliderRow
-            label="Day bias"
-            desc="Scenario training for bright daylight conditions."
-            value={config.zone_cct_bias_day}
-            min={-1200}
-            max={800}
-            unit="K"
-            disabled={config.ambient_auto_mode}
-            onChange={v => set('zone_cct_bias_day', v)}
-          />
-          <SliderRow
-            label="Afternoon bias"
-            desc="Scenario training for afternoon/indoor mixed light."
-            value={config.zone_cct_bias_afternoon}
-            min={-1200}
-            max={800}
-            unit="K"
-            disabled={config.ambient_auto_mode}
-            onChange={v => set('zone_cct_bias_afternoon', v)}
-          />
-          <SliderRow
-            label="Evening bias"
-            desc="Scenario training for sunset/golden-hour warmth."
-            value={config.zone_cct_bias_evening}
-            min={-1600}
-            max={600}
-            unit="K"
-            disabled={config.ambient_auto_mode}
-            onChange={v => set('zone_cct_bias_evening', v)}
-          />
-          <SliderRow
-            label="Night bias"
-            desc="Scenario training for darker evening scenes."
-            value={config.zone_cct_bias_night}
-            min={-1800}
-            max={400}
-            unit="K"
-            disabled={config.ambient_auto_mode}
-            onChange={v => set('zone_cct_bias_night', v)}
-          />
-          <SliderRow
-            label="Late-night bias"
-            desc="Scenario training for deepest night ambiance."
-            value={config.zone_cct_bias_late_night}
-            min={-2200}
-            max={300}
-            unit="K"
-            disabled={config.ambient_auto_mode}
-            onChange={v => set('zone_cct_bias_late_night', v)}
-          />
-          <SliderRow
-            label="Red channel trim"
-            desc="Fine trim for DDC red gain."
-            value={config.rgb_trim_r}
-            min={-15}
-            max={15}
-            unit=""
-            disabled={config.ambient_auto_mode}
-            onChange={v => set('rgb_trim_r', v)}
-          />
-          <SliderRow
-            label="Green channel trim"
-            desc="Fine trim for DDC green gain."
-            value={config.rgb_trim_g}
-            min={-15}
-            max={15}
-            unit=""
-            disabled={config.ambient_auto_mode}
-            onChange={v => set('rgb_trim_g', v)}
-          />
-          <SliderRow
-            label="Blue channel trim"
-            desc="Fine trim for DDC blue gain."
-            value={config.rgb_trim_b}
-            min={-15}
-            max={15}
-            unit=""
-            disabled={config.ambient_auto_mode}
-            onChange={v => set('rgb_trim_b', v)}
-          />
-
-          <Toggle
-            checked={config.auto_sleep_enabled}
-            onChange={v => set('auto_sleep_enabled', v)}
-            label="Auto-sleep display"
-            desc="Blanks the monitor when the room is very dark. Wakes on ambient light."
-            disabled={config.ambient_auto_mode}
-          />
-          {config.auto_sleep_enabled && (
-            <>
-              <SliderRow
-                label="Sleep threshold"
-                desc={`Room must drop below ${(config.sleep_lux_threshold).toFixed(1)} lux for ${config.sleep_delay_s}s to sleep.`}
-                value={Math.round(config.sleep_lux_threshold * 10)}
-                min={1}
-                max={30}
-                unit=" ×0.1lux"
-                disabled={config.ambient_auto_mode}
-                onChange={v => set('sleep_lux_threshold', v / 10)}
-              />
-              <SliderRow
-                label="Wake threshold"
-                desc={`Wakes when lux rises above ${(config.wake_lux_threshold).toFixed(1)}.`}
-                value={Math.round(config.wake_lux_threshold * 10)}
-                min={5}
-                max={100}
-                unit=" ×0.1lux"
-                disabled={config.ambient_auto_mode}
-                onChange={v => set('wake_lux_threshold', v / 10)}
-              />
-              <SliderRow
-                label="Sleep delay"
-                desc="Seconds in darkness before sleeping."
-                value={config.sleep_delay_s}
-                min={5}
-                max={120}
-                unit="s"
-                disabled={config.ambient_auto_mode}
-                onChange={v => set('sleep_delay_s', v)}
-              />
-            </>
-          )}
-        </div>
-
       </div>
 
-      {/* Auto-save status */}
       <div className="mt-6 flex justify-end h-8 items-center">
         {saveState === 'saving' && (
           <span className="text-caption text-casa-muted flex items-center gap-1.5">
