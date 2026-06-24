@@ -615,6 +615,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
 
   const pendingConfirmRef = useRef<(() => Promise<boolean>) | null>(null)
   const pendingCancelRef  = useRef<(() => Promise<boolean>) | null>(null)
+  const pendingVoiceQueueRef = useRef<string[]>([])
   const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [uiFeedback, setUiFeedback] = useState<'none' | 'confirm' | 'cancel'>('none')
@@ -704,6 +705,17 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     return true
   }, [loading, send, markUserInteraction, clearAutoSendTimer, appendDebugLog])
 
+  const queueOrSendVoiceInput = useCallback((text: string) => {
+    const trimmed = text.trim()
+    if (!trimmed) return
+    if (loading) {
+      pendingVoiceQueueRef.current.push(trimmed)
+      appendDebugLog('voice_queued', trimmed.slice(0, 120))
+      return
+    }
+    void sendCurrentInput(trimmed)
+  }, [loading, sendCurrentInput, appendDebugLog])
+
   const speech = useSpeechInput({
     onInterim: (interim) => {
       if (Date.now() < ignoreInterimUntilRef.current) return
@@ -741,7 +753,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         clearAutoSendTimer()
         autoSendTimerRef.current = setTimeout(() => {
           autoSendTimerRef.current = null
-          sendCurrentInput(finalized)
+          queueOrSendVoiceInput(finalized)
           interimRef.current = ''
         }, TRANSCRIPT_SETTLE_BEFORE_SEND_MS)
       } else {
@@ -781,6 +793,17 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     },
     hasPendingAction: hasPendingToolAction,
   })
+
+  useEffect(() => {
+    if (loading) return
+    const next = pendingVoiceQueueRef.current.shift()
+    if (!next) return
+    appendDebugLog('voice_dequeued', next.slice(0, 120))
+    const sent = sendCurrentInput(next)
+    if (!sent) {
+      pendingVoiceQueueRef.current.unshift(next)
+    }
+  }, [loading, sendCurrentInput, appendDebugLog])
 
   useEffect(() => {
     return () => {
@@ -971,7 +994,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
 
   // While AI is thinking, suppress new voice input (don't stop the mic — avoids fade/blue flicker)
   useEffect(() => {
-    if (loading) {
+    if (loading && page !== 'grocery') {
       speech.suppress()
     } else {
       speech.unsuppress()
