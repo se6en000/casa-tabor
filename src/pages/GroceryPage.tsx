@@ -19,6 +19,7 @@ const SYNC_LAST_AT_KEY = 'grocery-sync-last-at-v1'
 const SYNC_LAST_SUMMARY_KEY = 'grocery-sync-last-summary-v1'
 const AUTO_SYNC_INTERVAL_MS = 45_000
 const QUICK_ADD_TOUCH_ITEMS = ['Milk', 'Eggs', 'Bread', 'Bananas', 'Chicken', 'Coffee']
+const CHECKED_ITEM_DISMISS_MS = 1_500
 
 function detectCategory(name: string): string {
   const lower = name.toLowerCase()
@@ -180,7 +181,7 @@ export default function GroceryPage() {
           },
         }
       )
-    }, 1000)
+    }, CHECKED_ITEM_DISMISS_MS)
     completionTimersRef.current.set(id, timeoutId)
   }
 
