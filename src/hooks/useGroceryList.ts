@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 
@@ -51,6 +52,14 @@ async function fetchGroceryData() {
 
 export function useGroceryList() {
   const qc = useQueryClient()
+
+  useEffect(() => {
+    const handleExternalGroceryUpdate = () => {
+      qc.invalidateQueries({ queryKey: ['grocery'] })
+    }
+    window.addEventListener('casa:grocery-updated', handleExternalGroceryUpdate)
+    return () => window.removeEventListener('casa:grocery-updated', handleExternalGroceryUpdate)
+  }, [qc])
 
   const { data, isLoading } = useQuery({
     queryKey: ['grocery'],

@@ -21,6 +21,32 @@ const genId = (): string =>
     : Math.random().toString(36).slice(2) + Date.now().toString(36)
 
 const GOODBYE_PHRASES = /\b(thank you|thanks|goodbye|bye|that'?s all|all done|good night|ciao|close session|new session|start over|end session)\b/i
+const GROCERY_NON_ADD_INTENTS = /\b(what|show|list|what's|whats|how many|remove|delete|clear|check|uncheck|done|completed|archive)\b/i
+
+function dispatchGroceryUpdated() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent('casa:grocery-updated'))
+}
+
+function shouldFastAddGrocery(page: string, text: string, hasImage: boolean): boolean {
+  if (page !== 'grocery' || hasImage) return false
+  const normalized = text.trim().toLowerCase()
+  if (!normalized || normalized.endsWith('?')) return false
+  return !GROCERY_NON_ADD_INTENTS.test(normalized)
+}
+
+function parseGroceryItemsFromText(text: string): { name: string }[] {
+  const normalized = text
+    .replace(/^add\s+/i, '')
+    .replace(/\b(to|into)\s+(the\s+)?(shopping|grocery)\s+list\b/gi, '')
+    .replace(/\bplease\b/gi, '')
+    .trim()
+  const parts = normalized
+    .split(/,| and /i)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+  return parts.map((name) => ({ name }))
+}
 
 function buildContext(ctx: AssistantContext) {
   const now = new Date()
@@ -154,6 +180,67 @@ export function useAIAssistant(ctx: AssistantContext) {
       activeSession = startNewSession()
     }
 
+    if (shouldFastAddGrocery(ctxRef.current.page, trimmedText, Boolean(image))) {
+      try {
+        const items = parseGroceryItemsFromText(trimmedText)
+        if (items.length > 0) {
+          const actionId = genId()
+          const exec = await supabase.functions.invoke('execute-ai-action', {
+            body: {
+              tool: 'add_grocery_items',
+              args: { items },
+              action_id: actionId,
+              session_id: activeSession.id,
+              correlation_id: buildCorrelationId(actionId, activeSession.id),
+            },
+          })
+
+          let assistantMsg: AIMessage
+          if (exec.error || exec.data?.success === false) {
+            assistantMsg = {
+              id: genId(),
+              role: 'assistant',
+              content: `I couldn't add that yet: ${exec.error?.message ?? exec.data?.error ?? 'unknown error'}`,
+            }
+          } else {
+            const execItems = Array.isArray(exec.data?.items)
+              ? exec.data.items as Array<{ name?: string }>
+              : []
+            const addedItems = execItems.length > 0
+              ? execItems.map((item) => item.name).filter((name): name is string => Boolean(name))
+              : items.map((item) => item.name)
+            assistantMsg = {
+              id: genId(),
+              role: 'assistant',
+              content: `Yes — I added ${addedItems.join(', ')}.`,
+            }
+            dispatchGroceryUpdated()
+          }
+
+          setMessages(prev => {
+            const updated = [...prev, assistantMsg]
+            if (activeSession) saveMessages(activeSession.id, updated)
+            return updated
+          })
+          return
+        }
+      } catch (e) {
+        const errMsg: AIMessage = {
+          id: genId(),
+          role: 'assistant',
+          content: `I couldn't add that yet: ${(e as Error).message ?? 'unknown error'}`,
+        }
+        setMessages(prev => {
+          const updated = [...prev, errMsg]
+          if (activeSession) saveMessages(activeSession.id, updated)
+          return updated
+        })
+        return
+      } finally {
+        setLoading(false)
+      }
+    }
+
     const imagePayload = image
       ? { mimeType: image.mimeType, data: image.dataUrl.replace(/^data:[^;]+;base64,/, '') }
       : undefined
@@ -209,9 +296,11 @@ export function useAIAssistant(ctx: AssistantContext) {
               content: `I couldn't add that yet: ${exec.error?.message ?? exec.data?.error ?? 'unknown error'}`,
             }
           } else {
-            const addedItems = Array.isArray(exec.data?.items)
-              ? exec.data.items.map((item: { name?: string }) => item.name).filter(Boolean)
+            const execItems = Array.isArray(exec.data?.items)
+              ? exec.data.items as Array<{ name?: string }>
               : []
+            const addedItems = execItems.map((item) => item.name).filter((name): name is string => Boolean(name))
+            dispatchGroceryUpdated()
             assistantMsg = {
               id: genId(),
               role: 'assistant',
