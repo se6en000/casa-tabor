@@ -56,6 +56,8 @@ export function useGroceryList() {
     queryKey: ['grocery'],
     queryFn: fetchGroceryData,
     staleTime: 30_000,
+    refetchInterval: 45_000,
+    refetchOnWindowFocus: true,
   })
 
   const addItem = useMutation({

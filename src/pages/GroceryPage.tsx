@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ShoppingCart, Trash2, CheckSquare, Square, X, Plus, RefreshCw } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useGroceryList, GROCERY_CATEGORIES, type GroceryItem } from '../hooks/useGroceryList'
@@ -13,6 +13,11 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   pantry:    ['pasta', 'rice', 'cereal', 'oat', 'flour', 'sugar', 'salt', 'oil', 'vinegar', 'sauce', 'soup', 'broth', 'stock', 'can', 'bean', 'lentil', 'nut', 'peanut', 'almond', 'cashew', 'chip', 'cracker', 'popcorn', 'honey', 'jam', 'jelly', 'syrup', 'ketchup', 'mustard', 'mayo', 'spice', 'seasoning'],
   beverages: ['water', 'juice', 'soda', 'coffee', 'tea', 'beer', 'wine', 'sparkling', 'lemonade', 'smoothie', 'energy', 'drink'],
 }
+
+const SYNC_CURSOR_KEY = 'grocery-sync-cursor-v1'
+const SYNC_LAST_AT_KEY = 'grocery-sync-last-at-v1'
+const SYNC_LAST_SUMMARY_KEY = 'grocery-sync-last-summary-v1'
+const AUTO_SYNC_INTERVAL_MS = 45_000
 
 function detectCategory(name: string): string {
   const lower = name.toLowerCase()
@@ -60,7 +65,7 @@ function ItemRow({ item, onToggle, onDelete }: {
       <button
         type="button"
         onClick={() => onDelete(item.id)}
-        className="opacity-0 group-hover:opacity-100 flex-shrink-0 text-casa-muted hover:text-red-500 transition-all"
+        className="opacity-70 lg:opacity-0 lg:group-hover:opacity-100 flex-shrink-0 text-casa-muted hover:text-red-500 transition-all"
       >
         <X size={15} />
       </button>
@@ -84,17 +89,10 @@ export default function GroceryPage() {
   const [inputValue, setInputValue] = useState('')
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
-  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null)
-  const [lastSyncSummary, setLastSyncSummary] = useState<string>('Not synced yet')
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => localStorage.getItem(SYNC_LAST_AT_KEY))
+  const [lastSyncSummary, setLastSyncSummary] = useState<string>(() => localStorage.getItem(SYNC_LAST_SUMMARY_KEY) ?? 'Not synced yet')
   const inputRef = useRef<HTMLInputElement>(null)
-  const syncCursorKey = 'grocery-sync-cursor-v1'
-  const syncLastAtKey = 'grocery-sync-last-at-v1'
-  const syncLastSummaryKey = 'grocery-sync-last-summary-v1'
-
-  useEffect(() => {
-    setLastSyncAt(localStorage.getItem(syncLastAtKey))
-    setLastSyncSummary(localStorage.getItem(syncLastSummaryKey) ?? 'Not synced yet')
-  }, [])
+  const syncInFlightRef = useRef(false)
 
   const handleAddItem = () => {
     const name = inputValue.trim()
@@ -112,11 +110,13 @@ export default function GroceryPage() {
     }
   }
 
-  const handleSyncNow = async () => {
+  const handleSyncNow = useCallback(async () => {
+    if (syncInFlightRef.current) return
+    syncInFlightRef.current = true
     setSyncing(true)
     setSyncError(null)
     try {
-      const since = localStorage.getItem(syncCursorKey)
+      const since = localStorage.getItem(SYNC_CURSOR_KEY)
       const { data, error } = await supabase.functions.invoke('sync-casa-to-ios', {
         body: { since, limit: 300 },
       })
@@ -130,20 +130,47 @@ export default function GroceryPage() {
         : `${changed} update${changed === 1 ? '' : 's'} and ${deleted} delete${deleted === 1 ? '' : 's'} ready`
 
       const nextCursor = typeof data?.next_cursor === 'string' ? data.next_cursor : null
-      if (nextCursor) localStorage.setItem(syncCursorKey, nextCursor)
+      if (nextCursor) localStorage.setItem(SYNC_CURSOR_KEY, nextCursor)
 
       const nowIso = new Date().toISOString()
-      localStorage.setItem(syncLastAtKey, nowIso)
-      localStorage.setItem(syncLastSummaryKey, summary)
+      localStorage.setItem(SYNC_LAST_AT_KEY, nowIso)
+      localStorage.setItem(SYNC_LAST_SUMMARY_KEY, summary)
       setLastSyncAt(nowIso)
       setLastSyncSummary(summary)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Sync failed'
       setSyncError(message)
     } finally {
+      syncInFlightRef.current = false
       setSyncing(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const kickoff = window.setTimeout(() => {
+      void handleSyncNow()
+    }, 1_500)
+
+    const intervalId = window.setInterval(() => {
+      void handleSyncNow()
+    }, AUTO_SYNC_INTERVAL_MS)
+
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        void handleSyncNow()
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleFocus)
+
+    return () => {
+      window.clearTimeout(kickoff)
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleFocus)
+    }
+  }, [handleSyncNow])
 
   // Show all items including checked, grouped by category
   const allItemsByCategory = GROCERY_CATEGORIES.map(cat => ({
@@ -152,7 +179,7 @@ export default function GroceryPage() {
   })).filter(cat => cat.items.length > 0)
 
   return (
-    <div className="min-h-screen bg-casa-bg pb-24">
+    <div className="h-full min-h-0 bg-casa-bg flex flex-col overflow-hidden">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-casa-surface border-b border-casa-border px-4 pt-safe-t">
         <div className="flex items-center justify-between py-4">
@@ -201,9 +228,10 @@ export default function GroceryPage() {
       </div>
 
       {/* Content */}
-      <div className="max-w-lg mx-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto touch-pan-y">
+        <div className="max-w-6xl mx-auto px-4">
         {isLoading ? (
-          <div className="px-4 pt-6 space-y-4">
+            <div className="pt-6 space-y-4">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="animate-pulse">
                 <div className="h-4 bg-casa-divider rounded w-24 mb-3" />
@@ -214,21 +242,22 @@ export default function GroceryPage() {
             ))}
           </div>
         ) : items.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16 text-center px-8">
+            <div className="flex flex-col items-center gap-3 py-16 text-center px-8">
             <ShoppingCart size={40} className="text-casa-gold opacity-40" />
             <p className="text-body font-semibold text-casa-text">Your list is empty</p>
             <p className="text-body-sm text-casa-muted">Add items below or ask the AI.</p>
           </div>
         ) : (
-          <div className="pt-2 pb-4">
+            <div className="pt-3 pb-28 lg:pb-32">
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
             {allItemsByCategory.map(cat => (
-              <div key={cat.key} className="mb-2">
-                <div className="px-4 pt-4 pb-1">
+                  <div key={cat.key}>
+                    <div className="px-1 pb-1">
                   <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider">
                     {cat.label}
                   </p>
                 </div>
-                <div className="bg-casa-surface mx-4 rounded-2xl border border-casa-border divide-y divide-casa-divider overflow-hidden">
+                    <div className="bg-casa-surface rounded-2xl border border-casa-border divide-y divide-casa-divider overflow-hidden">
                   {cat.items.map(item => (
                     <ItemRow
                       key={item.id}
@@ -240,13 +269,15 @@ export default function GroceryPage() {
                 </div>
               </div>
             ))}
+              </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* Quick-add bar — pinned at bottom */}
       <div className="fixed bottom-[var(--spacing-nav-height,64px)] left-0 right-0 z-20 bg-casa-surface border-t border-casa-border px-4 py-3 pb-safe-b">
-        <div className="max-w-lg mx-auto flex items-center gap-2 bg-casa-bg rounded-xl border border-casa-border px-3 py-2">
+        <div className="max-w-6xl mx-auto flex items-center gap-2 bg-casa-bg rounded-xl border border-casa-border px-3 py-2">
           <Plus size={16} className="text-casa-muted flex-shrink-0" />
           <input
             ref={inputRef}
