@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react'
-import { ShoppingCart, Trash2, CheckSquare, Square, X, Plus } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ShoppingCart, Trash2, CheckSquare, Square, X, Plus, RefreshCw } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useGroceryList, GROCERY_CATEGORIES, type GroceryItem } from '../hooks/useGroceryList'
+import { supabase } from '../lib/supabase'
 
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
   produce:   ['apple', 'banana', 'orange', 'grape', 'berry', 'lettuce', 'spinach', 'kale', 'broccoli', 'carrot', 'tomato', 'onion', 'garlic', 'pepper', 'cucumber', 'celery', 'avocado', 'lemon', 'lime', 'mango', 'strawberr', 'blueberr', 'salad', 'herb', 'basil', 'cilantro', 'parsley', 'zucchini', 'potato', 'yam', 'corn', 'bean', 'pea', 'mushroom'],
@@ -81,7 +82,19 @@ export default function GroceryPage() {
   } = useGroceryList()
 
   const [inputValue, setInputValue] = useState('')
+  const [syncing, setSyncing] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null)
+  const [lastSyncSummary, setLastSyncSummary] = useState<string>('Not synced yet')
   const inputRef = useRef<HTMLInputElement>(null)
+  const syncCursorKey = 'grocery-sync-cursor-v1'
+  const syncLastAtKey = 'grocery-sync-last-at-v1'
+  const syncLastSummaryKey = 'grocery-sync-last-summary-v1'
+
+  useEffect(() => {
+    setLastSyncAt(localStorage.getItem(syncLastAtKey))
+    setLastSyncSummary(localStorage.getItem(syncLastSummaryKey) ?? 'Not synced yet')
+  }, [])
 
   const handleAddItem = () => {
     const name = inputValue.trim()
@@ -96,6 +109,39 @@ export default function GroceryPage() {
     if (e.key === 'Enter') {
       e.preventDefault()
       handleAddItem()
+    }
+  }
+
+  const handleSyncNow = async () => {
+    setSyncing(true)
+    setSyncError(null)
+    try {
+      const since = localStorage.getItem(syncCursorKey)
+      const { data, error } = await supabase.functions.invoke('sync-casa-to-ios', {
+        body: { since, limit: 300 },
+      })
+      if (error) throw error
+
+      const deltas = Array.isArray(data?.deltas) ? data.deltas : []
+      const deleted = deltas.filter((d: { deleted?: boolean }) => d.deleted).length
+      const changed = deltas.length - deleted
+      const summary = deltas.length === 0
+        ? 'No new changes to sync'
+        : `${changed} update${changed === 1 ? '' : 's'} and ${deleted} delete${deleted === 1 ? '' : 's'} ready`
+
+      const nextCursor = typeof data?.next_cursor === 'string' ? data.next_cursor : null
+      if (nextCursor) localStorage.setItem(syncCursorKey, nextCursor)
+
+      const nowIso = new Date().toISOString()
+      localStorage.setItem(syncLastAtKey, nowIso)
+      localStorage.setItem(syncLastSummaryKey, summary)
+      setLastSyncAt(nowIso)
+      setLastSyncSummary(summary)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Sync failed'
+      setSyncError(message)
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -120,20 +166,38 @@ export default function GroceryPage() {
                 {uncheckedCount} item{uncheckedCount !== 1 ? 's' : ''} remaining
                 {checkedCount > 0 && ` · ${checkedCount} done`}
               </p>
+              <p className="text-[11px] text-casa-muted">
+                {lastSyncSummary}
+                {lastSyncAt ? ` · ${new Date(lastSyncAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}
+              </p>
             </div>
           </div>
-          {checkedCount > 0 && (
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => clearChecked.mutate()}
-              disabled={clearChecked.isPending}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-button text-caption font-medium text-casa-muted border border-casa-border hover:bg-casa-bg hover:text-red-500 hover:border-red-300 transition-colors"
+              onClick={handleSyncNow}
+              disabled={syncing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-button text-caption font-medium text-casa-muted border border-casa-border hover:bg-casa-bg transition-colors disabled:opacity-60"
             >
-              <Trash2 size={13} />
-              Clear done
+              <RefreshCw size={13} className={cn(syncing && 'animate-spin')} />
+              {syncing ? 'Syncing…' : 'Sync now'}
             </button>
-          )}
+            {checkedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => clearChecked.mutate()}
+                disabled={clearChecked.isPending}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-button text-caption font-medium text-casa-muted border border-casa-border hover:bg-casa-bg hover:text-red-500 hover:border-red-300 transition-colors"
+              >
+                <Trash2 size={13} />
+                Clear done
+              </button>
+            )}
+          </div>
         </div>
+        {syncError && (
+          <p className="pb-3 text-[11px] text-red-600">Sync error: {syncError}</p>
+        )}
       </div>
 
       {/* Content */}
