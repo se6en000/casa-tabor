@@ -18,6 +18,7 @@ const SYNC_CURSOR_KEY = 'grocery-sync-cursor-v1'
 const SYNC_LAST_AT_KEY = 'grocery-sync-last-at-v1'
 const SYNC_LAST_SUMMARY_KEY = 'grocery-sync-last-summary-v1'
 const AUTO_SYNC_INTERVAL_MS = 45_000
+const QUICK_ADD_TOUCH_ITEMS = ['Milk', 'Eggs', 'Bread', 'Bananas', 'Chicken', 'Coffee']
 
 function detectCategory(name: string): string {
   const lower = name.toLowerCase()
@@ -106,6 +107,14 @@ export default function GroceryPage() {
     addItem.mutate({ list_id: defaultListId, name, quantity: null, unit: null, category, checked: false, notes: null })
     setInputValue('')
     inputRef.current?.focus()
+  }
+
+  const handleQuickAdd = (name: string) => {
+    if (!defaultListId) return
+    const trimmed = name.trim()
+    if (!trimmed) return
+    const category = detectCategory(trimmed)
+    addItem.mutate({ list_id: defaultListId, name: trimmed, quantity: null, unit: null, category, checked: false, notes: null })
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -304,7 +313,7 @@ export default function GroceryPage() {
             <p className="text-body-sm text-casa-muted">Add items below or ask the AI.</p>
           </div>
         ) : (
-            <div className="pt-3 pb-28 lg:pb-32">
+            <div className="pt-3 pb-6">
               {activeItemsByCategory.length === 0 ? (
                 <div className="mb-4 rounded-2xl border border-casa-border bg-casa-surface p-4 text-sm text-casa-muted">
                   Active list is clear. Completed items are in the archive below.
@@ -364,37 +373,48 @@ export default function GroceryPage() {
                   </div>
                 </div>
               )}
+
+              <div className="sticky bottom-0 z-20 mt-5 border-t border-casa-border bg-casa-surface/95 backdrop-blur px-3 py-3 pb-safe-b rounded-t-2xl">
+                <div className="flex items-center gap-2 bg-casa-bg rounded-2xl border border-casa-border px-4 py-3 min-h-14 shadow-sm">
+                  <Plus size={18} className="text-casa-muted flex-shrink-0" />
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={inputValue}
+                    onChange={e => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Add an item…"
+                    className="flex-1 bg-transparent text-body text-casa-text placeholder:text-casa-muted outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddItem}
+                    disabled={!inputValue.trim() || !defaultListId}
+                    className={cn(
+                      'flex-shrink-0 min-h-10 px-4 rounded-button text-body-sm font-semibold transition-all',
+                      inputValue.trim()
+                        ? 'bg-casa-gold text-white hover:brightness-110'
+                        : 'text-casa-muted'
+                    )}
+                  >
+                    Add
+                  </button>
+                </div>
+                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                  {QUICK_ADD_TOUCH_ITEMS.map(item => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => handleQuickAdd(item)}
+                      className="flex-shrink-0 min-h-9 px-3 rounded-full border border-casa-border bg-casa-bg text-body-sm text-casa-text hover:bg-casa-main transition-colors"
+                    >
+                      + {item}
+                    </button>
+                  ))}
+                </div>
+              </div>
           </div>
         )}
-        </div>
-      </div>
-
-      {/* Quick-add bar — pinned at bottom */}
-      <div className="fixed bottom-[var(--spacing-nav-height,64px)] left-0 right-0 z-20 bg-casa-surface border-t border-casa-border px-4 py-3 pb-safe-b">
-        <div className="max-w-6xl mx-auto flex items-center gap-2 bg-casa-bg rounded-xl border border-casa-border px-3 py-2">
-          <Plus size={16} className="text-casa-muted flex-shrink-0" />
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputValue}
-            onChange={e => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Add an item…"
-            className="flex-1 bg-transparent text-body text-casa-text placeholder:text-casa-muted outline-none"
-          />
-          <button
-            type="button"
-            onClick={handleAddItem}
-            disabled={!inputValue.trim() || !defaultListId}
-            className={cn(
-              'flex-shrink-0 px-3 py-1 rounded-button text-caption font-semibold transition-all',
-              inputValue.trim()
-                ? 'bg-casa-gold text-white hover:brightness-110'
-                : 'text-casa-muted'
-            )}
-          >
-            Add
-          </button>
         </div>
       </div>
     </div>

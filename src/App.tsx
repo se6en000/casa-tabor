@@ -130,7 +130,7 @@ function AppShell() {
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
   const location = useLocation()
-  const hideFab = location.pathname.startsWith('/settings') || screensaverActive
+  const hideFab = location.pathname.startsWith('/settings') || location.pathname.startsWith('/grocery') || screensaverActive
   const navigate = useNavigate()
 
   const handlePushAction = useCallback(async (action: string, eventId?: string | null, url?: string, prepItemId?: string | null) => {
