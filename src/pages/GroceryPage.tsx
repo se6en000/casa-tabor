@@ -96,6 +96,7 @@ export default function GroceryPage() {
   const [syncError, setSyncError] = useState<string | null>(null)
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => localStorage.getItem(SYNC_LAST_AT_KEY))
   const [lastSyncSummary, setLastSyncSummary] = useState<string>(() => localStorage.getItem(SYNC_LAST_SUMMARY_KEY) ?? 'Not synced yet')
+  const [showCompletedArchive, setShowCompletedArchive] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const syncInFlightRef = useRef(false)
   const completionTimersRef = useRef<Map<string, number>>(new Map())
@@ -330,7 +331,7 @@ export default function GroceryPage() {
             <div className="pt-3 pb-6">
               {activeItemsByCategory.length === 0 ? (
                 <div className="mb-4 rounded-2xl border border-casa-border bg-casa-surface p-4 text-sm text-casa-muted">
-                  Active list is clear. Completed items are in the archive below.
+                  Active list is clear. Completed items are hidden in the archive.
                 </div>
               ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -359,13 +360,16 @@ export default function GroceryPage() {
 
               {completedItemsByCategory.length > 0 && (
                 <div className="mt-5">
-                  <div className="px-1 pb-2">
-                    <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider">
-                      Completed Archive
-                    </p>
-                  </div>
-                  <div className="space-y-3">
-                    {completedItemsByCategory.map(cat => (
+                  <button
+                    type="button"
+                    onClick={() => setShowCompletedArchive(prev => !prev)}
+                    className="px-1 pb-2 text-caption font-semibold text-casa-muted uppercase tracking-wider hover:text-casa-text transition-colors"
+                  >
+                    {showCompletedArchive ? 'Hide completed archive' : `Show completed archive (${checkedCount})`}
+                  </button>
+                  {showCompletedArchive && (
+                    <div className="space-y-3">
+                      {completedItemsByCategory.map(cat => (
                       <div key={`completed-${cat.key}`}>
                         <div className="px-1 pb-1">
                           <p className="text-[11px] font-semibold text-casa-muted uppercase tracking-wider">
@@ -383,8 +387,9 @@ export default function GroceryPage() {
                           ))}
                         </div>
                       </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
