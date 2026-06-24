@@ -50,7 +50,12 @@ Deno.serve(async (req) => {
       .lte('start_time', yearEnd.toISOString())
       .order('start_time'),
     sb.from('grocery_lists').select('id, name').order('created_at').limit(5),
-    sb.from('grocery_items').select('id, list_id, name, quantity, unit, category, checked, notes').eq('checked', false).order('category').order('name'),
+    sb.from('grocery_items')
+      .select('id, list_id, name, quantity, unit, category, checked, notes')
+      .eq('checked', false)
+      .is('deleted_at', null)
+      .order('category')
+      .order('name'),
   ])
 
   if (eventsResult.error) {

@@ -350,6 +350,7 @@ Deno.serve(async (req) => {
         category: i.category ?? 'other',
         notes: i.notes ?? null,
         checked: false,
+        last_modified_source: 'casa',
       }))
       const { error } = await sb.from('grocery_items').insert(items)
       if (error) throw new Error(error.message)
@@ -359,7 +360,10 @@ Deno.serve(async (req) => {
     }
 
     if (tool === 'check_grocery_item') {
-      const { error } = await sb.from('grocery_items').update({ checked: args.checked }).eq('id', args.item_id)
+      const { error } = await sb
+        .from('grocery_items')
+        .update({ checked: args.checked, last_modified_source: 'casa' })
+        .eq('id', args.item_id)
       if (error) throw new Error(error.message)
       return new Response(JSON.stringify({ success: true, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
@@ -367,7 +371,11 @@ Deno.serve(async (req) => {
     }
 
     if (tool === 'clear_checked_grocery_items') {
-      const { error } = await sb.from('grocery_items').delete().eq('checked', true)
+      const { error } = await sb
+        .from('grocery_items')
+        .update({ deleted_at: new Date().toISOString(), last_modified_source: 'casa' })
+        .eq('checked', true)
+        .is('deleted_at', null)
       if (error) throw new Error(error.message)
       return new Response(JSON.stringify({ success: true, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
