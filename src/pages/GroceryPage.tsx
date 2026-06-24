@@ -282,6 +282,14 @@ export default function GroceryPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={handleVoiceAdd}
+              className="flex items-center gap-2 min-h-11 px-4 rounded-full bg-casa-gold text-white text-body-sm font-semibold shadow-sm hover:brightness-110 transition-all"
+            >
+              <Mic size={16} />
+              Voice add
+            </button>
+            <button
+              type="button"
               onClick={handleSyncNow}
               disabled={syncing}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-button text-caption font-medium text-casa-muted border border-casa-border hover:bg-casa-bg transition-colors disabled:opacity-60"
@@ -420,14 +428,6 @@ export default function GroceryPage() {
                   </button>
                 </div>
                 <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                  <button
-                    type="button"
-                    onClick={handleVoiceAdd}
-                    className="flex-shrink-0 min-h-9 px-3 rounded-full border border-casa-gold/40 bg-casa-gold/10 text-body-sm text-casa-navy hover:bg-casa-gold/20 transition-colors inline-flex items-center gap-1.5"
-                  >
-                    <Mic size={14} />
-                    Voice add
-                  </button>
                   {QUICK_ADD_TOUCH_ITEMS.map(item => (
                     <button
                       key={item}
@@ -440,7 +440,7 @@ export default function GroceryPage() {
                   ))}
                 </div>
                 <p className="mt-1 text-[11px] text-casa-muted">
-                  Tip: tap Voice add, then say “add milk, eggs, and bananas.”
+                  Tip: use the Voice add button at the top, then say “add milk, eggs, and bananas.”
                 </p>
               </div>
           </div>
