@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ShoppingCart, Trash2, CheckSquare, Square, X, Plus, RefreshCw, Mic } from 'lucide-react'
+import { ShoppingCart, Trash2, CheckSquare, Square, X, Plus, RefreshCw, Mic, GripVertical } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useGroceryList, GROCERY_CATEGORIES, type GroceryItem } from '../hooks/useGroceryList'
 import { supabase } from '../lib/supabase'
@@ -29,19 +29,38 @@ function detectCategory(name: string): string {
   return 'other'
 }
 
-function ItemRow({ item, onToggle, onDelete, isDismissing = false }: {
+function ItemRow({ item, onToggle, onDelete, isDismissing = false, isDragging = false, onMovePointerDown, onMovePointerMove, onMovePointerUp, onMovePointerCancel }: {
   item: GroceryItem
   onToggle: (id: string, checked: boolean) => void
   onDelete: (id: string) => void
   isDismissing?: boolean
+  isDragging?: boolean
+  onMovePointerDown?: (e: React.PointerEvent<HTMLButtonElement>) => void
+  onMovePointerMove?: (e: React.PointerEvent<HTMLButtonElement>) => void
+  onMovePointerUp?: (e: React.PointerEvent<HTMLButtonElement>) => void
+  onMovePointerCancel?: (e: React.PointerEvent<HTMLButtonElement>) => void
 }) {
   const visualChecked = item.checked || Boolean(isDismissing)
 
   return (
     <div className={cn(
       'flex items-center gap-3 px-4 py-3 hover:bg-casa-bg/50 transition-colors group',
-      visualChecked && 'opacity-50'
+      visualChecked && 'opacity-50',
+      isDragging && 'opacity-30'
     )}>
+      {onMovePointerDown && (
+        <button
+          type="button"
+          onPointerDown={onMovePointerDown}
+          onPointerMove={onMovePointerMove}
+          onPointerUp={onMovePointerUp}
+          onPointerCancel={onMovePointerCancel}
+          className="flex-shrink-0 text-casa-muted hover:text-casa-navy transition-colors touch-none"
+          aria-label={`Move ${item.name}`}
+        >
+          <GripVertical size={18} />
+        </button>
+      )}
       <button
         type="button"
         onClick={() => onToggle(item.id, !visualChecked)}
@@ -88,6 +107,7 @@ export default function GroceryPage() {
     addItem,
     toggleItem,
     deleteItem,
+    updateItemCategory,
     clearChecked,
   } = useGroceryList()
 
@@ -97,6 +117,15 @@ export default function GroceryPage() {
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => localStorage.getItem(SYNC_LAST_AT_KEY))
   const [lastSyncSummary, setLastSyncSummary] = useState<string>(() => localStorage.getItem(SYNC_LAST_SUMMARY_KEY) ?? 'Not synced yet')
   const [showCompletedArchive, setShowCompletedArchive] = useState(false)
+  const [dragState, setDragState] = useState<{
+    itemId: string
+    itemName: string
+    fromCategory: string
+    pointerId: number
+    x: number
+    y: number
+  } | null>(null)
+  const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const syncInFlightRef = useRef(false)
   const completionTimersRef = useRef<Map<string, number>>(new Map())
@@ -146,6 +175,12 @@ export default function GroceryPage() {
         window.clearTimeout(timeoutId)
       }
       timers.clear()
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      document.body.style.userSelect = ''
     }
   }, [])
 
@@ -221,6 +256,75 @@ export default function GroceryPage() {
       setSyncing(false)
     }
   }, [])
+
+  const detectDropCategory = useCallback((x: number, y: number) => {
+    const target = document.elementFromPoint(x, y) as HTMLElement | null
+    const dropZone = target?.closest<HTMLElement>('[data-drop-category]')
+    return dropZone?.dataset.dropCategory ?? null
+  }, [])
+
+  const finishDrag = useCallback((dropCategory: string | null) => {
+    setDragState((current) => {
+      if (current && dropCategory && dropCategory !== current.fromCategory) {
+        updateItemCategory.mutate({ id: current.itemId, category: dropCategory })
+      }
+      return null
+    })
+    setDragOverCategory(null)
+    document.body.style.userSelect = ''
+  }, [updateItemCategory])
+
+  const handleMovePointerDown = useCallback((
+    item: GroceryItem,
+    fromCategory: string,
+    e: React.PointerEvent<HTMLButtonElement>
+  ) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    document.body.style.userSelect = 'none'
+    setDragState({
+      itemId: item.id,
+      itemName: item.name,
+      fromCategory,
+      pointerId: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+    })
+    setDragOverCategory(fromCategory)
+  }, [])
+
+  const handleMovePointerMove = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    setDragState((current) => {
+      if (!current || current.pointerId !== e.pointerId) return current
+      return {
+        ...current,
+        x: e.clientX,
+        y: e.clientY,
+      }
+    })
+    const overCategory = detectDropCategory(e.clientX, e.clientY)
+    setDragOverCategory(overCategory)
+  }, [detectDropCategory])
+
+  const handleMovePointerUp = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      // ignore capture release failures
+    }
+    const overCategory = detectDropCategory(e.clientX, e.clientY)
+    finishDrag(overCategory)
+  }, [detectDropCategory, finishDrag])
+
+  const handleMovePointerCancel = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    finishDrag(null)
+  }, [finishDrag])
 
   useEffect(() => {
     const kickoff = window.setTimeout(() => {
@@ -337,6 +441,29 @@ export default function GroceryPage() {
           </div>
         ) : (
             <div className="pt-3 pb-6">
+              {dragState && (
+                <div className="mb-3 rounded-2xl border border-casa-border bg-casa-surface p-3">
+                  <p className="text-[11px] font-semibold text-casa-muted uppercase tracking-wider mb-2">
+                    Drop into category
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {GROCERY_CATEGORIES.map((cat) => (
+                      <div
+                        key={`drop-target-${cat.key}`}
+                        data-drop-category={cat.key}
+                        className={cn(
+                          'px-3 py-1.5 rounded-full text-caption border transition-colors',
+                          dragOverCategory === cat.key
+                            ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
+                            : 'border-casa-border text-casa-muted bg-casa-bg'
+                        )}
+                      >
+                        {cat.label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {activeItemsByCategory.length === 0 ? (
                 <div className="mb-4 rounded-2xl border border-casa-border bg-casa-surface p-4 text-sm text-casa-muted">
                   Active list is clear. Completed items are hidden in the archive.
@@ -344,7 +471,14 @@ export default function GroceryPage() {
               ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
                 {activeItemsByCategory.map(cat => (
-                  <div key={cat.key}>
+                  <div
+                    key={cat.key}
+                    data-drop-category={cat.key}
+                    className={cn(
+                      'rounded-2xl',
+                      dragState && dragOverCategory === cat.key && 'ring-2 ring-casa-gold/60 bg-casa-gold/5'
+                    )}
+                  >
                     <div className="px-1 pb-1">
                   <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider">
                     {cat.label}
@@ -356,8 +490,13 @@ export default function GroceryPage() {
                       key={item.id}
                       item={item}
                       isDismissing={dismissingIds.has(item.id)}
+                      isDragging={dragState?.itemId === item.id}
                       onToggle={handleToggle}
                       onDelete={(id) => deleteItem.mutate(id)}
+                      onMovePointerDown={(e) => handleMovePointerDown(item, cat.key, e)}
+                      onMovePointerMove={handleMovePointerMove}
+                      onMovePointerUp={handleMovePointerUp}
+                      onMovePointerCancel={handleMovePointerCancel}
                     />
                   ))}
                 </div>
@@ -447,6 +586,14 @@ export default function GroceryPage() {
         )}
         </div>
       </div>
+      {dragState && (
+        <div
+          className="fixed z-[90] pointer-events-none px-3 py-2 rounded-xl bg-casa-navy text-white text-body-sm shadow-modal"
+          style={{ left: dragState.x + 14, top: dragState.y + 14 }}
+        >
+          Move “{dragState.itemName}”
+        </div>
+      )}
     </div>
   )
 }

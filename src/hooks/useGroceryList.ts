@@ -129,6 +129,24 @@ export function useGroceryList() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['grocery'] }),
   })
 
+  const updateItemCategory = useMutation({
+    mutationFn: async ({ id, category }: { id: string; category: string }) => {
+      const { error } = await supabase
+        .from('grocery_items')
+        .update({ category, last_modified_source: 'casa' })
+        .eq('id', id)
+      if (error) throw error
+    },
+    onMutate: async ({ id, category }) => {
+      await qc.cancelQueries({ queryKey: ['grocery'] })
+      qc.setQueryData(['grocery'], (old: typeof data) => {
+        if (!old) return old
+        return { ...old, items: old.items.map(i => i.id === id ? { ...i, category } : i) }
+      })
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['grocery'] }),
+  })
+
   const clearChecked = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
@@ -164,6 +182,7 @@ export function useGroceryList() {
     addItem,
     toggleItem,
     deleteItem,
+    updateItemCategory,
     clearChecked,
   }
 }
