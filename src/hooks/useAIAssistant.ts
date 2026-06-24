@@ -28,6 +28,13 @@ function dispatchGroceryUpdated() {
   window.dispatchEvent(new CustomEvent('casa:grocery-updated'))
 }
 
+function emitAssistantDebug(event: string, detail?: string) {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent('casa:ai-debug', {
+    detail: { event, detail },
+  }))
+}
+
 function shouldFastAddGrocery(page: string, text: string, hasImage: boolean): boolean {
   if (page !== 'grocery' || hasImage) return false
   const normalized = text.trim().toLowerCase()
@@ -155,6 +162,7 @@ export function useAIAssistant(ctx: AssistantContext) {
     options?: { skipGoodbyeCheck?: boolean },
   ) => {
     const trimmedText = text.trim()
+    emitAssistantDebug('send_start', `${ctxRef.current.page}:${trimmedText.slice(0, 140)}`)
     // Check for goodbye phrase → end session
     const looksLikeShortGoodbye = GOODBYE_PHRASES.test(trimmedText) && trimmedText.split(/\s+/).length <= 6
     if (!options?.skipGoodbyeCheck && looksLikeShortGoodbye) {
@@ -183,20 +191,24 @@ export function useAIAssistant(ctx: AssistantContext) {
     if (shouldFastAddGrocery(ctxRef.current.page, trimmedText, Boolean(image))) {
       try {
         const items = parseGroceryItemsFromText(trimmedText)
+        emitAssistantDebug('fast_add_parsed', `count=${items.length} items=${items.map((item) => item.name).join('|').slice(0, 220)}`)
         if (items.length > 0) {
           const actionId = genId()
+          const correlationId = buildCorrelationId(actionId, activeSession.id)
+          emitAssistantDebug('fast_add_execute_start', `action=${actionId.slice(0, 8)} corr=${correlationId.slice(0, 28)} count=${items.length}`)
           const exec = await supabase.functions.invoke('execute-ai-action', {
             body: {
               tool: 'add_grocery_items',
               args: { items },
               action_id: actionId,
               session_id: activeSession.id,
-              correlation_id: buildCorrelationId(actionId, activeSession.id),
+              correlation_id: correlationId,
             },
           })
 
           let assistantMsg: AIMessage
           if (exec.error || exec.data?.success === false) {
+            emitAssistantDebug('fast_add_execute_error', exec.error?.message ?? exec.data?.error ?? 'unknown error')
             assistantMsg = {
               id: genId(),
               role: 'assistant',
@@ -206,6 +218,7 @@ export function useAIAssistant(ctx: AssistantContext) {
             const execItems = Array.isArray(exec.data?.items)
               ? exec.data.items as Array<{ name?: string }>
               : []
+            emitAssistantDebug('fast_add_execute_success', `inserted=${execItems.length} requested=${items.length}`)
             const addedItems = execItems.length > 0
               ? execItems.map((item) => item.name).filter((name): name is string => Boolean(name))
               : items.map((item) => item.name)
@@ -225,6 +238,7 @@ export function useAIAssistant(ctx: AssistantContext) {
           return
         }
       } catch (e) {
+        emitAssistantDebug('fast_add_exception', (e as Error).message ?? 'unknown error')
         const errMsg: AIMessage = {
           id: genId(),
           role: 'assistant',
@@ -248,6 +262,8 @@ export function useAIAssistant(ctx: AssistantContext) {
     try {
       const currentMessages = [...messagesRef.current, userMsg]
       const allMsgsForApi = currentMessages.map(m => ({ role: m.role, content: m.content }))
+      const aiCorrelationId = buildCorrelationId(userMsg.id, activeSession.id)
+      emitAssistantDebug('assistant_invoke_start', `messages=${allMsgsForApi.length} corr=${aiCorrelationId.slice(0, 28)}`)
 
       const invokePromise = supabase.functions.invoke('ai-assistant', {
         body: {
@@ -255,7 +271,7 @@ export function useAIAssistant(ctx: AssistantContext) {
           context: buildContext(ctxRef.current),
           image: imagePayload,
           session_id: activeSession.id,
-          correlation_id: buildCorrelationId(userMsg.id, activeSession.id),
+          correlation_id: aiCorrelationId,
         },
       })
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -263,6 +279,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       )
       const { data, error } = await Promise.race([invokePromise, timeoutPromise]) as Awaited<typeof invokePromise>
       if (error) throw error
+      emitAssistantDebug('assistant_invoke_result', `type=${data.type ?? 'unknown'}`)
 
       let assistantMsg: AIMessage
 
@@ -280,16 +297,19 @@ export function useAIAssistant(ctx: AssistantContext) {
         const args = (data.args as Record<string, unknown>) ?? {}
         if (tool === 'add_grocery_items') {
           const autoActionId = genId()
+          const autoCorrelationId = buildCorrelationId(autoActionId, activeSession.id)
+          emitAssistantDebug('tool_add_grocery_execute_start', `action=${autoActionId.slice(0, 8)} corr=${autoCorrelationId.slice(0, 28)}`)
           const exec = await supabase.functions.invoke('execute-ai-action', {
             body: {
               tool,
               args,
               action_id: autoActionId,
               session_id: activeSession.id,
-              correlation_id: buildCorrelationId(autoActionId, activeSession.id),
+              correlation_id: autoCorrelationId,
             },
           })
           if (exec.error || exec.data?.success === false) {
+            emitAssistantDebug('tool_add_grocery_execute_error', exec.error?.message ?? exec.data?.error ?? 'unknown error')
             assistantMsg = {
               id: genId(),
               role: 'assistant',
@@ -299,6 +319,7 @@ export function useAIAssistant(ctx: AssistantContext) {
             const execItems = Array.isArray(exec.data?.items)
               ? exec.data.items as Array<{ name?: string }>
               : []
+            emitAssistantDebug('tool_add_grocery_execute_success', `inserted=${execItems.length}`)
             const addedItems = execItems.map((item) => item.name).filter((name): name is string => Boolean(name))
             dispatchGroceryUpdated()
             assistantMsg = {
@@ -333,6 +354,7 @@ export function useAIAssistant(ctx: AssistantContext) {
         return updated
       })
     } catch (e) {
+      emitAssistantDebug('assistant_invoke_exception', (e as Error).message ?? 'unknown error')
       const msg = (e as Error).message ?? 'Something went wrong'
       const isTimeout = msg.includes('timed out')
       const errMsg: AIMessage = {

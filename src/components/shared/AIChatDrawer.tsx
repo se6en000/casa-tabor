@@ -639,6 +639,19 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     })
   }, [])
 
+  useEffect(() => {
+    const onAssistantDebug = (rawEvent: Event) => {
+      const event = rawEvent as CustomEvent<{ event?: string; detail?: string }>
+      const name = event.detail?.event?.trim()
+      if (!name) return
+      appendDebugLog(`assistant_${name}`, event.detail?.detail?.slice(0, 260))
+    }
+    window.addEventListener('casa:ai-debug', onAssistantDebug as EventListener)
+    return () => {
+      window.removeEventListener('casa:ai-debug', onAssistantDebug as EventListener)
+    }
+  }, [appendDebugLog])
+
   const clearDebugLog = useCallback(() => {
     setDebugLog([])
     try {
