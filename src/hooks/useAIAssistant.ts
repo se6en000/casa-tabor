@@ -58,6 +58,19 @@ function parseGroceryItemsFromText(text: string): { name: string }[] {
   return parts.map((name) => ({ name }))
 }
 
+function buildGroceryAddResponseText(addedItems: string[], skippedExactMatches: string[]): string {
+  if (addedItems.length > 0 && skippedExactMatches.length > 0) {
+    return `Yes — I added ${addedItems.join(', ')}. Already on your list: ${skippedExactMatches.join(', ')}.`
+  }
+  if (addedItems.length > 0) {
+    return `Yes — I added ${addedItems.join(', ')}.`
+  }
+  if (skippedExactMatches.length > 0) {
+    return `Already on your list: ${skippedExactMatches.join(', ')}.`
+  }
+  return 'No new grocery items were added.'
+}
+
 function buildContext(ctx: AssistantContext) {
   const now = new Date()
   const offsetMins = -now.getTimezoneOffset()
@@ -221,16 +234,19 @@ export function useAIAssistant(ctx: AssistantContext) {
             const execItems = Array.isArray(exec.data?.items)
               ? exec.data.items as Array<{ name?: string }>
               : []
+            const skippedExactMatches = Array.isArray(exec.data?.skipped_exact_matches)
+              ? exec.data.skipped_exact_matches.filter((name: unknown): name is string => typeof name === 'string' && name.trim().length > 0)
+              : []
             emitAssistantDebug('fast_add_execute_success', `inserted=${execItems.length} requested=${items.length}`)
-            const addedItems = execItems.length > 0
-              ? execItems.map((item) => item.name).filter((name): name is string => Boolean(name))
-              : items.map((item) => item.name)
+            const addedItems = execItems.map((item) => item.name).filter((name): name is string => Boolean(name))
             assistantMsg = {
               id: genId(),
               role: 'assistant',
-              content: `Yes — I added ${addedItems.join(', ')}.`,
+              content: buildGroceryAddResponseText(addedItems, skippedExactMatches),
             }
-            dispatchGroceryUpdated()
+            if (addedItems.length > 0) {
+              dispatchGroceryUpdated()
+            }
           }
 
           setMessages(prev => {
@@ -322,15 +338,18 @@ export function useAIAssistant(ctx: AssistantContext) {
             const execItems = Array.isArray(exec.data?.items)
               ? exec.data.items as Array<{ name?: string }>
               : []
+            const skippedExactMatches = Array.isArray(exec.data?.skipped_exact_matches)
+              ? exec.data.skipped_exact_matches.filter((name: unknown): name is string => typeof name === 'string' && name.trim().length > 0)
+              : []
             emitAssistantDebug('tool_add_grocery_execute_success', `inserted=${execItems.length}`)
             const addedItems = execItems.map((item) => item.name).filter((name): name is string => Boolean(name))
-            dispatchGroceryUpdated()
+            if (addedItems.length > 0) {
+              dispatchGroceryUpdated()
+            }
             assistantMsg = {
               id: genId(),
               role: 'assistant',
-              content: addedItems.length > 0
-                ? `Yes — I added ${addedItems.join(', ')}.`
-                : `Yes — I added that to your grocery list.`,
+              content: buildGroceryAddResponseText(addedItems, skippedExactMatches),
             }
           }
         } else {

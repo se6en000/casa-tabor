@@ -76,6 +76,10 @@ function inferCategory(inputCategory: unknown, itemName: string): string {
   return 'other'
 }
 
+function normalizeComparableName(name: string): string {
+  return name.trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
 async function getExistingActionResult(sb: ReturnType<typeof createClient>, actionId?: string) {
   if (!actionId) return null
   const { data, error } = await sb
@@ -433,7 +437,27 @@ Deno.serve(async (req) => {
 
       if (normalizedItems.length === 0) throw new Error('No valid grocery item names were provided')
 
-      const items = normalizedItems.map((i) => ({
+      const { data: existingItems, error: existingItemsError } = await sb
+        .from('grocery_items')
+        .select('name')
+        .eq('list_id', listId)
+        .eq('checked', false)
+        .is('deleted_at', null)
+      if (existingItemsError) throw new Error(existingItemsError.message)
+
+      const seenNames = new Set((existingItems ?? []).map((item) => normalizeComparableName(String(item.name ?? ''))))
+      const skippedExactMatches: string[] = []
+      const uniqueItems = normalizedItems.filter((item) => {
+        const key = normalizeComparableName(item.name)
+        if (seenNames.has(key)) {
+          skippedExactMatches.push(item.name)
+          return false
+        }
+        seenNames.add(key)
+        return true
+      })
+
+      const items = uniqueItems.map((i) => ({
         list_id: listId,
         name: i.name,
         quantity: i.quantity ?? null,
@@ -443,16 +467,19 @@ Deno.serve(async (req) => {
         checked: false,
         last_modified_source: 'casa',
       }))
-      const { error } = await sb.from('grocery_items').insert(items)
-      if (error) throw new Error(error.message)
+      if (items.length > 0) {
+        const { error } = await sb.from('grocery_items').insert(items)
+        if (error) throw new Error(error.message)
+      }
       return new Response(JSON.stringify({
         success: true,
         count: items.length,
-        items: normalizedItems.map((item) => ({
+        items: uniqueItems.map((item) => ({
           name: item.name,
           category: item.category,
           normalized_from: item.normalizedFrom ?? null,
         })),
+        skipped_exact_matches: skippedExactMatches,
         correlation_id: cid,
       }), {
         headers: { ...CORS, 'content-type': 'application/json' },
