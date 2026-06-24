@@ -616,6 +616,8 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const pendingConfirmRef = useRef<(() => Promise<boolean>) | null>(null)
   const pendingCancelRef  = useRef<(() => Promise<boolean>) | null>(null)
   const pendingVoiceQueueRef = useRef<string[]>([])
+  const voiceSendInFlightRef = useRef(false)
+  const voiceSendSeqRef = useRef(0)
   const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [uiFeedback, setUiFeedback] = useState<'none' | 'confirm' | 'cancel'>('none')
@@ -693,8 +695,20 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
 
   const sendCurrentInput = useCallback((text: string) => {
     const trimmed = text.trim()
-    if (!trimmed || loading) return false
-    appendDebugLog('send_current_input', trimmed.slice(0, 160))
+    if (!trimmed) {
+      appendDebugLog('voice_send_skipped_empty')
+      return false
+    }
+    if (loading || voiceSendInFlightRef.current) {
+      appendDebugLog(
+        'voice_send_blocked',
+        `loading=${loading ? '1' : '0'} inflight=${voiceSendInFlightRef.current ? '1' : '0'} depth=${pendingVoiceQueueRef.current.length}`
+      )
+      return false
+    }
+    voiceSendInFlightRef.current = true
+    const sendSeq = ++voiceSendSeqRef.current
+    appendDebugLog('send_current_input', `#${sendSeq} depth=${pendingVoiceQueueRef.current.length} ${trimmed.slice(0, 140)}`)
     clearAutoSendTimer()
     ignoreInterimUntilRef.current = Date.now() + 1200
     markUserInteraction()
@@ -708,12 +722,19 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const queueOrSendVoiceInput = useCallback((text: string) => {
     const trimmed = text.trim()
     if (!trimmed) return
-    if (loading) {
+    if (loading || voiceSendInFlightRef.current) {
       pendingVoiceQueueRef.current.push(trimmed)
-      appendDebugLog('voice_queued', trimmed.slice(0, 120))
+      appendDebugLog(
+        'voice_queued',
+        `reason=${loading ? 'loading' : 'inflight'} depth=${pendingVoiceQueueRef.current.length} ${trimmed.slice(0, 110)}`
+      )
       return
     }
-    void sendCurrentInput(trimmed)
+    const sent = sendCurrentInput(trimmed)
+    if (!sent) {
+      pendingVoiceQueueRef.current.push(trimmed)
+      appendDebugLog('voice_requeued', `depth=${pendingVoiceQueueRef.current.length} ${trimmed.slice(0, 110)}`)
+    }
   }, [loading, sendCurrentInput, appendDebugLog])
 
   const speech = useSpeechInput({
@@ -731,7 +752,10 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         ignoreInterimUntilRef.current = Date.now() + 1200
         const msg = interimRef.current || (textareaRef.current?.value ?? '')
         const finalized = msg.trim()
-        if (!finalized) return
+        if (!finalized) {
+          appendDebugLog('voice_send_skipped_empty', 'finalized transcript empty')
+          return
+        }
         interimRef.current = finalized
         setInput(finalized)
         if (isLikelyNoiseTranscript(msg, confidence)) {
@@ -796,12 +820,17 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
 
   useEffect(() => {
     if (loading) return
+    if (voiceSendInFlightRef.current) {
+      voiceSendInFlightRef.current = false
+      appendDebugLog('voice_send_complete', `pending=${pendingVoiceQueueRef.current.length}`)
+    }
     const next = pendingVoiceQueueRef.current.shift()
     if (!next) return
-    appendDebugLog('voice_dequeued', next.slice(0, 120))
+    appendDebugLog('voice_dequeued', `depth=${pendingVoiceQueueRef.current.length} ${next.slice(0, 110)}`)
     const sent = sendCurrentInput(next)
     if (!sent) {
       pendingVoiceQueueRef.current.unshift(next)
+      appendDebugLog('voice_requeued', `depth=${pendingVoiceQueueRef.current.length} ${next.slice(0, 110)}`)
     }
   }, [loading, sendCurrentInput, appendDebugLog])
 
@@ -866,6 +895,8 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       reset()
       setInput('')
       interimRef.current = ''
+      pendingVoiceQueueRef.current = []
+      voiceSendInFlightRef.current = false
       setAttachedImage(null)
       freshStartedRef.current = null  // allow fresh start next time this event is opened
     }
