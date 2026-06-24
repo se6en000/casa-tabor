@@ -189,17 +189,50 @@ export function useAIAssistant(ctx: AssistantContext) {
             : `Sorry, something went wrong: ${data.message ?? 'unknown error'}`,
         }
       } else if (data.type === 'tool_action') {
-        const displayText = (data.display_text as string) ?? `Action: ${data.tool}`
-        assistantMsg = {
-          id: genId(),
-          role: 'assistant',
-          content: displayText,
-          toolAction: {
-            tool: (data.tool as string) ?? '',
-            args: (data.args as Record<string, unknown>) ?? {},
-            displayText,
-            status: 'pending',
-          },
+        const tool = (data.tool as string) ?? ''
+        const args = (data.args as Record<string, unknown>) ?? {}
+        if (tool === 'add_grocery_items') {
+          const autoActionId = genId()
+          const exec = await supabase.functions.invoke('execute-ai-action', {
+            body: {
+              tool,
+              args,
+              action_id: autoActionId,
+              session_id: activeSession.id,
+              correlation_id: buildCorrelationId(autoActionId, activeSession.id),
+            },
+          })
+          if (exec.error || exec.data?.success === false) {
+            assistantMsg = {
+              id: genId(),
+              role: 'assistant',
+              content: `I couldn't add that yet: ${exec.error?.message ?? exec.data?.error ?? 'unknown error'}`,
+            }
+          } else {
+            const addedItems = Array.isArray(exec.data?.items)
+              ? exec.data.items.map((item: { name?: string }) => item.name).filter(Boolean)
+              : []
+            assistantMsg = {
+              id: genId(),
+              role: 'assistant',
+              content: addedItems.length > 0
+                ? `Yes — I added ${addedItems.join(', ')}.`
+                : `Yes — I added that to your grocery list.`,
+            }
+          }
+        } else {
+          const displayText = (data.display_text as string) ?? `Action: ${tool}`
+          assistantMsg = {
+            id: genId(),
+            role: 'assistant',
+            content: displayText,
+            toolAction: {
+              tool,
+              args,
+              displayText,
+              status: 'pending',
+            },
+          }
         }
       } else {
         assistantMsg = { id: genId(), role: 'assistant', content: (data.text ?? '') as string }

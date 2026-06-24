@@ -436,6 +436,7 @@ INSTRUCTIONS:
 - Prefer append semantics for "add/include/also/plus" phrasing unless user explicitly asks to replace.
 - For each write proposal, include "Will change", "Will preserve", and "Needs confirmation".
 - For add_grocery_items, do NOT ask for confirmation. Just add items immediately. If you inferred/corrected an item name or category, mention it briefly after adding.
+- Treat shopping, groceries, pantry restocks, and food purchase intents as add_grocery_items by default. Unless user explicitly asks a question instead of an action, auto-add immediately.
 - Default time window: when no date is given, search from NOW (${context.currentDate}) forward — never return past events.
 - "Next event" / "what's next" = first event whose start_time is strictly AFTER NOW. If an event is currently in progress (started before NOW, ends after NOW), mention it as "currently happening" first, then state what starts next.
 - Default duration: 1 hour if not specified. Default time: morning (9am) for "tomorrow"/"next week", 2pm for "afternoon", 6pm for "evening", 12pm for "lunch".
