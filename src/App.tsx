@@ -69,6 +69,7 @@ function GlobalAIDrawer({
   setOpen: (open: boolean) => void
   safeMode: boolean
 }) {
+  const location = useLocation()
   const [anchor, setAnchor] = useState<{ right: number; top: number } | undefined>()
   const [launchRequest, setLaunchRequest] = useState<{ prompt: string; autoSend: boolean; nonce: string } | null>(null)
   const [wakeSessionNonce, setWakeSessionNonce] = useState<string | undefined>(undefined)
@@ -105,7 +106,7 @@ function GlobalAIDrawer({
       open={open}
       onClose={() => setOpen(false)}
       anchor={anchor}
-      page="app"
+      page={location.pathname.startsWith('/grocery') ? 'grocery' : 'app'}
       events={events}
       family={family}
       homeCity={weather?.city}

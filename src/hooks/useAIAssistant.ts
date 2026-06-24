@@ -48,7 +48,10 @@ function parseGroceryItemsFromText(text: string): { name: string }[] {
     .replace(/\b(to|into)\s+(the\s+)?(shopping|grocery)\s+list\b/gi, '')
     .replace(/\bplease\b/gi, '')
     .trim()
-  const parts = normalized
+  const expanded = normalized
+    // Handle rapid-fire STT bundles like "beef add chicken add fish"
+    .replace(/\s+(?:and\s+)?add\s+/gi, ', ')
+  const parts = expanded
     .split(/,| and /i)
     .map((part) => part.trim())
     .filter((part) => part.length > 0)
