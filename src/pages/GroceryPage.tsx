@@ -27,29 +27,32 @@ function detectCategory(name: string): string {
   return 'other'
 }
 
-function ItemRow({ item, onToggle, onDelete }: {
+function ItemRow({ item, onToggle, onDelete, isDismissing = false }: {
   item: GroceryItem
   onToggle: (id: string, checked: boolean) => void
   onDelete: (id: string) => void
+  isDismissing?: boolean
 }) {
+  const visualChecked = item.checked || Boolean(isDismissing)
+
   return (
     <div className={cn(
       'flex items-center gap-3 px-4 py-3 hover:bg-casa-bg/50 transition-colors group',
-      item.checked && 'opacity-50'
+      visualChecked && 'opacity-50'
     )}>
       <button
         type="button"
-        onClick={() => onToggle(item.id, !item.checked)}
+        onClick={() => onToggle(item.id, !visualChecked)}
         className="flex-shrink-0 text-casa-navy/60 hover:text-casa-gold transition-colors"
       >
-        {item.checked
+        {visualChecked
           ? <CheckSquare size={20} className="text-emerald-500" />
           : <Square size={20} />}
       </button>
       <div className="flex-1 min-w-0">
         <span className={cn(
           'text-body text-casa-text',
-          item.checked && 'line-through text-casa-muted'
+          visualChecked && 'line-through text-casa-muted'
         )}>
           {item.name}
         </span>
@@ -93,6 +96,8 @@ export default function GroceryPage() {
   const [lastSyncSummary, setLastSyncSummary] = useState<string>(() => localStorage.getItem(SYNC_LAST_SUMMARY_KEY) ?? 'Not synced yet')
   const inputRef = useRef<HTMLInputElement>(null)
   const syncInFlightRef = useRef(false)
+  const completionTimersRef = useRef<Map<string, number>>(new Map())
+  const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set())
 
   const handleAddItem = () => {
     const name = inputValue.trim()
@@ -108,6 +113,53 @@ export default function GroceryPage() {
       e.preventDefault()
       handleAddItem()
     }
+  }
+
+  useEffect(() => {
+    const timers = completionTimersRef.current
+    return () => {
+      for (const timeoutId of timers.values()) {
+        window.clearTimeout(timeoutId)
+      }
+      timers.clear()
+    }
+  }, [])
+
+  const handleToggle = (id: string, checked: boolean) => {
+    const existingTimer = completionTimersRef.current.get(id)
+    if (existingTimer) {
+      window.clearTimeout(existingTimer)
+      completionTimersRef.current.delete(id)
+    }
+
+    if (!checked) {
+      setDismissingIds(prev => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      toggleItem.mutate({ id, checked: false })
+      return
+    }
+
+    setDismissingIds(prev => new Set(prev).add(id))
+
+    const timeoutId = window.setTimeout(() => {
+      completionTimersRef.current.delete(id)
+      toggleItem.mutate(
+        { id, checked: true },
+        {
+          onSettled: () => {
+            setDismissingIds(prev => {
+              const next = new Set(prev)
+              next.delete(id)
+              return next
+            })
+          },
+        }
+      )
+    }, 1000)
+    completionTimersRef.current.set(id, timeoutId)
   }
 
   const handleSyncNow = useCallback(async () => {
@@ -172,10 +224,14 @@ export default function GroceryPage() {
     }
   }, [handleSyncNow])
 
-  // Show all items including checked, grouped by category
-  const allItemsByCategory = GROCERY_CATEGORIES.map(cat => ({
+  const activeItemsByCategory = GROCERY_CATEGORIES.map(cat => ({
     ...cat,
-    items: items.filter(i => i.category === cat.key),
+    items: items.filter(i => i.category === cat.key && !i.checked),
+  })).filter(cat => cat.items.length > 0)
+
+  const completedItemsByCategory = GROCERY_CATEGORIES.map(cat => ({
+    ...cat,
+    items: items.filter(i => i.category === cat.key && i.checked),
   })).filter(cat => cat.items.length > 0)
 
   return (
@@ -249,8 +305,13 @@ export default function GroceryPage() {
           </div>
         ) : (
             <div className="pt-3 pb-28 lg:pb-32">
+              {activeItemsByCategory.length === 0 ? (
+                <div className="mb-4 rounded-2xl border border-casa-border bg-casa-surface p-4 text-sm text-casa-muted">
+                  Active list is clear. Completed items are in the archive below.
+                </div>
+              ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-            {allItemsByCategory.map(cat => (
+                {activeItemsByCategory.map(cat => (
                   <div key={cat.key}>
                     <div className="px-1 pb-1">
                   <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider">
@@ -262,14 +323,47 @@ export default function GroceryPage() {
                     <ItemRow
                       key={item.id}
                       item={item}
-                      onToggle={(id, checked) => toggleItem.mutate({ id, checked })}
+                      isDismissing={dismissingIds.has(item.id)}
+                      onToggle={handleToggle}
                       onDelete={(id) => deleteItem.mutate(id)}
                     />
                   ))}
                 </div>
               </div>
-            ))}
+                ))}
               </div>
+              )}
+
+              {completedItemsByCategory.length > 0 && (
+                <div className="mt-5">
+                  <div className="px-1 pb-2">
+                    <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider">
+                      Completed Archive
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    {completedItemsByCategory.map(cat => (
+                      <div key={`completed-${cat.key}`}>
+                        <div className="px-1 pb-1">
+                          <p className="text-[11px] font-semibold text-casa-muted uppercase tracking-wider">
+                            {cat.label}
+                          </p>
+                        </div>
+                        <div className="bg-casa-surface rounded-2xl border border-casa-border divide-y divide-casa-divider overflow-hidden">
+                          {cat.items.map(item => (
+                            <ItemRow
+                              key={item.id}
+                              item={item}
+                              onToggle={handleToggle}
+                              onDelete={(id) => deleteItem.mutate(id)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
           </div>
         )}
         </div>
