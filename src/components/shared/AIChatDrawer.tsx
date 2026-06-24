@@ -24,6 +24,9 @@ const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 
 
 type VoicePhase = 'idle' | 'connecting' | 'listening' | 'processing'
 type STTMode = 'unknown' | 'bridge' | 'webspeech'
+type WebSpeechResult = { isFinal: boolean; 0: { transcript: string } }
+type WebSpeechResultEvent = { resultIndex: number; results: ArrayLike<WebSpeechResult> }
+type WebSpeechErrorEvent = { error?: string }
 
 const SILENCE_MS = 1500
 const CONNECT_TIMEOUT_MS = 5000
@@ -34,6 +37,14 @@ const TRANSCRIPT_SETTLE_BEFORE_SEND_MS = 250
 const FEEDBACK_LOCK_MS = 2800
 const MIN_FINAL_CONFIDENCE = 0.55
 const VOICE_TELEMETRY_KEY = 'casa-voice-telemetry'
+const AI_DEBUG_LOG_KEY = 'casa-ai-debug-log'
+const MAX_DEBUG_LOG_ENTRIES = 160
+
+type DebugLogEntry = {
+  at: string
+  event: string
+  detail?: string
+}
 
 type VoiceUxProfile = {
   inactivityMs: number
@@ -210,7 +221,7 @@ function useSpeechInput({
       return
     }
     onFinalRef.current(transcript.trim(), confidence); onFinalRef.current('__SEND__', confidence)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   const triggerFinal = useCallback((text: string, confidence?: number | null) => {
     stopWS()
@@ -236,7 +247,25 @@ function useSpeechInput({
     recognition.interimResults = true
     recognition.lang = 'en-US'
 
-    recognition.onresult = (event: any) => {
+    const scheduleRecognitionRestart = (delayMs: number) => {
+      if (webspeechRestartTimerRef.current) return
+      webspeechRestartTimerRef.current = setTimeout(() => {
+        webspeechRestartTimerRef.current = null
+        if (!activeRef.current || phaseRef.current === 'processing') return
+        if (recognitionRef.current !== recognition) {
+          recognitionRef.current = recognition
+        }
+        try {
+          recognition.start()
+        } catch {
+          if (recognitionRef.current === recognition) {
+            recognitionRef.current = null
+          }
+        }
+      }, delayMs)
+    }
+
+    recognition.onresult = (event: WebSpeechResultEvent) => {
       let interim = ''
       let finalAccum = ''
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -272,7 +301,7 @@ function useSpeechInput({
       }, SILENCE_MS)
     }
 
-    recognition.onerror = (e: any) => {
+    recognition.onerror = (e: WebSpeechErrorEvent) => {
       if (recognitionRef.current === recognition) {
         recognitionRef.current = null
       }
@@ -284,12 +313,7 @@ function useSpeechInput({
         phaseRef.current !== 'processing' &&
         !webspeechRestartTimerRef.current
       ) {
-        webspeechRestartTimerRef.current = setTimeout(() => {
-          webspeechRestartTimerRef.current = null
-          if (activeRef.current && phaseRef.current !== 'processing' && !recognitionRef.current) {
-            startWebSpeech()
-          }
-        }, 500)
+        scheduleRecognitionRestart(500)
       }
     }
 
@@ -304,12 +328,7 @@ function useSpeechInput({
         phaseRef.current !== 'processing' &&
         !webspeechRestartTimerRef.current
       ) {
-        webspeechRestartTimerRef.current = setTimeout(() => {
-          webspeechRestartTimerRef.current = null
-          if (activeRef.current && phaseRef.current !== 'processing' && !recognitionRef.current) {
-            startWebSpeech()
-          }
-        }, 150)
+        scheduleRecognitionRestart(150)
       }
     }
 
@@ -325,12 +344,7 @@ function useSpeechInput({
         phaseRef.current !== 'processing' &&
         !webspeechRestartTimerRef.current
       ) {
-        webspeechRestartTimerRef.current = setTimeout(() => {
-          webspeechRestartTimerRef.current = null
-          if (activeRef.current && phaseRef.current !== 'processing' && !recognitionRef.current) {
-            startWebSpeech()
-          }
-        }, 300)
+        scheduleRecognitionRestart(300)
       }
     }
   }, [WebSpeech, triggerFinal, stopWebSpeechRestartTimer]) // all state accessed via refs
@@ -347,75 +361,87 @@ function useSpeechInput({
   // ── Bridge path (Pi / Chromium) ─────────────────────────────────────────
   const startBridge = useCallback(() => {
     if (!activeRef.current) return
-    stopWS()
-    lastInterimRef.current = ''
-    lastInterimTimeRef.current = 0
-    connectStartRef.current = Date.now()
-    setPhaseSync('connecting')
+    const connectBridge = () => {
+      stopWS()
+      lastInterimRef.current = ''
+      lastInterimTimeRef.current = 0
+      connectStartRef.current = Date.now()
+      setPhaseSync('connecting')
 
-    const ws = new WebSocket(BRIDGE_WS)
-    wsRef.current = ws
+      const ws = new WebSocket(BRIDGE_WS)
+      wsRef.current = ws
 
-    ws.onopen = () => {
-      setReconnecting(false)
-      setBridgeDown(false)
-      ws.send(JSON.stringify({ type: 'start' }))
-    }
+      const scheduleReconnect = (delayMs: number) => {
+        if (!activeRef.current || phaseRef.current === 'processing') return
+        setTimeout(() => {
+          if (!activeRef.current || phaseRef.current === 'processing') return
+          connectBridge()
+        }, delayMs)
+      }
 
-    ws.onmessage = (evt) => {
-      if (!activeRef.current) return
-      try {
-        const msg = JSON.parse(evt.data as string)
-        switch (msg.type) {
-          case 'ready':
-            setPhaseSync('listening')
-            connectStartRef.current = 0
-            setBridgeDown(false)
-            setReconnecting(false)
-            break
-          case 'volume':
-            setVolume(msg.level ?? 0)
-            break
-          case 'interim':
-            if (phaseRef.current === 'processing') break
-            if (msg.text !== lastInterimRef.current) {
-              lastInterimRef.current = msg.text
-              lastInterimTimeRef.current = Date.now()
-              onInterimRef.current(msg.text)
-            }
-            break
-          case 'final':
-            if (phaseRef.current !== 'processing') {
-              triggerFinal(msg.text, typeof msg.confidence === 'number' ? msg.confidence : null)
-              if (activeRef.current) setTimeout(() => startBridge(), 300)
-            }
-            break
-          case 'error':
-            console.warn('[STT] bridge error', msg.msg)
-            if (activeRef.current) setTimeout(() => startBridge(), 500)
-            break
+      ws.onopen = () => {
+        setReconnecting(false)
+        setBridgeDown(false)
+        ws.send(JSON.stringify({ type: 'start' }))
+      }
+
+      ws.onmessage = (evt) => {
+        if (!activeRef.current) return
+        try {
+          const msg = JSON.parse(evt.data as string)
+          switch (msg.type) {
+            case 'ready':
+              setPhaseSync('listening')
+              connectStartRef.current = 0
+              setBridgeDown(false)
+              setReconnecting(false)
+              break
+            case 'volume':
+              setVolume(msg.level ?? 0)
+              break
+            case 'interim':
+              if (phaseRef.current === 'processing') break
+              if (msg.text !== lastInterimRef.current) {
+                lastInterimRef.current = msg.text
+                lastInterimTimeRef.current = Date.now()
+                onInterimRef.current(msg.text)
+              }
+              break
+            case 'final':
+              if (phaseRef.current !== 'processing') {
+                triggerFinal(msg.text, typeof msg.confidence === 'number' ? msg.confidence : null)
+                scheduleReconnect(300)
+              }
+              break
+            case 'error':
+              console.warn('[STT] bridge error', msg.msg)
+              scheduleReconnect(500)
+              break
+          }
+        } catch {
+          // ignore
         }
-      } catch { /* ignore */ }
+      }
+
+      ws.onerror = () => {
+        console.warn('[STT] WS connection error')
+      }
+
+      ws.onclose = () => {
+        wsRef.current = null
+        setVolume(0)
+        if (activeRef.current && phaseRef.current !== 'processing') {
+          setReconnecting(true)
+        }
+        if (connectStartRef.current > 0 && Date.now() - connectStartRef.current > CONNECT_TIMEOUT_MS) {
+          console.warn('[STT] connect timeout, retrying')
+          setBridgeDown(true)
+        }
+        scheduleReconnect(500)
+      }
     }
 
-    ws.onerror = () => {
-      console.warn('[STT] WS connection error')
-    }
-
-    ws.onclose = () => {
-      wsRef.current = null
-      setVolume(0)
-      if (activeRef.current && phaseRef.current !== 'processing') {
-        setReconnecting(true)
-      }
-      if (connectStartRef.current > 0 && Date.now() - connectStartRef.current > CONNECT_TIMEOUT_MS) {
-        console.warn('[STT] connect timeout, retrying')
-        setBridgeDown(true)
-      }
-      if (activeRef.current && phaseRef.current !== 'processing') {
-        setTimeout(() => startBridge(), 500)
-      }
-    }
+    connectBridge()
   }, [triggerFinal]) // onInterim/phase via refs
 
   const stopBridge = useCallback(() => {
@@ -565,6 +591,18 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const bridgeDownLoggedRef = useRef(false)
   const voiceProfileRef = useRef<VoiceUxProfile>(getVoiceUxProfile())
   const [inactivityCountdown, setInactivityCountdown] = useState<number | null>(null)
+  const [showDebugLog, setShowDebugLog] = useState(false)
+  const [debugLog, setDebugLog] = useState<DebugLogEntry[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const raw = localStorage.getItem(AI_DEBUG_LOG_KEY)
+      if (!raw) return []
+      const parsed = JSON.parse(raw) as DebugLogEntry[]
+      return Array.isArray(parsed) ? parsed.slice(-MAX_DEBUG_LOG_ENTRIES) : []
+    } catch {
+      return []
+    }
+  })
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -580,6 +618,32 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [uiFeedback, setUiFeedback] = useState<'none' | 'confirm' | 'cancel'>('none')
+
+  const appendDebugLog = useCallback((event: string, detail?: string) => {
+    const nextEntry: DebugLogEntry = {
+      at: new Date().toISOString(),
+      event,
+      detail,
+    }
+    setDebugLog((prev) => {
+      const next = [...prev, nextEntry].slice(-MAX_DEBUG_LOG_ENTRIES)
+      try {
+        localStorage.setItem(AI_DEBUG_LOG_KEY, JSON.stringify(next))
+      } catch {
+        // ignore storage failures
+      }
+      return next
+    })
+  }, [])
+
+  const clearDebugLog = useCallback(() => {
+    setDebugLog([])
+    try {
+      localStorage.removeItem(AI_DEBUG_LOG_KEY)
+    } catch {
+      // ignore storage failures
+    }
+  }, [])
 
   const pingWakeMisfireCooldown = useCallback((seconds = voiceProfileRef.current.wakeMisfireCooldownSecs) => {
     void fetch('http://127.0.0.1:8766/wake-misfire', {
@@ -629,6 +693,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const sendCurrentInput = useCallback((text: string) => {
     const trimmed = text.trim()
     if (!trimmed || loading) return false
+    appendDebugLog('send_current_input', trimmed.slice(0, 160))
     clearAutoSendTimer()
     ignoreInterimUntilRef.current = Date.now() + 1200
     markUserInteraction()
@@ -637,7 +702,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     if (textareaRef.current) textareaRef.current.value = ''
     send(trimmed)
     return true
-  }, [loading, send, markUserInteraction, clearAutoSendTimer])
+  }, [loading, send, markUserInteraction, clearAutoSendTimer, appendDebugLog])
 
   const speech = useSpeechInput({
     onInterim: (interim) => {
@@ -649,6 +714,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       }
     },
     onFinalTranscript: (text, confidence) => {
+      appendDebugLog('voice_final', text === '__SEND__' ? '__SEND__' : `${text.slice(0, 140)}${typeof confidence === 'number' ? ` (conf=${confidence.toFixed(2)})` : ''}`)
       if (text === '__SEND__') {
         ignoreInterimUntilRef.current = Date.now() + 1200
         const msg = interimRef.current || (textareaRef.current?.value ?? '')
@@ -657,6 +723,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         interimRef.current = finalized
         setInput(finalized)
         if (isLikelyNoiseTranscript(msg, confidence)) {
+          appendDebugLog('voice_noise_filtered', msg.slice(0, 140))
           interimRef.current = ''
           setInput('')
           if (wakeSessionActiveRef.current && !hadMeaningfulProgressRef.current) {
@@ -666,6 +733,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         }
         // Check for sleep command before sending to AI
         if (SLEEP_PHRASES.test(msg)) {
+          appendDebugLog('voice_sleep_command', msg.slice(0, 140))
           onSleepCommand?.()
           setTimeout(onClose, 300)
           return
@@ -721,6 +789,30 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       led.off()
     }
   }, [clearAutoSendTimer]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open) return
+    appendDebugLog('speech_phase', speech.phase)
+  }, [open, speech.phase, appendDebugLog])
+
+  useEffect(() => {
+    if (!open) return
+    appendDebugLog('loading_state', loading ? 'loading' : 'idle')
+  }, [open, loading, appendDebugLog])
+
+  useEffect(() => {
+    if (!open || messages.length === 0) return
+    const latest = messages[messages.length - 1]
+    const summary = latest.toolAction
+      ? `${latest.role}:tool:${latest.toolAction.tool}:${latest.toolAction.status}`
+      : `${latest.role}:${latest.content.slice(0, 120)}`
+    appendDebugLog('message', summary)
+  }, [open, messages, appendDebugLog])
+
+  useEffect(() => {
+    if (open) appendDebugLog('drawer_opened', page)
+    else appendDebugLog('drawer_closed')
+  }, [open, page, appendDebugLog])
 
   useEffect(() => {
     if (open) {
@@ -1173,6 +1265,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                       })
                       if (error) throw error
                       if (data?.success === false) throw new Error(data.error ?? 'Action failed')
+                      appendDebugLog('tool_action_success', `${tool}`)
                       updateMessageToolStatus(messageId, 'done', {
                         actionId: data?.action_id,
                         resultEventId: data?.event_id,
@@ -1185,6 +1278,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                       qc.invalidateQueries({ queryKey: ['grocery'] })
                       return true
                     } catch (err) {
+                      appendDebugLog('tool_action_error', `${tool}: ${(err as Error).message}`)
                       updateMessageToolStatus(messageId, 'error', { errorMsg: (err as Error).message })
                       return false
                     }
@@ -1392,7 +1486,42 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                     Retry last
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setShowDebugLog((prev) => !prev)}
+                  className="inline-flex items-center rounded-full border border-casa-border bg-casa-bg px-2 py-0.5 hover:bg-white transition-colors"
+                >
+                  {showDebugLog ? 'Hide debug' : 'Show debug'}
+                </button>
               </div>
+              {showDebugLog && (
+                <div className="mt-2 rounded-xl border border-casa-border bg-casa-bg/70 p-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <p className="text-[11px] font-semibold text-casa-muted">AI/Voice debug log</p>
+                    <button
+                      type="button"
+                      onClick={clearDebugLog}
+                      className="text-[11px] text-casa-muted hover:text-casa-navy"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+                    {debugLog.length === 0 ? (
+                      <p className="text-[11px] text-casa-muted">No debug events yet.</p>
+                    ) : (
+                      debugLog.slice().reverse().map((entry, idx) => (
+                        <div key={`${entry.at}-${idx}`} className="font-mono text-[10px] text-casa-muted break-words">
+                          <span className="text-casa-navy/80">{new Date(entry.at).toLocaleTimeString()}</span>
+                          {' · '}
+                          <span>{entry.event}</span>
+                          {entry.detail ? ` · ${entry.detail}` : ''}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
 
 
             </div>
