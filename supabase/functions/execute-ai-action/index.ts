@@ -15,6 +15,67 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const GROCERY_CATEGORIES = new Set([
+  'produce',
+  'dairy',
+  'meat',
+  'pantry',
+  'frozen',
+  'bakery',
+  'beverages',
+  'other',
+])
+
+const CATEGORY_KEYWORDS: Record<string, string[]> = {
+  produce: ['apple', 'banana', 'orange', 'berry', 'lettuce', 'spinach', 'broccoli', 'carrot', 'tomato', 'onion', 'avocado', 'lemon', 'lime', 'grape', 'cucumber', 'potato', 'mushroom'],
+  dairy: ['milk', 'cheese', 'butter', 'cream', 'yogurt', 'egg', 'mozzarella', 'cheddar', 'parmesan'],
+  meat: ['chicken', 'beef', 'steak', 'pork', 'fish', 'salmon', 'tuna', 'shrimp', 'turkey', 'bacon', 'sausage'],
+  bakery: ['bread', 'bagel', 'muffin', 'croissant', 'bun', 'roll', 'tortilla', 'pita'],
+  frozen: ['frozen', 'ice cream', 'sorbet', 'pizza', 'fries', 'waffle'],
+  pantry: ['pasta', 'rice', 'cereal', 'oat', 'flour', 'sugar', 'salt', 'oil', 'vinegar', 'sauce', 'soup', 'bean', 'lentil', 'spice', 'seasoning', 'ketchup', 'mustard', 'mayo'],
+  beverages: ['water', 'juice', 'soda', 'coffee', 'tea', 'beer', 'wine', 'sparkling', 'lemonade', 'drink'],
+}
+
+const NAME_NORMALIZATION_RULES: Array<{ pattern: RegExp; replacement: string }> = [
+  { pattern: /\bcoca[\s-]?cola\b|\bcoke\b/i, replacement: 'Coca-Cola' },
+  { pattern: /\bdr[\s.]?pepper\b/i, replacement: 'Dr Pepper' },
+  { pattern: /\bgatorade\b/i, replacement: 'Gatorade' },
+  { pattern: /\bred ?bull\b/i, replacement: 'Red Bull' },
+  { pattern: /\bpaper ?towels?\b/i, replacement: 'paper towels' },
+  { pattern: /\btoilet ?paper\b/i, replacement: 'toilet paper' },
+]
+
+function toTitleCase(value: string): string {
+  return value
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function normalizeGroceryName(rawName: string): { name: string; normalizedFrom?: string } {
+  const trimmed = rawName.trim().replace(/\s+/g, ' ')
+  if (!trimmed) return { name: '' }
+  for (const rule of NAME_NORMALIZATION_RULES) {
+    if (rule.pattern.test(trimmed)) {
+      return { name: rule.replacement, normalizedFrom: trimmed }
+    }
+  }
+  return { name: toTitleCase(trimmed) }
+}
+
+function inferCategory(inputCategory: unknown, itemName: string): string {
+  if (typeof inputCategory === 'string') {
+    const normalizedCategory = inputCategory.trim().toLowerCase()
+    if (GROCERY_CATEGORIES.has(normalizedCategory)) return normalizedCategory
+  }
+  const lower = itemName.toLowerCase()
+  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    if (keywords.some((keyword) => lower.includes(keyword))) return category
+  }
+  return 'other'
+}
+
 async function getExistingActionResult(sb: ReturnType<typeof createClient>, actionId?: string) {
   if (!actionId) return null
   const { data, error } = await sb
@@ -342,19 +403,58 @@ Deno.serve(async (req) => {
       const listId = lists?.[0]?.id
       if (!listId) throw new Error('No grocery list found')
 
-      const items = (args.items as { name: string; quantity?: string; unit?: string; category?: string; notes?: string }[]).map(i => ({
+      const sourceItems = Array.isArray(args.items)
+        ? args.items as { name: string; quantity?: string; unit?: string; category?: string; notes?: string }[]
+        : []
+      const normalizedItems = sourceItems
+        .map((item) => {
+          const normalized = normalizeGroceryName(String(item.name ?? ''))
+          if (!normalized.name) return null
+          const category = inferCategory(item.category, normalized.name)
+          return {
+            rawName: String(item.name ?? '').trim(),
+            name: normalized.name,
+            normalizedFrom: normalized.normalizedFrom,
+            quantity: item.quantity ?? null,
+            unit: item.unit ?? null,
+            category,
+            notes: item.notes ?? null,
+          }
+        })
+        .filter((item): item is {
+          rawName: string
+          name: string
+          normalizedFrom?: string
+          quantity: string | null
+          unit: string | null
+          category: string
+          notes: string | null
+        } => item !== null)
+
+      if (normalizedItems.length === 0) throw new Error('No valid grocery item names were provided')
+
+      const items = normalizedItems.map((i) => ({
         list_id: listId,
         name: i.name,
         quantity: i.quantity ?? null,
         unit: i.unit ?? null,
-        category: i.category ?? 'other',
+        category: i.category,
         notes: i.notes ?? null,
         checked: false,
         last_modified_source: 'casa',
       }))
       const { error } = await sb.from('grocery_items').insert(items)
       if (error) throw new Error(error.message)
-      return new Response(JSON.stringify({ success: true, count: items.length, correlation_id: cid }), {
+      return new Response(JSON.stringify({
+        success: true,
+        count: items.length,
+        items: normalizedItems.map((item) => ({
+          name: item.name,
+          category: item.category,
+          normalized_from: item.normalizedFrom ?? null,
+        })),
+        correlation_id: cid,
+      }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }

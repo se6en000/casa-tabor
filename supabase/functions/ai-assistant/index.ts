@@ -316,7 +316,7 @@ Deno.serve(async (req) => {
       },
       {
         name: 'add_grocery_items',
-        description: 'Add one or more items to the grocery list.',
+        description: 'Add one or more items to the grocery list immediately (no confirmation step). Infer category and normalize likely product names/brands when needed.',
         parameters: {
           type: 'OBJECT',
           properties: {
@@ -426,7 +426,7 @@ ${defaultListId ? `Default list ID: ${defaultListId}` : ''}
 
 INSTRUCTIONS:
 - You are allowed to answer general/random questions directly (facts, explanations, ideas, writing help, etc.) when no Casa data/action is needed.
-- Use tools for calendar/grocery/place actions. Writes (create/update/delete) need user confirm; reads (search) execute immediately.
+- Use tools for calendar/grocery/place actions. Writes (create/update/delete) need user confirm, except add_grocery_items which should execute immediately. Reads (search) execute immediately.
 - Always operate on UUIDs from the events list. Use search_events when unsure, then update with the exact ID.
 - For update_event, always copy the event's updated_at value from context/events list into expected_updated_at.
 - Batch related field updates into a single update_event action instead of many small ones.
@@ -435,6 +435,7 @@ INSTRUCTIONS:
 - Always apply append/replace/clear/transform intent classification before building update_event args.
 - Prefer append semantics for "add/include/also/plus" phrasing unless user explicitly asks to replace.
 - For each write proposal, include "Will change", "Will preserve", and "Needs confirmation".
+- For add_grocery_items, do NOT ask for confirmation. Just add items immediately. If you inferred/corrected an item name or category, mention it briefly after adding.
 - Default time window: when no date is given, search from NOW (${context.currentDate}) forward — never return past events.
 - "Next event" / "what's next" = first event whose start_time is strictly AFTER NOW. If an event is currently in progress (started before NOW, ends after NOW), mention it as "currently happening" first, then state what starts next.
 - Default duration: 1 hour if not specified. Default time: morning (9am) for "tomorrow"/"next week", 2pm for "afternoon", 6pm for "evening", 12pm for "lunch".
@@ -737,6 +738,46 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         const data2 = await res2.json()
         const finalText = data2.candidates?.[0]?.content?.parts?.find((p: { text?: string }) => p.text)?.text ?? ''
         return { type: 'text', text: finalText || 'Done!' }
+      }
+
+      if (name === 'add_grocery_items') {
+        const execResult = await sb.functions.invoke('execute-ai-action', {
+          body: {
+            tool: name,
+            args,
+            session_id: null,
+            correlation_id: `${cid}:auto-grocery:${Date.now().toString(36)}`,
+          },
+        })
+
+        const execError = execResult.error?.message ?? (execResult.data as { error?: string } | null)?.error ?? null
+        if (execError) {
+          return { type: 'text', text: `I couldn't add that to grocery yet: ${execError}` }
+        }
+
+        const payload = (execResult.data as {
+          success?: boolean
+          count?: number
+          items?: { name: string; category?: string; normalized_from?: string | null }[]
+        } | null) ?? {}
+        if (!payload.success) {
+          return { type: 'text', text: "I couldn't add that to grocery right now. Please try again." }
+        }
+
+        const addedItems = Array.isArray(payload.items) ? payload.items : []
+        const names = addedItems.map((item) => item.name).filter(Boolean)
+        const corrected = addedItems
+          .filter((item) => item.normalized_from && item.normalized_from !== item.name)
+          .map((item) => `${item.normalized_from} → ${item.name}`)
+
+        const addedLine = names.length > 0
+          ? `Added to grocery: ${names.join(', ')}.`
+          : `Added ${payload.count ?? 0} grocery item${payload.count === 1 ? '' : 's'}.`
+        const correctionLine = corrected.length > 0
+          ? ` I interpreted ${corrected.join('; ')}.`
+          : ''
+
+        return { type: 'text', text: `${addedLine}${correctionLine}` }
       }
 
       // Write tools: return to frontend for confirmation

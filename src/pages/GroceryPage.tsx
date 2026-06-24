@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ShoppingCart, Trash2, CheckSquare, Square, X, Plus, RefreshCw } from 'lucide-react'
+import { ShoppingCart, Trash2, CheckSquare, Square, X, Plus, RefreshCw, Mic } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useGroceryList, GROCERY_CATEGORIES, type GroceryItem } from '../hooks/useGroceryList'
 import { supabase } from '../lib/supabase'
@@ -115,6 +115,19 @@ export default function GroceryPage() {
     if (!trimmed) return
     const category = detectCategory(trimmed)
     addItem.mutate({ list_id: defaultListId, name: trimmed, quantity: null, unit: null, category, checked: false, notes: null })
+  }
+
+  const handleVoiceAdd = () => {
+    const prompt = inputValue.trim()
+      ? `Add these grocery items to the shopping list: ${inputValue.trim()}`
+      : 'Add items to the grocery list.'
+    document.dispatchEvent(new CustomEvent('open-ai-chat', {
+      detail: {
+        prompt,
+        autoSend: false,
+        source: 'grocery-voice-add',
+      },
+    }))
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -401,6 +414,14 @@ export default function GroceryPage() {
                   </button>
                 </div>
                 <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                  <button
+                    type="button"
+                    onClick={handleVoiceAdd}
+                    className="flex-shrink-0 min-h-9 px-3 rounded-full border border-casa-gold/40 bg-casa-gold/10 text-body-sm text-casa-navy hover:bg-casa-gold/20 transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <Mic size={14} />
+                    Voice add
+                  </button>
                   {QUICK_ADD_TOUCH_ITEMS.map(item => (
                     <button
                       key={item}
@@ -412,6 +433,9 @@ export default function GroceryPage() {
                     </button>
                   ))}
                 </div>
+                <p className="mt-1 text-[11px] text-casa-muted">
+                  Tip: tap Voice add, then say “add milk, eggs, and bananas.”
+                </p>
               </div>
           </div>
         )}
