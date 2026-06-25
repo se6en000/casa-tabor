@@ -915,7 +915,7 @@ export default function GroceryPage() {
                   >
                     <div className="px-1 pb-1">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="inline-flex items-center gap-1.5 text-caption font-semibold text-casa-muted uppercase tracking-wider">
+                        <p className="inline-flex items-center gap-1.5 text-body-sm font-semibold text-casa-muted">
                           <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: section.accentColor }} />
                           {section.label}
                         </p>
@@ -975,7 +975,7 @@ export default function GroceryPage() {
                   <button
                     type="button"
                     onClick={() => setShowCompletedArchive(prev => !prev)}
-                    className="px-1 pb-2 text-caption font-semibold text-casa-muted uppercase tracking-wider hover:text-casa-text transition-colors"
+                    className="px-1 pb-2 text-caption font-semibold text-casa-muted hover:text-casa-text transition-colors"
                   >
                     {showCompletedArchive ? 'Hide completed archive' : `Show completed archive (${checkedCount})`}
                   </button>
@@ -984,7 +984,7 @@ export default function GroceryPage() {
                       {completedItemsByCategory.map(cat => (
                       <div key={`completed-${cat.key}`}>
                         <div className="px-1 pb-1">
-                          <p className="text-[11px] font-semibold text-casa-muted uppercase tracking-wider">
+                          <p className="text-body-sm font-semibold text-casa-muted">
                             {cat.label}
                           </p>
                         </div>
