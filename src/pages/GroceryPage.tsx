@@ -261,6 +261,7 @@ export default function GroceryPage() {
   })
 
   const [inputValue, setInputValue] = useState('')
+  const [isAddPanelOpen, setIsAddPanelOpen] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => localStorage.getItem(SYNC_LAST_AT_KEY))
@@ -719,6 +720,12 @@ export default function GroceryPage() {
   }, [finishDrag])
 
   useEffect(() => {
+    if (!isAddPanelOpen) return
+    const timer = window.setTimeout(() => inputRef.current?.focus(), 80)
+    return () => window.clearTimeout(timer)
+  }, [isAddPanelOpen])
+
+  useEffect(() => {
     const kickoff = window.setTimeout(() => {
       void handleSyncNow()
     }, 1_500)
@@ -1086,82 +1093,105 @@ export default function GroceryPage() {
                 </div>
               )}
 
-              <div className="sticky bottom-0 z-20 mt-5 border-t border-casa-border bg-casa-surface/95 backdrop-blur px-3 py-3 pb-safe-b rounded-t-2xl">
-                <div className="flex items-center gap-2 bg-casa-bg rounded-2xl border border-casa-border px-4 py-3 min-h-14 shadow-sm">
-                  <Plus size={18} className="text-casa-muted flex-shrink-0" />
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={inputValue}
-                    onChange={e => setInputValue(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Add an item…"
-                    className="flex-1 bg-transparent text-body text-casa-text placeholder:text-casa-muted outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddItem}
-                    disabled={!inputValue.trim() || !defaultListId}
-                    className={cn(
-                      'flex-shrink-0 min-h-10 px-4 rounded-button text-body-sm font-semibold transition-all',
-                      inputValue.trim()
-                        ? 'bg-casa-gold text-white hover:brightness-110'
-                        : 'text-casa-muted'
-                    )}
-                  >
-                    Add
-                  </button>
-                </div>
-                {mergeSuggestion && (
-                  <div className="mt-2 rounded-2xl border border-casa-gold/40 bg-casa-gold/10 px-3 py-2">
-                    <p className="text-[11px] text-casa-navy">
-                      Similar item already on your list: <span className="font-semibold">{mergeSuggestion.name}</span>
-                    </p>
-                    <div className="mt-1.5 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => spotlightItem(mergeSuggestion.id)}
-                        className="px-2.5 py-1 rounded-full border border-casa-gold/60 bg-casa-surface text-[11px] font-medium text-casa-navy hover:bg-casa-bg transition-colors"
-                      >
-                        Use existing
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const nextName = inputValue.trim()
-                          if (!nextName || !defaultListId) return
-                          const category = detectCategory(nextName)
-                          addItem.mutate({ list_id: defaultListId, name: nextName, quantity: null, unit: null, category, checked: false, notes: null })
-                          setInputValue('')
-                          inputRef.current?.focus()
-                        }}
-                        className="px-2.5 py-1 rounded-full border border-casa-border text-[11px] text-casa-muted hover:bg-casa-bg transition-colors"
-                      >
-                        Add anyway
-                      </button>
-                    </div>
-                  </div>
-                )}
-                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                  {QUICK_ADD_TOUCH_ITEMS.map(item => (
-                    <button
-                      key={item}
-                      type="button"
-                      onClick={() => handleQuickAdd(item)}
-                      className="flex-shrink-0 min-h-9 px-3 rounded-full border border-casa-border bg-casa-bg text-body-sm text-casa-text hover:bg-casa-main transition-colors"
-                    >
-                      + {item}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-1 text-[11px] text-casa-muted">
-                  Tip: use the Voice add button at the top, then say “add milk, eggs, and bananas.”
-                </p>
-              </div>
+              <div className="h-24" />
           </div>
         )}
         </div>
       </div>
+      {isAddPanelOpen && (
+        <div className="fixed right-24 bottom-[calc(var(--spacing-nav-height)+1rem+var(--vk-height,0px)+var(--vk-gap,0px))] lg:bottom-[calc(1.5rem+var(--vk-height,0px)+var(--vk-gap,0px))] z-[55] w-[min(34rem,calc(100vw-7rem))] max-h-[min(24rem,55vh)] overflow-y-auto rounded-2xl border border-casa-border bg-casa-surface shadow-modal p-3">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <p className="text-body-sm font-semibold text-casa-navy">Add grocery items</p>
+            <button
+              type="button"
+              onClick={() => setIsAddPanelOpen(false)}
+              className="h-8 w-8 rounded-full border border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main transition-colors flex items-center justify-center"
+              aria-label="Close add panel"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div className="flex items-center gap-2 bg-casa-bg rounded-2xl border border-casa-border px-4 py-3 min-h-14 shadow-sm">
+            <Plus size={18} className="text-casa-muted flex-shrink-0" />
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputValue}
+              onChange={e => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Add an item…"
+              className="flex-1 bg-transparent text-body text-casa-text placeholder:text-casa-muted outline-none"
+            />
+            <button
+              type="button"
+              onClick={handleAddItem}
+              disabled={!inputValue.trim() || !defaultListId}
+              className={cn(
+                'flex-shrink-0 min-h-10 px-4 rounded-button text-body-sm font-semibold transition-all',
+                inputValue.trim()
+                  ? 'bg-casa-gold text-white hover:brightness-110'
+                  : 'text-casa-muted'
+              )}
+            >
+              Add
+            </button>
+          </div>
+          {mergeSuggestion && (
+            <div className="mt-2 rounded-2xl border border-casa-gold/40 bg-casa-gold/10 px-3 py-2">
+              <p className="text-[11px] text-casa-navy">
+                Similar item already on your list: <span className="font-semibold">{mergeSuggestion.name}</span>
+              </p>
+              <div className="mt-1.5 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => spotlightItem(mergeSuggestion.id)}
+                  className="px-2.5 py-1 rounded-full border border-casa-gold/60 bg-casa-surface text-[11px] font-medium text-casa-navy hover:bg-casa-bg transition-colors"
+                >
+                  Use existing
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextName = inputValue.trim()
+                    if (!nextName || !defaultListId) return
+                    const category = detectCategory(nextName)
+                    addItem.mutate({ list_id: defaultListId, name: nextName, quantity: null, unit: null, category, checked: false, notes: null })
+                    setInputValue('')
+                    inputRef.current?.focus()
+                  }}
+                  className="px-2.5 py-1 rounded-full border border-casa-border text-[11px] text-casa-muted hover:bg-casa-bg transition-colors"
+                >
+                  Add anyway
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+            {QUICK_ADD_TOUCH_ITEMS.map(item => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => handleQuickAdd(item)}
+                className="flex-shrink-0 min-h-9 px-3 rounded-full border border-casa-border bg-casa-bg text-body-sm text-casa-text hover:bg-casa-main transition-colors"
+              >
+                + {item}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-[11px] text-casa-muted">
+            Tip: use the Voice add button at the top, then say “add milk, eggs, and bananas.”
+          </p>
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => setIsAddPanelOpen((current) => !current)}
+        className="fixed right-5 bottom-[calc(var(--spacing-nav-height)+1rem+var(--vk-height,0px)+var(--vk-gap,0px))] lg:bottom-[calc(1.5rem+var(--vk-height,0px)+var(--vk-gap,0px))] z-[60] w-14 h-14 rounded-full bg-casa-gold text-casa-navy font-semibold border border-casa-gold/50 shadow-[0_1px_0_rgba(255,255,255,0.25)_inset] flex items-center justify-center hover:brightness-110 transition-all"
+        aria-label={isAddPanelOpen ? 'Close add panel' : 'Open add panel'}
+        title={isAddPanelOpen ? 'Close add panel' : 'Add items'}
+      >
+        {isAddPanelOpen ? <X size={22} /> : <Plus size={24} />}
+      </button>
       {dragState && (
         <div
           className="fixed z-[90] pointer-events-none px-3 py-2 rounded-xl bg-casa-navy text-white text-body-sm shadow-modal"
