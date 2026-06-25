@@ -891,8 +891,7 @@ export default function GroceryPage() {
                     )}
                   >
                     <div
-                      className="bg-casa-surface rounded-2xl border border-casa-border border-l-2 overflow-hidden"
-                      style={{ borderLeftColor: section.accentColor }}
+                      className="bg-casa-surface rounded-2xl border border-casa-border overflow-hidden"
                     >
                       <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-casa-divider">
                         <p className="text-body font-semibold text-casa-navy">
@@ -909,6 +908,7 @@ export default function GroceryPage() {
                           )}
                         </div>
                       </div>
+                      <div className="h-1.5" style={{ backgroundColor: section.accentColor }} />
                       <div className="divide-y divide-casa-divider">
                       {section.items.map((item) => (
                         <div key={item.id} id={`grocery-item-${item.id}`}>
