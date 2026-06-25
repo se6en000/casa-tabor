@@ -44,10 +44,6 @@ export const GROCERY_CATEGORIES = [
 
 const EMPTY_ITEMS: GroceryItem[] = []
 
-function normalizeComparableName(name: string): string {
-  return name.trim().replace(/\s+/g, ' ').toLowerCase()
-}
-
 async function fetchGroceryData() {
   const [{ data: lists }, { data: items }] = await Promise.all([
     supabase.from('grocery_lists').select('id, name, created_at').order('created_at').limit(5),
@@ -128,24 +124,12 @@ export function useGroceryList() {
       const normalizedName = item.name.trim().replace(/\s+/g, ' ')
       if (!normalizedName) return
 
-      const { data: existing, error: existingError } = await supabase
-        .from('grocery_items')
-        .select('name')
-        .eq('list_id', item.list_id)
-        .eq('checked', false)
-        .is('deleted_at', null)
-      if (existingError) throw existingError
-
-      const compareName = normalizeComparableName(normalizedName)
-      const alreadyExists = (existing ?? []).some((row) => normalizeComparableName(String(row.name ?? '')) === compareName)
-      if (alreadyExists) return
-
       const { error } = await supabase.from('grocery_items').insert({
         ...item,
         name: normalizedName,
         last_modified_source: 'casa',
       })
-      if (error) throw error
+      if (error && error.code !== '23505') throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['grocery'] }),
   })

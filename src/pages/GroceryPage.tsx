@@ -2,17 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ShoppingCart, Trash2, CheckSquare, Square, X, Plus, RefreshCw, Mic, GripVertical } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useGroceryList, GROCERY_CATEGORIES, type GroceryItem } from '../hooks/useGroceryList'
+import { inferCategoryFromName } from '../utils/groceryCategorization'
 import { supabase } from '../lib/supabase'
-
-const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  produce:   ['apple', 'banana', 'orange', 'grape', 'berry', 'lettuce', 'spinach', 'kale', 'broccoli', 'carrot', 'tomato', 'onion', 'garlic', 'pepper', 'cucumber', 'celery', 'avocado', 'lemon', 'lime', 'mango', 'strawberr', 'blueberr', 'salad', 'herb', 'basil', 'cilantro', 'parsley', 'zucchini', 'potato', 'yam', 'corn', 'bean', 'pea', 'mushroom'],
-  dairy:     ['milk', 'cheese', 'butter', 'cream', 'yogurt', 'egg', 'sour cream', 'cottage', 'mozzarella', 'cheddar', 'parmesan', 'half and half', 'whipped'],
-  meat:      ['chicken', 'beef', 'steak', 'pork', 'fish', 'salmon', 'tuna', 'shrimp', 'turkey', 'bacon', 'sausage', 'lamb', 'ground', 'ribs', 'wings', 'lobster', 'crab', 'tilapia'],
-  bakery:    ['bread', 'bagel', 'muffin', 'croissant', 'bun', 'roll', 'cake', 'cookie', 'pie', 'tortilla', 'wrap', 'pita'],
-  frozen:    ['frozen', 'ice cream', 'sorbet', 'pizza', 'waffle', 'fries', 'edamame'],
-  pantry:    ['pasta', 'rice', 'cereal', 'oat', 'flour', 'sugar', 'salt', 'oil', 'vinegar', 'sauce', 'soup', 'broth', 'stock', 'can', 'bean', 'lentil', 'nut', 'peanut', 'almond', 'cashew', 'chip', 'cracker', 'popcorn', 'honey', 'jam', 'jelly', 'syrup', 'ketchup', 'mustard', 'mayo', 'spice', 'seasoning'],
-  beverages: ['water', 'juice', 'soda', 'coffee', 'tea', 'beer', 'wine', 'sparkling', 'lemonade', 'smoothie', 'energy', 'drink'],
-}
 
 const SYNC_CURSOR_KEY = 'grocery-sync-cursor-v1'
 const SYNC_LAST_AT_KEY = 'grocery-sync-last-at-v1'
@@ -23,11 +14,7 @@ const CHECKED_ITEM_DISMISS_MS = 1_500
 const CHECKED_ITEM_EXIT_ANIMATION_MS = 320
 
 function detectCategory(name: string): string {
-  const lower = name.toLowerCase()
-  for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    if (keywords.some(kw => lower.includes(kw))) return cat
-  }
-  return 'other'
+  return inferCategoryFromName(name)
 }
 
 function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging = false, onMovePointerDown, onMovePointerMove, onMovePointerUp, onMovePointerCancel }: {

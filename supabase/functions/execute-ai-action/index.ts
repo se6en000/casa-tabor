@@ -8,32 +8,15 @@ import {
   hasSmartEnrichmentInputs,
 } from '../_shared/enrichment-impact.mjs'
 import { requireEnv } from '../_shared/env.mjs'
+import {
+  normalizeComparableName,
+  resolveCategoryFromInput,
+} from '../_shared/grocery-normalization.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-const GROCERY_CATEGORIES = new Set([
-  'produce',
-  'dairy',
-  'meat',
-  'pantry',
-  'frozen',
-  'bakery',
-  'beverages',
-  'other',
-])
-
-const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  produce: ['apple', 'banana', 'orange', 'berry', 'lettuce', 'spinach', 'broccoli', 'carrot', 'tomato', 'onion', 'avocado', 'lemon', 'lime', 'grape', 'cucumber', 'potato', 'mushroom'],
-  dairy: ['milk', 'cheese', 'butter', 'cream', 'yogurt', 'egg', 'mozzarella', 'cheddar', 'parmesan'],
-  meat: ['chicken', 'beef', 'steak', 'pork', 'fish', 'salmon', 'tuna', 'shrimp', 'turkey', 'bacon', 'sausage'],
-  bakery: ['bread', 'bagel', 'muffin', 'croissant', 'bun', 'roll', 'tortilla', 'pita'],
-  frozen: ['frozen', 'ice cream', 'sorbet', 'pizza', 'fries', 'waffle'],
-  pantry: ['pasta', 'rice', 'cereal', 'oat', 'flour', 'sugar', 'salt', 'oil', 'vinegar', 'sauce', 'soup', 'bean', 'lentil', 'spice', 'seasoning', 'ketchup', 'mustard', 'mayo'],
-  beverages: ['water', 'juice', 'soda', 'coffee', 'tea', 'beer', 'wine', 'sparkling', 'lemonade', 'drink'],
 }
 
 const NAME_NORMALIZATION_RULES: Array<{ pattern: RegExp; replacement: string }> = [
@@ -62,22 +45,6 @@ function normalizeGroceryName(rawName: string): { name: string; normalizedFrom?:
     }
   }
   return { name: toTitleCase(trimmed) }
-}
-
-function inferCategory(inputCategory: unknown, itemName: string): string {
-  if (typeof inputCategory === 'string') {
-    const normalizedCategory = inputCategory.trim().toLowerCase()
-    if (GROCERY_CATEGORIES.has(normalizedCategory)) return normalizedCategory
-  }
-  const lower = itemName.toLowerCase()
-  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    if (keywords.some((keyword) => lower.includes(keyword))) return category
-  }
-  return 'other'
-}
-
-function normalizeComparableName(name: string): string {
-  return name.trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
 async function getExistingActionResult(sb: ReturnType<typeof createClient>, actionId?: string) {
@@ -414,7 +381,10 @@ Deno.serve(async (req) => {
         .map((item) => {
           const normalized = normalizeGroceryName(String(item.name ?? ''))
           if (!normalized.name) return null
-          const category = inferCategory(item.category, normalized.name)
+          const category = resolveCategoryFromInput(
+            typeof item.category === 'string' ? item.category : null,
+            normalized.name,
+          )
           return {
             rawName: String(item.name ?? '').trim(),
             name: normalized.name,
@@ -457,24 +427,39 @@ Deno.serve(async (req) => {
         return true
       })
 
-      const items = uniqueItems.map((i) => ({
-        list_id: listId,
-        name: i.name,
-        quantity: i.quantity ?? null,
-        unit: i.unit ?? null,
-        category: i.category,
-        notes: i.notes ?? null,
-        checked: false,
-        last_modified_source: 'casa',
-      }))
-      if (items.length > 0) {
-        const { error } = await sb.from('grocery_items').insert(items)
-        if (error) throw new Error(error.message)
+      const insertedItems: Array<{ name: string; category: string; normalizedFrom?: string }> = []
+      if (uniqueItems.length > 0) {
+        for (const item of uniqueItems) {
+          const { data: insertedRows, error } = await sb
+            .from('grocery_items')
+            .insert({
+              list_id: listId,
+              name: item.name,
+              quantity: item.quantity ?? null,
+              unit: item.unit ?? null,
+              category: item.category,
+              notes: item.notes ?? null,
+              checked: false,
+              last_modified_source: 'casa',
+            })
+            .select('id')
+
+          if (error && error.code !== '23505') throw new Error(error.message)
+          if ((insertedRows ?? []).length > 0) {
+            insertedItems.push({
+              name: item.name,
+              category: item.category,
+              normalizedFrom: item.normalizedFrom,
+            })
+          } else {
+            skippedExactMatches.push(item.name)
+          }
+        }
       }
       return new Response(JSON.stringify({
         success: true,
-        count: items.length,
-        items: uniqueItems.map((item) => ({
+        count: insertedItems.length,
+        items: insertedItems.map((item) => ({
           name: item.name,
           category: item.category,
           normalized_from: item.normalizedFrom ?? null,

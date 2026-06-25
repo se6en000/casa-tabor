@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.ts'
+import { inferCategoryFromName } from '../_shared/grocery-normalization.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -211,10 +212,12 @@ Deno.serve(async (req) => {
     })
 
     for (const item of approved) {
+      const inferredCategory = inferCategoryFromName(item.corrected_name)
       const { error } = await sb
         .from('grocery_items')
         .update({
           name: item.corrected_name,
+          category: inferredCategory,
           last_modified_source: 'casa',
         })
         .eq('id', item.id)

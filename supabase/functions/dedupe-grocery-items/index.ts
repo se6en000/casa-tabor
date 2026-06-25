@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.ts'
+import { normalizeComparableName } from '../_shared/grocery-normalization.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -19,10 +20,6 @@ type GroceryRow = {
   ios_reminder_id: string | null
   updated_at: string
   created_at: string
-}
-
-function normalizeComparableName(name: string): string {
-  return name.trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
 function scoreRow(row: GroceryRow): number {

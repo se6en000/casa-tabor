@@ -1,41 +1,14 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.ts'
+import {
+  normalizeComparableName,
+  resolveCategoryFromInput,
+} from '../_shared/grocery-normalization.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-const ALLOWED_CATEGORIES = new Set([
-  'produce',
-  'dairy',
-  'meat',
-  'bakery',
-  'frozen',
-  'pantry',
-  'beverages',
-  'other',
-])
-
-const CATEGORY_ALIASES: Record<string, string> = {
-  'meat & seafood': 'meat',
-  'meat and seafood': 'meat',
-  seafood: 'meat',
-  protein: 'meat',
-  drink: 'beverages',
-  drinks: 'beverages',
-  beverage: 'beverages',
-}
-
-const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  produce: ['apple', 'banana', 'orange', 'berry', 'lettuce', 'spinach', 'broccoli', 'carrot', 'tomato', 'onion', 'avocado', 'lemon', 'lime', 'grape', 'cucumber', 'potato', 'mushroom'],
-  dairy: ['milk', 'cheese', 'butter', 'cream', 'yogurt', 'egg', 'mozzarella', 'cheddar', 'parmesan'],
-  meat: ['chicken', 'beef', 'steak', 'pork', 'fish', 'salmon', 'tuna', 'shrimp', 'turkey', 'bacon', 'sausage', 'mahi', 'cod', 'tilapia', 'halibut', 'trout'],
-  bakery: ['bread', 'bagel', 'muffin', 'croissant', 'bun', 'roll', 'tortilla', 'pita'],
-  frozen: ['frozen', 'ice cream', 'sorbet', 'pizza', 'fries', 'waffle'],
-  pantry: ['pasta', 'rice', 'cereal', 'oat', 'flour', 'sugar', 'salt', 'oil', 'vinegar', 'sauce', 'soup', 'bean', 'lentil', 'spice', 'seasoning', 'ketchup', 'mustard', 'mayo', 'cheerio', 'fruit loop'],
-  beverages: ['water', 'juice', 'soda', 'coffee', 'tea', 'beer', 'wine', 'sparkling', 'lemonade', 'drink', 'nespresso'],
 }
 
 type IncomingReminder = {
@@ -58,40 +31,6 @@ type ExistingGroceryRow = {
   deleted_at: string | null
   name: string | null
   checked: boolean
-}
-
-function normalizeComparableName(name: string): string {
-  return name.trim().replace(/\s+/g, ' ').toLowerCase()
-}
-
-function normalizeCategory(category?: string | null): string {
-  if (!category) return 'other'
-  const normalized = category.trim().toLowerCase()
-  if (ALLOWED_CATEGORIES.has(normalized)) return normalized
-  const aliased = CATEGORY_ALIASES[normalized]
-  if (aliased && ALLOWED_CATEGORIES.has(aliased)) return aliased
-  return 'other'
-}
-
-function inferCategoryFromName(name: string): string {
-  const normalizedName = normalizeComparableName(name)
-  if (!normalizedName) return 'other'
-  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    if (keywords.some((keyword) => normalizedName.includes(keyword))) return category
-  }
-  return 'other'
-}
-
-function resolveCategory(inputCategory: string | null | undefined, name: string): string {
-  const normalizedCategory = normalizeCategory(inputCategory)
-  if (normalizedCategory !== 'other') return normalizedCategory
-  // Keep explicit "other", but infer when category is absent/unknown from iOS payloads.
-  if (!inputCategory || !inputCategory.trim()) return inferCategoryFromName(name)
-  const normalizedInput = inputCategory.trim().toLowerCase()
-  if (!ALLOWED_CATEGORIES.has(normalizedInput) && !CATEGORY_ALIASES[normalizedInput]) {
-    return inferCategoryFromName(name)
-  }
-  return 'other'
 }
 
 function normalizeIso(iso?: string | null): string | null {
@@ -177,7 +116,7 @@ Deno.serve(async (req) => {
       }
 
       const incomingName = (reminder.name ?? reminder.title ?? '').trim()
-      const resolvedCategory = resolveCategory(reminder.category, incomingName || 'Untitled')
+      const resolvedCategory = resolveCategoryFromInput(reminder.category, incomingName || 'Untitled')
       const isDeleted = Boolean(reminder.deleted)
 
       if (existing) {
@@ -249,6 +188,7 @@ Deno.serve(async (req) => {
         continue
       }
 
+      const comparableName = normalizeComparableName(incomingName || 'Untitled')
       const { error } = await sb.from('grocery_items').insert({
         list_id: listId,
         ios_reminder_id: reminder.reminder_id,
@@ -261,8 +201,32 @@ Deno.serve(async (req) => {
         last_modified_source: 'ios',
         ios_updated_at: incomingUpdatedAt,
       })
-      if (error) throw new Error(error.message)
-      inserted += 1
+      if (!error) {
+        inserted += 1
+        continue
+      }
+      if (error.code !== '23505') throw new Error(error.message)
+
+      const { error: conflictUpdateError } = await sb
+        .from('grocery_items')
+        .update({
+          ios_reminder_id: reminder.reminder_id,
+          name: incomingName || 'Untitled',
+          quantity: reminder.quantity ?? null,
+          unit: reminder.unit ?? null,
+          category: resolvedCategory,
+          checked: Boolean(reminder.completed),
+          notes: reminder.notes ?? null,
+          deleted_at: null,
+          last_modified_source: 'ios',
+          ios_updated_at: incomingUpdatedAt,
+        })
+        .eq('list_id', listId)
+        .eq('name_normalized', comparableName)
+        .eq('checked', false)
+        .is('deleted_at', null)
+      if (conflictUpdateError) throw new Error(conflictUpdateError.message)
+      updated += 1
     }
 
     return new Response(

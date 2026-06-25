@@ -1,21 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.ts'
-
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  produce: ['apple', 'banana', 'orange', 'berry', 'lettuce', 'spinach', 'broccoli', 'carrot', 'tomato', 'onion', 'avocado', 'lemon', 'lime', 'grape', 'cucumber', 'potato', 'mushroom'],
-  dairy: ['milk', 'cheese', 'butter', 'cream', 'yogurt', 'egg', 'mozzarella', 'cheddar', 'parmesan'],
-  meat: ['chicken', 'beef', 'steak', 'pork', 'fish', 'salmon', 'tuna', 'shrimp', 'turkey', 'bacon', 'sausage', 'mahi', 'cod', 'tilapia', 'halibut', 'trout'],
-  bakery: ['bread', 'bagel', 'muffin', 'croissant', 'bun', 'roll', 'tortilla', 'pita'],
-  frozen: ['frozen', 'ice cream', 'sorbet', 'pizza', 'fries', 'waffle'],
-  pantry: ['pasta', 'rice', 'cereal', 'oat', 'flour', 'sugar', 'salt', 'oil', 'vinegar', 'sauce', 'soup', 'bean', 'lentil', 'spice', 'seasoning', 'ketchup', 'mustard', 'mayo', 'cheerio', 'fruit loop'],
-  beverages: ['water', 'juice', 'soda', 'coffee', 'tea', 'beer', 'wine', 'sparkling', 'lemonade', 'drink', 'nespresso'],
-}
+import { inferCategoryFromName } from '../_shared/grocery-normalization.ts'
 
 type GroceryRow = {
   id: string
@@ -23,17 +8,10 @@ type GroceryRow = {
   category: string | null
 }
 
-function normalizeComparableName(name: string): string {
-  return name.trim().replace(/\s+/g, ' ').toLowerCase()
-}
-
-function inferCategoryFromName(name: string): string {
-  const normalizedName = normalizeComparableName(name)
-  if (!normalizedName) return 'other'
-  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    if (keywords.some((keyword) => normalizedName.includes(keyword))) return category
-  }
-  return 'other'
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
 Deno.serve(async (req) => {
