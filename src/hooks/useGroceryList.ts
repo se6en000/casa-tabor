@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 
@@ -42,6 +42,8 @@ export const GROCERY_CATEGORIES = [
   { key: 'other', label: '🛒 Other' },
 ]
 
+const EMPTY_ITEMS: GroceryItem[] = []
+
 function normalizeComparableName(name: string): string {
   return name.trim().replace(/\s+/g, ' ').toLowerCase()
 }
@@ -56,6 +58,46 @@ async function fetchGroceryData() {
 
 export function useGroceryList() {
   const qc = useQueryClient()
+  const knownItemIdsRef = useRef<Set<string> | null>(null)
+  const pendingNormalizationIdsRef = useRef<Set<string>>(new Set())
+  const normalizationTimerRef = useRef<number | null>(null)
+  const normalizationInFlightRef = useRef(false)
+  const flushIdleNormalizationRef = useRef<() => void>(() => {})
+
+  const flushIdleNormalization = useCallback(() => {
+    if (normalizationInFlightRef.current) return
+    const ids = Array.from(pendingNormalizationIdsRef.current)
+    if (ids.length === 0) return
+    pendingNormalizationIdsRef.current.clear()
+    normalizationInFlightRef.current = true
+
+    void (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('normalize-grocery-items', {
+          body: { item_ids: ids },
+        })
+        if (error) throw error
+        if (Number(data?.corrected_count ?? 0) > 0) {
+          qc.invalidateQueries({ queryKey: ['grocery'] })
+        }
+      } catch (err) {
+        console.warn('[useGroceryList] idle normalization failed', err)
+        ids.forEach((id) => pendingNormalizationIdsRef.current.add(id))
+      } finally {
+        normalizationInFlightRef.current = false
+        if (pendingNormalizationIdsRef.current.size > 0 && normalizationTimerRef.current == null) {
+          normalizationTimerRef.current = window.setTimeout(() => {
+            normalizationTimerRef.current = null
+            flushIdleNormalizationRef.current()
+          }, 60_000)
+        }
+      }
+    })()
+  }, [qc])
+
+  useEffect(() => {
+    flushIdleNormalizationRef.current = flushIdleNormalization
+  }, [flushIdleNormalization])
 
   useEffect(() => {
     const handleExternalGroceryUpdate = () => {
@@ -64,6 +106,14 @@ export function useGroceryList() {
     window.addEventListener('casa:grocery-updated', handleExternalGroceryUpdate)
     return () => window.removeEventListener('casa:grocery-updated', handleExternalGroceryUpdate)
   }, [qc])
+
+  useEffect(() => {
+    return () => {
+      if (normalizationTimerRef.current) {
+        window.clearTimeout(normalizationTimerRef.current)
+      }
+    }
+  }, [])
 
   const { data, isLoading } = useQuery({
     queryKey: ['grocery'],
@@ -160,8 +210,43 @@ export function useGroceryList() {
   })
 
   const lists = data?.lists ?? []
-  const items = data?.items ?? []
+  const items = data?.items ?? EMPTY_ITEMS
   const defaultListId = lists[0]?.id ?? null
+
+  useEffect(() => {
+    const currentIds = new Set(items.map((item) => item.id))
+
+    if (!knownItemIdsRef.current) {
+      knownItemIdsRef.current = currentIds
+      return
+    }
+
+    const previouslyKnown = knownItemIdsRef.current
+    let queuedAny = false
+    for (const item of items) {
+      if (previouslyKnown.has(item.id)) continue
+      const shouldQueue =
+        !item.checked &&
+        !item.deleted_at &&
+        item.last_modified_source === 'casa'
+      if (shouldQueue) {
+        pendingNormalizationIdsRef.current.add(item.id)
+        queuedAny = true
+      }
+    }
+
+    knownItemIdsRef.current = currentIds
+
+    if (queuedAny) {
+      if (normalizationTimerRef.current) {
+        window.clearTimeout(normalizationTimerRef.current)
+      }
+      normalizationTimerRef.current = window.setTimeout(() => {
+        normalizationTimerRef.current = null
+        void flushIdleNormalization()
+      }, 60_000)
+    }
+  }, [items, flushIdleNormalization])
 
   const itemsByCategory = GROCERY_CATEGORIES.map(cat => ({
     ...cat,
