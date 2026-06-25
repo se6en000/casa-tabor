@@ -312,9 +312,12 @@ export default function CookPage() {
               )}
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              <div className="rounded-xl border border-casa-border bg-casa-bg p-3">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <p className="text-[11px] font-semibold text-casa-navy">Ingredients</p>
+              <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden">
+                <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-body font-semibold text-casa-navy">Ingredients</p>
+                    <p className="text-[11px] text-casa-muted">{cookIngredients.length} items</p>
+                  </div>
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
@@ -345,8 +348,14 @@ export default function CookPage() {
                     ))}
                   </div>
                 </div>
+                <div
+                  className="h-2.5 w-full"
+                  style={{ backgroundColor: 'var(--color-family-liv)' }}
+                  aria-hidden
+                />
+                <div className="p-4">
                 {cookIngredients.length === 0 ? (
-                  <p className="text-[11px] text-casa-muted">No ingredient breakdown saved for this recipe.</p>
+                  <p className="text-body-sm text-casa-muted">No ingredient breakdown saved for this recipe.</p>
                 ) : (
                   <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
                     {cookIngredients.map((ingredient, index) => {
@@ -363,11 +372,22 @@ export default function CookPage() {
                     })}
                   </div>
                 )}
+                </div>
               </div>
 
-              <div className="rounded-xl border border-casa-border bg-casa-bg p-3">
-                <p className="text-[11px] font-semibold text-casa-navy mb-2">Directions</p>
-                <p className="text-body text-casa-text">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
+              <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden">
+                <div className="px-4 pt-3 pb-2">
+                  <p className="text-body font-semibold text-casa-navy">Directions</p>
+                  <p className="text-[11px] text-casa-muted">Step {stepIndex + 1} of {Math.max(1, cookSteps.length)}</p>
+                </div>
+                <div
+                  className="h-2.5 w-full"
+                  style={{ backgroundColor: 'var(--color-casa-gold)' }}
+                  aria-hidden
+                />
+                <div className="p-4">
+                  <p className="text-body text-casa-text leading-relaxed">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
+                </div>
               </div>
             </div>
             <div className="px-4 py-3 border-t border-casa-divider flex items-center justify-between">
