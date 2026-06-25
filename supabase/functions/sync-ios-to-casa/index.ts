@@ -18,6 +18,26 @@ const ALLOWED_CATEGORIES = new Set([
   'other',
 ])
 
+const CATEGORY_ALIASES: Record<string, string> = {
+  'meat & seafood': 'meat',
+  'meat and seafood': 'meat',
+  seafood: 'meat',
+  protein: 'meat',
+  drink: 'beverages',
+  drinks: 'beverages',
+  beverage: 'beverages',
+}
+
+const CATEGORY_KEYWORDS: Record<string, string[]> = {
+  produce: ['apple', 'banana', 'orange', 'berry', 'lettuce', 'spinach', 'broccoli', 'carrot', 'tomato', 'onion', 'avocado', 'lemon', 'lime', 'grape', 'cucumber', 'potato', 'mushroom'],
+  dairy: ['milk', 'cheese', 'butter', 'cream', 'yogurt', 'egg', 'mozzarella', 'cheddar', 'parmesan'],
+  meat: ['chicken', 'beef', 'steak', 'pork', 'fish', 'salmon', 'tuna', 'shrimp', 'turkey', 'bacon', 'sausage', 'mahi', 'cod', 'tilapia', 'halibut', 'trout'],
+  bakery: ['bread', 'bagel', 'muffin', 'croissant', 'bun', 'roll', 'tortilla', 'pita'],
+  frozen: ['frozen', 'ice cream', 'sorbet', 'pizza', 'fries', 'waffle'],
+  pantry: ['pasta', 'rice', 'cereal', 'oat', 'flour', 'sugar', 'salt', 'oil', 'vinegar', 'sauce', 'soup', 'bean', 'lentil', 'spice', 'seasoning', 'ketchup', 'mustard', 'mayo', 'cheerio', 'fruit loop'],
+  beverages: ['water', 'juice', 'soda', 'coffee', 'tea', 'beer', 'wine', 'sparkling', 'lemonade', 'drink', 'nespresso'],
+}
+
 type IncomingReminder = {
   reminder_id: string
   name?: string
@@ -47,7 +67,31 @@ function normalizeComparableName(name: string): string {
 function normalizeCategory(category?: string | null): string {
   if (!category) return 'other'
   const normalized = category.trim().toLowerCase()
-  return ALLOWED_CATEGORIES.has(normalized) ? normalized : 'other'
+  if (ALLOWED_CATEGORIES.has(normalized)) return normalized
+  const aliased = CATEGORY_ALIASES[normalized]
+  if (aliased && ALLOWED_CATEGORIES.has(aliased)) return aliased
+  return 'other'
+}
+
+function inferCategoryFromName(name: string): string {
+  const normalizedName = normalizeComparableName(name)
+  if (!normalizedName) return 'other'
+  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    if (keywords.some((keyword) => normalizedName.includes(keyword))) return category
+  }
+  return 'other'
+}
+
+function resolveCategory(inputCategory: string | null | undefined, name: string): string {
+  const normalizedCategory = normalizeCategory(inputCategory)
+  if (normalizedCategory !== 'other') return normalizedCategory
+  // Keep explicit "other", but infer when category is absent/unknown from iOS payloads.
+  if (!inputCategory || !inputCategory.trim()) return inferCategoryFromName(name)
+  const normalizedInput = inputCategory.trim().toLowerCase()
+  if (!ALLOWED_CATEGORIES.has(normalizedInput) && !CATEGORY_ALIASES[normalizedInput]) {
+    return inferCategoryFromName(name)
+  }
+  return 'other'
 }
 
 function normalizeIso(iso?: string | null): string | null {
@@ -133,6 +177,7 @@ Deno.serve(async (req) => {
       }
 
       const incomingName = (reminder.name ?? reminder.title ?? '').trim()
+      const resolvedCategory = resolveCategory(reminder.category, incomingName || 'Untitled')
       const isDeleted = Boolean(reminder.deleted)
 
       if (existing) {
@@ -157,7 +202,7 @@ Deno.serve(async (req) => {
             name: incomingName || 'Untitled',
             quantity: reminder.quantity ?? null,
             unit: reminder.unit ?? null,
-            category: normalizeCategory(reminder.category),
+            category: resolvedCategory,
             checked: Boolean(reminder.completed),
             notes: reminder.notes ?? null,
             deleted_at: null,
@@ -183,7 +228,7 @@ Deno.serve(async (req) => {
             name: incomingName || 'Untitled',
             quantity: reminder.quantity ?? null,
             unit: reminder.unit ?? null,
-            category: normalizeCategory(reminder.category),
+            category: resolvedCategory,
             checked: Boolean(reminder.completed),
             notes: reminder.notes ?? null,
             deleted_at: null,
@@ -210,7 +255,7 @@ Deno.serve(async (req) => {
         name: incomingName || 'Untitled',
         quantity: reminder.quantity ?? null,
         unit: reminder.unit ?? null,
-        category: normalizeCategory(reminder.category),
+        category: resolvedCategory,
         checked: Boolean(reminder.completed),
         notes: reminder.notes ?? null,
         last_modified_source: 'ios',
