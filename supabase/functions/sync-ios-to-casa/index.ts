@@ -140,6 +140,7 @@ Deno.serve(async (req) => {
     let deleted = 0
     let skippedStale = 0
     let skippedMissingId = 0
+    let mergedNameConflicts = 0
 
     for (const reminder of incoming) {
       const reminderId = getReminderId(reminder)
@@ -197,7 +198,49 @@ Deno.serve(async (req) => {
             ios_updated_at: incomingUpdatedAt,
           })
           .eq('id', existing.id)
-        if (error) throw new Error(error.message)
+        if (error && error.code !== '23505') throw new Error(error.message)
+        if (error?.code === '23505') {
+          const comparableName = normalizeComparableName(incomingName || 'Untitled')
+          if (!comparableName) throw new Error(error.message)
+
+          const { error: mergeError } = await sb
+            .from('grocery_items')
+            .update({
+              ios_reminder_id: reminderId,
+              name: incomingName || 'Untitled',
+              quantity: reminder.quantity ?? null,
+              unit: reminder.unit ?? null,
+              category: resolvedCategory,
+              subcategory: resolved.subcategory,
+              store_section: resolved.storeSection,
+              brand: resolved.brand,
+              canonical_item_id: resolved.canonicalItemId,
+              enhancement_confidence: resolved.confidence,
+              enhanced_at: new Date().toISOString(),
+              checked: Boolean(reminder.completed),
+              notes: reminder.notes ?? null,
+              deleted_at: null,
+              last_modified_source: 'ios',
+              ios_updated_at: incomingUpdatedAt,
+            })
+            .eq('list_id', listId)
+            .eq('name_normalized', comparableName)
+            .eq('checked', false)
+            .is('deleted_at', null)
+          if (mergeError) throw new Error(mergeError.message)
+
+          const { error: tombstoneError } = await sb
+            .from('grocery_items')
+            .update({
+              deleted_at: new Date().toISOString(),
+              last_modified_source: 'ios',
+              ios_updated_at: incomingUpdatedAt,
+            })
+            .eq('id', existing.id)
+          if (tombstoneError) throw new Error(tombstoneError.message)
+
+          mergedNameConflicts += 1
+        }
         updated += 1
         continue
       }
@@ -302,6 +345,7 @@ Deno.serve(async (req) => {
         deleted,
         skipped_stale: skippedStale,
         skipped_missing_id: skippedMissingId,
+        merged_name_conflicts: mergedNameConflicts,
         processed: incoming.length,
       }),
       { headers: { ...CORS, 'content-type': 'application/json' } }
