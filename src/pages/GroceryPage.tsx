@@ -803,7 +803,7 @@ export default function GroceryPage() {
                   Active list is clear. Completed items are hidden in the archive.
                 </div>
               ) : (
-              <div className="space-y-3">
+              <div className="columns-1 lg:columns-2 2xl:columns-3 gap-3">
                 {(viewMode === 'route'
                   ? routeSections.map((sectionData) => ({
                     key: sectionData.section,
@@ -822,7 +822,7 @@ export default function GroceryPage() {
                     key={section.key}
                     data-drop-category={section.dropKey ?? undefined}
                     className={cn(
-                      'rounded-2xl',
+                      'rounded-2xl break-inside-avoid mb-3',
                       section.dropKey && dragState && dragOverCategory === section.dropKey && 'ring-2 ring-casa-gold/60 bg-casa-gold/5'
                     )}
                   >
