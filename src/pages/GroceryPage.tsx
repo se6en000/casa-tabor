@@ -571,10 +571,21 @@ export default function GroceryPage() {
 
         if (totalCorrected === 0) {
           cleanSummary = totalScanned > 0
-            ? 'Clean pass: no high-confidence name fixes (low-confidence left unchanged)'
+            ? 'Clean pass: names already looked good (no spelling/case fixes needed)'
             : 'Clean pass: no suspicious names'
         } else {
           cleanSummary = `Cleaned ${totalCorrected} name${totalCorrected === 1 ? '' : 's'} · Enhanced ${totalEnhanced} item${totalEnhanced === 1 ? '' : 's'}`
+        }
+
+        const { data: learningData, error: learningError } = await supabase.functions.invoke('learn-grocery-corrections', {
+          body: { dry_run: false, limit: 400, min_votes: 1, lookback_days: 90 },
+        })
+        if (learningError) throw learningError
+        const learnedCount = Number(learningData?.applied_count ?? 0)
+        if (learnedCount > 0) {
+          cleanSummary = cleanSummary
+            ? `${cleanSummary} · Learned ${learnedCount} new match${learnedCount === 1 ? '' : 'es'}`
+            : `Learned ${learnedCount} new match${learnedCount === 1 ? '' : 'es'}`
         }
       }
 
@@ -897,6 +908,7 @@ export default function GroceryPage() {
                                 category,
                                 fromCategory: item.category,
                                 itemName: item.name,
+                                reviewedByUser: true,
                               })
                               setReviewingItemId(null)
                             }}

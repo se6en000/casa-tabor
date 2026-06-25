@@ -193,36 +193,68 @@ export function useGroceryList() {
       category,
       fromCategory,
       itemName,
+      reviewedByUser = false,
     }: {
       id: string
       category: string
       fromCategory?: string
       itemName?: string
+      reviewedByUser?: boolean
     }) => {
+      const updatePayload: {
+        category: string
+        last_modified_source: 'casa'
+        enhancement_confidence?: number
+        enhanced_at?: string
+      } = {
+        category,
+        last_modified_source: 'casa',
+      }
+
+      if (reviewedByUser) {
+        updatePayload.enhancement_confidence = 0.99
+        updatePayload.enhanced_at = new Date().toISOString()
+      }
+
       const { error } = await supabase
         .from('grocery_items')
-        .update({ category, last_modified_source: 'casa' })
+        .update(updatePayload)
         .eq('id', id)
       if (error) throw error
 
-      if (fromCategory && fromCategory !== category) {
+      if (itemName && (reviewedByUser || (fromCategory && fromCategory !== category))) {
         const { error: feedbackError } = await supabase
           .from('grocery_category_corrections')
           .insert({
             grocery_item_id: id,
             item_name: itemName?.trim() || null,
-            from_category: fromCategory,
+            from_category: fromCategory ?? category,
             to_category: category,
             source: 'manual-ui',
           })
         if (feedbackError) throw feedbackError
+
+        const { error: learningError } = await supabase.functions.invoke('learn-grocery-corrections', {
+          body: { dry_run: false, limit: 200, min_votes: 1, lookback_days: 90 },
+        })
+        if (learningError) throw learningError
       }
     },
-    onMutate: async ({ id, category }) => {
+    onMutate: async ({ id, category, reviewedByUser = false }) => {
       await qc.cancelQueries({ queryKey: ['grocery'] })
       qc.setQueryData(['grocery'], (old: typeof data) => {
         if (!old) return old
-        return { ...old, items: old.items.map(i => i.id === id ? { ...i, category } : i) }
+        return {
+          ...old,
+          items: old.items.map(i => i.id === id
+            ? {
+              ...i,
+              category,
+              enhancement_confidence: reviewedByUser ? 0.99 : i.enhancement_confidence,
+              enhanced_at: reviewedByUser ? new Date().toISOString() : i.enhanced_at,
+            }
+            : i),
+        }
       })
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ['grocery'] }),
