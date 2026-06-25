@@ -11,7 +11,7 @@ const primaryTabs = [
   { to: '/', icon: Home, label: 'Home' },
   { to: '/calendar', icon: Calendar, label: 'Calendar' },
   { to: '/grocery', icon: ShoppingCart, label: 'Grocery' },
-  { to: '/briefing', icon: Sun, label: 'Briefing' },
+  { to: '/cook', icon: ChefHat, label: 'Cooking' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 
@@ -107,12 +107,12 @@ export default function NavBar() {
               <div className="py-2">
                 <button
                   className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors"
-                  onClick={() => { navigate('/cook'); setMoreOpen(false) }}
+                  onClick={() => { navigate('/briefing'); setMoreOpen(false) }}
                 >
                   <div className="w-9 h-9 rounded-xl bg-casa-gold/15 flex items-center justify-center flex-shrink-0">
-                    <ChefHat size={18} strokeWidth={1.8} className="text-casa-gold" />
+                    <Sun size={18} strokeWidth={1.8} className="text-casa-gold" />
                   </div>
-                  <span className="text-body-md font-medium text-casa-navy">Cooking</span>
+                  <span className="text-body-md font-medium text-casa-navy">Briefing</span>
                 </button>
 
                 <button
