@@ -55,6 +55,8 @@ export const GROCERY_CATEGORIES = [
 ]
 
 const EMPTY_ITEMS: GroceryItem[] = []
+const NORMALIZATION_DEBOUNCE_MS = 1_500
+const NORMALIZATION_RETRY_MS = 15_000
 
 async function fetchGroceryData() {
   const [{ data: lists }, { data: items }] = await Promise.all([
@@ -107,7 +109,7 @@ export function useGroceryList() {
           normalizationTimerRef.current = window.setTimeout(() => {
             normalizationTimerRef.current = null
             flushIdleNormalizationRef.current()
-          }, 60_000)
+          }, NORMALIZATION_RETRY_MS)
         }
       }
     })()
@@ -273,7 +275,7 @@ export function useGroceryList() {
       normalizationTimerRef.current = window.setTimeout(() => {
         normalizationTimerRef.current = null
         void flushIdleNormalization()
-      }, 60_000)
+      }, NORMALIZATION_DEBOUNCE_MS)
     }
   }, [items, flushIdleNormalization])
 
