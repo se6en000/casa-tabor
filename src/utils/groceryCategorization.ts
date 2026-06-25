@@ -57,6 +57,7 @@ const CATEGORY_TOKENS: Record<Exclude<GroceryCategoryKey, 'other'>, Set<string>>
   ]),
   meat: new Set([
     'chicken', 'beef', 'steak', 'pork', 'fish', 'salmon', 'tuna', 'shrimp', 'turkey', 'bacon', 'sausage', 'lamb',
+    'rib', 'ribeye',
     'mahi', 'cod', 'tilapia', 'halibut', 'trout', 'lobster', 'crab',
   ]),
   bakery: new Set(['bread', 'bagel', 'bagels', 'muffin', 'muffins', 'croissant', 'bun', 'buns', 'roll', 'rolls', 'tortilla', 'tortillas', 'pita']),
