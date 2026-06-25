@@ -803,7 +803,7 @@ export default function GroceryPage() {
                   Active list is clear. Completed items are hidden in the archive.
                 </div>
               ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+              <div className="space-y-3">
                 {(viewMode === 'route'
                   ? routeSections.map((sectionData) => ({
                     key: sectionData.section,
