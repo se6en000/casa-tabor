@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ShoppingCart, Trash2, CheckSquare, Square, X, Plus, RefreshCw, Mic, GripVertical, Link2, Upload, BookOpen, ChefHat, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ShoppingCart, Trash2, CheckSquare, Square, X, Plus, RefreshCw, Mic, GripVertical, Link2, Upload, BookOpen, ChefHat, ChevronLeft, ChevronRight, Clock3, ExternalLink } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../utils/cn'
 import { useGroceryList, GROCERY_CATEGORIES, type GroceryItem } from '../hooks/useGroceryList'
@@ -122,6 +122,36 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
   }
   return btoa(binary)
+}
+
+function extractTimerOptions(instruction: string): Array<{ label: string; seconds: number }> {
+  const options: Array<{ label: string; seconds: number }> = []
+  const regex = /(\d+)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b/gi
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(instruction)) !== null) {
+    const value = Number(match[1] ?? 0)
+    const unit = String(match[2] ?? '').toLowerCase()
+    if (!Number.isFinite(value) || value <= 0) continue
+    let seconds = 0
+    if (unit.startsWith('h')) seconds = value * 3600
+    else if (unit.startsWith('m')) seconds = value * 60
+    else seconds = value
+    if (seconds <= 0) continue
+    options.push({
+      label: `${value} ${unit.startsWith('h') ? 'hr' : unit.startsWith('m') ? 'min' : 'sec'}`,
+      seconds,
+    })
+  }
+  return options.slice(0, 3)
+}
+
+function formatTimer(seconds: number): string {
+  const safeSeconds = Math.max(0, Math.floor(seconds))
+  const h = Math.floor(safeSeconds / 3600)
+  const m = Math.floor((safeSeconds % 3600) / 60)
+  const s = safeSeconds % 60
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  return `${m}:${String(s).padStart(2, '0')}`
 }
 
 function compareNullableText(a: string | null, b: string | null): number {
@@ -400,6 +430,7 @@ export default function GroceryPage() {
   const [selectedRecipeIngredientIndexes, setSelectedRecipeIngredientIndexes] = useState<Set<number>>(new Set())
   const [savingRecipe, setSavingRecipe] = useState(false)
   const [cookView, setCookView] = useState<{ recipe: RecipePreset; stepIndex: number } | null>(null)
+  const [cookTimer, setCookTimer] = useState<{ totalSeconds: number; remainingSeconds: number; label: string } | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => localStorage.getItem(SYNC_LAST_AT_KEY))
@@ -527,6 +558,12 @@ export default function GroceryPage() {
       .sort((a, b) => a.daysUntil - b.daysUntil || b.dueAt - a.dueAt)
       .slice(0, 8)
   }, [activeNameSet, analysisNow, historyRows])
+
+  const cookStepTimerOptions = useMemo(() => {
+    if (!cookView) return []
+    const instruction = cookView.recipe.steps[cookView.stepIndex]?.instruction ?? ''
+    return extractTimerOptions(instruction)
+  }, [cookView])
 
   const weeklyAutoListCandidates = useMemo(() => {
     const thirtyDaysAgo = analysisNow - 30 * 24 * 60 * 60 * 1000
@@ -719,13 +756,33 @@ export default function GroceryPage() {
   }, [importRecipeFromSource])
 
   const addSelectedRecipeIngredientsToCart = useCallback((recipe: RecipeDraft) => {
+    if (!defaultListId) return
     recipe.ingredients.forEach((ingredient, index) => {
       if (!selectedRecipeIngredientIndexes.has(index)) return
       const name = (ingredient.name || ingredient.raw_text).trim()
       if (!name) return
-      addItemByName(name, { spotlightOnDuplicate: false, clearInput: false })
+      if (findMergeSuggestion(name)) return
+      const category = detectCategory(name)
+      addItem.mutate({
+        list_id: defaultListId,
+        name,
+        quantity: ingredient.quantity,
+        unit: ingredient.unit,
+        category,
+        checked: false,
+        notes: null,
+      })
     })
-  }, [addItemByName, selectedRecipeIngredientIndexes])
+  }, [addItem, defaultListId, findMergeSuggestion, selectedRecipeIngredientIndexes])
+
+  const updateParsedIngredient = useCallback((index: number, patch: Partial<RecipeDraftIngredient>) => {
+    setParsedRecipe((current) => {
+      if (!current) return current
+      const nextIngredients = current.ingredients.map((ingredient, ingredientIndex) =>
+        ingredientIndex === index ? { ...ingredient, ...patch } : ingredient)
+      return { ...current, ingredients: nextIngredients }
+    })
+  }, [])
 
   const saveRecipePreset = useCallback(async (options: { addSelectedToCart: boolean }) => {
     if (!parsedRecipe) return
@@ -789,6 +846,7 @@ export default function GroceryPage() {
 
   const openRecipeForCookMode = useCallback(async (recipe: RecipePreset) => {
     setCookView({ recipe, stepIndex: 0 })
+    setCookTimer(null)
     await supabase
       .from('recipes')
       .update({ last_used_at: new Date().toISOString() })
@@ -838,6 +896,19 @@ export default function GroceryPage() {
     const timer = window.setInterval(() => setAnalysisNow(Date.now()), 15 * 60_000)
     return () => window.clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    if (!cookTimer) return
+    if (cookTimer.remainingSeconds <= 0) return
+    const tick = window.setInterval(() => {
+      setCookTimer((current) => {
+        if (!current) return current
+        const next = Math.max(0, current.remainingSeconds - 1)
+        return { ...current, remainingSeconds: next }
+      })
+    }, 1000)
+    return () => window.clearInterval(tick)
+  }, [cookTimer])
 
   const handleToggle = (id: string, checked: boolean) => {
     if (!checked) {
@@ -1641,9 +1712,9 @@ export default function GroceryPage() {
                         {parsedRecipe.ingredients.map((ingredient, index) => {
                           const checked = selectedRecipeIngredientIndexes.has(index)
                           const displayName = ingredient.name || ingredient.raw_text
-                          const qtyPrefix = [ingredient.quantity, ingredient.unit].filter(Boolean).join(' ').trim()
                           return (
-                            <label key={`${ingredient.raw_text}-${index}`} className="flex items-start gap-2 text-body-sm text-casa-text">
+                            <div key={`${ingredient.raw_text}-${index}`} className="rounded-lg border border-casa-border bg-casa-surface px-2 py-1.5">
+                              <label className="flex items-start gap-2 text-body-sm text-casa-text">
                               <input
                                 type="checkbox"
                                 checked={checked}
@@ -1656,8 +1727,32 @@ export default function GroceryPage() {
                                   })
                                 }}
                               />
-                              <span>{qtyPrefix ? `${qtyPrefix} ` : ''}{displayName}</span>
-                            </label>
+                                <span>{displayName}</span>
+                              </label>
+                              <div className="mt-1 flex items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  value={ingredient.quantity ?? ''}
+                                  onChange={(event) => updateParsedIngredient(index, { quantity: event.target.value || null })}
+                                  placeholder="Qty"
+                                  className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-[11px] text-casa-text outline-none"
+                                />
+                                <input
+                                  type="text"
+                                  value={ingredient.unit ?? ''}
+                                  onChange={(event) => updateParsedIngredient(index, { unit: event.target.value || null })}
+                                  placeholder="Unit"
+                                  className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-[11px] text-casa-text outline-none"
+                                />
+                                <input
+                                  type="text"
+                                  value={ingredient.name ?? ingredient.raw_text}
+                                  onChange={(event) => updateParsedIngredient(index, { name: event.target.value || null })}
+                                  placeholder="Ingredient"
+                                  className="flex-1 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-[11px] text-casa-text outline-none"
+                                />
+                              </div>
+                            </div>
                           )
                         })}
                       </div>
@@ -1768,19 +1863,68 @@ export default function GroceryPage() {
                   {cookView.recipe.servings ? ` · ${cookView.recipe.servings}` : ''}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setCookView(null)}
-                className="h-9 w-9 rounded-full border border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main transition-colors flex items-center justify-center"
-              >
-                <X size={16} />
-              </button>
+              <div className="flex items-center gap-2">
+                {cookView.recipe.source_url && (
+                  <a
+                    href={cookView.recipe.source_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-2.5 py-1.5 rounded-button border border-casa-border bg-casa-bg text-[11px] text-casa-muted hover:bg-casa-main transition-colors inline-flex items-center gap-1"
+                  >
+                    <ExternalLink size={12} />
+                    Original
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCookView(null)
+                    setCookTimer(null)
+                  }}
+                  className="h-9 w-9 rounded-full border border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main transition-colors flex items-center justify-center"
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
               <div className="rounded-2xl border border-casa-border bg-casa-bg p-4">
                 <p className="text-body-sm text-casa-navy leading-relaxed">
                   {cookView.recipe.steps[cookView.stepIndex]?.instruction ?? 'No instruction available.'}
                 </p>
+                {cookStepTimerOptions.length > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {cookStepTimerOptions.map((timer, index) => (
+                      <button
+                        key={`${timer.label}-${index}`}
+                        type="button"
+                        onClick={() => setCookTimer({
+                          totalSeconds: timer.seconds,
+                          remainingSeconds: timer.seconds,
+                          label: timer.label,
+                        })}
+                        className="px-2 py-1 rounded-pill border border-casa-border bg-casa-surface text-[11px] text-casa-muted hover:bg-casa-main transition-colors inline-flex items-center gap-1"
+                      >
+                        <Clock3 size={11} />
+                        {timer.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {cookTimer && (
+                  <div className="mt-2 rounded-xl border border-casa-gold/40 bg-casa-gold/10 px-2.5 py-1.5 flex items-center justify-between gap-2">
+                    <p className="text-[11px] text-casa-navy">
+                      Timer ({cookTimer.label}): <span className="font-semibold">{formatTimer(cookTimer.remainingSeconds)}</span>
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setCookTimer(null)}
+                      className="text-[11px] text-casa-muted hover:text-casa-text"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {cookView.recipe.ingredients.map((ingredient, index) => (
@@ -1795,9 +1939,12 @@ export default function GroceryPage() {
             <div className="px-4 py-3 border-t border-casa-divider flex items-center justify-between gap-2">
               <button
                 type="button"
-                onClick={() => setCookView((current) => current
-                  ? { ...current, stepIndex: Math.max(0, current.stepIndex - 1) }
-                  : current)}
+                onClick={() => {
+                  setCookTimer(null)
+                  setCookView((current) => current
+                    ? { ...current, stepIndex: Math.max(0, current.stepIndex - 1) }
+                    : current)
+                }}
                 disabled={cookView.stepIndex <= 0}
                 className="px-3 py-2 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-main transition-colors disabled:opacity-50 inline-flex items-center gap-1"
               >
@@ -1806,9 +1953,12 @@ export default function GroceryPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setCookView((current) => current
-                  ? { ...current, stepIndex: Math.min(current.recipe.steps.length - 1, current.stepIndex + 1) }
-                  : current)}
+                onClick={() => {
+                  setCookTimer(null)
+                  setCookView((current) => current
+                    ? { ...current, stepIndex: Math.min(current.recipe.steps.length - 1, current.stepIndex + 1) }
+                    : current)
+                }}
                 disabled={cookView.stepIndex >= cookView.recipe.steps.length - 1}
                 className="px-3 py-2 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 transition-colors disabled:opacity-50 inline-flex items-center gap-1"
               >
