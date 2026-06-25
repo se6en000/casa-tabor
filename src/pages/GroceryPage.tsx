@@ -52,6 +52,11 @@ const CATEGORY_ACCENT_BY_KEY: Record<string, string> = {
   pet: 'var(--color-family-kelly)',
   other: 'var(--color-casa-gold)',
 }
+const RECIPE_MEAL_SLOTS: Array<{ slot: RecipeMealPlanSlot; label: string }> = [
+  { slot: 'tonight', label: 'Tonight' },
+  { slot: 'tomorrow', label: 'Tomorrow' },
+  { slot: 'this-week', label: 'This week' },
+]
 
 type HistoricalGroceryEvent = {
   name: string
@@ -96,6 +101,16 @@ type RecipePreset = {
   created_at: string
   ingredients: RecipeDraftIngredient[]
   steps: RecipeDraftStep[]
+}
+
+type RecipeMealPlanSlot = 'tonight' | 'tomorrow' | 'this-week'
+
+type RecipeMealPlan = {
+  id: string
+  recipe_id: string
+  slot: RecipeMealPlanSlot
+  planned_for: string | null
+  notes: string | null
 }
 
 function detectCategory(name: string): string {
@@ -152,6 +167,30 @@ function formatTimer(seconds: number): string {
   const s = safeSeconds % 60
   if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   return `${m}:${String(s).padStart(2, '0')}`
+}
+
+function scaleQuantityValue(value: string | null, scale: number): string | null {
+  if (!value) return value
+  const trimmed = value.trim()
+  if (!trimmed) return value
+  if (Math.abs(scale - 1) < 0.0001) return trimmed
+  const replacedFractions = trimmed
+    .replace(/\b½\b/g, ' 1/2 ')
+    .replace(/\b¼\b/g, ' 1/4 ')
+    .replace(/\b¾\b/g, ' 3/4 ')
+  const numeric = replacedFractions.match(/^\s*(\d+(?:\.\d+)?)(?:\s+(\d+)\/(\d+))?\s*$/)
+  if (!numeric) return trimmed
+  const whole = Number(numeric[1] ?? 0)
+  const fracNum = Number(numeric[2] ?? 0)
+  const fracDen = Number(numeric[3] ?? 1)
+  const base = whole + (fracDen > 0 ? fracNum / fracDen : 0)
+  if (!Number.isFinite(base)) return trimmed
+  const scaled = base * scale
+  if (scaled === 0) return '0'
+  if (scaled >= 1 && Math.abs(Math.round(scaled) - scaled) < 0.05) {
+    return String(Math.max(1, Math.round(scaled)))
+  }
+  return Number(scaled.toFixed(scaled < 1 ? 2 : 1)).toString()
 }
 
 function compareNullableText(a: string | null, b: string | null): number {
@@ -420,6 +459,20 @@ export default function GroceryPage() {
     refetchInterval: 2 * 60_000,
   })
 
+  const { data: recipeMealPlans = [], refetch: refetchMealPlans } = useQuery({
+    queryKey: ['recipe-meal-plans'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('recipe_meal_plans')
+        .select('id,recipe_id,slot,planned_for,notes')
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return (data ?? []) as RecipeMealPlan[]
+    },
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000,
+  })
+
   const [inputValue, setInputValue] = useState('')
   const [isAddPanelOpen, setIsAddPanelOpen] = useState(false)
   const [addPanelMode, setAddPanelMode] = useState<'quick' | 'recipe' | 'library'>('quick')
@@ -429,6 +482,7 @@ export default function GroceryPage() {
   const [parsedRecipe, setParsedRecipe] = useState<RecipeDraft | null>(null)
   const [selectedRecipeIngredientIndexes, setSelectedRecipeIngredientIndexes] = useState<Set<number>>(new Set())
   const [savingRecipe, setSavingRecipe] = useState(false)
+  const [recipeScale, setRecipeScale] = useState(1)
   const [cookView, setCookView] = useState<{ recipe: RecipePreset; stepIndex: number } | null>(null)
   const [cookTimer, setCookTimer] = useState<{ totalSeconds: number; remainingSeconds: number; label: string } | null>(null)
   const [syncing, setSyncing] = useState(false)
@@ -505,6 +559,34 @@ export default function GroceryPage() {
     return map
   }, [activeNameSet, historyRows])
 
+  const pantryLikelyOwnedNames = useMemo(() => {
+    const recentWindowMs = 21 * 24 * 60 * 60 * 1000
+    const now = Date.now()
+    const names = new Set<string>()
+    for (const row of historyRows) {
+      if (!row.checked) continue
+      const normalized = normalizeItemName(row.name)
+      if (!normalized || activeNameSet.has(normalized)) continue
+      const updatedAt = Date.parse(row.updated_at)
+      if (Number.isNaN(updatedAt)) continue
+      if (now - updatedAt > recentWindowMs) continue
+      names.add(normalized)
+    }
+    return names
+  }, [activeNameSet, historyRows])
+
+  const defaultSelectedRecipeIndexes = useCallback((recipe: RecipeDraft) => {
+    const selected = new Set<number>()
+    recipe.ingredients.forEach((ingredient, index) => {
+      const normalized = normalizeItemName(ingredient.name || ingredient.raw_text)
+      if (!normalized) return
+      if (activeNameSet.has(normalized)) return
+      if (pantryLikelyOwnedNames.has(normalized)) return
+      selected.add(index)
+    })
+    return selected
+  }, [activeNameSet, pantryLikelyOwnedNames])
+
   const predictiveSuggestions = Array.from(predictiveMap.values())
     .filter((entry) => entry.count >= 2)
     .sort((a, b) => b.count - a.count || b.lastAt - a.lastAt)
@@ -572,6 +654,16 @@ export default function GroceryPage() {
       .sort((a, b) => b.count - a.count || b.lastAt - a.lastAt)
       .slice(0, 10)
   }, [analysisNow, predictiveMap])
+
+  const mealPlanSlotsByRecipe = useMemo(() => {
+    const byRecipe = new Map<string, Set<RecipeMealPlanSlot>>()
+    for (const plan of recipeMealPlans) {
+      const bucket = byRecipe.get(plan.recipe_id) ?? new Set<RecipeMealPlanSlot>()
+      bucket.add(plan.slot)
+      byRecipe.set(plan.recipe_id, bucket)
+    }
+    return byRecipe
+  }, [recipeMealPlans])
 
   const spotlightItem = useCallback((itemId: string) => {
     setSpotlightedItemId(itemId)
@@ -718,7 +810,8 @@ export default function GroceryPage() {
         throw new Error('No ingredients found in this recipe')
       }
       setParsedRecipe(recipe)
-      setSelectedRecipeIngredientIndexes(new Set(recipe.ingredients.map((_, index) => index)))
+      setSelectedRecipeIngredientIndexes(defaultSelectedRecipeIndexes(recipe))
+      setRecipeScale(1)
       setAddPanelMode('recipe')
       setIsAddPanelOpen(true)
     } catch (err) {
@@ -726,7 +819,7 @@ export default function GroceryPage() {
     } finally {
       setRecipeImporting(false)
     }
-  }, [])
+  }, [defaultSelectedRecipeIndexes])
 
   const handleRecipeUrlImport = useCallback(async () => {
     const url = recipeUrlInput.trim()
@@ -766,14 +859,14 @@ export default function GroceryPage() {
       addItem.mutate({
         list_id: defaultListId,
         name,
-        quantity: ingredient.quantity,
+        quantity: scaleQuantityValue(ingredient.quantity, recipeScale),
         unit: ingredient.unit,
         category,
         checked: false,
         notes: null,
       })
     })
-  }, [addItem, defaultListId, findMergeSuggestion, selectedRecipeIngredientIndexes])
+  }, [addItem, defaultListId, findMergeSuggestion, recipeScale, selectedRecipeIngredientIndexes])
 
   const updateParsedIngredient = useCallback((index: number, patch: Partial<RecipeDraftIngredient>) => {
     setParsedRecipe((current) => {
@@ -836,6 +929,7 @@ export default function GroceryPage() {
       await refetchRecipeLibrary()
       setParsedRecipe(null)
       setSelectedRecipeIngredientIndexes(new Set())
+      setRecipeScale(1)
       setAddPanelMode('library')
     } catch (err) {
       setRecipeImportError(err instanceof Error ? err.message : 'Could not save recipe')
@@ -854,6 +948,25 @@ export default function GroceryPage() {
     void refetchRecipeLibrary()
   }, [refetchRecipeLibrary])
 
+  const planRecipeForSlot = useCallback(async (recipeId: string, slot: RecipeMealPlanSlot) => {
+    const today = new Date()
+    const planned = new Date(today)
+    if (slot === 'tomorrow') planned.setDate(today.getDate() + 1)
+    if (slot === 'this-week') planned.setDate(today.getDate() + 4)
+    const { error } = await supabase
+      .from('recipe_meal_plans')
+      .upsert({
+        recipe_id: recipeId,
+        slot,
+        planned_for: planned.toISOString().slice(0, 10),
+      }, { onConflict: 'recipe_id,slot' })
+    if (error) {
+      setRecipeImportError(error.message)
+      return
+    }
+    await refetchMealPlans()
+  }, [refetchMealPlans])
+
   const loadRecipeIntoChecklist = useCallback((recipe: RecipePreset) => {
     const draft: RecipeDraft = {
       name: recipe.name,
@@ -866,10 +979,11 @@ export default function GroceryPage() {
       steps: recipe.steps,
     }
     setParsedRecipe(draft)
-    setSelectedRecipeIngredientIndexes(new Set(draft.ingredients.map((_, index) => index)))
+    setSelectedRecipeIngredientIndexes(defaultSelectedRecipeIndexes(draft))
+    setRecipeScale(1)
     setAddPanelMode('recipe')
     setIsAddPanelOpen(true)
-  }, [])
+  }, [defaultSelectedRecipeIndexes])
 
   useEffect(() => {
     return () => {
@@ -1707,11 +1821,31 @@ export default function GroceryPage() {
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
                     <div className="rounded-xl border border-casa-border bg-casa-bg p-2">
-                      <p className="text-[11px] text-casa-muted mb-1">Ingredients (uncheck what you already have)</p>
+                      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[11px] text-casa-muted">Ingredients (auto-hides likely pantry staples)</p>
+                        <div className="flex items-center gap-1">
+                          {[0.5, 1, 2].map((scale) => (
+                            <button
+                              key={scale}
+                              type="button"
+                              onClick={() => setRecipeScale(scale)}
+                              className={cn(
+                                'px-2 py-1 rounded-pill border text-[10px] transition-colors',
+                                Math.abs(recipeScale - scale) < 0.001
+                                  ? 'border-casa-gold/50 bg-casa-gold/10 text-casa-navy'
+                                  : 'border-casa-border text-casa-muted hover:bg-casa-surface'
+                              )}
+                            >
+                              {scale}x
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <div className="max-h-44 overflow-y-auto space-y-1 pr-1">
                         {parsedRecipe.ingredients.map((ingredient, index) => {
                           const checked = selectedRecipeIngredientIndexes.has(index)
                           const displayName = ingredient.name || ingredient.raw_text
+                          const scaledQuantity = scaleQuantityValue(ingredient.quantity, recipeScale)
                           return (
                             <div key={`${ingredient.raw_text}-${index}`} className="rounded-lg border border-casa-border bg-casa-surface px-2 py-1.5">
                               <label className="flex items-start gap-2 text-body-sm text-casa-text">
@@ -1728,6 +1862,11 @@ export default function GroceryPage() {
                                 }}
                               />
                                 <span>{displayName}</span>
+                                {(scaledQuantity || ingredient.unit) && (
+                                  <span className="text-[10px] text-casa-muted">
+                                    {scaledQuantity ? `${scaledQuantity} ` : ''}{ingredient.unit ?? ''}
+                                  </span>
+                                )}
                               </label>
                               <div className="mt-1 flex items-center gap-1.5">
                                 <input
@@ -1777,7 +1916,7 @@ export default function GroceryPage() {
                       onClick={() => addSelectedRecipeIngredientsToCart(parsedRecipe)}
                       className="px-3 py-1.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-main transition-colors"
                     >
-                      Add selected ingredients
+                      Add selected ingredients ({selectedRecipeIngredientIndexes.size})
                     </button>
                     <button
                       type="button"
@@ -1803,6 +1942,18 @@ export default function GroceryPage() {
 
           {addPanelMode === 'library' && (
             <div className="space-y-2">
+              {recipeMealPlans.length > 0 && (
+                <div className="rounded-xl border border-casa-border bg-casa-surface px-3 py-2">
+                  <p className="text-[11px] font-semibold text-casa-navy">Planned meals</p>
+                  <p className="text-[11px] text-casa-muted mt-1">
+                    {recipeMealPlans.slice(0, 3).map((plan) => {
+                      const recipe = recipeLibrary.find((row) => row.id === plan.recipe_id)
+                      const slotLabel = RECIPE_MEAL_SLOTS.find((entry) => entry.slot === plan.slot)?.label ?? plan.slot
+                      return `${slotLabel}: ${recipe?.name ?? 'Recipe'}`
+                    }).join(' · ')}
+                  </p>
+                </div>
+              )}
               {recipeLibrary.length === 0 ? (
                 <p className="text-[11px] text-casa-muted">No saved recipes yet. Import one from URL, photo, or PDF.</p>
               ) : (
@@ -1818,6 +1969,24 @@ export default function GroceryPage() {
                         </p>
                       </div>
                       <div className="flex flex-wrap justify-end gap-1.5">
+                        {RECIPE_MEAL_SLOTS.map(({ slot, label }) => {
+                          const planned = mealPlanSlotsByRecipe.get(recipe.id)?.has(slot) ?? false
+                          return (
+                            <button
+                              key={`${recipe.id}-${slot}`}
+                              type="button"
+                              onClick={() => void planRecipeForSlot(recipe.id, slot)}
+                              className={cn(
+                                'px-2.5 py-1 rounded-pill border text-[11px] transition-colors',
+                                planned
+                                  ? 'border-casa-gold/40 bg-casa-gold/10 text-casa-navy'
+                                  : 'border-casa-border text-casa-muted hover:bg-casa-surface'
+                              )}
+                            >
+                              {planned ? `Planned: ${label}` : label}
+                            </button>
+                          )
+                        })}
                         <button
                           type="button"
                           onClick={() => loadRecipeIntoChecklist(recipe)}

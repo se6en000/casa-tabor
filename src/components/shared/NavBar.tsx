@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Home, Calendar, ShoppingCart, Sun, Settings, Music, MoreHorizontal, Bell, Sparkles } from 'lucide-react'
+import { Home, Calendar, ShoppingCart, Sun, Settings, ChefHat, MoreHorizontal, Bell, Sparkles } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useNotifications } from '../../hooks/useNotifications'
 import NotificationDrawer from './NotificationDrawer'
@@ -107,12 +107,12 @@ export default function NavBar() {
               <div className="py-2">
                 <button
                   className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors"
-                  onClick={() => { navigate('/music'); setMoreOpen(false) }}
+                  onClick={() => { navigate('/cook'); setMoreOpen(false) }}
                 >
                   <div className="w-9 h-9 rounded-xl bg-casa-gold/15 flex items-center justify-center flex-shrink-0">
-                    <Music size={18} strokeWidth={1.8} className="text-casa-gold" />
+                    <ChefHat size={18} strokeWidth={1.8} className="text-casa-gold" />
                   </div>
-                  <span className="text-body-md font-medium text-casa-navy">Music</span>
+                  <span className="text-body-md font-medium text-casa-navy">Cooking</span>
                 </button>
 
                 <button

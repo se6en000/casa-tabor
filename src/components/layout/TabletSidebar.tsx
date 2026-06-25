@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { format, isAfter, isBefore } from 'date-fns'
-import { Home, Calendar, ShoppingCart, Sun, Music, Settings, ChevronDown, Users, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Home, Calendar, ShoppingCart, Sun, ChefHat, Settings, ChevronDown, Users, ChevronLeft, ChevronRight } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '../../utils/cn'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
@@ -17,7 +17,7 @@ const NAV = [
   { to: '/calendar', icon: Calendar,     label: 'Calendar' },
   { to: '/grocery',  icon: ShoppingCart, label: 'Grocery' },
   { to: '/briefing', icon: Sun,          label: 'Briefing' },
-  { to: '/music',    icon: Music,        label: 'Music' },
+  { to: '/cook',     icon: ChefHat,      label: 'Cooking' },
   { to: '/settings', icon: Settings,     label: 'Settings' },
 ]
 
