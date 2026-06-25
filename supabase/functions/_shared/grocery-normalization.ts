@@ -47,16 +47,16 @@ const TOKEN_CORRECTIONS: Record<string, string> = {
   papper: 'paper',
   applesause: 'applesauce',
   hommus: 'hummus',
-  almondmilk: 'almond milk',
+  almondmilk: 'almondmilk',
 }
 
 const CATEGORY_PHRASES: Record<string, string[]> = {
-  produce: ['blue berries', 'straw berries', 'rasp berries', 'black berries', 'water melon', 'spring mix', 'baby spinach', 'fresh basil', 'fresh cilantro', 'fresh parsley', 'ginger root', 'romaine hearts', 'brussels sprouts'],
+  produce: ['blue berries', 'straw berries', 'rasp berries', 'black berries', 'water melon', 'spring mix', 'baby spinach', 'fresh basil', 'fresh cilantro', 'fresh parsley', 'ginger root', 'romaine hearts', 'brussels sprouts', 'fresh asparagus', 'green cabbage', 'butternut squash', 'yellow squash'],
   dairy: ['half and half', 'half half', 'heavy cream', 'cottage cheese', 'sour cream', 'almond milk', 'oat milk'],
   meat: ['ground beef', 'ground turkey', 'chicken breast', 'salmon fillet', 'mahi mahi', 'rib eye', 'ribeye'],
   bakery: ['sourdough bread', 'hamburger buns', 'hot dog buns', 'garlic bread'],
   frozen: ['frozen pizza', 'frozen fries', 'frozen berries', 'frozen cauliflower', 'riced cauliflower'],
-  pantry: ['olive oil', 'peanut butter', 'beef ramen', 'tuna canned', 'apple sauce', 'applesauce pouches', 'dried oregano', 'dried basil', 'italian seasoning', 'firm tofu', 'extra firm tofu'],
+  pantry: ['olive oil', 'peanut butter', 'beef ramen', 'tuna canned', 'apple sauce', 'applesauce pouches', 'dried oregano', 'dried basil', 'italian seasoning', 'firm tofu', 'extra firm tofu', 'original hummus', 'mild salsa'],
   beverages: ['sparkling water', 'coffee pods', 'espresso coffee', 'nespresso pods'],
   snacks: ['potato chips', 'tortilla chips', 'granola bars', 'protein bar', 'fruit snacks', 'trail mix'],
   deli: ['rotisserie chicken', 'lunch meat', 'deli turkey', 'prepared salad', 'prepared soup', 'genoa salami', 'cooked ham'],
@@ -73,18 +73,18 @@ const CATEGORY_TOKENS: Record<string, Set<string>> = {
     'watermelon', 'kiwi', 'mango', 'pineapple', 'melon', 'lettuce', 'spinach', 'kale', 'broccoli', 'carrot', 'carrots',
     'tomato', 'tomatoes', 'onion', 'onions', 'garlic', 'pepper', 'peppers', 'cucumber', 'celery', 'avocado', 'lemon',
     'lime', 'pear', 'ginger', 'asparagus', 'cauliflower', 'sprout', 'brussels', 'radish', 'clementine', 'artichoke',
-    'pea', 'romaine', 'corn', 'grapefruit', 'eggplant', 'yam', 'chard', 'bok', 'peach', 'plum',
+    'pea', 'romaine', 'corn', 'grapefruit', 'eggplant', 'yam', 'chard', 'bok', 'peach', 'plum', 'squash', 'nectarine', 'apricot', 'prune', 'beet', 'arugula', 'cherry', 'shallot',
     'zucchini', 'potato', 'potatoes', 'mushroom', 'mushrooms', 'herb', 'herbs', 'basil', 'cilantro', 'parsley', 'dill', 'chive', 'chives', 'mint',
   ]),
   dairy: new Set(['milk', 'cheese', 'butter', 'cream', 'yogurt', 'yoghurt', 'egg', 'eggs', 'mozzarella', 'cheddar', 'parmesan', 'cottage', 'ricotta', 'gouda', 'buttermilk', 'creamer', 'almond', 'oatmilk', 'soymilk']),
   meat: new Set(['chicken', 'beef', 'steak', 'pork', 'fish', 'salmon', 'tuna', 'shrimp', 'turkey', 'bacon', 'sausage', 'lamb', 'rib', 'ribeye', 'mahi', 'cod', 'tilapia', 'halibut', 'trout', 'lobster', 'crab']),
   bakery: new Set(['bread', 'bagel', 'bagels', 'muffin', 'muffins', 'croissant', 'bun', 'buns', 'roll', 'rolls', 'tortilla', 'tortillas', 'pita']),
-  frozen: new Set(['frozen', 'ice', 'pizza', 'fries', 'waffle', 'waffles', 'popsicle']),
-  pantry: new Set(['pasta', 'rice', 'cereal', 'oat', 'oats', 'flour', 'sugar', 'salt', 'oil', 'vinegar', 'sauce', 'soup', 'broth', 'stock', 'bean', 'beans', 'lentil', 'lentils', 'spice', 'seasoning', 'ketchup', 'mustard', 'mayo', 'ramen', 'applesauce', 'oregano', 'thyme', 'rosemary', 'tofu', 'orzo', 'quinoa', 'honey', 'olive']),
-  beverages: new Set(['water', 'juice', 'soda', 'coffee', 'tea', 'beer', 'wine', 'sparkling', 'lemonade', 'smoothie', 'drink', 'drinks', 'nespresso', 'espresso']),
-  snacks: new Set(['chips', 'cracker', 'crackers', 'pretzel', 'pretzels', 'bar', 'bars', 'popcorn', 'snack', 'snacks', 'granola', 'cookies']),
-  deli: new Set(['deli', 'rotisserie', 'prepared', 'salad', 'hummus', 'guacamole', 'salami', 'ham', 'prosciutto']),
-  household: new Set(['paper', 'towels', 'toilet', 'detergent', 'soap', 'cleaner', 'bleach', 'sponge', 'sponges', 'trash', 'bags', 'foil', 'tissue', 'tissues']),
+  frozen: new Set(['frozen', 'ice', 'pizza', 'fries', 'waffle', 'waffles', 'popsicle', 'hashbrown', 'slider', 'ravioli', 'meatball']),
+  pantry: new Set(['pasta', 'rice', 'cereal', 'oat', 'oats', 'flour', 'sugar', 'salt', 'oil', 'vinegar', 'sauce', 'soup', 'broth', 'stock', 'bean', 'beans', 'lentil', 'lentils', 'spice', 'seasoning', 'ketchup', 'mustard', 'mayo', 'mayonnaise', 'ramen', 'applesauce', 'oregano', 'thyme', 'rosemary', 'tofu', 'orzo', 'quinoa', 'honey', 'olive', 'spaghetti', 'fusilli', 'penne', 'salsa', 'sweetener', 'hummus', 'hommus', 'spread', 'raisin', 'shell', 'shells', 'taco', 'pie', 'crust', 'amino', 'tempeh', 'edamame', 'rotini', 'saffron', 'seitan', 'chorizo', 'horseradish', 'quiche', 'ranch', 'pistachio', 'walnut']),
+  beverages: new Set(['water', 'juice', 'soda', 'coffee', 'tea', 'beer', 'wine', 'sparkling', 'lemonade', 'smoothie', 'drink', 'drinks', 'nespresso', 'espresso', 'kombucha', 'cola', 'smartwater', 'almondbreeze', 'almondmilk']),
+  snacks: new Set(['chips', 'cracker', 'crackers', 'pretzel', 'pretzels', 'bar', 'bars', 'popcorn', 'snack', 'snacks', 'granola', 'cookies', 'cookie', 'wafer', 'wafers', 'zbar', 'zbars', 'kettlecorn', 'chickn']),
+  deli: new Set(['deli', 'rotisserie', 'prepared', 'salad', 'hummus', 'guacamole', 'salami', 'ham', 'prosciutto', 'pepperoni', 'provolone']),
+  household: new Set(['paper', 'towels', 'toilet', 'detergent', 'soap', 'cleaner', 'cleanse', 'bleach', 'sponge', 'sponges', 'trash', 'bags', 'foil', 'tissue', 'tissues', 'napkin', 'napkins', 'garbage', 'plate', 'plates', 'magic', 'eraser']),
   'personal-care': new Set(['shampoo', 'conditioner', 'toothpaste', 'toothbrush', 'deodorant', 'lotion', 'razor', 'bodywash', 'body', 'wash']),
   baby: new Set(['diapers', 'wipe', 'wipes', 'formula', 'baby', 'infant']),
   pet: new Set(['dog', 'cat', 'pet', 'litter', 'kibble', 'treat', 'treats']),
@@ -100,13 +100,19 @@ export function normalizeComparableName(name: string): string {
 
 function normalizeToken(token: string): string {
   const corrected = TOKEN_CORRECTIONS[token] ?? token
-  if (corrected.endsWith('ies') && corrected.length > 4) {
-    return `${corrected.slice(0, -3)}y`
-  }
-  if (/(ches|shes|xes|zes|oes)$/u.test(corrected) && corrected.length > 4) {
-    return corrected.slice(0, -2)
-  }
-  if (corrected.endsWith('s') && corrected.length > 3 && !corrected.endsWith('ss')) {
+  if (
+    corrected.endsWith('s') &&
+    corrected.length > 3 &&
+    !corrected.endsWith('ss') &&
+    !corrected.endsWith('ies') &&
+    !corrected.endsWith('oes') &&
+    !corrected.endsWith('xes') &&
+    !corrected.endsWith('ches') &&
+    !corrected.endsWith('shes') &&
+    !corrected.endsWith('zes') &&
+    !corrected.endsWith('us') &&
+    !corrected.endsWith('is')
+  ) {
     return corrected.slice(0, -1)
   }
   return corrected
