@@ -31,6 +31,19 @@ type IncomingReminder = {
   updated_at?: string | null
 }
 
+type ExistingGroceryRow = {
+  id: string
+  ios_reminder_id: string | null
+  ios_updated_at: string | null
+  deleted_at: string | null
+  name: string | null
+  checked: boolean
+}
+
+function normalizeComparableName(name: string): string {
+  return name.trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
 function normalizeCategory(category?: string | null): string {
   if (!category) return 'other'
   const normalized = category.trim().toLowerCase()
@@ -78,11 +91,30 @@ Deno.serve(async (req) => {
     const reminderIds = incoming.map((item) => item.reminder_id).filter(Boolean)
     const { data: existingRows, error: existingError } = await sb
       .from('grocery_items')
-      .select('id, ios_reminder_id, ios_updated_at, deleted_at')
+      .select('id, ios_reminder_id, ios_updated_at, deleted_at, name, checked')
       .in('ios_reminder_id', reminderIds)
     if (existingError) throw new Error(existingError.message)
 
-    const existingByReminderId = new Map((existingRows ?? []).map((row) => [row.ios_reminder_id as string, row]))
+    const { data: existingListRows, error: existingListRowsError } = await sb
+      .from('grocery_items')
+      .select('id, ios_reminder_id, ios_updated_at, deleted_at, name, checked')
+      .eq('list_id', listId)
+      .is('deleted_at', null)
+    if (existingListRowsError) throw new Error(existingListRowsError.message)
+
+    const existingByReminderId = new Map<string, ExistingGroceryRow>(
+      ((existingRows ?? []) as ExistingGroceryRow[])
+        .filter((row) => Boolean(row.ios_reminder_id))
+        .map((row) => [row.ios_reminder_id as string, row])
+    )
+    const activeByName = new Map<string, ExistingGroceryRow[]>()
+    for (const row of (existingListRows ?? []) as ExistingGroceryRow[]) {
+      const key = normalizeComparableName(String(row.name ?? ''))
+      if (!key) continue
+      const bucket = activeByName.get(key)
+      if (bucket) bucket.push(row)
+      else activeByName.set(key, [row])
+    }
 
     let inserted = 0
     let updated = 0
@@ -139,6 +171,38 @@ Deno.serve(async (req) => {
       }
 
       if (isDeleted) continue
+
+      const comparableName = normalizeComparableName(incomingName || 'Untitled')
+      const matchingByName = comparableName ? activeByName.get(comparableName) ?? [] : []
+      if (matchingByName.length > 0) {
+        const candidate = matchingByName[0]
+        const { error } = await sb
+          .from('grocery_items')
+          .update({
+            ios_reminder_id: reminder.reminder_id,
+            name: incomingName || 'Untitled',
+            quantity: reminder.quantity ?? null,
+            unit: reminder.unit ?? null,
+            category: normalizeCategory(reminder.category),
+            checked: Boolean(reminder.completed),
+            notes: reminder.notes ?? null,
+            deleted_at: null,
+            last_modified_source: 'ios',
+            ios_updated_at: incomingUpdatedAt,
+          })
+          .eq('id', candidate.id)
+        if (error) throw new Error(error.message)
+        existingByReminderId.set(reminder.reminder_id, {
+          ...candidate,
+          ios_reminder_id: reminder.reminder_id,
+          ios_updated_at: incomingUpdatedAt,
+          checked: Boolean(reminder.completed),
+          name: incomingName || 'Untitled',
+          deleted_at: null,
+        })
+        updated += 1
+        continue
+      }
 
       const { error } = await sb.from('grocery_items').insert({
         list_id: listId,
