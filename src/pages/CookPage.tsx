@@ -79,6 +79,7 @@ export default function CookPage() {
   const [cookRecipeId, setCookRecipeId] = useState<string | null>(null)
   const [stepIndex, setStepIndex] = useState(0)
   const [recipeScale, setRecipeScale] = useState(1)
+  const [showCupsConversion, setShowCupsConversion] = useState(false)
 
   const { data: recipes = [] } = useQuery({
     queryKey: ['cook-page-recipes'],
@@ -167,6 +168,39 @@ export default function CookPage() {
   const cookSteps = cookRecipeId ? stepsByRecipe.get(cookRecipeId) ?? [] : []
   const cookIngredients = cookRecipeId ? ingredientsByRecipe.get(cookRecipeId) ?? [] : []
   const currentStep = cookSteps[stepIndex] ?? null
+
+  const densityForIngredient = (ingredientName: string): number => {
+    const name = ingredientName.toLowerCase()
+    if (name.includes('rice')) return 195
+    if (name.includes('corn')) return 165
+    if (name.includes('pea')) return 145
+    if (name.includes('carrot')) return 128
+    if (name.includes('shrimp')) return 145
+    if (name.includes('soy sauce')) return 255
+    return 236.588
+  }
+
+  const gramsToCupsLabel = (grams: number, ingredientName: string): string => {
+    const cups = grams / densityForIngredient(ingredientName)
+    const rounded = cups < 1 ? Number(cups.toFixed(2)) : Number(cups.toFixed(1))
+    return `${rounded} cup${rounded === 1 ? '' : 's'}`
+  }
+
+  const quantityLabel = (ingredient: RecipeIngredient): string => {
+    const scaledQuantity = scaleQuantityValue(ingredient.quantity, recipeScale)
+    const unit = (ingredient.unit ?? '').toLowerCase().trim()
+    if (!scaledQuantity) return ingredient.unit ?? ''
+    if (!showCupsConversion) {
+      return `${scaledQuantity}${ingredient.unit ? ` ${ingredient.unit}` : ''}`.trim()
+    }
+    if (unit === 'g' || unit === 'gram' || unit === 'grams') {
+      const numeric = Number(scaledQuantity)
+      if (Number.isFinite(numeric)) {
+        return gramsToCupsLabel(numeric, ingredient.name || ingredient.raw_text)
+      }
+    }
+    return `${scaledQuantity}${ingredient.unit ? ` ${ingredient.unit}` : ''}`.trim()
+  }
 
   return (
     <div className="h-full overflow-y-auto p-4 lg:p-6 space-y-4">
@@ -272,6 +306,18 @@ export default function CookPage() {
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <p className="text-[11px] font-semibold text-casa-navy">Ingredients</p>
                   <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowCupsConversion((current) => !current)}
+                      className={cn(
+                        'px-2 py-1 rounded-pill border text-[10px] transition-colors',
+                        showCupsConversion
+                          ? 'border-casa-gold/50 bg-casa-gold/10 text-casa-navy'
+                          : 'border-casa-border text-casa-muted hover:bg-casa-surface'
+                      )}
+                    >
+                      {showCupsConversion ? 'Show grams' : 'g → cups'}
+                    </button>
                     {[0.5, 1, 2].map((scale) => (
                       <button
                         key={scale}
@@ -295,12 +341,12 @@ export default function CookPage() {
                   <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
                     {cookIngredients.map((ingredient, index) => {
                       const name = ingredient.name || ingredient.raw_text
-                      const qty = scaleQuantityValue(ingredient.quantity, recipeScale)
+                      const qty = quantityLabel(ingredient)
                       return (
-                        <div key={`${ingredient.recipe_id}-${index}`} className="flex items-center justify-between gap-3 text-[11px]">
-                          <span className="text-casa-text">{name}</span>
+                        <div key={`${ingredient.recipe_id}-${index}`} className="flex items-center justify-between gap-3 text-body">
+                          <span className="text-casa-text font-medium">{name}</span>
                           <span className="text-casa-muted whitespace-nowrap">
-                            {qty ? `${qty} ` : ''}{ingredient.unit ?? ''}
+                            {qty}
                           </span>
                         </div>
                       )
