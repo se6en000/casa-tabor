@@ -32,6 +32,7 @@ type ExtractedRecipe = {
   steps: RecipeStep[]
   servings?: string | null
   cook_time?: string | null
+  image_url?: string | null
   source_excerpt?: string | null
   confidence: number
 }
@@ -109,6 +110,7 @@ function normalizeExtractedRecipe(payload: Record<string, unknown>, fallbackName
     steps,
     servings: typeof payload.servings === 'string' ? payload.servings.trim() || null : null,
     cook_time: typeof payload.cook_time === 'string' ? payload.cook_time.trim() || null : null,
+    image_url: typeof payload.image_url === 'string' ? payload.image_url.trim() || null : null,
     source_excerpt: typeof payload.source_excerpt === 'string' ? payload.source_excerpt.trim() || null : null,
     confidence: Math.max(0, Math.min(1, Number(payload.confidence ?? 0.7) || 0.7)),
   }
@@ -126,6 +128,22 @@ function stripHtmlToText(html: string): string {
 }
 
 function readRecipeFromJsonLd(html: string): ExtractedRecipe | null {
+  const coerceImageUrl = (value: unknown): string | null => {
+    if (typeof value === 'string') return value.trim() || null
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const fromItem = coerceImageUrl(item)
+        if (fromItem) return fromItem
+      }
+      return null
+    }
+    if (value && typeof value === 'object') {
+      const row = value as Record<string, unknown>
+      return coerceImageUrl(row.url ?? row.contentUrl)
+    }
+    return null
+  }
+
   const scripts = Array.from(html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi))
   for (const match of scripts) {
     const block = (match[1] ?? '').trim()
@@ -190,9 +208,15 @@ function readRecipeFromJsonLd(html: string): ExtractedRecipe | null {
         steps,
         servings: typeof recipe.recipeYield === 'string' ? recipe.recipeYield : null,
         cook_time: typeof recipe.totalTime === 'string' ? recipe.totalTime : null,
+        image_url: coerceImageUrl(recipe.image),
         source_excerpt: null,
         confidence: 0.96,
       }
+    }
+
+    function readOgImage(html: string): string | null {
+      const match = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i)
+      return match?.[1]?.trim() || null
     }
   }
   return null
@@ -312,6 +336,7 @@ Deno.serve(async (req) => {
         const plainText = stripHtmlToText(html)
         sourceExcerpt = plainText.slice(0, 1000)
         extracted = await extractFromTextWithLlm(llmConfig, plainText, fallbackName)
+        extracted.image_url = readOgImage(html)
       }
     } else {
       if (!fileBase64) throw new Error('file_base64 is required for image/pdf imports')

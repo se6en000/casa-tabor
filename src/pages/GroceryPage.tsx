@@ -86,6 +86,7 @@ type RecipeDraft = {
   confidence: number
   source_type: 'url' | 'image' | 'pdf'
   source_url: string | null
+  image_url: string | null
   ingredients: RecipeDraftIngredient[]
   steps: RecipeDraftStep[]
 }
@@ -95,6 +96,7 @@ type RecipePreset = {
   name: string
   source_type: 'url' | 'image' | 'pdf' | 'manual'
   source_url: string | null
+  image_url: string | null
   servings: string | null
   cook_time: string | null
   last_used_at: string | null
@@ -381,7 +383,7 @@ export default function GroceryPage() {
     queryFn: async () => {
       const { data: recipes, error: recipesError } = await supabase
         .from('recipes')
-        .select('id,name,source_type,source_url,servings,cook_time,last_used_at,created_at')
+        .select('id,name,source_type,source_url,image_url,servings,cook_time,last_used_at,created_at')
         .order('last_used_at', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
         .limit(100)
@@ -391,6 +393,7 @@ export default function GroceryPage() {
         name: string
         source_type: 'url' | 'image' | 'pdf' | 'manual'
         source_url: string | null
+        image_url: string | null
         servings: string | null
         cook_time: string | null
         last_used_at: string | null
@@ -775,6 +778,7 @@ export default function GroceryPage() {
         confidence: Math.max(0, Math.min(1, Number(recipeRaw.confidence ?? 0.7) || 0.7)),
         source_type: payload.sourceType,
         source_url: payload.sourceType === 'url' ? (payload.sourceUrl ?? null) : null,
+        image_url: typeof recipeRaw.image_url === 'string' ? recipeRaw.image_url : null,
         ingredients: ingredientsRaw
           .map((row) => {
             if (!row || typeof row !== 'object') return null
@@ -888,6 +892,7 @@ export default function GroceryPage() {
           name: parsedRecipe.name,
           source_type: parsedRecipe.source_type,
           source_url: parsedRecipe.source_url,
+          image_url: parsedRecipe.image_url,
           servings: parsedRecipe.servings,
           cook_time: parsedRecipe.cook_time,
           instructions_text: parsedRecipe.steps.map((step) => `${step.step_number}. ${step.instruction}`).join('\n'),
@@ -975,6 +980,7 @@ export default function GroceryPage() {
       confidence: 0.95,
       source_type: recipe.source_type === 'manual' ? 'url' : recipe.source_type,
       source_url: recipe.source_url,
+      image_url: recipe.image_url,
       ingredients: recipe.ingredients,
       steps: recipe.steps,
     }
