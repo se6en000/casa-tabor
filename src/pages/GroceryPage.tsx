@@ -12,9 +12,46 @@ const AUTO_SYNC_INTERVAL_MS = 45_000
 const QUICK_ADD_TOUCH_ITEMS = ['Milk', 'Eggs', 'Bread', 'Bananas', 'Chicken', 'Coffee']
 const CHECKED_ITEM_DISMISS_MS = 1_500
 const CHECKED_ITEM_EXIT_ANIMATION_MS = 320
+const STORE_SECTION_ORDER: Record<string, number> = {
+  'Produce': 10,
+  'Bakery': 20,
+  'Dairy': 30,
+  'Meat & Seafood': 40,
+  'Frozen': 50,
+  'Pantry': 60,
+  'Beverages': 70,
+  'Household': 80,
+  'Other': 90,
+}
 
 function detectCategory(name: string): string {
   return inferCategoryFromName(name)
+}
+
+function compareNullableText(a: string | null, b: string | null): number {
+  const left = (a ?? '').trim().toLowerCase()
+  const right = (b ?? '').trim().toLowerCase()
+  return left.localeCompare(right)
+}
+
+function getStoreSectionRank(storeSection: string | null): number {
+  if (!storeSection) return 999
+  return STORE_SECTION_ORDER[storeSection] ?? 999
+}
+
+function sortItemsForShopping(items: GroceryItem[]): GroceryItem[] {
+  return [...items].sort((a, b) => {
+    const sectionDelta = getStoreSectionRank(a.store_section) - getStoreSectionRank(b.store_section)
+    if (sectionDelta !== 0) return sectionDelta
+
+    const subcategoryDelta = compareNullableText(a.subcategory, b.subcategory)
+    if (subcategoryDelta !== 0) return subcategoryDelta
+
+    const brandDelta = compareNullableText(a.brand, b.brand)
+    if (brandDelta !== 0) return brandDelta
+
+    return a.name.localeCompare(b.name)
+  })
 }
 
 function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging = false, onMovePointerDown, onMovePointerMove, onMovePointerUp, onMovePointerCancel }: {
@@ -372,12 +409,12 @@ export default function GroceryPage() {
 
   const activeItemsByCategory = GROCERY_CATEGORIES.map(cat => ({
     ...cat,
-    items: items.filter(i => i.category === cat.key && (!i.checked || visibleDismissIds.has(i.id))),
+    items: sortItemsForShopping(items.filter(i => i.category === cat.key && (!i.checked || visibleDismissIds.has(i.id)))),
   })).filter(cat => cat.items.length > 0)
 
   const completedItemsByCategory = GROCERY_CATEGORIES.map(cat => ({
     ...cat,
-    items: items.filter(i => i.category === cat.key && i.checked && !visibleDismissIds.has(i.id)),
+    items: sortItemsForShopping(items.filter(i => i.category === cat.key && i.checked && !visibleDismissIds.has(i.id))),
   })).filter(cat => cat.items.length > 0)
 
   return (

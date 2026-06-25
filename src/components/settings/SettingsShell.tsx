@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useRef } from 'react'
 import {
   Users, Sun, MessageSquare, Bot, Home, Activity,
-  BookmarkCheck, Layers, ChevronRight, Music2, LineChart, Image,
+  BookmarkCheck, Layers, ChevronRight, Music2, LineChart, Image, ShoppingBasket,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import BounceScroll from '../shared/BounceScroll'
@@ -44,6 +44,7 @@ const NAV_GROUPS = [
     items: [
       { to: '/settings/analytics', icon: LineChart,     label: 'Data & Analytics',    desc: 'Orchestration and graph health' },
       { to: '/settings/status',  icon: Activity,      label: 'Status Dashboard',    desc: 'AI usage and cost' },
+      { to: '/settings/grocery-intelligence', icon: ShoppingBasket, label: 'Grocery Intelligence', desc: 'Learning, recategorization, dedupe, and aisle stats' },
     ],
   },
 ]

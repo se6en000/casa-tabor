@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Users, Sun, MessageSquare, Bot, ChevronRight, Music2, Home, Activity, BookmarkCheck, Layers, Image } from 'lucide-react'
+import { Users, Sun, MessageSquare, Bot, ChevronRight, Music2, Home, Activity, BookmarkCheck, Layers, Image, ShoppingBasket } from 'lucide-react'
 import BounceScroll from '../components/shared/BounceScroll'
 
 const sections = [
@@ -13,6 +13,7 @@ const sections = [
   { to: '/settings/sms',      icon: MessageSquare, label: 'Notifications',           desc: 'Twilio SMS, briefing time' },
   { to: '/settings/music',    icon: Music2,        label: 'Spotify / Music',         desc: 'Connect and control music playback' },
   { to: '/settings/status',   icon: Activity,      label: 'Status Dashboard',        desc: 'AI usage, tokens, and cost monitoring' },
+  { to: '/settings/grocery-intelligence', icon: ShoppingBasket, label: 'Grocery Intelligence', desc: 'Learning, recategorization, dedupe, and aisle coverage stats' },
 ]
 
 export default function SettingsPage() {

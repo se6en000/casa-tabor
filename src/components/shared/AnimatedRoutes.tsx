@@ -16,6 +16,7 @@ import TripDetailPage from '../../pages/TripDetailPage'
 import HomeSettingsPage from '../../pages/HomeSettingsPage'
 import StatusDashboardPage from '../../pages/StatusDashboardPage'
 import DataAnalyticsPage from '../../pages/DataAnalyticsPage'
+import GroceryIntelligenceSettingsPage from '../../pages/GroceryIntelligenceSettingsPage'
 import SavedPlacesSettingsPage from '../../pages/SavedPlacesSettingsPage'
 import ActionHubPage from '../../pages/ActionHubPage'
 import SettingsShell from '../settings/SettingsShell'
@@ -56,6 +57,7 @@ export default function AnimatedRoutes() {
           <Route path="theme"      element={<Navigate to="/settings/display" replace />} />
           <Route path="status"     element={<StatusDashboardPage />} />
           <Route path="analytics"  element={<DataAnalyticsPage />} />
+          <Route path="grocery-intelligence"  element={<GroceryIntelligenceSettingsPage />} />
         </Route>
       </Routes>
     </AnimatePresence>
