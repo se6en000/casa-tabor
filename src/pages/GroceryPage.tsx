@@ -141,32 +141,34 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
           : <Square size={20} />}
       </button>
       <div className="flex-1 min-w-0">
-        <span className={cn(
-          'text-body text-casa-text',
-          visualChecked && 'line-through text-casa-muted'
-        )}>
-          {item.name}
-        </span>
-        {(item.quantity || item.unit) && (
-          <span className="ml-2 text-caption text-casa-muted">
-            {item.quantity}{item.unit ? ' ' + item.unit : ''}
-          </span>
-        )}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <span className={cn(
+              'text-body text-casa-text',
+              visualChecked && 'line-through text-casa-muted'
+            )}>
+              {item.name}
+            </span>
+            {(item.quantity || item.unit) && (
+              <span className="ml-2 text-caption text-casa-muted">
+                {item.quantity}{item.unit ? ' ' + item.unit : ''}
+              </span>
+            )}
+          </div>
+          {needsConfidenceReview && (
+            <button
+              type="button"
+              onClick={() => onRequestReview?.(item.id)}
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 hover:bg-amber-100 transition-colors"
+            >
+              Review match ({Math.round((item.enhancement_confidence ?? 0) * 100)}%)
+            </button>
+          )}
+        </div>
         {(item.store_section || item.subcategory || item.brand) && (
           <p className="text-[11px] text-casa-muted mt-0.5">
             {[item.store_section, item.subcategory, item.brand].filter(Boolean).join(' · ')}
           </p>
-        )}
-        {needsConfidenceReview && (
-          <div className="mt-1.5">
-            <button
-              type="button"
-              onClick={() => onRequestReview?.(item.id)}
-              className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 hover:bg-amber-100 transition-colors"
-            >
-              Review match ({Math.round((item.enhancement_confidence ?? 0) * 100)}%)
-            </button>
-          </div>
         )}
         {isReviewing && (
           <div className="mt-2 rounded-xl border border-casa-border bg-casa-bg px-2.5 py-2">
