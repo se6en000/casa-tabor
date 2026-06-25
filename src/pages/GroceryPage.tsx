@@ -261,7 +261,7 @@ export default function GroceryPage() {
   })
 
   const [inputValue, setInputValue] = useState('')
-  const [isAddPanelOpen, setIsAddPanelOpen] = useState(true)
+  const [isAddPanelOpen, setIsAddPanelOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => localStorage.getItem(SYNC_LAST_AT_KEY))
