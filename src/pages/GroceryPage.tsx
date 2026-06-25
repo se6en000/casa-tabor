@@ -10,6 +10,7 @@ const SYNC_CURSOR_KEY = 'grocery-sync-cursor-v1'
 const SYNC_LAST_AT_KEY = 'grocery-sync-last-at-v1'
 const SYNC_LAST_SUMMARY_KEY = 'grocery-sync-last-summary-v1'
 const AUTO_SYNC_INTERVAL_MS = 45_000
+const CLEAN_SYNC_BATCH_SIZE = 60
 const QUICK_ADD_TOUCH_ITEMS = ['Milk', 'Eggs', 'Bread', 'Bananas', 'Chicken', 'Coffee']
 const CHECKED_ITEM_DISMISS_MS = 1_500
 const CHECKED_ITEM_EXIT_ANIMATION_MS = 320
@@ -50,6 +51,14 @@ function detectCategory(name: string): string {
 
 function normalizeItemName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
 }
 
 function compareNullableText(a: string | null, b: string | null): number {
@@ -523,12 +532,50 @@ export default function GroceryPage() {
     }, CHECKED_ITEM_DISMISS_MS)
   }
 
-  const handleSyncNow = useCallback(async () => {
+  const handleSyncNow = useCallback(async (options?: { cleanBeforeSync?: boolean }) => {
     if (syncInFlightRef.current) return
     syncInFlightRef.current = true
     setSyncing(true)
     setSyncError(null)
     try {
+      let cleanSummary = ''
+      if (options?.cleanBeforeSync) {
+        const activeItemIds = items
+          .filter((item) => !item.checked && !item.deleted_at)
+          .map((item) => item.id)
+        const batches = chunkArray(activeItemIds, CLEAN_SYNC_BATCH_SIZE)
+
+        let totalScanned = 0
+        let totalCorrected = 0
+        let totalEnhanced = 0
+
+        for (const batchIds of batches) {
+          const [{ data: normalizeData, error: normalizeError }, { data: enhanceData, error: enhanceError }] = await Promise.all([
+            supabase.functions.invoke('normalize-grocery-items', {
+              body: { item_ids: batchIds },
+            }),
+            supabase.functions.invoke('enhance-grocery-items', {
+              body: { item_ids: batchIds, limit: batchIds.length },
+            }),
+          ])
+
+          if (normalizeError) throw normalizeError
+          if (enhanceError) throw enhanceError
+
+          totalScanned += Number(normalizeData?.scanned_count ?? 0)
+          totalCorrected += Number(normalizeData?.corrected_count ?? 0)
+          totalEnhanced += Number(enhanceData?.enhanced_count ?? 0)
+        }
+
+        if (totalCorrected === 0) {
+          cleanSummary = totalScanned > 0
+            ? 'Clean pass: no high-confidence name fixes (low-confidence left unchanged)'
+            : 'Clean pass: no suspicious names'
+        } else {
+          cleanSummary = `Cleaned ${totalCorrected} name${totalCorrected === 1 ? '' : 's'} · Enhanced ${totalEnhanced} item${totalEnhanced === 1 ? '' : 's'}`
+        }
+      }
+
       const since = localStorage.getItem(SYNC_CURSOR_KEY)
       const { data, error } = await supabase.functions.invoke('sync-casa-to-ios', {
         body: { since, limit: 300 },
@@ -538,9 +585,10 @@ export default function GroceryPage() {
       const deltas = Array.isArray(data?.deltas) ? data.deltas : []
       const deleted = deltas.filter((d: { deleted?: boolean }) => d.deleted).length
       const changed = deltas.length - deleted
-      const summary = deltas.length === 0
+      const syncSummary = deltas.length === 0
         ? 'No new changes to sync'
         : `${changed} update${changed === 1 ? '' : 's'} and ${deleted} delete${deleted === 1 ? '' : 's'} ready`
+      const summary = cleanSummary ? `${cleanSummary} · ${syncSummary}` : syncSummary
 
       const nextCursor = typeof data?.next_cursor === 'string' ? data.next_cursor : null
       if (nextCursor) localStorage.setItem(SYNC_CURSOR_KEY, nextCursor)
@@ -557,7 +605,7 @@ export default function GroceryPage() {
       syncInFlightRef.current = false
       setSyncing(false)
     }
-  }, [])
+  }, [items])
 
   const detectDropCategory = useCallback((x: number, y: number) => {
     const target = document.elementFromPoint(x, y) as HTMLElement | null
@@ -728,12 +776,12 @@ export default function GroceryPage() {
             </button>
             <button
               type="button"
-              onClick={handleSyncNow}
+              onClick={() => void handleSyncNow({ cleanBeforeSync: true })}
               disabled={syncing}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-button text-caption font-medium text-casa-muted border border-casa-border hover:bg-casa-bg transition-colors disabled:opacity-60"
             >
               <RefreshCw size={13} className={cn(syncing && 'animate-spin')} />
-              {syncing ? 'Syncing…' : 'Sync now'}
+              {syncing ? 'Syncing…' : 'Clean + Sync'}
             </button>
             {checkedCount > 0 && (
               <button
