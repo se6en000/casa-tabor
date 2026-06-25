@@ -457,8 +457,29 @@ export default function CookPage() {
                 <ChevronLeft size={14} />
                 Prev
               </button>
-              <button type="button" onClick={() => setCookRecipeId(null)} className="px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-muted hover:bg-casa-main">Close</button>
-              <button type="button" onClick={() => setStepIndex((current) => Math.min(Math.max(0, cookSteps.length - 1), current + 1))} disabled={directionsViewMode === 'all' || stepIndex >= cookSteps.length - 1} className="px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-muted disabled:opacity-50 inline-flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setCookRecipeId(null)}
+                className={cn(
+                  'px-3 py-2 rounded-button border text-body-sm transition-colors',
+                  directionsViewMode === 'all'
+                    ? 'border-casa-gold/50 bg-casa-gold text-casa-navy font-semibold hover:brightness-110'
+                    : 'border-casa-border text-casa-muted hover:bg-casa-main'
+                )}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => setStepIndex((current) => Math.min(Math.max(0, cookSteps.length - 1), current + 1))}
+                disabled={directionsViewMode === 'all' || stepIndex >= cookSteps.length - 1}
+                className={cn(
+                  'px-3 py-2 rounded-button border text-body-sm disabled:opacity-50 inline-flex items-center gap-1 transition-colors',
+                  directionsViewMode === 'step'
+                    ? 'border-casa-gold/50 bg-casa-gold text-casa-navy font-semibold hover:brightness-110'
+                    : 'border-casa-border text-casa-muted'
+                )}
+              >
                 Next
                 <ChevronRight size={14} />
               </button>
