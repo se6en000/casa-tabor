@@ -261,7 +261,6 @@ export default function GroceryPage() {
   })
 
   const [inputValue, setInputValue] = useState('')
-  const [viewMode, setViewMode] = useState<'category' | 'route'>('category')
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => localStorage.getItem(SYNC_LAST_AT_KEY))
@@ -605,6 +604,12 @@ export default function GroceryPage() {
         }
       }
 
+      const { data: dedupeData, error: dedupeError } = await supabase.functions.invoke('dedupe-grocery-items', {
+        body: { dry_run: false },
+      })
+      if (dedupeError) throw dedupeError
+      const dedupedRows = Number(dedupeData?.duplicate_rows ?? 0)
+
       const since = localStorage.getItem(SYNC_CURSOR_KEY)
       const { data, error } = await supabase.functions.invoke('sync-casa-to-ios', {
         body: { since, limit: 300 },
@@ -617,7 +622,10 @@ export default function GroceryPage() {
       const syncSummary = deltas.length === 0
         ? 'No new changes to sync'
         : `${changed} update${changed === 1 ? '' : 's'} and ${deleted} delete${deleted === 1 ? '' : 's'} ready`
-      const summary = cleanSummary ? `${cleanSummary} · ${syncSummary}` : syncSummary
+      const dedupeSummary = dedupedRows > 0
+        ? `Deduped ${dedupedRows} duplicate item${dedupedRows === 1 ? '' : 's'}`
+        : ''
+      const summary = [cleanSummary, dedupeSummary, syncSummary].filter(Boolean).join(' · ')
 
       const nextCursor = typeof data?.next_cursor === 'string' ? data.next_cursor : null
       if (nextCursor) localStorage.setItem(SYNC_CURSOR_KEY, nextCursor)
@@ -748,19 +756,6 @@ export default function GroceryPage() {
     items: sortItemsForShopping(items.filter(i => i.category === cat.key && i.checked && !visibleDismissIds.has(i.id))),
   })).filter(cat => cat.items.length > 0)
 
-  const routeSections = Object.entries(
-    items
-      .filter((item) => !item.checked || visibleDismissIds.has(item.id))
-      .reduce<Record<string, GroceryItem[]>>((acc, item) => {
-        const sectionLabel = item.store_section ?? GROCERY_CATEGORIES.find((cat) => cat.key === item.category)?.label ?? 'Other'
-        if (!acc[sectionLabel]) acc[sectionLabel] = []
-        acc[sectionLabel].push(item)
-        return acc
-      }, {})
-  )
-    .map(([section, sectionItems]) => ({ section, items: sortItemsForShopping(sectionItems) }))
-    .sort((a, b) => getStoreSectionRank(a.section) - getStoreSectionRank(b.section) || a.section.localeCompare(b.section))
-
   return (
     <div className="h-full min-h-0 bg-casa-bg flex flex-col overflow-hidden">
       {/* Header */}
@@ -783,18 +778,6 @@ export default function GroceryPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setViewMode((current) => current === 'category' ? 'route' : 'category')}
-              className={cn(
-                'px-3 py-1.5 rounded-button text-caption font-medium border transition-colors',
-                viewMode === 'route'
-                  ? 'border-casa-gold bg-casa-gold/10 text-casa-navy'
-                  : 'border-casa-border text-casa-muted hover:bg-casa-bg'
-              )}
-            >
-              {viewMode === 'route' ? 'Category view' : 'Route view'}
-            </button>
             <button
               type="button"
               onClick={handleVoiceAdd}
@@ -881,19 +864,7 @@ export default function GroceryPage() {
                 </div>
               ) : (
               <div className="columns-1 lg:columns-2 2xl:columns-3 gap-3">
-                {(viewMode === 'route'
-                  ? routeSections.map((sectionData) => ({
-                    key: sectionData.section,
-                    label: sectionData.section,
-                    items: sectionData.items,
-                    dropKey: null as string | null,
-                    accentColor: 'var(--color-casa-gold)',
-                    reviewCount: sectionData.items.filter((item) =>
-                      typeof item.enhancement_confidence === 'number' &&
-                      item.enhancement_confidence < LOW_CONFIDENCE_REVIEW_THRESHOLD
-                    ).length,
-                  }))
-                  : activeItemsByCategory.map((cat) => ({
+                {activeItemsByCategory.map((cat) => ({
                     key: cat.key,
                     label: cat.label,
                     items: cat.items,
@@ -903,8 +874,7 @@ export default function GroceryPage() {
                       typeof item.enhancement_confidence === 'number' &&
                       item.enhancement_confidence < LOW_CONFIDENCE_REVIEW_THRESHOLD
                     ).length,
-                  }))
-                ).map((section) => (
+                  })).map((section) => (
                   <div
                     key={section.key}
                     data-drop-category={section.dropKey ?? undefined}
