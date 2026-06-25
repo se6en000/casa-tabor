@@ -29,6 +29,12 @@ type DryRunRecategorize = {
   recategorized_count?: number
 }
 
+type DryRunLearning = {
+  scanned_count?: number
+  candidate_rules?: number
+  applied_count?: number
+}
+
 function normalizeName(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ')
 }
@@ -51,6 +57,31 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
   )
 }
 
+function KpiCard({
+  label,
+  value,
+  target,
+  passed,
+}: {
+  label: string
+  value: string
+  target: string
+  passed: boolean
+}) {
+  return (
+    <div className={cn(
+      'rounded-card border p-4 shadow-card',
+      passed ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/70',
+    )}>
+      <p className="text-caption text-casa-muted">{label}</p>
+      <p className="font-display text-heading text-casa-navy mt-1">{value}</p>
+      <p className={cn('text-caption mt-1', passed ? 'text-emerald-700' : 'text-amber-700')}>
+        Target: {target} · {passed ? 'On track' : 'Needs attention'}
+      </p>
+    </div>
+  )
+}
+
 export default function GroceryIntelligenceSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -61,13 +92,14 @@ export default function GroceryIntelligenceSettingsPage() {
   const [aisleMapCount, setAisleMapCount] = useState(0)
   const [dryRunDedupe, setDryRunDedupe] = useState<DryRunDedupe>({})
   const [dryRunRecategorize, setDryRunRecategorize] = useState<DryRunRecategorize>({})
+  const [dryRunLearning, setDryRunLearning] = useState<DryRunLearning>({})
 
   async function load() {
     setRefreshing(true)
     setError(null)
 
     try {
-      const [itemsRes, catalogRes, aisleRes, dedupeRes, recategorizeRes] = await Promise.all([
+      const [itemsRes, catalogRes, aisleRes, dedupeRes, recategorizeRes, learningRes] = await Promise.all([
         supabase
           .from('grocery_items')
           .select('id,name,category,checked,created_at,updated_at,ios_updated_at,canonical_item_id,subcategory,brand,store_section,enhancement_confidence,enhanced_at')
@@ -78,6 +110,7 @@ export default function GroceryIntelligenceSettingsPage() {
         supabase.from('grocery_aisle_mappings').select('id', { count: 'exact', head: true }),
         supabase.functions.invoke('dedupe-grocery-items', { body: { dry_run: true } }),
         supabase.functions.invoke('recategorize-grocery-items', { body: { dry_run: true, limit: 2000 } }),
+        supabase.functions.invoke('learn-grocery-corrections', { body: { dry_run: true, limit: 400, min_votes: 2, lookback_days: 45 } }),
       ])
 
       if (itemsRes.error) throw itemsRes.error
@@ -85,12 +118,14 @@ export default function GroceryIntelligenceSettingsPage() {
       if (aisleRes.error) throw aisleRes.error
       if (dedupeRes.error) throw dedupeRes.error
       if (recategorizeRes.error) throw recategorizeRes.error
+      if (learningRes.error) throw learningRes.error
 
       setItems((itemsRes.data ?? []) as GroceryItemLite[])
       setCatalogCount(catalogRes.count ?? 0)
       setAisleMapCount(aisleRes.count ?? 0)
       setDryRunDedupe((dedupeRes.data ?? {}) as DryRunDedupe)
       setDryRunRecategorize((recategorizeRes.data ?? {}) as DryRunRecategorize)
+      setDryRunLearning((learningRes.data ?? {}) as DryRunLearning)
       setLastRefreshedAt(new Date().toISOString())
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load grocery intelligence')
@@ -151,6 +186,7 @@ export default function GroceryIntelligenceSettingsPage() {
       brandTagged,
       avgConfidence,
       otherCount,
+      otherRate: active.length > 0 ? otherCount / active.length : 0,
       newestEnhancedAt,
       lastIosTouchAt,
       duplicateGroupsDetected,
@@ -167,6 +203,36 @@ export default function GroceryIntelligenceSettingsPage() {
       widthPct: Math.max(8, Math.round((count / max) * 100)),
     }))
   }, [metrics.categoryCounts])
+
+  const kpis = useMemo(() => {
+    const duplicateGroups = dryRunDedupe.duplicate_groups ?? metrics.duplicateGroupsDetected
+    return [
+      {
+        label: 'Other bucket rate',
+        value: fmtPercent(metrics.otherRate),
+        target: '<= 8%',
+        passed: metrics.otherRate <= 0.08,
+      },
+      {
+        label: 'Canonical coverage',
+        value: metrics.totalItems > 0 ? fmtPercent(metrics.canonical / metrics.totalItems) : '0%',
+        target: '>= 70%',
+        passed: metrics.totalItems > 0 && (metrics.canonical / metrics.totalItems) >= 0.7,
+      },
+      {
+        label: 'Average confidence',
+        value: fmtPercent(metrics.avgConfidence),
+        target: '>= 86%',
+        passed: metrics.avgConfidence >= 0.86,
+      },
+      {
+        label: 'Duplicate groups',
+        value: fmtNumber(duplicateGroups),
+        target: '= 0',
+        passed: duplicateGroups === 0,
+      },
+    ]
+  }, [dryRunDedupe.duplicate_groups, metrics.avgConfidence, metrics.canonical, metrics.duplicateGroupsDetected, metrics.otherRate, metrics.totalItems])
 
   if (loading) return <div className="text-casa-muted animate-breathe">Loading grocery intelligence…</div>
 
@@ -212,6 +278,28 @@ export default function GroceryIntelligenceSettingsPage() {
         <StatCard label="Aisle Mappings" value={fmtNumber(aisleMapCount)} sub="Store/category aisle rules" />
         <StatCard label="Dupes (dry run)" value={fmtNumber(dryRunDedupe.duplicate_groups ?? metrics.duplicateGroupsDetected)} sub={`${fmtNumber(dryRunDedupe.duplicate_rows ?? 0)} duplicate rows`} />
         <StatCard label="Needs Recategorize" value={fmtNumber(dryRunRecategorize.scanned_count ?? 0)} sub={`${fmtNumber(dryRunRecategorize.recategorized_count ?? 0)} would be changed`} />
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard
+          label="Learning Queue (dry run)"
+          value={fmtNumber(dryRunLearning.candidate_rules ?? 0)}
+          sub={`${fmtNumber(dryRunLearning.scanned_count ?? 0)} correction signals scanned`}
+        />
+        <StatCard
+          label="Learning Apply Estimate"
+          value={fmtNumber(dryRunLearning.applied_count ?? 0)}
+          sub="Catalog rules ready to apply"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide">KPI Targets</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {kpis.map((kpi) => (
+            <KpiCard key={kpi.label} label={kpi.label} value={kpi.value} target={kpi.target} passed={kpi.passed} />
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

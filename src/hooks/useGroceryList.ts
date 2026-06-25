@@ -45,6 +45,12 @@ export const GROCERY_CATEGORIES = [
   { key: 'frozen', label: '🧊 Frozen' },
   { key: 'pantry', label: '🥫 Pantry' },
   { key: 'beverages', label: '☕ Beverages' },
+  { key: 'snacks', label: '🍿 Snacks' },
+  { key: 'deli', label: '🥪 Deli & Prepared' },
+  { key: 'household', label: '🧽 Household' },
+  { key: 'personal-care', label: '🧴 Personal Care' },
+  { key: 'baby', label: '🍼 Baby' },
+  { key: 'pet', label: '🐾 Pet' },
   { key: 'other', label: '🛒 Other' },
 ]
 
@@ -180,12 +186,35 @@ export function useGroceryList() {
   })
 
   const updateItemCategory = useMutation({
-    mutationFn: async ({ id, category }: { id: string; category: string }) => {
+    mutationFn: async ({
+      id,
+      category,
+      fromCategory,
+      itemName,
+    }: {
+      id: string
+      category: string
+      fromCategory?: string
+      itemName?: string
+    }) => {
       const { error } = await supabase
         .from('grocery_items')
         .update({ category, last_modified_source: 'casa' })
         .eq('id', id)
       if (error) throw error
+
+      if (fromCategory && fromCategory !== category) {
+        const { error: feedbackError } = await supabase
+          .from('grocery_category_corrections')
+          .insert({
+            grocery_item_id: id,
+            item_name: itemName?.trim() || null,
+            from_category: fromCategory,
+            to_category: category,
+            source: 'manual-ui',
+          })
+        if (feedbackError) throw feedbackError
+      }
     },
     onMutate: async ({ id, category }) => {
       await qc.cancelQueries({ queryKey: ['grocery'] })

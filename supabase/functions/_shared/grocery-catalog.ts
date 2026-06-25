@@ -34,17 +34,26 @@ function tokenize(value: string): string[] {
   return normalizeComparableName(value).split(' ').filter(Boolean)
 }
 
+function normalizeToken(token: string): string {
+  if (token.endsWith('es') && token.length > 4) return token.slice(0, -2)
+  if (token.endsWith('s') && token.length > 3) return token.slice(0, -1)
+  return token
+}
+
 function similarityScore(a: string, b: string): number {
   if (!a || !b) return 0
   if (a === b) return 1
-  const aTokens = new Set(tokenize(a))
-  const bTokens = new Set(tokenize(b))
+  const aTokens = new Set(tokenize(a).map(normalizeToken))
+  const bTokens = new Set(tokenize(b).map(normalizeToken))
   if (aTokens.size === 0 || bTokens.size === 0) return 0
   let overlap = 0
   for (const token of aTokens) {
     if (bTokens.has(token)) overlap += 1
   }
-  return overlap / Math.max(aTokens.size, bTokens.size)
+  const jaccard = overlap / (aTokens.size + bTokens.size - overlap)
+  const containment = overlap / Math.min(aTokens.size, bTokens.size)
+  const boost = overlap >= 2 ? 0.05 : 0
+  return Math.min(1, Math.max(jaccard, containment * 0.9) + boost)
 }
 
 function detectBrand(name: string, keywords: string[] | null | undefined): string | null {
@@ -120,11 +129,31 @@ export function resolveGroceryFromCatalog(
   }
 
   let best: { row: CatalogRow; score: number } | null = null
+  const normalizedTokens = tokenize(normalized).map(normalizeToken)
   for (const row of catalog) {
     const pool = buildAliasPool(row)
     let rowBest = 0
     for (const alias of pool) {
-      const score = similarityScore(normalized, alias)
+      let score = similarityScore(normalized, alias)
+      if (alias === normalized) {
+        score = 1
+      } else {
+        const aliasTokens = tokenize(alias).map(normalizeToken)
+        const aliasPhrase = alias.replace(/\s+/g, '\\s+')
+        if (new RegExp(`(?:^|\\s)${aliasPhrase}(?:\\s|$)`).test(normalized)) {
+          score = Math.max(score, 0.96)
+        } else if (
+          aliasTokens.length >= 2 &&
+          aliasTokens.every((token) => normalizedTokens.includes(token))
+        ) {
+          score = Math.max(score, 0.93)
+        } else if (
+          normalizedTokens.length >= 2 &&
+          normalizedTokens.every((token) => aliasTokens.includes(token))
+        ) {
+          score = Math.max(score, 0.9)
+        }
+      }
       if (score > rowBest) rowBest = score
       if (rowBest === 1) break
     }

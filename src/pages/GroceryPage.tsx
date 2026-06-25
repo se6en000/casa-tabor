@@ -27,8 +27,13 @@ const STORE_SECTION_ORDER: Record<string, number> = {
   'Frozen': 50,
   'Pantry': 60,
   'Beverages': 70,
-  'Household': 80,
-  'Other': 90,
+  'Snacks': 80,
+  'Deli & Prepared': 90,
+  'Household': 100,
+  'Personal Care': 110,
+  'Baby': 120,
+  'Pet': 130,
+  'Other': 140,
 }
 
 type HistoricalGroceryEvent = {
@@ -563,7 +568,12 @@ export default function GroceryPage() {
   const finishDrag = useCallback((dropCategory: string | null) => {
     setDragState((current) => {
       if (current && dropCategory && dropCategory !== current.fromCategory) {
-        updateItemCategory.mutate({ id: current.itemId, category: dropCategory })
+        updateItemCategory.mutate({
+          id: current.itemId,
+          category: dropCategory,
+          fromCategory: current.fromCategory,
+          itemName: current.itemName,
+        })
       }
       return null
     })
@@ -832,7 +842,12 @@ export default function GroceryPage() {
                             isReviewing={reviewingItemId === item.id}
                             onRequestReview={setReviewingItemId}
                             onChooseReviewCategory={(id, category) => {
-                              updateItemCategory.mutate({ id, category })
+                              updateItemCategory.mutate({
+                                id,
+                                category,
+                                fromCategory: item.category,
+                                itemName: item.name,
+                              })
                               setReviewingItemId(null)
                             }}
                             onDismissReview={() => setReviewingItemId(null)}
