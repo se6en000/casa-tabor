@@ -72,6 +72,11 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
             {item.quantity}{item.unit ? ' ' + item.unit : ''}
           </span>
         )}
+        {(item.store_section || item.subcategory || item.brand) && (
+          <p className="text-[11px] text-casa-muted mt-0.5">
+            {[item.store_section, item.subcategory, item.brand].filter(Boolean).join(' · ')}
+          </p>
+        )}
         {item.notes && (
           <p className="text-caption text-casa-muted truncate mt-0.5">{item.notes}</p>
         )}

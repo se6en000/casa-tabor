@@ -1,6 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.ts'
-import { inferCategoryFromName } from '../_shared/grocery-normalization.ts'
+import {
+  loadAisleMappings,
+  loadCatalogRows,
+  resolveGroceryFromCatalog,
+} from '../_shared/grocery-catalog.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -133,6 +137,10 @@ Deno.serve(async (req) => {
     }
 
     const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
+    const [catalogRows, aisleMappings] = await Promise.all([
+      loadCatalogRows(sb),
+      loadAisleMappings(sb),
+    ])
     const uniqueIds = Array.from(new Set(itemIds)).slice(0, 60)
 
     const { data: rows, error: rowsError } = await sb
@@ -212,12 +220,18 @@ Deno.serve(async (req) => {
     })
 
     for (const item of approved) {
-      const inferredCategory = inferCategoryFromName(item.corrected_name)
+      const resolved = resolveGroceryFromCatalog(item.corrected_name, catalogRows, aisleMappings)
       const { error } = await sb
         .from('grocery_items')
         .update({
           name: item.corrected_name,
-          category: inferredCategory,
+          category: resolved.category,
+          subcategory: resolved.subcategory,
+          store_section: resolved.storeSection,
+          brand: resolved.brand,
+          canonical_item_id: resolved.canonicalItemId,
+          enhancement_confidence: resolved.confidence,
+          enhanced_at: new Date().toISOString(),
           last_modified_source: 'casa',
         })
         .eq('id', item.id)

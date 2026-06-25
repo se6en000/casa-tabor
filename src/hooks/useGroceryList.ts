@@ -18,6 +18,12 @@ export interface GroceryItem {
   ios_updated_at: string | null
   sync_version: number
   last_modified_source: 'casa' | 'ios'
+  canonical_item_id: string | null
+  subcategory: string | null
+  brand: string | null
+  store_section: string | null
+  enhancement_confidence: number | null
+  enhanced_at: string | null
 }
 
 export interface GroceryList {
@@ -69,15 +75,25 @@ export function useGroceryList() {
 
     void (async () => {
       try {
-        const { data, error } = await supabase.functions.invoke('normalize-grocery-items', {
-          body: { item_ids: ids },
-        })
-        if (error) throw error
-        if (Number(data?.corrected_count ?? 0) > 0) {
+        const [{ data: normalizeData, error: normalizeError }, { data: enhanceData, error: enhanceError }] = await Promise.all([
+          supabase.functions.invoke('normalize-grocery-items', {
+            body: { item_ids: ids },
+          }),
+          supabase.functions.invoke('enhance-grocery-items', {
+            body: { item_ids: ids },
+          }),
+        ])
+
+        if (normalizeError) throw normalizeError
+        if (enhanceError) throw enhanceError
+
+        const correctedCount = Number(normalizeData?.corrected_count ?? 0)
+        const enhancedCount = Number(enhanceData?.enhanced_count ?? 0)
+        if (correctedCount > 0 || enhancedCount > 0) {
           qc.invalidateQueries({ queryKey: ['grocery'] })
         }
       } catch (err) {
-        console.warn('[useGroceryList] idle normalization failed', err)
+        console.warn('[useGroceryList] idle normalization/enhancement failed', err)
         ids.forEach((id) => pendingNormalizationIdsRef.current.add(id))
       } finally {
         normalizationInFlightRef.current = false

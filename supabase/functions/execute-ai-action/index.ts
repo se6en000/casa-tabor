@@ -10,8 +10,12 @@ import {
 import { requireEnv } from '../_shared/env.mjs'
 import {
   normalizeComparableName,
-  resolveCategoryFromInput,
 } from '../_shared/grocery-normalization.ts'
+import {
+  loadAisleMappings,
+  loadCatalogRows,
+  resolveGroceryFromCatalog,
+} from '../_shared/grocery-catalog.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -370,6 +374,10 @@ Deno.serve(async (req) => {
     }
 
     if (tool === 'add_grocery_items') {
+      const [catalogRows, aisleMappings] = await Promise.all([
+        loadCatalogRows(sb),
+        loadAisleMappings(sb),
+      ])
       const { data: lists } = await sb.from('grocery_lists').select('id').order('created_at').limit(1)
       const listId = lists?.[0]?.id
       if (!listId) throw new Error('No grocery list found')
@@ -381,17 +389,19 @@ Deno.serve(async (req) => {
         .map((item) => {
           const normalized = normalizeGroceryName(String(item.name ?? ''))
           if (!normalized.name) return null
-          const category = resolveCategoryFromInput(
-            typeof item.category === 'string' ? item.category : null,
-            normalized.name,
-          )
+          const resolved = resolveGroceryFromCatalog(normalized.name, catalogRows, aisleMappings)
           return {
             rawName: String(item.name ?? '').trim(),
             name: normalized.name,
             normalizedFrom: normalized.normalizedFrom,
             quantity: item.quantity ?? null,
             unit: item.unit ?? null,
-            category,
+            category: resolved.category,
+            subcategory: resolved.subcategory,
+            storeSection: resolved.storeSection,
+            brand: resolved.brand,
+            canonicalItemId: resolved.canonicalItemId,
+            enhancementConfidence: resolved.confidence,
             notes: item.notes ?? null,
           }
         })
@@ -402,6 +412,11 @@ Deno.serve(async (req) => {
           quantity: string | null
           unit: string | null
           category: string
+          subcategory: string | null
+          storeSection: string | null
+          brand: string | null
+          canonicalItemId: string | null
+          enhancementConfidence: number
           notes: string | null
         } => item !== null)
 
@@ -427,7 +442,13 @@ Deno.serve(async (req) => {
         return true
       })
 
-      const insertedItems: Array<{ name: string; category: string; normalizedFrom?: string }> = []
+      const insertedItems: Array<{
+        name: string
+        category: string
+        subcategory: string | null
+        storeSection: string | null
+        normalizedFrom?: string
+      }> = []
       if (uniqueItems.length > 0) {
         for (const item of uniqueItems) {
           const { data: insertedRows, error } = await sb
@@ -438,6 +459,12 @@ Deno.serve(async (req) => {
               quantity: item.quantity ?? null,
               unit: item.unit ?? null,
               category: item.category,
+              subcategory: item.subcategory,
+              store_section: item.storeSection,
+              brand: item.brand,
+              canonical_item_id: item.canonicalItemId,
+              enhancement_confidence: item.enhancementConfidence,
+              enhanced_at: new Date().toISOString(),
               notes: item.notes ?? null,
               checked: false,
               last_modified_source: 'casa',
@@ -449,6 +476,8 @@ Deno.serve(async (req) => {
             insertedItems.push({
               name: item.name,
               category: item.category,
+              subcategory: item.subcategory,
+              storeSection: item.storeSection,
               normalizedFrom: item.normalizedFrom,
             })
           } else {
@@ -462,6 +491,8 @@ Deno.serve(async (req) => {
         items: insertedItems.map((item) => ({
           name: item.name,
           category: item.category,
+          subcategory: item.subcategory,
+          store_section: item.storeSection,
           normalized_from: item.normalizedFrom ?? null,
         })),
         skipped_exact_matches: skippedExactMatches,

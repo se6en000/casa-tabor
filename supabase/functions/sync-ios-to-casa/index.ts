@@ -2,8 +2,12 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.ts'
 import {
   normalizeComparableName,
-  resolveCategoryFromInput,
 } from '../_shared/grocery-normalization.ts'
+import {
+  loadAisleMappings,
+  loadCatalogRows,
+  resolveGroceryFromCatalog,
+} from '../_shared/grocery-catalog.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -46,6 +50,10 @@ Deno.serve(async (req) => {
     const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
     const { reminders } = await req.json().catch(() => ({ reminders: [] }))
     const incoming = Array.isArray(reminders) ? (reminders as IncomingReminder[]) : []
+    const [catalogRows, aisleMappings] = await Promise.all([
+      loadCatalogRows(sb),
+      loadAisleMappings(sb),
+    ])
 
     if (incoming.length === 0) {
       return new Response(JSON.stringify({ success: true, inserted: 0, updated: 0, deleted: 0, skipped_stale: 0 }), {
@@ -116,7 +124,8 @@ Deno.serve(async (req) => {
       }
 
       const incomingName = (reminder.name ?? reminder.title ?? '').trim()
-      const resolvedCategory = resolveCategoryFromInput(reminder.category, incomingName || 'Untitled')
+      const resolved = resolveGroceryFromCatalog(incomingName || 'Untitled', catalogRows, aisleMappings)
+      const resolvedCategory = resolved.category
       const isDeleted = Boolean(reminder.deleted)
 
       if (existing) {
@@ -142,6 +151,12 @@ Deno.serve(async (req) => {
             quantity: reminder.quantity ?? null,
             unit: reminder.unit ?? null,
             category: resolvedCategory,
+            subcategory: resolved.subcategory,
+            store_section: resolved.storeSection,
+            brand: resolved.brand,
+            canonical_item_id: resolved.canonicalItemId,
+            enhancement_confidence: resolved.confidence,
+            enhanced_at: new Date().toISOString(),
             checked: Boolean(reminder.completed),
             notes: reminder.notes ?? null,
             deleted_at: null,
@@ -168,6 +183,12 @@ Deno.serve(async (req) => {
             quantity: reminder.quantity ?? null,
             unit: reminder.unit ?? null,
             category: resolvedCategory,
+            subcategory: resolved.subcategory,
+            store_section: resolved.storeSection,
+            brand: resolved.brand,
+            canonical_item_id: resolved.canonicalItemId,
+            enhancement_confidence: resolved.confidence,
+            enhanced_at: new Date().toISOString(),
             checked: Boolean(reminder.completed),
             notes: reminder.notes ?? null,
             deleted_at: null,
@@ -196,6 +217,12 @@ Deno.serve(async (req) => {
         quantity: reminder.quantity ?? null,
         unit: reminder.unit ?? null,
         category: resolvedCategory,
+        subcategory: resolved.subcategory,
+        store_section: resolved.storeSection,
+        brand: resolved.brand,
+        canonical_item_id: resolved.canonicalItemId,
+        enhancement_confidence: resolved.confidence,
+        enhanced_at: new Date().toISOString(),
         checked: Boolean(reminder.completed),
         notes: reminder.notes ?? null,
         last_modified_source: 'ios',
@@ -215,6 +242,12 @@ Deno.serve(async (req) => {
           quantity: reminder.quantity ?? null,
           unit: reminder.unit ?? null,
           category: resolvedCategory,
+          subcategory: resolved.subcategory,
+          store_section: resolved.storeSection,
+          brand: resolved.brand,
+          canonical_item_id: resolved.canonicalItemId,
+          enhancement_confidence: resolved.confidence,
+          enhanced_at: new Date().toISOString(),
           checked: Boolean(reminder.completed),
           notes: reminder.notes ?? null,
           deleted_at: null,
