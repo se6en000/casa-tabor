@@ -20,6 +20,7 @@ const SYNC_LAST_SUMMARY_KEY = 'grocery-sync-last-summary-v1'
 const AUTO_SYNC_INTERVAL_MS = 45_000
 const QUICK_ADD_TOUCH_ITEMS = ['Milk', 'Eggs', 'Bread', 'Bananas', 'Chicken', 'Coffee']
 const CHECKED_ITEM_DISMISS_MS = 1_500
+const CHECKED_ITEM_EXIT_ANIMATION_MS = 320
 
 function detectCategory(name: string): string {
   const lower = name.toLowerCase()
@@ -29,24 +30,26 @@ function detectCategory(name: string): string {
   return 'other'
 }
 
-function ItemRow({ item, onToggle, onDelete, isDismissing = false, isDragging = false, onMovePointerDown, onMovePointerMove, onMovePointerUp, onMovePointerCancel }: {
+function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging = false, onMovePointerDown, onMovePointerMove, onMovePointerUp, onMovePointerCancel }: {
   item: GroceryItem
   onToggle: (id: string, checked: boolean) => void
   onDelete: (id: string) => void
-  isDismissing?: boolean
+  dismissPhase?: 'none' | 'queued' | 'exiting'
   isDragging?: boolean
   onMovePointerDown?: (e: React.PointerEvent<HTMLButtonElement>) => void
   onMovePointerMove?: (e: React.PointerEvent<HTMLButtonElement>) => void
   onMovePointerUp?: (e: React.PointerEvent<HTMLButtonElement>) => void
   onMovePointerCancel?: (e: React.PointerEvent<HTMLButtonElement>) => void
 }) {
-  const visualChecked = item.checked || Boolean(isDismissing)
+  const visualChecked = item.checked || dismissPhase !== 'none'
 
   return (
     <div className={cn(
-      'flex items-center gap-3 px-4 py-3 hover:bg-casa-bg/50 transition-colors group',
+      'flex items-center gap-3 px-4 py-3 hover:bg-casa-bg/50 transition-all duration-300 ease-out group will-change-transform',
       visualChecked && 'opacity-50',
-      isDragging && 'opacity-30'
+      dismissPhase === 'queued' && 'bg-casa-gold/5',
+      dismissPhase === 'exiting' && 'opacity-0 translate-y-1 scale-[0.985] max-h-0 py-0',
+      isDragging && 'opacity-30',
     )}>
       {onMovePointerDown && (
         <button
@@ -128,8 +131,11 @@ export default function GroceryPage() {
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const syncInFlightRef = useRef(false)
-  const completionTimersRef = useRef<Map<string, number>>(new Map())
+  const dismissBatchTimerRef = useRef<number | null>(null)
+  const dismissExitTimerRef = useRef<number | null>(null)
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set())
+  const [dismissingExitingIds, setDismissingExitingIds] = useState<Set<string>>(new Set())
+  const dismissingIdsRef = useRef<Set<string>>(new Set())
 
   const handleAddItem = () => {
     const name = inputValue.trim()
@@ -169,14 +175,19 @@ export default function GroceryPage() {
   }
 
   useEffect(() => {
-    const timers = completionTimersRef.current
     return () => {
-      for (const timeoutId of timers.values()) {
-        window.clearTimeout(timeoutId)
+      if (dismissBatchTimerRef.current) {
+        window.clearTimeout(dismissBatchTimerRef.current)
       }
-      timers.clear()
+      if (dismissExitTimerRef.current) {
+        window.clearTimeout(dismissExitTimerRef.current)
+      }
     }
   }, [])
+
+  useEffect(() => {
+    dismissingIdsRef.current = dismissingIds
+  }, [dismissingIds])
 
   useEffect(() => {
     return () => {
@@ -185,14 +196,13 @@ export default function GroceryPage() {
   }, [])
 
   const handleToggle = (id: string, checked: boolean) => {
-    const existingTimer = completionTimersRef.current.get(id)
-    if (existingTimer) {
-      window.clearTimeout(existingTimer)
-      completionTimersRef.current.delete(id)
-    }
-
     if (!checked) {
-      setDismissingIds(prev => {
+      setDismissingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      setDismissingExitingIds((prev) => {
         const next = new Set(prev)
         next.delete(id)
         return next
@@ -201,24 +211,38 @@ export default function GroceryPage() {
       return
     }
 
+    toggleItem.mutate({ id, checked: true })
     setDismissingIds(prev => new Set(prev).add(id))
-
-    const timeoutId = window.setTimeout(() => {
-      completionTimersRef.current.delete(id)
-      toggleItem.mutate(
-        { id, checked: true },
-        {
-          onSettled: () => {
-            setDismissingIds(prev => {
-              const next = new Set(prev)
-              next.delete(id)
-              return next
-            })
-          },
-        }
-      )
+    setDismissingExitingIds((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+    if (dismissBatchTimerRef.current) {
+      window.clearTimeout(dismissBatchTimerRef.current)
+    }
+    dismissBatchTimerRef.current = window.setTimeout(() => {
+      const batchIds = Array.from(dismissingIdsRef.current)
+      dismissBatchTimerRef.current = null
+      if (batchIds.length === 0) return
+      setDismissingExitingIds(new Set(batchIds))
+      if (dismissExitTimerRef.current) {
+        window.clearTimeout(dismissExitTimerRef.current)
+      }
+      dismissExitTimerRef.current = window.setTimeout(() => {
+        setDismissingIds((prev) => {
+          const next = new Set(prev)
+          batchIds.forEach((batchId) => next.delete(batchId))
+          return next
+        })
+        setDismissingExitingIds((prev) => {
+          const next = new Set(prev)
+          batchIds.forEach((batchId) => next.delete(batchId))
+          return next
+        })
+        dismissExitTimerRef.current = null
+      }, CHECKED_ITEM_EXIT_ANIMATION_MS)
     }, CHECKED_ITEM_DISMISS_MS)
-    completionTimersRef.current.set(id, timeoutId)
   }
 
   const handleSyncNow = useCallback(async () => {
@@ -352,14 +376,16 @@ export default function GroceryPage() {
     }
   }, [handleSyncNow])
 
+  const visibleDismissIds = new Set([...dismissingIds, ...dismissingExitingIds])
+
   const activeItemsByCategory = GROCERY_CATEGORIES.map(cat => ({
     ...cat,
-    items: items.filter(i => i.category === cat.key && !i.checked),
+    items: items.filter(i => i.category === cat.key && (!i.checked || visibleDismissIds.has(i.id))),
   })).filter(cat => cat.items.length > 0)
 
   const completedItemsByCategory = GROCERY_CATEGORIES.map(cat => ({
     ...cat,
-    items: items.filter(i => i.category === cat.key && i.checked),
+    items: items.filter(i => i.category === cat.key && i.checked && !visibleDismissIds.has(i.id)),
   })).filter(cat => cat.items.length > 0)
 
   return (
@@ -489,7 +515,7 @@ export default function GroceryPage() {
                     <ItemRow
                       key={item.id}
                       item={item}
-                      isDismissing={dismissingIds.has(item.id)}
+                      dismissPhase={dismissingExitingIds.has(item.id) ? 'exiting' : dismissingIds.has(item.id) ? 'queued' : 'none'}
                       isDragging={dragState?.itemId === item.id}
                       onToggle={handleToggle}
                       onDelete={(id) => deleteItem.mutate(id)}
