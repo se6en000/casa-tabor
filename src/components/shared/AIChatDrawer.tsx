@@ -505,8 +505,10 @@ function useSpeechInput({
       return
     }
 
-    // Bridge mode: recover if websocket dropped between turns.
-    if (!wsRef.current && (phaseRef.current !== 'processing')) {
+    // Bridge mode: recover whenever socket is missing.
+    // If we're stuck in processing (final transcript closed WS), reconnect anyway
+    // so wake + follow-up turns continue without requiring a drawer reopen.
+    if (!wsRef.current) {
       startBridge()
     }
   }, [startWebSpeech, startBridge]) // phase/resources read via refs
