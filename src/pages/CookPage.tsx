@@ -90,6 +90,7 @@ export default function CookPage() {
   const [stepIndex, setStepIndex] = useState(0)
   const [recipeScale, setRecipeScale] = useState(1)
   const [showCupsConversion, setShowCupsConversion] = useState(false)
+  const [directionsViewMode, setDirectionsViewMode] = useState<'step' | 'all'>('step')
 
   const { data: recipes = [] } = useQuery({
     queryKey: ['cook-page-recipes'],
@@ -275,6 +276,7 @@ export default function CookPage() {
                   setCookRecipeId(recipe.id)
                   setStepIndex(0)
                   setRecipeScale(1)
+                  setDirectionsViewMode('step')
                 }}
                 className="px-2.5 py-1 rounded-pill border border-casa-gold/40 bg-casa-gold/10 text-[11px] font-medium text-casa-navy hover:bg-casa-gold/15 transition-colors inline-flex items-center gap-1"
               >
@@ -376,9 +378,41 @@ export default function CookPage() {
               </div>
 
               <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden">
-                <div className="px-4 pt-3 pb-2">
-                  <p className="text-body font-semibold text-casa-navy">Directions</p>
-                  <p className="text-[11px] text-casa-muted">Step {stepIndex + 1} of {Math.max(1, cookSteps.length)}</p>
+                <div className="px-4 pt-3 pb-2 flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-body font-semibold text-casa-navy">Directions</p>
+                    <p className="text-[11px] text-casa-muted">
+                      {directionsViewMode === 'step'
+                        ? `Step ${stepIndex + 1} of ${Math.max(1, cookSteps.length)}`
+                        : `${cookSteps.length} steps`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setDirectionsViewMode('step')}
+                      className={cn(
+                        'px-2 py-1 rounded-pill border text-[10px] transition-colors',
+                        directionsViewMode === 'step'
+                          ? 'border-casa-gold/50 bg-casa-gold/10 text-casa-navy'
+                          : 'border-casa-border text-casa-muted hover:bg-casa-surface'
+                      )}
+                    >
+                      Step-by-step
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDirectionsViewMode('all')}
+                      className={cn(
+                        'px-2 py-1 rounded-pill border text-[10px] transition-colors',
+                        directionsViewMode === 'all'
+                          ? 'border-casa-gold/50 bg-casa-gold/10 text-casa-navy'
+                          : 'border-casa-border text-casa-muted hover:bg-casa-surface'
+                      )}
+                    >
+                      All steps
+                    </button>
+                  </div>
                 </div>
                 <div
                   className="h-2.5 w-full"
@@ -386,17 +420,45 @@ export default function CookPage() {
                   aria-hidden
                 />
                 <div className="p-4">
-                  <p className="text-body text-casa-text leading-relaxed">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
+                  {directionsViewMode === 'step' ? (
+                    <p className="text-body text-casa-text leading-relaxed">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
+                  ) : (
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                      {(cookSteps.length > 0 ? cookSteps : [{ step_number: 1, instruction: 'No directions saved for this recipe yet.' }]).map((step, index) => {
+                        const headerColors = [
+                          'var(--color-family-liv)',
+                          'var(--color-family-emme)',
+                          'var(--color-family-jake)',
+                          'var(--color-family-kelly)',
+                          'var(--color-family-owen)',
+                          'var(--color-casa-gold)',
+                        ]
+                        return (
+                          <div key={`${step.step_number}-${index}`} className="rounded-lg border border-casa-border bg-casa-surface overflow-hidden">
+                            <div className="px-3 py-2 flex items-center justify-between" style={{ backgroundColor: `${headerColors[index % headerColors.length]}22` }}>
+                              <p className="text-[11px] font-semibold text-casa-navy">Step {step.step_number}</p>
+                            </div>
+                            <div
+                              className="h-1.5 w-full"
+                              style={{ backgroundColor: headerColors[index % headerColors.length] }}
+                              aria-hidden
+                            />
+                            <p className="p-3 text-body-sm text-casa-text leading-relaxed">{step.instruction}</p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
             <div className="px-4 py-3 border-t border-casa-divider flex items-center justify-between">
-              <button type="button" onClick={() => setStepIndex((current) => Math.max(0, current - 1))} disabled={stepIndex <= 0} className="px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-muted disabled:opacity-50 inline-flex items-center gap-1">
+              <button type="button" onClick={() => setStepIndex((current) => Math.max(0, current - 1))} disabled={directionsViewMode === 'all' || stepIndex <= 0} className="px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-muted disabled:opacity-50 inline-flex items-center gap-1">
                 <ChevronLeft size={14} />
                 Prev
               </button>
               <button type="button" onClick={() => setCookRecipeId(null)} className="px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-muted hover:bg-casa-main">Close</button>
-              <button type="button" onClick={() => setStepIndex((current) => Math.min(Math.max(0, cookSteps.length - 1), current + 1))} disabled={stepIndex >= cookSteps.length - 1} className="px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-muted disabled:opacity-50 inline-flex items-center gap-1">
+              <button type="button" onClick={() => setStepIndex((current) => Math.min(Math.max(0, cookSteps.length - 1), current + 1))} disabled={directionsViewMode === 'all' || stepIndex >= cookSteps.length - 1} className="px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-muted disabled:opacity-50 inline-flex items-center gap-1">
                 Next
                 <ChevronRight size={14} />
               </button>
