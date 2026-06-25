@@ -180,12 +180,22 @@ function scaleQuantityValue(value: string | null, scale: number): string | null 
     .replace(/\b½\b/g, ' 1/2 ')
     .replace(/\b¼\b/g, ' 1/4 ')
     .replace(/\b¾\b/g, ' 3/4 ')
-  const numeric = replacedFractions.match(/^\s*(\d+(?:\.\d+)?)(?:\s+(\d+)\/(\d+))?\s*$/)
-  if (!numeric) return trimmed
-  const whole = Number(numeric[1] ?? 0)
-  const fracNum = Number(numeric[2] ?? 0)
-  const fracDen = Number(numeric[3] ?? 1)
-  const base = whole + (fracDen > 0 ? fracNum / fracDen : 0)
+  const mixed = replacedFractions.match(/^\s*(\d+)\s+(\d+)\/(\d+)\s*$/)
+  const fractionOnly = replacedFractions.match(/^\s*(\d+)\/(\d+)\s*$/)
+  const decimalOrInt = replacedFractions.match(/^\s*(\d+(?:\.\d+)?)\s*$/)
+  let base = Number.NaN
+  if (mixed) {
+    const whole = Number(mixed[1] ?? 0)
+    const fracNum = Number(mixed[2] ?? 0)
+    const fracDen = Number(mixed[3] ?? 1)
+    base = whole + (fracDen > 0 ? fracNum / fracDen : 0)
+  } else if (fractionOnly) {
+    const fracNum = Number(fractionOnly[1] ?? 0)
+    const fracDen = Number(fractionOnly[2] ?? 1)
+    base = fracDen > 0 ? fracNum / fracDen : Number.NaN
+  } else if (decimalOrInt) {
+    base = Number(decimalOrInt[1] ?? Number.NaN)
+  }
   if (!Number.isFinite(base)) return trimmed
   const scaled = base * scale
   if (scaled === 0) return '0'
