@@ -314,7 +314,7 @@ export default function CookPage() {
               )}
             </div>
             <div className="flex-1 min-h-0 p-4 flex flex-col gap-3 overflow-hidden">
-              <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden flex-1 min-h-0 flex flex-col">
+              <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden shrink-0">
                 <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-2">
                   <div>
                     <p className="text-body font-semibold text-casa-navy">Ingredients</p>
@@ -359,7 +359,7 @@ export default function CookPage() {
                 {cookIngredients.length === 0 ? (
                   <p className="text-body-sm text-casa-muted">No ingredient breakdown saved for this recipe.</p>
                 ) : (
-                  <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                  <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
                     {cookIngredients.map((ingredient, index) => {
                       const name = ingredient.name || ingredient.raw_text
                       const qty = quantityLabel(ingredient)
@@ -377,7 +377,7 @@ export default function CookPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden">
+              <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden flex-1 min-h-0 flex flex-col">
                 <div className="px-4 pt-3 pb-2 flex items-start justify-between gap-2">
                   <div>
                     <p className="text-body font-semibold text-casa-navy">Directions</p>
