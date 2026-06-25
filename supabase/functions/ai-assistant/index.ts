@@ -709,10 +709,11 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
     const resolveModelParts = async (parts: GeminiPart[]) => {
       const funcCallPart = parts.find((p: { functionCall?: { name: string; args: Record<string, unknown> } }) => p.functionCall)
-      const textPart = parts.find((p: { text?: string }) => p.text)
+      const textParts = parts
+        .flatMap((p) => 'text' in p && typeof p.text === 'string' && p.text.trim() ? [p.text.trim()] : [])
 
-      if (!funcCallPart && textPart) {
-        return { type: 'text', text: (textPart as { text: string }).text }
+      if (!funcCallPart && textParts.length > 0) {
+        return { type: 'text', text: textParts.join('\n') }
       }
 
       if (!funcCallPart) return null
@@ -806,6 +807,44 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const retryResolved = await resolveModelParts(retryParts)
       if (retryResolved) return retryResolved
       console.error('[ai-assistant] Empty retry response. finishReason:', retryData.candidates?.[0]?.finishReason, 'parts:', JSON.stringify(retryParts))
+    }
+
+    const latestUserText = [...contents]
+      .reverse()
+      .find((turn) => turn.role === 'user')
+      ?.parts.flatMap((part) => 'text' in part && typeof part.text === 'string' ? [part.text.trim()] : [])
+      .find((part) => part.length > 0)
+
+    // Last-resort reliability pass: no tools, compact prompt, latest user turn only.
+    // This avoids occasional empty tool-call responses from Gemini under load.
+    if (latestUserText) {
+      const fallbackBody = {
+        system_instruction: {
+          parts: [{
+            text: 'You are the Casa Tabor assistant. Respond helpfully in 1-3 concise sentences. If data is missing, ask one clear follow-up question.',
+          }],
+        },
+        contents: [{ role: 'user', parts: [{ text: latestUserText }] }],
+        generation_config: { temperature: 0.2, max_output_tokens: 320 },
+      }
+      const fallbackRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(fallbackBody) }
+      )
+      if (fallbackRes.ok) {
+        const fallbackData = await fallbackRes.json()
+        const fallbackParts = fallbackData.candidates?.[0]?.content?.parts ?? []
+        const fallbackText = fallbackParts
+          .flatMap((part: { text?: string }) => typeof part.text === 'string' && part.text.trim() ? [part.text.trim()] : [])
+          .join('\n')
+        if (fallbackText) {
+          console.log(`[ai-assistant][${cid}] recovered empty response via compact fallback`)
+          return { type: 'text', text: fallbackText }
+        }
+      } else {
+        const fallbackErr = await fallbackRes.text().catch(() => '')
+        console.error(`[ai-assistant][${cid}] compact fallback failed status=${fallbackRes.status} body=${fallbackErr.slice(0, 180)}`)
+      }
     }
 
     return { type: 'text', text: 'I heard you, but I hit a brief response issue. Please continue and I will keep going.' }

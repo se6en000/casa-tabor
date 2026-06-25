@@ -20,8 +20,34 @@ const genId = (): string =>
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2) + Date.now().toString(36)
 
+type AIAssistantResponse = {
+  type?: string
+  code?: string
+  message?: string
+  text?: string
+  tool?: unknown
+  args?: unknown
+  display_text?: string
+}
+
 const GOODBYE_PHRASES = /\b(thank you|thanks|goodbye|bye|that'?s all|all done|good night|ciao|close session|new session|start over|end session)\b/i
 const GROCERY_NON_ADD_INTENTS = /\b(what|show|list|what's|whats|how many|remove|delete|clear|check|uncheck|done|completed|archive)\b/i
+const ASSISTANT_TIMEOUT_MS = 45_000
+
+function isRetriableAssistantError(error: unknown): boolean {
+  const raw = (error as { message?: string })?.message ?? String(error ?? '')
+  const msg = raw.toLowerCase()
+  return (
+    msg.includes('timed out') ||
+    msg.includes('timeout') ||
+    msg.includes('network') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('fetch failed') ||
+    msg.includes('temporarily unavailable') ||
+    msg.includes('gateway') ||
+    msg.includes('service unavailable')
+  )
+}
 
 function dispatchGroceryUpdated() {
   if (typeof window === 'undefined') return
@@ -284,20 +310,43 @@ export function useAIAssistant(ctx: AssistantContext) {
       const aiCorrelationId = buildCorrelationId(userMsg.id, activeSession.id)
       emitAssistantDebug('assistant_invoke_start', `messages=${allMsgsForApi.length} corr=${aiCorrelationId.slice(0, 28)}`)
 
-      const invokePromise = supabase.functions.invoke('ai-assistant', {
-        body: {
-          messages: allMsgsForApi,
-          context: buildContext(ctxRef.current),
-          image: imagePayload,
-          session_id: activeSession.id,
-          correlation_id: aiCorrelationId,
-        },
-      })
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('AI request timed out')), 30000)
-      )
-      const { data, error } = await Promise.race([invokePromise, timeoutPromise]) as Awaited<typeof invokePromise>
-      if (error) throw error
+      const invokeAssistant = async () => {
+        const invokePromise = supabase.functions.invoke('ai-assistant', {
+          body: {
+            messages: allMsgsForApi,
+            context: buildContext(ctxRef.current),
+            image: imagePayload,
+            session_id: activeSession.id,
+            correlation_id: aiCorrelationId,
+          },
+        })
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('AI request timed out')), ASSISTANT_TIMEOUT_MS)
+        )
+        return await Promise.race([invokePromise, timeoutPromise]) as Awaited<typeof invokePromise>
+      }
+
+      let data: AIAssistantResponse | undefined
+      let invokeError: unknown = null
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        try {
+          const result = await invokeAssistant()
+          if (result.error) throw result.error
+          data = (result.data ?? {}) as AIAssistantResponse
+          invokeError = null
+          if (attempt > 1) emitAssistantDebug('assistant_invoke_retry_success', `attempt=${attempt}`)
+          break
+        } catch (err) {
+          invokeError = err
+          const retriable = isRetriableAssistantError(err)
+          emitAssistantDebug('assistant_invoke_attempt_error', `attempt=${attempt} retriable=${retriable} ${(err as Error).message ?? 'unknown error'}`)
+          if (!retriable || attempt === 2) break
+          await new Promise((resolve) => setTimeout(resolve, 450))
+          emitAssistantDebug('assistant_invoke_retry', `attempt=${attempt + 1}`)
+        }
+      }
+      if (invokeError) throw invokeError
+      if (!data) throw new Error('AI request returned no data')
       emitAssistantDebug('assistant_invoke_result', `type=${data.type ?? 'unknown'}`)
 
       let assistantMsg: AIMessage
