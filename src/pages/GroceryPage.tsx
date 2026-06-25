@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ShoppingCart, Trash2, CheckSquare, Square, X, Plus, RefreshCw, Mic, GripVertical } from 'lucide-react'
+import { ShoppingCart, Trash2, CheckSquare, Square, X, Plus, RefreshCw, Mic, GripVertical, Link2, Upload, BookOpen, ChefHat, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../utils/cn'
 import { useGroceryList, GROCERY_CATEGORIES, type GroceryItem } from '../hooks/useGroceryList'
@@ -61,6 +61,43 @@ type HistoricalGroceryEvent = {
   deleted_at: string | null
 }
 
+type RecipeDraftIngredient = {
+  raw_text: string
+  name: string | null
+  quantity: string | null
+  unit: string | null
+  optional: boolean
+}
+
+type RecipeDraftStep = {
+  step_number: number
+  instruction: string
+}
+
+type RecipeDraft = {
+  name: string
+  servings: string | null
+  cook_time: string | null
+  confidence: number
+  source_type: 'url' | 'image' | 'pdf'
+  source_url: string | null
+  ingredients: RecipeDraftIngredient[]
+  steps: RecipeDraftStep[]
+}
+
+type RecipePreset = {
+  id: string
+  name: string
+  source_type: 'url' | 'image' | 'pdf' | 'manual'
+  source_url: string | null
+  servings: string | null
+  cook_time: string | null
+  last_used_at: string | null
+  created_at: string
+  ingredients: RecipeDraftIngredient[]
+  steps: RecipeDraftStep[]
+}
+
 function detectCategory(name: string): string {
   return inferCategoryFromName(name)
 }
@@ -75,6 +112,16 @@ function chunkArray<T>(items: T[], size: number): T[][] {
     chunks.push(items.slice(index, index + size))
   }
   return chunks
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  const chunkSize = 0x8000
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+  }
+  return btoa(binary)
 }
 
 function compareNullableText(a: string | null, b: string | null): number {
@@ -260,8 +307,99 @@ export default function GroceryPage() {
     refetchInterval: 10 * 60_000,
   })
 
+  const { data: recipeLibrary = [], refetch: refetchRecipeLibrary } = useQuery({
+    queryKey: ['recipe-library'],
+    queryFn: async () => {
+      const { data: recipes, error: recipesError } = await supabase
+        .from('recipes')
+        .select('id,name,source_type,source_url,servings,cook_time,last_used_at,created_at')
+        .order('last_used_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .limit(100)
+      if (recipesError) throw recipesError
+      const recipeRows = (recipes ?? []) as Array<{
+        id: string
+        name: string
+        source_type: 'url' | 'image' | 'pdf' | 'manual'
+        source_url: string | null
+        servings: string | null
+        cook_time: string | null
+        last_used_at: string | null
+        created_at: string
+      }>
+      if (recipeRows.length === 0) return [] as RecipePreset[]
+
+      const ids = recipeRows.map((row) => row.id)
+      const [{ data: ingredientRows, error: ingredientsError }, { data: stepRows, error: stepsError }] = await Promise.all([
+        supabase
+          .from('recipe_ingredients')
+          .select('recipe_id,raw_text,name,quantity,unit,optional,sort_order')
+          .in('recipe_id', ids)
+          .order('sort_order', { ascending: true }),
+        supabase
+          .from('recipe_steps')
+          .select('recipe_id,step_number,instruction')
+          .in('recipe_id', ids)
+          .order('step_number', { ascending: true }),
+      ])
+      if (ingredientsError) throw ingredientsError
+      if (stepsError) throw stepsError
+
+      const ingredientsByRecipe = new Map<string, RecipeDraftIngredient[]>()
+      for (const row of (ingredientRows ?? []) as Array<{
+        recipe_id: string
+        raw_text: string
+        name: string | null
+        quantity: string | null
+        unit: string | null
+        optional: boolean
+        sort_order: number
+      }>) {
+        const bucket = ingredientsByRecipe.get(row.recipe_id) ?? []
+        bucket.push({
+          raw_text: row.raw_text,
+          name: row.name,
+          quantity: row.quantity,
+          unit: row.unit,
+          optional: Boolean(row.optional),
+        })
+        ingredientsByRecipe.set(row.recipe_id, bucket)
+      }
+
+      const stepsByRecipe = new Map<string, RecipeDraftStep[]>()
+      for (const row of (stepRows ?? []) as Array<{
+        recipe_id: string
+        step_number: number
+        instruction: string
+      }>) {
+        const bucket = stepsByRecipe.get(row.recipe_id) ?? []
+        bucket.push({
+          step_number: Number(row.step_number ?? bucket.length + 1),
+          instruction: String(row.instruction ?? '').trim(),
+        })
+        stepsByRecipe.set(row.recipe_id, bucket)
+      }
+
+      return recipeRows.map((row) => ({
+        ...row,
+        ingredients: ingredientsByRecipe.get(row.id) ?? [],
+        steps: stepsByRecipe.get(row.id) ?? [],
+      }))
+    },
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000,
+  })
+
   const [inputValue, setInputValue] = useState('')
   const [isAddPanelOpen, setIsAddPanelOpen] = useState(false)
+  const [addPanelMode, setAddPanelMode] = useState<'quick' | 'recipe' | 'library'>('quick')
+  const [recipeUrlInput, setRecipeUrlInput] = useState('')
+  const [recipeImporting, setRecipeImporting] = useState(false)
+  const [recipeImportError, setRecipeImportError] = useState<string | null>(null)
+  const [parsedRecipe, setParsedRecipe] = useState<RecipeDraft | null>(null)
+  const [selectedRecipeIngredientIndexes, setSelectedRecipeIngredientIndexes] = useState<Set<number>>(new Set())
+  const [savingRecipe, setSavingRecipe] = useState(false)
+  const [cookView, setCookView] = useState<{ recipe: RecipePreset; stepIndex: number } | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => localStorage.getItem(SYNC_LAST_AT_KEY))
@@ -280,6 +418,7 @@ export default function GroceryPage() {
   const [spotlightedItemId, setSpotlightedItemId] = useState<string | null>(null)
   const [analysisNow, setAnalysisNow] = useState(() => Date.now())
   const inputRef = useRef<HTMLInputElement>(null)
+  const recipeFileInputRef = useRef<HTMLInputElement>(null)
   const syncInFlightRef = useRef(false)
   const dismissBatchTimerRef = useRef<number | null>(null)
   const dismissExitTimerRef = useRef<number | null>(null)
@@ -473,6 +612,206 @@ export default function GroceryPage() {
       handleAddItem()
     }
   }
+
+  const importRecipeFromSource = useCallback(async (payload: {
+    sourceType: 'url' | 'image' | 'pdf'
+    sourceUrl?: string
+    fileBase64?: string
+    mimeType?: string
+    fallbackName?: string
+  }) => {
+    setRecipeImportError(null)
+    setRecipeImporting(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('extract-recipe-content', {
+        body: {
+          source_type: payload.sourceType,
+          source_url: payload.sourceUrl ?? null,
+          file_base64: payload.fileBase64 ?? null,
+          mime_type: payload.mimeType ?? null,
+          fallback_name: payload.fallbackName ?? 'Imported recipe',
+        },
+      })
+      if (error) throw error
+
+      const recipeRaw = data?.recipe as Record<string, unknown> | undefined
+      if (!recipeRaw) throw new Error('No recipe extracted')
+
+      const ingredientsRaw = Array.isArray(recipeRaw.ingredients) ? recipeRaw.ingredients : []
+      const stepsRaw = Array.isArray(recipeRaw.steps) ? recipeRaw.steps : []
+      const recipe: RecipeDraft = {
+        name: String(recipeRaw.name ?? 'Imported recipe').trim() || 'Imported recipe',
+        servings: typeof recipeRaw.servings === 'string' ? recipeRaw.servings : null,
+        cook_time: typeof recipeRaw.cook_time === 'string' ? recipeRaw.cook_time : null,
+        confidence: Math.max(0, Math.min(1, Number(recipeRaw.confidence ?? 0.7) || 0.7)),
+        source_type: payload.sourceType,
+        source_url: payload.sourceType === 'url' ? (payload.sourceUrl ?? null) : null,
+        ingredients: ingredientsRaw
+          .map((row) => {
+            if (!row || typeof row !== 'object') return null
+            const item = row as Record<string, unknown>
+            const rawText = String(item.raw_text ?? '').trim()
+            if (!rawText) return null
+            return {
+              raw_text: rawText,
+              name: typeof item.name === 'string' ? item.name : null,
+              quantity: typeof item.quantity === 'string' ? item.quantity : null,
+              unit: typeof item.unit === 'string' ? item.unit : null,
+              optional: Boolean(item.optional),
+            } as RecipeDraftIngredient
+          })
+          .filter((row): row is RecipeDraftIngredient => row !== null),
+        steps: stepsRaw
+          .map((row, index) => {
+            if (!row || typeof row !== 'object') return null
+            const item = row as Record<string, unknown>
+            const instruction = String(item.instruction ?? '').trim()
+            if (!instruction) return null
+            return {
+              step_number: Number(item.step_number ?? index + 1),
+              instruction,
+            } as RecipeDraftStep
+          })
+          .filter((row): row is RecipeDraftStep => row !== null)
+          .sort((a, b) => a.step_number - b.step_number)
+          .map((step, index) => ({ ...step, step_number: index + 1 })),
+      }
+
+      if (recipe.ingredients.length === 0) {
+        throw new Error('No ingredients found in this recipe')
+      }
+      setParsedRecipe(recipe)
+      setSelectedRecipeIngredientIndexes(new Set(recipe.ingredients.map((_, index) => index)))
+      setAddPanelMode('recipe')
+      setIsAddPanelOpen(true)
+    } catch (err) {
+      setRecipeImportError(err instanceof Error ? err.message : 'Recipe import failed')
+    } finally {
+      setRecipeImporting(false)
+    }
+  }, [])
+
+  const handleRecipeUrlImport = useCallback(async () => {
+    const url = recipeUrlInput.trim()
+    if (!url) {
+      setRecipeImportError('Paste a recipe URL first')
+      return
+    }
+    await importRecipeFromSource({ sourceType: 'url', sourceUrl: url, fallbackName: 'Web recipe' })
+  }, [importRecipeFromSource, recipeUrlInput])
+
+  const handleRecipeFilePick = useCallback(async (file: File | null) => {
+    if (!file) return
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    const isImage = file.type.startsWith('image/')
+    if (!isPdf && !isImage) {
+      setRecipeImportError('Please upload a recipe photo or PDF')
+      return
+    }
+    const buffer = await file.arrayBuffer()
+    const base64 = arrayBufferToBase64(buffer)
+    await importRecipeFromSource({
+      sourceType: isPdf ? 'pdf' : 'image',
+      fileBase64: base64,
+      mimeType: file.type || (isPdf ? 'application/pdf' : 'image/jpeg'),
+      fallbackName: file.name.replace(/\.[^.]+$/, ''),
+    })
+  }, [importRecipeFromSource])
+
+  const addSelectedRecipeIngredientsToCart = useCallback((recipe: RecipeDraft) => {
+    recipe.ingredients.forEach((ingredient, index) => {
+      if (!selectedRecipeIngredientIndexes.has(index)) return
+      const name = (ingredient.name || ingredient.raw_text).trim()
+      if (!name) return
+      addItemByName(name, { spotlightOnDuplicate: false, clearInput: false })
+    })
+  }, [addItemByName, selectedRecipeIngredientIndexes])
+
+  const saveRecipePreset = useCallback(async (options: { addSelectedToCart: boolean }) => {
+    if (!parsedRecipe) return
+    setSavingRecipe(true)
+    setRecipeImportError(null)
+    try {
+      const { data: recipeRow, error: recipeError } = await supabase
+        .from('recipes')
+        .insert({
+          name: parsedRecipe.name,
+          source_type: parsedRecipe.source_type,
+          source_url: parsedRecipe.source_url,
+          servings: parsedRecipe.servings,
+          cook_time: parsedRecipe.cook_time,
+          instructions_text: parsedRecipe.steps.map((step) => `${step.step_number}. ${step.instruction}`).join('\n'),
+          last_used_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single()
+      if (recipeError) throw recipeError
+
+      const recipeId = String(recipeRow.id)
+      const ingredientRows = parsedRecipe.ingredients.map((ingredient, index) => ({
+        recipe_id: recipeId,
+        raw_text: ingredient.raw_text,
+        name: ingredient.name,
+        quantity: ingredient.quantity,
+        unit: ingredient.unit,
+        optional: ingredient.optional,
+        sort_order: index,
+      }))
+      if (ingredientRows.length > 0) {
+        const { error: ingredientError } = await supabase.from('recipe_ingredients').insert(ingredientRows)
+        if (ingredientError) throw ingredientError
+      }
+
+      const stepRows = parsedRecipe.steps.map((step, index) => ({
+        recipe_id: recipeId,
+        step_number: index + 1,
+        instruction: step.instruction,
+      }))
+      if (stepRows.length > 0) {
+        const { error: stepError } = await supabase.from('recipe_steps').insert(stepRows)
+        if (stepError) throw stepError
+      }
+
+      if (options.addSelectedToCart) {
+        addSelectedRecipeIngredientsToCart(parsedRecipe)
+      }
+
+      await refetchRecipeLibrary()
+      setParsedRecipe(null)
+      setSelectedRecipeIngredientIndexes(new Set())
+      setAddPanelMode('library')
+    } catch (err) {
+      setRecipeImportError(err instanceof Error ? err.message : 'Could not save recipe')
+    } finally {
+      setSavingRecipe(false)
+    }
+  }, [addSelectedRecipeIngredientsToCart, parsedRecipe, refetchRecipeLibrary])
+
+  const openRecipeForCookMode = useCallback(async (recipe: RecipePreset) => {
+    setCookView({ recipe, stepIndex: 0 })
+    await supabase
+      .from('recipes')
+      .update({ last_used_at: new Date().toISOString() })
+      .eq('id', recipe.id)
+    void refetchRecipeLibrary()
+  }, [refetchRecipeLibrary])
+
+  const loadRecipeIntoChecklist = useCallback((recipe: RecipePreset) => {
+    const draft: RecipeDraft = {
+      name: recipe.name,
+      servings: recipe.servings,
+      cook_time: recipe.cook_time,
+      confidence: 0.95,
+      source_type: recipe.source_type === 'manual' ? 'url' : recipe.source_type,
+      source_url: recipe.source_url,
+      ingredients: recipe.ingredients,
+      steps: recipe.steps,
+    }
+    setParsedRecipe(draft)
+    setSelectedRecipeIngredientIndexes(new Set(draft.ingredients.map((_, index) => index)))
+    setAddPanelMode('recipe')
+    setIsAddPanelOpen(true)
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -1099,7 +1438,7 @@ export default function GroceryPage() {
         </div>
       </div>
       {isAddPanelOpen && (
-        <div className="fixed right-24 bottom-[calc(var(--spacing-nav-height)+1rem+var(--vk-height,0px)+var(--vk-gap,0px))] lg:bottom-[calc(1.5rem+var(--vk-height,0px)+var(--vk-gap,0px))] z-[55] w-[min(34rem,calc(100vw-7rem))] max-h-[min(24rem,55vh)] overflow-y-auto rounded-2xl border border-casa-border bg-casa-surface shadow-modal p-3">
+        <div className="fixed right-24 bottom-[calc(var(--spacing-nav-height)+1rem+var(--vk-height,0px)+var(--vk-gap,0px))] lg:bottom-[calc(1.5rem+var(--vk-height,0px)+var(--vk-gap,0px))] z-[55] w-[min(42rem,calc(100vw-7rem))] max-h-[min(36rem,74vh)] overflow-y-auto rounded-2xl border border-casa-border bg-casa-surface shadow-modal p-3">
           <div className="flex items-center justify-between gap-2 mb-2">
             <p className="text-body-sm font-semibold text-casa-navy">Add grocery items</p>
             <button
@@ -1111,6 +1450,49 @@ export default function GroceryPage() {
               <X size={14} />
             </button>
           </div>
+          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setAddPanelMode('quick')}
+              className={cn(
+                'px-2.5 py-1 rounded-pill border text-[11px] transition-colors',
+                addPanelMode === 'quick'
+                  ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
+                  : 'border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main',
+              )}
+            >
+              Quick add
+            </button>
+            <button
+              type="button"
+              onClick={() => setAddPanelMode('recipe')}
+              className={cn(
+                'px-2.5 py-1 rounded-pill border text-[11px] transition-colors inline-flex items-center gap-1',
+                addPanelMode === 'recipe'
+                  ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
+                  : 'border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main',
+              )}
+            >
+              <Upload size={12} />
+              Recipe import
+            </button>
+            <button
+              type="button"
+              onClick={() => setAddPanelMode('library')}
+              className={cn(
+                'px-2.5 py-1 rounded-pill border text-[11px] transition-colors inline-flex items-center gap-1',
+                addPanelMode === 'library'
+                  ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
+                  : 'border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main',
+              )}
+            >
+              <BookOpen size={12} />
+              Saved recipes
+            </button>
+          </div>
+
+          {addPanelMode === 'quick' && (
+            <>
           <div className="flex items-center gap-2 bg-casa-bg rounded-2xl border border-casa-border px-4 py-3 min-h-14 shadow-sm">
             <Plus size={18} className="text-casa-muted flex-shrink-0" />
             <input
@@ -1181,6 +1563,188 @@ export default function GroceryPage() {
           <p className="mt-1 text-[11px] text-casa-muted">
             Tip: use the Voice add button at the top, then say “add milk, eggs, and bananas.”
           </p>
+            </>
+          )}
+
+          {addPanelMode === 'recipe' && (
+            <div>
+              <div className="rounded-2xl border border-casa-border bg-casa-bg p-3">
+                <p className="text-[11px] text-casa-muted mb-1">Paste a public recipe URL</p>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-1 bg-casa-surface rounded-button border border-casa-border px-3 py-2">
+                    <Link2 size={14} className="text-casa-muted" />
+                    <input
+                      type="url"
+                      value={recipeUrlInput}
+                      onChange={(event) => setRecipeUrlInput(event.target.value)}
+                      placeholder="https://..."
+                      className="flex-1 bg-transparent text-body-sm text-casa-text placeholder:text-casa-muted outline-none"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleRecipeUrlImport()}
+                    disabled={recipeImporting}
+                    className="px-3 py-2 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-main transition-colors disabled:opacity-60"
+                  >
+                    Import URL
+                  </button>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => recipeFileInputRef.current?.click()}
+                    disabled={recipeImporting}
+                    className="px-3 py-1.5 rounded-pill border border-casa-border text-[11px] text-casa-muted hover:bg-casa-surface transition-colors disabled:opacity-60 inline-flex items-center gap-1"
+                  >
+                    <Upload size={12} />
+                    Upload photo or PDF
+                  </button>
+                  <input
+                    ref={recipeFileInputRef}
+                    type="file"
+                    accept="image/*,.pdf,application/pdf"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null
+                      event.currentTarget.value = ''
+                      void handleRecipeFilePick(file)
+                    }}
+                  />
+                </div>
+              </div>
+
+              {recipeImporting && (
+                <p className="mt-2 text-[11px] text-casa-muted animate-breathe">Extracting recipe…</p>
+              )}
+              {recipeImportError && (
+                <p className="mt-2 text-[11px] text-casa-error">{recipeImportError}</p>
+              )}
+
+              {parsedRecipe && (
+                <div className="mt-2 rounded-2xl border border-casa-border bg-casa-surface p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-body-sm font-semibold text-casa-navy">{parsedRecipe.name}</p>
+                      <p className="text-[11px] text-casa-muted">
+                        {parsedRecipe.ingredients.length} ingredients · {parsedRecipe.steps.length} steps · {Math.round(parsedRecipe.confidence * 100)}% confidence
+                        {parsedRecipe.servings ? ` · ${parsedRecipe.servings}` : ''}
+                        {parsedRecipe.cook_time ? ` · ${parsedRecipe.cook_time}` : ''}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                    <div className="rounded-xl border border-casa-border bg-casa-bg p-2">
+                      <p className="text-[11px] text-casa-muted mb-1">Ingredients (uncheck what you already have)</p>
+                      <div className="max-h-44 overflow-y-auto space-y-1 pr-1">
+                        {parsedRecipe.ingredients.map((ingredient, index) => {
+                          const checked = selectedRecipeIngredientIndexes.has(index)
+                          const displayName = ingredient.name || ingredient.raw_text
+                          const qtyPrefix = [ingredient.quantity, ingredient.unit].filter(Boolean).join(' ').trim()
+                          return (
+                            <label key={`${ingredient.raw_text}-${index}`} className="flex items-start gap-2 text-body-sm text-casa-text">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => {
+                                  setSelectedRecipeIngredientIndexes((current) => {
+                                    const next = new Set(current)
+                                    if (next.has(index)) next.delete(index)
+                                    else next.add(index)
+                                    return next
+                                  })
+                                }}
+                              />
+                              <span>{qtyPrefix ? `${qtyPrefix} ` : ''}{displayName}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-casa-border bg-casa-bg p-2">
+                      <p className="text-[11px] text-casa-muted mb-1">Directions</p>
+                      <div className="max-h-44 overflow-y-auto space-y-1 pr-1">
+                        {parsedRecipe.steps.map((step) => (
+                          <p key={`${step.step_number}-${step.instruction}`} className="text-[11px] text-casa-text">
+                            <span className="font-semibold mr-1">{step.step_number}.</span>
+                            {step.instruction}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => addSelectedRecipeIngredientsToCart(parsedRecipe)}
+                      className="px-3 py-1.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-main transition-colors"
+                    >
+                      Add selected ingredients
+                    </button>
+                    <button
+                      type="button"
+                      disabled={savingRecipe}
+                      onClick={() => void saveRecipePreset({ addSelectedToCart: false })}
+                      className="px-3 py-1.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-main transition-colors disabled:opacity-60"
+                    >
+                      Save recipe
+                    </button>
+                    <button
+                      type="button"
+                      disabled={savingRecipe}
+                      onClick={() => void saveRecipePreset({ addSelectedToCart: true })}
+                      className="px-3 py-1.5 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 transition-colors disabled:opacity-60"
+                    >
+                      Save + Add selected
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {addPanelMode === 'library' && (
+            <div className="space-y-2">
+              {recipeLibrary.length === 0 ? (
+                <p className="text-[11px] text-casa-muted">No saved recipes yet. Import one from URL, photo, or PDF.</p>
+              ) : (
+                recipeLibrary.slice(0, 24).map((recipe) => (
+                  <div key={recipe.id} className="rounded-2xl border border-casa-border bg-casa-bg px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-body-sm font-semibold text-casa-navy">{recipe.name}</p>
+                        <p className="text-[11px] text-casa-muted">
+                          {recipe.ingredients.length} ingredients · {recipe.steps.length} steps
+                          {recipe.cook_time ? ` · ${recipe.cook_time}` : ''}
+                          {recipe.last_used_at ? ` · used ${new Date(recipe.last_used_at).toLocaleDateString()}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => loadRecipeIntoChecklist(recipe)}
+                          className="px-2.5 py-1 rounded-pill border border-casa-border text-[11px] text-casa-muted hover:bg-casa-surface transition-colors"
+                        >
+                          Add again
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void openRecipeForCookMode(recipe)}
+                          className="px-2.5 py-1 rounded-pill border border-casa-gold/40 bg-casa-gold/10 text-[11px] font-medium text-casa-navy hover:bg-casa-gold/15 transition-colors inline-flex items-center gap-1"
+                        >
+                          <ChefHat size={12} />
+                          Cook mode
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
       )}
       <button
@@ -1192,6 +1756,69 @@ export default function GroceryPage() {
       >
         {isAddPanelOpen ? <X size={22} /> : <Plus size={24} />}
       </button>
+      {cookView && (
+        <div className="fixed inset-0 z-[70] bg-casa-navy/30">
+          <div className="absolute right-4 top-4 bottom-4 w-[min(38rem,calc(100vw-2rem))] rounded-2xl border border-casa-border bg-casa-surface shadow-modal flex flex-col">
+            <div className="px-4 py-3 border-b border-casa-divider flex items-center justify-between gap-2">
+              <div>
+                <p className="text-body font-semibold text-casa-navy">{cookView.recipe.name}</p>
+                <p className="text-[11px] text-casa-muted">
+                  Step {cookView.stepIndex + 1} of {Math.max(1, cookView.recipe.steps.length)}
+                  {cookView.recipe.cook_time ? ` · ${cookView.recipe.cook_time}` : ''}
+                  {cookView.recipe.servings ? ` · ${cookView.recipe.servings}` : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCookView(null)}
+                className="h-9 w-9 rounded-full border border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main transition-colors flex items-center justify-center"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
+              <div className="rounded-2xl border border-casa-border bg-casa-bg p-4">
+                <p className="text-body-sm text-casa-navy leading-relaxed">
+                  {cookView.recipe.steps[cookView.stepIndex]?.instruction ?? 'No instruction available.'}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {cookView.recipe.ingredients.map((ingredient, index) => (
+                  <div key={`${cookView.recipe.id}-${index}`} className="rounded-xl border border-casa-border bg-casa-bg px-2 py-1.5">
+                    <p className="text-[11px] text-casa-text">
+                      {[ingredient.quantity, ingredient.unit].filter(Boolean).join(' ')} {(ingredient.name || ingredient.raw_text).trim()}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="px-4 py-3 border-t border-casa-divider flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setCookView((current) => current
+                  ? { ...current, stepIndex: Math.max(0, current.stepIndex - 1) }
+                  : current)}
+                disabled={cookView.stepIndex <= 0}
+                className="px-3 py-2 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-main transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+              >
+                <ChevronLeft size={14} />
+                Previous
+              </button>
+              <button
+                type="button"
+                onClick={() => setCookView((current) => current
+                  ? { ...current, stepIndex: Math.min(current.recipe.steps.length - 1, current.stepIndex + 1) }
+                  : current)}
+                disabled={cookView.stepIndex >= cookView.recipe.steps.length - 1}
+                className="px-3 py-2 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+              >
+                Next
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {dragState && (
         <div
           className="fixed z-[90] pointer-events-none px-3 py-2 rounded-xl bg-casa-navy text-white text-body-sm shadow-modal"
