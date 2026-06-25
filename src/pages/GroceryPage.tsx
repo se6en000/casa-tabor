@@ -36,6 +36,22 @@ const STORE_SECTION_ORDER: Record<string, number> = {
   'Pet': 130,
   'Other': 140,
 }
+const CATEGORY_ACCENT_BY_KEY: Record<string, string> = {
+  produce: 'var(--color-family-liv)',
+  dairy: 'var(--color-family-emme)',
+  meat: 'var(--color-family-kelly)',
+  bakery: 'var(--color-family-owen)',
+  frozen: 'var(--color-family-jake)',
+  pantry: 'var(--color-family-kelly)',
+  beverages: 'var(--color-family-jake)',
+  snacks: 'var(--color-family-emme)',
+  deli: 'var(--color-family-owen)',
+  household: 'var(--color-family-jake)',
+  'personal-care': 'var(--color-family-emme)',
+  baby: 'var(--color-family-liv)',
+  pet: 'var(--color-family-kelly)',
+  other: 'var(--color-casa-gold)',
+}
 
 type HistoricalGroceryEvent = {
   name: string
@@ -144,7 +160,7 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <span className={cn(
-              'text-body text-casa-text',
+              'text-body font-medium text-casa-text',
               visualChecked && 'line-through text-casa-muted'
             )}>
               {item.name}
@@ -871,12 +887,22 @@ export default function GroceryPage() {
                     label: sectionData.section,
                     items: sectionData.items,
                     dropKey: null as string | null,
+                    accentColor: 'var(--color-casa-gold)',
+                    reviewCount: sectionData.items.filter((item) =>
+                      typeof item.enhancement_confidence === 'number' &&
+                      item.enhancement_confidence < LOW_CONFIDENCE_REVIEW_THRESHOLD
+                    ).length,
                   }))
                   : activeItemsByCategory.map((cat) => ({
                     key: cat.key,
                     label: cat.label,
                     items: cat.items,
                     dropKey: cat.key,
+                    accentColor: CATEGORY_ACCENT_BY_KEY[cat.key] ?? 'var(--color-casa-gold)',
+                    reviewCount: cat.items.filter((item) =>
+                      typeof item.enhancement_confidence === 'number' &&
+                      item.enhancement_confidence < LOW_CONFIDENCE_REVIEW_THRESHOLD
+                    ).length,
                   }))
                 ).map((section) => (
                   <div
@@ -888,11 +914,27 @@ export default function GroceryPage() {
                     )}
                   >
                     <div className="px-1 pb-1">
-                      <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider">
-                        {section.label}
-                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="inline-flex items-center gap-1.5 text-caption font-semibold text-casa-muted uppercase tracking-wider">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: section.accentColor }} />
+                          {section.label}
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <span className="rounded-pill border border-casa-border bg-casa-main px-2 py-0.5 text-[10px] font-semibold text-casa-muted">
+                            {section.items.length} item{section.items.length === 1 ? '' : 's'}
+                          </span>
+                          {section.reviewCount > 0 && (
+                            <span className="rounded-pill border border-casa-border bg-casa-surface px-2 py-0.5 text-[10px] font-semibold text-casa-muted">
+                              {section.reviewCount} review
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="bg-casa-surface rounded-2xl border border-casa-border divide-y divide-casa-divider overflow-hidden">
+                    <div
+                      className="bg-casa-surface rounded-2xl border border-casa-border border-l-2 divide-y divide-casa-divider overflow-hidden"
+                      style={{ borderLeftColor: section.accentColor }}
+                    >
                       {section.items.map((item) => (
                         <div key={item.id} id={`grocery-item-${item.id}`}>
                           <ItemRow
