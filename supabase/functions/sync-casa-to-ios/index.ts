@@ -31,9 +31,11 @@ Deno.serve(async (req) => {
     const { since, limit = 200 } = await req.json().catch(() => ({}))
     const effectiveLimit = Math.max(1, Math.min(Number(limit) || 200, 500))
 
+    // Preserve original timestamp precision (microseconds) to avoid re-reading
+    // the same rows when cursor precision exceeds JS Date milliseconds.
     const parsedSince =
       typeof since === 'string' && !Number.isNaN(Date.parse(since))
-        ? new Date(since).toISOString()
+        ? since
         : null
 
     let query = sb

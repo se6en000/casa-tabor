@@ -40,3 +40,8 @@ launchctl list | grep -E 'com\.casa\.sync\.(shopping|ios-to-casa)'
 - If `com.casa.sync.shopping` shows non-zero exit / repeated AppleScript `-1728` errors (e.g. “Can’t get item N of every reminder…”), Casa→iOS sync is broken even if edge functions are healthy.
 - In this state, Grocery page may show sync deltas, but Shopping list will not update reliably.
 
+## Critical cursor precision pitfall (sync-casa-to-ios)
+
+- Do **not** coerce the incoming `since` cursor through `new Date(...).toISOString()` in `sync-casa-to-ios`; this truncates microseconds to milliseconds.
+- Truncation can cause the same page to repeat forever (`deltas=limit` with unchanged `next_cursor`) and prevents catch-up.
+- Keep the original validated `since` string when applying `.gt('updated_at', since)`.
