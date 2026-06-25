@@ -883,10 +883,12 @@ export default function GroceryPage() {
                       section.dropKey && dragState && dragOverCategory === section.dropKey && 'ring-2 ring-casa-gold/60 bg-casa-gold/5'
                     )}
                   >
-                    <div className="px-1 pb-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="inline-flex items-center gap-1.5 text-body-sm font-semibold text-casa-muted">
-                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: section.accentColor }} />
+                    <div
+                      className="bg-casa-surface rounded-2xl border border-casa-border border-l-2 overflow-hidden"
+                      style={{ borderLeftColor: section.accentColor }}
+                    >
+                      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-casa-divider bg-casa-main/35">
+                        <p className="text-body-sm font-semibold text-casa-text">
                           {section.label}
                         </p>
                         <div className="flex items-center gap-1.5">
@@ -900,11 +902,7 @@ export default function GroceryPage() {
                           )}
                         </div>
                       </div>
-                    </div>
-                    <div
-                      className="bg-casa-surface rounded-2xl border border-casa-border border-l-2 divide-y divide-casa-divider overflow-hidden"
-                      style={{ borderLeftColor: section.accentColor }}
-                    >
+                      <div className="divide-y divide-casa-divider">
                       {section.items.map((item) => (
                         <div key={item.id} id={`grocery-item-${item.id}`}>
                           <ItemRow
@@ -934,6 +932,7 @@ export default function GroceryPage() {
                           />
                         </div>
                       ))}
+                      </div>
                     </div>
                   </div>
                 ))}
