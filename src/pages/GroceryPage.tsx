@@ -12,6 +12,7 @@ const AUTO_SYNC_INTERVAL_MS = 45_000
 const QUICK_ADD_TOUCH_ITEMS = ['Milk', 'Eggs', 'Bread', 'Bananas', 'Chicken', 'Coffee']
 const CHECKED_ITEM_DISMISS_MS = 1_500
 const CHECKED_ITEM_EXIT_ANIMATION_MS = 320
+const LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.82
 const STORE_SECTION_ORDER: Record<string, number> = {
   'Produce': 10,
   'Bakery': 20,
@@ -26,6 +27,10 @@ const STORE_SECTION_ORDER: Record<string, number> = {
 
 function detectCategory(name: string): string {
   return inferCategoryFromName(name)
+}
+
+function normalizeItemName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
 function compareNullableText(a: string | null, b: string | null): number {
@@ -54,18 +59,27 @@ function sortItemsForShopping(items: GroceryItem[]): GroceryItem[] {
   })
 }
 
-function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging = false, onMovePointerDown, onMovePointerMove, onMovePointerUp, onMovePointerCancel }: {
+function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging = false, isSpotlighted = false, isReviewing = false, onRequestReview, onChooseReviewCategory, onDismissReview, onMovePointerDown, onMovePointerMove, onMovePointerUp, onMovePointerCancel }: {
   item: GroceryItem
   onToggle: (id: string, checked: boolean) => void
   onDelete: (id: string) => void
   dismissPhase?: 'none' | 'queued' | 'exiting'
   isDragging?: boolean
+  isSpotlighted?: boolean
+  isReviewing?: boolean
+  onRequestReview?: (id: string) => void
+  onChooseReviewCategory?: (id: string, category: string) => void
+  onDismissReview?: () => void
   onMovePointerDown?: (e: React.PointerEvent<HTMLButtonElement>) => void
   onMovePointerMove?: (e: React.PointerEvent<HTMLButtonElement>) => void
   onMovePointerUp?: (e: React.PointerEvent<HTMLButtonElement>) => void
   onMovePointerCancel?: (e: React.PointerEvent<HTMLButtonElement>) => void
 }) {
   const visualChecked = item.checked || dismissPhase !== 'none'
+  const needsConfidenceReview =
+    !item.checked &&
+    typeof item.enhancement_confidence === 'number' &&
+    item.enhancement_confidence < LOW_CONFIDENCE_REVIEW_THRESHOLD
 
   return (
     <div className={cn(
@@ -74,6 +88,7 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
       dismissPhase === 'queued' && 'bg-casa-gold/5',
       dismissPhase === 'exiting' && 'opacity-0 translate-y-1 scale-[0.985] max-h-0 py-0',
       isDragging && 'opacity-30',
+      isSpotlighted && 'ring-2 ring-casa-gold/60 bg-casa-gold/10',
     )}>
       {onMovePointerDown && (
         <button
@@ -114,6 +129,46 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
             {[item.store_section, item.subcategory, item.brand].filter(Boolean).join(' · ')}
           </p>
         )}
+        {needsConfidenceReview && (
+          <div className="mt-1.5">
+            <button
+              type="button"
+              onClick={() => onRequestReview?.(item.id)}
+              className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 hover:bg-amber-100 transition-colors"
+            >
+              Review match ({Math.round((item.enhancement_confidence ?? 0) * 100)}%)
+            </button>
+          </div>
+        )}
+        {isReviewing && (
+          <div className="mt-2 rounded-xl border border-casa-border bg-casa-bg px-2.5 py-2">
+            <p className="text-[11px] text-casa-muted mb-1">Quick recategorize</p>
+            <div className="flex flex-wrap gap-1.5">
+              {GROCERY_CATEGORIES.map((category) => (
+                <button
+                  key={`${item.id}-${category.key}`}
+                  type="button"
+                  onClick={() => onChooseReviewCategory?.(item.id, category.key)}
+                  className={cn(
+                    'px-2 py-1 rounded-full border text-[11px] transition-colors',
+                    item.category === category.key
+                      ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
+                      : 'border-casa-border bg-casa-surface text-casa-muted hover:bg-casa-main'
+                  )}
+                >
+                  {category.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={onDismissReview}
+                className="px-2 py-1 rounded-full border border-casa-border text-[11px] text-casa-muted hover:bg-casa-main transition-colors"
+              >
+                Looks right
+              </button>
+            </div>
+          </div>
+        )}
         {item.notes && (
           <p className="text-caption text-casa-muted truncate mt-0.5">{item.notes}</p>
         )}
@@ -144,6 +199,7 @@ export default function GroceryPage() {
   } = useGroceryList()
 
   const [inputValue, setInputValue] = useState('')
+  const [viewMode, setViewMode] = useState<'category' | 'route'>('category')
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => localStorage.getItem(SYNC_LAST_AT_KEY))
@@ -158,6 +214,8 @@ export default function GroceryPage() {
     y: number
   } | null>(null)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
+  const [reviewingItemId, setReviewingItemId] = useState<string | null>(null)
+  const [spotlightedItemId, setSpotlightedItemId] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const syncInFlightRef = useRef(false)
   const dismissBatchTimerRef = useRef<number | null>(null)
@@ -166,9 +224,51 @@ export default function GroceryPage() {
   const [dismissingExitingIds, setDismissingExitingIds] = useState<Set<string>>(new Set())
   const dismissingIdsRef = useRef<Set<string>>(new Set())
 
+  const activeItems = items.filter((item) => !item.checked)
+
+  const findMergeSuggestion = useCallback((name: string) => {
+    const normalized = normalizeItemName(name)
+    if (!normalized) return null
+    const exact = activeItems.find((item) => normalizeItemName(item.name) === normalized)
+    if (exact) return exact
+    const fuzzy = activeItems.find((item) => {
+      const existing = normalizeItemName(item.name)
+      return existing.includes(normalized) || normalized.includes(existing)
+    })
+    return fuzzy ?? null
+  }, [activeItems])
+
+  const mergeSuggestion = findMergeSuggestion(inputValue)
+
+  const spotlightItem = useCallback((itemId: string) => {
+    setSpotlightedItemId(itemId)
+    const node = document.getElementById(`grocery-item-${itemId}`)
+    node?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    window.setTimeout(() => setSpotlightedItemId((current) => (current === itemId ? null : current)), 1600)
+  }, [])
+
+  const addItemByName = useCallback((name: string) => {
+    const trimmedName = name.trim()
+    if (!trimmedName || !defaultListId) return
+    const suggestion = findMergeSuggestion(trimmedName)
+    if (suggestion) {
+      spotlightItem(suggestion.id)
+      return
+    }
+    const category = detectCategory(trimmedName)
+    addItem.mutate({ list_id: defaultListId, name: trimmedName, quantity: null, unit: null, category, checked: false, notes: null })
+    setInputValue('')
+    inputRef.current?.focus()
+  }, [addItem, defaultListId, findMergeSuggestion, spotlightItem])
+
   const handleAddItem = () => {
     const name = inputValue.trim()
     if (!name || !defaultListId) return
+    const suggestion = findMergeSuggestion(name)
+    if (suggestion) {
+      spotlightItem(suggestion.id)
+      return
+    }
     const category = detectCategory(name)
     addItem.mutate({ list_id: defaultListId, name, quantity: null, unit: null, category, checked: false, notes: null })
     setInputValue('')
@@ -176,11 +276,7 @@ export default function GroceryPage() {
   }
 
   const handleQuickAdd = (name: string) => {
-    if (!defaultListId) return
-    const trimmed = name.trim()
-    if (!trimmed) return
-    const category = detectCategory(trimmed)
-    addItem.mutate({ list_id: defaultListId, name: trimmed, quantity: null, unit: null, category, checked: false, notes: null })
+    addItemByName(name)
   }
 
   const handleVoiceAdd = () => {
@@ -417,6 +513,19 @@ export default function GroceryPage() {
     items: sortItemsForShopping(items.filter(i => i.category === cat.key && i.checked && !visibleDismissIds.has(i.id))),
   })).filter(cat => cat.items.length > 0)
 
+  const routeSections = Object.entries(
+    items
+      .filter((item) => !item.checked || visibleDismissIds.has(item.id))
+      .reduce<Record<string, GroceryItem[]>>((acc, item) => {
+        const sectionLabel = item.store_section ?? GROCERY_CATEGORIES.find((cat) => cat.key === item.category)?.label ?? 'Other'
+        if (!acc[sectionLabel]) acc[sectionLabel] = []
+        acc[sectionLabel].push(item)
+        return acc
+      }, {})
+  )
+    .map(([section, sectionItems]) => ({ section, items: sortItemsForShopping(sectionItems) }))
+    .sort((a, b) => getStoreSectionRank(a.section) - getStoreSectionRank(b.section) || a.section.localeCompare(b.section))
+
   return (
     <div className="h-full min-h-0 bg-casa-bg flex flex-col overflow-hidden">
       {/* Header */}
@@ -439,6 +548,18 @@ export default function GroceryPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setViewMode((current) => current === 'category' ? 'route' : 'category')}
+              className={cn(
+                'px-3 py-1.5 rounded-button text-caption font-medium border transition-colors',
+                viewMode === 'route'
+                  ? 'border-casa-gold bg-casa-gold/10 text-casa-navy'
+                  : 'border-casa-border text-casa-muted hover:bg-casa-bg'
+              )}
+            >
+              {viewMode === 'route' ? 'Category view' : 'Route view'}
+            </button>
             <button
               type="button"
               onClick={handleVoiceAdd}
@@ -525,37 +646,59 @@ export default function GroceryPage() {
                 </div>
               ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-                {activeItemsByCategory.map(cat => (
+                {(viewMode === 'route'
+                  ? routeSections.map((sectionData) => ({
+                    key: sectionData.section,
+                    label: sectionData.section,
+                    items: sectionData.items,
+                    dropKey: null as string | null,
+                  }))
+                  : activeItemsByCategory.map((cat) => ({
+                    key: cat.key,
+                    label: cat.label,
+                    items: cat.items,
+                    dropKey: cat.key,
+                  }))
+                ).map((section) => (
                   <div
-                    key={cat.key}
-                    data-drop-category={cat.key}
+                    key={section.key}
+                    data-drop-category={section.dropKey ?? undefined}
                     className={cn(
                       'rounded-2xl',
-                      dragState && dragOverCategory === cat.key && 'ring-2 ring-casa-gold/60 bg-casa-gold/5'
+                      section.dropKey && dragState && dragOverCategory === section.dropKey && 'ring-2 ring-casa-gold/60 bg-casa-gold/5'
                     )}
                   >
                     <div className="px-1 pb-1">
-                  <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider">
-                    {cat.label}
-                  </p>
-                </div>
+                      <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider">
+                        {section.label}
+                      </p>
+                    </div>
                     <div className="bg-casa-surface rounded-2xl border border-casa-border divide-y divide-casa-divider overflow-hidden">
-                  {cat.items.map(item => (
-                    <ItemRow
-                      key={item.id}
-                      item={item}
-                      dismissPhase={dismissingExitingIds.has(item.id) ? 'exiting' : dismissingIds.has(item.id) ? 'queued' : 'none'}
-                      isDragging={dragState?.itemId === item.id}
-                      onToggle={handleToggle}
-                      onDelete={(id) => deleteItem.mutate(id)}
-                      onMovePointerDown={(e) => handleMovePointerDown(item, cat.key, e)}
-                      onMovePointerMove={handleMovePointerMove}
-                      onMovePointerUp={handleMovePointerUp}
-                      onMovePointerCancel={handleMovePointerCancel}
-                    />
-                  ))}
-                </div>
-              </div>
+                      {section.items.map((item) => (
+                        <div key={item.id} id={`grocery-item-${item.id}`}>
+                          <ItemRow
+                            item={item}
+                            dismissPhase={dismissingExitingIds.has(item.id) ? 'exiting' : dismissingIds.has(item.id) ? 'queued' : 'none'}
+                            isDragging={dragState?.itemId === item.id}
+                            isSpotlighted={spotlightedItemId === item.id}
+                            isReviewing={reviewingItemId === item.id}
+                            onRequestReview={setReviewingItemId}
+                            onChooseReviewCategory={(id, category) => {
+                              updateItemCategory.mutate({ id, category })
+                              setReviewingItemId(null)
+                            }}
+                            onDismissReview={() => setReviewingItemId(null)}
+                            onToggle={handleToggle}
+                            onDelete={(id) => deleteItem.mutate(id)}
+                            onMovePointerDown={(e) => handleMovePointerDown(item, item.category, e)}
+                            onMovePointerMove={handleMovePointerMove}
+                            onMovePointerUp={handleMovePointerUp}
+                            onMovePointerCancel={handleMovePointerCancel}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
               )}
@@ -580,12 +723,14 @@ export default function GroceryPage() {
                         </div>
                         <div className="bg-casa-surface rounded-2xl border border-casa-border divide-y divide-casa-divider overflow-hidden">
                           {cat.items.map(item => (
-                            <ItemRow
-                              key={item.id}
-                              item={item}
-                              onToggle={handleToggle}
-                              onDelete={(id) => deleteItem.mutate(id)}
-                            />
+                            <div key={item.id} id={`grocery-item-${item.id}`}>
+                              <ItemRow
+                                item={item}
+                                isSpotlighted={spotlightedItemId === item.id}
+                                onToggle={handleToggle}
+                                onDelete={(id) => deleteItem.mutate(id)}
+                              />
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -621,6 +766,36 @@ export default function GroceryPage() {
                     Add
                   </button>
                 </div>
+                {mergeSuggestion && (
+                  <div className="mt-2 rounded-2xl border border-casa-gold/40 bg-casa-gold/10 px-3 py-2">
+                    <p className="text-[11px] text-casa-navy">
+                      Similar item already on your list: <span className="font-semibold">{mergeSuggestion.name}</span>
+                    </p>
+                    <div className="mt-1.5 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => spotlightItem(mergeSuggestion.id)}
+                        className="px-2.5 py-1 rounded-full border border-casa-gold/60 bg-casa-surface text-[11px] font-medium text-casa-navy hover:bg-casa-bg transition-colors"
+                      >
+                        Use existing
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextName = inputValue.trim()
+                          if (!nextName || !defaultListId) return
+                          const category = detectCategory(nextName)
+                          addItem.mutate({ list_id: defaultListId, name: nextName, quantity: null, unit: null, category, checked: false, notes: null })
+                          setInputValue('')
+                          inputRef.current?.focus()
+                        }}
+                        className="px-2.5 py-1 rounded-full border border-casa-border text-[11px] text-casa-muted hover:bg-casa-bg transition-colors"
+                      >
+                        Add anyway
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
                   {QUICK_ADD_TOUCH_ITEMS.map(item => (
                     <button
