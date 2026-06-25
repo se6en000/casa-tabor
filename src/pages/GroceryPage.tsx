@@ -13,6 +13,11 @@ const QUICK_ADD_TOUCH_ITEMS = ['Milk', 'Eggs', 'Bread', 'Bananas', 'Chicken', 'C
 const CHECKED_ITEM_DISMISS_MS = 1_500
 const CHECKED_ITEM_EXIT_ANIMATION_MS = 320
 const LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.82
+const SMART_BUNDLES: Array<{ name: string; items: string[] }> = [
+  { name: 'Taco Night', items: ['Ground Beef', 'Tortillas', 'Cheddar Cheese', 'Salsa', 'Lettuce'] },
+  { name: 'Breakfast Restock', items: ['Eggs', 'Milk', 'Bread', 'Bananas', 'Coffee'] },
+  { name: 'Pasta Dinner', items: ['Pasta', 'Marinara Sauce', 'Parmesan', 'Garlic Bread'] },
+]
 const STORE_SECTION_ORDER: Record<string, number> = {
   'Produce': 10,
   'Bakery': 20,
@@ -239,6 +244,38 @@ export default function GroceryPage() {
   }, [activeItems])
 
   const mergeSuggestion = findMergeSuggestion(inputValue)
+  const activeNameSet = new Set(activeItems.map((item) => normalizeItemName(item.name)))
+  const completedItems = items.filter((item) => item.checked)
+
+  const predictiveMap = new Map<string, { name: string; count: number; lastAt: number }>()
+  for (const item of completedItems) {
+    const normalized = normalizeItemName(item.name)
+    if (!normalized || activeNameSet.has(normalized)) continue
+    const seen = predictiveMap.get(normalized)
+    const updatedAt = Date.parse(item.updated_at)
+    if (!seen) {
+      predictiveMap.set(normalized, {
+        name: item.name,
+        count: 1,
+        lastAt: Number.isNaN(updatedAt) ? 0 : updatedAt,
+      })
+      continue
+    }
+    seen.count += 1
+    if (!Number.isNaN(updatedAt) && updatedAt > seen.lastAt) {
+      seen.lastAt = updatedAt
+      seen.name = item.name
+    }
+  }
+
+  const predictiveSuggestions = Array.from(predictiveMap.values())
+    .filter((entry) => entry.count >= 2)
+    .sort((a, b) => b.count - a.count || b.lastAt - a.lastAt)
+    .slice(0, 6)
+
+  const smartRebuySuggestions = Array.from(predictiveMap.values())
+    .sort((a, b) => b.lastAt - a.lastAt)
+    .slice(0, 6)
 
   const spotlightItem = useCallback((itemId: string) => {
     setSpotlightedItemId(itemId)
@@ -247,37 +284,49 @@ export default function GroceryPage() {
     window.setTimeout(() => setSpotlightedItemId((current) => (current === itemId ? null : current)), 1600)
   }, [])
 
-  const addItemByName = useCallback((name: string) => {
+  const addItemByName = useCallback((name: string, options?: { allowDuplicate?: boolean; spotlightOnDuplicate?: boolean; clearInput?: boolean }) => {
     const trimmedName = name.trim()
     if (!trimmedName || !defaultListId) return
     const suggestion = findMergeSuggestion(trimmedName)
-    if (suggestion) {
-      spotlightItem(suggestion.id)
+    if (suggestion && !options?.allowDuplicate) {
+      if (options?.spotlightOnDuplicate !== false) {
+        spotlightItem(suggestion.id)
+      }
       return
     }
     const category = detectCategory(trimmedName)
     addItem.mutate({ list_id: defaultListId, name: trimmedName, quantity: null, unit: null, category, checked: false, notes: null })
-    setInputValue('')
-    inputRef.current?.focus()
+    if (options?.clearInput !== false) {
+      setInputValue('')
+      inputRef.current?.focus()
+    }
   }, [addItem, defaultListId, findMergeSuggestion, spotlightItem])
 
   const handleAddItem = () => {
-    const name = inputValue.trim()
-    if (!name || !defaultListId) return
-    const suggestion = findMergeSuggestion(name)
-    if (suggestion) {
-      spotlightItem(suggestion.id)
-      return
-    }
-    const category = detectCategory(name)
-    addItem.mutate({ list_id: defaultListId, name, quantity: null, unit: null, category, checked: false, notes: null })
-    setInputValue('')
-    inputRef.current?.focus()
+    addItemByName(inputValue, { spotlightOnDuplicate: true, clearInput: true })
   }
 
   const handleQuickAdd = (name: string) => {
-    addItemByName(name)
+    addItemByName(name, { spotlightOnDuplicate: true, clearInput: true })
   }
+
+  const handleAddBundle = useCallback((bundleItems: string[]) => {
+    let addedAny = false
+    for (const bundleItem of bundleItems) {
+      const trimmed = bundleItem.trim()
+      if (!trimmed) continue
+      const existing = findMergeSuggestion(trimmed)
+      if (existing) continue
+      addItemByName(trimmed, { spotlightOnDuplicate: false, clearInput: false })
+      addedAny = true
+    }
+    if (!addedAny) {
+      const firstExisting = bundleItems
+        .map((bundleItem) => findMergeSuggestion(bundleItem))
+        .find((value): value is GroceryItem => Boolean(value))
+      if (firstExisting) spotlightItem(firstExisting.id)
+    }
+  }, [addItemByName, findMergeSuggestion, spotlightItem])
 
   const handleVoiceAdd = () => {
     const prompt = inputValue.trim()
@@ -735,6 +784,65 @@ export default function GroceryPage() {
                         </div>
                       </div>
                       ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(predictiveSuggestions.length > 0 || smartRebuySuggestions.length > 0 || SMART_BUNDLES.length > 0) && (
+                <div className="mt-5 rounded-2xl border border-casa-border bg-casa-surface p-3">
+                  <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider mb-2">
+                    Smart picks
+                  </p>
+                  {predictiveSuggestions.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-[11px] text-casa-muted mb-1">Likely next adds</p>
+                      <div className="flex gap-2 overflow-x-auto pb-1">
+                        {predictiveSuggestions.map((item) => (
+                          <button
+                            key={`predictive-${item.name}`}
+                            type="button"
+                            onClick={() => addItemByName(item.name, { spotlightOnDuplicate: true, clearInput: true })}
+                            className="flex-shrink-0 min-h-8 px-3 rounded-full border border-casa-border bg-casa-bg text-[11px] text-casa-text hover:bg-casa-main transition-colors"
+                          >
+                            + {item.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {smartRebuySuggestions.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-[11px] text-casa-muted mb-1">Rebuy from your history</p>
+                      <div className="flex gap-2 overflow-x-auto pb-1">
+                        {smartRebuySuggestions.map((item) => (
+                          <button
+                            key={`rebuy-${item.name}`}
+                            type="button"
+                            onClick={() => addItemByName(item.name, { spotlightOnDuplicate: true, clearInput: true })}
+                            className="flex-shrink-0 min-h-8 px-3 rounded-full border border-casa-border bg-casa-bg text-[11px] text-casa-text hover:bg-casa-main transition-colors"
+                          >
+                            + {item.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {SMART_BUNDLES.length > 0 && (
+                    <div>
+                      <p className="text-[11px] text-casa-muted mb-1">1-tap bundles</p>
+                      <div className="flex flex-wrap gap-2">
+                        {SMART_BUNDLES.map((bundle) => (
+                          <button
+                            key={bundle.name}
+                            type="button"
+                            onClick={() => handleAddBundle(bundle.items)}
+                            className="min-h-8 px-3 rounded-full border border-casa-gold/50 bg-casa-gold/10 text-[11px] font-medium text-casa-navy hover:bg-casa-gold/15 transition-colors"
+                          >
+                            + {bundle.name} ({bundle.items.length})
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>

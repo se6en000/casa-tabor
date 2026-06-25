@@ -16,7 +16,9 @@ const CORS = {
 }
 
 type IncomingReminder = {
-  reminder_id: string
+  reminder_id?: string
+  id?: string
+  identifier?: string
   name?: string
   title?: string
   completed?: boolean
@@ -26,6 +28,9 @@ type IncomingReminder = {
   category?: string | null
   deleted?: boolean
   updated_at?: string | null
+  updatedAt?: string | null
+  last_modified_at?: string | null
+  lastModifiedAt?: string | null
 }
 
 type ExistingGroceryRow = {
@@ -41,6 +46,29 @@ function normalizeIso(iso?: string | null): string | null {
   if (!iso) return null
   const parsed = Date.parse(iso)
   return Number.isNaN(parsed) ? null : new Date(parsed).toISOString()
+}
+
+function getReminderId(reminder: IncomingReminder): string {
+  return String(
+    reminder.reminder_id ??
+    reminder.id ??
+    reminder.identifier ??
+    ''
+  ).trim()
+}
+
+function getReminderName(reminder: IncomingReminder): string {
+  return String(reminder.name ?? reminder.title ?? '').trim()
+}
+
+function getReminderUpdatedAt(reminder: IncomingReminder): string | null {
+  return normalizeIso(
+    reminder.updated_at ??
+    reminder.updatedAt ??
+    reminder.last_modified_at ??
+    reminder.lastModifiedAt ??
+    null
+  )
 }
 
 Deno.serve(async (req) => {
@@ -79,7 +107,7 @@ Deno.serve(async (req) => {
       listId = createdList.id
     }
 
-    const reminderIds = incoming.map((item) => item.reminder_id).filter(Boolean)
+    const reminderIds = incoming.map((item) => getReminderId(item)).filter(Boolean)
     const { data: existingRows, error: existingError } = await sb
       .from('grocery_items')
       .select('id, ios_reminder_id, ios_updated_at, deleted_at, name, checked')
@@ -111,11 +139,16 @@ Deno.serve(async (req) => {
     let updated = 0
     let deleted = 0
     let skippedStale = 0
+    let skippedMissingId = 0
 
     for (const reminder of incoming) {
-      if (!reminder.reminder_id) continue
-      const existing = existingByReminderId.get(reminder.reminder_id)
-      const incomingUpdatedAt = normalizeIso(reminder.updated_at) ?? new Date().toISOString()
+      const reminderId = getReminderId(reminder)
+      if (!reminderId) {
+        skippedMissingId += 1
+        continue
+      }
+      const existing = existingByReminderId.get(reminderId)
+      const incomingUpdatedAt = getReminderUpdatedAt(reminder) ?? new Date().toISOString()
       const existingUpdatedAt = normalizeIso(existing?.ios_updated_at ?? null)
 
       if (existingUpdatedAt && incomingUpdatedAt < existingUpdatedAt) {
@@ -123,7 +156,7 @@ Deno.serve(async (req) => {
         continue
       }
 
-      const incomingName = (reminder.name ?? reminder.title ?? '').trim()
+      const incomingName = getReminderName(reminder)
       const resolved = resolveGroceryFromCatalog(incomingName || 'Untitled', catalogRows, aisleMappings)
       const resolvedCategory = resolved.category
       const isDeleted = Boolean(reminder.deleted)
@@ -178,7 +211,7 @@ Deno.serve(async (req) => {
         const { error } = await sb
           .from('grocery_items')
           .update({
-            ios_reminder_id: reminder.reminder_id,
+            ios_reminder_id: reminderId,
             name: incomingName || 'Untitled',
             quantity: reminder.quantity ?? null,
             unit: reminder.unit ?? null,
@@ -197,9 +230,9 @@ Deno.serve(async (req) => {
           })
           .eq('id', candidate.id)
         if (error) throw new Error(error.message)
-        existingByReminderId.set(reminder.reminder_id, {
+        existingByReminderId.set(reminderId, {
           ...candidate,
-          ios_reminder_id: reminder.reminder_id,
+          ios_reminder_id: reminderId,
           ios_updated_at: incomingUpdatedAt,
           checked: Boolean(reminder.completed),
           name: incomingName || 'Untitled',
@@ -209,10 +242,9 @@ Deno.serve(async (req) => {
         continue
       }
 
-      const comparableName = normalizeComparableName(incomingName || 'Untitled')
       const { error } = await sb.from('grocery_items').insert({
         list_id: listId,
-        ios_reminder_id: reminder.reminder_id,
+        ios_reminder_id: reminderId,
         name: incomingName || 'Untitled',
         quantity: reminder.quantity ?? null,
         unit: reminder.unit ?? null,
@@ -237,7 +269,7 @@ Deno.serve(async (req) => {
       const { error: conflictUpdateError } = await sb
         .from('grocery_items')
         .update({
-          ios_reminder_id: reminder.reminder_id,
+          ios_reminder_id: reminderId,
           name: incomingName || 'Untitled',
           quantity: reminder.quantity ?? null,
           unit: reminder.unit ?? null,
@@ -269,6 +301,7 @@ Deno.serve(async (req) => {
         updated,
         deleted,
         skipped_stale: skippedStale,
+        skipped_missing_id: skippedMissingId,
         processed: incoming.length,
       }),
       { headers: { ...CORS, 'content-type': 'application/json' } }
