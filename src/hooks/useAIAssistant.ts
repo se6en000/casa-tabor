@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import type { EventWithDetails } from './useCalendarEvents'
 import type { FamilyMember } from '../types'
 import { useAISession, type AIMessage } from './useAISession'
+import { readVoiceRuntimeConfig, shouldEmitVoiceDebug } from '../lib/voiceRuntimeConfig'
 
 export type { AIMessage }
 
@@ -56,6 +57,8 @@ function dispatchGroceryUpdated() {
 
 function emitAssistantDebug(event: string, detail?: string) {
   if (typeof window === 'undefined') return
+  const config = readVoiceRuntimeConfig()
+  if (!shouldEmitVoiceDebug(config.debugLevel, 'minimal')) return
   window.dispatchEvent(new CustomEvent('casa:ai-debug', {
     detail: { event, detail },
   }))
@@ -77,11 +80,25 @@ function parseGroceryItemsFromText(text: string): { name: string }[] {
   const expanded = normalized
     // Handle rapid-fire STT bundles like "beef add chicken add fish"
     .replace(/\s+(?:and\s+)?add\s+/gi, ', ')
-  const parts = expanded
+    // Handle "plus" and "then" cadence in one-breath dictation.
+    .replace(/\s+(?:plus|then)\s+/gi, ', ')
+    // Normalize spoken punctuation words.
+    .replace(/\bcomma\b/gi, ', ')
+  const rawParts = expanded
     .split(/,| and /i)
     .map((part) => part.trim())
     .filter((part) => part.length > 0)
-  return parts.map((name) => ({ name }))
+  const dedup = new Map<string, string>()
+  for (const part of rawParts) {
+    const canonical = part
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (!canonical) continue
+    if (!dedup.has(canonical)) dedup.set(canonical, part)
+  }
+  return Array.from(dedup.values()).map((name) => ({ name }))
 }
 
 function buildGroceryAddResponseText(addedItems: string[], skippedExactMatches: string[]): string {
@@ -104,6 +121,8 @@ function buildContext(ctx: AssistantContext) {
   const offsetAbs = Math.abs(offsetMins)
   const utcOffset = `${offsetSign}${String(Math.floor(offsetAbs / 60)).padStart(2, '0')}:${String(offsetAbs % 60).padStart(2, '0')}`
 
+  const ambiguousTimeDefaultMeridiem = now.getHours() >= 6 && now.getHours() < 18 ? 'PM' : 'AM'
+
   return {
     page: ctx.page,
     currentDate: now.toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }),
@@ -120,6 +139,7 @@ function buildContext(ctx: AssistantContext) {
     })),
     family: ctx.family.map(f => ({ id: f.id, name: f.name })),
     homeCity: ctx.homeCity,
+    ambiguousTimeDefaultMeridiem,
     focusedEvent: ctx.focusedEvent ? {
       id: ctx.focusedEvent.id,
       title: ctx.focusedEvent.title,
@@ -181,9 +201,15 @@ export function useAIAssistant(ctx: AssistantContext) {
   // already accumulated (e.g. user spoke before sessionLoading resolved)
   useEffect(() => {
     if (!sessionLoading && session) {
-      setMessages(prev => prev.length === 0 ? session.messages : prev)
+      const timer = setTimeout(() => {
+        setMessages(prev => prev.length === 0 ? session.messages : prev)
+      }, 0)
+      return () => clearTimeout(timer)
     } else if (!sessionLoading && !session) {
-      setMessages(prev => prev.length === 0 ? [] : prev)
+      const timer = setTimeout(() => {
+        setMessages(prev => prev.length === 0 ? [] : prev)
+      }, 0)
+      return () => clearTimeout(timer)
     }
   }, [sessionLoading, session?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 

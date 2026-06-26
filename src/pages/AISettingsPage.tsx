@@ -1,9 +1,17 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { FlaskConical, CheckCircle, AlertCircle, Home, Mic } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
+import {
+  readVoiceRuntimeConfig,
+  VOICE_RUNTIME_CONFIG_KEY,
+  writeVoiceRuntimeConfig,
+  type VoiceDebugLevel,
+  type VoiceRuntimeConfig,
+} from '../lib/voiceRuntimeConfig'
+import { VOICE_AUDIT_LOG_KEY } from '../lib/voiceAudit'
 
 interface LLMConfig {
   provider: string
@@ -54,6 +62,8 @@ export default function AISettingsPage() {
   const [testMessage, setTestMessage] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [voiceTelemetry, setVoiceTelemetry] = useState<{ counts: Record<string, number>; updatedAt?: string }>({ counts: {} })
+  const [voiceRuntime, setVoiceRuntime] = useState<VoiceRuntimeConfig>(() => readVoiceRuntimeConfig())
+  const [auditEntries, setAuditEntries] = useState(0)
   const hydratedRef = useRef(false)
   const { settings: screensaverSettings, update: updateScreensaver } = useScreensaverSettings()
 
@@ -67,6 +77,25 @@ export default function AISettingsPage() {
       if (ciVal) setCustomInstructions(ciVal)
       setIsLoading(false)
     })
+  }, [])
+
+  useEffect(() => {
+    const refreshRuntime = () => {
+      setVoiceRuntime(readVoiceRuntimeConfig())
+      try {
+        const raw = localStorage.getItem(VOICE_AUDIT_LOG_KEY)
+        const entries = raw ? JSON.parse(raw) as unknown[] : []
+        setAuditEntries(Array.isArray(entries) ? entries.length : 0)
+      } catch {
+        setAuditEntries(0)
+      }
+    }
+    refreshRuntime()
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === VOICE_RUNTIME_CONFIG_KEY || e.key === VOICE_AUDIT_LOG_KEY) refreshRuntime()
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
   }, [])
 
   useEffect(() => {
@@ -108,7 +137,7 @@ export default function AISettingsPage() {
     setTestStatus('idle')
   }
 
-  async function handleSave() {
+  const handleSave = useCallback(async () => {
     setSaveStatus('saving')
     const updatedAt = new Date().toISOString()
     const [a, b] = await Promise.all([
@@ -123,7 +152,7 @@ export default function AISettingsPage() {
     ])
     setSaveStatus(a.error || b.error ? 'error' : 'saved')
     if (!a.error && !b.error) setTimeout(() => setSaveStatus('idle'), 3000)
-  }
+  }, [config, customInstructions])
 
   useEffect(() => {
     if (isLoading) return
@@ -136,7 +165,7 @@ export default function AISettingsPage() {
       handleSave()
     }, 700)
     return () => clearTimeout(t)
-  }, [config, customInstructions, isLoading])
+  }, [config, customInstructions, isLoading, handleSave])
 
   async function handleTest() {
     setTestStatus('testing')
@@ -164,6 +193,21 @@ export default function AISettingsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ score: next }),
     }).catch(() => {})
+  }
+
+  function setVoiceDebugLevel(debugLevel: VoiceDebugLevel) {
+    const next = writeVoiceRuntimeConfig({ debugLevel })
+    setVoiceRuntime(next)
+  }
+
+  function setVoiceAuditEnabled(auditEnabled: boolean) {
+    const next = writeVoiceRuntimeConfig({ auditEnabled })
+    setVoiceRuntime(next)
+  }
+
+  function setVoiceCoreV2Enabled(coreV2Enabled: boolean) {
+    const next = writeVoiceRuntimeConfig({ coreV2Enabled })
+    setVoiceRuntime(next)
   }
 
   if (isLoading) return <div className="p-6 text-casa-muted animate-breathe">Loading…</div>
@@ -263,6 +307,77 @@ export default function AISettingsPage() {
           <div className="flex items-center gap-2">
             <Mic size={15} className="text-casa-gold" />
             <label className="text-body-sm font-semibold text-casa-navy">Wake Word — "Alexa"</label>
+          </div>
+
+          <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3 space-y-3">
+            <p className="text-body-sm font-semibold text-casa-navy">Voice Runtime Controls</p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => setVoiceDebugLevel('off')}
+                className={cn(
+                  'rounded-button border px-2.5 py-2 text-caption font-semibold transition-colors',
+                  voiceRuntime.debugLevel === 'off'
+                    ? 'bg-casa-navy text-white border-casa-navy'
+                    : 'bg-white text-casa-navy border-casa-border hover:bg-casa-bg',
+                )}
+              >
+                Debug Off
+              </button>
+              <button
+                type="button"
+                onClick={() => setVoiceDebugLevel('minimal')}
+                className={cn(
+                  'rounded-button border px-2.5 py-2 text-caption font-semibold transition-colors',
+                  voiceRuntime.debugLevel === 'minimal'
+                    ? 'bg-casa-navy text-white border-casa-navy'
+                    : 'bg-white text-casa-navy border-casa-border hover:bg-casa-bg',
+                )}
+              >
+                Debug Minimal
+              </button>
+              <button
+                type="button"
+                onClick={() => setVoiceDebugLevel('verbose')}
+                className={cn(
+                  'rounded-button border px-2.5 py-2 text-caption font-semibold transition-colors',
+                  voiceRuntime.debugLevel === 'verbose'
+                    ? 'bg-casa-navy text-white border-casa-navy'
+                    : 'bg-white text-casa-navy border-casa-border hover:bg-casa-bg',
+                )}
+              >
+                Debug Verbose
+              </button>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setVoiceAuditEnabled(!voiceRuntime.auditEnabled)}
+                className={cn(
+                  'rounded-button border px-2.5 py-2 text-caption font-semibold transition-colors',
+                  voiceRuntime.auditEnabled
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-white text-casa-navy border-casa-border hover:bg-casa-bg',
+                )}
+              >
+                Audit Trail: {voiceRuntime.auditEnabled ? 'Enabled' : 'Disabled'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setVoiceCoreV2Enabled(!voiceRuntime.coreV2Enabled)}
+                className={cn(
+                  'rounded-button border px-2.5 py-2 text-caption font-semibold transition-colors',
+                  voiceRuntime.coreV2Enabled
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-white text-casa-navy border-casa-border hover:bg-casa-bg',
+                )}
+              >
+                Voice Core V2: {voiceRuntime.coreV2Enabled ? 'Enabled' : 'Disabled'}
+              </button>
+            </div>
+            <p className="text-caption text-casa-muted">
+              Audit entries on this device: <span className="font-semibold text-casa-navy">{auditEntries}</span>
+            </p>
           </div>
 
           {/* Voice Quality Telemetry */}

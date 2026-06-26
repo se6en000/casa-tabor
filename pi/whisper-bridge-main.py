@@ -48,6 +48,7 @@ _ws         = None          # current DeepGram WebSocketApp
 _ws_gen     = 0             # incremented on each start_recording(); guards stale _on_close
 _finals     = []
 _final_conf = []
+_recording_lock = threading.Lock()
 
 def _push_voice_level(level: int):
     try:
@@ -351,7 +352,7 @@ def _strip_wake(text: str) -> str:
     return _WAKE_STRIP.sub('', text).strip()
 
 def _on_message(ws_arg, message):
-    global _finals, _final_conf
+    global _finals, _final_conf, _wake_cooldown_until
     try:
         data = json.loads(message)
         msg_type = data.get('type', '')
@@ -365,6 +366,7 @@ def _on_message(ws_arg, message):
             conf = (sum(_final_conf) / len(_final_conf)) if _final_conf else None
             if full:
                 log.info(f'[DG] UtteranceEnd -> "{full}"')
+                _wake_cooldown_until = max(_wake_cooldown_until, time.time() + 1.2)
                 _finals = []
                 _final_conf = []
                 _set(transcript=full, interim_transcript='', recording=False)
@@ -391,6 +393,7 @@ def _on_message(ws_arg, message):
             _final_conf = []
             if full:
                 log.info(f'[DG] speech_final -> "{full}"')
+                _wake_cooldown_until = max(_wake_cooldown_until, time.time() + 1.2)
                 _set(transcript=full, interim_transcript='', recording=False)
                 _ws_push_stt({'type': 'final', 'text': full, 'confidence': conf})
         elif is_final and text:
@@ -435,6 +438,7 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
             log.error(f'send initial buffer failed: {e}')
     
     last_voice_push = 0.0
+    short_reads = 0
     try:
         while True:
             with _state_lock:
@@ -446,7 +450,12 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
                 break
             raw = proc.stdout.read(chunk_bytes)
             if not raw or len(raw) < chunk_bytes:
+                short_reads += 1
+                if short_reads <= 5:
+                    time.sleep(0.03)
+                    continue
                 break
+            short_reads = 0
             warmup += 1
             if warmup <= WARMUP_CHUNKS:
                 continue
@@ -479,14 +488,6 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
 def start_recording():
     global _rec_proc, _ws, _finals, _final_conf, _wake_proc, _ws_gen
 
-    if _wake_proc:
-        try:
-            _wake_proc.terminate()
-            _wake_proc.wait(timeout=1)
-        except Exception:
-            pass
-        _wake_proc = None
-
     # Capture buffer for pre-fill before starting new recording
     initial_buffer = _get_buffer_copy()
     log.info(f'[start_recording] captured {len(initial_buffer)} bytes for pre-fill')
@@ -498,6 +499,9 @@ def start_recording():
     # Set recording=True NOW so the wake word loop immediately yields the mic.
     # ready=False still — browser waits for {type:'ready'} before showing listening state.
     _set(recording=True, ready=False, transcript=None, interim_transcript='', error=None, volume=0)
+    # Give wake loop a brief moment to release the recorder cleanly before
+    # we open the STT recorder. This avoids rc=1 churn during handoff.
+    time.sleep(0.08)
 
     # Clean up old DeepGram WS and arecord without triggering _on_close callback
     old_ws = _ws
@@ -529,10 +533,11 @@ def start_recording():
     )
     _ws = ws
 
-    proc = subprocess.Popen(
-        _make_recorder_cmd(),
-        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
-    )
+    with _recording_lock:
+        proc = subprocess.Popen(
+            _make_recorder_cmd(),
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+        )
     _rec_proc = proc
 
     threading.Thread(target=ws.run_forever, daemon=True).start()

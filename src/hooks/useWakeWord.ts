@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { readVoiceRuntimeConfig, shouldEmitVoiceDebug } from '../lib/voiceRuntimeConfig'
 
 const BRIDGE_WS = 'ws://127.0.0.1:8767'
 const SCREENSAVER_GRACE_MS = 3000  // ignore wake triggers for 3s after screensaver activates
@@ -7,6 +8,8 @@ const RECONNECT_MS = 3000          // backoff before reconnecting WS
 
 function emitWakeDebug(event: string, detail?: string) {
   if (typeof window === 'undefined') return
+  const config = readVoiceRuntimeConfig()
+  if (!shouldEmitVoiceDebug(config.debugLevel, 'verbose')) return
   window.dispatchEvent(new CustomEvent('casa:ai-debug', { detail: { event, detail } }))
 }
 
@@ -45,7 +48,9 @@ export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean, ena
   }, [drawerOpen])
 
   useEffect(() => {
-    if (!enabled) {
+    const runtime = readVoiceRuntimeConfig()
+    const wakeEnabled = enabled && runtime.coreV2Enabled
+    if (!wakeEnabled) {
       emitWakeDebug('wake_listener_disabled')
       if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null }
       if (wsRef.current) { try { wsRef.current.close() } catch { /* ignore */ } wsRef.current = null }

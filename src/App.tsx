@@ -22,6 +22,7 @@ import { useWakeWord } from './hooks/useWakeWord'
 import { useIdleTimer } from './hooks/useIdleTimer'
 import { useScreensaverSettings } from './hooks/useScreensaverSettings'
 import { supabase } from './lib/supabase'
+import { readVoiceRuntimeConfig, shouldEmitVoiceDebug } from './lib/voiceRuntimeConfig'
 
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
 const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
@@ -83,12 +84,15 @@ function GlobalAIDrawer({
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ right?: number; top?: number; prompt?: string; autoSend?: boolean; source?: string } | undefined>).detail
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('casa:ai-debug', {
-          detail: {
-            event: 'drawer_open_event_received',
-            detail: `source=${detail?.source ?? 'manual'} autoSend=${detail?.autoSend ? '1' : '0'} prompt=${detail?.prompt ? '1' : '0'}`,
-          },
-        }))
+        const voiceConfig = readVoiceRuntimeConfig()
+        if (shouldEmitVoiceDebug(voiceConfig.debugLevel, 'minimal')) {
+          window.dispatchEvent(new CustomEvent('casa:ai-debug', {
+            detail: {
+              event: 'drawer_open_event_received',
+              detail: `source=${detail?.source ?? 'manual'} autoSend=${detail?.autoSend ? '1' : '0'} prompt=${detail?.prompt ? '1' : '0'}`,
+            },
+          }))
+        }
       }
       if (detail && typeof detail.right === 'number' && typeof detail.top === 'number') {
         setAnchor({ right: detail.right, top: detail.top })

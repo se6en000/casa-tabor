@@ -11,6 +11,14 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
+import {
+  readVoiceRuntimeConfig,
+  shouldEmitVoiceDebug,
+  type VoiceDebugLevel,
+  type VoiceRuntimeConfig,
+  writeVoiceRuntimeConfig,
+} from '../../lib/voiceRuntimeConfig'
+import { appendVoiceAudit, clearVoiceAudit, readVoiceAudit, type VoiceAuditEvent } from '../../lib/voiceAudit'
 
 const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s all|all done|never mind|nevermind|stop)\b/i
 const CONFIRM_PHRASES = /\b(yes|yeah|yep|confirm|ok|okay|go ahead|do it|sounds good|correct|right|affirmative|absolutely|sure|proceed)\b/i
@@ -39,18 +47,35 @@ const MIN_FINAL_CONFIDENCE = 0.55
 const VOICE_TELEMETRY_KEY = 'casa-voice-telemetry'
 const AI_DEBUG_LOG_KEY = 'casa-ai-debug-log'
 const MAX_DEBUG_LOG_ENTRIES = 500
+const MAX_AUDIT_LOG_ENTRIES = 500
 
 type DebugLogEntry = {
   at: string
   event: string
   detail?: string
   sessionId?: string
+  turnId?: string
 }
+
+type VoiceTurnState = 'idle' | 'wake_armed' | 'listening' | 'endpointed' | 'thinking' | 'responding' | 'closed'
 
 type VoiceUxProfile = {
   inactivityMs: number
   wakeFollowupGraceMs: number
   wakeMisfireCooldownSecs: number
+}
+
+function eventDebugLevel(event: string): VoiceDebugLevel {
+  if (
+    event.startsWith('voice_queued') ||
+    event.startsWith('voice_requeued') ||
+    event.startsWith('assistant_wake_') ||
+    event.startsWith('speech_bridge_') ||
+    event.startsWith('speech_webspeech_')
+  ) {
+    return 'verbose'
+  }
+  return 'minimal'
 }
 
 function getVoiceUxProfile(): VoiceUxProfile {
@@ -611,6 +636,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const bridgeDownLoggedRef = useRef(false)
   const voiceProfileRef = useRef<VoiceUxProfile>(getVoiceUxProfile())
   const [inactivityCountdown, setInactivityCountdown] = useState<number | null>(null)
+  const [voiceConfig, setVoiceConfig] = useState<VoiceRuntimeConfig>(() => readVoiceRuntimeConfig())
   const [showDebugLog, setShowDebugLog] = useState(false)
   const [debugLog, setDebugLog] = useState<DebugLogEntry[]>(() => {
     if (typeof window === 'undefined') return []
@@ -622,6 +648,10 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     } catch {
       return []
     }
+  })
+  const [auditLog, setAuditLog] = useState<VoiceAuditEvent[]>(() => {
+    const all = readVoiceAudit()
+    return all.slice(-MAX_AUDIT_LOG_ENTRIES)
   })
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -641,15 +671,43 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const traceSessionIdRef = useRef<string | null>(null)
+  const turnIdRef = useRef<string>('turn-idle')
+  const turnStateRef = useRef<VoiceTurnState>('idle')
   const closeReasonRef = useRef('unknown')
   const [uiFeedback, setUiFeedback] = useState<'none' | 'confirm' | 'cancel'>('none')
 
+  useEffect(() => {
+    const sync = () => setVoiceConfig(readVoiceRuntimeConfig())
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === 'casa-voice-runtime-config-v1') sync()
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
+  const appendAuditLog = useCallback((event: string, detail?: string) => {
+    if (!voiceConfig.auditEnabled) return
+    const sessionId = traceSessionIdRef.current ?? 'voice-session-unknown'
+    const entry: VoiceAuditEvent = {
+      at: new Date().toISOString(),
+      event,
+      detail,
+      sessionId,
+      turnId: turnIdRef.current,
+    }
+    const updated = appendVoiceAudit(entry)
+    setAuditLog(updated.slice(-MAX_AUDIT_LOG_ENTRIES))
+  }, [voiceConfig.auditEnabled])
+
   const appendDebugLog = useCallback((event: string, detail?: string) => {
+    appendAuditLog(event, detail)
+    if (!shouldEmitVoiceDebug(voiceConfig.debugLevel, eventDebugLevel(event))) return
     const nextEntry: DebugLogEntry = {
       at: new Date().toISOString(),
       event,
       detail,
       sessionId: traceSessionIdRef.current ?? undefined,
+      turnId: turnIdRef.current,
     }
     setDebugLog((prev) => {
       const next = [...prev, nextEntry].slice(-MAX_DEBUG_LOG_ENTRIES)
@@ -660,18 +718,28 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       }
       return next
     })
-  }, [])
+  }, [appendAuditLog, voiceConfig.debugLevel])
+
+  const transitionTurnState = useCallback((next: VoiceTurnState, reason: string) => {
+    const previous = turnStateRef.current
+    if (previous === next) return
+    turnStateRef.current = next
+    appendDebugLog('turn_state', `${previous} -> ${next} (${reason})`)
+  }, [appendDebugLog])
 
   const beginTraceSession = useCallback(() => {
     traceSessionIdRef.current = `voice-${Date.now().toString(36)}`
+    turnIdRef.current = `turn-${Date.now().toString(36)}`
+    turnStateRef.current = 'idle'
     closeReasonRef.current = 'unknown'
   }, [])
 
   const requestClose = useCallback((reason: string) => {
     closeReasonRef.current = reason
+    transitionTurnState('closed', reason)
     appendDebugLog('drawer_close_requested', reason)
     onClose()
-  }, [appendDebugLog, onClose])
+  }, [appendDebugLog, onClose, transitionTurnState])
 
   useEffect(() => {
     const onAssistantDebug = (rawEvent: Event) => {
@@ -704,6 +772,22 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       appendDebugLog('debug_log_copy_failed', (err as Error).message ?? 'unknown error')
     }
   }, [debugLog, appendDebugLog])
+
+  const clearAuditLog = useCallback(() => {
+    clearVoiceAudit()
+    setAuditLog([])
+    appendDebugLog('audit_log_cleared')
+  }, [appendDebugLog])
+
+  const copyAuditLog = useCallback(async () => {
+    const payload = JSON.stringify({ exportedAt: new Date().toISOString(), entries: auditLog }, null, 2)
+    try {
+      await navigator.clipboard.writeText(payload)
+      appendDebugLog('audit_log_copied', `entries=${auditLog.length}`)
+    } catch (err) {
+      appendDebugLog('audit_log_copy_failed', (err as Error).message ?? 'unknown error')
+    }
+  }, [auditLog, appendDebugLog])
 
   const pingWakeMisfireCooldown = useCallback((seconds = voiceProfileRef.current.wakeMisfireCooldownSecs) => {
     void fetch('http://127.0.0.1:8766/wake-misfire', {
@@ -764,17 +848,19 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       return false
     }
     voiceSendInFlightRef.current = true
+    turnIdRef.current = `turn-${Date.now().toString(36)}`
+    transitionTurnState('thinking', 'input_sent_for_assistant')
     const sendSeq = ++voiceSendSeqRef.current
     appendDebugLog('send_current_input', `#${sendSeq} depth=${pendingVoiceQueueRef.current.length} ${trimmed.slice(0, 140)}`)
     clearAutoSendTimer()
     ignoreInterimUntilRef.current = Date.now() + 1200
     markUserInteraction()
-    setInput('')
+    queueMicrotask(() => setInput(''))
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
     send(trimmed)
     return true
-  }, [loading, send, markUserInteraction, clearAutoSendTimer, appendDebugLog])
+  }, [loading, send, markUserInteraction, clearAutoSendTimer, appendDebugLog, transitionTurnState])
 
   const queueOrSendVoiceInput = useCallback((text: string) => {
     const trimmed = text.trim()
@@ -806,6 +892,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     onFinalTranscript: (text, confidence) => {
       appendDebugLog('voice_final', text === '__SEND__' ? '__SEND__' : `${text.slice(0, 140)}${typeof confidence === 'number' ? ` (conf=${confidence.toFixed(2)})` : ''}`)
       if (text === '__SEND__') {
+        transitionTurnState('endpointed', 'speech_final_received')
         ignoreInterimUntilRef.current = Date.now() + 1200
         const msg = interimRef.current || (textareaRef.current?.value ?? '')
         const finalized = msg.trim()
@@ -815,10 +902,38 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         }
         interimRef.current = finalized
         setInput(finalized)
+        if (hasPendingToolAction && CONFIRM_PHRASES.test(finalized) && finalized.split(/\s+/).length <= 6) {
+          appendDebugLog('voice_confirm_budget_short_circuit', finalized.slice(0, 80))
+          const run = pendingConfirmRef.current
+          if (run) {
+            triggerUiFeedback('confirm')
+            led.confirm()
+            void Promise.resolve(run()).then((confirmed) => {
+              if (!confirmed) return
+              startFresh()
+              setTimeout(() => requestClose('voice_confirm_completed'), 700)
+            })
+          }
+          return
+        }
+        if (hasPendingToolAction && CANCEL_PHRASES.test(finalized) && finalized.split(/\s+/).length <= 6) {
+          appendDebugLog('voice_cancel_budget_short_circuit', finalized.slice(0, 80))
+          const run = pendingCancelRef.current
+          if (run) {
+            triggerUiFeedback('cancel')
+            led.cancel()
+            void Promise.resolve(run()).then((cancelled) => {
+              if (!cancelled) return
+              startFresh()
+              setTimeout(() => requestClose('voice_cancel_completed'), 700)
+            })
+          }
+          return
+        }
         if (isLikelyNoiseTranscript(msg, confidence)) {
           appendDebugLog('voice_noise_filtered', msg.slice(0, 140))
           interimRef.current = ''
-          setInput('')
+          queueMicrotask(() => setInput(''))
           if (wakeSessionActiveRef.current && !hadMeaningfulProgressRef.current) {
             autoDismissDrawer(true)
           }
@@ -917,7 +1032,10 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       ? `${latest.role}:tool:${latest.toolAction.tool}:${latest.toolAction.status}`
       : `${latest.role}:${latest.content.slice(0, 120)}`
     appendDebugLog('message', summary)
-  }, [open, messages, appendDebugLog])
+    if (latest.role === 'assistant') {
+      transitionTurnState('responding', 'assistant_message_received')
+    }
+  }, [open, messages, appendDebugLog, transitionTurnState])
 
   useEffect(() => {
     if (open) appendDebugLog('drawer_opened', page)
@@ -931,37 +1049,37 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       wakeSessionActiveRef.current = Boolean(wakeSessionNonce)
       wakeStartedRef.current = Boolean(wakeSessionNonce)
       hadMeaningfulProgressRef.current = false
-      setInactivityCountdown(null)
       appendDebugLog('trace_started', wakeSessionNonce ? 'source=wake' : 'source=manual')
+      transitionTurnState('wake_armed', wakeSessionNonce ? 'wake_open' : 'manual_open')
       if (wakeSessionNonce) trackVoiceMetric('wake_session_started')
       markConversationProgress(false)
-      if (IS_SAFE_MODE) return
+      if (IS_SAFE_MODE || !voiceConfig.coreV2Enabled) return
       // Start connecting immediately — don't wait for animation.
       // Bridge buffers audio from /start so by the time the user speaks it's ready.
       speech.start()
+      transitionTurnState('listening', 'speech_start')
       // Focus textarea slightly after animation settles (UI only, doesn't affect mic)
       setTimeout(() => textareaRef.current?.focus(), 300)
     } else {
       clearAutoSendTimer()
-      setInactivityCountdown(null)
       if (feedbackTimerRef.current) {
         clearTimeout(feedbackTimerRef.current)
         feedbackTimerRef.current = null
       }
-      setUiFeedback('none')
+      queueMicrotask(() => setUiFeedback('none'))
       ignoreInterimUntilRef.current = 0
       speech.stop()
       led.off()
       reset()
-      setInput('')
+      queueMicrotask(() => setInput(''))
       interimRef.current = ''
       pendingVoiceQueueRef.current = []
       voiceSendInFlightRef.current = false
-      setAttachedImage(null)
+      queueMicrotask(() => setAttachedImage(null))
       freshStartedRef.current = null  // allow fresh start next time this event is opened
       traceSessionIdRef.current = null
     }
-  }, [open, markConversationProgress, wakeSessionNonce, clearAutoSendTimer, beginTraceSession, appendDebugLog]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, markConversationProgress, wakeSessionNonce, clearAutoSendTimer, beginTraceSession, appendDebugLog, transitionTurnState, voiceConfig.coreV2Enabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open) return
@@ -1030,6 +1148,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   useEffect(() => {
     if (!open || !focusedEvent) return
     if (freshStartedRef.current === focusedEvent.id) return
+    // eslint-disable-next-line react-hooks/immutability
     freshStartedRef.current = focusedEvent.id
     firedEventGreetRef.current = null  // reset so greet fires after fresh start
     startFresh()
@@ -1163,12 +1282,14 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     const img = attachedImage
     if ((!text && !img) || loading) return
     markUserInteraction()
+    turnIdRef.current = `turn-${Date.now().toString(36)}`
+    transitionTurnState('thinking', 'typed_input_sent')
     setInput('')
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
     setAttachedImage(null)
     send(text || '(see attached image)', img ?? undefined)
-  }, [input, attachedImage, loading, send, markUserInteraction])
+  }, [input, attachedImage, loading, send, markUserInteraction, transitionTurnState])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1183,7 +1304,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       speech.stop()
     }
     setInput(value)
-  }, [markUserInteraction, speech.connecting, speech.listening, speech.stop])
+  }, [markUserInteraction, speech])
 
   const handleKeyboardToggle = useCallback(() => {
     markUserInteraction()
@@ -1204,6 +1325,8 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const cooldownSeconds = Math.ceil(speech.wakeCooldownRemaining ?? 0)
   const diagnosticsLabel = IS_SAFE_MODE
     ? 'Safe mode'
+    : !voiceConfig.coreV2Enabled
+      ? 'Voice core disabled'
     : speech.bridgeDown
       ? 'Bridge offline'
       : cooldownSeconds > 0
@@ -1235,7 +1358,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
             : speech.listening || speech.connecting
               ? 'listening'
               : 'idle'
-  const presenceStyle = { ['--voice-level' as '--voice-level']: String(voiceLevel) } as React.CSSProperties
+  const presenceStyle = { ['--voice-level' as const]: String(voiceLevel) } as React.CSSProperties
 
   return (
     <AnimatePresence>
@@ -1521,7 +1644,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                   style={{ minHeight: '24px', maxHeight: '120px' }}
                 />
 
-                {speech.supported && (
+                {speech.supported && voiceConfig.coreV2Enabled && (
                   <button
                     type="button"
                     onClick={() => { markUserInteraction(); speech.toggle() }}
@@ -1567,6 +1690,8 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
               <p className="text-caption text-casa-muted mt-1.5 text-center opacity-60">
                 {IS_SAFE_MODE
                   ? 'Safe mode enabled: voice capture is disabled'
+                  : !voiceConfig.coreV2Enabled
+                    ? 'Voice core disabled in AI Settings — text input still works'
                   : speech.bridgeDown
                     ? 'Voice bridge offline — text input still works'
                     : speech.supported
@@ -1601,15 +1726,29 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                     Retry last
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setShowDebugLog((prev) => !prev)}
-                  className="inline-flex items-center rounded-full border border-casa-border bg-casa-bg px-2 py-0.5 hover:bg-white transition-colors"
-                >
-                  {showDebugLog ? 'Hide debug' : 'Show debug'}
-                </button>
+                {shouldEmitVoiceDebug(voiceConfig.debugLevel, 'minimal') && (
+                  <button
+                    type="button"
+                    onClick={() => setShowDebugLog((prev) => !prev)}
+                    className="inline-flex items-center rounded-full border border-casa-border bg-casa-bg px-2 py-0.5 hover:bg-white transition-colors"
+                  >
+                    {showDebugLog ? 'Hide debug' : 'Show debug'}
+                  </button>
+                )}
+                {voiceConfig.auditEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = writeVoiceRuntimeConfig({ auditEnabled: false })
+                      setVoiceConfig(next)
+                    }}
+                    className="inline-flex items-center rounded-full border border-casa-border bg-casa-bg px-2 py-0.5 hover:bg-white transition-colors"
+                  >
+                    Disable audit
+                  </button>
+                )}
               </div>
-              {showDebugLog && (
+              {showDebugLog && shouldEmitVoiceDebug(voiceConfig.debugLevel, 'minimal') && (
                 <div className="mt-2 rounded-xl border border-casa-border bg-casa-bg/70 p-2">
                   <div className="mb-1 flex items-center justify-between">
                     <p className="text-[11px] font-semibold text-casa-muted">AI/Voice debug log</p>
@@ -1639,6 +1778,45 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                           <span className="text-casa-navy/80">{new Date(entry.at).toLocaleTimeString()}</span>
                           {' · '}
                           <span>{entry.event}</span>
+                          {entry.turnId ? ` · ${entry.turnId}` : ''}
+                          {entry.detail ? ` · ${entry.detail}` : ''}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+              {voiceConfig.auditEnabled && showDebugLog && (
+                <div className="mt-2 rounded-xl border border-casa-border bg-casa-bg/70 p-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <p className="text-[11px] font-semibold text-casa-muted">Wake-to-close audit trail</p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { void copyAuditLog() }}
+                        className="text-[11px] text-casa-muted hover:text-casa-navy"
+                      >
+                        Copy
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearAuditLog}
+                        className="text-[11px] text-casa-muted hover:text-casa-navy"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                  <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
+                    {auditLog.length === 0 ? (
+                      <p className="text-[11px] text-casa-muted">No audit events yet.</p>
+                    ) : (
+                      auditLog.slice().reverse().slice(0, 120).map((entry, idx) => (
+                        <div key={`${entry.at}-${idx}`} className="font-mono text-[10px] text-casa-muted break-words">
+                          <span className="text-casa-navy/80">{new Date(entry.at).toLocaleTimeString()}</span>
+                          {' · '}
+                          <span>{entry.event}</span>
+                          {entry.turnId ? ` · ${entry.turnId}` : ''}
                           {entry.detail ? ` · ${entry.detail}` : ''}
                         </div>
                       ))

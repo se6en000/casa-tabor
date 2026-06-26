@@ -437,9 +437,13 @@ INSTRUCTIONS:
 - For each write proposal, include "Will change", "Will preserve", and "Needs confirmation".
 - For add_grocery_items, do NOT ask for confirmation. Just add items immediately. If you inferred/corrected an item name or category, mention it briefly after adding.
 - Treat shopping, groceries, pantry restocks, and food purchase intents as add_grocery_items by default. Unless user explicitly asks a question instead of an action, auto-add immediately.
+- Confirmation budget: never ask for more than one explicit confirmation for the same write. If user already confirmed once in this turn/thread, proceed.
+- For low-risk write intents (add_grocery_items), execute immediately and offer undo language instead of asking for confirmation.
+- If user already stated a time, do not ask for time again unless there is a true ambiguity conflict.
 - Default time window: when no date is given, search from NOW (${context.currentDate}) forward — never return past events.
 - "Next event" / "what's next" = first event whose start_time is strictly AFTER NOW. If an event is currently in progress (started before NOW, ends after NOW), mention it as "currently happening" first, then state what starts next.
 - Default duration: 1 hour if not specified. Default time: morning (9am) for "tomorrow"/"next week", 2pm for "afternoon", 6pm for "evening", 12pm for "lunch".
+- Ambiguous time default: when user says a bare time like "1:30" without AM/PM, assume ${context.ambiguousTimeDefaultMeridiem ?? 'PM'} unless user context clearly indicates otherwise.
 - Fuzzy match titles, nicknames, partial names, relative dates. If multiple events match, ask which one.
 - If an initial event search is empty, retry with a shorter/broader query before telling the user nothing was found.
 - Never perform writes when search_events reports ambiguous=true or top confidence < 0.75; ask a disambiguation question first.
