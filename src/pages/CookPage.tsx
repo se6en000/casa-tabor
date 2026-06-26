@@ -463,7 +463,7 @@ export default function CookPage() {
                 className={cn(
                   'px-3 py-2 rounded-button border text-body-sm transition-colors',
                   directionsViewMode === 'all'
-                    ? 'border-casa-gold/50 bg-casa-gold text-casa-navy font-semibold hover:brightness-110'
+                    ? 'border-casa-navy bg-casa-navy text-white font-semibold hover:bg-casa-navy/90'
                     : 'border-casa-border text-casa-muted hover:bg-casa-main'
                 )}
               >
@@ -476,7 +476,7 @@ export default function CookPage() {
                 className={cn(
                   'px-3 py-2 rounded-button border text-body-sm disabled:opacity-50 inline-flex items-center gap-1 transition-colors',
                   directionsViewMode === 'step'
-                    ? 'border-casa-gold/50 bg-casa-gold text-casa-navy font-semibold hover:brightness-110'
+                    ? 'border-casa-navy bg-casa-navy text-white font-semibold hover:bg-casa-navy/90'
                     : 'border-casa-border text-casa-muted'
                 )}
               >
