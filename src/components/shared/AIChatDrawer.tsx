@@ -171,6 +171,7 @@ function useSpeechInput({
   onTrace?: (event: string, detail?: string) => void
 }) {
   const wsRef              = useRef<WebSocket | null>(null)
+  const wsGenerationRef    = useRef(0)
   const activeRef          = useRef(false)
   const suppressRef        = useRef(false)
   const modeRef            = useRef<STTMode>('unknown')
@@ -181,6 +182,8 @@ function useSpeechInput({
   const lastInterimRef     = useRef('')
   const lastInterimTimeRef = useRef(0)
   const connectStartRef    = useRef(0)
+  const bridgeReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const bridgeConnectingRef = useRef(false)
   const [phase, setPhase]  = useState<VoicePhase>('idle')
   const phaseRef           = useRef<VoicePhase>('idle')
   const setPhaseSync = (p: VoicePhase) => { phaseRef.current = p; setPhase(p) }
@@ -216,12 +219,22 @@ function useSpeechInput({
       : null
   ).current
 
-  const stopWS = () => {
+  const clearBridgeReconnectTimer = useCallback(() => {
+    if (bridgeReconnectTimerRef.current) {
+      clearTimeout(bridgeReconnectTimerRef.current)
+      bridgeReconnectTimerRef.current = null
+    }
+  }, [])
+
+  const stopWS = useCallback(() => {
+    clearBridgeReconnectTimer()
+    bridgeConnectingRef.current = false
+    wsGenerationRef.current += 1
     if (wsRef.current) {
       try { wsRef.current.close() } catch { /* ignore */ }
       wsRef.current = null
     }
-  }
+  }, [clearBridgeReconnectTimer])
   const stopSilenceTimer = () => { if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
   const stopWebSpeechRestartTimer = useCallback(() => {
     if (webspeechRestartTimerRef.current) {
@@ -261,7 +274,7 @@ function useSpeechInput({
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     handleFinalTranscript(finalText, confidence)
-  }, [handleFinalTranscript, onTrace, stopWebSpeechRestartTimer])
+  }, [handleFinalTranscript, onTrace, stopWebSpeechRestartTimer, stopWS])
 
   // ── Web Speech API path (Safari / iOS) ──────────────────────────────────
   const startWebSpeech = useCallback(() => {
@@ -394,26 +407,38 @@ function useSpeechInput({
   // ── Bridge path (Pi / Chromium) ─────────────────────────────────────────
   const startBridge = useCallback(() => {
     if (!activeRef.current) return
+    const existing = wsRef.current
+    if (existing && (existing.readyState === WebSocket.CONNECTING || existing.readyState === WebSocket.OPEN)) {
+      return
+    }
+    if (bridgeConnectingRef.current) return
     const connectBridge = () => {
-      stopWS()
+      clearBridgeReconnectTimer()
+      bridgeConnectingRef.current = true
       lastInterimRef.current = ''
       lastInterimTimeRef.current = 0
       connectStartRef.current = Date.now()
       setPhaseSync('connecting')
+      const generation = wsGenerationRef.current + 1
+      wsGenerationRef.current = generation
 
       const ws = new WebSocket(BRIDGE_WS)
       onTrace?.('speech_bridge_connect_start')
       wsRef.current = ws
 
       const scheduleReconnect = (delayMs: number) => {
+        if (bridgeReconnectTimerRef.current) return
         if (!activeRef.current || phaseRef.current === 'processing') return
-        setTimeout(() => {
+        bridgeReconnectTimerRef.current = setTimeout(() => {
+          bridgeReconnectTimerRef.current = null
           if (!activeRef.current || phaseRef.current === 'processing') return
           connectBridge()
         }, delayMs)
       }
 
       ws.onopen = () => {
+        if (wsGenerationRef.current !== generation || wsRef.current !== ws) return
+        bridgeConnectingRef.current = false
         setReconnecting(false)
         setBridgeDown(false)
         onTrace?.('speech_bridge_ws_open')
@@ -421,6 +446,7 @@ function useSpeechInput({
       }
 
       ws.onmessage = (evt) => {
+        if (wsGenerationRef.current !== generation || wsRef.current !== ws) return
         if (!activeRef.current) return
         try {
           const msg = JSON.parse(evt.data as string)
@@ -447,13 +473,13 @@ function useSpeechInput({
               if (phaseRef.current !== 'processing') {
                 onTrace?.('speech_bridge_final', `${String(msg.text ?? '').slice(0, 140)}${typeof msg.confidence === 'number' ? ` (conf=${Number(msg.confidence).toFixed(2)})` : ''}`)
                 triggerFinal(msg.text, typeof msg.confidence === 'number' ? msg.confidence : null)
-                scheduleReconnect(300)
               }
               break
             case 'error':
               onTrace?.('speech_bridge_error', String(msg.msg ?? 'unknown'))
               console.warn('[STT] bridge error', msg.msg)
-              scheduleReconnect(500)
+              stopWS()
+              scheduleReconnect(350)
               break
           }
         } catch {
@@ -462,11 +488,14 @@ function useSpeechInput({
       }
 
       ws.onerror = () => {
+        if (wsGenerationRef.current !== generation || wsRef.current !== ws) return
         onTrace?.('speech_bridge_ws_error')
         console.warn('[STT] WS connection error')
       }
 
       ws.onclose = () => {
+        if (wsGenerationRef.current !== generation || wsRef.current !== ws) return
+        bridgeConnectingRef.current = false
         wsRef.current = null
         setVolume(0)
         onTrace?.('speech_bridge_ws_closed')
@@ -482,14 +511,15 @@ function useSpeechInput({
     }
 
     connectBridge()
-  }, [triggerFinal, onTrace]) // onInterim/phase via refs
+  }, [triggerFinal, onTrace, clearBridgeReconnectTimer, stopWS]) // onInterim/phase via refs
 
   const stopBridge = useCallback(() => {
+    clearBridgeReconnectTimer()
     if (wsRef.current) {
       try { wsRef.current.send(JSON.stringify({ type: 'stop' })) } catch { /* ignore */ }
     }
     stopWS()
-  }, [])
+  }, [clearBridgeReconnectTimer, stopWS])
 
   // ── Unified start / stop ─────────────────────────────────────────────────
   const stop = useCallback(async () => {

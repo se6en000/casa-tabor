@@ -32,6 +32,9 @@ WAKE_WATCHDOG_SECS = 90
 WAKE_AUDIO_GAIN   = 3.0        # Amplify mic input before wake detection
 WAKE_SCORE_MIN = 0.08
 WAKE_SCORE_MAX = 0.90
+POST_FINAL_WAKE_COOLDOWN_SECS = 3.0
+START_DEBOUNCE_SECS = 0.8
+STT_CLIENT_GRACE_SECS = 2.5
 SENSOR_BRIDGE  = 'http://127.0.0.1:8765'
 
 # ── Audio buffering for wake word ─────────────────────────────────────────────
@@ -49,6 +52,7 @@ _ws_gen     = 0             # incremented on each start_recording(); guards stal
 _finals     = []
 _final_conf = []
 _recording_lock = threading.Lock()
+_recording_started_at = 0.0
 
 def _push_voice_level(level: int):
     try:
@@ -76,6 +80,7 @@ _ws_clients: set = set()
 _ws_clients_lock = threading.Lock()
 _stt_client = None   # browser WS that owns the current STT session
 _stt_lock   = threading.Lock()
+_stt_missing_since = 0.0
 
 def _ws_push_all(msg: dict):
     data = json.dumps(msg)
@@ -116,8 +121,9 @@ def _handle_ws_client(ws):
             if cmd == 'start':
                 with _stt_lock:
                     _stt_client = ws
-                stop_recording()
-                start_recording()
+                started = start_recording(reason='ws_start')
+                if not started and _get().get('recording') and _get().get('ready'):
+                    _ws_push_stt({'type': 'ready'})
             elif cmd == 'stop':
                 with _stt_lock:
                     if _stt_client is ws:
@@ -184,12 +190,42 @@ def _clear_buffer():
         _audio_buffer.clear()
 
 def _display_off():
-    subprocess.Popen(['xset', '-display', _DISPLAY, 'dpms', 'force', 'off'],
-                     env={**__import__('os').environ, 'DISPLAY': _DISPLAY})
+    try:
+        subprocess.run(
+            ['xset', '-display', _DISPLAY, 'dpms', 'force', 'off'],
+            env={**__import__('os').environ, 'DISPLAY': _DISPLAY},
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=0.8,
+        )
+    except Exception:
+        pass
 
 def _display_on():
-    subprocess.Popen(['xset', '-display', _DISPLAY, 'dpms', 'force', 'on'],
-                     env={**__import__('os').environ, 'DISPLAY': _DISPLAY})
+    try:
+        subprocess.run(
+            ['xset', '-display', _DISPLAY, 'dpms', 'force', 'on'],
+            env={**__import__('os').environ, 'DISPLAY': _DISPLAY},
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=0.8,
+        )
+    except Exception:
+        pass
+    # Fallback wake signal for servers without DPMS extension.
+    try:
+        subprocess.run(
+            ['xset', '-display', _DISPLAY, 's', 'reset'],
+            env={**__import__('os').environ, 'DISPLAY': _DISPLAY},
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=0.8,
+        )
+    except Exception:
+        pass
 
 # ── Wake word watchdog ────────────────────────────────────────────────────────
 def _wake_watchdog():
@@ -230,7 +266,7 @@ def _make_recorder_cmd():
     return ['arecord', '-D', ALSA_DEVICE, '-f', 'S16_LE', '-r', str(RATE), '-c', '1', '-']
 
 def _wake_word_loop():
-    global _wake_triggered, _wake_ts, _wake_last_chunk_ts, _wake_cooldown_until
+    global _wake_triggered, _wake_ts, _wake_last_chunk_ts, _wake_cooldown_until, _stt_missing_since
     try:
         import numpy as np
         from openwakeword.model import Model as WakeModel
@@ -256,9 +292,16 @@ def _wake_word_loop():
             with _stt_lock:
                 has_stt_client = _stt_client is not None
             if not has_stt_client:
-                log.warning('[wake] recording=true with no STT client — forcing stop')
-                stop_recording()
-                break
+                if _stt_missing_since == 0.0:
+                    _stt_missing_since = time.time()
+                missing_for = time.time() - _stt_missing_since
+                if missing_for >= STT_CLIENT_GRACE_SECS:
+                    log.warning(f'[wake] recording=true with no STT client for {missing_for:.1f}s — forcing stop')
+                    stop_recording()
+                    _stt_missing_since = 0.0
+                    break
+            else:
+                _stt_missing_since = 0.0
             time.sleep(0.2)
 
         _wake_last_chunk_ts = time.time()
@@ -366,7 +409,7 @@ def _on_message(ws_arg, message):
             conf = (sum(_final_conf) / len(_final_conf)) if _final_conf else None
             if full:
                 log.info(f'[DG] UtteranceEnd -> "{full}"')
-                _wake_cooldown_until = max(_wake_cooldown_until, time.time() + 1.2)
+                _wake_cooldown_until = max(_wake_cooldown_until, time.time() + POST_FINAL_WAKE_COOLDOWN_SECS)
                 _finals = []
                 _final_conf = []
                 _set(transcript=full, interim_transcript='', recording=False)
@@ -393,7 +436,7 @@ def _on_message(ws_arg, message):
             _final_conf = []
             if full:
                 log.info(f'[DG] speech_final -> "{full}"')
-                _wake_cooldown_until = max(_wake_cooldown_until, time.time() + 1.2)
+                _wake_cooldown_until = max(_wake_cooldown_until, time.time() + POST_FINAL_WAKE_COOLDOWN_SECS)
                 _set(transcript=full, interim_transcript='', recording=False)
                 _ws_push_stt({'type': 'final', 'text': full, 'confidence': conf})
         elif is_final and text:
@@ -485,8 +528,21 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
         _push_voice_level(0)
         log.info('[stream_audio] thread exited')
 
-def start_recording():
-    global _rec_proc, _ws, _finals, _final_conf, _wake_proc, _ws_gen
+def start_recording(force_restart=False, reason='manual'):
+    global _rec_proc, _ws, _finals, _final_conf, _wake_proc, _ws_gen, _recording_started_at
+
+    now = time.time()
+    state = _get()
+    with _stt_lock:
+        has_stt_client = _stt_client is not None
+
+    if state.get('recording') and not force_restart:
+        if now - _recording_started_at < START_DEBOUNCE_SECS:
+            log.info(f'[start_recording] duplicate start suppressed (reason={reason}, debounce={START_DEBOUNCE_SECS}s)')
+            return False
+        if has_stt_client and _ws is not None and _rec_proc is not None:
+            log.info(f'[start_recording] already active; ignoring duplicate start (reason={reason})')
+            return False
 
     # Capture buffer for pre-fill before starting new recording
     initial_buffer = _get_buffer_copy()
@@ -499,6 +555,7 @@ def start_recording():
     # Set recording=True NOW so the wake word loop immediately yields the mic.
     # ready=False still — browser waits for {type:'ready'} before showing listening state.
     _set(recording=True, ready=False, transcript=None, interim_transcript='', error=None, volume=0)
+    _recording_started_at = now
     # Give wake loop a brief moment to release the recorder cleanly before
     # we open the STT recorder. This avoids rc=1 churn during handoff.
     time.sleep(0.08)
@@ -553,6 +610,7 @@ def start_recording():
 
     threading.Thread(target=_deferred_stream, daemon=True).start()
     log.info('[bridge] started — waiting for WS...')
+    return True
 
 def stop_recording():
     global _rec_proc, _ws
@@ -591,7 +649,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         global WAKE_SCORE, _wake_cooldown_until, _wake_ts
         if self.path == '/start':
-            stop_recording(); start_recording()
+            start_recording(reason='http_start')
             self.send_response(200); self._cors()
             self.send_header('Content-Type', 'application/json'); self.end_headers()
             self.wfile.write(b'{"ok":true}')

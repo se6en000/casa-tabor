@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
       },
       {
         name: 'create_event',
-        description: 'Create a new calendar event or reminder. Requires user confirmation before executing.',
+        description: 'Create a new calendar event or reminder. Low-risk creates may execute immediately; otherwise require confirmation.',
         parameters: {
           type: 'OBJECT',
           properties: {
@@ -426,7 +426,7 @@ ${defaultListId ? `Default list ID: ${defaultListId}` : ''}
 
 INSTRUCTIONS:
 - You are allowed to answer general/random questions directly (facts, explanations, ideas, writing help, etc.) when no Casa data/action is needed.
-- Use tools for calendar/grocery/place actions. Writes (create/update/delete) need user confirm, except add_grocery_items which should execute immediately. Reads (search) execute immediately.
+- Use tools for calendar/grocery/place actions. Reads (search) execute immediately. Most writes need confirmation, but low-risk create_event and add_grocery_items should execute immediately.
 - Always operate on UUIDs from the events list. Use search_events when unsure, then update with the exact ID.
 - For update_event, always copy the event's updated_at value from context/events list into expected_updated_at.
 - Batch related field updates into a single update_event action instead of many small ones.
@@ -438,7 +438,7 @@ INSTRUCTIONS:
 - For add_grocery_items, do NOT ask for confirmation. Just add items immediately. If you inferred/corrected an item name or category, mention it briefly after adding.
 - Treat shopping, groceries, pantry restocks, and food purchase intents as add_grocery_items by default. Unless user explicitly asks a question instead of an action, auto-add immediately.
 - Confirmation budget: never ask for more than one explicit confirmation for the same write. If user already confirmed once in this turn/thread, proceed.
-- For low-risk write intents (add_grocery_items), execute immediately and offer undo language instead of asking for confirmation.
+- For low-risk write intents (add_grocery_items and straightforward create_event), execute immediately and offer undo language instead of asking for confirmation.
 - If user already stated a time, do not ask for time again unless there is a true ambiguity conflict.
 - Default time window: when no date is given, search from NOW (${context.currentDate}) forward — never return past events.
 - "Next event" / "what's next" = first event whose start_time is strictly AFTER NOW. If an event is currently in progress (started before NOW, ends after NOW), mention it as "currently happening" first, then state what starts next.
@@ -784,6 +784,55 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           : ''
 
         return { type: 'text', text: `${addedLine}${correctionLine}` }
+      }
+
+      if (name === 'create_event') {
+        const title = typeof args.title === 'string' ? args.title.trim() : ''
+        const start = typeof args.start === 'string' ? args.start : ''
+        const end = typeof args.end === 'string' ? args.end : ''
+        const location = typeof args.location === 'string' ? args.location.trim() : ''
+        const notes = typeof args.notes === 'string' ? args.notes.trim() : ''
+        const members = Array.isArray(args.members)
+          ? args.members.filter((member): member is string => typeof member === 'string' && member.trim().length > 0)
+          : []
+        const startMs = Date.parse(start)
+        const endMs = Date.parse(end)
+        const durationMinutes = Number.isFinite(startMs) && Number.isFinite(endMs)
+          ? (endMs - startMs) / 60000
+          : NaN
+        const isLowRiskCreate = (
+          title.length >= 3 &&
+          title.length <= 140 &&
+          Number.isFinite(durationMinutes) &&
+          durationMinutes >= 5 &&
+          durationMinutes <= 240 &&
+          members.length <= 2 &&
+          location.length === 0 &&
+          notes.length === 0
+        )
+
+        if (isLowRiskCreate) {
+          const execResult = await sb.functions.invoke('execute-ai-action', {
+            body: {
+              tool: name,
+              args,
+              session_id: null,
+              correlation_id: `${cid}:auto-create:${Date.now().toString(36)}`,
+            },
+          })
+
+          const execError = execResult.error?.message ?? (execResult.data as { error?: string } | null)?.error ?? null
+          if (execError) {
+            return { type: 'text', text: `I heard you but couldn't auto-create that yet: ${execError}` }
+          }
+
+          const payload = (execResult.data as { success?: boolean } | null) ?? {}
+          if (!payload.success) {
+            return { type: 'text', text: "I couldn't auto-create that yet. Please try once more." }
+          }
+
+          return { type: 'text', text: `Done — I added "${title}" at ${start}.` }
+        }
       }
 
       // Write tools: return to frontend for confirmation
