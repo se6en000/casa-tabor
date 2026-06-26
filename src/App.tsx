@@ -82,6 +82,14 @@ function GlobalAIDrawer({
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ right?: number; top?: number; prompt?: string; autoSend?: boolean; source?: string } | undefined>).detail
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('casa:ai-debug', {
+          detail: {
+            event: 'drawer_open_event_received',
+            detail: `source=${detail?.source ?? 'manual'} autoSend=${detail?.autoSend ? '1' : '0'} prompt=${detail?.prompt ? '1' : '0'}`,
+          },
+        }))
+      }
       if (detail && typeof detail.right === 'number' && typeof detail.top === 'number') {
         setAnchor({ right: detail.right, top: detail.top })
       }

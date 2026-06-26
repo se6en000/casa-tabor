@@ -38,12 +38,13 @@ const FEEDBACK_LOCK_MS = 2800
 const MIN_FINAL_CONFIDENCE = 0.55
 const VOICE_TELEMETRY_KEY = 'casa-voice-telemetry'
 const AI_DEBUG_LOG_KEY = 'casa-ai-debug-log'
-const MAX_DEBUG_LOG_ENTRIES = 160
+const MAX_DEBUG_LOG_ENTRIES = 500
 
 type DebugLogEntry = {
   at: string
   event: string
   detail?: string
+  sessionId?: string
 }
 
 type VoiceUxProfile = {
@@ -134,6 +135,7 @@ function useSpeechInput({
   onConfirm,
   onCancel,
   hasPendingAction,
+  onTrace,
 }: {
   onInterim: (text: string) => void
   onFinalTranscript: (text: string, confidence?: number | null) => void
@@ -141,6 +143,7 @@ function useSpeechInput({
   onConfirm: () => void
   onCancel: () => void
   hasPendingAction: boolean
+  onTrace?: (event: string, detail?: string) => void
 }) {
   const wsRef              = useRef<WebSocket | null>(null)
   const activeRef          = useRef(false)
@@ -229,10 +232,11 @@ function useSpeechInput({
     stopWebSpeechRestartTimer()
     setPhaseSync('processing')
     const finalText = text.trim() || lastInterimRef.current.trim()
+    onTrace?.('speech_trigger_final', `${finalText.slice(0, 140)}${typeof confidence === 'number' ? ` (conf=${confidence.toFixed(2)})` : ''}`)
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     handleFinalTranscript(finalText, confidence)
-  }, [handleFinalTranscript, stopWebSpeechRestartTimer])
+  }, [handleFinalTranscript, onTrace, stopWebSpeechRestartTimer])
 
   // ── Web Speech API path (Safari / iOS) ──────────────────────────────────
   const startWebSpeech = useCallback(() => {
@@ -240,6 +244,7 @@ function useSpeechInput({
     if (recognitionRef.current) return
     stopWebSpeechRestartTimer()
     setPhaseSync('listening')
+    onTrace?.('speech_webspeech_start')
 
     const recognition = new WebSpeech()
     recognitionRef.current = recognition
@@ -307,6 +312,7 @@ function useSpeechInput({
       }
       // 'no-speech' and 'aborted' are expected — no-speech = silence, aborted = we called stop()
       if (e.error === 'no-speech' || e.error === 'aborted') return
+      onTrace?.('speech_webspeech_error', e.error ?? 'unknown')
       console.warn('[WebSpeech] error', e.error)
       if (
         activeRef.current &&
@@ -321,6 +327,7 @@ function useSpeechInput({
       if (recognitionRef.current === recognition) {
         recognitionRef.current = null
       }
+      onTrace?.('speech_webspeech_end')
       // continuous=true can still stop on silence — restart transparently
       // Use phaseRef (not phase) to avoid stale closure
       if (
@@ -338,6 +345,7 @@ function useSpeechInput({
       if (recognitionRef.current === recognition) {
         recognitionRef.current = null
       }
+      onTrace?.('speech_webspeech_start_failed', (err as Error).message ?? 'unknown')
       console.warn('[WebSpeech] start failed', err)
       if (
         activeRef.current &&
@@ -347,7 +355,7 @@ function useSpeechInput({
         scheduleRecognitionRestart(300)
       }
     }
-  }, [WebSpeech, triggerFinal, stopWebSpeechRestartTimer]) // all state accessed via refs
+  }, [WebSpeech, triggerFinal, stopWebSpeechRestartTimer, onTrace]) // all state accessed via refs
 
   const stopWebSpeech = useCallback(() => {
     stopSilenceTimer()
@@ -369,6 +377,7 @@ function useSpeechInput({
       setPhaseSync('connecting')
 
       const ws = new WebSocket(BRIDGE_WS)
+      onTrace?.('speech_bridge_connect_start')
       wsRef.current = ws
 
       const scheduleReconnect = (delayMs: number) => {
@@ -382,6 +391,7 @@ function useSpeechInput({
       ws.onopen = () => {
         setReconnecting(false)
         setBridgeDown(false)
+        onTrace?.('speech_bridge_ws_open')
         ws.send(JSON.stringify({ type: 'start' }))
       }
 
@@ -392,6 +402,7 @@ function useSpeechInput({
           switch (msg.type) {
             case 'ready':
               setPhaseSync('listening')
+              onTrace?.('speech_bridge_ready')
               connectStartRef.current = 0
               setBridgeDown(false)
               setReconnecting(false)
@@ -409,11 +420,13 @@ function useSpeechInput({
               break
             case 'final':
               if (phaseRef.current !== 'processing') {
+                onTrace?.('speech_bridge_final', `${String(msg.text ?? '').slice(0, 140)}${typeof msg.confidence === 'number' ? ` (conf=${Number(msg.confidence).toFixed(2)})` : ''}`)
                 triggerFinal(msg.text, typeof msg.confidence === 'number' ? msg.confidence : null)
                 scheduleReconnect(300)
               }
               break
             case 'error':
+              onTrace?.('speech_bridge_error', String(msg.msg ?? 'unknown'))
               console.warn('[STT] bridge error', msg.msg)
               scheduleReconnect(500)
               break
@@ -424,12 +437,14 @@ function useSpeechInput({
       }
 
       ws.onerror = () => {
+        onTrace?.('speech_bridge_ws_error')
         console.warn('[STT] WS connection error')
       }
 
       ws.onclose = () => {
         wsRef.current = null
         setVolume(0)
+        onTrace?.('speech_bridge_ws_closed')
         if (activeRef.current && phaseRef.current !== 'processing') {
           setReconnecting(true)
         }
@@ -442,7 +457,7 @@ function useSpeechInput({
     }
 
     connectBridge()
-  }, [triggerFinal]) // onInterim/phase via refs
+  }, [triggerFinal, onTrace]) // onInterim/phase via refs
 
   const stopBridge = useCallback(() => {
     if (wsRef.current) {
@@ -460,27 +475,30 @@ function useSpeechInput({
     setPhaseSync('idle')
     setVolume(0)
     setReconnecting(false)
+    onTrace?.('speech_stop')
     onInterimRef.current('')
     if (modeRef.current === 'webspeech') stopWebSpeech()
     else stopBridge()
-  }, [stopWebSpeech, stopBridge])
+  }, [stopWebSpeech, stopBridge, onTrace])
 
   const start = useCallback(async () => {
     if (activeRef.current) return
     if (IS_SAFE_MODE) return
     activeRef.current = true
     setPhaseSync('connecting')
+    onTrace?.('speech_start_requested')
 
     // Auto-detect once per component lifetime — don't re-probe on every open
     if (modeRef.current === 'unknown') {
       const hasBridge = await probeBridge()
       modeRef.current = hasBridge ? 'bridge' : (WebSpeech ? 'webspeech' : 'bridge')
+      onTrace?.('speech_mode_selected', modeRef.current)
       console.log(`[STT] mode: ${modeRef.current}`)
     }
 
     if (modeRef.current === 'webspeech') startWebSpeech()
     else startBridge()
-  }, [startWebSpeech, startBridge, WebSpeech])
+  }, [startWebSpeech, startBridge, WebSpeech, onTrace])
 
   const toggle = useCallback(() => {
     if (activeRef.current) stop()
@@ -622,6 +640,8 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const voiceSendSeqRef = useRef(0)
   const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const traceSessionIdRef = useRef<string | null>(null)
+  const closeReasonRef = useRef('unknown')
   const [uiFeedback, setUiFeedback] = useState<'none' | 'confirm' | 'cancel'>('none')
 
   const appendDebugLog = useCallback((event: string, detail?: string) => {
@@ -629,6 +649,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       at: new Date().toISOString(),
       event,
       detail,
+      sessionId: traceSessionIdRef.current ?? undefined,
     }
     setDebugLog((prev) => {
       const next = [...prev, nextEntry].slice(-MAX_DEBUG_LOG_ENTRIES)
@@ -640,6 +661,17 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       return next
     })
   }, [])
+
+  const beginTraceSession = useCallback(() => {
+    traceSessionIdRef.current = `voice-${Date.now().toString(36)}`
+    closeReasonRef.current = 'unknown'
+  }, [])
+
+  const requestClose = useCallback((reason: string) => {
+    closeReasonRef.current = reason
+    appendDebugLog('drawer_close_requested', reason)
+    onClose()
+  }, [appendDebugLog, onClose])
 
   useEffect(() => {
     const onAssistantDebug = (rawEvent: Event) => {
@@ -663,6 +695,16 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     }
   }, [])
 
+  const copyDebugLog = useCallback(async () => {
+    const payload = JSON.stringify({ exportedAt: new Date().toISOString(), entries: debugLog }, null, 2)
+    try {
+      await navigator.clipboard.writeText(payload)
+      appendDebugLog('debug_log_copied', `entries=${debugLog.length}`)
+    } catch (err) {
+      appendDebugLog('debug_log_copy_failed', (err as Error).message ?? 'unknown error')
+    }
+  }, [debugLog, appendDebugLog])
+
   const pingWakeMisfireCooldown = useCallback((seconds = voiceProfileRef.current.wakeMisfireCooldownSecs) => {
     void fetch('http://127.0.0.1:8766/wake-misfire', {
       method: 'POST',
@@ -682,8 +724,8 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     trackVoiceMetric(wakeMisfire ? 'wake_misfire_autodismiss' : 'inactivity_autodismiss')
     if (wakeMisfire) pingWakeMisfireCooldown()
     startFresh()
-    onClose()
-  }, [onClose, pingWakeMisfireCooldown, startFresh])
+    requestClose(wakeMisfire ? 'wake_misfire_auto_dismiss' : 'inactivity_auto_dismiss')
+  }, [pingWakeMisfireCooldown, requestClose, startFresh])
 
   const markUserInteraction = useCallback(() => {
     markConversationProgress(true)
@@ -786,7 +828,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         if (SLEEP_PHRASES.test(msg)) {
           appendDebugLog('voice_sleep_command', msg.slice(0, 140))
           onSleepCommand?.()
-          setTimeout(onClose, 300)
+          setTimeout(() => requestClose('sleep_command'), 300)
           return
         }
         clearAutoSendTimer()
@@ -804,7 +846,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       markUserInteraction()
       // Verbal goodbye — clear session immediately so next open starts fresh
       startFresh()
-      setTimeout(onClose, 400)
+      setTimeout(() => requestClose('voice_dismiss_phrase'), 400)
     },
     onConfirm: () => {
       markUserInteraction()
@@ -815,7 +857,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       void Promise.resolve(run()).then((confirmed) => {
         if (!confirmed) return
         startFresh()
-        setTimeout(onClose, 700)
+        setTimeout(() => requestClose('voice_confirm_completed'), 700)
       })
     },
     onCancel:  () => {
@@ -827,10 +869,11 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       void Promise.resolve(run()).then((cancelled) => {
         if (!cancelled) return
         startFresh()
-        setTimeout(onClose, 700)
+        setTimeout(() => requestClose('voice_cancel_completed'), 700)
       })
     },
     hasPendingAction: hasPendingToolAction,
+    onTrace: appendDebugLog,
   })
 
   useEffect(() => {
@@ -878,16 +921,18 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
 
   useEffect(() => {
     if (open) appendDebugLog('drawer_opened', page)
-    else appendDebugLog('drawer_closed')
+    else appendDebugLog('drawer_closed', closeReasonRef.current)
   }, [open, page, appendDebugLog])
 
   useEffect(() => {
     if (open) {
+      beginTraceSession()
       autoDismissingRef.current = false
       wakeSessionActiveRef.current = Boolean(wakeSessionNonce)
       wakeStartedRef.current = Boolean(wakeSessionNonce)
       hadMeaningfulProgressRef.current = false
       setInactivityCountdown(null)
+      appendDebugLog('trace_started', wakeSessionNonce ? 'source=wake' : 'source=manual')
       if (wakeSessionNonce) trackVoiceMetric('wake_session_started')
       markConversationProgress(false)
       if (IS_SAFE_MODE) return
@@ -914,8 +959,9 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       voiceSendInFlightRef.current = false
       setAttachedImage(null)
       freshStartedRef.current = null  // allow fresh start next time this event is opened
+      traceSessionIdRef.current = null
     }
-  }, [open, markConversationProgress, wakeSessionNonce, clearAutoSendTimer]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, markConversationProgress, wakeSessionNonce, clearAutoSendTimer, beginTraceSession, appendDebugLog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open) return
@@ -1200,7 +1246,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[65] max-sm:bg-black/40 sm:bg-transparent"
-            onClick={onClose}
+            onClick={() => requestClose('backdrop_tap')}
           />
 
           <motion.div
@@ -1266,7 +1312,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                 )}
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={() => requestClose('header_close_button')}
                   className="w-8 h-8 flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-full hover:bg-casa-divider transition-colors"
                 >
                   <X size={18} />
@@ -1567,13 +1613,22 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                 <div className="mt-2 rounded-xl border border-casa-border bg-casa-bg/70 p-2">
                   <div className="mb-1 flex items-center justify-between">
                     <p className="text-[11px] font-semibold text-casa-muted">AI/Voice debug log</p>
-                    <button
-                      type="button"
-                      onClick={clearDebugLog}
-                      className="text-[11px] text-casa-muted hover:text-casa-navy"
-                    >
-                      Clear
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { void copyDebugLog() }}
+                        className="text-[11px] text-casa-muted hover:text-casa-navy"
+                      >
+                        Copy
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearDebugLog}
+                        className="text-[11px] text-casa-muted hover:text-casa-navy"
+                      >
+                        Clear
+                      </button>
+                    </div>
                   </div>
                   <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
                     {debugLog.length === 0 ? (
