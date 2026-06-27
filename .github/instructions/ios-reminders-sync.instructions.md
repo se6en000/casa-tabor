@@ -45,3 +45,11 @@ launchctl list | grep -E 'com\.casa\.sync\.(shopping|ios-to-casa)'
 - Do **not** coerce the incoming `since` cursor through `new Date(...).toISOString()` in `sync-casa-to-ios`; this truncates microseconds to milliseconds.
 - Truncation can cause the same page to repeat forever (`deltas=limit` with unchanged `next_cursor`) and prevents catch-up.
 - Keep the original validated `since` string when applying `.gt('updated_at', since)`.
+
+## Echo-loop suppression (required)
+
+- `sync-casa-to-ios` must exclude iOS-origin rows (`last_modified_source = 'ios'`), otherwise iOS→Casa updates can boomerang back to iOS and cause perpetual churn.
+- Expected filter:
+  - include legacy null source rows
+  - include non-iOS sources
+  - exclude `ios` source rows from Casa→iOS deltas

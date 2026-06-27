@@ -43,6 +43,9 @@ Deno.serve(async (req) => {
       .select(
         'id, list_id, name, quantity, unit, category, checked, notes, updated_at, deleted_at, ios_reminder_id, sync_version, last_modified_source'
       )
+      // Prevent iOS-origin echoes from boomeranging back into Reminders.
+      // Casa→iOS should publish only Casa-origin (or legacy null-source) changes.
+      .or('last_modified_source.is.null,last_modified_source.neq.ios')
       .order('updated_at', { ascending: true })
       .limit(effectiveLimit)
 
