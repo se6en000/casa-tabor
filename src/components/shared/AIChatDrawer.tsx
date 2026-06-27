@@ -1240,13 +1240,15 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     } else {
       speech.unsuppress()
       // Auto re-arm for active wake sessions and explicit confirmation follow-ups.
-      // This preserves natural multi-turn voice flow while avoiding global reconnect loops.
-      if (open && (hasPendingToolAction || wakeSessionActiveRef.current)) {
+      // Grocery voice add should also stay hot between turns (manual mic sessions),
+      // so users can chain multiple items without re-tapping the mic.
+      const keepVoiceHot = hasPendingToolAction || wakeSessionActiveRef.current || page === 'grocery'
+      if (open && keepVoiceHot) {
         setTimeout(() => speech.ensureRunning(), 220)
         setTimeout(() => speech.ensureRunning(), 950)
       }
     }
-  }, [loading, open, hasPendingToolAction, speech]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading, open, hasPendingToolAction, page, speech]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
