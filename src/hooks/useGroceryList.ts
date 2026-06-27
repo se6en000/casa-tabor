@@ -58,6 +58,19 @@ const EMPTY_ITEMS: GroceryItem[] = []
 const NORMALIZATION_DEBOUNCE_MS = 1_500
 const NORMALIZATION_RETRY_MS = 15_000
 
+let _groceryRealtimeSubscribers = 0
+let _groceryRealtimeChannel: ReturnType<typeof supabase.channel> | null = null
+const _groceryInvalidateCallbacks = new Set<() => void>()
+let _groceryDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+function fireGroceryInvalidation() {
+  if (_groceryDebounceTimer) clearTimeout(_groceryDebounceTimer)
+  _groceryDebounceTimer = setTimeout(() => {
+    _groceryDebounceTimer = null
+    _groceryInvalidateCallbacks.forEach((cb) => cb())
+  }, 500)
+}
+
 async function fetchGroceryData() {
   const [{ data: lists }, { data: items }] = await Promise.all([
     supabase.from('grocery_lists').select('id, name, created_at').order('created_at').limit(5),
@@ -125,6 +138,32 @@ export function useGroceryList() {
     }
     window.addEventListener('casa:grocery-updated', handleExternalGroceryUpdate)
     return () => window.removeEventListener('casa:grocery-updated', handleExternalGroceryUpdate)
+  }, [qc])
+
+  useEffect(() => {
+    const invalidate = () => qc.invalidateQueries({ queryKey: ['grocery'] })
+    _groceryInvalidateCallbacks.add(invalidate)
+    _groceryRealtimeSubscribers++
+
+    if (_groceryRealtimeSubscribers === 1) {
+      _groceryRealtimeChannel = supabase
+        .channel('grocery-realtime-singleton')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'grocery_items' }, fireGroceryInvalidation)
+        .subscribe()
+    }
+
+    return () => {
+      _groceryInvalidateCallbacks.delete(invalidate)
+      _groceryRealtimeSubscribers--
+      if (_groceryRealtimeSubscribers === 0 && _groceryRealtimeChannel) {
+        supabase.removeChannel(_groceryRealtimeChannel)
+        _groceryRealtimeChannel = null
+        if (_groceryDebounceTimer) {
+          clearTimeout(_groceryDebounceTimer)
+          _groceryDebounceTimer = null
+        }
+      }
+    }
   }, [qc])
 
   useEffect(() => {
