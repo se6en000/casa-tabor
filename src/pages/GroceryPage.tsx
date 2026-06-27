@@ -52,6 +52,22 @@ const CATEGORY_ACCENT_BY_KEY: Record<string, string> = {
   pet: 'var(--color-family-kelly)',
   other: 'var(--color-casa-gold)',
 }
+const CATEGORY_SUBTITLE_BY_KEY: Record<string, string> = {
+  produce: 'Fresh items • entry side',
+  dairy: 'Cold essentials • back wall',
+  meat: 'Protein picks • butcher lane',
+  bakery: 'Bread & baked goods',
+  frozen: 'Frozen staples',
+  pantry: 'Shelf staples • center aisles',
+  beverages: 'Drinks & hydration',
+  snacks: 'Quick bites & treats',
+  deli: 'Prepared foods',
+  household: 'Home & cleaning',
+  'personal-care': 'Health & body',
+  baby: 'Baby essentials',
+  pet: 'Pet supplies',
+  other: 'Everything else',
+}
 const RECIPE_MEAL_SLOTS: Array<{ slot: RecipeMealPlanSlot; label: string }> = [
   { slot: 'tonight', label: 'Tonight' },
   { slot: 'tomorrow', label: 'Tomorrow' },
@@ -231,6 +247,13 @@ function sortItemsForShopping(items: GroceryItem[]): GroceryItem[] {
   })
 }
 
+function splitCategoryLabel(raw: string): { icon: string; label: string } {
+  const trimmed = raw.trim()
+  const match = trimmed.match(/^(\S+)\s+(.*)$/)
+  if (!match) return { icon: '🛒', label: trimmed }
+  return { icon: match[1], label: match[2] }
+}
+
 function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging = false, isSpotlighted = false, isReviewing = false, onRequestReview, onChooseReviewCategory, onDismissReview, onMovePointerDown, onMovePointerMove, onMovePointerUp, onMovePointerCancel }: {
   item: GroceryItem
   onToggle: (id: string, checked: boolean) => void
@@ -255,7 +278,7 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
 
   return (
     <div className={cn(
-      'flex items-center gap-3 px-4 py-3 hover:bg-casa-bg/50 transition-all duration-300 ease-out group will-change-transform',
+      'flex items-start gap-3.5 px-4 py-3.5 hover:bg-casa-bg/45 transition-all duration-300 ease-out group will-change-transform',
       visualChecked && 'opacity-50',
       dismissPhase === 'queued' && 'bg-casa-gold/5',
       dismissPhase === 'exiting' && 'opacity-0 translate-y-1 scale-[0.985] max-h-0 py-0',
@@ -278,11 +301,16 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
       <button
         type="button"
         onClick={() => onToggle(item.id, !visualChecked)}
-        className="flex-shrink-0 text-casa-navy/60 hover:text-casa-gold transition-colors"
+        className={cn(
+          'flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl border transition-colors',
+          visualChecked
+            ? 'border-emerald-300 bg-emerald-50 text-emerald-600'
+            : 'border-casa-border bg-casa-surface text-casa-navy/60 hover:text-casa-gold hover:border-casa-gold/40'
+        )}
       >
         {visualChecked
-          ? <CheckSquare size={20} className="text-emerald-500" />
-          : <Square size={20} />}
+          ? <CheckSquare size={21} className="text-emerald-500" />
+          : <Square size={21} />}
       </button>
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
@@ -294,7 +322,7 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
               {item.name}
             </span>
             {(item.quantity || item.unit) && (
-              <span className="ml-2 text-caption text-casa-muted">
+              <span className="ml-2 text-body-sm font-medium text-casa-muted">
                 {item.quantity}{item.unit ? ' ' + item.unit : ''}
               </span>
             )}
@@ -310,7 +338,7 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
           )}
         </div>
         {(item.store_section || item.subcategory || item.brand) && (
-          <p className="text-[11px] text-casa-muted mt-0.5">
+          <p className="text-[11px] text-casa-muted mt-0.5 leading-relaxed">
             {[item.store_section, item.subcategory, item.brand].filter(Boolean).join(' · ')}
           </p>
         )}
@@ -1414,9 +1442,11 @@ export default function GroceryPage() {
                 {activeItemsByCategory.map((cat) => ({
                     key: cat.key,
                     label: cat.label,
+                    categoryMeta: splitCategoryLabel(cat.label),
                     items: cat.items,
                     dropKey: cat.key,
                     accentColor: CATEGORY_ACCENT_BY_KEY[cat.key] ?? 'var(--color-casa-gold)',
+                    subtitle: CATEGORY_SUBTITLE_BY_KEY[cat.key] ?? 'Auto-organized for faster list scanning',
                     reviewCount: cat.items.filter((item) =>
                       typeof item.enhancement_confidence === 'number' &&
                       item.enhancement_confidence < LOW_CONFIDENCE_REVIEW_THRESHOLD
@@ -1431,24 +1461,28 @@ export default function GroceryPage() {
                     )}
                   >
                     <div
-                      className="bg-casa-surface rounded-2xl border border-casa-border overflow-hidden"
+                      className="bg-casa-surface rounded-[1.4rem] border border-casa-border overflow-hidden shadow-card"
                     >
-                      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-casa-divider">
-                        <p className="text-body font-semibold text-casa-navy">
-                          {section.label}
-                        </p>
-                        <div className="flex items-center gap-2 text-caption text-casa-muted">
-                          <span>
-                            {section.items.length} item{section.items.length === 1 ? '' : 's'}
-                          </span>
+                      <div className="h-2" style={{ backgroundColor: section.accentColor }} />
+                      <div className="flex items-start justify-between gap-3 px-4 py-3.5 bg-casa-bg/80 border-b border-casa-divider">
+                        <div className="min-w-0">
+                          <p className="text-heading font-semibold text-casa-navy leading-tight flex items-center gap-2">
+                            <span>{section.categoryMeta.icon}</span>
+                            <span>{section.categoryMeta.label}</span>
+                          </p>
+                          <p className="text-body-sm text-casa-muted mt-0.5">{section.subtitle}</p>
+                        </div>
+                        <div className="flex items-center gap-2 text-caption text-casa-muted shrink-0">
                           {section.reviewCount > 0 && (
-                            <span>
+                            <span className="px-2.5 py-1 rounded-pill border border-casa-gold/35 bg-casa-gold/10 text-[11px] font-semibold text-casa-navy">
                               {section.reviewCount} review
                             </span>
                           )}
+                          <span className="px-3 py-1 rounded-pill border border-casa-border bg-casa-surface text-body-sm font-semibold text-casa-navy/85">
+                            {section.items.length} item{section.items.length === 1 ? '' : 's'}
+                          </span>
                         </div>
                       </div>
-                      <div className="h-1.5" style={{ backgroundColor: section.accentColor }} />
                       <div className="divide-y divide-casa-divider">
                       {section.items.map((item) => (
                         <div key={item.id} id={`grocery-item-${item.id}`}>
