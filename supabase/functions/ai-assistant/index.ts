@@ -439,6 +439,7 @@ INSTRUCTIONS:
 - Treat shopping, groceries, pantry restocks, and food purchase intents as add_grocery_items by default. Unless user explicitly asks a question instead of an action, auto-add immediately.
 - Confirmation budget: never ask for more than one explicit confirmation for the same write. If user already confirmed once in this turn/thread, proceed.
 - For low-risk write intents (add_grocery_items and straightforward create_event), execute immediately and offer undo language instead of asking for confirmation.
+- Never claim "done/completed/updated/saved" for write actions unless the tool execution result confirms success; for calendar writes, only use completion wording when sync_status is synced.
 - If user already stated a time, do not ask for time again unless there is a true ambiguity conflict.
 - Default time window: when no date is given, search from NOW (${context.currentDate}) forward — never return past events.
 - "Next event" / "what's next" = first event whose start_time is strictly AFTER NOW. If an event is currently in progress (started before NOW, ends after NOW), mention it as "currently happening" first, then state what starts next.
@@ -743,7 +744,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         if (!res2.ok) return { type: 'error', code: 'llm_error', message: 'Second LLM call failed' }
         const data2 = await res2.json()
         const finalText = data2.candidates?.[0]?.content?.parts?.find((p: { text?: string }) => p.text)?.text ?? ''
-        return { type: 'text', text: finalText || 'Done!' }
+        return { type: 'text', text: finalText || 'I found results, but I could not format a full response. Please ask me to summarize.' }
       }
 
       if (name === 'add_grocery_items') {
@@ -826,12 +827,23 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             return { type: 'text', text: `I heard you but couldn't auto-create that yet: ${execError}` }
           }
 
-          const payload = (execResult.data as { success?: boolean } | null) ?? {}
+          const payload = (execResult.data as { success?: boolean; sync_status?: 'synced' | 'queued' | 'failed'; sync_warning?: string } | null) ?? {}
           if (!payload.success) {
             return { type: 'text', text: "I couldn't auto-create that yet. Please try once more." }
           }
 
-          return { type: 'text', text: `Done — I added "${title}" at ${start}.` }
+          if (payload.sync_status === 'synced') {
+            return { type: 'text', text: `Confirmed — I created "${title}" at ${start}.` }
+          }
+          if (payload.sync_status === 'queued') {
+            return { type: 'text', text: `Saved in Casa Tabor. Google sync is queued and still in progress for "${title}".` }
+          }
+          return {
+            type: 'text',
+            text: payload.sync_warning
+              ? payload.sync_warning
+              : `Saved in Casa Tabor, but I could not confirm Google sync yet for "${title}".`,
+          }
         }
       }
 

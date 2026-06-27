@@ -1517,6 +1517,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                   onConfirmToolAction={async (messageId, tool, args) => {
                     updateMessageToolStatus(messageId, 'loading')
                     try {
+                      const isCalendarWrite = tool === 'create_event' || tool === 'update_event' || tool === 'delete_event'
                       const matchedEvent = tool === 'update_event'
                         ? events.find((event) => event.id === String(args.id ?? ''))
                         : undefined
@@ -1558,12 +1559,24 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                       }
 
                       if (executeFailure) throw executeFailure
+                      const normalizedSyncStatus = data?.sync_status === 'queued'
+                        ? 'queued'
+                        : data?.sync_status === 'failed'
+                          ? 'failed'
+                          : data?.sync_status === 'synced'
+                            ? 'synced'
+                            : undefined
+                      const syncStatus = isCalendarWrite ? (normalizedSyncStatus ?? 'failed') : undefined
+                      const syncWarning = data?.sync_warning
+                        ?? (isCalendarWrite && syncStatus === 'failed'
+                          ? 'Saved in Casa Tabor, but sync verification is unavailable right now.'
+                          : undefined)
                       appendDebugLog('tool_action_success', `${tool}`)
                       updateMessageToolStatus(messageId, 'done', {
                         actionId: data?.action_id,
                         resultEventId: data?.event_id,
-                        syncWarning: data?.sync_warning,
-                        syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
+                        syncWarning,
+                        syncStatus,
                         undoStatus: 'idle',
                         undoErrorMsg: undefined,
                       })
@@ -1590,9 +1603,18 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                       })
                       if (error) throw error
                       if (data?.success === false) throw new Error(data.error ?? 'Undo failed')
+                      const normalizedSyncStatus = data?.sync_status === 'queued'
+                        ? 'queued'
+                        : data?.sync_status === 'failed'
+                          ? 'failed'
+                          : data?.sync_status === 'synced'
+                            ? 'synced'
+                            : 'failed'
                       updateMessageToolStatus(messageId, 'done', {
-                        syncWarning: data?.sync_warning,
-                        syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
+                        syncWarning: data?.sync_warning ?? (normalizedSyncStatus === 'failed'
+                          ? 'Undo applied in Casa Tabor, but sync verification is unavailable right now.'
+                          : undefined),
+                        syncStatus: normalizedSyncStatus,
                         undoStatus: 'done',
                         undoErrorMsg: undefined,
                       })
@@ -1904,6 +1926,8 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, o
   const isUser = msg.role === 'user'
   const ta = msg.toolAction
   const hasPendingAction = !!ta && ta.status === 'pending'
+  const isCalendarWrite = !!ta && (ta.tool === 'create_event' || ta.tool === 'update_event' || ta.tool === 'delete_event')
+  const calendarSyncStatus = isCalendarWrite ? (ta.syncStatus ?? 'failed') : null
   const isStaleError = !!ta?.errorMsg && ta.errorMsg.toLowerCase().includes('changed since')
   const isDestructiveAction = ta?.tool === 'delete_event' || ta?.tool === 'clear_checked_grocery_items'
 
@@ -1944,22 +1968,34 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, o
           <div className="mt-2.5 pt-2.5 border-t border-casa-divider">
             {ta.status === 'done' ? (
               <div className="space-y-1">
-                <div className="flex items-center gap-1.5 text-emerald-600 text-caption font-semibold">
-                  <Check size={13} />
-                  {ta.tool === 'create_event' ? 'Created & added to calendar ✓'
-                    : ta.tool === 'update_event' ? 'Updated ✓'
-                    : ta.tool === 'delete_event' ? 'Deleted ✓'
-                    : ta.tool === 'add_grocery_items' ? 'Added to grocery list ✓'
-                    : 'Done ✓'}
-                </div>
+                {isCalendarWrite && calendarSyncStatus !== 'synced' ? (
+                  <div className={cn(
+                    'flex items-center gap-1.5 text-caption font-semibold',
+                    calendarSyncStatus === 'queued' ? 'text-amber-600' : 'text-red-600',
+                  )}>
+                    {calendarSyncStatus === 'queued' ? <Loader2 size={13} className="animate-spin" /> : <XCircle size={13} />}
+                    {calendarSyncStatus === 'queued'
+                      ? 'Saved in Casa — Google sync in progress'
+                      : 'Saved in Casa — Google sync not confirmed'}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-emerald-600 text-caption font-semibold">
+                    <Check size={13} />
+                    {ta.tool === 'create_event' ? 'Created and verified ✓'
+                      : ta.tool === 'update_event' ? 'Updated and verified ✓'
+                      : ta.tool === 'delete_event' ? 'Deleted and verified ✓'
+                      : ta.tool === 'add_grocery_items' ? 'Added to grocery list ✓'
+                      : 'Completed ✓'}
+                  </div>
+                )}
                 {ta.tool === 'create_event' && ta.resultEventId && (
                   <p className="text-caption text-casa-muted">Visible on your calendar now</p>
                 )}
                 {ta.syncWarning && (
                   <p className="text-caption text-amber-600">{ta.syncWarning}</p>
                 )}
-                {ta.tool === 'update_event' && (
-                  <SyncStatusPill status={ta.syncStatus ?? (ta.syncWarning ? 'queued' : 'synced')} />
+                {isCalendarWrite && calendarSyncStatus && (
+                  <SyncStatusPill status={calendarSyncStatus} />
                 )}
                 {ta.tool === 'update_event' && ta.actionId && ta.undoStatus !== 'done' && (
                   <div className="pt-1 space-y-1">

@@ -188,10 +188,30 @@ Deno.serve(async (req) => {
 
       // Fire enrichment async (slow — Gemini AI, don't block)
       sb.functions.invoke('enrich-event', { body: { event_id: event.id } }).catch(() => {})
-      // Await Google sync — fire-and-forget can be killed before completion in Deno Deploy
-      await sb.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {})
+      // Verify Google calendar creation before claiming completion.
+      const syncRes = await sb.functions.invoke('create-google-event', {
+        body: { event_id: event.id },
+      }).catch((err: Error) => ({ data: null, error: err }))
+      const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? null
+      const syncSkipped = typeof syncRes?.data?.skipped === 'string' ? syncRes.data.skipped : null
 
-      return new Response(JSON.stringify({ success: true, event_id: event.id, correlation_id: cid }), {
+      let syncStatus: 'synced' | 'failed' = 'synced'
+      let syncWarning: string | undefined
+      if (syncError) {
+        syncStatus = 'failed'
+        syncWarning = `Saved in Casa Tabor, but Google sync is not confirmed: ${syncError}`
+      } else if (syncSkipped && syncSkipped !== 'reminder' && syncSkipped !== 'already has google_event_id') {
+        syncStatus = 'failed'
+        syncWarning = `Saved in Casa Tabor, but Google sync is not confirmed (${syncSkipped}).`
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        event_id: event.id,
+        sync_status: syncStatus,
+        ...(syncWarning ? { sync_warning: syncWarning } : {}),
+        correlation_id: cid,
+      }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
@@ -365,10 +385,31 @@ Deno.serve(async (req) => {
     }
 
     if (tool === 'delete_event') {
-      await sb.functions.invoke('delete-google-event', { body: { event_id: args.id } }).catch(() => {})
+      const syncRes = await sb.functions.invoke('delete-google-event', {
+        body: { event_id: args.id },
+      }).catch((err: Error) => ({ data: null, error: err }))
+      const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? null
+      const syncSkipped = typeof syncRes?.data?.skipped === 'string' ? syncRes.data.skipped : null
+
       const { error } = await sb.from('events').update({ status: 'cancelled' }).eq('id', args.id)
       if (error) throw new Error(error.message)
-      return new Response(JSON.stringify({ success: true, correlation_id: cid }), {
+
+      let syncStatus: 'synced' | 'failed' = 'synced'
+      let syncWarning: string | undefined
+      if (syncError) {
+        syncStatus = 'failed'
+        syncWarning = `Marked cancelled in Casa Tabor, but Google deletion is not confirmed: ${syncError}`
+      } else if (syncSkipped && syncSkipped !== 'no google_event_id') {
+        syncStatus = 'failed'
+        syncWarning = `Marked cancelled in Casa Tabor, but Google deletion is not confirmed (${syncSkipped}).`
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        sync_status: syncStatus,
+        ...(syncWarning ? { sync_warning: syncWarning } : {}),
+        correlation_id: cid,
+      }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
