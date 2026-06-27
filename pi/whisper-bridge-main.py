@@ -29,12 +29,19 @@ WAKE_SCORE    = 0.12           # Reliable trigger without excessive false positi
 WAKE_COOLDOWN = 2.0
 WAKE_MISFIRE_COOLDOWN = 6.0
 WAKE_WATCHDOG_SECS = 90
-WAKE_AUDIO_GAIN   = 3.0        # Amplify mic input before wake detection
+WAKE_AUDIO_GAIN   = 2.0        # Amplify mic input before wake detection
 WAKE_SCORE_MIN = 0.08
 WAKE_SCORE_MAX = 0.90
 POST_FINAL_WAKE_COOLDOWN_SECS = 3.0
+POST_FINAL_WAKE_DISARM_SECS = 5.0
 START_DEBOUNCE_SECS = 0.8
 STT_CLIENT_GRACE_SECS = 2.5
+STT_CLIENT_DISCONNECT_GRACE_SECS = 0.7
+WAKE_CONSECUTIVE_HITS_REQUIRED = 3
+WAKE_HIT_MAX_GAP_SECS = 0.35
+WAKE_SCORE_LOG_THROTTLE_SECS = 0.8
+MISFIRE_SUPPRESS_AFTER_SPEECH_STARTED_SECS = 8.0
+POST_STOP_WAKE_DISARM_SECS = 2.0
 SENSOR_BRIDGE  = 'http://127.0.0.1:8765'
 
 # ── Audio buffering for wake word ─────────────────────────────────────────────
@@ -81,6 +88,7 @@ _ws_clients_lock = threading.Lock()
 _stt_client = None   # browser WS that owns the current STT session
 _stt_lock   = threading.Lock()
 _stt_missing_since = 0.0
+_stt_disconnect_seq = 0
 
 def _ws_push_all(msg: dict):
     data = json.dumps(msg)
@@ -107,7 +115,7 @@ def _ws_push_stt(msg: dict):
             _stt_client = None
 
 def _handle_ws_client(ws):
-    global _stt_client
+    global _stt_client, _stt_disconnect_seq
     with _ws_clients_lock:
         _ws_clients.add(ws)
     log.info('[WS] browser client connected')
@@ -121,6 +129,7 @@ def _handle_ws_client(ws):
             if cmd == 'start':
                 with _stt_lock:
                     _stt_client = ws
+                    _stt_disconnect_seq += 1
                 started = start_recording(reason='ws_start')
                 if not started and _get().get('recording') and _get().get('ready'):
                     _ws_push_stt({'type': 'ready'})
@@ -135,14 +144,23 @@ def _handle_ws_client(ws):
         should_stop = False
         with _ws_clients_lock:
             _ws_clients.discard(ws)
+        stop_seq = 0
         with _stt_lock:
             if _stt_client is ws:
                 _stt_client = None
                 should_stop = True
+                _stt_disconnect_seq += 1
+                stop_seq = _stt_disconnect_seq
         if should_stop:
-            # If the active STT browser disconnects unexpectedly, stop recording so
-            # the wake-word loop can regain the mic immediately.
-            stop_recording()
+            # Give the browser a short grace window to reconnect before tearing
+            # down STT; this avoids stop/start churn on transient WS reconnects.
+            def _delayed_stop(expected_seq: int):
+                time.sleep(STT_CLIENT_DISCONNECT_GRACE_SECS)
+                with _stt_lock:
+                    should_teardown = (_stt_client is None and _stt_disconnect_seq == expected_seq)
+                if should_teardown:
+                    stop_recording()
+            threading.Thread(target=_delayed_stop, args=(stop_seq,), daemon=True).start()
         log.info('[WS] browser client disconnected')
 
 def _run_ws_server():
@@ -162,6 +180,9 @@ _wake_cooldown_until = 0.0
 _wake_lock           = threading.Lock()
 _wake_proc           = None
 _wake_last_chunk_ts  = time.time()
+_wake_disarmed_until = 0.0
+_wake_last_score_log_ts = 0.0
+_last_speech_started_ts = 0.0
 _audio_buffer        = []  # Circular buffer of audio chunks
 _audio_buffer_lock   = threading.Lock()
 WAKE_CHUNK_SECS      = 0.08  # 2560 bytes @ 16kHz, 16-bit mono
@@ -266,7 +287,7 @@ def _make_recorder_cmd():
     return ['arecord', '-D', ALSA_DEVICE, '-f', 'S16_LE', '-r', str(RATE), '-c', '1', '-']
 
 def _wake_word_loop():
-    global _wake_triggered, _wake_ts, _wake_last_chunk_ts, _wake_cooldown_until, _stt_missing_since
+    global _wake_triggered, _wake_ts, _wake_last_chunk_ts, _wake_cooldown_until, _stt_missing_since, _wake_disarmed_until, _wake_last_score_log_ts
     try:
         import numpy as np
         from openwakeword.model import Model as WakeModel
@@ -314,12 +335,15 @@ def _wake_word_loop():
         _wake_proc = proc
         log.info('[wake] recorder started (pid=%d)', proc.pid)
         try:
+            high_score_streak = 0
+            last_hit_ts = 0.0
             # Drain warmup chunks to skip startup pop/noise
             for _ in range(WARMUP_CHUNKS):
                 proc.stdout.read(CHUNK_BYTES)
             while True:
                 rec_state = _get()['recording']
                 if rec_state:
+                    high_score_streak = 0
                     log.info('[wake] yielding mic — STT recording=True')
                     # Wait here until recording is done before letting outer while grab proc again
                     while _get()['recording']:
@@ -345,15 +369,29 @@ def _wake_word_loop():
                 prediction = model.predict(audio_np)
                 score = max(prediction.get(WAKE_MODEL, 0),
                             prediction.get(f'{WAKE_MODEL}_v0.1', 0))
-                if score > 0.05:
+                now = time.time()
+                if score > 0.05 and (now - _wake_last_score_log_ts) >= WAKE_SCORE_LOG_THROTTLE_SECS:
                     log.info(f'[wake] score={score:.3f}')
+                    _wake_last_score_log_ts = now
+                if now < _wake_disarmed_until:
+                    high_score_streak = 0
+                    continue
                 if score >= WAKE_SCORE:
-                    now = time.time()
                     if now < _wake_cooldown_until:
+                        high_score_streak = 0
+                        continue
+                    if now - last_hit_ts <= WAKE_HIT_MAX_GAP_SECS:
+                        high_score_streak += 1
+                    else:
+                        high_score_streak = 1
+                    last_hit_ts = now
+                    if high_score_streak < WAKE_CONSECUTIVE_HITS_REQUIRED:
                         continue
                     if now - _wake_ts >= WAKE_COOLDOWN:
                         log.info(f'[wake] triggered! score={score:.2f}')
                         _display_on()
+                        _wake_disarmed_until = max(_wake_disarmed_until, now + 0.8)
+                        high_score_streak = 0
                         
                         # Capture buffer for pre-fill
                         buffer_audio = _get_buffer_copy()
@@ -374,6 +412,8 @@ def _wake_word_loop():
                         
                         # If an STT client gets created immediately, the buffer will be
                         # sent as initial audio before any new chunks
+                else:
+                    high_score_streak = 0
         except Exception as e:
             log.error(f'[wake] inner error: {e}')
         finally:
@@ -395,12 +435,13 @@ def _strip_wake(text: str) -> str:
     return _WAKE_STRIP.sub('', text).strip()
 
 def _on_message(ws_arg, message):
-    global _finals, _final_conf, _wake_cooldown_until
+    global _finals, _final_conf, _wake_cooldown_until, _wake_disarmed_until, _last_speech_started_ts
     try:
         data = json.loads(message)
         msg_type = data.get('type', '')
 
         if msg_type == 'SpeechStarted':
+            _last_speech_started_ts = time.time()
             log.info('[DG] SpeechStarted')
             return
 
@@ -409,7 +450,9 @@ def _on_message(ws_arg, message):
             conf = (sum(_final_conf) / len(_final_conf)) if _final_conf else None
             if full:
                 log.info(f'[DG] UtteranceEnd -> "{full}"')
-                _wake_cooldown_until = max(_wake_cooldown_until, time.time() + POST_FINAL_WAKE_COOLDOWN_SECS)
+                now = time.time()
+                _wake_cooldown_until = max(_wake_cooldown_until, now + POST_FINAL_WAKE_COOLDOWN_SECS)
+                _wake_disarmed_until = max(_wake_disarmed_until, now + POST_FINAL_WAKE_DISARM_SECS)
                 _finals = []
                 _final_conf = []
                 _set(transcript=full, interim_transcript='', recording=False)
@@ -436,7 +479,9 @@ def _on_message(ws_arg, message):
             _final_conf = []
             if full:
                 log.info(f'[DG] speech_final -> "{full}"')
-                _wake_cooldown_until = max(_wake_cooldown_until, time.time() + POST_FINAL_WAKE_COOLDOWN_SECS)
+                now = time.time()
+                _wake_cooldown_until = max(_wake_cooldown_until, now + POST_FINAL_WAKE_COOLDOWN_SECS)
+                _wake_disarmed_until = max(_wake_disarmed_until, now + POST_FINAL_WAKE_DISARM_SECS)
                 _set(transcript=full, interim_transcript='', recording=False)
                 _ws_push_stt({'type': 'final', 'text': full, 'confidence': conf})
         elif is_final and text:
@@ -613,7 +658,7 @@ def start_recording(force_restart=False, reason='manual'):
     return True
 
 def stop_recording():
-    global _rec_proc, _ws
+    global _rec_proc, _ws, _wake_disarmed_until
     old_ws = _ws
     _ws = None
     old_proc = _rec_proc
@@ -628,6 +673,7 @@ def stop_recording():
     if old_ws:
         try: old_ws.close()
         except: pass
+    _wake_disarmed_until = max(_wake_disarmed_until, time.time() + POST_STOP_WAKE_DISARM_SECS)
     _set(recording=False, ready=False, volume=0)
     log.info('[bridge] stopped')
 
@@ -647,7 +693,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200); self._cors(); self.end_headers()
 
     def do_POST(self):
-        global WAKE_SCORE, _wake_cooldown_until, _wake_ts
+        global WAKE_SCORE, _wake_cooldown_until, _wake_ts, _wake_disarmed_until, _last_speech_started_ts
         if self.path == '/start':
             start_recording(reason='http_start')
             self.send_response(200); self._cors()
@@ -689,13 +735,29 @@ class Handler(BaseHTTPRequestHandler):
                 seconds = WAKE_MISFIRE_COOLDOWN
             seconds = max(1.0, min(15.0, seconds))
             now = time.time()
+            state = _get()
+            recent_speech_started = (now - _last_speech_started_ts) <= MISFIRE_SUPPRESS_AFTER_SPEECH_STARTED_SECS
+            if state.get('recording') or recent_speech_started:
+                remaining = max(0.0, _wake_cooldown_until - now)
+                reason = 'recording_active' if state.get('recording') else 'recent_speech_started'
+                log.info(f'[wake] misfire cooldown ignored ({reason})')
+                self.send_response(200); self._cors()
+                self.send_header('Content-Type', 'application/json'); self.end_headers()
+                self.wfile.write(json.dumps({
+                    'ok': True,
+                    'applied': False,
+                    'reason': reason,
+                    'cooldown_seconds': round(remaining, 2),
+                }).encode())
+                return
             _wake_ts = now
             _wake_cooldown_until = max(_wake_cooldown_until, now + seconds)
+            _wake_disarmed_until = max(_wake_disarmed_until, now + seconds)
             remaining = max(0.0, _wake_cooldown_until - now)
             log.info(f'[wake] misfire cooldown set ({remaining:.1f}s)')
             self.send_response(200); self._cors()
             self.send_header('Content-Type', 'application/json'); self.end_headers()
-            self.wfile.write(json.dumps({'ok': True, 'cooldown_seconds': round(remaining, 2)}).encode())
+            self.wfile.write(json.dumps({'ok': True, 'applied': True, 'cooldown_seconds': round(remaining, 2)}).encode())
         elif self.path == '/display/off':
             _display_off()
             self.send_response(200); self._cors()
@@ -712,7 +774,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith('/status'):
             s = _get()
+            now = time.time()
             s['wake_cooldown_remaining'] = max(0.0, _wake_cooldown_until - time.time())
+            s['wake_disarmed_remaining'] = max(0.0, _wake_disarmed_until - time.time())
+            s['speech_started_recently'] = (now - _last_speech_started_ts) <= MISFIRE_SUPPRESS_AFTER_SPEECH_STARTED_SECS
             self.send_response(200); self._cors()
             self.send_header('Content-Type', 'application/json'); self.end_headers()
             self.wfile.write(json.dumps(s).encode())
