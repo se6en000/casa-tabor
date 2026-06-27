@@ -1523,17 +1523,41 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                       const requestArgs = tool === 'update_event' && matchedEvent && args.expected_updated_at === undefined
                         ? { ...args, expected_updated_at: matchedEvent.updated_at }
                         : args
-                      const { data, error } = await supabase.functions.invoke('execute-ai-action', {
+                      const invokeExecute = async (payloadArgs: Record<string, unknown>) => supabase.functions.invoke('execute-ai-action', {
                         body: {
                           tool,
-                          args: requestArgs,
+                          args: payloadArgs,
                           action_id: messageId,
                           session_id: session?.id ?? null,
                           correlation_id: buildCorrelationId(messageId),
                         },
                       })
-                      if (error) throw error
-                      if (data?.success === false) throw new Error(data.error ?? 'Action failed')
+
+                      let { data, error } = await invokeExecute(requestArgs)
+                      let executeFailure = error ?? (data?.success === false ? new Error(data.error ?? 'Action failed') : null)
+
+                      if (executeFailure && tool === 'update_event' && /changed since/i.test((executeFailure as Error).message ?? '')) {
+                        const eventId = String(args.id ?? '')
+                        if (eventId) {
+                          appendDebugLog('tool_action_retry_stale', `update_event:${eventId}`)
+                          const { data: latestEvent, error: latestEventError } = await supabase
+                            .from('events')
+                            .select('updated_at')
+                            .eq('id', eventId)
+                            .single()
+                          if (latestEventError) throw executeFailure
+                          const retryArgs = {
+                            ...requestArgs,
+                            expected_updated_at: latestEvent.updated_at,
+                          }
+                          const retryResult = await invokeExecute(retryArgs)
+                          data = retryResult.data
+                          error = retryResult.error
+                          executeFailure = error ?? (data?.success === false ? new Error(data.error ?? 'Action failed') : null)
+                        }
+                      }
+
+                      if (executeFailure) throw executeFailure
                       appendDebugLog('tool_action_success', `${tool}`)
                       updateMessageToolStatus(messageId, 'done', {
                         actionId: data?.action_id,
