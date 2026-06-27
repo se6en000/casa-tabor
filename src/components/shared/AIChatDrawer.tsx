@@ -1239,13 +1239,14 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       speech.suppress()
     } else {
       speech.unsuppress()
-      // Double re-arm pass for iOS/WebSpeech: immediate + delayed safety retry.
-      if (open) {
+      // Only auto re-arm for explicit confirmation follow-ups.
+      // For normal turns, require a fresh wake to avoid post-final reconnect churn.
+      if (open && hasPendingToolAction) {
         setTimeout(() => speech.ensureRunning(), 220)
         setTimeout(() => speech.ensureRunning(), 950)
       }
     }
-  }, [loading, open, speech]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading, open, hasPendingToolAction, speech]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
