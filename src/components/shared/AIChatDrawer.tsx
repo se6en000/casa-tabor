@@ -1239,9 +1239,9 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       speech.suppress()
     } else {
       speech.unsuppress()
-      // Only auto re-arm for explicit confirmation follow-ups.
-      // For normal turns, require a fresh wake to avoid post-final reconnect churn.
-      if (open && hasPendingToolAction) {
+      // Auto re-arm for active wake sessions and explicit confirmation follow-ups.
+      // This preserves natural multi-turn voice flow while avoiding global reconnect loops.
+      if (open && (hasPendingToolAction || wakeSessionActiveRef.current)) {
         setTimeout(() => speech.ensureRunning(), 220)
         setTimeout(() => speech.ensureRunning(), 950)
       }
