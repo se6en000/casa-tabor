@@ -1105,7 +1105,15 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
           }
           // No pending callback: fall through to Phase 1
         }
-        if (isLikelyNoiseTranscript(msg, confidence)) {
+        // Check if this is a known one-word intent (should bypass noise filter)
+        const oneWordIntentKeywords = new Set([
+          'yes', 'yeah', 'yep', 'ok', 'okay', 'confirm',
+          'no', 'nope', 'cancel', 'abort', 'skip', 'dont',
+          'quit', 'exit', 'close', 'goodbye', 'bye', 'done'
+        ])
+        const isKnownOneWordIntent = oneWordIntentKeywords.has(finalized.toLowerCase().trim())
+        
+        if (!isKnownOneWordIntent && isLikelyNoiseTranscript(msg, confidence)) {
           appendDebugLog('voice_noise_filtered', msg.slice(0, 140))
           interimRef.current = ''
           queueMicrotask(() => setInput(''))
