@@ -48,6 +48,12 @@ type SimpleCommandExecution = {
   assistantMessage?: string
 }
 
+type SendOptions = {
+  skipGoodbyeCheck?: boolean
+  disableFastGroceryLane?: boolean
+  traceId?: string
+}
+
 function isRetriableAssistantError(error: unknown): boolean {
   const kind = classifyAssistantError(error)
   return kind === 'network' || kind === 'provider'
@@ -457,7 +463,7 @@ export function useAIAssistant(ctx: AssistantContext) {
   const lastRequestRef = useRef<{
     text: string
     image?: { dataUrl: string; mimeType: string }
-    options?: { skipGoodbyeCheck?: boolean; disableFastGroceryLane?: boolean }
+    options?: SendOptions
   } | null>(null)
   useEffect(() => { sessionRef.current = session }, [session])
   useEffect(() => { messagesRef.current = messages }, [messages])
@@ -494,7 +500,7 @@ export function useAIAssistant(ctx: AssistantContext) {
   const send = useCallback(async (
     text: string,
     image?: { dataUrl: string; mimeType: string },
-    options?: { skipGoodbyeCheck?: boolean; disableFastGroceryLane?: boolean },
+    options?: SendOptions,
   ) => {
     const turnStart = performance.now()
     const trimmedText = text.trim()
@@ -527,7 +533,8 @@ export function useAIAssistant(ctx: AssistantContext) {
     if (!activeSession) {
       activeSession = startNewSession()
     }
-    const traceId = activeSession.id
+    const explicitTraceId = typeof options?.traceId === 'string' ? options.traceId.trim() : ''
+    const traceId = explicitTraceId.length > 0 ? explicitTraceId : activeSession.id
     const turnId = userMsg.id
     const deviceId = getVoiceDebugDeviceId()
     const clientBuild = detectClientBuildFingerprint()

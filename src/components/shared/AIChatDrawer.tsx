@@ -1024,9 +1024,12 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     queueMicrotask(() => setInput(''))
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
-    send(trimmed, undefined, { disableFastGroceryLane: isWakeAssistantMode })
+    send(trimmed, undefined, {
+      disableFastGroceryLane: isWakeAssistantMode,
+      traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
+    })
     return true
-  }, [loading, send, markUserInteraction, clearAutoSendTimer, appendDebugLog, transitionTurnState, isWakeAssistantMode])
+  }, [loading, send, markUserInteraction, clearAutoSendTimer, appendDebugLog, transitionTurnState, isWakeAssistantMode, session?.id])
 
   const queueOrSendVoiceInput = useCallback((text: string) => {
     const trimmed = text.trim()
@@ -1398,9 +1401,10 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       setTimeout(() => send(launchRequest.prompt, undefined, {
         skipGoodbyeCheck: true,
         disableFastGroceryLane: isWakeAssistantMode,
+        traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
       }), 120)
     }
-  }, [open, launchRequest, send, startFresh, markUserInteraction, isWakeAssistantMode])
+  }, [open, launchRequest, send, startFresh, markUserInteraction, isWakeAssistantMode, session?.id])
 
   // Once session is fresh (no messages), inject a deterministic event summary greeting
   // so the user immediately sees what event the AI has loaded — no API round-trip needed.
@@ -1526,8 +1530,11 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
     setAttachedImage(null)
-    send(text || '(see attached image)', img ?? undefined, { disableFastGroceryLane: isWakeAssistantMode })
-  }, [input, attachedImage, loading, send, markUserInteraction, transitionTurnState, isWakeAssistantMode])
+    send(text || '(see attached image)', img ?? undefined, {
+      disableFastGroceryLane: isWakeAssistantMode,
+      traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
+    })
+  }, [input, attachedImage, loading, send, markUserInteraction, transitionTurnState, isWakeAssistantMode, session?.id])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
