@@ -19,6 +19,7 @@ import {
   writeVoiceRuntimeConfig,
 } from '../../lib/voiceRuntimeConfig'
 import { appendVoiceAudit, clearVoiceAudit, readVoiceAudit, type VoiceAuditEvent } from '../../lib/voiceAudit'
+import { enqueueRemoteVoiceTrace } from '../../lib/remoteVoiceTrace'
 
 const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s all|all done|never mind|nevermind|stop)\b/i
 const STRONG_CONFIRM_PHRASES = new Set([
@@ -817,7 +818,9 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
 
   const appendDebugLog = useCallback((event: string, detail?: string) => {
     const entry = buildTraceEntry(event, detail)
+    enqueueRemoteVoiceTrace(entry, 'debug', voiceConfig)
     if (voiceConfig.auditEnabled) {
+      enqueueRemoteVoiceTrace(entry, 'audit', voiceConfig)
       console.info('[casa-ai-audit]', JSON.stringify(entry))
       const updated = appendVoiceAudit(entry)
       setAuditLog(updated.slice(-MAX_AUDIT_LOG_ENTRIES))
@@ -836,7 +839,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       }
       return next
     })
-  }, [buildTraceEntry, voiceConfig.auditEnabled, voiceConfig.debugLevel])
+  }, [buildTraceEntry, voiceConfig])
 
   const transitionTurnState = useCallback((next: VoiceTurnState, reason: string) => {
     const previous = turnStateRef.current
