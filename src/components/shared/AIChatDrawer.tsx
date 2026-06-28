@@ -21,8 +21,33 @@ import {
 import { appendVoiceAudit, clearVoiceAudit, readVoiceAudit, type VoiceAuditEvent } from '../../lib/voiceAudit'
 
 const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s all|all done|never mind|nevermind|stop)\b/i
-const CONFIRM_PHRASES = /\b(yes|yeah|yep|confirm|ok|okay|go ahead|do it|sounds good|correct|right|affirmative|absolutely|sure|proceed)\b/i
-const CANCEL_PHRASES  = /\b(no|nope|cancel|don't|do not|stop|abort|never mind|nevermind|undo)\b/i
+const STRONG_CONFIRM_PHRASES = new Set([
+  'yes',
+  'yeah',
+  'yep',
+  'confirm',
+  'ok',
+  'okay',
+  'go ahead',
+  'do it',
+  'sounds good',
+  'correct',
+  'right',
+  'affirmative',
+  'absolutely',
+  'sure',
+  'proceed',
+])
+const STRONG_CANCEL_PHRASES = new Set([
+  'cancel',
+  'do not',
+  "don't",
+  'abort',
+  'never mind',
+  'nevermind',
+  'undo',
+  'stop',
+])
 
 /** DeepGram STT bridge — HTTP for probe/display, WS for streaming */
 const BRIDGE    = 'http://127.0.0.1:8766'
@@ -64,7 +89,7 @@ const TURN_STATE_TRANSITIONS: Record<VoiceTurnState, readonly VoiceTurnState[]> 
   listening: ['endpointed', 'thinking', 'closed'],
   endpointed: ['thinking', 'listening', 'closed'],
   thinking: ['responding', 'listening', 'closed'],
-  responding: ['listening', 'thinking', 'closed'],
+  responding: ['endpointed', 'listening', 'thinking', 'closed'],
   closed: ['idle', 'wake_armed', 'listening'],
 }
 
@@ -85,6 +110,25 @@ function eventDebugLevel(event: string): VoiceDebugLevel {
     return 'verbose'
   }
   return 'minimal'
+}
+
+function normalizeIntentPhrase(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9'\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function isStrongConfirmUtterance(value: string): boolean {
+  const normalized = normalizeIntentPhrase(value)
+  return normalized.length > 0 && STRONG_CONFIRM_PHRASES.has(normalized)
+}
+
+function isStrongCancelUtterance(value: string): boolean {
+  const normalized = normalizeIntentPhrase(value)
+  if (normalized === 'no' || normalized === 'nope' || normalized === 'oh no') return false
+  return normalized.length > 0 && STRONG_CANCEL_PHRASES.has(normalized)
 }
 
 function getVoiceUxProfile(): VoiceUxProfile {
@@ -264,11 +308,11 @@ function useSpeechInput({
       return
     }
     const isShort = transcript.trim().split(/\s+/).length <= 5
-    if (isShort && hasPendingRef.current && CONFIRM_PHRASES.test(transcript)) {
+    if (isShort && hasPendingRef.current && isStrongConfirmUtterance(transcript)) {
       onConfirmRef.current(); onInterimRef.current('')
       return
     }
-    if (isShort && hasPendingRef.current && CANCEL_PHRASES.test(transcript)) {
+    if (isShort && hasPendingRef.current && isStrongCancelUtterance(transcript)) {
       onCancelRef.current(); onInterimRef.current('')
       return
     }
@@ -956,7 +1000,13 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         }
         interimRef.current = finalized
         setInput(finalized)
-        if (hasPendingToolAction && CONFIRM_PHRASES.test(finalized) && finalized.split(/\s+/).length <= 6) {
+        const normalizedIntent = normalizeIntentPhrase(finalized)
+        const shouldConfirmShortCircuit = hasPendingToolAction && isStrongConfirmUtterance(finalized)
+        const shouldCancelShortCircuit = hasPendingToolAction && isStrongCancelUtterance(finalized)
+        if (hasPendingToolAction && !shouldConfirmShortCircuit && !shouldCancelShortCircuit && normalizedIntent.length > 0) {
+          appendDebugLog('voice_confirm_short_circuit_miss', normalizedIntent.slice(0, 80))
+        }
+        if (hasPendingToolAction && shouldConfirmShortCircuit) {
           appendDebugLog('voice_confirm_budget_short_circuit', finalized.slice(0, 80))
           const run = pendingConfirmRef.current
           if (run) {
@@ -969,7 +1019,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
           }
           return
         }
-        if (hasPendingToolAction && CANCEL_PHRASES.test(finalized) && finalized.split(/\s+/).length <= 6) {
+        if (hasPendingToolAction && shouldCancelShortCircuit) {
           appendDebugLog('voice_cancel_budget_short_circuit', finalized.slice(0, 80))
           const run = pendingCancelRef.current
           if (run) {

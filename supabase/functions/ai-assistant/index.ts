@@ -744,6 +744,25 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       return { type: 'text', text: `I had trouble processing that (${finishReason}). Could you rephrase?` }
     }
 
+    const summarizeReadTool = (name: string, toolResult: Record<string, unknown>): string => {
+      if (name === 'search_events') {
+        const count = Number(toolResult.count ?? 0)
+        if (count > 0) return `I found ${count} matching event${count === 1 ? '' : 's'}.`
+        return 'I could not find any matching events.'
+      }
+      if (name === 'search_places') {
+        const count = Number(toolResult.count ?? 0)
+        if (count > 0) return `I found ${count} place option${count === 1 ? '' : 's'}.`
+        return 'I could not find a matching place yet.'
+      }
+      if (name === 'search_web') {
+        const count = Number(toolResult.count ?? 0)
+        if (count > 0) return `I found ${count} web result${count === 1 ? '' : 's'} for that query.`
+        return 'I could not find web results for that query.'
+      }
+      return 'I found results for your request.'
+    }
+
     const resolveModelParts = async (parts: GeminiPart[]) => {
       const funcCallPart = parts.find((p: { functionCall?: { name: string; args: Record<string, unknown> } }) => p.functionCall)
       const textParts = parts
@@ -777,7 +796,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         if (!res2.ok) return { type: 'error', code: 'llm_error', message: 'Second LLM call failed' }
         const data2 = await res2.json()
         const finalText = data2.candidates?.[0]?.content?.parts?.find((p: { text?: string }) => p.text)?.text ?? ''
-        return { type: 'text', text: finalText || 'I found results, but I could not format a full response. Please ask me to summarize.' }
+        return { type: 'text', text: finalText || summarizeReadTool(name, toolResult) }
       }
 
       if (name === 'add_grocery_items') {

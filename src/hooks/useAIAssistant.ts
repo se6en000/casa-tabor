@@ -34,10 +34,12 @@ type AIAssistantResponse = {
 const GOODBYE_PHRASES = /\b(thank you|thanks|goodbye|bye|that'?s all|all done|good night|ciao|close session|new session|start over|end session)\b/i
 const GROCERY_NON_ADD_INTENTS = /\b(what|show|list|what's|whats|how many|remove|delete|clear|check|uncheck|done|completed|archive)\b/i
 const ASSISTANT_STAGE_TIMEOUTS_MS = [12_000, 7_000] as const
-const ASSISTANT_TOTAL_BUDGET_MS = 14_000
+const ASSISTANT_TOTAL_BUDGET_MS = 9_000
 const COMMAND_SYNC_TIMEOUT_MS = 1_800
 const SIMPLE_COMMAND_SLO_MS = 2_000
 const TURN_SLO_MS = 6_000
+const AI_LATENCY_METRICS_KEY = 'casa-ai-latency-rollup'
+const AI_LATENCY_WINDOW_SIZE = 120
 
 type AssistantErrorKind = 'timeout' | 'network' | 'provider' | 'unknown'
 type SimpleCommandExecution = {
@@ -85,6 +87,34 @@ function emitAssistantDebug(event: string, detail?: string) {
 
 function emitSloBreach(stage: string, elapsedMs: number, budgetMs: number) {
   emitAssistantDebug('assistant_slo_breach', `${stage} elapsed=${elapsedMs} budget=${budgetMs}`)
+}
+
+function percentile(values: number[], p: number): number {
+  if (values.length === 0) return 0
+  const sorted = [...values].sort((a, b) => a - b)
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1))
+  return sorted[idx]
+}
+
+function recordLatencyMetric(lane: string, elapsedMs: number): void {
+  if (typeof window === 'undefined') return
+  try {
+    const raw = localStorage.getItem(AI_LATENCY_METRICS_KEY)
+    const parsed = raw ? JSON.parse(raw) as { byLane?: Record<string, number[]>; updatedAt?: string } : {}
+    const byLane = parsed.byLane ?? {}
+    const samples = [...(byLane[lane] ?? []), elapsedMs].slice(-AI_LATENCY_WINDOW_SIZE)
+    byLane[lane] = samples
+    localStorage.setItem(AI_LATENCY_METRICS_KEY, JSON.stringify({
+      byLane,
+      updatedAt: new Date().toISOString(),
+    }))
+    emitAssistantDebug(
+      'assistant_latency_rollup',
+      `lane=${lane} p50=${Math.round(percentile(samples, 50))} p95=${Math.round(percentile(samples, 95))} p99=${Math.round(percentile(samples, 99))} n=${samples.length}`,
+    )
+  } catch {
+    // ignore localStorage metric failures
+  }
 }
 
 function shouldFastAddGrocery(page: string, text: string, hasImage: boolean, disableFastLane?: boolean): boolean {
@@ -312,6 +342,15 @@ function parseSimpleCalendarCommand(
   }
 }
 
+function parseFollowupAddMemberCommand(text: string, family: FamilyMember[]): string | null {
+  const normalized = text.trim().toLowerCase().replace(/\s+/g, ' ')
+  const match = normalized.match(/^(?:also\s+)?add\s+([a-z][a-z\s'-]{0,30}?)(?:\s+(?:to|too))?$/i)
+  if (!match) return null
+  const requested = match[1].trim()
+  const familyMatch = family.find((person) => person.name.toLowerCase() === requested)
+  return familyMatch?.name ?? null
+}
+
 function buildContext(ctx: AssistantContext) {
   const now = new Date()
   const offsetMins = -now.getTimezoneOffset()
@@ -386,6 +425,7 @@ export function useAIAssistant(ctx: AssistantContext) {
   const sessionRef = useRef(session)
   const messagesRef = useRef(messages)
   const ctxRef = useRef(ctx)
+  const lastDeterministicEventIdRef = useRef<string | null>(null)
   const lastRequestRef = useRef<{
     text: string
     image?: { dataUrl: string; mimeType: string }
@@ -413,6 +453,7 @@ export function useAIAssistant(ctx: AssistantContext) {
 
   const startFresh = useCallback(() => {
     endSession()   // clear localStorage so next open is truly blank
+    lastDeterministicEventIdRef.current = null
     setMessages([])
     startNewSession()
   }, [endSession, startNewSession])
@@ -457,6 +498,59 @@ export function useAIAssistant(ctx: AssistantContext) {
 
     const runSimpleCommandLane = async (): Promise<SimpleCommandExecution> => {
       if (ctxRef.current.page === 'grocery' || Boolean(image)) return { executed: false }
+      const followupMember = parseFollowupAddMemberCommand(trimmedText, ctxRef.current.family)
+      if (followupMember && lastDeterministicEventIdRef.current) {
+        const actionId = genId()
+        const correlationId = buildCorrelationId(actionId, activeSession.id)
+        const eventId = lastDeterministicEventIdRef.current
+        emitAssistantDebug('simple_command_detected', `type=update_event_add_member member=${followupMember} corr=${correlationId.slice(0, 28)}`)
+        const stageStart = performance.now()
+        const latestRow = await supabase
+          .from('events')
+          .select('updated_at')
+          .eq('id', eventId)
+          .single()
+        if (latestRow.error || !latestRow.data?.updated_at) {
+          emitAssistantDebug('simple_command_error', `update_event_add_member_missing_row:${eventId}`)
+          return { executed: false }
+        }
+        const executePromise = supabase.functions.invoke('execute-ai-action', {
+          body: {
+            tool: 'update_event',
+            args: {
+              id: eventId,
+              expected_updated_at: latestRow.data.updated_at,
+              members_add: [followupMember],
+            },
+            action_id: actionId,
+            session_id: activeSession.id,
+            correlation_id: correlationId,
+            sync_mode: 'async',
+          },
+        })
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`command execute timeout after ${COMMAND_SYNC_TIMEOUT_MS}ms`)), COMMAND_SYNC_TIMEOUT_MS),
+        )
+        try {
+          const exec = await Promise.race([executePromise, timeoutPromise]) as Awaited<typeof executePromise>
+          const stageDuration = Math.round(performance.now() - stageStart)
+          emitAssistantDebug('simple_command_stage_ms', `execute_ai_action=${stageDuration}`)
+          if (stageDuration > SIMPLE_COMMAND_SLO_MS) emitSloBreach('simple_command', stageDuration, SIMPLE_COMMAND_SLO_MS)
+          if (exec.error || exec.data?.success === false) {
+            const err = exec.error?.message ?? exec.data?.error ?? 'unknown error'
+            emitAssistantDebug('simple_command_error', err)
+            return { executed: true, assistantMessage: `I heard you, but I couldn't add ${followupMember} yet: ${err}` }
+          }
+          emitAssistantDebug('simple_command_success', `added_member=${followupMember}`)
+          return { executed: true, assistantMessage: `Done — I added ${followupMember} to that appointment.` }
+        } catch (err) {
+          const stageDuration = Math.round(performance.now() - stageStart)
+          emitAssistantDebug('simple_command_stage_ms', `execute_ai_action=${stageDuration}`)
+          emitAssistantDebug('simple_command_exception', (err as Error).message ?? 'unknown error')
+          return { executed: true, assistantMessage: `I heard you, but adding ${followupMember} took too long. Please try once.` }
+        }
+      }
+
       const parsed = parseSimpleCalendarCommand(trimmedText, ctxRef.current.family)
       if (!parsed) return { executed: false }
       const actionId = genId()
@@ -500,6 +594,8 @@ export function useAIAssistant(ctx: AssistantContext) {
             assistantMessage: `I understood the request, but I couldn't save it yet: ${err}`,
           }
         }
+        const createdEventId = typeof exec.data?.event_id === 'string' ? exec.data.event_id : null
+        if (createdEventId) lastDeterministicEventIdRef.current = createdEventId
         emitAssistantDebug('simple_command_success', parsed.title.slice(0, 80))
         return {
           executed: true,
@@ -530,6 +626,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       })
       const turnDuration = Math.round(performance.now() - turnStart)
       emitAssistantDebug('assistant_turn_ms', `lane=command elapsed=${turnDuration}`)
+      recordLatencyMetric('command', turnDuration)
       if (turnDuration > TURN_SLO_MS) emitSloBreach('turn_total', turnDuration, TURN_SLO_MS)
       setLoading(false)
       return
@@ -585,6 +682,10 @@ export function useAIAssistant(ctx: AssistantContext) {
             if (activeSession) saveMessages(activeSession.id, updated)
             return updated
           })
+          const turnDuration = Math.round(performance.now() - turnStart)
+          emitAssistantDebug('assistant_turn_ms', `lane=fast_add elapsed=${turnDuration}`)
+          recordLatencyMetric('fast_add', turnDuration)
+          if (turnDuration > TURN_SLO_MS) emitSloBreach('turn_total', turnDuration, TURN_SLO_MS)
           return
         }
       } catch (e) {
@@ -599,6 +700,10 @@ export function useAIAssistant(ctx: AssistantContext) {
           if (activeSession) saveMessages(activeSession.id, updated)
           return updated
         })
+        const turnDuration = Math.round(performance.now() - turnStart)
+        emitAssistantDebug('assistant_turn_ms', `lane=fast_add_error elapsed=${turnDuration}`)
+        recordLatencyMetric('fast_add_error', turnDuration)
+        if (turnDuration > TURN_SLO_MS) emitSloBreach('turn_total', turnDuration, TURN_SLO_MS)
         return
       } finally {
         setLoading(false)
@@ -743,6 +848,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       })
       const turnDuration = Math.round(performance.now() - turnStart)
       emitAssistantDebug('assistant_turn_ms', `lane=llm elapsed=${turnDuration}`)
+      recordLatencyMetric('llm', turnDuration)
       if (turnDuration > TURN_SLO_MS) emitSloBreach('turn_total', turnDuration, TURN_SLO_MS)
     } catch (e) {
       emitAssistantDebug('assistant_invoke_exception', (e as Error).message ?? 'unknown error')
@@ -758,6 +864,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       setMessages(prev => [...prev, errMsg])
       const turnDuration = Math.round(performance.now() - turnStart)
       emitAssistantDebug('assistant_turn_ms', `lane=error elapsed=${turnDuration} kind=${kind}`)
+      recordLatencyMetric('error', turnDuration)
       if (turnDuration > TURN_SLO_MS) emitSloBreach('turn_total', turnDuration, TURN_SLO_MS)
       console.error('[useAIAssistant]', e)
     } finally {
