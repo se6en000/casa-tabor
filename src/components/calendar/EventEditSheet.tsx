@@ -1122,20 +1122,9 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                   </label>
                 </div>
 
-                {/* Date/time pickers — collapse time when all-day */}
-                {isAllDay ? (
-                  <div>
-                    <p className="text-caption text-casa-muted mb-1">Date</p>
-                    <InlineCalendarPicker
-                      value={startDT.slice(0, 10)}
-                      onChange={(nextDate) => { setStartDT(`${nextDate}T00:00`); setEndDT(`${nextDate}T23:59`); markDirty() }}
-                    />
-                    <p className="text-caption text-casa-muted mt-1">
-                      {new Date(`${startDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Quick picks</p>
                     <div className="flex flex-wrap gap-2">
                       <button type="button" onClick={applyNow} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">Now</button>
                       <button type="button" onClick={() => applyStartQuickOffset(0)} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">Today</button>
@@ -1143,110 +1132,175 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                       <button type="button" onClick={() => applyDuration(30)} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">30m</button>
                       <button type="button" onClick={() => applyDuration(60)} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">1h</button>
                     </div>
+                  </div>
 
-                    <div className="sm:hidden grid grid-cols-1 gap-2">
-                      <div>
-                        <p className="text-caption text-casa-muted mb-1">Start</p>
-                        <input
-                          type="datetime-local"
-                          step={900}
-                          value={startDT}
-                          onChange={e => {
-                            const candidate = new Date(e.target.value)
-                            if (Number.isNaN(candidate.getTime())) return
-                            setStartAndAutoEnd(candidate)
-                          }}
-                          className={inputCls}
-                        />
-                        <p className="text-caption text-casa-muted mt-1">
-                          {new Date(`${startDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-caption text-casa-muted mb-1">End</p>
-                        <input
-                          type="datetime-local"
-                          step={900}
-                          value={endDT}
-                          onChange={e => { setEndDT(e.target.value); markDirty() }}
-                          className={inputCls}
-                        />
-                        <p className="text-caption text-casa-muted mt-1">
-                          {new Date(`${endDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
-                        </p>
-                      </div>
-                    </div>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { setIsAllDay(v => !v); markDirty() }}
+                      className={`px-3 py-1.5 rounded-full border text-caption font-semibold transition-colors ${isAllDay ? 'border-casa-gold bg-casa-gold/15 text-casa-navy' : 'border-casa-border bg-casa-bg text-casa-text hover:border-casa-gold'}`}
+                    >
+                      All day
+                    </button>
+                    <span className={`px-3 py-1.5 rounded-full border text-caption font-semibold ${startDT.slice(0, 10) !== endDT.slice(0, 10) ? 'border-casa-gold bg-casa-gold/15 text-casa-navy' : 'border-casa-border bg-casa-bg text-casa-muted'}`}>
+                      {startDT.slice(0, 10) !== endDT.slice(0, 10) ? 'Multi-day detected' : 'Single day'}
+                    </span>
+                  </div>
 
-                    <div className="hidden sm:grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-caption text-casa-muted mb-1">Start</p>
-                        {(() => {
-                          const p = getPickerParts(startDT)
-                          return (
-                            <div className="space-y-2">
-                              <InlineCalendarPicker
-                                value={startDT.slice(0, 10)}
-                                onChange={(nextDate) => {
-                                  const candidate = new Date(`${nextDate}T${startDT.slice(11, 16) || '00:00'}`)
-                                  if (Number.isNaN(candidate.getTime())) return
-                                  setStartAndAutoEnd(candidate)
-                                }}
-                              />
-                              <p className="text-caption text-casa-muted mt-1">
-                                {new Date(`${startDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
-                              </p>
-                              <div className="grid grid-cols-3 gap-2">
-                                <select value={p.hour12} onChange={e => updateStartParts({ hour12: Number(e.target.value) })} className={inputCls}>
-                                  {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
-                                </select>
-                                <select value={p.minute} onChange={e => updateStartParts({ minute: Number(e.target.value) })} className={inputCls}>
-                                  {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
-                                </select>
-                                <select value={p.ampm} onChange={e => updateStartParts({ ampm: e.target.value as 'AM' | 'PM' })} className={inputCls}>
-                                  <option value="AM">AM</option>
-                                  <option value="PM">PM</option>
-                                </select>
-                              </div>
-                            </div>
-                          )
-                        })()}
-                      </div>
-                      <div>
-                        <p className="text-caption text-casa-muted mb-1">End</p>
-                        {(() => {
-                          const p = getPickerParts(endDT)
-                          return (
-                            <div className="space-y-2">
-                              <InlineCalendarPicker
-                                value={endDT.slice(0, 10)}
-                                onChange={(nextDate) => {
-                                  const next = `${nextDate}T${endDT.slice(11, 16) || '00:00'}`
-                                  setEndDT(next)
+                  <div className="sm:hidden grid grid-cols-1 gap-3">
+                    <div>
+                      <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">Start</label>
+                      {(() => {
+                        const p = getPickerParts(startDT)
+                        return (
+                          <div className="rounded-xl border border-casa-border bg-casa-bg p-2 space-y-2">
+                            <InlineCalendarPicker
+                              value={startDT.slice(0, 10)}
+                              onChange={(nextDate) => {
+                                if (isAllDay) {
+                                  setStartDT(`${nextDate}T00:00`)
                                   markDirty()
-                                }}
-                              />
-                              <p className="text-caption text-casa-muted mt-1">
-                                {new Date(`${endDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
-                              </p>
-                              <div className="grid grid-cols-3 gap-2">
-                                <select value={p.hour12} onChange={e => updateEndParts({ hour12: Number(e.target.value) })} className={inputCls}>
+                                  return
+                                }
+                                const candidate = new Date(`${nextDate}T${startDT.slice(11, 16) || '00:00'}`)
+                                if (Number.isNaN(candidate.getTime())) return
+                                setStartAndAutoEnd(candidate)
+                              }}
+                            />
+                            <p className="text-caption text-casa-muted">
+                              Selected: {new Date(`${startDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                            </p>
+                            {!isAllDay && (
+                              <div className="grid grid-cols-3 gap-1.5">
+                                <select value={p.hour12} onChange={e => updateStartParts({ hour12: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
                                   {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
                                 </select>
-                                <select value={p.minute} onChange={e => updateEndParts({ minute: Number(e.target.value) })} className={inputCls}>
+                                <select value={p.minute} onChange={e => updateStartParts({ minute: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
                                   {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
                                 </select>
-                                <select value={p.ampm} onChange={e => updateEndParts({ ampm: e.target.value as 'AM' | 'PM' })} className={inputCls}>
+                                <select value={p.ampm} onChange={e => updateStartParts({ ampm: e.target.value as 'AM' | 'PM' })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm font-semibold text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
                                   <option value="AM">AM</option>
                                   <option value="PM">PM</option>
                                 </select>
                               </div>
-                            </div>
-                          )
-                        })()}
-                      </div>
+                            )}
+                          </div>
+                        )
+                      })()}
+                    </div>
+                    <div>
+                      <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">End</label>
+                      {(() => {
+                        const p = getPickerParts(endDT)
+                        return (
+                          <div className="rounded-xl border border-casa-border bg-casa-bg p-2 space-y-2">
+                            <InlineCalendarPicker
+                              value={endDT.slice(0, 10)}
+                              onChange={(nextDate) => {
+                                setEndDT(`${nextDate}T${isAllDay ? '23:59' : (endDT.slice(11, 16) || '00:00')}`)
+                                markDirty()
+                              }}
+                            />
+                            <p className="text-caption text-casa-muted">
+                              Selected: {new Date(`${endDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                            </p>
+                            {!isAllDay && (
+                              <div className="grid grid-cols-3 gap-1.5">
+                                <select value={p.hour12} onChange={e => updateEndParts({ hour12: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
+                                  {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
+                                </select>
+                                <select value={p.minute} onChange={e => updateEndParts({ minute: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
+                                  {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
+                                </select>
+                                <select value={p.ampm} onChange={e => updateEndParts({ ampm: e.target.value as 'AM' | 'PM' })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm font-semibold text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
+                                  <option value="AM">AM</option>
+                                  <option value="PM">PM</option>
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </div>
                   </div>
-                )}
+
+                  <div className="hidden sm:grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">Start</label>
+                      {(() => {
+                        const p = getPickerParts(startDT)
+                        return (
+                          <div className="rounded-xl border border-casa-border bg-casa-bg p-2 space-y-2">
+                            <InlineCalendarPicker
+                              value={startDT.slice(0, 10)}
+                              onChange={(nextDate) => {
+                                if (isAllDay) {
+                                  setStartDT(`${nextDate}T00:00`)
+                                  markDirty()
+                                  return
+                                }
+                                const candidate = new Date(`${nextDate}T${startDT.slice(11, 16) || '00:00'}`)
+                                if (Number.isNaN(candidate.getTime())) return
+                                setStartAndAutoEnd(candidate)
+                              }}
+                            />
+                            <p className="text-caption text-casa-muted">
+                              Selected: {new Date(`${startDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                            </p>
+                            {!isAllDay && (
+                              <div className="grid grid-cols-3 gap-1.5">
+                                <select value={p.hour12} onChange={e => updateStartParts({ hour12: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
+                                  {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
+                                </select>
+                                <select value={p.minute} onChange={e => updateStartParts({ minute: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
+                                  {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
+                                </select>
+                                <select value={p.ampm} onChange={e => updateStartParts({ ampm: e.target.value as 'AM' | 'PM' })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm font-semibold text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
+                                  <option value="AM">AM</option>
+                                  <option value="PM">PM</option>
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
+                    </div>
+                    <div>
+                      <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">End</label>
+                      {(() => {
+                        const p = getPickerParts(endDT)
+                        return (
+                          <div className="rounded-xl border border-casa-border bg-casa-bg p-2 space-y-2">
+                            <InlineCalendarPicker
+                              value={endDT.slice(0, 10)}
+                              onChange={(nextDate) => {
+                                setEndDT(`${nextDate}T${isAllDay ? '23:59' : (endDT.slice(11, 16) || '00:00')}`)
+                                markDirty()
+                              }}
+                            />
+                            <p className="text-caption text-casa-muted">
+                              Selected: {new Date(`${endDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                            </p>
+                            {!isAllDay && (
+                              <div className="grid grid-cols-3 gap-1.5">
+                                <select value={p.hour12} onChange={e => updateEndParts({ hour12: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
+                                  {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
+                                </select>
+                                <select value={p.minute} onChange={e => updateEndParts({ minute: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
+                                  {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
+                                </select>
+                                <select value={p.ampm} onChange={e => updateEndParts({ ampm: e.target.value as 'AM' | 'PM' })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm font-semibold text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
+                                  <option value="AM">AM</option>
+                                  <option value="PM">PM</option>
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  </div>
+                </div>
 
                 {/* Recurrence */}
                 <div className="space-y-3">
