@@ -30,3 +30,11 @@ real-time, multichannel assistant reliability under production constraints.
 - Propose phased, testable, production-safe improvements.
 - Include real-world validation commands and acceptance criteria.
 - Prefer solutions that scale across touchscreen kiosk + mobile + web.
+
+## Debugging Source of Truth (Cross-Device)
+
+- For any "check logs", "debug voice", "debug AI drawer", or Alexa reliability request:
+  1. Query Supabase `ai_drawer_debug_events` first (primary source of truth).
+  2. Correlate with `events` and `ai_event_edit_history`.
+  3. Use Pi `casa.log` / `chromium.log` only as secondary fallback when Supabase data is missing.
+- Treat legacy local-only trace assumptions as deprecated; default to centralized Supabase debugging.

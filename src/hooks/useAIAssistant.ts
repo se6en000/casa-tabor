@@ -76,12 +76,19 @@ function dispatchGroceryUpdated() {
   window.dispatchEvent(new CustomEvent('casa:grocery-updated'))
 }
 
-function emitAssistantDebug(event: string, detail?: string) {
+type AssistantDebugMeta = {
+  correlationId?: string
+  actionId?: string
+  lane?: string
+  payload?: unknown
+}
+
+function emitAssistantDebug(event: string, detail?: string, meta?: AssistantDebugMeta) {
   if (typeof window === 'undefined') return
   const config = readVoiceRuntimeConfig()
   if (!shouldEmitVoiceDebug(config.debugLevel, 'minimal')) return
   window.dispatchEvent(new CustomEvent('casa:ai-debug', {
-    detail: { event, detail },
+    detail: { event, detail, meta },
   }))
 }
 
@@ -470,7 +477,11 @@ export function useAIAssistant(ctx: AssistantContext) {
   ) => {
     const turnStart = performance.now()
     const trimmedText = text.trim()
-    emitAssistantDebug('send_start', `page=${ctxRef.current.page} chars=${trimmedText.length} text=${trimmedText.slice(0, 140)}`)
+    emitAssistantDebug(
+      'send_start',
+      `page=${ctxRef.current.page} chars=${trimmedText.length} text=${trimmedText.slice(0, 140)}`,
+      { payload: { page: ctxRef.current.page, chars: trimmedText.length, text: trimmedText.slice(0, 600) } },
+    )
     // Check for goodbye phrase → end session
     const looksLikeShortGoodbye = GOODBYE_PHRASES.test(trimmedText) && trimmedText.split(/\s+/).length <= 6
     if (!options?.skipGoodbyeCheck && looksLikeShortGoodbye) {
@@ -503,7 +514,11 @@ export function useAIAssistant(ctx: AssistantContext) {
         const actionId = genId()
         const correlationId = buildCorrelationId(actionId, activeSession.id)
         const eventId = lastDeterministicEventIdRef.current
-        emitAssistantDebug('simple_command_detected', `type=update_event_add_member action=${actionId.slice(0, 8)} event=${eventId.slice(0, 8)} member=${followupMember} corr=${correlationId.slice(0, 28)}`)
+        emitAssistantDebug(
+          'simple_command_detected',
+          `type=update_event_add_member action=${actionId.slice(0, 8)} event=${eventId.slice(0, 8)} member=${followupMember} corr=${correlationId.slice(0, 28)}`,
+          { correlationId, actionId, lane: 'command', payload: { eventId, member: followupMember } },
+        )
         const stageStart = performance.now()
         const latestRow = await supabase
           .from('events')
@@ -538,18 +553,27 @@ export function useAIAssistant(ctx: AssistantContext) {
           if (stageDuration > SIMPLE_COMMAND_SLO_MS) emitSloBreach('simple_command', stageDuration, SIMPLE_COMMAND_SLO_MS)
           if (exec.error || exec.data?.success === false) {
             const err = exec.error?.message ?? exec.data?.error ?? 'unknown error'
-            emitAssistantDebug('simple_command_error', `action=${actionId.slice(0, 8)} event=${eventId.slice(0, 8)} ${err}`)
+            emitAssistantDebug(
+              'simple_command_error',
+              `action=${actionId.slice(0, 8)} event=${eventId.slice(0, 8)} ${err}`,
+              { correlationId, actionId, lane: 'command', payload: { eventId, error: err } },
+            )
             return { executed: true, assistantMessage: `I heard you, but I couldn't add ${followupMember} yet: ${err}` }
           }
           emitAssistantDebug(
             'simple_command_success',
             `action=${actionId.slice(0, 8)} event=${eventId.slice(0, 8)} added_member=${followupMember} sync=${exec.data?.sync_status ?? 'unknown'}`,
+            { correlationId, actionId, lane: 'command', payload: { eventId, member: followupMember, syncStatus: exec.data?.sync_status } },
           )
           return { executed: true, assistantMessage: `Done — I added ${followupMember} to that appointment.` }
         } catch (err) {
           const stageDuration = Math.round(performance.now() - stageStart)
           emitAssistantDebug('simple_command_stage_ms', `execute_ai_action=${stageDuration}`)
-          emitAssistantDebug('simple_command_exception', `action=${actionId.slice(0, 8)} event=${eventId.slice(0, 8)} ${(err as Error).message ?? 'unknown error'}`)
+          emitAssistantDebug(
+            'simple_command_exception',
+            `action=${actionId.slice(0, 8)} event=${eventId.slice(0, 8)} ${(err as Error).message ?? 'unknown error'}`,
+            { correlationId, actionId, lane: 'command', payload: { eventId, error: (err as Error).message ?? 'unknown error' } },
+          )
           return { executed: true, assistantMessage: `I heard you, but adding ${followupMember} took too long. Please try once.` }
         }
       }
@@ -559,7 +583,11 @@ export function useAIAssistant(ctx: AssistantContext) {
       const actionId = genId()
       const correlationId = buildCorrelationId(actionId, activeSession.id)
       const stageStart = performance.now()
-      emitAssistantDebug('simple_command_detected', `type=create_event action=${actionId.slice(0, 8)} pattern=${parsed.pattern} corr=${correlationId.slice(0, 28)}`)
+      emitAssistantDebug(
+        'simple_command_detected',
+        `type=create_event action=${actionId.slice(0, 8)} pattern=${parsed.pattern} corr=${correlationId.slice(0, 28)}`,
+        { correlationId, actionId, lane: 'command', payload: { pattern: parsed.pattern, title: parsed.title, start: parsed.start, end: parsed.end } },
+      )
 
       const executePromise = supabase.functions.invoke('execute-ai-action', {
         body: {
@@ -591,7 +619,11 @@ export function useAIAssistant(ctx: AssistantContext) {
         }
         if (exec.error || exec.data?.success === false) {
           const err = exec.error?.message ?? exec.data?.error ?? 'unknown error'
-          emitAssistantDebug('simple_command_error', `action=${actionId.slice(0, 8)} ${err}`)
+          emitAssistantDebug(
+            'simple_command_error',
+            `action=${actionId.slice(0, 8)} ${err}`,
+            { correlationId, actionId, lane: 'command', payload: { error: err } },
+          )
           return {
             executed: true,
             assistantMessage: `I understood the request, but I couldn't save it yet: ${err}`,
@@ -602,6 +634,7 @@ export function useAIAssistant(ctx: AssistantContext) {
         emitAssistantDebug(
           'simple_command_success',
           `action=${actionId.slice(0, 8)} event=${createdEventId ? createdEventId.slice(0, 8) : 'none'} sync=${exec.data?.sync_status ?? 'unknown'} title=${parsed.title.slice(0, 80)}`,
+          { correlationId, actionId, lane: 'command', payload: { createdEventId, syncStatus: exec.data?.sync_status, title: parsed.title } },
         )
         return {
           executed: true,
@@ -610,7 +643,11 @@ export function useAIAssistant(ctx: AssistantContext) {
       } catch (err) {
         const stageDuration = Math.round(performance.now() - stageStart)
         emitAssistantDebug('simple_command_stage_ms', `execute_ai_action=${stageDuration}`)
-        emitAssistantDebug('simple_command_exception', `action=${actionId.slice(0, 8)} ${(err as Error).message ?? 'unknown error'}`)
+        emitAssistantDebug(
+          'simple_command_exception',
+          `action=${actionId.slice(0, 8)} ${(err as Error).message ?? 'unknown error'}`,
+          { correlationId, actionId, lane: 'command', payload: { error: (err as Error).message ?? 'unknown error' } },
+        )
         return {
           executed: true,
           assistantMessage: 'I heard the command, but execution took too long. Please repeat once.',
@@ -724,7 +761,11 @@ export function useAIAssistant(ctx: AssistantContext) {
       const currentMessages = [...messagesRef.current, userMsg]
       const allMsgsForApi = currentMessages.map(m => ({ role: m.role, content: m.content }))
       const aiCorrelationId = buildCorrelationId(userMsg.id, activeSession.id)
-      emitAssistantDebug('assistant_invoke_start', `messages=${allMsgsForApi.length} corr=${aiCorrelationId.slice(0, 28)}`)
+      emitAssistantDebug(
+        'assistant_invoke_start',
+        `messages=${allMsgsForApi.length} corr=${aiCorrelationId.slice(0, 28)}`,
+        { correlationId: aiCorrelationId, lane: 'llm', payload: { messages: allMsgsForApi.length } },
+      )
 
       const invokeAssistant = async (timeoutMs: number) => {
         const invokePromise = supabase.functions.invoke('ai-assistant', {
@@ -746,7 +787,11 @@ export function useAIAssistant(ctx: AssistantContext) {
       let invokeError: unknown = null
       for (let attempt = 1; attempt <= ASSISTANT_STAGE_TIMEOUTS_MS.length; attempt += 1) {
         if (performance.now() - turnStart > ASSISTANT_TOTAL_BUDGET_MS && attempt > 1) {
-          emitAssistantDebug('assistant_budget_exhausted', `elapsed=${Math.round(performance.now() - turnStart)}`)
+          emitAssistantDebug(
+            'assistant_budget_exhausted',
+            `elapsed=${Math.round(performance.now() - turnStart)}`,
+            { correlationId: aiCorrelationId, lane: 'llm', payload: { elapsed: Math.round(performance.now() - turnStart) } },
+          )
           break
         }
         const timeoutMs = ASSISTANT_STAGE_TIMEOUTS_MS[attempt - 1]
@@ -757,20 +802,34 @@ export function useAIAssistant(ctx: AssistantContext) {
           data = (result.data ?? {}) as AIAssistantResponse
           invokeError = null
           const elapsed = Math.round(performance.now() - stageStart)
-          emitAssistantDebug('assistant_stage_ms', `attempt=${attempt} timeout=${timeoutMs} elapsed=${elapsed}`)
+          emitAssistantDebug(
+            'assistant_stage_ms',
+            `attempt=${attempt} timeout=${timeoutMs} elapsed=${elapsed}`,
+            { correlationId: aiCorrelationId, lane: 'llm', payload: { attempt, timeoutMs, elapsed } },
+          )
           if (elapsed > timeoutMs) emitSloBreach(`assistant_attempt_${attempt}`, elapsed, timeoutMs)
-          if (attempt > 1) emitAssistantDebug('assistant_invoke_retry_success', `attempt=${attempt}`)
+          if (attempt > 1) {
+            emitAssistantDebug('assistant_invoke_retry_success', `attempt=${attempt}`, { correlationId: aiCorrelationId, lane: 'llm', payload: { attempt } })
+          }
           break
         } catch (err) {
           invokeError = err
           const kind = classifyAssistantError(err)
           const retriable = isRetriableAssistantError(err)
           const elapsed = Math.round(performance.now() - stageStart)
-          emitAssistantDebug('assistant_stage_ms', `attempt=${attempt} timeout=${timeoutMs} elapsed=${elapsed}`)
-          emitAssistantDebug('assistant_invoke_attempt_error', `attempt=${attempt} kind=${kind} retriable=${retriable} ${(err as Error).message ?? 'unknown error'}`)
+          emitAssistantDebug(
+            'assistant_stage_ms',
+            `attempt=${attempt} timeout=${timeoutMs} elapsed=${elapsed}`,
+            { correlationId: aiCorrelationId, lane: 'llm', payload: { attempt, timeoutMs, elapsed } },
+          )
+          emitAssistantDebug(
+            'assistant_invoke_attempt_error',
+            `attempt=${attempt} kind=${kind} retriable=${retriable} ${(err as Error).message ?? 'unknown error'}`,
+            { correlationId: aiCorrelationId, lane: 'llm', payload: { attempt, kind, retriable, error: (err as Error).message ?? 'unknown error' } },
+          )
           if (!retriable || attempt === ASSISTANT_STAGE_TIMEOUTS_MS.length) break
           await new Promise((resolve) => setTimeout(resolve, 450))
-          emitAssistantDebug('assistant_invoke_retry', `attempt=${attempt + 1}`)
+          emitAssistantDebug('assistant_invoke_retry', `attempt=${attempt + 1}`, { correlationId: aiCorrelationId, lane: 'llm', payload: { attempt: attempt + 1 } })
         }
       }
       if (invokeError) throw invokeError
@@ -778,6 +837,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       emitAssistantDebug(
         'assistant_invoke_result',
         `type=${data.type ?? 'unknown'} code=${data.code ?? 'none'} tool=${typeof data.tool === 'string' ? data.tool : 'none'}`,
+        { correlationId: aiCorrelationId, lane: 'llm', payload: { type: data.type, code: data.code, tool: data.tool } },
       )
 
       let assistantMsg: AIMessage
@@ -850,17 +910,22 @@ export function useAIAssistant(ctx: AssistantContext) {
         assistantMsg = { id: genId(), role: 'assistant', content: (data.text ?? '') as string }
       }
 
+      emitAssistantDebug(
+        'assistant_response_text',
+        assistantMsg.content.slice(0, 240),
+        { correlationId: aiCorrelationId, lane: data.type === 'tool_action' ? 'tool_action' : 'llm', payload: { content: assistantMsg.content } },
+      )
       setMessages(prev => {
         const updated = [...prev, assistantMsg]
         if (activeSession) saveMessages(activeSession.id, updated)
         return updated
       })
       const turnDuration = Math.round(performance.now() - turnStart)
-      emitAssistantDebug('assistant_turn_ms', `lane=llm elapsed=${turnDuration}`)
+      emitAssistantDebug('assistant_turn_ms', `lane=llm elapsed=${turnDuration}`, { correlationId: aiCorrelationId, lane: 'llm', payload: { elapsed: turnDuration } })
       recordLatencyMetric('llm', turnDuration)
       if (turnDuration > TURN_SLO_MS) emitSloBreach('turn_total', turnDuration, TURN_SLO_MS)
     } catch (e) {
-      emitAssistantDebug('assistant_invoke_exception', (e as Error).message ?? 'unknown error')
+      emitAssistantDebug('assistant_invoke_exception', (e as Error).message ?? 'unknown error', { lane: 'llm', payload: { error: (e as Error).message ?? 'unknown error' } })
       const kind = classifyAssistantError(e)
       const isTimeout = kind === 'timeout'
       const errMsg: AIMessage = {
@@ -872,7 +937,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       }
       setMessages(prev => [...prev, errMsg])
       const turnDuration = Math.round(performance.now() - turnStart)
-      emitAssistantDebug('assistant_turn_ms', `lane=error elapsed=${turnDuration} kind=${kind}`)
+      emitAssistantDebug('assistant_turn_ms', `lane=error elapsed=${turnDuration} kind=${kind}`, { lane: 'error', payload: { elapsed: turnDuration, kind } })
       recordLatencyMetric('error', turnDuration)
       if (turnDuration > TURN_SLO_MS) emitSloBreach('turn_total', turnDuration, TURN_SLO_MS)
       console.error('[useAIAssistant]', e)

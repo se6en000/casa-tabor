@@ -87,7 +87,13 @@ type DebugLogEntry = {
   turnState?: string
   loading?: boolean
   queueDepth?: number
+  correlationId?: string
+  actionId?: string
+  lane?: string
+  payload?: unknown
 }
+
+type TraceMeta = Pick<DebugLogEntry, 'correlationId' | 'actionId' | 'lane' | 'payload'>
 
 type VoiceTurnState = 'idle' | 'wake_armed' | 'listening' | 'endpointed' | 'thinking' | 'responding' | 'closed'
 const TURN_STATE_TRANSITIONS: Record<VoiceTurnState, readonly VoiceTurnState[]> = {
@@ -796,7 +802,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     return () => window.removeEventListener('storage', onStorage)
   }, [])
 
-  const buildTraceEntry = useCallback((event: string, detail?: string): VoiceAuditEvent => {
+  const buildTraceEntry = useCallback((event: string, detail?: string, meta?: TraceMeta): VoiceAuditEvent => {
     const now = Date.now()
     const started = traceStartedAtMsRef.current > 0 ? traceStartedAtMsRef.current : now
     const sessionId = traceSessionIdRef.current ?? 'voice-session-unknown'
@@ -812,12 +818,16 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       turnState: turnStateRef.current,
       loading,
       queueDepth: pendingVoiceQueueRef.current.length,
+      correlationId: meta?.correlationId,
+      actionId: meta?.actionId,
+      lane: meta?.lane,
+      payload: meta?.payload,
     }
     return entry
   }, [loading, page])
 
-  const appendDebugLog = useCallback((event: string, detail?: string) => {
-    const entry = buildTraceEntry(event, detail)
+  const appendDebugLog = useCallback((event: string, detail?: string, meta?: TraceMeta) => {
+    const entry = buildTraceEntry(event, detail, meta)
     enqueueRemoteVoiceTrace(entry, 'debug', voiceConfig)
     if (voiceConfig.auditEnabled) {
       enqueueRemoteVoiceTrace(entry, 'audit', voiceConfig)
@@ -870,10 +880,10 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
 
   useEffect(() => {
     const onAssistantDebug = (rawEvent: Event) => {
-      const event = rawEvent as CustomEvent<{ event?: string; detail?: string }>
+      const event = rawEvent as CustomEvent<{ event?: string; detail?: string; meta?: TraceMeta }>
       const name = event.detail?.event?.trim()
       if (!name) return
-      appendDebugLog(`assistant_${name}`, event.detail?.detail?.slice(0, 260))
+      appendDebugLog(`assistant_${name}`, event.detail?.detail?.slice(0, 260), event.detail?.meta)
     }
     window.addEventListener('casa:ai-debug', onAssistantDebug as EventListener)
     return () => {

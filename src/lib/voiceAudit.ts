@@ -10,6 +10,10 @@ export type VoiceAuditEvent = {
   turnState?: string
   loading?: boolean
   queueDepth?: number
+  correlationId?: string
+  actionId?: string
+  lane?: string
+  payload?: unknown
 }
 
 export const VOICE_AUDIT_LOG_KEY = 'casa-voice-audit-log'

@@ -20,6 +20,10 @@ type IncomingEntry = {
   turnState?: string
   loading?: boolean
   queueDepth?: number
+  correlationId?: string
+  actionId?: string
+  lane?: string
+  payload?: unknown
 }
 
 Deno.serve(async (req) => {
@@ -67,6 +71,10 @@ Deno.serve(async (req) => {
         turn_state: typeof entry.turnState === 'string' ? entry.turnState.slice(0, 64) : null,
         loading: typeof entry.loading === 'boolean' ? entry.loading : null,
         queue_depth: Number.isFinite(entry.queueDepth) ? Math.max(0, Math.trunc(entry.queueDepth as number)) : null,
+        correlation_id: typeof entry.correlationId === 'string' ? entry.correlationId.slice(0, 120) : null,
+        action_id: typeof entry.actionId === 'string' ? entry.actionId.slice(0, 120) : null,
+        lane: typeof entry.lane === 'string' ? entry.lane.slice(0, 64) : null,
+        payload: entry.payload && typeof entry.payload === 'object' ? entry.payload : null,
         device_id: typeof body.meta?.device_id === 'string' ? body.meta.device_id.slice(0, 120) : null,
         source_origin: typeof body.meta?.origin === 'string' ? body.meta.origin.slice(0, 240) : null,
         source_href: typeof body.meta?.href === 'string' ? body.meta.href.slice(0, 500) : null,

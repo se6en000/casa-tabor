@@ -13,6 +13,10 @@ type RemoteVoiceTraceEntry = {
   turnState?: string
   loading?: boolean
   queueDepth?: number
+  correlationId?: string
+  actionId?: string
+  lane?: string
+  payload?: unknown
   channel: 'debug' | 'audit'
 }
 
@@ -27,6 +31,26 @@ const MAX_QUEUE_SIZE = 2500
 const MAX_ATTEMPTS = 3
 const FLUSH_INTERVAL_MS = 1800
 const RETRY_DELAY_MS = 4000
+const REMOTE_NOISE_EVENTS = new Set([
+  'speech_ensure_running',
+  'speech_ensure_running_ok',
+])
+const REMOTE_CRITICAL_EVENTS = new Set([
+  'speech_trigger_final',
+  'voice_final',
+  'send_current_input',
+  'assistant_assistant_invoke_start',
+  'assistant_assistant_invoke_result',
+  'assistant_assistant_turn_ms',
+  'assistant_assistant_stage_ms',
+  'assistant_simple_command_detected',
+  'assistant_simple_command_success',
+  'assistant_simple_command_error',
+  'assistant_assistant_response_text',
+  'message',
+  'trace_context',
+  'trace_closed',
+])
 
 let queue: RemoteQueueItem[] = []
 let flushTimer: ReturnType<typeof setTimeout> | null = null
@@ -69,6 +93,10 @@ function scheduleFlush(delayMs = nextFlushDelayMs) {
     flushTimer = null
     void flushQueueNow()
   }, delayMs)
+}
+
+function shouldSkipRemote(entryEvent: string, config: VoiceRuntimeConfig): boolean {
+  return config.debugLevel !== 'verbose' && REMOTE_NOISE_EVENTS.has(entryEvent)
 }
 
 async function flushQueueNow() {
@@ -122,12 +150,13 @@ export function enqueueRemoteVoiceTrace(
     page: entry.page?.slice(0, 64),
     turnState: entry.turnState?.slice(0, 64),
   }
+  if (shouldSkipRemote(withChannel.event, config)) return
   queue.push({ entry: withChannel, attempts: 0 })
   if (queue.length > MAX_QUEUE_SIZE) {
     queue = queue.slice(-MAX_QUEUE_SIZE)
     console.warn('[voice-trace] queue trimmed to max size')
   }
-  if (config.debugLevel === 'verbose') {
+  if (config.debugLevel === 'verbose' || REMOTE_CRITICAL_EVENTS.has(withChannel.event)) {
     void flushQueueNow()
     return
   }
