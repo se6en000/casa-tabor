@@ -16,6 +16,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useSavedPlaces } from '../../hooks/useSavedPlaces'
 import BounceScroll from '../shared/BounceScroll'
+import InlineCalendarPicker from '../shared/InlineCalendarPicker'
 
 const ALL_CATEGORIES = Object.keys(CATEGORY_LABEL) as string[]
 const MINUTE_OPTIONS = [0, 15, 30, 45] as const
@@ -1125,12 +1126,13 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                 {isAllDay ? (
                   <div>
                     <p className="text-caption text-casa-muted mb-1">Date</p>
-                    <input
-                      type="date"
+                    <InlineCalendarPicker
                       value={startDT.slice(0, 10)}
-                      onChange={e => { setStartDT(`${e.target.value}T00:00`); setEndDT(`${e.target.value}T23:59`); markDirty() }}
-                      className={inputCls}
+                      onChange={(nextDate) => { setStartDT(`${nextDate}T00:00`); setEndDT(`${nextDate}T23:59`); markDirty() }}
                     />
+                    <p className="text-caption text-casa-muted mt-1">
+                      {new Date(`${startDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1156,6 +1158,9 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                           }}
                           className={inputCls}
                         />
+                        <p className="text-caption text-casa-muted mt-1">
+                          {new Date(`${startDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                        </p>
                       </div>
                       <div>
                         <p className="text-caption text-casa-muted mb-1">End</p>
@@ -1166,6 +1171,9 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                           onChange={e => { setEndDT(e.target.value); markDirty() }}
                           className={inputCls}
                         />
+                        <p className="text-caption text-casa-muted mt-1">
+                          {new Date(`${endDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                        </p>
                       </div>
                     </div>
 
@@ -1176,16 +1184,17 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                           const p = getPickerParts(startDT)
                           return (
                             <div className="space-y-2">
-                              <input
-                                type="date"
+                              <InlineCalendarPicker
                                 value={startDT.slice(0, 10)}
-                                onChange={e => {
-                                  const candidate = new Date(`${e.target.value}T${startDT.slice(11, 16) || '00:00'}`)
+                                onChange={(nextDate) => {
+                                  const candidate = new Date(`${nextDate}T${startDT.slice(11, 16) || '00:00'}`)
                                   if (Number.isNaN(candidate.getTime())) return
                                   setStartAndAutoEnd(candidate)
                                 }}
-                                className={inputCls}
                               />
+                              <p className="text-caption text-casa-muted mt-1">
+                                {new Date(`${startDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                              </p>
                               <div className="grid grid-cols-3 gap-2">
                                 <select value={p.hour12} onChange={e => updateStartParts({ hour12: Number(e.target.value) })} className={inputCls}>
                                   {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
@@ -1208,16 +1217,17 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                           const p = getPickerParts(endDT)
                           return (
                             <div className="space-y-2">
-                              <input
-                                type="date"
+                              <InlineCalendarPicker
                                 value={endDT.slice(0, 10)}
-                                onChange={e => {
-                                  const next = `${e.target.value}T${endDT.slice(11, 16) || '00:00'}`
+                                onChange={(nextDate) => {
+                                  const next = `${nextDate}T${endDT.slice(11, 16) || '00:00'}`
                                   setEndDT(next)
                                   markDirty()
                                 }}
-                                className={inputCls}
                               />
+                              <p className="text-caption text-casa-muted mt-1">
+                                {new Date(`${endDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                              </p>
                               <div className="grid grid-cols-3 gap-2">
                                 <select value={p.hour12} onChange={e => updateEndParts({ hour12: Number(e.target.value) })} className={inputCls}>
                                   {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}

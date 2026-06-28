@@ -4,6 +4,7 @@ import { X, Plus } from 'lucide-react'
 import { addDays, addMinutes } from 'date-fns'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
+import InlineCalendarPicker from './InlineCalendarPicker'
 
 interface Props {
   open: boolean
@@ -17,7 +18,6 @@ function toLocalDT(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const MINUTE_OPTIONS = [0, 15, 30, 45] as const
 
 function snapMinuteToQuarter(minute: number): number {
@@ -310,35 +310,19 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                   </label>
                   {(() => {
                     const p = getPickerParts(startDT)
-                    const daysInMonth = new Date(p.year, p.month + 1, 0).getDate()
                     return (
                       <div className="rounded-xl border border-casa-border bg-casa-bg p-2 space-y-2">
-                        <div className="grid grid-cols-3 gap-1.5">
-                          <select
-                            data-vk-nav="true"
-                            value={p.month}
-                            onChange={e => updateStartParts({ month: Number(e.target.value) })}
-                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
-                          >
-                            {MONTH_LABELS.map((m, i) => <option key={m} value={i}>{m}</option>)}
-                          </select>
-                          <select
-                            data-vk-nav="true"
-                            value={p.day}
-                            onChange={e => updateStartParts({ day: Number(e.target.value) })}
-                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
-                          >
-                            {Array.from({ length: daysInMonth }, (_, idx) => idx + 1).map(day => <option key={day} value={day}>{day}</option>)}
-                          </select>
-                          <select
-                            data-vk-nav="true"
-                            value={p.year}
-                            onChange={e => updateStartParts({ year: Number(e.target.value) })}
-                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
-                          >
-                            {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 1 + i).map(year => <option key={year} value={year}>{year}</option>)}
-                          </select>
-                        </div>
+                        <InlineCalendarPicker
+                          value={startDT.slice(0, 10)}
+                          onChange={(nextDate) => {
+                            const nextStart = parseLocalDT(`${nextDate}T${startDT.slice(11, 16) || '00:00'}`)
+                            setStartDT(toLocalDT(nextStart))
+                            setEndDT(toLocalDT(addMinutes(nextStart, 30)))
+                          }}
+                        />
+                        <p className="text-caption text-casa-muted">
+                          Selected: {parseLocalDT(startDT).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                        </p>
                         <div className="grid grid-cols-3 gap-1.5">
                           <select
                             data-vk-nav="true"
@@ -376,35 +360,15 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                   </label>
                   {(() => {
                     const p = getPickerParts(endDT)
-                    const daysInMonth = new Date(p.year, p.month + 1, 0).getDate()
                     return (
                       <div className="rounded-xl border border-casa-border bg-casa-bg p-2 space-y-2">
-                        <div className="grid grid-cols-3 gap-1.5">
-                          <select
-                            data-vk-nav="true"
-                            value={p.month}
-                            onChange={e => updateEndParts({ month: Number(e.target.value) })}
-                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
-                          >
-                            {MONTH_LABELS.map((m, i) => <option key={m} value={i}>{m}</option>)}
-                          </select>
-                          <select
-                            data-vk-nav="true"
-                            value={p.day}
-                            onChange={e => updateEndParts({ day: Number(e.target.value) })}
-                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
-                          >
-                            {Array.from({ length: daysInMonth }, (_, idx) => idx + 1).map(day => <option key={day} value={day}>{day}</option>)}
-                          </select>
-                          <select
-                            data-vk-nav="true"
-                            value={p.year}
-                            onChange={e => updateEndParts({ year: Number(e.target.value) })}
-                            className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
-                          >
-                            {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 1 + i).map(year => <option key={year} value={year}>{year}</option>)}
-                          </select>
-                        </div>
+                        <InlineCalendarPicker
+                          value={endDT.slice(0, 10)}
+                          onChange={(nextDate) => setEndDT(`${nextDate}T${endDT.slice(11, 16) || '00:00'}`)}
+                        />
+                        <p className="text-caption text-casa-muted">
+                          Selected: {parseLocalDT(endDT).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                        </p>
                         <div className="grid grid-cols-3 gap-1.5">
                           <select
                             data-vk-nav="true"
