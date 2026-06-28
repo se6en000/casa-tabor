@@ -1402,21 +1402,23 @@ function PanelFooter({ event, onEdit, onEditWithAI }: { event: EventWithDetails;
     : null
 
   return (
-    <div className="p-4 border-t border-casa-border flex gap-2 items-stretch">
-      {/* Icon-only square buttons — aspect-square makes them match the row height */}
+    <div className="p-4 border-t border-casa-border flex gap-2.5 items-stretch">
+      {/* Mobile gets larger tap targets with labels; desktop keeps compact icon buttons */}
       <button
         onClick={onEdit}
         title="Edit Details"
-        className="aspect-square flex items-center justify-center shrink-0 rounded-button border border-casa-border text-casa-navy hover:bg-casa-bg transition-colors"
+        className="h-12 min-w-12 px-3 sm:px-0 sm:aspect-square flex items-center justify-center gap-1.5 shrink-0 rounded-button border border-casa-border text-casa-navy hover:bg-casa-bg transition-colors"
       >
         <Pencil size={18} />
+        <span className="text-body-sm font-semibold sm:hidden">Edit</span>
       </button>
       <button
         onClick={onEditWithAI}
         title="Edit with AI"
-        className="aspect-square flex items-center justify-center shrink-0 rounded-button border border-casa-gold/60 text-casa-gold hover:bg-casa-gold/10 transition-colors"
+        className="h-12 min-w-12 px-3 sm:px-0 sm:aspect-square flex items-center justify-center gap-1.5 shrink-0 rounded-button border border-casa-gold/60 text-casa-gold hover:bg-casa-gold/10 transition-colors"
       >
         <Sparkles size={18} />
+        <span className="text-body-sm font-semibold sm:hidden">AI</span>
       </button>
       {/* Full-size action buttons */}
       {mapsUrl && (
@@ -1424,13 +1426,13 @@ function PanelFooter({ event, onEdit, onEditWithAI }: { event: EventWithDetails;
           href={mapsUrl}
           target="_blank"
           rel="noreferrer"
-          className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
+          className="flex-1 min-h-12 flex items-center justify-center gap-2 px-4 py-2.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
         >
           <Navigation size={15} />
           Directions
         </a>
       )}
-      <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 transition-all">
+      <button className="flex-1 min-h-12 flex items-center justify-center gap-2 px-4 py-2.5 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 transition-all">
         <Share2 size={15} />
         Share
       </button>
