@@ -111,10 +111,22 @@ Deno.serve(async (req) => {
       })
     }
 
-    const { error } = await sb
+    const { error: upsertError } = await sb
       .from('ai_drawer_debug_events')
       .upsert(rows, { onConflict: 'dedupe_key', ignoreDuplicates: true })
-    if (error) throw new Error(error.message)
+
+    if (upsertError) {
+      const msg = String(upsertError.message ?? '').toLowerCase()
+      const missingConflictConstraint = msg.includes('no unique or exclusion constraint matching the on conflict specification')
+      if (!missingConflictConstraint) {
+        throw new Error(upsertError.message)
+      }
+      console.warn('[ingest-ai-drawer-debug] dedupe_key conflict target unavailable; falling back to insert')
+      const { error: insertError } = await sb
+        .from('ai_drawer_debug_events')
+        .insert(rows)
+      if (insertError) throw new Error(insertError.message)
+    }
 
     return new Response(JSON.stringify({ inserted: rows.length }), {
       status: 200,
