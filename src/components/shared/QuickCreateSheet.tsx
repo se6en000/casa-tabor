@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Plus } from 'lucide-react'
-import { addMinutes } from 'date-fns'
+import { addDays, addMinutes } from 'date-fns'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -141,6 +141,25 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     setEndDT(toLocalDT(addMinutes(nextStart, 30)))
   }
 
+  const applyStartQuickOffset = (days: number) => {
+    const base = parseLocalDT(startDT)
+    const next = addDays(base, days)
+    setStartDT(toLocalDT(next))
+    setEndDT(toLocalDT(addMinutes(next, 30)))
+  }
+
+  const applyNow = () => {
+    const now = new Date()
+    now.setMinutes(snapMinuteToQuarter(now.getMinutes()), 0, 0)
+    setStartDT(toLocalDT(now))
+    setEndDT(toLocalDT(addMinutes(now, 30)))
+  }
+
+  const applyDuration = (minutes: number) => {
+    const start = parseLocalDT(startDT)
+    setEndDT(toLocalDT(addMinutes(start, minutes)))
+  }
+
   const updateEndParts = (patch: Partial<ReturnType<typeof getPickerParts>>) => {
     const parts = { ...getPickerParts(endDT), ...patch }
     const nextEnd = fromPickerParts(parts)
@@ -243,8 +262,48 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                 />
               </div>
 
-              {/* Times */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Quick time actions */}
+              <div className="space-y-2">
+                <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Quick picks</p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={applyNow} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">Now</button>
+                  <button type="button" onClick={() => applyStartQuickOffset(0)} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">Today</button>
+                  <button type="button" onClick={() => applyStartQuickOffset(1)} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">Tomorrow</button>
+                  <button type="button" onClick={() => applyDuration(30)} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">30m</button>
+                  <button type="button" onClick={() => applyDuration(60)} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">1h</button>
+                </div>
+              </div>
+
+              {/* Mobile native picker */}
+              <div className="sm:hidden grid grid-cols-1 gap-3">
+                <div>
+                  <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">Start</label>
+                  <input
+                    type="datetime-local"
+                    step={900}
+                    value={startDT}
+                    onChange={e => {
+                      const nextStart = parseLocalDT(e.target.value)
+                      setStartDT(toLocalDT(nextStart))
+                      setEndDT(toLocalDT(addMinutes(nextStart, 30)))
+                    }}
+                    className="w-full h-11 rounded-xl border border-casa-border bg-casa-bg px-3 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                  />
+                </div>
+                <div>
+                  <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">End</label>
+                  <input
+                    type="datetime-local"
+                    step={900}
+                    value={endDT}
+                    onChange={e => setEndDT(e.target.value)}
+                    className="w-full h-11 rounded-xl border border-casa-border bg-casa-bg px-3 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                  />
+                </div>
+              </div>
+
+              {/* Desktop precision picker */}
+              <div className="hidden sm:grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">
                     Start

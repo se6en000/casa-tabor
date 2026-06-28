@@ -339,6 +339,25 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     setEndDT(toLocalDTFromDate(next))
     markDirty()
   }
+  const applyStartQuickOffset = (days: number) => {
+    const base = new Date(startDT)
+    if (Number.isNaN(base.getTime())) return
+    const next = new Date(base)
+    next.setDate(next.getDate() + days)
+    setStartAndAutoEnd(next)
+  }
+  const applyNow = () => {
+    const now = new Date()
+    now.setMinutes(snapMinuteToQuarter(now.getMinutes()), 0, 0)
+    setStartAndAutoEnd(now)
+  }
+  const applyDuration = (minutes: number) => {
+    const start = new Date(startDT)
+    if (Number.isNaN(start.getTime())) return
+    const end = new Date(start.getTime() + minutes * 60_000)
+    setEndDT(toLocalDTFromDate(end))
+    markDirty()
+  }
   const fields = getFieldsForCategory(category)
 
   function buildForm(enrichment: typeof enr, fieldList: EnrichmentFieldKey[]) {
@@ -1114,70 +1133,107 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     />
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-caption text-casa-muted mb-1">Start</p>
-                      {(() => {
-                        const p = getPickerParts(startDT)
-                        return (
-                          <div className="space-y-2">
-                            <input
-                              type="date"
-                              value={startDT.slice(0, 10)}
-                              onChange={e => {
-                                const candidate = new Date(`${e.target.value}T${startDT.slice(11, 16) || '00:00'}`)
-                                if (Number.isNaN(candidate.getTime())) return
-                                setStartAndAutoEnd(candidate)
-                              }}
-                              className={inputCls}
-                            />
-                            <div className="grid grid-cols-3 gap-2">
-                              <select value={p.hour12} onChange={e => updateStartParts({ hour12: Number(e.target.value) })} className={inputCls}>
-                                {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
-                              </select>
-                              <select value={p.minute} onChange={e => updateStartParts({ minute: Number(e.target.value) })} className={inputCls}>
-                                {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
-                              </select>
-                              <select value={p.ampm} onChange={e => updateStartParts({ ampm: e.target.value as 'AM' | 'PM' })} className={inputCls}>
-                                <option value="AM">AM</option>
-                                <option value="PM">PM</option>
-                              </select>
-                            </div>
-                          </div>
-                        )
-                      })()}
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={applyNow} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">Now</button>
+                      <button type="button" onClick={() => applyStartQuickOffset(0)} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">Today</button>
+                      <button type="button" onClick={() => applyStartQuickOffset(1)} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">Tomorrow</button>
+                      <button type="button" onClick={() => applyDuration(30)} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">30m</button>
+                      <button type="button" onClick={() => applyDuration(60)} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">1h</button>
                     </div>
-                    <div>
-                      <p className="text-caption text-casa-muted mb-1">End</p>
-                      {(() => {
-                        const p = getPickerParts(endDT)
-                        return (
-                          <div className="space-y-2">
-                            <input
-                              type="date"
-                              value={endDT.slice(0, 10)}
-                              onChange={e => {
-                                const next = `${e.target.value}T${endDT.slice(11, 16) || '00:00'}`
-                                setEndDT(next)
-                                markDirty()
-                              }}
-                              className={inputCls}
-                            />
-                            <div className="grid grid-cols-3 gap-2">
-                              <select value={p.hour12} onChange={e => updateEndParts({ hour12: Number(e.target.value) })} className={inputCls}>
-                                {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
-                              </select>
-                              <select value={p.minute} onChange={e => updateEndParts({ minute: Number(e.target.value) })} className={inputCls}>
-                                {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
-                              </select>
-                              <select value={p.ampm} onChange={e => updateEndParts({ ampm: e.target.value as 'AM' | 'PM' })} className={inputCls}>
-                                <option value="AM">AM</option>
-                                <option value="PM">PM</option>
-                              </select>
+
+                    <div className="sm:hidden grid grid-cols-1 gap-2">
+                      <div>
+                        <p className="text-caption text-casa-muted mb-1">Start</p>
+                        <input
+                          type="datetime-local"
+                          step={900}
+                          value={startDT}
+                          onChange={e => {
+                            const candidate = new Date(e.target.value)
+                            if (Number.isNaN(candidate.getTime())) return
+                            setStartAndAutoEnd(candidate)
+                          }}
+                          className={inputCls}
+                        />
+                      </div>
+                      <div>
+                        <p className="text-caption text-casa-muted mb-1">End</p>
+                        <input
+                          type="datetime-local"
+                          step={900}
+                          value={endDT}
+                          onChange={e => { setEndDT(e.target.value); markDirty() }}
+                          className={inputCls}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="hidden sm:grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-caption text-casa-muted mb-1">Start</p>
+                        {(() => {
+                          const p = getPickerParts(startDT)
+                          return (
+                            <div className="space-y-2">
+                              <input
+                                type="date"
+                                value={startDT.slice(0, 10)}
+                                onChange={e => {
+                                  const candidate = new Date(`${e.target.value}T${startDT.slice(11, 16) || '00:00'}`)
+                                  if (Number.isNaN(candidate.getTime())) return
+                                  setStartAndAutoEnd(candidate)
+                                }}
+                                className={inputCls}
+                              />
+                              <div className="grid grid-cols-3 gap-2">
+                                <select value={p.hour12} onChange={e => updateStartParts({ hour12: Number(e.target.value) })} className={inputCls}>
+                                  {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
+                                </select>
+                                <select value={p.minute} onChange={e => updateStartParts({ minute: Number(e.target.value) })} className={inputCls}>
+                                  {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
+                                </select>
+                                <select value={p.ampm} onChange={e => updateStartParts({ ampm: e.target.value as 'AM' | 'PM' })} className={inputCls}>
+                                  <option value="AM">AM</option>
+                                  <option value="PM">PM</option>
+                                </select>
+                              </div>
                             </div>
-                          </div>
-                        )
-                      })()}
+                          )
+                        })()}
+                      </div>
+                      <div>
+                        <p className="text-caption text-casa-muted mb-1">End</p>
+                        {(() => {
+                          const p = getPickerParts(endDT)
+                          return (
+                            <div className="space-y-2">
+                              <input
+                                type="date"
+                                value={endDT.slice(0, 10)}
+                                onChange={e => {
+                                  const next = `${e.target.value}T${endDT.slice(11, 16) || '00:00'}`
+                                  setEndDT(next)
+                                  markDirty()
+                                }}
+                                className={inputCls}
+                              />
+                              <div className="grid grid-cols-3 gap-2">
+                                <select value={p.hour12} onChange={e => updateEndParts({ hour12: Number(e.target.value) })} className={inputCls}>
+                                  {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
+                                </select>
+                                <select value={p.minute} onChange={e => updateEndParts({ minute: Number(e.target.value) })} className={inputCls}>
+                                  {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
+                                </select>
+                                <select value={p.ampm} onChange={e => updateEndParts({ ampm: e.target.value as 'AM' | 'PM' })} className={inputCls}>
+                                  <option value="AM">AM</option>
+                                  <option value="PM">PM</option>
+                                </select>
+                              </div>
+                            </div>
+                          )
+                        })()}
+                      </div>
                     </div>
                   </div>
                 )}
