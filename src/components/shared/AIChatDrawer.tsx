@@ -160,6 +160,7 @@ function useSpeechInput({
   onConfirm,
   onCancel,
   hasPendingAction,
+  keepBridgeAliveBetweenFinals = false,
   onTrace,
 }: {
   onInterim: (text: string) => void
@@ -168,6 +169,7 @@ function useSpeechInput({
   onConfirm: () => void
   onCancel: () => void
   hasPendingAction: boolean
+  keepBridgeAliveBetweenFinals?: boolean
   onTrace?: (event: string, detail?: string) => void
 }) {
   const wsRef              = useRef<WebSocket | null>(null)
@@ -265,7 +267,13 @@ function useSpeechInput({
   }, [])
 
   const triggerFinal = useCallback((text: string, confidence?: number | null) => {
-    stopWS()
+    const keepBridgeStreamAlive =
+      keepBridgeAliveBetweenFinals &&
+      modeRef.current === 'bridge' &&
+      activeRef.current
+    if (!keepBridgeStreamAlive) {
+      stopWS()
+    }
     stopSilenceTimer()
     stopWebSpeechRestartTimer()
     setPhaseSync('processing')
@@ -274,7 +282,7 @@ function useSpeechInput({
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     handleFinalTranscript(finalText, confidence)
-  }, [handleFinalTranscript, onTrace, stopWebSpeechRestartTimer, stopWS])
+  }, [handleFinalTranscript, keepBridgeAliveBetweenFinals, onTrace, stopWebSpeechRestartTimer, stopWS])
 
   // ── Web Speech API path (Safari / iOS) ──────────────────────────────────
   const startWebSpeech = useCallback(() => {
@@ -1019,6 +1027,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       })
     },
     hasPendingAction: hasPendingToolAction,
+    keepBridgeAliveBetweenFinals: page === 'grocery' && !isWakeAssistantMode,
     onTrace: appendDebugLog,
   })
 
