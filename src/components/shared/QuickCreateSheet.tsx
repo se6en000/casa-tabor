@@ -69,7 +69,6 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
   const [startDT, setStartDT] = useState(toLocalDT(defaultStart))
   const [endDT,   setEndDT]   = useState(toLocalDT(defaultEnd))
   const [isAllDay, setIsAllDay] = useState(false)
-  const [isMultiDay, setIsMultiDay] = useState(false)
   const [saving,  setSaving]  = useState(false)
 
   // Re-initialise whenever the sheet opens with a new slot
@@ -80,23 +79,10 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     setStartDT(toLocalDT(s))
     setEndDT(toLocalDT(addMinutes(s, 30)))
     setIsAllDay(false)
-    setIsMultiDay(false)
     setSaving(false)
   }, [open, initialStart])
 
-  useEffect(() => {
-    if (isMultiDay) return
-    const startDate = startDT.slice(0, 10)
-    if (!startDate) return
-    if (isAllDay) {
-      const next = `${startDate}T23:59`
-      if (endDT !== next) setEndDT(next)
-      return
-    }
-    const endTime = endDT.slice(11, 16) || '00:00'
-    const next = `${startDate}T${endTime}`
-    if (endDT !== next) setEndDT(next)
-  }, [isAllDay, isMultiDay, startDT, endDT])
+  const isMultiDay = startDT.slice(0, 10) !== endDT.slice(0, 10)
 
   useEffect(() => {
     if (!open) return
@@ -310,13 +296,9 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                 >
                   All day
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setIsMultiDay(v => !v)}
-                  className={`px-3 py-1.5 rounded-full border text-caption font-semibold transition-colors ${isMultiDay ? 'border-casa-gold bg-casa-gold/15 text-casa-navy' : 'border-casa-border bg-casa-bg text-casa-text hover:border-casa-gold'}`}
-                >
-                  Multi-day
-                </button>
+                <span className={`px-3 py-1.5 rounded-full border text-caption font-semibold ${isMultiDay ? 'border-casa-gold bg-casa-gold/15 text-casa-navy' : 'border-casa-border bg-casa-bg text-casa-muted'}`}>
+                  {isMultiDay ? 'Multi-day detected' : 'Single day'}
+                </span>
               </div>
 
               {/* Mobile touch-friendly picker (no native popover clipping) */}
@@ -366,10 +348,8 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                         <InlineCalendarPicker
                           value={endDT.slice(0, 10)}
                           onChange={(nextDate) => {
-                            if (!isMultiDay) return
                             setEndDT(`${nextDate}T${isAllDay ? '23:59' : (endDT.slice(11, 16) || '00:00')}`)
                           }}
-                          className={!isMultiDay ? 'pointer-events-none opacity-60' : undefined}
                         />
                         {!isAllDay && (
                           <div className="grid grid-cols-3 gap-1.5">
@@ -460,13 +440,11 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                         <InlineCalendarPicker
                           value={endDT.slice(0, 10)}
                           onChange={(nextDate) => {
-                            if (!isMultiDay) return
                             setEndDT(`${nextDate}T${isAllDay ? '23:59' : (endDT.slice(11, 16) || '00:00')}`)
                           }}
-                          className={!isMultiDay ? 'pointer-events-none opacity-60' : undefined}
                         />
                         <p className="text-caption text-casa-muted">
-                          Selected: {parseLocalDT(endDT).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}{!isMultiDay ? ' (same day)' : ''}
+                          Selected: {parseLocalDT(endDT).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
                         </p>
                         {!isAllDay && (
                         <div className="grid grid-cols-3 gap-1.5">
