@@ -153,28 +153,151 @@ function toIsoWithOffset(date: Date): string {
   return `${y}-${m}-${d}T${h}:${min}:${sec}${sign}${hh}:${mm}`
 }
 
+const MONTH_INDEX: Record<string, number> = {
+  jan: 0, january: 0,
+  feb: 1, february: 1,
+  mar: 2, march: 2,
+  apr: 3, april: 3,
+  may: 4,
+  jun: 5, june: 5,
+  jul: 6, july: 6,
+  aug: 7, august: 7,
+  sep: 8, sept: 8, september: 8,
+  oct: 9, october: 9,
+  nov: 10, november: 10,
+  dec: 11, december: 11,
+}
+
+const WEEKDAY_INDEX: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+}
+
+function resolveDateFromPhrase(phrase: string, now: Date): Date {
+  const lower = phrase.toLowerCase()
+  if (/\btomorrow\b/.test(lower)) {
+    const d = new Date(now)
+    d.setDate(d.getDate() + 1)
+    return d
+  }
+  if (/\btoday\b/.test(lower)) return new Date(now)
+
+  const monthMatch = lower.match(/\b(?:on\s+)?(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?\b/)
+  if (monthMatch) {
+    const month = MONTH_INDEX[monthMatch[1]]
+    const day = Number.parseInt(monthMatch[2], 10)
+    if (!Number.isNaN(month) && !Number.isNaN(day)) {
+      const candidate = new Date(now.getFullYear(), month, day)
+      if (candidate < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
+        candidate.setFullYear(candidate.getFullYear() + 1)
+      }
+      return candidate
+    }
+  }
+
+  const weekdayMatch = lower.match(/\b(?:on\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/)
+  if (weekdayMatch) {
+    const targetDay = WEEKDAY_INDEX[weekdayMatch[1]]
+    const candidate = new Date(now)
+    const delta = (targetDay - candidate.getDay() + 7) % 7
+    candidate.setDate(candidate.getDate() + delta)
+    return candidate
+  }
+
+  return new Date(now)
+}
+
+function parseClockTime(phrase: string): null | { hour24: number; minute: number; matched: string; index: number } {
+  const match = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i.exec(phrase)
+  if (!match || typeof match.index !== 'number') return null
+  const rawHour = Number.parseInt(match[1], 10)
+  const minute = Number.parseInt(match[2] ?? '0', 10)
+  const meridiem = match[3].toLowerCase()
+  if (rawHour < 1 || rawHour > 12 || minute < 0 || minute > 59) return null
+  return {
+    hour24: (rawHour % 12) + (meridiem === 'pm' ? 12 : 0),
+    minute,
+    matched: match[0],
+    index: match.index,
+  }
+}
+
+function parseDurationMinutes(phrase: string): { minutes: number; cleaned: string } {
+  const match = phrase.match(/\bfor\s+(\d{1,3})\s*(minutes?|mins?|hours?|hrs?)\b/i)
+  if (!match) return { minutes: 60, cleaned: phrase }
+  const qty = Number.parseInt(match[1], 10)
+  const unit = match[2].toLowerCase()
+  if (Number.isNaN(qty) || qty <= 0) return { minutes: 60, cleaned: phrase }
+  const minutes = unit.startsWith('hour') || unit.startsWith('hr') ? qty * 60 : qty
+  const safeMinutes = Math.max(15, Math.min(240, minutes))
+  return {
+    minutes: safeMinutes,
+    cleaned: phrase.replace(match[0], ' ').replace(/\s+/g, ' ').trim(),
+  }
+}
+
 function parseSimpleCalendarCommand(
   text: string,
   family: FamilyMember[],
-): null | { title: string; start: string; end: string; members: string[] } {
+): null | { title: string; start: string; end: string; members: string[]; pattern: string } {
   const normalized = text.trim().replace(/\s+/g, ' ')
-  const rx = /^(?:alexa\s+)?(?:add|create|schedule)\s+(?:an?\s+)?(?:appointment|event|reminder)\s+(?:(for|on)\s+)?(?:(today|tomorrow)\s+)?at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s+(?:to|for)\s+(.+)$/i
-  const match = normalized.match(rx)
-  if (!match) return null
-  const dayWord = (match[2] ?? '').toLowerCase()
-  const hourRaw = Number.parseInt(match[3], 10)
-  const minuteRaw = Number.parseInt(match[4] ?? '0', 10)
-  const meridiem = (match[5] ?? '').toLowerCase()
-  const subject = (match[6] ?? '').trim().replace(/[.?!]+$/g, '')
-  if (!subject || Number.isNaN(hourRaw) || Number.isNaN(minuteRaw)) return null
-  if (hourRaw < 1 || hourRaw > 12 || minuteRaw < 0 || minuteRaw > 59) return null
+  if (!normalized || normalized.endsWith('?')) return null
+  if (!/^(?:alexa\s+)?(?:please\s+)?(?:add|create|schedule)\b/i.test(normalized)) return null
+  if (!/\b(appointment|appt|event|reminder)\b/i.test(normalized)) return null
+
+  const lead = normalized.match(/^(?:alexa\s+)?(?:please\s+)?(?:add|create|schedule)\s+(?:an?\s+)?(?:appointment|appt|event|reminder)\s+(.*)$/i)
+  const tail = (lead?.[1] ?? '').trim()
+  if (!tail) return null
+
+  const time = parseClockTime(tail)
+  if (!time) return null
 
   const now = new Date()
-  const start = new Date(now)
-  if (dayWord === 'tomorrow') start.setDate(start.getDate() + 1)
-  const hour24 = (hourRaw % 12) + (meridiem === 'pm' ? 12 : 0)
-  start.setHours(hour24, minuteRaw, 0, 0)
-  const end = new Date(start.getTime() + 60 * 60 * 1000)
+  const baseDate = resolveDateFromPhrase(tail, now)
+  const start = new Date(baseDate)
+  start.setHours(time.hour24, time.minute, 0, 0)
+
+  const beforeTime = tail.slice(0, time.index).trim()
+  const afterTime = tail.slice(time.index + time.matched.length).trim()
+
+  let pattern: string
+  let subjectRaw: string
+  if (/^(?:to|for)\s+/i.test(afterTime)) {
+    subjectRaw = afterTime.replace(/^(?:to|for)\s+/i, '')
+    pattern = 'time-then-to-for-subject'
+  } else {
+    const connectorSubject = tail.match(/\b(?:to|for)\s+(.+)$/i)
+    if (connectorSubject) {
+      subjectRaw = connectorSubject[1]
+      pattern = 'connector-subject'
+    } else if (afterTime.length > 0) {
+      subjectRaw = afterTime
+      pattern = 'time-then-subject'
+    } else {
+      subjectRaw = beforeTime
+      pattern = 'subject-before-time'
+    }
+  }
+
+  const durationParsed = parseDurationMinutes(subjectRaw)
+  const subject = durationParsed.cleaned
+    .replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, ' ')
+    .replace(/\b(?:on\s+)?(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[.?!]+$/g, '')
+  if (!subject) return null
+
+  if (start < now && !/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(tail)) {
+    start.setDate(start.getDate() + 1)
+    pattern = `${pattern}-rolled-next-day`
+  }
+  const end = new Date(start.getTime() + durationParsed.minutes * 60 * 1000)
 
   const members = family
     .map((person) => person.name)
@@ -185,6 +308,7 @@ function parseSimpleCalendarCommand(
     start: toIsoWithOffset(start),
     end: toIsoWithOffset(end),
     members,
+    pattern,
   }
 }
 
@@ -338,7 +462,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       const actionId = genId()
       const correlationId = buildCorrelationId(actionId, activeSession.id)
       const stageStart = performance.now()
-      emitAssistantDebug('simple_command_detected', `type=create_event corr=${correlationId.slice(0, 28)}`)
+      emitAssistantDebug('simple_command_detected', `type=create_event pattern=${parsed.pattern} corr=${correlationId.slice(0, 28)}`)
 
       const executePromise = supabase.functions.invoke('execute-ai-action', {
         body: {
