@@ -24,6 +24,7 @@ type IncomingEntry = {
   actionId?: string
   lane?: string
   payload?: unknown
+  dedupeKey?: string
 }
 
 Deno.serve(async (req) => {
@@ -57,9 +58,25 @@ Deno.serve(async (req) => {
       })
     }
 
+    const batchSeen = new Set<string>()
     const rows = entries
       .filter((entry) => typeof entry.event === 'string' && entry.event.trim().length > 0)
-      .map((entry) => ({
+      .map((entry) => {
+        const fallbackDedupe = [
+          body.meta?.device_id ?? '',
+          entry.channel === 'audit' ? 'audit' : 'debug',
+          entry.sessionId ?? '',
+          entry.turnId ?? '',
+          Number.isFinite(entry.seq) ? String(Math.trunc(entry.seq as number)) : '',
+          String(entry.event).slice(0, 120),
+          typeof entry.detail === 'string' ? entry.detail.slice(0, 240) : '',
+        ].join('|')
+        const dedupeKey = typeof entry.dedupeKey === 'string' && entry.dedupeKey.trim().length > 0
+          ? entry.dedupeKey.slice(0, 800)
+          : fallbackDedupe.slice(0, 800)
+        if (batchSeen.has(dedupeKey)) return null
+        batchSeen.add(dedupeKey)
+        return {
         client_at: typeof entry.at === 'string' ? entry.at : null,
         event: String(entry.event).slice(0, 120),
         detail: typeof entry.detail === 'string' ? entry.detail.slice(0, 2000) : null,
@@ -82,7 +99,10 @@ Deno.serve(async (req) => {
         source_href: typeof body.meta?.href === 'string' ? body.meta.href.slice(0, 500) : null,
         user_agent: typeof body.meta?.user_agent === 'string' ? body.meta.user_agent.slice(0, 500) : null,
         platform: typeof body.meta?.platform === 'string' ? body.meta.platform.slice(0, 120) : null,
-      }))
+        dedupe_key: dedupeKey,
+      }
+      })
+      .filter((row): row is NonNullable<typeof row> => Boolean(row))
 
     if (rows.length === 0) {
       return new Response(JSON.stringify({ inserted: 0 }), {
@@ -91,7 +111,9 @@ Deno.serve(async (req) => {
       })
     }
 
-    const { error } = await sb.from('ai_drawer_debug_events').insert(rows)
+    const { error } = await sb
+      .from('ai_drawer_debug_events')
+      .upsert(rows, { onConflict: 'dedupe_key', ignoreDuplicates: true })
     if (error) throw new Error(error.message)
 
     return new Response(JSON.stringify({ inserted: rows.length }), {

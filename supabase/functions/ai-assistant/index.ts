@@ -51,6 +51,7 @@ Deno.serve(async (req) => {
     }
   }
   const appendServerTrace = (event: string, detail: string, payload?: Record<string, unknown>) => {
+    const dedupeKey = `${cid}|${event}|${turnId ?? 'no-turn'}|${detail.slice(0, 80)}`
     sb.from('ai_drawer_debug_events').insert({
       event,
       detail: detail.slice(0, 2000),
@@ -67,6 +68,7 @@ Deno.serve(async (req) => {
       source_href: null,
       user_agent: null,
       platform: Deno.build.os,
+      dedupe_key: dedupeKey,
     }).then(() => {}).catch(() => {})
   }
   console.log(`[ai-assistant][${cid}] request messages=${Array.isArray(messages) ? messages.length : 0}`)

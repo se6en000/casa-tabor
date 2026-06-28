@@ -17,6 +17,7 @@ type RemoteVoiceTraceEntry = {
   actionId?: string
   lane?: string
   payload?: unknown
+  dedupeKey?: string
   channel: 'debug' | 'audit'
 }
 
@@ -31,6 +32,8 @@ const MAX_QUEUE_SIZE = 2500
 const MAX_ATTEMPTS = 3
 const FLUSH_INTERVAL_MS = 1800
 const RETRY_DELAY_MS = 4000
+const RECENT_FINGERPRINT_WINDOW_MS = 8000
+const MAX_RECENT_FINGERPRINTS = 2000
 const REMOTE_NOISE_EVENTS = new Set([
   'speech_ensure_running',
   'speech_ensure_running_ok',
@@ -57,6 +60,7 @@ let flushTimer: ReturnType<typeof setTimeout> | null = null
 let flushInFlight = false
 let listenersBound = false
 let nextFlushDelayMs = FLUSH_INTERVAL_MS
+const recentFingerprints = new Map<string, number>()
 
 function getDeviceId(): string {
   if (typeof window === 'undefined') return 'server'
@@ -97,6 +101,33 @@ function scheduleFlush(delayMs = nextFlushDelayMs) {
 
 function shouldSkipRemote(entryEvent: string, config: VoiceRuntimeConfig): boolean {
   return config.debugLevel !== 'verbose' && REMOTE_NOISE_EVENTS.has(entryEvent)
+}
+
+function buildEntryFingerprint(entry: RemoteVoiceTraceEntry): string {
+  return [
+    entry.channel,
+    entry.sessionId ?? '',
+    entry.turnId ?? '',
+    String(entry.seq ?? ''),
+    entry.event,
+    entry.detail ?? '',
+  ].join('|')
+}
+
+function shouldDropRecentDuplicate(entry: RemoteVoiceTraceEntry): boolean {
+  const now = Date.now()
+  if (recentFingerprints.size > MAX_RECENT_FINGERPRINTS) {
+    for (const [fingerprint, seenAt] of recentFingerprints.entries()) {
+      if (now - seenAt > RECENT_FINGERPRINT_WINDOW_MS) recentFingerprints.delete(fingerprint)
+    }
+  }
+  const fingerprint = buildEntryFingerprint(entry)
+  const previous = recentFingerprints.get(fingerprint)
+  if (typeof previous === 'number' && now - previous <= RECENT_FINGERPRINT_WINDOW_MS) {
+    return true
+  }
+  recentFingerprints.set(fingerprint, now)
+  return false
 }
 
 async function flushQueueNow() {
@@ -152,6 +183,17 @@ export function enqueueRemoteVoiceTrace(
     turnState: entry.turnState?.slice(0, 64),
   }
   if (shouldSkipRemote(withChannel.event, config)) return
+  if (shouldDropRecentDuplicate(withChannel)) return
+  const dedupeSource = [
+    getDeviceId(),
+    channel,
+    withChannel.sessionId ?? '',
+    withChannel.turnId ?? '',
+    String(withChannel.seq ?? ''),
+    withChannel.event,
+    withChannel.detail ?? '',
+  ].join('|')
+  withChannel.dedupeKey = dedupeSource.slice(0, 800)
   queue.push({ entry: withChannel, attempts: 0 })
   if (queue.length > MAX_QUEUE_SIZE) {
     queue = queue.slice(-MAX_QUEUE_SIZE)

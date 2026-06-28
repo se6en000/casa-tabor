@@ -68,11 +68,6 @@ async function getExistingActionResult(sb: ReturnType<typeof createClient>, acti
     .limit(1)
 
   if (error) throw new Error(error.message)
-  appendServerTrace('server_execute_action_grocery_added', `item_id=${item.id}`, {
-    item_id: item.id,
-    name: item.name,
-    normalized_name: item.normalized_name,
-  })
   return data?.[0]?.result_payload ?? null
 }
 
@@ -226,6 +221,7 @@ Deno.serve(async (req) => {
   }
   console.log(`[execute-ai-action][${cid}] start tool=${tool}`)
   const appendServerTrace = (event: string, detail: string, payload?: Record<string, unknown>) => {
+    const dedupeKey = `${cid}|${event}|${turnId ?? 'no-turn'}|${actionId ?? 'no-action'}|${detail.slice(0, 80)}`
     sb.from('ai_drawer_debug_events').insert({
       event,
       detail: detail.slice(0, 2000),
@@ -243,6 +239,7 @@ Deno.serve(async (req) => {
       source_href: null,
       user_agent: null,
       platform: Deno.build.os,
+      dedupe_key: dedupeKey,
     }).then(() => {}).catch(() => {})
   }
   appendServerTrace('server_execute_action_start', `tool=${tool}`, { tool, sync_mode: syncMode ?? 'default' })
