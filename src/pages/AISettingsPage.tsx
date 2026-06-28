@@ -59,9 +59,14 @@ const AI_REGRESSION_HISTORY_KEY = 'casa-ai-regression-history-v1'
 type ForensicsSnapshot = {
   windowHours: number
   totalTraces: number
+  startedTraceCount: number
+  terminalTraceCount: number
   completionRate: number
+  terminalRate: number
   finalTranscriptRate: number
   noFinalCount: number
+  serverOnlySessions: number
+  missingTerminalSessions: number
   stallCount: number
   invalidTransitionCount: number
   actionFailureRate: number
@@ -74,9 +79,14 @@ type ForensicsSnapshot = {
 const EMPTY_FORENSICS: ForensicsSnapshot = {
   windowHours: 24,
   totalTraces: 0,
+  startedTraceCount: 0,
+  terminalTraceCount: 0,
   completionRate: 0,
+  terminalRate: 0,
   finalTranscriptRate: 0,
   noFinalCount: 0,
+  serverOnlySessions: 0,
+  missingTerminalSessions: 0,
   stallCount: 0,
   invalidTransitionCount: 0,
   actionFailureRate: 0,
@@ -225,7 +235,7 @@ export default function AISettingsPage() {
       if (error) throw error
 
       const rows = data ?? []
-      const sessions = new Map<string, { hasFinal: boolean; hasSend: boolean }>()
+      const sessions = new Map<string, { hasFinal: boolean; hasSend: boolean; hasStart: boolean; hasTerminal: boolean; hasServer: boolean }>()
       const devices = new Set<string>()
       const llmMs: number[] = []
       let stallCount = 0
@@ -242,8 +252,11 @@ export default function AISettingsPage() {
           ? row.session_id
           : null
         if (sid) {
-          if (!sessions.has(sid)) sessions.set(sid, { hasFinal: false, hasSend: false })
+          if (!sessions.has(sid)) sessions.set(sid, { hasFinal: false, hasSend: false, hasStart: false, hasTerminal: false, hasServer: false })
           const entry = sessions.get(sid)!
+          if (row.event === 'trace_started') entry.hasStart = true
+          if (row.event === 'turn_completed' || row.event === 'turn_aborted' || row.event === 'turn_timeout' || row.event === 'asr_no_final' || row.event === 'trace_outcome') entry.hasTerminal = true
+          if (typeof row.event === 'string' && row.event.startsWith('server_')) entry.hasServer = true
           if (row.event === 'speech_trigger_final') entry.hasFinal = true
           if (row.event === 'voice_final' && typeof row.detail === 'string' && row.detail !== '__SEND__') entry.hasFinal = true
           if (row.event === 'send_current_input') entry.hasSend = true
@@ -268,15 +281,24 @@ export default function AISettingsPage() {
       const totalTraces = traceValues.length
       const completionCount = traceValues.filter((s) => s.hasSend).length
       const finalCount = traceValues.filter((s) => s.hasFinal).length
+      const startedTraceCount = traceValues.filter((s) => s.hasStart).length
+      const terminalTraceCount = traceValues.filter((s) => s.hasTerminal).length
+      const serverOnlySessions = traceValues.filter((s) => s.hasServer && !s.hasStart).length
+      const missingTerminalSessions = traceValues.filter((s) => s.hasStart && !s.hasTerminal).length
       const noFinalCount = totalTraces > 0 ? totalTraces - finalCount : noFinalFromOutcome
       const actionFailureRate = actionStartCount > 0 ? (actionErrorCount / actionStartCount) * 100 : 0
 
       setForensics({
         windowHours: 24,
         totalTraces,
+        startedTraceCount,
+        terminalTraceCount,
         completionRate: totalTraces > 0 ? (completionCount / totalTraces) * 100 : 0,
+        terminalRate: startedTraceCount > 0 ? (terminalTraceCount / startedTraceCount) * 100 : 0,
         finalTranscriptRate: totalTraces > 0 ? (finalCount / totalTraces) * 100 : 0,
         noFinalCount,
+        serverOnlySessions,
+        missingTerminalSessions,
         stallCount,
         invalidTransitionCount,
         actionFailureRate,
@@ -743,10 +765,14 @@ export default function AISettingsPage() {
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-caption">
                 <Metric label="Traces" value={forensics.totalTraces} />
+                <Metric label="Trace starts" value={forensics.startedTraceCount} />
+                <Metric label="Terminal %" value={Math.round(forensics.terminalRate)} />
                 <Metric label="Completion %" value={Math.round(forensics.completionRate)} />
                 <Metric label="Final transcript %" value={Math.round(forensics.finalTranscriptRate)} />
                 <Metric label="Active devices" value={forensics.activeDevices} />
                 <Metric label="No-final turns" value={forensics.noFinalCount} />
+                <Metric label="Server-only sessions" value={forensics.serverOnlySessions} />
+                <Metric label="Missing terminal" value={forensics.missingTerminalSessions} />
                 <Metric label="Listening stalls" value={forensics.stallCount} />
                 <Metric label="Invalid transitions" value={forensics.invalidTransitionCount} />
                 <Metric label="Action failure %" value={Math.round(forensics.actionFailureRate)} />

@@ -1353,6 +1353,14 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     }
   }, [open, messages.length, markConversationProgress])
 
+  useEffect(() => {
+    if (!open) return
+    const timer = setInterval(() => {
+      appendDebugLog('device_heartbeat', `phase=${speech.phase} loading=${loading ? 1 : 0}`)
+    }, 10000)
+    return () => clearInterval(timer)
+  }, [open, speech.phase, loading, appendDebugLog])
+
   const buildCorrelationId = useCallback((suffix: string) => {
     const sessionPart = session?.id ?? 'no-session'
     return `${sessionPart}:${suffix}:${Date.now().toString(36)}`

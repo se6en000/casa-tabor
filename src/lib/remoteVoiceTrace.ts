@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { supabase, supabaseAnonKey, supabaseUrl } from './supabase'
 import type { VoiceRuntimeConfig } from './voiceRuntimeConfig'
 
 type RemoteVoiceTraceEntry = {
@@ -27,6 +27,7 @@ type RemoteQueueItem = {
 }
 
 const DEVICE_ID_KEY = 'casa-voice-debug-device-id'
+const QUEUE_STORAGE_KEY = 'casa-voice-remote-queue-v1'
 const MAX_BATCH_SIZE = 80
 const MAX_QUEUE_SIZE = 2500
 const MAX_ATTEMPTS = 3
@@ -45,6 +46,7 @@ const REMOTE_CRITICAL_EVENTS = new Set([
   'turn_aborted',
   'turn_timeout',
   'asr_no_final',
+  'device_heartbeat',
   'speech_listening_stall',
   'speech_trigger_final',
   'voice_final',
@@ -66,8 +68,80 @@ let queue: RemoteQueueItem[] = []
 let flushTimer: ReturnType<typeof setTimeout> | null = null
 let flushInFlight = false
 let listenersBound = false
+let queueHydrated = false
 let nextFlushDelayMs = FLUSH_INTERVAL_MS
 const recentFingerprints = new Map<string, number>()
+let transportHealthy = true
+
+function persistQueue() {
+  if (typeof window === 'undefined') return
+  try {
+    if (queue.length === 0) {
+      localStorage.removeItem(QUEUE_STORAGE_KEY)
+      return
+    }
+    localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue.slice(-MAX_QUEUE_SIZE)))
+  } catch {
+    // ignore persistence failures
+  }
+}
+
+function hydrateQueue() {
+  if (queueHydrated || typeof window === 'undefined') return
+  queueHydrated = true
+  try {
+    const raw = localStorage.getItem(QUEUE_STORAGE_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as RemoteQueueItem[]
+    if (!Array.isArray(parsed)) return
+    queue = parsed
+      .filter((item) => item && item.entry && typeof item.entry.event === 'string')
+      .map((item) => ({ entry: item.entry, attempts: Number.isFinite(item.attempts) ? item.attempts : 0 }))
+      .slice(-MAX_QUEUE_SIZE)
+  } catch {
+    queue = []
+  }
+}
+
+function enqueueTransportEvent(event: string, detail: string) {
+  if (typeof window === 'undefined') return
+  const entry: RemoteVoiceTraceEntry = {
+    at: new Date().toISOString(),
+    event,
+    detail,
+    sessionId: 'transport',
+    turnId: 'transport',
+    channel: 'debug',
+  }
+  queue.push({ entry, attempts: 0 })
+  queue = queue.slice(-MAX_QUEUE_SIZE)
+  persistQueue()
+}
+
+function flushQueueKeepalive(reason: string) {
+  if (typeof window === 'undefined' || queue.length === 0) return
+  const payload = {
+    entries: queue.slice(0, MAX_BATCH_SIZE).map((item) => item.entry),
+    meta: {
+      device_id: getDeviceId(),
+      user_agent: navigator.userAgent,
+      platform: navigator.platform,
+      origin: window.location.origin,
+      href: window.location.href,
+      source_component: `client:${reason}`,
+    },
+  }
+  void fetch(`${supabaseUrl}/functions/v1/ingest-ai-drawer-debug`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      apikey: supabaseAnonKey,
+      authorization: `Bearer ${supabaseAnonKey}`,
+    },
+    body: JSON.stringify(payload),
+    keepalive: true,
+  }).catch(() => {})
+}
 
 function getDeviceId(): string {
   if (typeof window === 'undefined') return 'server'
@@ -90,10 +164,12 @@ function ensureListenersBound() {
   listenersBound = true
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
+      flushQueueKeepalive('visibility_hidden')
       void flushQueueNow()
     }
   })
   window.addEventListener('beforeunload', () => {
+    flushQueueKeepalive('before_unload')
     void flushQueueNow()
   })
 }
@@ -138,6 +214,7 @@ function shouldDropRecentDuplicate(entry: RemoteVoiceTraceEntry): boolean {
 }
 
 async function flushQueueNow() {
+  hydrateQueue()
   if (flushInFlight || queue.length === 0 || typeof window === 'undefined') return
   flushInFlight = true
   const batch = queue.slice(0, MAX_BATCH_SIZE)
@@ -161,12 +238,22 @@ async function flushQueueNow() {
     }
     queue = queue.slice(batch.length)
     nextFlushDelayMs = FLUSH_INTERVAL_MS
+    if (!transportHealthy) {
+      transportHealthy = true
+      enqueueTransportEvent('trace_transport_recovered', `batch=${batch.length}`)
+    }
+    persistQueue()
   } catch (err) {
     const failed = batch.map((item) => ({ ...item, attempts: item.attempts + 1 }))
     const recoverable = failed.filter((item) => item.attempts < MAX_ATTEMPTS)
     const tail = queue.slice(batch.length)
     queue = [...recoverable, ...tail].slice(-MAX_QUEUE_SIZE)
     nextFlushDelayMs = RETRY_DELAY_MS
+    if (transportHealthy) {
+      transportHealthy = false
+      enqueueTransportEvent('trace_transport_retrying', (err as Error).message)
+    }
+    persistQueue()
     console.warn('[voice-trace] remote flush failed', (err as Error).message)
   } finally {
     flushInFlight = false
@@ -180,6 +267,7 @@ export function enqueueRemoteVoiceTrace(
   config: VoiceRuntimeConfig,
 ): void {
   if (typeof window === 'undefined') return
+  hydrateQueue()
   ensureListenersBound()
   const withChannel: RemoteVoiceTraceEntry = {
     ...entry,
@@ -206,6 +294,7 @@ export function enqueueRemoteVoiceTrace(
     queue = queue.slice(-MAX_QUEUE_SIZE)
     console.warn('[voice-trace] queue trimmed to max size')
   }
+  persistQueue()
   if (config.debugLevel === 'verbose' || REMOTE_CRITICAL_EVENTS.has(withChannel.event)) {
     void flushQueueNow()
     return
