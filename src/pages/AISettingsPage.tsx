@@ -54,6 +54,7 @@ const DEFAULT_FAST_MODEL: Record<string, string> = {
 
 const VOICE_TELEMETRY_KEY = 'casa-voice-telemetry'
 const AI_LATENCY_METRICS_KEY = 'casa-ai-latency-rollup'
+const AI_REGRESSION_HISTORY_KEY = 'casa-ai-regression-history-v1'
 
 type ForensicsSnapshot = {
   windowHours: number
@@ -98,6 +99,56 @@ function parseOutcome(detail?: string | null): string | null {
   return match?.[1]?.toLowerCase() ?? null
 }
 
+type RegressionCase = {
+  id: string
+  phrase: string
+  expectedTool: 'create_event' | 'update_event' | 'add_grocery_items'
+}
+
+type RegressionCaseResult = {
+  id: string
+  phrase: string
+  expectedTool: RegressionCase['expectedTool']
+  actualType: string
+  actualTool: string | null
+  latencyMs: number
+  pass: boolean
+  error?: string
+}
+
+type RegressionRun = {
+  id: string
+  at: string
+  scorePct: number
+  passCount: number
+  totalCount: number
+  avgLatencyMs: number
+  results: RegressionCaseResult[]
+}
+
+const REGRESSION_CASES: RegressionCase[] = [
+  {
+    id: 'create-simple-appointment',
+    phrase: 'Alexa add an appointment tomorrow at 9am to feed Milo',
+    expectedTool: 'create_event',
+  },
+  {
+    id: 'update-existing-event',
+    phrase: 'Alexa move Feed Milo tomorrow from 9am to 10am',
+    expectedTool: 'update_event',
+  },
+  {
+    id: 'add-grocery-items',
+    phrase: 'Alexa add oat milk, two avocados, and paper towels to the grocery list',
+    expectedTool: 'add_grocery_items',
+  },
+  {
+    id: 'create-evening-task',
+    phrase: 'Alexa create an appointment at 7:30pm tomorrow to give Gilbert treats',
+    expectedTool: 'create_event',
+  },
+]
+
 export default function AISettingsPage() {
   const [config, setConfig] = useState<LLMConfig>({ provider: 'gemini', model: 'gemini-2.0-flash', api_key: '' })
   const [customInstructions, setCustomInstructions] = useState('')
@@ -111,6 +162,10 @@ export default function AISettingsPage() {
   const [forensics, setForensics] = useState<ForensicsSnapshot>(EMPTY_FORENSICS)
   const [forensicsLoading, setForensicsLoading] = useState(true)
   const [forensicsError, setForensicsError] = useState<string | null>(null)
+  const [regressionRunning, setRegressionRunning] = useState(false)
+  const [regressionResults, setRegressionResults] = useState<RegressionCaseResult[]>([])
+  const [regressionHistory, setRegressionHistory] = useState<RegressionRun[]>([])
+  const [regressionError, setRegressionError] = useState<string | null>(null)
   const [localLatencyRollup] = useState<{ p95?: number; p99?: number; sampleCount?: number } | null>(() => {
     try {
       const raw = localStorage.getItem(AI_LATENCY_METRICS_KEY)
@@ -128,6 +183,20 @@ export default function AISettingsPage() {
   })
   const hydratedRef = useRef(false)
   const { settings: screensaverSettings, update: updateScreensaver } = useScreensaverSettings()
+
+  const loadRegressionHistory = useCallback(() => {
+    try {
+      const raw = localStorage.getItem(AI_REGRESSION_HISTORY_KEY)
+      if (!raw) {
+        setRegressionHistory([])
+        return
+      }
+      const parsed = JSON.parse(raw) as RegressionRun[]
+      setRegressionHistory(Array.isArray(parsed) ? parsed : [])
+    } catch {
+      setRegressionHistory([])
+    }
+  }, [])
 
   useEffect(() => {
     Promise.all([
@@ -231,6 +300,13 @@ export default function AISettingsPage() {
   }, [loadForensics])
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      loadRegressionHistory()
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [loadRegressionHistory])
+
+  useEffect(() => {
     const refreshRuntime = () => {
       setVoiceRuntime(readVoiceRuntimeConfig())
       try {
@@ -331,6 +407,94 @@ export default function AISettingsPage() {
     } catch (err) {
       setTestStatus('fail')
       setTestMessage((err as Error).message)
+    }
+  }
+
+  async function runSyntheticRegressionHarness() {
+    if (regressionRunning) return
+    setRegressionRunning(true)
+    setRegressionError(null)
+    setRegressionResults([])
+    const now = new Date()
+    const traceId = `regression-${Date.now().toString(36)}`
+    const syntheticContext = {
+      page: 'app',
+      currentDate: now.toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }),
+      utcOffset: '-04:00',
+      homeCity: 'West Palm Beach',
+      ambiguousTimeDefaultMeridiem: 'PM',
+      family: [{ id: 'member-jake', name: 'Jake' }],
+      events: [
+        {
+          id: '11111111-1111-1111-1111-111111111111',
+          title: 'Jake | Feed Milo',
+          start_time: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+          end_time: new Date(now.getTime() + 25 * 60 * 60 * 1000).toISOString(),
+          updated_at: now.toISOString(),
+          location_name: null,
+          members: ['Jake'],
+          category: 'appointment',
+        },
+      ],
+    }
+
+    const results: RegressionCaseResult[] = []
+    try {
+      for (const testCase of REGRESSION_CASES) {
+        const started = performance.now()
+        const correlationId = `${traceId}:${testCase.id}:${Date.now().toString(36)}`
+        const { data, error } = await supabase.functions.invoke('ai-assistant', {
+          body: {
+            messages: [{ role: 'user', content: testCase.phrase }],
+            context: syntheticContext,
+            correlation_id: correlationId,
+            trace_id: traceId,
+            turn_id: `turn-${testCase.id}`,
+            lane: 'regression',
+            dry_run: true,
+          },
+        })
+        const latencyMs = Math.round(performance.now() - started)
+        const actualType = typeof data?.type === 'string' ? data.type : 'unknown'
+        const actualTool = typeof data?.tool === 'string' ? data.tool : null
+        const invokeError = error?.message
+          ?? (actualType === 'error' ? (typeof data?.message === 'string' ? data.message : 'assistant_error') : undefined)
+        const pass = !invokeError && actualType === 'tool_action' && actualTool === testCase.expectedTool
+
+        const result: RegressionCaseResult = {
+          id: testCase.id,
+          phrase: testCase.phrase,
+          expectedTool: testCase.expectedTool,
+          actualType,
+          actualTool,
+          latencyMs,
+          pass,
+          error: invokeError ?? (pass ? undefined : `expected ${testCase.expectedTool}, got ${actualType}:${actualTool ?? 'none'}`),
+        }
+        results.push(result)
+        setRegressionResults([...results])
+      }
+
+      const passCount = results.filter((r) => r.pass).length
+      const avgLatencyMs = results.length > 0
+        ? Math.round(results.reduce((sum, r) => sum + r.latencyMs, 0) / results.length)
+        : 0
+      const run: RegressionRun = {
+        id: `run-${Date.now().toString(36)}`,
+        at: new Date().toISOString(),
+        scorePct: results.length > 0 ? Math.round((passCount / results.length) * 100) : 0,
+        passCount,
+        totalCount: results.length,
+        avgLatencyMs,
+        results,
+      }
+      const nextHistory = [run, ...regressionHistory].slice(0, 25)
+      setRegressionHistory(nextHistory)
+      localStorage.setItem(AI_REGRESSION_HISTORY_KEY, JSON.stringify(nextHistory))
+    } catch (err) {
+      setRegressionError((err as Error).message ?? 'Failed to run regression harness')
+    } finally {
+      setRegressionRunning(false)
     }
   }
 
@@ -608,9 +772,58 @@ export default function AISettingsPage() {
               <ul className="space-y-1 text-caption text-casa-muted">
                 <li className="flex items-start gap-1.5"><Activity size={12} className="mt-0.5 text-emerald-600" /> Trace completeness + outcome diagnostics: <span className="font-semibold text-casa-navy">Live</span></li>
                 <li className="flex items-start gap-1.5"><BarChart3 size={12} className="mt-0.5 text-emerald-600" /> SLO surface in Settings: <span className="font-semibold text-casa-navy">Live</span></li>
-                <li className="flex items-start gap-1.5"><Activity size={12} className="mt-0.5 text-casa-muted" /> Synthetic phrase regression harness: <span className="font-semibold text-casa-navy">Next</span></li>
+                <li className="flex items-start gap-1.5"><BarChart3 size={12} className="mt-0.5 text-emerald-600" /> Synthetic phrase regression harness: <span className="font-semibold text-casa-navy">Live</span></li>
                 <li className="flex items-start gap-1.5"><Activity size={12} className="mt-0.5 text-casa-muted" /> Automated anomaly scoring + alert routing: <span className="font-semibold text-casa-navy">Next</span></li>
               </ul>
+            </div>
+            <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-caption font-semibold text-casa-navy">Synthetic Phrase Regression Harness</p>
+                <button
+                  type="button"
+                  onClick={() => void runSyntheticRegressionHarness()}
+                  disabled={regressionRunning}
+                  className="inline-flex items-center gap-1.5 rounded-button border border-casa-border bg-white px-2.5 py-1.5 text-caption font-semibold text-casa-navy hover:bg-casa-bg disabled:opacity-50"
+                >
+                  <FlaskConical size={12} className={cn(regressionRunning && 'animate-spin')} />
+                  {regressionRunning ? 'Running…' : 'Run 4-case pack'}
+                </button>
+              </div>
+              <p className="text-caption text-casa-muted">
+                Dry-run evaluation of parser and tool routing quality without creating/updating real data.
+              </p>
+              {regressionError && (
+                <div className="rounded-button border border-red-200 bg-red-50 px-2.5 py-2 text-caption text-casa-error">
+                  {regressionError}
+                </div>
+              )}
+              {regressionResults.length > 0 && (
+                <div className="rounded-button border border-casa-border bg-white overflow-hidden">
+                  {regressionResults.map((result) => (
+                    <div key={result.id} className="flex items-center justify-between gap-2 border-b last:border-b-0 border-casa-border px-2.5 py-2 text-caption">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-casa-navy truncate">{result.phrase}</p>
+                        <p className="text-casa-muted">expected: {result.expectedTool} · actual: {result.actualType}{result.actualTool ? `/${result.actualTool}` : ''}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className={cn('font-semibold', result.pass ? 'text-emerald-700' : 'text-casa-error')}>{result.pass ? 'PASS' : 'FAIL'}</p>
+                        <p className="text-casa-muted tabular-nums">{result.latencyMs}ms</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {regressionHistory.length > 0 && (
+                <div className="rounded-button border border-casa-border bg-white px-2.5 py-2 text-caption text-casa-muted">
+                  Latest score: <span className="font-semibold text-casa-navy">{regressionHistory[0].scorePct}%</span>
+                  {' · '}
+                  {regressionHistory[0].passCount}/{regressionHistory[0].totalCount} passing
+                  {' · '}
+                  avg {regressionHistory[0].avgLatencyMs}ms
+                  <br />
+                  Previous: {regressionHistory.slice(1, 4).map((run) => `${run.scorePct}%`).join(' · ') || '—'}
+                </div>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               <Link to="/settings/status" className="rounded-button border border-casa-border bg-white px-3 py-1.5 text-caption font-semibold text-casa-navy hover:bg-casa-bg">

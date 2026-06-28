@@ -31,6 +31,7 @@ Deno.serve(async (req) => {
     turn_id: turnIdRaw,
     lane: laneRaw,
     device_id: deviceIdRaw,
+    dry_run: dryRunRaw,
   } = await req.json()
   const cid = correlationId ?? `${context?.page ?? 'unknown'}:${Date.now().toString(36)}`
   const traceId = typeof traceIdRaw === 'string' && traceIdRaw.trim().length > 0
@@ -39,6 +40,7 @@ Deno.serve(async (req) => {
   const turnId = typeof turnIdRaw === 'string' && turnIdRaw.trim().length > 0 ? turnIdRaw : null
   const lane = typeof laneRaw === 'string' && laneRaw.trim().length > 0 ? laneRaw : 'llm'
   const deviceId = typeof deviceIdRaw === 'string' && deviceIdRaw.trim().length > 0 ? deviceIdRaw : null
+  const dryRun = dryRunRaw === true
   const requestStartMs = Date.now()
   const STAGE_SLO = {
     contextLoadMs: 1200,
@@ -75,6 +77,7 @@ Deno.serve(async (req) => {
   appendServerTrace('server_ai_assistant_start', `messages=${Array.isArray(messages) ? messages.length : 0}`, {
     message_count: Array.isArray(messages) ? messages.length : 0,
     has_image: Boolean(image),
+    dry_run: dryRun,
   })
 
   // Load config, saved places, contacts, grocery list, events in parallel
@@ -840,6 +843,14 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       }
 
       if (name === 'add_grocery_items') {
+        if (dryRun) {
+          return {
+            type: 'tool_action',
+            tool: name,
+            args,
+            display_text: buildDisplayText(name, args),
+          }
+        }
         const execResult = await sb.functions.invoke('execute-ai-action', {
           body: {
             tool: name,
@@ -908,7 +919,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           notes.length === 0
         )
 
-        if (isLowRiskCreate) {
+        if (isLowRiskCreate && !dryRun) {
           const execResult = await sb.functions.invoke('execute-ai-action', {
             body: {
               tool: name,
