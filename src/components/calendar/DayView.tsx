@@ -21,6 +21,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import BounceScroll from '../shared/BounceScroll'
 import LargeEventCard from './LargeEventCard'
 import ReminderEventCard from './ReminderEventCard'
+import { eventOverlapsDay, getEventDisplayStartDay } from '../../utils/eventTime'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -324,12 +325,13 @@ export default function DayView() {
 
   // Events for the currently selected day
   const dayEvents = allEvents
+    .filter(e => eventOverlapsDay(e, selectedDate))
     .sort((a, b) => {
       const aAllDay = a.all_day
       const bAllDay = b.all_day
       if (aAllDay && !bAllDay) return -1
       if (!aAllDay && bAllDay) return 1
-      return new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+      return getEventDisplayStartDay(a).getTime() - getEventDisplayStartDay(b).getTime()
     })
 
   const selectedEvent = selectedEventId ? (dayEvents.find(e => e.id === selectedEventId) ?? null) : null
