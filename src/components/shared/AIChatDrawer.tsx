@@ -434,7 +434,13 @@ function useSpeechInput({
         phaseRef.current !== 'processing' &&
         !webspeechRestartTimerRef.current
       ) {
+        onTrace?.('speech_webspeech_restart_scheduled', 'onend:150ms')
         scheduleRecognitionRestart(150)
+      } else {
+        onTrace?.(
+          'speech_webspeech_restart_skipped',
+          `active=${activeRef.current ? 1 : 0} phase=${phaseRef.current} timer=${webspeechRestartTimerRef.current ? 1 : 0}`,
+        )
       }
     }
 
@@ -629,12 +635,16 @@ function useSpeechInput({
   // Reads refs (not state) to avoid stale closure.
   const ensureRunning = useCallback(() => {
     if (!activeRef.current) return  // fully stopped (drawer closed), don't restart
+    onTrace?.('speech_ensure_running', `mode=${modeRef.current} phase=${phaseRef.current}`)
 
     if (modeRef.current === 'webspeech') {
       // On iOS Safari, phase can claim "listening" while the recognizer ended.
       // Re-arm whenever the recognizer instance is missing OR we're not actively listening.
       if (!recognitionRef.current || (phaseRef.current !== 'listening' && phaseRef.current !== 'connecting')) {
+        onTrace?.('speech_ensure_running_rearm', 'webspeech')
         startWebSpeech()
+      } else {
+        onTrace?.('speech_ensure_running_ok', 'webspeech')
       }
       return
     }
@@ -643,9 +653,12 @@ function useSpeechInput({
     // If we're stuck in processing (final transcript closed WS), reconnect anyway
     // so wake + follow-up turns continue without requiring a drawer reopen.
     if (!wsRef.current) {
+      onTrace?.('speech_ensure_running_rearm', 'bridge')
       startBridge()
+    } else {
+      onTrace?.('speech_ensure_running_ok', 'bridge')
     }
-  }, [startWebSpeech, startBridge]) // phase/resources read via refs
+  }, [startWebSpeech, startBridge, onTrace]) // phase/resources read via refs
 
   // Ensure bridge/webspeech resources are always torn down on component unmount.
   useEffect(() => {
@@ -1316,13 +1329,13 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       // Auto re-arm for active wake sessions and explicit confirmation follow-ups.
       // Grocery voice add should also stay hot between turns (manual mic sessions),
       // so users can chain multiple items without re-tapping the mic.
-      const keepVoiceHot = hasPendingToolAction || wakeSessionActiveRef.current || page === 'grocery'
+      const keepVoiceHot = hasPendingToolAction || wakeSessionActiveRef.current || page === 'grocery' || page === 'app'
       if (open && keepVoiceHot) {
         setTimeout(() => speech.ensureRunning(), 220)
         setTimeout(() => speech.ensureRunning(), 950)
       }
     }
-  }, [loading, open, hasPendingToolAction, page, speech]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading, open, hasPendingToolAction, page, speech])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })

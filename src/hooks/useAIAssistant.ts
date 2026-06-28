@@ -243,14 +243,14 @@ function resolveDateFromPhrase(phrase: string, now: Date): Date {
 }
 
 function parseClockTime(phrase: string): null | { hour24: number; minute: number; matched: string; index: number } {
-  const match = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i.exec(phrase)
+  const match = /(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)\b/i.exec(phrase)
   if (!match || typeof match.index !== 'number') return null
   const rawHour = Number.parseInt(match[1], 10)
   const minute = Number.parseInt(match[2] ?? '0', 10)
-  const meridiem = match[3].toLowerCase()
+  const meridiem = match[3].toLowerCase().replace(/[^ap]/g, '')
   if (rawHour < 1 || rawHour > 12 || minute < 0 || minute > 59) return null
   return {
-    hour24: (rawHour % 12) + (meridiem === 'pm' ? 12 : 0),
+    hour24: (rawHour % 12) + (meridiem === 'p' ? 12 : 0),
     minute,
     matched: match[0],
     index: match.index,
