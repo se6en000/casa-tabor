@@ -113,6 +113,17 @@ type VoiceUxProfile = {
   wakeMisfireCooldownSecs: number
 }
 
+function detectClientBuildFingerprint(): string {
+  if (typeof document === 'undefined') return 'unknown'
+  const moduleScripts = Array.from(document.querySelectorAll('script[type="module"][src]'))
+  const appScript = moduleScripts
+    .map((script) => script.getAttribute('src') ?? '')
+    .find((src) => src.includes('/assets/index-') || src.includes('index-'))
+  if (!appScript) return 'unknown'
+  const fileName = appScript.split('/').pop() ?? appScript
+  return fileName || 'unknown'
+}
+
 function eventDebugLevel(event: string): VoiceDebugLevel {
   if (
     event.startsWith('voice_queued') ||
@@ -787,6 +798,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const traceSessionIdRef = useRef<string | null>(null)
+  const traceBuildFingerprintRef = useRef('unknown')
   const traceStartedAtMsRef = useRef(0)
   const traceSeqRef = useRef(0)
   const traceHasFinalRef = useRef(false)
@@ -875,6 +887,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
 
   const beginTraceSession = useCallback(() => {
     traceSessionIdRef.current = `voice-${Date.now().toString(36)}`
+    traceBuildFingerprintRef.current = detectClientBuildFingerprint()
     traceStartedAtMsRef.current = Date.now()
     traceSeqRef.current = 0
     traceHasFinalRef.current = false
@@ -1225,7 +1238,8 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         appendDebugLog('trace_started', wakeSessionNonce ? 'source=wake' : 'source=manual')
         appendDebugLog(
           'trace_context',
-          `page=${page} debug=${voiceConfig.debugLevel} audit=${voiceConfig.auditEnabled ? 1 : 0} coreV2=${voiceConfig.coreV2Enabled ? 1 : 0}`,
+          `page=${page} debug=${voiceConfig.debugLevel} audit=${voiceConfig.auditEnabled ? 1 : 0} coreV2=${voiceConfig.coreV2Enabled ? 1 : 0} build=${traceBuildFingerprintRef.current}`,
+          { payload: { client_build: traceBuildFingerprintRef.current } },
         )
       })
       transitionTurnState('wake_armed', wakeSessionNonce ? 'wake_open' : 'manual_open')
@@ -1251,6 +1265,10 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
           'trace_outcome',
           `status=${outcome} final=${traceHasFinalRef.current ? 1 : 0} sent=${traceHasSendRef.current ? 1 : 0} speechEnd=${traceSpeechEndCountRef.current}`,
         )
+        if (outcome === 'completed') appendDebugLog('turn_completed', 'source=trace_outcome')
+        else if (outcome === 'final_no_send') appendDebugLog('turn_aborted', 'reason=final_without_send')
+        else if (outcome === 'asr_end_no_final') appendDebugLog('asr_no_final', 'reason=speech_ended_without_final')
+        else appendDebugLog('turn_timeout', 'reason=no_input_detected')
         appendDebugLog(
           'trace_closed',
           `reason=${closeReasonRef.current} pending=${pendingVoiceQueueRef.current.length} inflight=${voiceSendInFlightRef.current ? 1 : 0}`,

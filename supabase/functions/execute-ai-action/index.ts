@@ -195,7 +195,7 @@ Deno.serve(async (req) => {
   const {
     tool,
     args,
-    action_id: actionId,
+    action_id: actionIdRaw,
     session_id: sessionId,
     correlation_id: correlationId,
     trace_id: traceIdRaw,
@@ -205,11 +205,22 @@ Deno.serve(async (req) => {
     sync_mode: syncModeRaw,
   } = await req.json()
   const syncMode = typeof syncModeRaw === 'string' ? syncModeRaw : undefined
-  const cid = correlationId ?? `${sessionId ?? 'no-session'}:${actionId ?? 'no-action'}`
+  const cid = correlationId ?? `${sessionId ?? 'no-session'}:${actionIdRaw ?? 'no-action'}`
+  const cidParts = String(cid).split(':')
+  const inferredCorrelationToken = cidParts.length > 1 ? cidParts[1] : null
+  const actionId = typeof actionIdRaw === 'string' && actionIdRaw.trim().length > 0
+    ? actionIdRaw
+    : (typeof inferredCorrelationToken === 'string' && inferredCorrelationToken.trim().length > 0
+      ? inferredCorrelationToken
+      : null)
   const traceId = typeof traceIdRaw === 'string' && traceIdRaw.trim().length > 0
     ? traceIdRaw
     : String(cid.split(':')[0] || cid)
-  const turnId = typeof turnIdRaw === 'string' && turnIdRaw.trim().length > 0 ? turnIdRaw : null
+  const turnId = typeof turnIdRaw === 'string' && turnIdRaw.trim().length > 0
+    ? turnIdRaw
+    : (typeof inferredCorrelationToken === 'string' && inferredCorrelationToken.trim().length > 0 && laneRaw !== 'llm'
+      ? inferredCorrelationToken
+      : null)
   const lane = typeof laneRaw === 'string' && laneRaw.trim().length > 0 ? laneRaw : tool
   const deviceId = typeof deviceIdRaw === 'string' && deviceIdRaw.trim().length > 0 ? deviceIdRaw : null
   const requestStartMs = Date.now()

@@ -851,11 +851,13 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             display_text: buildDisplayText(name, args),
           }
         }
+        const autoActionId = `auto-grocery-${Date.now().toString(36)}`
         const execResult = await sb.functions.invoke('execute-ai-action', {
           body: {
             tool: name,
             args,
-            session_id: null,
+            action_id: autoActionId,
+            session_id: traceId,
             correlation_id: `${cid}:auto-grocery:${Date.now().toString(36)}`,
             trace_id: traceId,
             turn_id: turnId,
@@ -920,11 +922,13 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         )
 
         if (isLowRiskCreate && !dryRun) {
+          const autoActionId = `auto-create-${Date.now().toString(36)}`
           const execResult = await sb.functions.invoke('execute-ai-action', {
             body: {
               tool: name,
               args,
-              session_id: null,
+              action_id: autoActionId,
+              session_id: traceId,
               correlation_id: `${cid}:auto-create:${Date.now().toString(36)}`,
               trace_id: traceId,
               turn_id: turnId,
