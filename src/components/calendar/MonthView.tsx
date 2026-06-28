@@ -104,6 +104,11 @@ function DayPopover({ day, events, onClose, onSelectDay, onSelectEvent }: DayPop
                 )}>
                   {holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : event.title}
                 </p>
+                {multiDay && !holiday && !reminder && (
+                  <span className="inline-flex mt-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-casa-navy/10 text-casa-navy">
+                    Multi-day
+                  </span>
+                )}
                 {reminder && (
                   <span className="text-[9px] font-semibold text-amber-500 uppercase tracking-wide">Reminder</span>
                 )}
@@ -241,7 +246,9 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
                   style={{ backgroundColor: color }}
                 />
                 {multiDay && !holiday && !reminder && (
-                  <span className="shrink-0 text-[10px] font-semibold">↔</span>
+                  <span className="shrink-0 px-1 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wide bg-casa-navy/10 text-casa-navy">
+                    Multi
+                  </span>
                 )}
                 <span className="truncate">{holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}</span>
               </div>

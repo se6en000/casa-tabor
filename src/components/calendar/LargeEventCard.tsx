@@ -3,7 +3,7 @@ import { Navigation } from 'lucide-react'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { WeatherIcon } from '../shared/WeatherIcon'
-import { getEventDisplayEnd, getMultiDayBoundaryLabel, isEventMultiDay } from '../../utils/eventTime'
+import { getEventDisplayEnd, getMultiDayBoundaryLabel, isEventMultiDay, withColorAlpha } from '../../utils/eventTime'
 
 interface LargeEventCardProps {
   event: EventWithDetails
@@ -47,7 +47,10 @@ export default function LargeEventCard({
         selected && 'ring-1 ring-casa-gold/60 shadow-card-hover',
         className,
       )}
-      style={{ borderLeft: `6px solid ${color}` }}
+      style={{
+        borderLeft: `6px solid ${color}`,
+        backgroundColor: multiDay ? withColorAlpha(color, '1A') : undefined,
+      }}
     >
       <div className="grid grid-cols-[96px_1fr] min-h-[98px]">
         <div className="grid content-start justify-items-end pr-3 pl-2 pt-3 border-r border-casa-divider/70">
@@ -80,7 +83,14 @@ export default function LargeEventCard({
 
         <div className="px-4 py-3 min-w-0">
           <div className="flex items-start justify-between gap-3">
-            <p className="font-body font-semibold text-casa-text text-heading leading-snug truncate">{cleanTitle}</p>
+            <div className="min-w-0 flex-1">
+              <p className="font-body font-semibold text-casa-text text-heading leading-snug truncate">{cleanTitle}</p>
+              {multiDay && (
+                <span className="inline-flex mt-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-casa-navy/10 text-casa-navy">
+                  Multi-day
+                </span>
+              )}
+            </div>
             {members.length > 0 && (
               <div className="flex items-center gap-1 shrink-0 pt-0.5">
                 {primary && (

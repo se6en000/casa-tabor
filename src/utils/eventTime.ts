@@ -32,6 +32,17 @@ export function getEventSpanDayCount(event: Pick<EventWithDetails, 'start_time' 
   return Math.max(1, differenceInCalendarDays(displayEndDay, start) + 1)
 }
 
+export function withColorAlpha(color: string, alphaHex: string): string {
+  if (/^#[0-9a-f]{6}$/i.test(color)) return `${color}${alphaHex}`
+  if (/^#[0-9a-f]{3}$/i.test(color)) {
+    const r = color[1]
+    const g = color[2]
+    const b = color[3]
+    return `#${r}${r}${g}${g}${b}${b}${alphaHex}`
+  }
+  return color
+}
+
 export function getMultiDayBoundaryLabel(
   event: Pick<EventWithDetails, 'start_time' | 'end_time' | 'all_day'>,
   day: Date,
