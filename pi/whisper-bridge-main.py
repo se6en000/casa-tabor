@@ -455,7 +455,9 @@ def _on_message(ws_arg, message):
                 _wake_disarmed_until = max(_wake_disarmed_until, now + POST_FINAL_WAKE_DISARM_SECS)
                 _finals = []
                 _final_conf = []
-                _set(transcript=full, interim_transcript='', recording=False)
+                # Keep recording hot between turns so grocery rapid mode doesn't
+                # thrash into wake-recorder restarts between each finalized phrase.
+                _set(transcript=full, interim_transcript='')
                 _ws_push_stt({'type': 'final', 'text': full, 'confidence': conf})
             return
 
@@ -482,7 +484,9 @@ def _on_message(ws_arg, message):
                 now = time.time()
                 _wake_cooldown_until = max(_wake_cooldown_until, now + POST_FINAL_WAKE_COOLDOWN_SECS)
                 _wake_disarmed_until = max(_wake_disarmed_until, now + POST_FINAL_WAKE_DISARM_SECS)
-                _set(transcript=full, interim_transcript='', recording=False)
+                # Keep recording hot between turns so grocery rapid mode doesn't
+                # thrash into wake-recorder restarts between each finalized phrase.
+                _set(transcript=full, interim_transcript='')
                 _ws_push_stt({'type': 'final', 'text': full, 'confidence': conf})
         elif is_final and text:
             _finals.append(text)
