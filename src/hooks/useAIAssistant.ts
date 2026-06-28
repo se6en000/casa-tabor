@@ -40,6 +40,7 @@ const SIMPLE_COMMAND_SLO_MS = 2_000
 const TURN_SLO_MS = 6_000
 const AI_LATENCY_METRICS_KEY = 'casa-ai-latency-rollup'
 const AI_LATENCY_WINDOW_SIZE = 120
+const VOICE_DEBUG_DEVICE_ID_KEY = 'casa-voice-debug-device-id'
 
 type AssistantErrorKind = 'timeout' | 'network' | 'provider' | 'unknown'
 type SimpleCommandExecution = {
@@ -74,6 +75,15 @@ function classifyAssistantError(error: unknown): AssistantErrorKind {
 function dispatchGroceryUpdated() {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent('casa:grocery-updated'))
+}
+
+function getVoiceDebugDeviceId(): string | undefined {
+  if (typeof window === 'undefined') return undefined
+  try {
+    return localStorage.getItem(VOICE_DEBUG_DEVICE_ID_KEY) ?? undefined
+  } catch {
+    return undefined
+  }
 }
 
 type AssistantDebugMeta = {
@@ -506,6 +516,9 @@ export function useAIAssistant(ctx: AssistantContext) {
     if (!activeSession) {
       activeSession = startNewSession()
     }
+    const traceId = activeSession.id
+    const turnId = userMsg.id
+    const deviceId = getVoiceDebugDeviceId()
 
     const runSimpleCommandLane = async (): Promise<SimpleCommandExecution> => {
       if (ctxRef.current.page === 'grocery' || Boolean(image)) return { executed: false }
@@ -540,6 +553,10 @@ export function useAIAssistant(ctx: AssistantContext) {
             action_id: actionId,
             session_id: activeSession.id,
             correlation_id: correlationId,
+            trace_id: traceId,
+            turn_id: turnId,
+            lane: 'command',
+            device_id: deviceId,
             sync_mode: 'async',
           },
         })
@@ -603,6 +620,10 @@ export function useAIAssistant(ctx: AssistantContext) {
           action_id: actionId,
           session_id: activeSession.id,
           correlation_id: correlationId,
+          trace_id: traceId,
+          turn_id: turnId,
+          lane: 'command',
+          device_id: deviceId,
           sync_mode: 'async',
         },
       })
@@ -690,6 +711,10 @@ export function useAIAssistant(ctx: AssistantContext) {
               action_id: actionId,
               session_id: activeSession.id,
               correlation_id: correlationId,
+              trace_id: traceId,
+              turn_id: turnId,
+              lane: 'fast_add',
+              device_id: deviceId,
             },
           })
 
@@ -775,6 +800,10 @@ export function useAIAssistant(ctx: AssistantContext) {
             image: imagePayload,
             session_id: activeSession.id,
             correlation_id: aiCorrelationId,
+            trace_id: traceId,
+            turn_id: turnId,
+            lane: 'llm',
+            device_id: deviceId,
           },
         })
         const timeoutPromise = new Promise<never>((_, reject) =>
@@ -865,6 +894,10 @@ export function useAIAssistant(ctx: AssistantContext) {
               action_id: autoActionId,
               session_id: activeSession.id,
               correlation_id: autoCorrelationId,
+              trace_id: traceId,
+              turn_id: turnId,
+              lane: 'tool_action',
+              device_id: deviceId,
             },
           })
           if (exec.error || exec.data?.success === false) {

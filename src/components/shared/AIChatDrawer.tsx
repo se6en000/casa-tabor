@@ -883,7 +883,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       const event = rawEvent as CustomEvent<{ event?: string; detail?: string; meta?: TraceMeta }>
       const name = event.detail?.event?.trim()
       if (!name) return
-      appendDebugLog(`assistant_${name}`, event.detail?.detail?.slice(0, 260), event.detail?.meta)
+      appendDebugLog(`assistant_${name}`, event.detail?.detail?.slice(0, 1200), event.detail?.meta)
     }
     window.addEventListener('casa:ai-debug', onAssistantDebug as EventListener)
     return () => {

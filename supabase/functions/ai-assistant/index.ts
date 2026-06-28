@@ -22,8 +22,23 @@ Deno.serve(async (req) => {
   const mapsKey = optionalEnv('GOOGLE_MAPS_API_KEY', '')
   const braveKey = optionalEnv('BRAVE_API_KEY', '')
 
-  const { messages, context, image, correlation_id: correlationId } = await req.json()
+  const {
+    messages,
+    context,
+    image,
+    correlation_id: correlationId,
+    trace_id: traceIdRaw,
+    turn_id: turnIdRaw,
+    lane: laneRaw,
+    device_id: deviceIdRaw,
+  } = await req.json()
   const cid = correlationId ?? `${context?.page ?? 'unknown'}:${Date.now().toString(36)}`
+  const traceId = typeof traceIdRaw === 'string' && traceIdRaw.trim().length > 0
+    ? traceIdRaw
+    : String(cid.split(':')[0] || cid)
+  const turnId = typeof turnIdRaw === 'string' && turnIdRaw.trim().length > 0 ? turnIdRaw : null
+  const lane = typeof laneRaw === 'string' && laneRaw.trim().length > 0 ? laneRaw : 'llm'
+  const deviceId = typeof deviceIdRaw === 'string' && deviceIdRaw.trim().length > 0 ? deviceIdRaw : null
   const requestStartMs = Date.now()
   const STAGE_SLO = {
     contextLoadMs: 1200,
@@ -35,7 +50,30 @@ Deno.serve(async (req) => {
       console.warn(`[ai-assistant][${cid}] slo_breach stage=${stage} elapsed=${elapsedMs} budget=${budgetMs}`)
     }
   }
+  const appendServerTrace = (event: string, detail: string, payload?: Record<string, unknown>) => {
+    sb.from('ai_drawer_debug_events').insert({
+      event,
+      detail: detail.slice(0, 2000),
+      channel: 'debug',
+      session_id: traceId,
+      turn_id: turnId,
+      correlation_id: cid,
+      lane,
+      payload: payload ?? null,
+      device_id: deviceId,
+      page: context?.page ?? 'app',
+      source_component: 'server:ai-assistant',
+      source_origin: context?.page ?? null,
+      source_href: null,
+      user_agent: null,
+      platform: Deno.build.os,
+    }).then(() => {}).catch(() => {})
+  }
   console.log(`[ai-assistant][${cid}] request messages=${Array.isArray(messages) ? messages.length : 0}`)
+  appendServerTrace('server_ai_assistant_start', `messages=${Array.isArray(messages) ? messages.length : 0}`, {
+    message_count: Array.isArray(messages) ? messages.length : 0,
+    has_image: Boolean(image),
+  })
 
   // Load config, saved places, contacts, grocery list, events in parallel
   const now = new Date()
@@ -806,6 +844,10 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             args,
             session_id: null,
             correlation_id: `${cid}:auto-grocery:${Date.now().toString(36)}`,
+            trace_id: traceId,
+            turn_id: turnId,
+            lane: 'tool_action',
+            device_id: deviceId,
           },
         })
 
@@ -871,6 +913,10 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
               args,
               session_id: null,
               correlation_id: `${cid}:auto-create:${Date.now().toString(36)}`,
+              trace_id: traceId,
+              turn_id: turnId,
+              lane: 'tool_action',
+              device_id: deviceId,
             },
           })
 
@@ -1027,6 +1073,17 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     const result = await callGeminiWithTools(history)
     const requestTotalMs = Date.now() - requestStartMs
     console.log(`[ai-assistant][${cid}] stage=request_total ms=${requestTotalMs} result_type=${String(result?.type ?? 'unknown')}`)
+    appendServerTrace(
+      'server_ai_assistant_result',
+      `type=${String(result?.type ?? 'unknown')} ms=${requestTotalMs}`,
+      {
+        result_type: String(result?.type ?? 'unknown'),
+        request_ms: requestTotalMs,
+        response_text: typeof (result as { text?: unknown })?.text === 'string'
+          ? String((result as { text?: string }).text).slice(0, 1200)
+          : null,
+      },
+    )
     warnIfSlow('request_total', requestTotalMs, STAGE_SLO.requestTotalMs)
     logUsage()
     return new Response(JSON.stringify({ ...result, correlation_id: cid }), {
@@ -1035,6 +1092,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   } catch (e) {
     const msg = (e as Error).message ?? 'Unknown error'
     console.error(`[ai-assistant][${cid}] error ${msg}`)
+    appendServerTrace('server_ai_assistant_error', msg, { error: msg })
     return new Response(
       JSON.stringify({ type: 'error', code: 'llm_error', message: msg, correlation_id: cid }),
       { status: 200, headers: { ...CORS, 'content-type': 'application/json' } }

@@ -114,6 +114,7 @@ async function flushQueueNow() {
           platform: navigator.platform,
           origin: window.location.origin,
           href: window.location.href,
+          source_component: 'client',
         },
       },
     })
@@ -145,7 +146,7 @@ export function enqueueRemoteVoiceTrace(
   const withChannel: RemoteVoiceTraceEntry = {
     ...entry,
     channel,
-    detail: entry.detail?.slice(0, 600),
+    detail: entry.detail?.slice(0, 2000),
     event: entry.event.slice(0, 120),
     page: entry.page?.slice(0, 64),
     turnState: entry.turnState?.slice(0, 64),

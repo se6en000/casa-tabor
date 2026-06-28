@@ -45,6 +45,7 @@ Deno.serve(async (req) => {
         href?: string
         user_agent?: string
         platform?: string
+        source_component?: string
       }
     }
 
@@ -74,7 +75,8 @@ Deno.serve(async (req) => {
         correlation_id: typeof entry.correlationId === 'string' ? entry.correlationId.slice(0, 120) : null,
         action_id: typeof entry.actionId === 'string' ? entry.actionId.slice(0, 120) : null,
         lane: typeof entry.lane === 'string' ? entry.lane.slice(0, 64) : null,
-        payload: entry.payload && typeof entry.payload === 'object' ? entry.payload : null,
+        payload: entry.payload !== undefined ? entry.payload : null,
+        source_component: typeof body.meta?.source_component === 'string' ? body.meta.source_component.slice(0, 64) : 'client',
         device_id: typeof body.meta?.device_id === 'string' ? body.meta.device_id.slice(0, 120) : null,
         source_origin: typeof body.meta?.origin === 'string' ? body.meta.origin.slice(0, 240) : null,
         source_href: typeof body.meta?.href === 'string' ? body.meta.href.slice(0, 500) : null,

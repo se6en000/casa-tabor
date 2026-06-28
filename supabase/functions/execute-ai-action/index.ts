@@ -68,6 +68,11 @@ async function getExistingActionResult(sb: ReturnType<typeof createClient>, acti
     .limit(1)
 
   if (error) throw new Error(error.message)
+  appendServerTrace('server_execute_action_grocery_added', `item_id=${item.id}`, {
+    item_id: item.id,
+    name: item.name,
+    normalized_name: item.normalized_name,
+  })
   return data?.[0]?.result_payload ?? null
 }
 
@@ -198,10 +203,20 @@ Deno.serve(async (req) => {
     action_id: actionId,
     session_id: sessionId,
     correlation_id: correlationId,
+    trace_id: traceIdRaw,
+    turn_id: turnIdRaw,
+    lane: laneRaw,
+    device_id: deviceIdRaw,
     sync_mode: syncModeRaw,
   } = await req.json()
   const syncMode = typeof syncModeRaw === 'string' ? syncModeRaw : undefined
   const cid = correlationId ?? `${sessionId ?? 'no-session'}:${actionId ?? 'no-action'}`
+  const traceId = typeof traceIdRaw === 'string' && traceIdRaw.trim().length > 0
+    ? traceIdRaw
+    : String(cid.split(':')[0] || cid)
+  const turnId = typeof turnIdRaw === 'string' && turnIdRaw.trim().length > 0 ? turnIdRaw : null
+  const lane = typeof laneRaw === 'string' && laneRaw.trim().length > 0 ? laneRaw : tool
+  const deviceId = typeof deviceIdRaw === 'string' && deviceIdRaw.trim().length > 0 ? deviceIdRaw : null
   const requestStartMs = Date.now()
   const ACTION_SLO_MS = 2500
   const warnIfSlow = (stage: string, elapsedMs: number, budgetMs: number) => {
@@ -210,6 +225,27 @@ Deno.serve(async (req) => {
     }
   }
   console.log(`[execute-ai-action][${cid}] start tool=${tool}`)
+  const appendServerTrace = (event: string, detail: string, payload?: Record<string, unknown>) => {
+    sb.from('ai_drawer_debug_events').insert({
+      event,
+      detail: detail.slice(0, 2000),
+      channel: 'debug',
+      session_id: traceId,
+      turn_id: turnId,
+      action_id: actionId ?? null,
+      correlation_id: cid,
+      lane,
+      payload: payload ?? null,
+      device_id: deviceId,
+      page: 'app',
+      source_component: 'server:execute-ai-action',
+      source_origin: 'execute-ai-action',
+      source_href: null,
+      user_agent: null,
+      platform: Deno.build.os,
+    }).then(() => {}).catch(() => {})
+  }
+  appendServerTrace('server_execute_action_start', `tool=${tool}`, { tool, sync_mode: syncMode ?? 'default' })
 
   try {
     if (tool === 'create_event') {
@@ -224,9 +260,23 @@ Deno.serve(async (req) => {
         status: 'confirmed',
         is_enriched: false,
         event_type: args.event_type ?? 'event',
+        ai_origin_trace_id: traceId,
+        ai_origin_turn_id: turnId,
+        ai_origin_action_id: actionId ?? null,
+        ai_origin_lane: lane,
+        ai_origin_device_id: deviceId,
+        ai_last_trace_id: traceId,
+        ai_last_turn_id: turnId,
+        ai_last_action_id: actionId ?? null,
+        ai_last_lane: lane,
+        ai_last_device_id: deviceId,
       }).select().single()
 
       if (error) throw new Error(error.message)
+      appendServerTrace('server_execute_action_event_created', `event_id=${event.id}`, {
+        event_id: event.id,
+        title: event.title,
+      })
       console.log(`[execute-ai-action][${cid}] stage=create_event_insert ms=${Date.now() - createStartMs}`)
 
       // Add members
@@ -353,6 +403,19 @@ Deno.serve(async (req) => {
         p_ai_session_id: sessionId ?? null,
       })
       if (rpcError) throw new Error(rpcError.message)
+      const { error: provenanceError } = await sb
+        .from('events')
+        .update({
+          ai_last_trace_id: traceId,
+          ai_last_turn_id: turnId,
+          ai_last_action_id: actionId ?? null,
+          ai_last_lane: lane,
+          ai_last_device_id: deviceId,
+        })
+        .eq('id', normalized.eventId)
+      if (provenanceError) {
+        console.warn(`[execute-ai-action][${cid}] provenance_update_failed ${provenanceError.message}`)
+      }
 
       if (targetFields.length > 0) {
         sb.functions.invoke('enrich-event', {
@@ -381,6 +444,24 @@ Deno.serve(async (req) => {
           .limit(1)
         : { data: null, error: null }
       if (historyLoadError) throw new Error(historyLoadError.message)
+      if (historyRow?.[0]?.id) {
+        const { error: historyTraceError } = await sb
+          .from('ai_event_edit_history')
+          .update({
+            trace_id: traceId,
+            turn_id: turnId,
+            lane,
+            device_id: deviceId,
+          })
+          .eq('id', historyRow[0].id)
+        if (historyTraceError) {
+          console.warn(`[execute-ai-action][${cid}] history_trace_update_failed ${historyTraceError.message}`)
+        }
+      }
+      appendServerTrace('server_execute_action_event_updated', `event_id=${normalized.eventId}`, {
+        event_id: normalized.eventId,
+        action_id: actionId ?? null,
+      })
 
       const baseResponse = {
         success: true,
@@ -635,12 +716,17 @@ Deno.serve(async (req) => {
     const msg = (e as Error).message ?? 'Action failed'
     console.error(`[execute-ai-action][${cid}] error ${msg}`)
     console.log(`[execute-ai-action][${cid}] stage=request_total ms=${Date.now() - requestStartMs} status=error`)
+    appendServerTrace('server_execute_action_error', msg, { tool, error: msg })
     return new Response(JSON.stringify({ success: false, error: msg, correlation_id: cid }), {
       status: 200, headers: { ...CORS, 'content-type': 'application/json' },
     })
   } finally {
     const requestTotalMs = Date.now() - requestStartMs
     console.log(`[execute-ai-action][${cid}] stage=request_total ms=${requestTotalMs} tool=${tool}`)
+    appendServerTrace('server_execute_action_complete', `tool=${tool} ms=${requestTotalMs}`, {
+      tool,
+      request_ms: requestTotalMs,
+    })
     warnIfSlow('request_total', requestTotalMs, ACTION_SLO_MS)
   }
 })
