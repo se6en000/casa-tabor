@@ -48,6 +48,12 @@ type SimpleCommandExecution = {
   assistantMessage?: string
 }
 
+type OneWordIntentResult = {
+  response: string
+  action: 'execute' | 'cancel' | 'skip'
+  actionId?: string
+}
+
 type SendOptions = {
   skipGoodbyeCheck?: boolean
   disableFastGroceryLane?: boolean
@@ -452,6 +458,67 @@ function buildContext(ctx: AssistantContext) {
   }
 }
 
+function parseOneWordIntent(
+  trimmedText: string,
+  currentPage: string,
+): OneWordIntentResult | null {
+  const normalized = trimmedText.toLowerCase().trim()
+  const words = normalized.split(/\s+/)
+
+  if (words.length === 1) {
+    const word = words[0]
+
+    // YES / CONFIRM
+    if (['yes', 'confirm', 'ok', 'okay', 'yep', 'sure', 'go', 'do it', 'yeah'].includes(word)) {
+      return {
+        response: 'Done.',
+        action: 'skip',
+      }
+    }
+
+    // NO / CANCEL
+    if (['no', 'cancel', 'nope', 'abort', 'skip', 'nevermind', 'dont'].includes(word)) {
+      return {
+        response: 'Cancelled. What else?',
+        action: 'skip',
+      }
+    }
+
+    // QUIT / EXIT
+    if (['quit', 'exit', 'close', 'goodbye', 'bye', 'done'].includes(word)) {
+      return {
+        response: 'Goodbye!',
+        action: 'cancel',
+      }
+    }
+
+    // Single noun on grocery page
+    if (currentPage === 'grocery' && !['what', 'show', 'list', 'where', 'when', 'how'].includes(word)) {
+      return {
+        response: `Adding **${word}** to grocery…`,
+        action: 'execute',
+        actionId: `grocery-add:${word}`,
+      }
+    }
+  }
+
+  // Two-word patterns
+  if (words.length === 2) {
+    const [first, second] = words
+
+    // "add [food]" on grocery page
+    if (first === 'add' && currentPage === 'grocery') {
+      return {
+        response: `Adding **${second}** to grocery…`,
+        action: 'execute',
+        actionId: `grocery-add:${second}`,
+      }
+    }
+  }
+
+  return null
+}
+
 export function useAIAssistant(ctx: AssistantContext) {
   const { session, loading: sessionLoading, startNewSession, endSession, saveMessages } = useAISession()
   const [messages, setMessages] = useState<AIMessage[]>([])
@@ -521,6 +588,30 @@ export function useAIAssistant(ctx: AssistantContext) {
       endSession()
       // Close the drawer after a brief moment so user sees the farewell message
       setTimeout(() => ctxRef.current.onSessionEnd?.(), 1200)
+      return
+    }
+
+    // === Phase 1: One-Word Intent Hardening ===
+    const oneWordResult = parseOneWordIntent(
+      trimmedText,
+      ctxRef.current.page,
+    )
+    if (oneWordResult) {
+      const assistantMsg: AIMessage = {
+        id: genId(),
+        role: 'assistant',
+        content: oneWordResult.response,
+      }
+      setMessages(prev => {
+        const updated = [...prev, { id: genId(), role: 'user' as const, content: trimmedText }, assistantMsg]
+        if (sessionRef.current) saveMessages(sessionRef.current.id, updated)
+        return updated
+      })
+      if (oneWordResult.action === 'cancel') {
+        endSession()
+        setTimeout(() => ctxRef.current.onSessionEnd?.(), 1200)
+      }
+      setLoading(false)
       return
     }
 

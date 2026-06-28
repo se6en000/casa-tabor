@@ -1241,14 +1241,14 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         appendDebugLog('trace_started', wakeSessionNonce ? 'source=wake' : 'source=manual')
         appendDebugLog(
           'trace_context',
-          `page=${page} debug=${voiceConfig.debugLevel} audit=${voiceConfig.auditEnabled ? 1 : 0} coreV2=${voiceConfig.coreV2Enabled ? 1 : 0} build=${traceBuildFingerprintRef.current}`,
+          `page=${page} debug=${voiceConfig.debugLevel} audit=${voiceConfig.auditEnabled ? 1 : 0} build=${traceBuildFingerprintRef.current}`,
           { payload: { client_build: traceBuildFingerprintRef.current } },
         )
       })
       transitionTurnState('wake_armed', wakeSessionNonce ? 'wake_open' : 'manual_open')
       if (wakeSessionNonce) trackVoiceMetric('wake_session_started')
       markConversationProgress(false)
-      if (IS_SAFE_MODE || !voiceConfig.coreV2Enabled) return
+      if (IS_SAFE_MODE) return
       // Start connecting immediately — don't wait for animation.
       // Bridge buffers audio from /start so by the time the user speaks it's ready.
       speech.start()
@@ -1299,7 +1299,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       freshStartedRef.current = null  // allow fresh start next time this event is opened
       traceSessionIdRef.current = null
     }
-  }, [open, markConversationProgress, wakeSessionNonce, clearAutoSendTimer, beginTraceSession, appendDebugLog, transitionTurnState, voiceConfig.coreV2Enabled]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, markConversationProgress, wakeSessionNonce, clearAutoSendTimer, beginTraceSession, appendDebugLog, transitionTurnState]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open) return

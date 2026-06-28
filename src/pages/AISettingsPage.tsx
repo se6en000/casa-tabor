@@ -542,10 +542,6 @@ export default function AISettingsPage() {
     setVoiceRuntime(next)
   }
 
-  function setVoiceCoreV2Enabled(coreV2Enabled: boolean) {
-    const next = writeVoiceRuntimeConfig({ coreV2Enabled })
-    setVoiceRuntime(next)
-  }
 
   if (isLoading) return <div className="p-6 text-casa-muted animate-breathe">Loading…</div>
 
@@ -698,18 +694,6 @@ export default function AISettingsPage() {
                 )}
               >
                 Audit Trail: {voiceRuntime.auditEnabled ? 'Enabled' : 'Disabled'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setVoiceCoreV2Enabled(!voiceRuntime.coreV2Enabled)}
-                className={cn(
-                  'rounded-button border px-2.5 py-2 text-caption font-semibold transition-colors',
-                  voiceRuntime.coreV2Enabled
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : 'bg-white text-casa-navy border-casa-border hover:bg-casa-bg',
-                )}
-              >
-                Voice Core V2: {voiceRuntime.coreV2Enabled ? 'Enabled' : 'Disabled'}
               </button>
             </div>
             <p className="text-caption text-casa-muted">
