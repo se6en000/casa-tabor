@@ -2,7 +2,7 @@
 import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { startOfWeek, endOfWeek, addDays, startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns'
+import { startOfWeek, endOfWeek, addDays, startOfDay, startOfMonth, endOfMonth } from 'date-fns'
 import type {
   CalendarEvent, FamilyMember, EventEnrichment,
   EventLogistic, EventChecklistItem, EventActionItem,
@@ -59,8 +59,8 @@ async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDet
       event_checklist_items ( * ),
       event_action_items ( * )
     `)
-    .gte('start_time', start.toISOString())
-    .lte('start_time', end.toISOString())
+    .gt('end_time', start.toISOString())
+    .lt('start_time', end.toISOString())
     .neq('status', 'cancelled')
     .order('start_time')
 
@@ -98,7 +98,7 @@ export function useWeekEvents(selectedDate: Date) {
 /** Fetches 14 days starting from `today` for AI context and rolling views. */
 export function useRollingEvents(today: Date) {
   const start = startOfDay(today)
-  const end   = endOfDay(addDays(today, 14))
+  const end   = addDays(start, 15)
 
   useRealtimeEventInvalidation()
 
@@ -158,8 +158,7 @@ function useRealtimeEventInvalidation() {
 export function useTodayEvents(date: Date) {
   const dayStart = new Date(date)
   dayStart.setHours(0, 0, 0, 0)
-  const dayEnd = new Date(date)
-  dayEnd.setHours(23, 59, 59, 999)
+  const dayEnd = addDays(dayStart, 1)
 
   useRealtimeEventInvalidation()
 
@@ -172,7 +171,7 @@ export function useTodayEvents(date: Date) {
 
 export function useMonthEvents(selectedDate: Date) {
   const monthStart = startOfMonth(selectedDate)
-  const monthEnd = endOfMonth(selectedDate)
+  const monthEnd = addDays(endOfMonth(selectedDate), 1)
 
   useRealtimeEventInvalidation()
 

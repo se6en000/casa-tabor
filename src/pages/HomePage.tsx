@@ -40,6 +40,7 @@ interface EventMatchCandidate {
   id: string
   title: string
   start_time: string
+  end_time: string
 }
 
 function extractEventIdFromSourceRef(sourceRef: string | null | undefined): string | null {
@@ -68,7 +69,14 @@ function findMatchingEventIdForPrepItem(
       (itemDescription.length > 0 && eventTitle.length > 0 && itemDescription.includes(eventTitle))
     )
     if (!titleMatch) continue
-    if (itemDate && new Date(event.start_time).toDateString() !== itemDate) continue
+    if (itemDate) {
+      const day = new Date(itemDate)
+      day.setHours(0, 0, 0, 0)
+      const dayEnd = addDays(day, 1)
+      const eventStart = new Date(event.start_time)
+      const eventEnd = new Date(event.end_time)
+      if (!(eventStart < dayEnd && eventEnd > day)) continue
+    }
     return event.id
   }
 
@@ -276,10 +284,10 @@ export default function HomePage() {
 
     const { data: dbCandidates, error } = await supabase
       .from('events')
-      .select('id, title, start_time')
+      .select('id, title, start_time, end_time')
       .neq('status', 'cancelled')
-      .gte('start_time', lower.toISOString())
-      .lte('start_time', upper.toISOString())
+      .gt('end_time', lower.toISOString())
+      .lt('start_time', upper.toISOString())
       .order('start_time', { ascending: true })
       .limit(200)
 

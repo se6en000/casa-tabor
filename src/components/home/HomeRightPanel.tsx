@@ -17,6 +17,7 @@ import { useCalendarStore } from '../../stores/calendarStore'
 import BounceScroll from '../shared/BounceScroll'
 import ConflictAlertsSection from '../shared/ConflictAlertsSection'
 import type { PrepItem } from '../../types'
+import { eventOverlapsDay } from '../../utils/eventTime'
 
 interface Props {
   now: Date
@@ -153,7 +154,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
             {days.map(day => {
               const isToday = day.toDateString() === now.toDateString()
               const eventCount = weekEvents?.filter(event => (
-                new Date(event.start_time).toDateString() === day.toDateString()
+                eventOverlapsDay(event, day)
               )).length ?? 0
 
               return (

@@ -443,7 +443,7 @@ INSTRUCTIONS:
 - If user already stated a time, do not ask for time again unless there is a true ambiguity conflict.
 - Default time window: when no date is given, search from NOW (${context.currentDate}) forward — never return past events.
 - "Next event" / "what's next" = first event whose start_time is strictly AFTER NOW. If an event is currently in progress (started before NOW, ends after NOW), mention it as "currently happening" first, then state what starts next.
-- Default duration: 1 hour if not specified. Default time: morning (9am) for "tomorrow"/"next week", 2pm for "afternoon", 6pm for "evening", 12pm for "lunch".
+- Default duration: 1 hour if not specified for normal appointments. For trip/vacation/travel intents or explicit multi-day language ("3-day", "through Friday", "until Sunday"), default to a multi-day event instead of 1 hour and preserve the implied span.
 - Ambiguous time default: when user says a bare time like "1:30" without AM/PM, assume ${context.ambiguousTimeDefaultMeridiem ?? 'PM'} unless user context clearly indicates otherwise.
 - Fuzzy match titles, nicknames, partial names, relative dates. If multiple events match, ask which one.
 - If an initial event search is empty, retry with a shorter/broader query before telling the user nothing was found.

@@ -1,8 +1,9 @@
-import { format } from 'date-fns'
+import { format, isSameDay } from 'date-fns'
 import { Navigation } from 'lucide-react'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { WeatherIcon } from '../shared/WeatherIcon'
+import { getEventDisplayEnd, isEventMultiDay } from '../../utils/eventTime'
 
 interface LargeEventCardProps {
   event: EventWithDetails
@@ -26,7 +27,9 @@ export default function LargeEventCard({
 }: LargeEventCardProps) {
   const start = new Date(event.start_time)
   const end = new Date(event.end_time)
+  const displayEnd = getEventDisplayEnd(event)
   const happening = start <= now && end >= now
+  const multiDay = isEventMultiDay(event)
   const members = event.members ?? []
   const primary = members.find((m) => m.role === 'primary') ?? members[0]
   const others = members.filter((m) => m !== primary)
@@ -82,7 +85,11 @@ export default function LargeEventCard({
 
           <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1 min-w-0">
             <span className="flex items-center gap-1 text-body-sm text-casa-muted tabular-nums">
-              {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
+              {event.all_day
+                ? (multiDay ? `${format(start, 'MMM d')} – ${format(displayEnd, 'MMM d')} · all day` : 'All day')
+                : (isSameDay(start, end)
+                  ? `${format(start, 'h:mm a')} – ${format(end, 'h:mm a')}`
+                  : `${format(start, 'MMM d h:mm a')} – ${format(end, 'MMM d h:mm a')}`)}
             </span>
             {event.enrichment?.weather_at_event && (
               <WeatherIcon condition={event.enrichment.weather_at_event} size={12} />

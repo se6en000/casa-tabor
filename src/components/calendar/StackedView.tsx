@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import { format, addDays, isToday, isSameDay, startOfDay } from 'date-fns'
+import { format, addDays, isToday, startOfDay } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   MapPin, Clock, DollarSign, Phone, AlertTriangle,
@@ -19,6 +19,7 @@ import { WeatherIcon } from '../shared/WeatherIcon'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import BounceScroll from '../shared/BounceScroll'
+import { eventOverlapsDay, isEventMultiDay } from '../../utils/eventTime'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -88,7 +89,7 @@ export default function StackedView() {
         <div key={rowIdx} className="grid grid-cols-4 gap-2 min-h-[160px]">
           {rowDays.map(day => {
             const dayEvents = events
-              .filter(e => isSameDay(new Date(e.start_time), day))
+              .filter(e => eventOverlapsDay(e, day))
               .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
 
             const dayAllDay = dayEvents.filter(isAllDayReminder)
@@ -230,6 +231,7 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
 
   const start = new Date(event.start_time)
   const end = new Date(event.end_time)
+  const multiDay = isEventMultiDay(event)
 
   // Long-press detection
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -288,8 +290,9 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
         <div className="flex items-center justify-between gap-1 mb-0.5">
           <div className="flex items-center gap-1">
             <p className="text-caption font-semibold text-casa-muted tabular-nums leading-none">
-              {format(start, 'h:mm')}–{format(end, 'h:mma')}
+              {event.all_day ? 'All day' : `${format(start, 'h:mm')}–${format(end, 'h:mma')}`}
             </p>
+            {multiDay && <span className="text-[9px] font-semibold text-casa-gold uppercase">Multi-day</span>}
             {event.location_name && (
               <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
             )}

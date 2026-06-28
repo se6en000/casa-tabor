@@ -6,6 +6,12 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function googleAllDayEndToInclusiveEndTime(exclusiveEndDate: string): string {
+  const d = new Date(`${exclusiveEndDate}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - 1)
+  return `${d.toISOString().slice(0, 10)}T23:59:59Z`
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
@@ -72,7 +78,7 @@ async function upsertEvent(sb: SupabaseClient, sourceMemberId: string, ev: Recor
   const start = ev.start as Record<string, string> | undefined
   const end = ev.end as Record<string, string> | undefined
   const startTime = start?.dateTime ?? (start?.date ? start.date + 'T00:00:00Z' : null)
-  const endTime = end?.dateTime ?? (end?.date ? end.date + 'T23:59:59Z' : null)
+  const endTime = end?.dateTime ?? (end?.date ? googleAllDayEndToInclusiveEndTime(end.date) : null)
   if (!startTime || !endTime) return
 
   const { data: existing } = await sb.from('events').select('id, is_enriched, updated_at').eq('google_event_id', ev.id).maybeSingle()

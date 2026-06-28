@@ -9,6 +9,12 @@ const CORS = {
 
 const TZ = 'America/New_York'
 
+function toGoogleAllDayEndDate(inclusiveEndTime: string): string {
+  const d = new Date(inclusiveEndTime)
+  d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
@@ -63,7 +69,7 @@ Deno.serve(async (req) => {
       ? { date: new Date(master.start_time).toISOString().slice(0, 10) }
       : { dateTime: new Date(master.start_time).toISOString(), timeZone: TZ }
     const end = isAllDay
-      ? { date: new Date(master.end_time).toISOString().slice(0, 10) }
+      ? { date: toGoogleAllDayEndDate(master.end_time as string) }
       : { dateTime: new Date(master.end_time).toISOString(), timeZone: TZ }
 
     // Build location string

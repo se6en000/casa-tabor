@@ -323,8 +323,8 @@ export default function DayView() {
   // Events for the currently selected day
   const dayEvents = allEvents
     .sort((a, b) => {
-      const aAllDay = a.start_time.endsWith('00:00:00+00:00')
-      const bAllDay = b.start_time.endsWith('00:00:00+00:00')
+      const aAllDay = a.all_day
+      const bAllDay = b.all_day
       if (aAllDay && !bAllDay) return -1
       if (!aAllDay && bAllDay) return 1
       return new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
