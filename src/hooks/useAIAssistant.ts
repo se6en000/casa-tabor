@@ -597,6 +597,11 @@ export function useAIAssistant(ctx: AssistantContext) {
       ctxRef.current.page,
     )
     if (oneWordResult) {
+      emitAssistantDebug(
+        'phase1_one_word_matched',
+        `text=${trimmedText.slice(0, 60)} action=${oneWordResult.action} response=${oneWordResult.response.slice(0, 80)}`,
+        { payload: { text: trimmedText, action: oneWordResult.action, response: oneWordResult.response } }
+      )
       const assistantMsg: AIMessage = {
         id: genId(),
         role: 'assistant',

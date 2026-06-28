@@ -1000,7 +1000,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     }, FEEDBACK_LOCK_MS)
   }, [])
 
-  const sendCurrentInput = useCallback((text: string) => {
+  const sendCurrentInput = useCallback(async (text: string) => {
     const trimmed = text.trim()
     if (!trimmed) {
       appendDebugLog('voice_send_skipped_empty')
@@ -1024,14 +1024,14 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     queueMicrotask(() => setInput(''))
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
-    send(trimmed, undefined, {
+    await send(trimmed, undefined, {
       disableFastGroceryLane: isWakeAssistantMode,
       traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
     })
     return true
   }, [loading, send, markUserInteraction, clearAutoSendTimer, appendDebugLog, transitionTurnState, isWakeAssistantMode, session?.id])
 
-  const queueOrSendVoiceInput = useCallback((text: string) => {
+  const queueOrSendVoiceInput = useCallback(async (text: string) => {
     const trimmed = text.trim()
     if (!trimmed) return
     if (loading || voiceSendInFlightRef.current) {
@@ -1042,7 +1042,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       )
       return
     }
-    const sent = sendCurrentInput(trimmed)
+    const sent = await sendCurrentInput(trimmed)
     if (!sent) {
       pendingVoiceQueueRef.current.push(trimmed)
       appendDebugLog('voice_requeued', `depth=${pendingVoiceQueueRef.current.length} ${trimmed.slice(0, 110)}`)
@@ -1172,11 +1172,14 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     const next = pendingVoiceQueueRef.current.shift()
     if (!next) return
     appendDebugLog('voice_dequeued', `depth=${pendingVoiceQueueRef.current.length} ${next.slice(0, 110)}`)
-    const sent = sendCurrentInput(next)
-    if (!sent) {
-      pendingVoiceQueueRef.current.unshift(next)
-      appendDebugLog('voice_requeued', `depth=${pendingVoiceQueueRef.current.length} ${next.slice(0, 110)}`)
-    }
+    
+    // Fire async send without awaiting (queue processing will wait for loading to clear)
+    void sendCurrentInput(next).then((sent) => {
+      if (!sent) {
+        pendingVoiceQueueRef.current.unshift(next)
+        appendDebugLog('voice_requeued', `depth=${pendingVoiceQueueRef.current.length} ${next.slice(0, 110)}`)
+      }
+    })
   }, [loading, sendCurrentInput, appendDebugLog])
 
   useEffect(() => {
