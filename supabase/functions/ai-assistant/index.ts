@@ -14,23 +14,12 @@ const CORS = {
 }
 
 interface ImagePayload { mimeType: string; data: string }
-type ForwardedClientTraceEvent = {
-  at?: string
-  event?: string
-  detail?: string
-  channel?: 'debug' | 'audit'
-  sessionId?: string
-  turnId?: string
-  seq?: number
-  elapsedMs?: number
-  page?: string
-  turnState?: string
-  loading?: boolean
-  queueDepth?: number
-  correlationId?: string
-  actionId?: string
-  lane?: string
-  payload?: unknown
+
+function sanitizeIngressText(value: unknown, maxLen = 1800): string | null {
+ if (typeof value !== 'string') return null
+ const normalized = value.replace(/\s+/g, ' ').trim()
+ if (!normalized) return null
+ return normalized.slice(0, maxLen)
 }
 
 Deno.serve(async (req) => {
@@ -49,7 +38,6 @@ Deno.serve(async (req) => {
     turn_id: turnIdRaw,
     lane: laneRaw,
     device_id: deviceIdRaw,
-    client_trace_events: clientTraceEventsRaw,
     client_trace_present: clientTracePresentRaw,
     client_build: clientBuildRaw,
     client_trace_source: clientTraceSourceRaw,
@@ -73,9 +61,6 @@ Deno.serve(async (req) => {
   const clientTracePresent = typeof clientTracePresentRaw === 'boolean'
     ? clientTracePresentRaw
     : inferredClientTracePresent
-  const forwardedClientTraceEvents = Array.isArray(clientTraceEventsRaw)
-    ? (clientTraceEventsRaw as ForwardedClientTraceEvent[]).slice(0, 180)
-    : []
   const requestStartMs = Date.now()
   const STAGE_SLO = {
     contextLoadMs: 1200,
@@ -108,39 +93,15 @@ Deno.serve(async (req) => {
       dedupe_key: dedupeKey,
     }).then(() => {}).catch(() => {})
   }
-  if (forwardedClientTraceEvents.length > 0) {
-    const rows = forwardedClientTraceEvents
-      .filter((entry) => typeof entry?.event === 'string' && entry.event.trim().length > 0)
-      .map((entry, index) => ({
-        client_at: typeof entry.at === 'string' ? entry.at : null,
-        event: String(entry.event).slice(0, 120),
-        detail: typeof entry.detail === 'string' ? entry.detail.slice(0, 2000) : null,
-        channel: entry.channel === 'audit' ? 'audit' : 'debug',
-        session_id: typeof entry.sessionId === 'string' && entry.sessionId.trim().length > 0 ? entry.sessionId.slice(0, 120) : traceId,
-        turn_id: typeof entry.turnId === 'string' && entry.turnId.trim().length > 0 ? entry.turnId.slice(0, 120) : turnId,
-        seq: Number.isFinite(entry.seq) ? Math.trunc(entry.seq as number) : null,
-        elapsed_ms: Number.isFinite(entry.elapsedMs) ? Math.max(0, Math.trunc(entry.elapsedMs as number)) : null,
-        page: typeof entry.page === 'string' ? entry.page.slice(0, 64) : (context?.page ?? 'app'),
-        turn_state: typeof entry.turnState === 'string' ? entry.turnState.slice(0, 64) : null,
-        loading: typeof entry.loading === 'boolean' ? entry.loading : null,
-        queue_depth: Number.isFinite(entry.queueDepth) ? Math.max(0, Math.trunc(entry.queueDepth as number)) : null,
-        correlation_id: typeof entry.correlationId === 'string' ? entry.correlationId.slice(0, 120) : cid,
-        action_id: typeof entry.actionId === 'string' ? entry.actionId.slice(0, 120) : null,
-        lane: typeof entry.lane === 'string' && entry.lane.trim().length > 0 ? entry.lane.slice(0, 64) : lane,
-        payload: entry.payload !== undefined ? entry.payload : null,
-        source_component: 'server:forwarded-client-trace',
-        source_origin: context?.page ?? null,
-        source_href: null,
-        user_agent: null,
-        platform: Deno.build.os,
-        device_id: deviceId,
-        dedupe_key: `forward:${cid}:${traceId}:${turnId ?? 'no-turn'}:${index}:${String(entry.event).slice(0, 64)}:${String(entry.at ?? '').slice(0, 64)}`.slice(0, 800),
-      }))
-    if (rows.length > 0) {
-      await sb.from('ai_drawer_debug_events').upsert(rows, { onConflict: 'dedupe_key', ignoreDuplicates: true })
-    }
-  }
   console.log(`[ai-assistant][${cid}] request messages=${Array.isArray(messages) ? messages.length : 0}`)
+  const latestUserText = Array.isArray(messages)
+    ? sanitizeIngressText(
+      [...messages].reverse().find((msg) =>
+        msg && typeof msg === 'object' && msg.role === 'user' && typeof msg.content === 'string'
+      )?.content,
+      2000,
+    )
+    : null
   appendServerTrace('server_ai_assistant_start', `messages=${Array.isArray(messages) ? messages.length : 0}`, {
     message_count: Array.isArray(messages) ? messages.length : 0,
     has_image: Boolean(image),
@@ -149,6 +110,15 @@ Deno.serve(async (req) => {
     client_build: clientBuild,
     client_trace_source: clientTraceSource,
   })
+  if (latestUserText) {
+    appendServerTrace('server_ai_assistant_ingress_user_text', latestUserText.slice(0, 300), {
+      user_text: latestUserText,
+      user_text_length: latestUserText.length,
+      message_count: Array.isArray(messages) ? messages.length : 0,
+      lane,
+      client_build: clientBuild,
+    })
+  }
   if (!dryRun && !clientTracePresent && lane !== 'regression') {
     appendServerTrace('client_trace_absent_at_ingress', `lane=${lane}`, {
       lane,

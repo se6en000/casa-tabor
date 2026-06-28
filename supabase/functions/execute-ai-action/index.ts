@@ -17,25 +17,6 @@ import {
   resolveGroceryFromCatalog,
 } from '../_shared/grocery-catalog.ts'
 
-type ForwardedClientTraceEvent = {
-  at?: string
-  event?: string
-  detail?: string
-  channel?: 'debug' | 'audit'
-  sessionId?: string
-  turnId?: string
-  seq?: number
-  elapsedMs?: number
-  page?: string
-  turnState?: string
-  loading?: boolean
-  queueDepth?: number
-  correlationId?: string
-  actionId?: string
-  lane?: string
-  payload?: unknown
-}
-
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -68,6 +49,19 @@ function normalizeGroceryName(rawName: string): { name: string; normalizedFrom?:
     }
   }
   return { name: toTitleCase(trimmed) }
+}
+
+function summarizeIngressArgs(args: unknown): { preview: string | null; size: number } {
+  try {
+    const serialized = JSON.stringify(args ?? null)
+    if (typeof serialized !== 'string') return { preview: null, size: 0 }
+    return {
+      preview: serialized.slice(0, 1800),
+      size: serialized.length,
+    }
+  } catch {
+    return { preview: null, size: 0 }
+  }
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
@@ -221,7 +215,6 @@ Deno.serve(async (req) => {
     turn_id: turnIdRaw,
     lane: laneRaw,
     device_id: deviceIdRaw,
-    client_trace_events: clientTraceEventsRaw,
     client_trace_present: clientTracePresentRaw,
     client_build: clientBuildRaw,
     client_trace_source: clientTraceSourceRaw,
@@ -256,9 +249,6 @@ Deno.serve(async (req) => {
   const clientTracePresent = typeof clientTracePresentRaw === 'boolean'
     ? clientTracePresentRaw
     : inferredClientTracePresent
-  const forwardedClientTraceEvents = Array.isArray(clientTraceEventsRaw)
-    ? (clientTraceEventsRaw as ForwardedClientTraceEvent[]).slice(0, 180)
-    : []
   const requestStartMs = Date.now()
   const ACTION_SLO_MS = 2500
   const warnIfSlow = (stage: string, elapsedMs: number, budgetMs: number) => {
@@ -289,44 +279,20 @@ Deno.serve(async (req) => {
       dedupe_key: dedupeKey,
     }).then(() => {}).catch(() => {})
   }
-  if (forwardedClientTraceEvents.length > 0) {
-    const rows = forwardedClientTraceEvents
-      .filter((entry) => typeof entry?.event === 'string' && entry.event.trim().length > 0)
-      .map((entry, index) => ({
-        client_at: typeof entry.at === 'string' ? entry.at : null,
-        event: String(entry.event).slice(0, 120),
-        detail: typeof entry.detail === 'string' ? entry.detail.slice(0, 2000) : null,
-        channel: entry.channel === 'audit' ? 'audit' : 'debug',
-        session_id: typeof entry.sessionId === 'string' && entry.sessionId.trim().length > 0 ? entry.sessionId.slice(0, 120) : traceId,
-        turn_id: typeof entry.turnId === 'string' && entry.turnId.trim().length > 0 ? entry.turnId.slice(0, 120) : turnId,
-        seq: Number.isFinite(entry.seq) ? Math.trunc(entry.seq as number) : null,
-        elapsed_ms: Number.isFinite(entry.elapsedMs) ? Math.max(0, Math.trunc(entry.elapsedMs as number)) : null,
-        page: typeof entry.page === 'string' ? entry.page.slice(0, 64) : 'app',
-        turn_state: typeof entry.turnState === 'string' ? entry.turnState.slice(0, 64) : null,
-        loading: typeof entry.loading === 'boolean' ? entry.loading : null,
-        queue_depth: Number.isFinite(entry.queueDepth) ? Math.max(0, Math.trunc(entry.queueDepth as number)) : null,
-        correlation_id: typeof entry.correlationId === 'string' ? entry.correlationId.slice(0, 120) : cid,
-        action_id: typeof entry.actionId === 'string' ? entry.actionId.slice(0, 120) : actionId,
-        lane: typeof entry.lane === 'string' && entry.lane.trim().length > 0 ? entry.lane.slice(0, 64) : lane,
-        payload: entry.payload !== undefined ? entry.payload : null,
-        source_component: 'server:forwarded-client-trace',
-        source_origin: 'execute-ai-action',
-        source_href: null,
-        user_agent: null,
-        platform: Deno.build.os,
-        device_id: deviceId,
-        dedupe_key: `forward:${cid}:${traceId}:${turnId ?? 'no-turn'}:${index}:${String(entry.event).slice(0, 64)}:${String(entry.at ?? '').slice(0, 64)}`.slice(0, 800),
-      }))
-    if (rows.length > 0) {
-      await sb.from('ai_drawer_debug_events').upsert(rows, { onConflict: 'dedupe_key', ignoreDuplicates: true })
-    }
-  }
+  const ingressArgs = summarizeIngressArgs(args)
   appendServerTrace('server_execute_action_start', `tool=${tool}`, {
     tool,
     sync_mode: syncMode ?? 'default',
     client_trace_present: clientTracePresent,
     client_build: clientBuild,
     client_trace_source: clientTraceSource,
+  })
+  appendServerTrace('server_execute_action_ingress_args', `tool=${tool}`, {
+    tool,
+    args_preview: ingressArgs.preview,
+    args_size: ingressArgs.size,
+    lane,
+    client_build: clientBuild,
   })
   if (!clientTracePresent && lane !== 'regression') {
     appendServerTrace('client_trace_absent_at_ingress', `lane=${lane}`, {

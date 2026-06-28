@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { drainClientTraceEvents } from '../lib/clientTraceBridge'
 import type { EventWithDetails } from './useCalendarEvents'
 import type { FamilyMember } from '../types'
 import { useAISession, type AIMessage } from './useAISession'
@@ -532,12 +531,10 @@ export function useAIAssistant(ctx: AssistantContext) {
     const turnId = userMsg.id
     const deviceId = getVoiceDebugDeviceId()
     const clientBuild = detectClientBuildFingerprint()
-    const clientTraceEvents = drainClientTraceEvents(140)
     const clientTraceMeta = {
       client_trace_present: Boolean(traceId && turnId && deviceId),
       client_build: clientBuild,
       client_trace_source: 'use-ai-assistant',
-      client_trace_events: clientTraceEvents,
     }
 
     const runSimpleCommandLane = async (): Promise<SimpleCommandExecution> => {
