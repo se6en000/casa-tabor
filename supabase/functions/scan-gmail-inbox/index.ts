@@ -732,8 +732,8 @@ Deno.serve(async (req) => {
       if (newEvent) {
         await sb.from('event_members').insert({ event_id: newEvent.id, family_member_id: assignedMember.id, role: 'primary' })
 
-        // Use canonical create flow so DB + Google linkage stays consistent.
-        await sb.functions.invoke('create-google-event', {
+        // Use unified sync flow so failed writes queue for retry.
+        await sb.functions.invoke('sync-event-to-google', {
           body: { event_id: newEvent.id },
         }).catch(console.error)
 

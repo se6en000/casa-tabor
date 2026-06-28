@@ -195,7 +195,7 @@ export default function WeekView() {
       updated_at: new Date().toISOString(),
     }).eq('id', d.event.id)
     qc.invalidateQueries({ queryKey: ['events'] })
-    supabase.functions.invoke('push-to-google', { body: { event_id: d.event.id } }).catch(() => {})
+    supabase.functions.invoke('sync-event-to-google', { body: { event_id: d.event.id } }).catch(() => {})
   }, [qc])
 
   // Non-passive native touch listeners so we can preventDefault during drag

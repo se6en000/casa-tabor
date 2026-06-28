@@ -148,7 +148,7 @@ Rules:
 
       if (!error) {
         // Push to Google Calendar
-        sb.functions.invoke('push-to-google', { body: { event_id: aiResponse.event_id } }).catch(() => {})
+        sb.functions.invoke('sync-event-to-google', { body: { event_id: aiResponse.event_id } }).catch(() => {})
       }
     }
 
@@ -162,7 +162,7 @@ Rules:
           role: i === 0 ? 'primary' : 'attendee',
         }))
       )
-      sb.functions.invoke('push-to-google', { body: { event_id: aiResponse.event_id } }).catch(() => {})
+      sb.functions.invoke('sync-event-to-google', { body: { event_id: aiResponse.event_id } }).catch(() => {})
     }
 
     if (aiResponse.action === 'add' && aiResponse.new_event) {
@@ -179,7 +179,7 @@ Rules:
       if (newEvent) {
         // Assign to the sender by default
         await sb.from('event_members').insert({ event_id: newEvent.id, family_member_id: member.id, role: 'primary' })
-        sb.functions.invoke('create-google-event', { body: { event_id: newEvent.id } }).catch(() => {})
+        sb.functions.invoke('sync-event-to-google', { body: { event_id: newEvent.id } }).catch(() => {})
         sb.functions.invoke('enrich-event', { body: { event_id: newEvent.id } }).catch(() => {})
       }
     }

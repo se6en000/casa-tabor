@@ -794,16 +794,12 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
 
     // Google Calendar sync — strategy depends on scope
     if (scope === 'this') {
-      // Single instance: push-to-google (patch) or create-google-event (new)
+      // Single instance: unified sync (auto create/patch + retry queue)
       try {
-        if (event.google_event_id) {
-          const pushRes = await supabase.functions.invoke('push-to-google', { body: { event_id: event.id } })
-          if (pushRes.error) console.warn('[EventEditSheet] push-to-google error:', pushRes.error)
-        } else {
-          supabase.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {})
-        }
+        const syncRes = await supabase.functions.invoke('sync-event-to-google', { body: { event_id: event.id } })
+        if (syncRes.error) console.warn('[EventEditSheet] sync-event-to-google error:', syncRes.error)
       } catch (pushErr) {
-        console.warn('[EventEditSheet] push-to-google failed:', pushErr)
+        console.warn('[EventEditSheet] sync-event-to-google failed:', pushErr)
       }
       // Weather fetch for this single instance
       supabase.functions.invoke('fetch-event-weather', { body: { event_id: event.id } })

@@ -105,15 +105,28 @@ async function finalizeEventSync(
   historyId: string | null | undefined,
   response: Record<string, unknown>,
 ) {
-  const syncRes = await sb.functions.invoke('push-to-google', {
+  const syncRes = await sb.functions.invoke('sync-event-to-google', {
     body: { event_id: eventId },
   }).catch((err: Error) => ({ data: null, error: err }))
 
+  const syncStatus = typeof syncRes?.data?.sync_status === 'string' ? syncRes.data.sync_status : null
   const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? null
-  if (!syncError) {
+  if (!syncError && (syncStatus === 'synced' || syncStatus === 'not_needed')) {
     const syncedResponse = { ...response, sync_status: 'synced' }
     await updateAuditResult(sb, historyId, syncedResponse, 'succeeded')
     return syncedResponse
+  }
+  if (!syncError && syncStatus === 'queued') {
+    const queuedResponse = {
+      ...response,
+      sync_warning: typeof syncRes?.data?.sync_warning === 'string'
+        ? syncRes.data.sync_warning
+        : 'Saved in Casa Tabor. Google sync is queued and still in progress.',
+      sync_status: 'queued',
+      sync_job_id: syncRes?.data?.sync_job_id ?? null,
+    }
+    await updateAuditResult(sb, historyId, queuedResponse, 'pending')
+    return queuedResponse
   }
 
   try {
@@ -188,27 +201,32 @@ Deno.serve(async (req) => {
 
       // Fire enrichment async (slow — Gemini AI, don't block)
       sb.functions.invoke('enrich-event', { body: { event_id: event.id } }).catch(() => {})
-      // Verify Google calendar creation before claiming completion.
-      const syncRes = await sb.functions.invoke('create-google-event', {
+      // Verify Google sync before claiming completion (create/patch + retry queue).
+      const syncRes = await sb.functions.invoke('sync-event-to-google', {
         body: { event_id: event.id },
       }).catch((err: Error) => ({ data: null, error: err }))
       const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? null
-      const syncSkipped = typeof syncRes?.data?.skipped === 'string' ? syncRes.data.skipped : null
+      const syncStatus = typeof syncRes?.data?.sync_status === 'string' ? syncRes.data.sync_status : null
 
-      let syncStatus: 'synced' | 'failed' = 'synced'
+      let finalSyncStatus: 'synced' | 'failed' | 'queued' = 'synced'
       let syncWarning: string | undefined
       if (syncError) {
-        syncStatus = 'failed'
+        finalSyncStatus = 'failed'
         syncWarning = `Saved in Casa Tabor, but Google sync is not confirmed: ${syncError}`
-      } else if (syncSkipped && syncSkipped !== 'reminder' && syncSkipped !== 'already has google_event_id') {
-        syncStatus = 'failed'
-        syncWarning = `Saved in Casa Tabor, but Google sync is not confirmed (${syncSkipped}).`
+      } else if (syncStatus === 'queued') {
+        finalSyncStatus = 'queued'
+        syncWarning = typeof syncRes?.data?.sync_warning === 'string'
+          ? syncRes.data.sync_warning
+          : 'Saved in Casa Tabor. Google sync is queued and still in progress.'
+      } else if (syncStatus !== 'synced' && syncStatus !== 'not_needed') {
+        finalSyncStatus = 'failed'
+        syncWarning = 'Saved in Casa Tabor, but Google sync is not confirmed.'
       }
 
       return new Response(JSON.stringify({
         success: true,
         event_id: event.id,
-        sync_status: syncStatus,
+        sync_status: finalSyncStatus,
         ...(syncWarning ? { sync_warning: syncWarning } : {}),
         correlation_id: cid,
       }), {

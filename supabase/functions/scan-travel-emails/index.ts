@@ -616,7 +616,7 @@ async function extractAndUpsertTrip(
     }
 
     // Sync to Google Calendar
-    await sb.functions.invoke('push-to-google', { body: { event_id: legEvent.id } }).catch(() => {})
+    await sb.functions.invoke('sync-event-to-google', { body: { event_id: legEvent.id } }).catch(() => {})
 
     return { ok: true, debug: `change: updated leg ${legEvent.id}` }
   }
@@ -930,9 +930,9 @@ This is a family household. Other family members remain at home.`).catch(() => '
         legEventIds.push(legEventId)
         // Create in Google Calendar if new, otherwise push updates (best-effort)
         if (existingLeg) {
-          await sb.functions.invoke('push-to-google', { body: { event_id: legEventId } }).catch(() => {})
+          await sb.functions.invoke('sync-event-to-google', { body: { event_id: legEventId } }).catch(() => {})
         } else {
-          await sb.functions.invoke('create-google-event', { body: { event_id: legEventId } }).catch(() => {})
+          await sb.functions.invoke('sync-event-to-google', { body: { event_id: legEventId } }).catch(() => {})
         }
       }
     }

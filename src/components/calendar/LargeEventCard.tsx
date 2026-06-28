@@ -1,5 +1,5 @@
 import { format, isSameDay } from 'date-fns'
-import { Navigation } from 'lucide-react'
+import { CheckCircle2, Clock3, Navigation } from 'lucide-react'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { WeatherIcon } from '../shared/WeatherIcon'
@@ -38,6 +38,8 @@ export default function LargeEventCard({
   const others = members.filter((m) => m !== primary)
   const ownerName = primary?.family_member?.name ?? ''
   const cleanTitle = cleanEventTitle(event.title)
+  const showSyncState = event.event_type !== 'reminder'
+  const isGoogleSynced = !!event.google_event_id
 
   return (
     <div
@@ -127,6 +129,17 @@ export default function LargeEventCard({
             </span>
             {event.enrichment?.weather_at_event && (
               <WeatherIcon condition={event.enrichment.weather_at_event} size={12} />
+            )}
+            {showSyncState && (
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1 text-caption',
+                  isGoogleSynced ? 'text-emerald-600' : 'text-casa-muted',
+                )}
+                title={isGoogleSynced ? 'Google sync confirmed' : 'Google sync pending'}
+              >
+                {isGoogleSynced ? <CheckCircle2 size={12} /> : <Clock3 size={12} />}
+              </span>
             )}
             {event.location_name && (
               <span className="flex items-center gap-1 text-body-sm text-casa-muted min-w-0 break-words">

@@ -204,8 +204,8 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
       supabase.functions.invoke('fetch-event-weather', { body: { event_id: inserted.id } })
         .then(() => qc.invalidateQueries({ queryKey: ['events'] }))
         .catch(() => {})
-      // Push new event to Google Calendar so it shows up there too
-      supabase.functions.invoke('create-google-event', { body: { event_id: inserted.id } })
+      // Sync new event to Google Calendar (with retry queue fallback)
+      supabase.functions.invoke('sync-event-to-google', { body: { event_id: inserted.id } })
         .catch(() => {})
     }
     onClose()

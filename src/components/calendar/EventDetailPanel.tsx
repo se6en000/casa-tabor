@@ -9,7 +9,7 @@ import {
   Plane, Loader2, ExternalLink, Paperclip,
   Home, Hotel, Hash, DoorOpen, Armchair, Luggage, Users,
   Sun, CloudRain, CloudSnow, Wind,
-  Crown, Plus, Bookmark, BookmarkCheck, Copy, Check, Map,
+  Crown, Plus, Bookmark, BookmarkCheck, Copy, Check, Map, CheckCircle2, Clock3,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
@@ -359,6 +359,8 @@ function PanelHeader({ event, onClose }: { event: EventWithDetails; onClose: () 
   const confidence = event.enrichment?.confidence as keyof typeof CONFIDENCE_CONFIG | undefined
   const conf = confidence ? CONFIDENCE_CONFIG[confidence] : null
   const category = event.enrichment?.category
+  const showSyncState = event.event_type !== 'reminder'
+  const isGoogleSynced = !!event.google_event_id
 
   return (
     <div className="border-b border-casa-border">
@@ -390,6 +392,18 @@ function PanelHeader({ event, onClose }: { event: EventWithDetails; onClose: () 
             <span className={cn('inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-caption font-semibold border', conf.bg, conf.text, conf.border)}>
               <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: conf.color }} />
               {conf.label}
+            </span>
+          )}
+          {showSyncState && (
+            <span
+              className={cn(
+                'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-caption font-semibold border',
+                isGoogleSynced ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-casa-bg text-casa-muted border-casa-border',
+              )}
+              title={isGoogleSynced ? 'Google sync confirmed' : 'Google sync pending'}
+            >
+              {isGoogleSynced ? <CheckCircle2 size={12} /> : <Clock3 size={12} />}
+              {isGoogleSynced ? 'Google synced' : 'Google pending'}
             </span>
           )}
         </div>

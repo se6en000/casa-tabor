@@ -50,12 +50,17 @@ Deno.serve(async (req) => {
         })
         .eq('id', job.id)
 
-      const syncRes = await sb.functions.invoke('push-to-google', {
-        body: { event_id: job.event_id },
+      const syncRes = await sb.functions.invoke('sync-event-to-google', {
+        body: {
+          event_id: job.event_id,
+          audit_history_id: job.audit_history_id ?? null,
+          enqueue_on_failure: false,
+        },
       }).catch((err: Error) => ({ data: null, error: err }))
 
-      const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? null
-      if (!syncError) {
+      const syncStatus = typeof syncRes?.data?.sync_status === 'string' ? syncRes.data.sync_status : null
+      const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? (syncStatus === 'failed' ? 'sync-event-to-google failed' : null)
+      if (!syncError && (syncStatus === 'synced' || syncStatus === 'not_needed')) {
         const finishedAt = new Date().toISOString()
         await sb
           .from('google_sync_jobs')
