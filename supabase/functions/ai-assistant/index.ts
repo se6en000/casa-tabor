@@ -24,6 +24,7 @@ Deno.serve(async (req) => {
 
   const { messages, context, image, correlation_id: correlationId } = await req.json()
   const cid = correlationId ?? `${context?.page ?? 'unknown'}:${Date.now().toString(36)}`
+  const requestStartMs = Date.now()
   console.log(`[ai-assistant][${cid}] request messages=${Array.isArray(messages) ? messages.length : 0}`)
 
   // Load config, saved places, contacts, grocery list, events in parallel
@@ -32,6 +33,7 @@ Deno.serve(async (req) => {
   const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000)
   const yearEnd = new Date(); yearEnd.setFullYear(yearEnd.getFullYear() + 1, 11, 31); yearEnd.setHours(23,59,59,999)
 
+  const contextLoadStartMs = Date.now()
   const [
     { data: cfgRow },
     { data: savedPlaces },
@@ -66,6 +68,7 @@ Deno.serve(async (req) => {
   }
   const allEvents = eventsResult.data
   console.log('[ai-assistant] events loaded:', allEvents?.length ?? 0)
+  console.log(`[ai-assistant][${cid}] stage=context_load ms=${Date.now() - contextLoadStartMs}`)
 
   const savedContacts = (savedContactsResult as { data: unknown }).data
 
@@ -494,6 +497,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
   // Helper: execute read-only tools server-side
   async function executeReadTool(name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const stageStartMs = Date.now()
     if (name === 'search_events') {
       const query = normalizeSearchText((args.query as string) ?? '')
       const queryTokens = tokenized(query)
@@ -554,7 +558,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const secondConfidence = scoredResults[1]?.confidence ?? 0
       const ambiguous = scoredResults.length > 1 && (topConfidence < 0.75 || topConfidence - secondConfidence < 0.15)
 
-      return {
+      const payload = {
         found: true,
         count: scoredResults.length,
         ambiguity: {
@@ -608,6 +612,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             })),
         })),
       }
+      console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=${payload.count ?? 0}`)
+      return payload
     }
 
     if (name === 'search_places') {
@@ -629,8 +635,13 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           address: p.formattedAddress,
           phone: p.nationalPhoneNumber,
         }))
-        return { places, count: places.length }
-      } catch { return { places: [], count: 0 } }
+        const payload = { places, count: places.length }
+        console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=${payload.count}`)
+        return payload
+      } catch {
+        console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=0 error=fetch_failed`)
+        return { places: [], count: 0 }
+      }
     }
 
     if (name === 'search_web') {
@@ -655,7 +666,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         const data = await res.json()
         if (!res.ok) {
           const message = data?.error?.detail ?? data?.error ?? 'Brave search failed'
-          return { results: [], count: 0, error: message }
+          const payload = { results: [], count: 0, error: message }
+          console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=0 error=provider`)
+          return payload
         }
 
         const results = (data?.web?.results ?? []).map((item: {
@@ -672,8 +685,11 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           source: item.profile?.long_name ?? null,
           age: item.age ?? item.page_age ?? null,
         }))
-        return { results, count: results.length, query }
+        const payload = { results, count: results.length, query }
+        console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=${payload.count}`)
+        return payload
       } catch {
+        console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=0 error=network`)
         return { results: [], count: 0, error: 'Unable to reach Brave Search' }
       }
     }
@@ -683,6 +699,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
   // Call Gemini with function calling — up to 2 rounds (tool call → result → final answer)
   async function callGeminiWithTools(contents: GeminiContent[]): Promise<{ type: string; [key: string]: unknown }> {
+    const llmStartMs = Date.now()
     const body = {
       system_instruction: { parts: [{ text: systemInstruction }] },
       contents,
@@ -695,6 +712,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
     )
+    console.log(`[ai-assistant][${cid}] stage=llm_primary ms=${Date.now() - llmStartMs} status=${res.status}`)
 
     if (!res.ok) {
       const errText = await res.text()
@@ -741,6 +759,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
           { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...body, contents: newContents }) }
         )
+        console.log(`[ai-assistant][${cid}] stage=llm_secondary ms=${Date.now() - llmStartMs} status=${res2.status}`)
         if (!res2.ok) return { type: 'error', code: 'llm_error', message: 'Second LLM call failed' }
         const data2 = await res2.json()
         const finalText = data2.candidates?.[0]?.content?.parts?.find((p: { text?: string }) => p.text)?.text ?? ''
@@ -866,6 +885,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
     )
+    console.log(`[ai-assistant][${cid}] stage=llm_retry ms=${Date.now() - llmStartMs} status=${retryRes.status}`)
     if (retryRes.ok) {
       const retryData = await retryRes.json()
       const retryParts = retryData.candidates?.[0]?.content?.parts ?? []
@@ -896,6 +916,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
         { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(fallbackBody) }
       )
+      console.log(`[ai-assistant][${cid}] stage=llm_fallback ms=${Date.now() - llmStartMs} status=${fallbackRes.status}`)
       if (fallbackRes.ok) {
         const fallbackData = await fallbackRes.json()
         const fallbackParts = fallbackData.candidates?.[0]?.content?.parts ?? []
@@ -971,6 +992,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
   try {
     const result = await callGeminiWithTools(history)
+    console.log(`[ai-assistant][${cid}] stage=request_total ms=${Date.now() - requestStartMs} result_type=${String(result?.type ?? 'unknown')}`)
     logUsage()
     return new Response(JSON.stringify({ ...result, correlation_id: cid }), {
       headers: { ...CORS, 'content-type': 'application/json' },

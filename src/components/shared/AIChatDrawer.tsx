@@ -58,6 +58,15 @@ type DebugLogEntry = {
 }
 
 type VoiceTurnState = 'idle' | 'wake_armed' | 'listening' | 'endpointed' | 'thinking' | 'responding' | 'closed'
+const TURN_STATE_TRANSITIONS: Record<VoiceTurnState, readonly VoiceTurnState[]> = {
+  idle: ['wake_armed', 'listening', 'thinking', 'closed'],
+  wake_armed: ['listening', 'closed'],
+  listening: ['endpointed', 'thinking', 'closed'],
+  endpointed: ['thinking', 'listening', 'closed'],
+  thinking: ['responding', 'listening', 'closed'],
+  responding: ['listening', 'thinking', 'closed'],
+  closed: ['idle', 'wake_armed', 'listening'],
+}
 
 type VoiceUxProfile = {
   inactivityMs: number
@@ -761,6 +770,10 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const transitionTurnState = useCallback((next: VoiceTurnState, reason: string) => {
     const previous = turnStateRef.current
     if (previous === next) return
+    if (!TURN_STATE_TRANSITIONS[previous].includes(next)) {
+      appendDebugLog('turn_state_invalid', `${previous} -> ${next} (${reason})`)
+      return
+    }
     turnStateRef.current = next
     appendDebugLog('turn_state', `${previous} -> ${next} (${reason})`)
   }, [appendDebugLog])
@@ -1545,6 +1558,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                           action_id: messageId,
                           session_id: session?.id ?? null,
                           correlation_id: buildCorrelationId(messageId),
+                          sync_mode: isCalendarWrite ? 'async' : undefined,
                         },
                       })
 
@@ -1613,6 +1627,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                           action_id: `${messageId}:undo`,
                           session_id: session?.id ?? null,
                           correlation_id: buildCorrelationId(`${messageId}:undo`),
+                          sync_mode: 'async',
                         },
                       })
                       if (error) throw error

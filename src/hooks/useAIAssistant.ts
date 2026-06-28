@@ -33,7 +33,14 @@ type AIAssistantResponse = {
 
 const GOODBYE_PHRASES = /\b(thank you|thanks|goodbye|bye|that'?s all|all done|good night|ciao|close session|new session|start over|end session)\b/i
 const GROCERY_NON_ADD_INTENTS = /\b(what|show|list|what's|whats|how many|remove|delete|clear|check|uncheck|done|completed|archive)\b/i
-const ASSISTANT_TIMEOUT_MS = 45_000
+const ASSISTANT_STAGE_TIMEOUTS_MS = [18_000, 10_000] as const
+const COMMAND_SYNC_TIMEOUT_MS = 1_800
+
+type AssistantErrorKind = 'timeout' | 'network' | 'provider' | 'unknown'
+type SimpleCommandExecution = {
+  executed: boolean
+  assistantMessage?: string
+}
 
 function isRetriableAssistantError(error: unknown): boolean {
   const raw = (error as { message?: string })?.message ?? String(error ?? '')
@@ -48,6 +55,25 @@ function isRetriableAssistantError(error: unknown): boolean {
     msg.includes('gateway') ||
     msg.includes('service unavailable')
   )
+}
+
+function classifyAssistantError(error: unknown): AssistantErrorKind {
+  const raw = (error as { message?: string })?.message ?? String(error ?? '')
+  const msg = raw.toLowerCase()
+  if (msg.includes('timed out') || msg.includes('timeout')) return 'timeout'
+  if (
+    msg.includes('network') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('fetch failed') ||
+    msg.includes('gateway')
+  ) return 'network'
+  if (
+    msg.includes('resource_exhausted') ||
+    msg.includes('quota') ||
+    msg.includes('service unavailable') ||
+    msg.includes('temporarily unavailable')
+  ) return 'provider'
+  return 'unknown'
 }
 
 function dispatchGroceryUpdated() {
@@ -113,6 +139,56 @@ function buildGroceryAddResponseText(addedItems: string[], skippedExactMatches: 
     return `Already on your list: ${skippedExactMatches.join(', ')}.`
   }
   return 'No new grocery items were added.'
+}
+
+function toIsoWithOffset(date: Date): string {
+  const offsetMinutes = -date.getTimezoneOffset()
+  const sign = offsetMinutes >= 0 ? '+' : '-'
+  const abs = Math.abs(offsetMinutes)
+  const hh = String(Math.floor(abs / 60)).padStart(2, '0')
+  const mm = String(abs % 60).padStart(2, '0')
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  const h = String(date.getHours()).padStart(2, '0')
+  const min = String(date.getMinutes()).padStart(2, '0')
+  const sec = String(date.getSeconds()).padStart(2, '0')
+  return `${y}-${m}-${d}T${h}:${min}:${sec}${sign}${hh}:${mm}`
+}
+
+function parseSimpleCalendarCommand(
+  text: string,
+  family: FamilyMember[],
+): null | { title: string; start: string; end: string; members: string[] } {
+  const normalized = text.trim().replace(/\s+/g, ' ')
+  const rx = /^(?:alexa\s+)?(?:add|create|schedule)\s+(?:an?\s+)?(?:appointment|event|reminder)\s+(?:(for|on)\s+)?(?:(today|tomorrow)\s+)?at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s+(?:to|for)\s+(.+)$/i
+  const match = normalized.match(rx)
+  if (!match) return null
+  const dayWord = (match[2] ?? '').toLowerCase()
+  const hourRaw = Number.parseInt(match[3], 10)
+  const minuteRaw = Number.parseInt(match[4] ?? '0', 10)
+  const meridiem = (match[5] ?? '').toLowerCase()
+  const subject = (match[6] ?? '').trim().replace(/[.?!]+$/g, '')
+  if (!subject || Number.isNaN(hourRaw) || Number.isNaN(minuteRaw)) return null
+  if (hourRaw < 1 || hourRaw > 12 || minuteRaw < 0 || minuteRaw > 59) return null
+
+  const now = new Date()
+  const start = new Date(now)
+  if (dayWord === 'tomorrow') start.setDate(start.getDate() + 1)
+  const hour24 = (hourRaw % 12) + (meridiem === 'pm' ? 12 : 0)
+  start.setHours(hour24, minuteRaw, 0, 0)
+  const end = new Date(start.getTime() + 60 * 60 * 1000)
+
+  const members = family
+    .map((person) => person.name)
+    .filter((name) => subject.toLowerCase().includes(name.toLowerCase()))
+
+  return {
+    title: subject,
+    start: toIsoWithOffset(start),
+    end: toIsoWithOffset(end),
+    members,
+  }
 }
 
 function buildContext(ctx: AssistantContext) {
@@ -257,6 +333,79 @@ export function useAIAssistant(ctx: AssistantContext) {
       activeSession = startNewSession()
     }
 
+    const runSimpleCommandLane = async (): Promise<SimpleCommandExecution> => {
+      const parsed = parseSimpleCalendarCommand(trimmedText, ctxRef.current.family)
+      if (!parsed) return { executed: false }
+      const actionId = genId()
+      const correlationId = buildCorrelationId(actionId, activeSession.id)
+      const stageStart = performance.now()
+      emitAssistantDebug('simple_command_detected', `type=create_event corr=${correlationId.slice(0, 28)}`)
+
+      const executePromise = supabase.functions.invoke('execute-ai-action', {
+        body: {
+          tool: 'create_event',
+          args: {
+            title: parsed.title,
+            start: parsed.start,
+            end: parsed.end,
+            members: parsed.members,
+            all_day: false,
+            event_type: 'event',
+          },
+          action_id: actionId,
+          session_id: activeSession.id,
+          correlation_id: correlationId,
+          sync_mode: 'async',
+        },
+      })
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`command execute timeout after ${COMMAND_SYNC_TIMEOUT_MS}ms`)), COMMAND_SYNC_TIMEOUT_MS),
+      )
+
+      try {
+        const exec = await Promise.race([executePromise, timeoutPromise]) as Awaited<typeof executePromise>
+        const stageDuration = Math.round(performance.now() - stageStart)
+        emitAssistantDebug('simple_command_stage_ms', `execute_ai_action=${stageDuration}`)
+        if (exec.error || exec.data?.success === false) {
+          const err = exec.error?.message ?? exec.data?.error ?? 'unknown error'
+          emitAssistantDebug('simple_command_error', err)
+          return {
+            executed: true,
+            assistantMessage: `I understood the request, but I couldn't save it yet: ${err}`,
+          }
+        }
+        emitAssistantDebug('simple_command_success', parsed.title.slice(0, 80))
+        return {
+          executed: true,
+          assistantMessage: `Done — I added "${parsed.title}" at ${new Date(parsed.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`,
+        }
+      } catch (err) {
+        const stageDuration = Math.round(performance.now() - stageStart)
+        emitAssistantDebug('simple_command_stage_ms', `execute_ai_action=${stageDuration}`)
+        emitAssistantDebug('simple_command_exception', (err as Error).message ?? 'unknown error')
+        return {
+          executed: true,
+          assistantMessage: 'I heard the command, but execution took too long. Please repeat once.',
+        }
+      }
+    }
+
+    const simpleCommand = await runSimpleCommandLane()
+    if (simpleCommand.executed) {
+      const assistantMsg: AIMessage = {
+        id: genId(),
+        role: 'assistant',
+        content: simpleCommand.assistantMessage ?? 'Done.',
+      }
+      setMessages(prev => {
+        const updated = [...prev, assistantMsg]
+        if (activeSession) saveMessages(activeSession.id, updated)
+        return updated
+      })
+      setLoading(false)
+      return
+    }
+
     if (shouldFastAddGrocery(ctxRef.current.page, trimmedText, Boolean(image), options?.disableFastGroceryLane)) {
       try {
         const items = parseGroceryItemsFromText(trimmedText)
@@ -337,7 +486,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       const aiCorrelationId = buildCorrelationId(userMsg.id, activeSession.id)
       emitAssistantDebug('assistant_invoke_start', `messages=${allMsgsForApi.length} corr=${aiCorrelationId.slice(0, 28)}`)
 
-      const invokeAssistant = async () => {
+      const invokeAssistant = async (timeoutMs: number) => {
         const invokePromise = supabase.functions.invoke('ai-assistant', {
           body: {
             messages: allMsgsForApi,
@@ -348,26 +497,33 @@ export function useAIAssistant(ctx: AssistantContext) {
           },
         })
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('AI request timed out')), ASSISTANT_TIMEOUT_MS)
+          setTimeout(() => reject(new Error(`AI request timed out after ${timeoutMs}ms`)), timeoutMs)
         )
         return await Promise.race([invokePromise, timeoutPromise]) as Awaited<typeof invokePromise>
       }
 
       let data: AIAssistantResponse | undefined
       let invokeError: unknown = null
-      for (let attempt = 1; attempt <= 2; attempt += 1) {
+      for (let attempt = 1; attempt <= ASSISTANT_STAGE_TIMEOUTS_MS.length; attempt += 1) {
+        const timeoutMs = ASSISTANT_STAGE_TIMEOUTS_MS[attempt - 1]
+        const stageStart = performance.now()
         try {
-          const result = await invokeAssistant()
+          const result = await invokeAssistant(timeoutMs)
           if (result.error) throw result.error
           data = (result.data ?? {}) as AIAssistantResponse
           invokeError = null
+          const elapsed = Math.round(performance.now() - stageStart)
+          emitAssistantDebug('assistant_stage_ms', `attempt=${attempt} timeout=${timeoutMs} elapsed=${elapsed}`)
           if (attempt > 1) emitAssistantDebug('assistant_invoke_retry_success', `attempt=${attempt}`)
           break
         } catch (err) {
           invokeError = err
+          const kind = classifyAssistantError(err)
           const retriable = isRetriableAssistantError(err)
-          emitAssistantDebug('assistant_invoke_attempt_error', `attempt=${attempt} retriable=${retriable} ${(err as Error).message ?? 'unknown error'}`)
-          if (!retriable || attempt === 2) break
+          const elapsed = Math.round(performance.now() - stageStart)
+          emitAssistantDebug('assistant_stage_ms', `attempt=${attempt} timeout=${timeoutMs} elapsed=${elapsed}`)
+          emitAssistantDebug('assistant_invoke_attempt_error', `attempt=${attempt} kind=${kind} retriable=${retriable} ${(err as Error).message ?? 'unknown error'}`)
+          if (!retriable || attempt === ASSISTANT_STAGE_TIMEOUTS_MS.length) break
           await new Promise((resolve) => setTimeout(resolve, 450))
           emitAssistantDebug('assistant_invoke_retry', `attempt=${attempt + 1}`)
         }
@@ -453,8 +609,8 @@ export function useAIAssistant(ctx: AssistantContext) {
       })
     } catch (e) {
       emitAssistantDebug('assistant_invoke_exception', (e as Error).message ?? 'unknown error')
-      const msg = (e as Error).message ?? 'Something went wrong'
-      const isTimeout = msg.includes('timed out')
+      const kind = classifyAssistantError(e)
+      const isTimeout = kind === 'timeout'
       const errMsg: AIMessage = {
         id: genId(),
         role: 'assistant',

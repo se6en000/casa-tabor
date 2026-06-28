@@ -51,6 +51,13 @@ function normalizeGroceryName(rawName: string): { name: string; normalizedFrom?:
   return { name: toTitleCase(trimmed) }
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs)),
+  ])
+}
+
 async function getExistingActionResult(sb: ReturnType<typeof createClient>, actionId?: string) {
   if (!actionId) return null
   const { data, error } = await sb
@@ -104,16 +111,38 @@ async function finalizeEventSync(
   eventId: string,
   historyId: string | null | undefined,
   response: Record<string, unknown>,
+  options?: { asyncMode?: boolean; timeoutMs?: number; correlationId?: string },
 ) {
-  const syncRes = await sb.functions.invoke('sync-event-to-google', {
-    body: { event_id: eventId },
-  }).catch((err: Error) => ({ data: null, error: err }))
+  const syncStartMs = Date.now()
+  const asyncMode = options?.asyncMode === true
+  const timeoutMs = options?.timeoutMs ?? 1500
+  const cid = options?.correlationId ?? 'unknown'
+  if (asyncMode) {
+    void sb.functions.invoke('sync-event-to-google', { body: { event_id: eventId } }).catch(() => {})
+    const queuedResponse = {
+      ...response,
+      sync_status: 'queued',
+      sync_warning: 'Saved in Casa Tabor. Google sync is running asynchronously.',
+    }
+    await updateAuditResult(sb, historyId, queuedResponse, 'pending')
+    console.log(`[execute-ai-action][${cid}] stage=sync_finalize async=1 ms=${Date.now() - syncStartMs}`)
+    return queuedResponse
+  }
+
+  const syncRes = await withTimeout(
+    sb.functions.invoke('sync-event-to-google', {
+      body: { event_id: eventId },
+    }).catch((err: Error) => ({ data: null, error: err })),
+    timeoutMs,
+    `sync-event-to-google timed out after ${timeoutMs}ms`,
+  ).catch((err: Error) => ({ data: null, error: err }))
 
   const syncStatus = typeof syncRes?.data?.sync_status === 'string' ? syncRes.data.sync_status : null
   const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? null
   if (!syncError && (syncStatus === 'synced' || syncStatus === 'not_needed')) {
     const syncedResponse = { ...response, sync_status: 'synced' }
     await updateAuditResult(sb, historyId, syncedResponse, 'succeeded')
+    console.log(`[execute-ai-action][${cid}] stage=sync_finalize async=0 ms=${Date.now() - syncStartMs} status=synced`)
     return syncedResponse
   }
   if (!syncError && syncStatus === 'queued') {
@@ -126,6 +155,7 @@ async function finalizeEventSync(
       sync_job_id: syncRes?.data?.sync_job_id ?? null,
     }
     await updateAuditResult(sb, historyId, queuedResponse, 'pending')
+    console.log(`[execute-ai-action][${cid}] stage=sync_finalize async=0 ms=${Date.now() - syncStartMs} status=queued`)
     return queuedResponse
   }
 
@@ -138,6 +168,7 @@ async function finalizeEventSync(
       sync_job_id: syncJobId,
     }
     await updateAuditResult(sb, historyId, queuedResponse, 'pending', syncError)
+    console.log(`[execute-ai-action][${cid}] stage=sync_finalize async=0 ms=${Date.now() - syncStartMs} status=queued error=1`)
     return queuedResponse
   } catch (queueError) {
     const failedResponse = {
@@ -152,6 +183,7 @@ async function finalizeEventSync(
       'failed',
       `${syncError}; retry queue error: ${(queueError as Error).message ?? 'unknown error'}`,
     )
+    console.log(`[execute-ai-action][${cid}] stage=sync_finalize async=0 ms=${Date.now() - syncStartMs} status=failed`)
     return failedResponse
   }
 }
@@ -166,12 +198,16 @@ Deno.serve(async (req) => {
     action_id: actionId,
     session_id: sessionId,
     correlation_id: correlationId,
+    sync_mode: syncModeRaw,
   } = await req.json()
+  const syncMode = typeof syncModeRaw === 'string' ? syncModeRaw : undefined
   const cid = correlationId ?? `${sessionId ?? 'no-session'}:${actionId ?? 'no-action'}`
+  const requestStartMs = Date.now()
   console.log(`[execute-ai-action][${cid}] start tool=${tool}`)
 
   try {
     if (tool === 'create_event') {
+      const createStartMs = Date.now()
       const { data: event, error } = await sb.from('events').insert({
         title: args.title,
         start_time: args.start,
@@ -185,6 +221,7 @@ Deno.serve(async (req) => {
       }).select().single()
 
       if (error) throw new Error(error.message)
+      console.log(`[execute-ai-action][${cid}] stage=create_event_insert ms=${Date.now() - createStartMs}`)
 
       // Add members
       if (args.members?.length > 0) {
@@ -202,26 +239,19 @@ Deno.serve(async (req) => {
       // Fire enrichment async (slow — Gemini AI, don't block)
       sb.functions.invoke('enrich-event', { body: { event_id: event.id } }).catch(() => {})
       // Verify Google sync before claiming completion (create/patch + retry queue).
-      const syncRes = await sb.functions.invoke('sync-event-to-google', {
-        body: { event_id: event.id },
-      }).catch((err: Error) => ({ data: null, error: err }))
-      const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? null
-      const syncStatus = typeof syncRes?.data?.sync_status === 'string' ? syncRes.data.sync_status : null
-
-      let finalSyncStatus: 'synced' | 'failed' | 'queued' = 'synced'
-      let syncWarning: string | undefined
-      if (syncError) {
-        finalSyncStatus = 'failed'
-        syncWarning = `Saved in Casa Tabor, but Google sync is not confirmed: ${syncError}`
-      } else if (syncStatus === 'queued') {
-        finalSyncStatus = 'queued'
-        syncWarning = typeof syncRes?.data?.sync_warning === 'string'
-          ? syncRes.data.sync_warning
-          : 'Saved in Casa Tabor. Google sync is queued and still in progress.'
-      } else if (syncStatus !== 'synced' && syncStatus !== 'not_needed') {
-        finalSyncStatus = 'failed'
-        syncWarning = 'Saved in Casa Tabor, but Google sync is not confirmed.'
-      }
+      const syncPayload = await finalizeEventSync(
+        sb,
+        event.id,
+        null,
+        {},
+        {
+          asyncMode: syncMode === 'async',
+          timeoutMs: 1200,
+          correlationId: cid,
+        },
+      )
+      const finalSyncStatus = (syncPayload.sync_status as 'synced' | 'failed' | 'queued' | undefined) ?? 'queued'
+      const syncWarning = typeof syncPayload.sync_warning === 'string' ? syncPayload.sync_warning : undefined
 
       return new Response(JSON.stringify({
         success: true,
@@ -351,7 +381,11 @@ Deno.serve(async (req) => {
         event_id: normalized.eventId,
         action_id: actionId ?? null,
       }
-      const responsePayload = await finalizeEventSync(sb, normalized.eventId, historyRow?.[0]?.id, baseResponse)
+      const responsePayload = await finalizeEventSync(sb, normalized.eventId, historyRow?.[0]?.id, baseResponse, {
+        asyncMode: syncMode === 'async',
+        timeoutMs: 1200,
+        correlationId: cid,
+      })
 
       return new Response(JSON.stringify({ ...responsePayload, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
@@ -395,7 +429,11 @@ Deno.serve(async (req) => {
         action_id: actionId,
         undid_action_id: targetActionId,
       }
-      const responsePayload = await finalizeEventSync(sb, baseResponse.event_id, historyRow?.[0]?.id, baseResponse)
+      const responsePayload = await finalizeEventSync(sb, baseResponse.event_id, historyRow?.[0]?.id, baseResponse, {
+        asyncMode: syncMode === 'async',
+        timeoutMs: 1200,
+        correlationId: cid,
+      })
 
       return new Response(JSON.stringify({ ...responsePayload, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
@@ -590,6 +628,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     const msg = (e as Error).message ?? 'Action failed'
     console.error(`[execute-ai-action][${cid}] error ${msg}`)
+    console.log(`[execute-ai-action][${cid}] stage=request_total ms=${Date.now() - requestStartMs} status=error`)
     return new Response(JSON.stringify({ success: false, error: msg, correlation_id: cid }), {
       status: 200, headers: { ...CORS, 'content-type': 'application/json' },
     })
