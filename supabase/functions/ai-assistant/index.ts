@@ -25,6 +25,16 @@ Deno.serve(async (req) => {
   const { messages, context, image, correlation_id: correlationId } = await req.json()
   const cid = correlationId ?? `${context?.page ?? 'unknown'}:${Date.now().toString(36)}`
   const requestStartMs = Date.now()
+  const STAGE_SLO = {
+    contextLoadMs: 1200,
+    llmPrimaryMs: 4500,
+    requestTotalMs: 7000,
+  } as const
+  const warnIfSlow = (stage: string, elapsedMs: number, budgetMs: number) => {
+    if (elapsedMs > budgetMs) {
+      console.warn(`[ai-assistant][${cid}] slo_breach stage=${stage} elapsed=${elapsedMs} budget=${budgetMs}`)
+    }
+  }
   console.log(`[ai-assistant][${cid}] request messages=${Array.isArray(messages) ? messages.length : 0}`)
 
   // Load config, saved places, contacts, grocery list, events in parallel
@@ -68,7 +78,9 @@ Deno.serve(async (req) => {
   }
   const allEvents = eventsResult.data
   console.log('[ai-assistant] events loaded:', allEvents?.length ?? 0)
-  console.log(`[ai-assistant][${cid}] stage=context_load ms=${Date.now() - contextLoadStartMs}`)
+  const contextLoadMs = Date.now() - contextLoadStartMs
+  console.log(`[ai-assistant][${cid}] stage=context_load ms=${contextLoadMs}`)
+  warnIfSlow('context_load', contextLoadMs, STAGE_SLO.contextLoadMs)
 
   const savedContacts = (savedContactsResult as { data: unknown }).data
 
@@ -712,7 +724,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
     )
-    console.log(`[ai-assistant][${cid}] stage=llm_primary ms=${Date.now() - llmStartMs} status=${res.status}`)
+    const llmPrimaryMs = Date.now() - llmStartMs
+    console.log(`[ai-assistant][${cid}] stage=llm_primary ms=${llmPrimaryMs} status=${res.status}`)
+    warnIfSlow('llm_primary', llmPrimaryMs, STAGE_SLO.llmPrimaryMs)
 
     if (!res.ok) {
       const errText = await res.text()
@@ -992,7 +1006,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
   try {
     const result = await callGeminiWithTools(history)
-    console.log(`[ai-assistant][${cid}] stage=request_total ms=${Date.now() - requestStartMs} result_type=${String(result?.type ?? 'unknown')}`)
+    const requestTotalMs = Date.now() - requestStartMs
+    console.log(`[ai-assistant][${cid}] stage=request_total ms=${requestTotalMs} result_type=${String(result?.type ?? 'unknown')}`)
+    warnIfSlow('request_total', requestTotalMs, STAGE_SLO.requestTotalMs)
     logUsage()
     return new Response(JSON.stringify({ ...result, correlation_id: cid }), {
       headers: { ...CORS, 'content-type': 'application/json' },

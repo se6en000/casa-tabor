@@ -203,6 +203,12 @@ Deno.serve(async (req) => {
   const syncMode = typeof syncModeRaw === 'string' ? syncModeRaw : undefined
   const cid = correlationId ?? `${sessionId ?? 'no-session'}:${actionId ?? 'no-action'}`
   const requestStartMs = Date.now()
+  const ACTION_SLO_MS = 2500
+  const warnIfSlow = (stage: string, elapsedMs: number, budgetMs: number) => {
+    if (elapsedMs > budgetMs) {
+      console.warn(`[execute-ai-action][${cid}] slo_breach stage=${stage} elapsed=${elapsedMs} budget=${budgetMs}`)
+    }
+  }
   console.log(`[execute-ai-action][${cid}] start tool=${tool}`)
 
   try {
@@ -632,5 +638,9 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ success: false, error: msg, correlation_id: cid }), {
       status: 200, headers: { ...CORS, 'content-type': 'application/json' },
     })
+  } finally {
+    const requestTotalMs = Date.now() - requestStartMs
+    console.log(`[execute-ai-action][${cid}] stage=request_total ms=${requestTotalMs} tool=${tool}`)
+    warnIfSlow('request_total', requestTotalMs, ACTION_SLO_MS)
   }
 })

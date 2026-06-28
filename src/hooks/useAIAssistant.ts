@@ -33,8 +33,11 @@ type AIAssistantResponse = {
 
 const GOODBYE_PHRASES = /\b(thank you|thanks|goodbye|bye|that'?s all|all done|good night|ciao|close session|new session|start over|end session)\b/i
 const GROCERY_NON_ADD_INTENTS = /\b(what|show|list|what's|whats|how many|remove|delete|clear|check|uncheck|done|completed|archive)\b/i
-const ASSISTANT_STAGE_TIMEOUTS_MS = [18_000, 10_000] as const
+const ASSISTANT_STAGE_TIMEOUTS_MS = [12_000, 7_000] as const
+const ASSISTANT_TOTAL_BUDGET_MS = 14_000
 const COMMAND_SYNC_TIMEOUT_MS = 1_800
+const SIMPLE_COMMAND_SLO_MS = 2_000
+const TURN_SLO_MS = 6_000
 
 type AssistantErrorKind = 'timeout' | 'network' | 'provider' | 'unknown'
 type SimpleCommandExecution = {
@@ -43,18 +46,8 @@ type SimpleCommandExecution = {
 }
 
 function isRetriableAssistantError(error: unknown): boolean {
-  const raw = (error as { message?: string })?.message ?? String(error ?? '')
-  const msg = raw.toLowerCase()
-  return (
-    msg.includes('timed out') ||
-    msg.includes('timeout') ||
-    msg.includes('network') ||
-    msg.includes('failed to fetch') ||
-    msg.includes('fetch failed') ||
-    msg.includes('temporarily unavailable') ||
-    msg.includes('gateway') ||
-    msg.includes('service unavailable')
-  )
+  const kind = classifyAssistantError(error)
+  return kind === 'network' || kind === 'provider'
 }
 
 function classifyAssistantError(error: unknown): AssistantErrorKind {
@@ -88,6 +81,10 @@ function emitAssistantDebug(event: string, detail?: string) {
   window.dispatchEvent(new CustomEvent('casa:ai-debug', {
     detail: { event, detail },
   }))
+}
+
+function emitSloBreach(stage: string, elapsedMs: number, budgetMs: number) {
+  emitAssistantDebug('assistant_slo_breach', `${stage} elapsed=${elapsedMs} budget=${budgetMs}`)
 }
 
 function shouldFastAddGrocery(page: string, text: string, hasImage: boolean, disableFastLane?: boolean): boolean {
@@ -306,6 +303,7 @@ export function useAIAssistant(ctx: AssistantContext) {
     image?: { dataUrl: string; mimeType: string },
     options?: { skipGoodbyeCheck?: boolean; disableFastGroceryLane?: boolean },
   ) => {
+    const turnStart = performance.now()
     const trimmedText = text.trim()
     emitAssistantDebug('send_start', `${ctxRef.current.page}:${trimmedText.slice(0, 140)}`)
     // Check for goodbye phrase → end session
@@ -334,6 +332,7 @@ export function useAIAssistant(ctx: AssistantContext) {
     }
 
     const runSimpleCommandLane = async (): Promise<SimpleCommandExecution> => {
+      if (ctxRef.current.page === 'grocery' || Boolean(image)) return { executed: false }
       const parsed = parseSimpleCalendarCommand(trimmedText, ctxRef.current.family)
       if (!parsed) return { executed: false }
       const actionId = genId()
@@ -366,6 +365,9 @@ export function useAIAssistant(ctx: AssistantContext) {
         const exec = await Promise.race([executePromise, timeoutPromise]) as Awaited<typeof executePromise>
         const stageDuration = Math.round(performance.now() - stageStart)
         emitAssistantDebug('simple_command_stage_ms', `execute_ai_action=${stageDuration}`)
+        if (stageDuration > SIMPLE_COMMAND_SLO_MS) {
+          emitSloBreach('simple_command', stageDuration, SIMPLE_COMMAND_SLO_MS)
+        }
         if (exec.error || exec.data?.success === false) {
           const err = exec.error?.message ?? exec.data?.error ?? 'unknown error'
           emitAssistantDebug('simple_command_error', err)
@@ -402,6 +404,9 @@ export function useAIAssistant(ctx: AssistantContext) {
         if (activeSession) saveMessages(activeSession.id, updated)
         return updated
       })
+      const turnDuration = Math.round(performance.now() - turnStart)
+      emitAssistantDebug('assistant_turn_ms', `lane=command elapsed=${turnDuration}`)
+      if (turnDuration > TURN_SLO_MS) emitSloBreach('turn_total', turnDuration, TURN_SLO_MS)
       setLoading(false)
       return
     }
@@ -505,6 +510,10 @@ export function useAIAssistant(ctx: AssistantContext) {
       let data: AIAssistantResponse | undefined
       let invokeError: unknown = null
       for (let attempt = 1; attempt <= ASSISTANT_STAGE_TIMEOUTS_MS.length; attempt += 1) {
+        if (performance.now() - turnStart > ASSISTANT_TOTAL_BUDGET_MS && attempt > 1) {
+          emitAssistantDebug('assistant_budget_exhausted', `elapsed=${Math.round(performance.now() - turnStart)}`)
+          break
+        }
         const timeoutMs = ASSISTANT_STAGE_TIMEOUTS_MS[attempt - 1]
         const stageStart = performance.now()
         try {
@@ -514,6 +523,7 @@ export function useAIAssistant(ctx: AssistantContext) {
           invokeError = null
           const elapsed = Math.round(performance.now() - stageStart)
           emitAssistantDebug('assistant_stage_ms', `attempt=${attempt} timeout=${timeoutMs} elapsed=${elapsed}`)
+          if (elapsed > timeoutMs) emitSloBreach(`assistant_attempt_${attempt}`, elapsed, timeoutMs)
           if (attempt > 1) emitAssistantDebug('assistant_invoke_retry_success', `attempt=${attempt}`)
           break
         } catch (err) {
@@ -607,6 +617,9 @@ export function useAIAssistant(ctx: AssistantContext) {
         if (activeSession) saveMessages(activeSession.id, updated)
         return updated
       })
+      const turnDuration = Math.round(performance.now() - turnStart)
+      emitAssistantDebug('assistant_turn_ms', `lane=llm elapsed=${turnDuration}`)
+      if (turnDuration > TURN_SLO_MS) emitSloBreach('turn_total', turnDuration, TURN_SLO_MS)
     } catch (e) {
       emitAssistantDebug('assistant_invoke_exception', (e as Error).message ?? 'unknown error')
       const kind = classifyAssistantError(e)
@@ -619,6 +632,9 @@ export function useAIAssistant(ctx: AssistantContext) {
           : 'Sorry, something went wrong. Please try again.',
       }
       setMessages(prev => [...prev, errMsg])
+      const turnDuration = Math.round(performance.now() - turnStart)
+      emitAssistantDebug('assistant_turn_ms', `lane=error elapsed=${turnDuration} kind=${kind}`)
+      if (turnDuration > TURN_SLO_MS) emitSloBreach('turn_total', turnDuration, TURN_SLO_MS)
       console.error('[useAIAssistant]', e)
     } finally {
       setLoading(false)
