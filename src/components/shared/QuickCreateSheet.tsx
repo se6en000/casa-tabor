@@ -319,50 +319,75 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                 </button>
               </div>
 
-              {/* Mobile native picker */}
+              {/* Mobile touch-friendly picker (no native popover clipping) */}
               <div className="sm:hidden grid grid-cols-1 gap-3">
                 <div>
                   <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">Start</label>
-                  {isAllDay ? (
-                    <input
-                      type="date"
-                      value={startDT.slice(0, 10)}
-                      onChange={e => setStartDT(`${e.target.value}T00:00`)}
-                      className="w-full h-11 rounded-xl border border-casa-border bg-casa-bg px-3 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
-                    />
-                  ) : (
-                    <input
-                      type="datetime-local"
-                      step={900}
-                      value={startDT}
-                      onChange={e => {
-                        const nextStart = parseLocalDT(e.target.value)
-                        setStartDT(toLocalDT(nextStart))
-                        setEndDT(toLocalDT(addMinutes(nextStart, 30)))
-                      }}
-                      className="w-full h-11 rounded-xl border border-casa-border bg-casa-bg px-3 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
-                    />
-                  )}
+                  {(() => {
+                    const p = getPickerParts(startDT)
+                    return (
+                      <div className="rounded-xl border border-casa-border bg-casa-bg p-2 space-y-2">
+                        <InlineCalendarPicker
+                          value={startDT.slice(0, 10)}
+                          onChange={(nextDate) => {
+                            const nextStart = parseLocalDT(`${nextDate}T${isAllDay ? '00:00' : (startDT.slice(11, 16) || '00:00')}`)
+                            setStartDT(toLocalDT(nextStart))
+                            if (isAllDay) {
+                              setEndDT(`${nextDate}T23:59`)
+                            } else {
+                              setEndDT(toLocalDT(addMinutes(nextStart, 30)))
+                            }
+                          }}
+                        />
+                        {!isAllDay && (
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <select value={p.hour12} onChange={e => updateStartParts({ hour12: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
+                              {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
+                            </select>
+                            <select value={p.minute} onChange={e => updateStartParts({ minute: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
+                              {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
+                            </select>
+                            <select value={p.ampm} onChange={e => updateStartParts({ ampm: e.target.value as 'AM' | 'PM' })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm font-semibold text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
                 <div>
                   <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">End</label>
-                  {isAllDay ? (
-                    <input
-                      type="date"
-                      value={endDT.slice(0, 10)}
-                      onChange={e => setEndDT(`${e.target.value}T23:59`)}
-                      disabled={!isMultiDay}
-                      className="w-full h-11 rounded-xl border border-casa-border bg-casa-bg px-3 text-body-sm text-casa-navy disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
-                    />
-                  ) : (
-                    <input
-                      type="datetime-local"
-                      step={900}
-                      value={endDT}
-                      onChange={e => setEndDT(e.target.value)}
-                      className="w-full h-11 rounded-xl border border-casa-border bg-casa-bg px-3 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
-                    />
-                  )}
+                  {(() => {
+                    const p = getPickerParts(endDT)
+                    return (
+                      <div className="rounded-xl border border-casa-border bg-casa-bg p-2 space-y-2">
+                        <InlineCalendarPicker
+                          value={endDT.slice(0, 10)}
+                          onChange={(nextDate) => {
+                            if (!isMultiDay) return
+                            setEndDT(`${nextDate}T${isAllDay ? '23:59' : (endDT.slice(11, 16) || '00:00')}`)
+                          }}
+                          className={!isMultiDay ? 'pointer-events-none opacity-60' : undefined}
+                        />
+                        {!isAllDay && (
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <select value={p.hour12} onChange={e => updateEndParts({ hour12: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
+                              {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
+                            </select>
+                            <select value={p.minute} onChange={e => updateEndParts({ minute: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
+                              {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
+                            </select>
+                            <select value={p.ampm} onChange={e => updateEndParts({ ampm: e.target.value as 'AM' | 'PM' })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm font-semibold text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
 
