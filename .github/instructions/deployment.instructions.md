@@ -16,6 +16,12 @@ git push origin main
 npx vercel --prod
 ```
 
+Preferred one-command workflow (enforces both deploys + Pi refresh + verification):
+
+```bash
+bash pi/deploy-prod-and-refresh-pi.sh
+```
+
 ## Mandatory Pi refresh after frontend changes (before asking user to test)
 
 If the deployment includes frontend/client changes that affect runtime behavior, **always refresh the Pi kiosk session yourself before asking the user to test**.
@@ -36,6 +42,12 @@ Then verify Chromium is running before handing back to the user:
 
 ```bash
 ssh jake@192.168.86.118 'ps -eo pid,args | grep \"[/]usr/lib/chromium/chromium --\"'
+```
+
+If the launcher lock is stale, clear lock holders first (the script does this automatically):
+
+```bash
+ssh jake@192.168.86.118 'for pid in $(lsof -t /tmp/casa-kiosk-launch.lock 2>/dev/null | sort -u); do kill $pid 2>/dev/null || true; done; rm -f /tmp/casa-kiosk-launch.lock'
 ```
 
 ## Supabase edge functions
