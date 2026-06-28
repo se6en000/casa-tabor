@@ -19,7 +19,7 @@ import { WeatherIcon } from '../shared/WeatherIcon'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import BounceScroll from '../shared/BounceScroll'
-import { eventOverlapsDay, getEventDisplayEnd, isEventMultiDay } from '../../utils/eventTime'
+import { eventOverlapsDay, getEventDisplayEnd, getMultiDayBoundaryLabel, isEventMultiDay } from '../../utils/eventTime'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -162,6 +162,7 @@ export default function StackedView() {
                         <EventCard
                           key={event.id}
                           event={event}
+                          day={day}
                           isSelected={selectedEventId === event.id}
                           onClick={() => setSelectedEventId(event.id)}
                           onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
@@ -209,13 +210,14 @@ export default function StackedView() {
 
 interface EventCardProps {
   event: EventWithDetails
+  day: Date
   isSelected: boolean
   onClick: () => void
   onDoubleClick: () => void
   onLongPress: (event: EventWithDetails, x: number, y: number) => void
 }
 
-function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: EventCardProps) {
+function EventCard({ event, day, isSelected, onClick, onDoubleClick, onLongPress }: EventCardProps) {
   const color = getPrimaryColor(event)
   const enr = event.enrichment
   const snippet = getSnippet(event)
@@ -233,6 +235,7 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
   const end = new Date(event.end_time)
   const displayEnd = getEventDisplayEnd(event)
   const multiDay = isEventMultiDay(event)
+  const boundaryLabel = getMultiDayBoundaryLabel(event, day)
 
   // Long-press detection
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -292,8 +295,8 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
           <div className="flex items-center gap-1">
             <p className="text-caption font-semibold text-casa-muted tabular-nums leading-none">
               {event.all_day
-                ? (multiDay ? `${format(start, 'MMM d')}–${format(displayEnd, 'MMM d')} · All day` : 'All day')
-                : (multiDay ? `${format(start, 'MMM d')}–${format(displayEnd, 'MMM d')} · Multi-day` : `${format(start, 'h:mm')}–${format(end, 'h:mma')}`)}
+                ? (boundaryLabel ?? (multiDay ? `${format(start, 'MMM d')}–${format(displayEnd, 'MMM d')} · All day` : 'All day'))
+                : (boundaryLabel ?? (multiDay ? `${format(start, 'MMM d')}–${format(displayEnd, 'MMM d')} · Multi-day` : `${format(start, 'h:mm')}–${format(end, 'h:mma')}`))}
             </p>
             {event.location_name && (
               <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />

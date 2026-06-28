@@ -40,6 +40,7 @@ function DayEventCard({
   onLongPress,
   onCompleteReminder,
   onSnoozeReminder,
+  day,
 }: {
   event: EventWithDetails
   selected: boolean
@@ -48,6 +49,7 @@ function DayEventCard({
   onLongPress: (event: EventWithDetails, x: number, y: number) => void
   onCompleteReminder: (event: EventWithDetails) => void
   onSnoozeReminder: (event: EventWithDetails) => void
+  day: Date
 }) {
   const holiday = isHoliday(event)
   const reminder = !holiday && isReminder(event)
@@ -159,7 +161,7 @@ function DayEventCard({
         'hover:shadow-card',
       )}
     >
-      <LargeEventCard event={event} color={color} selected={selected} />
+      <LargeEventCard event={event} color={color} selected={selected} contextDay={day} />
     </motion.div>
   )
 }
@@ -400,6 +402,7 @@ export default function DayView() {
                     onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
                     onCompleteReminder={completeReminder}
                     onSnoozeReminder={snoozeReminder}
+                    day={selectedDate}
                   />
                 ))}
               </div>

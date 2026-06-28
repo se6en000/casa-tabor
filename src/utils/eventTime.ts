@@ -1,4 +1,4 @@
-import { addDays, differenceInCalendarDays, isSameDay, startOfDay } from 'date-fns'
+import { addDays, differenceInCalendarDays, format, isSameDay, startOfDay } from 'date-fns'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 
 function asDate(value: string): Date {
@@ -30,4 +30,27 @@ export function getEventSpanDayCount(event: Pick<EventWithDetails, 'start_time' 
   const start = startOfDay(asDate(event.start_time))
   const displayEndDay = startOfDay(getEventDisplayEnd(event))
   return Math.max(1, differenceInCalendarDays(displayEndDay, start) + 1)
+}
+
+export function getMultiDayBoundaryLabel(
+  event: Pick<EventWithDetails, 'start_time' | 'end_time' | 'all_day'>,
+  day: Date,
+): string | null {
+  if (!isEventMultiDay(event)) return null
+
+  const start = asDate(event.start_time)
+  const end = asDate(event.end_time)
+  const displayEnd = getEventDisplayEnd(event)
+  const onStartDay = isSameDay(day, start)
+  const onEndDay = isSameDay(day, displayEnd)
+
+  if (event.all_day) {
+    if (onStartDay) return 'Starts · All day'
+    if (onEndDay) return 'Ends · All day'
+    return 'Continues · All day'
+  }
+
+  if (onStartDay) return `Starts ${format(start, 'h:mm a')}`
+  if (onEndDay) return `Ends ${format(end, 'h:mm a')}`
+  return 'Continues'
 }

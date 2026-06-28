@@ -3,7 +3,7 @@ import { Navigation } from 'lucide-react'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { WeatherIcon } from '../shared/WeatherIcon'
-import { getEventDisplayEnd, isEventMultiDay } from '../../utils/eventTime'
+import { getEventDisplayEnd, getMultiDayBoundaryLabel, isEventMultiDay } from '../../utils/eventTime'
 
 interface LargeEventCardProps {
   event: EventWithDetails
@@ -11,6 +11,7 @@ interface LargeEventCardProps {
   now?: Date
   selected?: boolean
   className?: string
+  contextDay?: Date
 }
 
 function cleanEventTitle(title: string): string {
@@ -24,12 +25,14 @@ export default function LargeEventCard({
   now = new Date(),
   selected = false,
   className,
+  contextDay,
 }: LargeEventCardProps) {
   const start = new Date(event.start_time)
   const end = new Date(event.end_time)
   const displayEnd = getEventDisplayEnd(event)
   const happening = start <= now && end >= now
   const multiDay = isEventMultiDay(event)
+  const boundaryLabel = contextDay ? getMultiDayBoundaryLabel(event, contextDay) : null
   const members = event.members ?? []
   const primary = members.find((m) => m.role === 'primary') ?? members[0]
   const others = members.filter((m) => m !== primary)
@@ -50,9 +53,17 @@ export default function LargeEventCard({
         <div className="grid content-start justify-items-end pr-3 pl-2 pt-3 border-r border-casa-divider/70">
           {multiDay ? (
             <>
-              <p className="text-body-sm font-semibold text-casa-navy leading-none text-right">Multi-day</p>
+              <p className="text-body-sm font-semibold text-casa-navy leading-none text-right">
+                {boundaryLabel?.startsWith('Starts')
+                  ? 'Starts'
+                  : boundaryLabel?.startsWith('Ends')
+                    ? 'Ends'
+                    : boundaryLabel?.startsWith('Continues')
+                      ? 'Continues'
+                      : 'Multi-day'}
+              </p>
               <p className="text-caption text-casa-muted font-semibold mt-1 text-right">
-                {format(start, 'MMM d')} – {format(displayEnd, 'MMM d')}
+                {boundaryLabel ?? `${format(start, 'MMM d')} – ${format(displayEnd, 'MMM d')}`}
               </p>
             </>
           ) : (
@@ -97,9 +108,9 @@ export default function LargeEventCard({
           <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1 min-w-0">
             <span className="flex items-center gap-1 text-body-sm text-casa-muted tabular-nums">
               {event.all_day
-                ? (multiDay ? `${format(start, 'MMM d')} – ${format(displayEnd, 'MMM d')} · all day` : 'All day')
+                ? (boundaryLabel ?? (multiDay ? `${format(start, 'MMM d')} – ${format(displayEnd, 'MMM d')} · all day` : 'All day'))
                 : (multiDay
-                  ? `${format(start, 'MMM d')} – ${format(displayEnd, 'MMM d')} · multi-day`
+                  ? (boundaryLabel ?? `${format(start, 'MMM d')} – ${format(displayEnd, 'MMM d')} · multi-day`)
                   : (isSameDay(start, end)
                     ? `${format(start, 'h:mm a')} – ${format(end, 'h:mm a')}`
                     : `${format(start, 'MMM d h:mm a')} – ${format(end, 'MMM d h:mm a')}`))}
