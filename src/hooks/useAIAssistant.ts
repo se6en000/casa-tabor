@@ -64,7 +64,8 @@ function emitAssistantDebug(event: string, detail?: string) {
   }))
 }
 
-function shouldFastAddGrocery(page: string, text: string, hasImage: boolean): boolean {
+function shouldFastAddGrocery(page: string, text: string, hasImage: boolean, disableFastLane?: boolean): boolean {
+  if (disableFastLane) return false
   if (page !== 'grocery' || hasImage) return false
   const normalized = text.trim().toLowerCase()
   if (!normalized || normalized.endsWith('?')) return false
@@ -191,7 +192,7 @@ export function useAIAssistant(ctx: AssistantContext) {
   const lastRequestRef = useRef<{
     text: string
     image?: { dataUrl: string; mimeType: string }
-    options?: { skipGoodbyeCheck?: boolean }
+    options?: { skipGoodbyeCheck?: boolean; disableFastGroceryLane?: boolean }
   } | null>(null)
   useEffect(() => { sessionRef.current = session }, [session])
   useEffect(() => { messagesRef.current = messages }, [messages])
@@ -227,7 +228,7 @@ export function useAIAssistant(ctx: AssistantContext) {
   const send = useCallback(async (
     text: string,
     image?: { dataUrl: string; mimeType: string },
-    options?: { skipGoodbyeCheck?: boolean },
+    options?: { skipGoodbyeCheck?: boolean; disableFastGroceryLane?: boolean },
   ) => {
     const trimmedText = text.trim()
     emitAssistantDebug('send_start', `${ctxRef.current.page}:${trimmedText.slice(0, 140)}`)
@@ -256,7 +257,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       activeSession = startNewSession()
     }
 
-    if (shouldFastAddGrocery(ctxRef.current.page, trimmedText, Boolean(image))) {
+    if (shouldFastAddGrocery(ctxRef.current.page, trimmedText, Boolean(image), options?.disableFastGroceryLane)) {
       try {
         const items = parseGroceryItemsFromText(trimmedText)
         emitAssistantDebug('fast_add_parsed', `count=${items.length} items=${items.map((item) => item.name).join('|').slice(0, 220)}`)

@@ -854,6 +854,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
 
   // True when the latest assistant message has a pending tool action awaiting confirmation
   const hasPendingToolAction = messages.some(m => m.toolAction?.status === 'pending')
+  const isWakeAssistantMode = page === 'grocery' && Boolean(wakeSessionNonce)
 
   const triggerUiFeedback = useCallback((mode: 'confirm' | 'cancel') => {
     setUiFeedback(mode)
@@ -888,9 +889,9 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     queueMicrotask(() => setInput(''))
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
-    send(trimmed)
+    send(trimmed, undefined, { disableFastGroceryLane: isWakeAssistantMode })
     return true
-  }, [loading, send, markUserInteraction, clearAutoSendTimer, appendDebugLog, transitionTurnState])
+  }, [loading, send, markUserInteraction, clearAutoSendTimer, appendDebugLog, transitionTurnState, isWakeAssistantMode])
 
   const queueOrSendVoiceInput = useCallback((text: string) => {
     const trimmed = text.trim()
@@ -1193,9 +1194,12 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     ignoreInterimUntilRef.current = Date.now() + 1500
     startFresh()
     if (launchRequest.autoSend) {
-      setTimeout(() => send(launchRequest.prompt, undefined, { skipGoodbyeCheck: true }), 120)
+      setTimeout(() => send(launchRequest.prompt, undefined, {
+        skipGoodbyeCheck: true,
+        disableFastGroceryLane: isWakeAssistantMode,
+      }), 120)
     }
-  }, [open, launchRequest, send, startFresh, markUserInteraction])
+  }, [open, launchRequest, send, startFresh, markUserInteraction, isWakeAssistantMode])
 
   // Once session is fresh (no messages), inject a deterministic event summary greeting
   // so the user immediately sees what event the AI has loaded — no API round-trip needed.
@@ -1321,8 +1325,8 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
     setAttachedImage(null)
-    send(text || '(see attached image)', img ?? undefined)
-  }, [input, attachedImage, loading, send, markUserInteraction, transitionTurnState])
+    send(text || '(see attached image)', img ?? undefined, { disableFastGroceryLane: isWakeAssistantMode })
+  }, [input, attachedImage, loading, send, markUserInteraction, transitionTurnState, isWakeAssistantMode])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1355,6 +1359,9 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const hasTypedInput = input.trim().length > 0 && !loading && !speech.listening
   const latestAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
   const showRetryLast = !!latestAssistant && /try again|something went wrong|timed out|quota/i.test(latestAssistant.content)
+  const modeLabel = page === 'grocery'
+    ? (isWakeAssistantMode ? 'Assistant mode' : 'Grocery rapid mode')
+    : 'Assistant mode'
   const cooldownSeconds = Math.ceil(speech.wakeCooldownRemaining ?? 0)
   const diagnosticsLabel = IS_SAFE_MODE
     ? 'Safe mode'
@@ -1784,6 +1791,9 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                   : 'Tap ➤ to send · 📎 gallery · 📷 camera'}
               </p>
               <div className="mt-1 flex items-center justify-center gap-2 text-[11px] text-casa-muted/80">
+                <span className="inline-flex items-center rounded-full border border-casa-border/70 bg-casa-bg px-2 py-0.5">
+                  {modeLabel}
+                </span>
                 <span className="inline-flex items-center gap-1 rounded-full border border-casa-border/70 px-2 py-0.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-casa-gold/80" />
                   {diagnosticsLabel}
