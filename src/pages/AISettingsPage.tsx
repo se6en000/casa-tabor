@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { FlaskConical, CheckCircle, AlertCircle, Home, Mic } from 'lucide-react'
+import { FlaskConical, CheckCircle, AlertCircle, Home, Mic, Activity, RefreshCw, Gauge, BarChart3 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
@@ -53,6 +53,50 @@ const DEFAULT_FAST_MODEL: Record<string, string> = {
 }
 
 const VOICE_TELEMETRY_KEY = 'casa-voice-telemetry'
+const AI_LATENCY_METRICS_KEY = 'casa-ai-latency-rollup'
+
+type ForensicsSnapshot = {
+  windowHours: number
+  totalTraces: number
+  completionRate: number
+  finalTranscriptRate: number
+  noFinalCount: number
+  stallCount: number
+  invalidTransitionCount: number
+  actionFailureRate: number
+  llmP95Ms: number | null
+  llmP99Ms: number | null
+  activeDevices: number
+  refreshedAt: string
+}
+
+const EMPTY_FORENSICS: ForensicsSnapshot = {
+  windowHours: 24,
+  totalTraces: 0,
+  completionRate: 0,
+  finalTranscriptRate: 0,
+  noFinalCount: 0,
+  stallCount: 0,
+  invalidTransitionCount: 0,
+  actionFailureRate: 0,
+  llmP95Ms: null,
+  llmP99Ms: null,
+  activeDevices: 0,
+  refreshedAt: new Date().toISOString(),
+}
+
+function percentile(values: number[], p: number): number | null {
+  if (!values.length) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1))
+  return sorted[idx] ?? null
+}
+
+function parseOutcome(detail?: string | null): string | null {
+  if (!detail) return null
+  const match = detail.match(/status=([a-z_]+)/i)
+  return match?.[1]?.toLowerCase() ?? null
+}
 
 export default function AISettingsPage() {
   const [config, setConfig] = useState<LLMConfig>({ provider: 'gemini', model: 'gemini-2.0-flash', api_key: '' })
@@ -64,6 +108,24 @@ export default function AISettingsPage() {
   const [voiceTelemetry, setVoiceTelemetry] = useState<{ counts: Record<string, number>; updatedAt?: string }>({ counts: {} })
   const [voiceRuntime, setVoiceRuntime] = useState<VoiceRuntimeConfig>(() => readVoiceRuntimeConfig())
   const [auditEntries, setAuditEntries] = useState(0)
+  const [forensics, setForensics] = useState<ForensicsSnapshot>(EMPTY_FORENSICS)
+  const [forensicsLoading, setForensicsLoading] = useState(true)
+  const [forensicsError, setForensicsError] = useState<string | null>(null)
+  const [localLatencyRollup] = useState<{ p95?: number; p99?: number; sampleCount?: number } | null>(() => {
+    try {
+      const raw = localStorage.getItem(AI_LATENCY_METRICS_KEY)
+      if (!raw) return null
+      const parsed = JSON.parse(raw) as { byLane?: Record<string, number[]> }
+      const llmSamples = parsed.byLane?.llm ?? []
+      return {
+        sampleCount: llmSamples.length,
+        p95: percentile(llmSamples, 95) ?? undefined,
+        p99: percentile(llmSamples, 99) ?? undefined,
+      }
+    } catch {
+      return null
+    }
+  })
   const hydratedRef = useRef(false)
   const { settings: screensaverSettings, update: updateScreensaver } = useScreensaverSettings()
 
@@ -78,6 +140,95 @@ export default function AISettingsPage() {
       setIsLoading(false)
     })
   }, [])
+
+  const loadForensics = useCallback(async () => {
+    setForensicsLoading(true)
+    setForensicsError(null)
+    try {
+      const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      const { data, error } = await supabase
+        .from('ai_drawer_debug_events')
+        .select('event,session_id,device_id,payload,detail')
+        .gte('received_at', sinceIso)
+        .order('received_at', { ascending: false })
+        .limit(4000)
+
+      if (error) throw error
+
+      const rows = data ?? []
+      const sessions = new Map<string, { hasFinal: boolean; hasSend: boolean }>()
+      const devices = new Set<string>()
+      const llmMs: number[] = []
+      let stallCount = 0
+      let invalidTransitionCount = 0
+      let actionStartCount = 0
+      let actionErrorCount = 0
+      let noFinalFromOutcome = 0
+
+      for (const row of rows) {
+        if (typeof row.device_id === 'string' && row.device_id.trim().length > 0) {
+          devices.add(row.device_id)
+        }
+        const sid = typeof row.session_id === 'string' && row.session_id.trim().length > 0
+          ? row.session_id
+          : null
+        if (sid) {
+          if (!sessions.has(sid)) sessions.set(sid, { hasFinal: false, hasSend: false })
+          const entry = sessions.get(sid)!
+          if (row.event === 'speech_trigger_final') entry.hasFinal = true
+          if (row.event === 'voice_final' && typeof row.detail === 'string' && row.detail !== '__SEND__') entry.hasFinal = true
+          if (row.event === 'send_current_input') entry.hasSend = true
+        }
+
+        if (row.event === 'trace_outcome') {
+          const outcome = parseOutcome(row.detail)
+          if (outcome === 'asr_end_no_final' || outcome === 'no_input') noFinalFromOutcome += 1
+        }
+        if (row.event === 'speech_listening_stall') stallCount += 1
+        if (row.event === 'turn_state_invalid') invalidTransitionCount += 1
+        if (row.event === 'server_execute_action_start') actionStartCount += 1
+        if (row.event === 'server_execute_action_error') actionErrorCount += 1
+        if (row.event === 'server_ai_assistant_result') {
+          const payload = row.payload as { request_ms?: unknown } | null
+          const requestMs = typeof payload?.request_ms === 'number' ? payload.request_ms : null
+          if (typeof requestMs === 'number' && Number.isFinite(requestMs) && requestMs > 0) llmMs.push(requestMs)
+        }
+      }
+
+      const traceValues = [...sessions.values()]
+      const totalTraces = traceValues.length
+      const completionCount = traceValues.filter((s) => s.hasSend).length
+      const finalCount = traceValues.filter((s) => s.hasFinal).length
+      const noFinalCount = totalTraces > 0 ? totalTraces - finalCount : noFinalFromOutcome
+      const actionFailureRate = actionStartCount > 0 ? (actionErrorCount / actionStartCount) * 100 : 0
+
+      setForensics({
+        windowHours: 24,
+        totalTraces,
+        completionRate: totalTraces > 0 ? (completionCount / totalTraces) * 100 : 0,
+        finalTranscriptRate: totalTraces > 0 ? (finalCount / totalTraces) * 100 : 0,
+        noFinalCount,
+        stallCount,
+        invalidTransitionCount,
+        actionFailureRate,
+        llmP95Ms: percentile(llmMs, 95),
+        llmP99Ms: percentile(llmMs, 99),
+        activeDevices: devices.size,
+        refreshedAt: new Date().toISOString(),
+      })
+    } catch (err) {
+      setForensicsError((err as Error).message ?? 'Failed to load observability metrics')
+    } finally {
+      setForensicsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadForensics()
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [loadForensics])
 
   useEffect(() => {
     const refreshRuntime = () => {
@@ -399,6 +550,78 @@ export default function AISettingsPage() {
             </div>
             <p className="text-caption text-casa-muted">
               Last updated: {voiceTelemetry.updatedAt ? new Date(voiceTelemetry.updatedAt).toLocaleString() : '—'}
+            </p>
+          </div>
+
+          {/* Expert AI Optimization Dashboard */}
+          <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Gauge size={15} className="text-casa-gold" />
+                <label className="text-body-sm font-semibold text-casa-navy">AI Optimization Dashboard (24h)</label>
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadForensics()}
+                className="inline-flex items-center gap-1.5 rounded-button border border-casa-border bg-white px-2.5 py-1.5 text-caption font-semibold text-casa-navy hover:bg-casa-bg"
+              >
+                <RefreshCw size={12} className={cn(forensicsLoading && 'animate-spin')} />
+                Refresh
+              </button>
+            </div>
+            <p className="text-caption text-casa-muted">
+              End-to-end quality signals from centralized AI traces: capture quality, completion, latency, action reliability, and state-machine stability.
+            </p>
+            {forensicsError ? (
+              <div className="rounded-button border border-red-200 bg-red-50 px-3 py-2 text-caption text-casa-error">
+                Could not load forensic metrics: {forensicsError}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-caption">
+                <Metric label="Traces" value={forensics.totalTraces} />
+                <Metric label="Completion %" value={Math.round(forensics.completionRate)} />
+                <Metric label="Final transcript %" value={Math.round(forensics.finalTranscriptRate)} />
+                <Metric label="Active devices" value={forensics.activeDevices} />
+                <Metric label="No-final turns" value={forensics.noFinalCount} />
+                <Metric label="Listening stalls" value={forensics.stallCount} />
+                <Metric label="Invalid transitions" value={forensics.invalidTransitionCount} />
+                <Metric label="Action failure %" value={Math.round(forensics.actionFailureRate)} />
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-caption">
+              <div className="rounded-button border border-casa-border bg-casa-bg/60 px-2.5 py-2">
+                <p className="text-casa-muted">LLM latency P95/P99 (server)</p>
+                <p className="text-body-sm font-semibold text-casa-navy tabular-nums">
+                  {forensics.llmP95Ms !== null ? `${Math.round(forensics.llmP95Ms)}ms` : '—'} / {forensics.llmP99Ms !== null ? `${Math.round(forensics.llmP99Ms)}ms` : '—'}
+                </p>
+              </div>
+              <div className="rounded-button border border-casa-border bg-casa-bg/60 px-2.5 py-2">
+                <p className="text-casa-muted">LLM latency P95/P99 (this device)</p>
+                <p className="text-body-sm font-semibold text-casa-navy tabular-nums">
+                  {localLatencyRollup?.p95 ? `${Math.round(localLatencyRollup.p95)}ms` : '—'} / {localLatencyRollup?.p99 ? `${Math.round(localLatencyRollup.p99)}ms` : '—'}
+                  {localLatencyRollup?.sampleCount ? ` · n=${localLatencyRollup.sampleCount}` : ''}
+                </p>
+              </div>
+            </div>
+            <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3">
+              <p className="text-caption font-semibold text-casa-navy mb-1">Expert roadmap progress</p>
+              <ul className="space-y-1 text-caption text-casa-muted">
+                <li className="flex items-start gap-1.5"><Activity size={12} className="mt-0.5 text-emerald-600" /> Trace completeness + outcome diagnostics: <span className="font-semibold text-casa-navy">Live</span></li>
+                <li className="flex items-start gap-1.5"><BarChart3 size={12} className="mt-0.5 text-emerald-600" /> SLO surface in Settings: <span className="font-semibold text-casa-navy">Live</span></li>
+                <li className="flex items-start gap-1.5"><Activity size={12} className="mt-0.5 text-casa-muted" /> Synthetic phrase regression harness: <span className="font-semibold text-casa-navy">Next</span></li>
+                <li className="flex items-start gap-1.5"><Activity size={12} className="mt-0.5 text-casa-muted" /> Automated anomaly scoring + alert routing: <span className="font-semibold text-casa-navy">Next</span></li>
+              </ul>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link to="/settings/status" className="rounded-button border border-casa-border bg-white px-3 py-1.5 text-caption font-semibold text-casa-navy hover:bg-casa-bg">
+                Open Status Dashboard
+              </Link>
+              <Link to="/settings/analytics" className="rounded-button border border-casa-border bg-white px-3 py-1.5 text-caption font-semibold text-casa-navy hover:bg-casa-bg">
+                Open Data & Analytics
+              </Link>
+            </div>
+            <p className="text-caption text-casa-muted">
+              Refreshed: {new Date(forensics.refreshedAt).toLocaleString()}
             </p>
           </div>
           <p className="text-caption text-casa-muted">

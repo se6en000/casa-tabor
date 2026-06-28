@@ -35,7 +35,7 @@ const NAV_GROUPS = [
     items: [
       { to: '/settings/google',  icon: Layers,        label: 'Google Services',     desc: 'Calendar sync + Gmail' },
       { to: '/settings/music',   icon: Music2,        label: 'Spotify / Music',     desc: 'Connect music playback' },
-      { to: '/settings/ai',      icon: Bot,           label: 'AI Provider',         desc: 'Vendor, model, API key' },
+      { to: '/settings/ai',      icon: Bot,           label: 'AI & Voice',          desc: 'Provider, runtime controls, SLO + forensic telemetry' },
       { to: '/settings/sms',     icon: MessageSquare, label: 'Notifications',       desc: 'SMS briefings & alerts' },
     ],
   },
