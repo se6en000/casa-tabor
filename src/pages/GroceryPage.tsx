@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ShoppingCart, Trash2, CheckSquare, Square, X, Plus, RefreshCw, Mic, GripVertical, Link2, Upload, BookOpen, ChefHat, ChevronLeft, ChevronRight, Clock3, ExternalLink } from 'lucide-react'
+import { ShoppingCart, Trash2, Check, X, Plus, RefreshCw, Mic, GripVertical, Link2, Upload, BookOpen, ChefHat, ChevronLeft, ChevronRight, Clock3, ExternalLink } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../utils/cn'
 import { useGroceryList, GROCERY_CATEGORIES, type GroceryItem } from '../hooks/useGroceryList'
@@ -302,15 +302,13 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
         type="button"
         onClick={() => onToggle(item.id, !visualChecked)}
         className={cn(
-          'flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl border transition-colors',
+          'flex h-[42px] w-[42px] flex-shrink-0 items-center justify-center rounded-xl border-2 transition-colors',
           visualChecked
-            ? 'border-emerald-300 bg-emerald-50 text-emerald-600'
-            : 'border-casa-border bg-casa-surface text-casa-navy/60 hover:text-casa-gold hover:border-casa-gold/40'
+            ? 'border-emerald-400 bg-emerald-50 text-emerald-600'
+            : 'border-casa-border bg-casa-surface text-casa-navy/60 hover:border-casa-gold/40'
         )}
       >
-        {visualChecked
-          ? <CheckSquare size={21} className="text-emerald-500" />
-          : <Square size={21} />}
+        {visualChecked ? <Check size={20} className="text-emerald-600" /> : null}
       </button>
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
