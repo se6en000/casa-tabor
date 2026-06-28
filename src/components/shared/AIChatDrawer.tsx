@@ -742,6 +742,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       sessionId,
       turnId: turnIdRef.current,
     }
+    console.info('[casa-ai-audit]', JSON.stringify(entry))
     const updated = appendVoiceAudit(entry)
     setAuditLog(updated.slice(-MAX_AUDIT_LOG_ENTRIES))
   }, [voiceConfig.auditEnabled])
@@ -756,6 +757,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       sessionId: traceSessionIdRef.current ?? undefined,
       turnId: turnIdRef.current,
     }
+    console.info('[casa-ai-debug]', JSON.stringify(nextEntry))
     setDebugLog((prev) => {
       const next = [...prev, nextEntry].slice(-MAX_DEBUG_LOG_ENTRIES)
       try {

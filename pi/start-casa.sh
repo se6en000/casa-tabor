@@ -151,6 +151,9 @@ fi
   --disable-restore-session-state \
   --disable-background-networking \
   --check-for-update-interval=31536000 \
+  --enable-logging=stderr \
+  --log-level=0 \
+  --v=1 \
   --start-maximized \
   --window-position=0,0 \
   https://casa-tabor.vercel.app 2>&1 | tee -a "$HOME/chromium.log"
