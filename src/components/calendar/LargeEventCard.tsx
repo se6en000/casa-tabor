@@ -48,12 +48,23 @@ export default function LargeEventCard({
     >
       <div className="grid grid-cols-[96px_1fr] min-h-[98px]">
         <div className="grid content-start justify-items-end pr-3 pl-2 pt-3 border-r border-casa-divider/70">
-          <p className="text-display-sm font-display font-bold text-casa-navy tabular-nums leading-none text-right">
-            {format(start, 'h:mm')}
-          </p>
-          <p className="text-caption text-casa-muted font-semibold uppercase mt-1 text-right">
-            {format(start, 'a')}
-          </p>
+          {multiDay ? (
+            <>
+              <p className="text-body-sm font-semibold text-casa-navy leading-none text-right">Multi-day</p>
+              <p className="text-caption text-casa-muted font-semibold mt-1 text-right">
+                {format(start, 'MMM d')} – {format(displayEnd, 'MMM d')}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-display-sm font-display font-bold text-casa-navy tabular-nums leading-none text-right">
+                {format(start, 'h:mm')}
+              </p>
+              <p className="text-caption text-casa-muted font-semibold uppercase mt-1 text-right">
+                {format(start, 'a')}
+              </p>
+            </>
+          )}
         </div>
 
         <div className="px-4 py-3 min-w-0">
@@ -87,9 +98,11 @@ export default function LargeEventCard({
             <span className="flex items-center gap-1 text-body-sm text-casa-muted tabular-nums">
               {event.all_day
                 ? (multiDay ? `${format(start, 'MMM d')} – ${format(displayEnd, 'MMM d')} · all day` : 'All day')
-                : (isSameDay(start, end)
-                  ? `${format(start, 'h:mm a')} – ${format(end, 'h:mm a')}`
-                  : `${format(start, 'MMM d h:mm a')} – ${format(end, 'MMM d h:mm a')}`)}
+                : (multiDay
+                  ? `${format(start, 'MMM d')} – ${format(displayEnd, 'MMM d')} · multi-day`
+                  : (isSameDay(start, end)
+                    ? `${format(start, 'h:mm a')} – ${format(end, 'h:mm a')}`
+                    : `${format(start, 'MMM d h:mm a')} – ${format(end, 'MMM d h:mm a')}`))}
             </span>
             {event.enrichment?.weather_at_event && (
               <WeatherIcon condition={event.enrichment.weather_at_event} size={12} />

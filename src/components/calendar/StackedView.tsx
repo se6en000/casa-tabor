@@ -19,7 +19,7 @@ import { WeatherIcon } from '../shared/WeatherIcon'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import BounceScroll from '../shared/BounceScroll'
-import { eventOverlapsDay, isEventMultiDay } from '../../utils/eventTime'
+import { eventOverlapsDay, getEventDisplayEnd, isEventMultiDay } from '../../utils/eventTime'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -231,6 +231,7 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
 
   const start = new Date(event.start_time)
   const end = new Date(event.end_time)
+  const displayEnd = getEventDisplayEnd(event)
   const multiDay = isEventMultiDay(event)
 
   // Long-press detection
@@ -290,9 +291,10 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
         <div className="flex items-center justify-between gap-1 mb-0.5">
           <div className="flex items-center gap-1">
             <p className="text-caption font-semibold text-casa-muted tabular-nums leading-none">
-              {event.all_day ? 'All day' : `${format(start, 'h:mm')}–${format(end, 'h:mma')}`}
+              {event.all_day
+                ? (multiDay ? `${format(start, 'MMM d')}–${format(displayEnd, 'MMM d')} · All day` : 'All day')
+                : (multiDay ? `${format(start, 'MMM d')}–${format(displayEnd, 'MMM d')} · Multi-day` : `${format(start, 'h:mm')}–${format(end, 'h:mma')}`)}
             </p>
-            {multiDay && <span className="text-[9px] font-semibold text-casa-gold uppercase">Multi-day</span>}
             {event.location_name && (
               <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
             )}
