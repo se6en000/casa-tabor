@@ -16,6 +16,28 @@ git push origin main
 npx vercel --prod
 ```
 
+## Mandatory Pi refresh after frontend changes (before asking user to test)
+
+If the deployment includes frontend/client changes that affect runtime behavior, **always refresh the Pi kiosk session yourself before asking the user to test**.
+
+Use this exact sequence:
+
+```bash
+ssh jake@192.168.86.118 'bash -lc "
+for pid in $(pgrep -f \"/home/jake/start-casa.sh\" 2>/dev/null); do kill $pid 2>/dev/null || true; done
+for pid in $(pgrep -f \"/usr/lib/chromium/chromium --\" 2>/dev/null); do kill $pid 2>/dev/null || true; done
+sleep 4
+export DISPLAY=:0 XAUTHORITY=/home/jake/.Xauthority XDG_RUNTIME_DIR=/run/user/1000
+nohup /home/jake/start-casa.sh > /home/jake/casa.log 2>&1 < /dev/null & disown
+"'
+```
+
+Then verify Chromium is running before handing back to the user:
+
+```bash
+ssh jake@192.168.86.118 'ps -eo pid,args | grep \"[/]usr/lib/chromium/chromium --\"'
+```
+
 ## Supabase edge functions
 
 Deploy individual edge functions with:
