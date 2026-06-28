@@ -202,6 +202,9 @@ Deno.serve(async (req) => {
     turn_id: turnIdRaw,
     lane: laneRaw,
     device_id: deviceIdRaw,
+    client_trace_present: clientTracePresentRaw,
+    client_build: clientBuildRaw,
+    client_trace_source: clientTraceSourceRaw,
     sync_mode: syncModeRaw,
   } = await req.json()
   const syncMode = typeof syncModeRaw === 'string' ? syncModeRaw : undefined
@@ -223,6 +226,16 @@ Deno.serve(async (req) => {
       : null)
   const lane = typeof laneRaw === 'string' && laneRaw.trim().length > 0 ? laneRaw : tool
   const deviceId = typeof deviceIdRaw === 'string' && deviceIdRaw.trim().length > 0 ? deviceIdRaw : null
+  const clientBuild = typeof clientBuildRaw === 'string' && clientBuildRaw.trim().length > 0
+    ? clientBuildRaw.slice(0, 120)
+    : null
+  const clientTraceSource = typeof clientTraceSourceRaw === 'string' && clientTraceSourceRaw.trim().length > 0
+    ? clientTraceSourceRaw.slice(0, 80)
+    : null
+  const inferredClientTracePresent = Boolean(traceId && turnId && deviceId)
+  const clientTracePresent = typeof clientTracePresentRaw === 'boolean'
+    ? clientTracePresentRaw
+    : inferredClientTracePresent
   const requestStartMs = Date.now()
   const ACTION_SLO_MS = 2500
   const warnIfSlow = (stage: string, elapsedMs: number, budgetMs: number) => {
@@ -253,7 +266,22 @@ Deno.serve(async (req) => {
       dedupe_key: dedupeKey,
     }).then(() => {}).catch(() => {})
   }
-  appendServerTrace('server_execute_action_start', `tool=${tool}`, { tool, sync_mode: syncMode ?? 'default' })
+  appendServerTrace('server_execute_action_start', `tool=${tool}`, {
+    tool,
+    sync_mode: syncMode ?? 'default',
+    client_trace_present: clientTracePresent,
+    client_build: clientBuild,
+    client_trace_source: clientTraceSource,
+  })
+  if (!clientTracePresent && lane !== 'regression') {
+    appendServerTrace('client_trace_absent_at_ingress', `lane=${lane}`, {
+      lane,
+      tool,
+      client_trace_present: false,
+      client_build: clientBuild,
+      client_trace_source: clientTraceSource,
+    })
+  }
 
   try {
     if (tool === 'create_event') {

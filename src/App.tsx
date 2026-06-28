@@ -26,6 +26,65 @@ import { readVoiceRuntimeConfig, shouldEmitVoiceDebug } from './lib/voiceRuntime
 
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
 const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
+const VOICE_DEBUG_DEVICE_ID_KEY = 'casa-voice-debug-device-id'
+
+function detectClientBuildFingerprint(): string | null {
+  if (typeof document === 'undefined') return null
+  const moduleScripts = Array.from(document.querySelectorAll('script[type="module"][src]'))
+  const appScript = moduleScripts
+    .map((script) => script.getAttribute('src') ?? '')
+    .find((src) => src.includes('/assets/index-') || src.includes('index-'))
+  if (!appScript) return null
+  return appScript.split('/').pop() ?? appScript
+}
+
+function getVoiceDebugDeviceId(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return localStorage.getItem(VOICE_DEBUG_DEVICE_ID_KEY)
+  } catch {
+    return null
+  }
+}
+
+function emitClientRuntimeHeartbeat(reason: string) {
+  if (typeof window === 'undefined') return
+  const voiceConfig = readVoiceRuntimeConfig()
+  const deviceId = getVoiceDebugDeviceId()
+  const build = detectClientBuildFingerprint()
+  const sessionId = `runtime-${new Date().toISOString().slice(0, 16)}`
+  const basePayload = {
+    page: 'app',
+    debug: voiceConfig.debugLevel,
+    audit: voiceConfig.auditEnabled,
+    coreV2: voiceConfig.coreV2Enabled,
+    reason,
+    client_build: build,
+  }
+  void supabase.functions.invoke('ingest-ai-drawer-debug', {
+    body: {
+      entries: [
+        {
+          at: new Date().toISOString(),
+          event: 'client_runtime_online',
+          detail: `reason=${reason}`,
+          channel: 'debug',
+          sessionId,
+          turnId: 'runtime',
+          payload: basePayload,
+        },
+      ],
+      meta: {
+        device_id: deviceId,
+        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+        platform: typeof navigator !== 'undefined' ? navigator.platform : null,
+        origin: window.location.origin,
+        href: window.location.href,
+        source_component: 'client:app-runtime',
+      },
+    },
+  }).catch(() => {})
+}
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
@@ -190,6 +249,21 @@ function AppShell() {
       body: JSON.stringify({ score: settings.wakeWordSensitivity }),
     }).catch(() => {})
   }, [settings.wakeWordSensitivity])
+
+  useEffect(() => {
+    emitClientRuntimeHeartbeat('app_mount')
+    const interval = setInterval(() => {
+      emitClientRuntimeHeartbeat('interval_30s')
+    }, 30000)
+    const onVisibility = () => {
+      emitClientRuntimeHeartbeat(document.visibilityState === 'hidden' ? 'visibility_hidden' : 'visibility_visible')
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [])
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {

@@ -86,6 +86,17 @@ function getVoiceDebugDeviceId(): string | undefined {
   }
 }
 
+function detectClientBuildFingerprint(): string | undefined {
+  if (typeof document === 'undefined') return undefined
+  const moduleScripts = Array.from(document.querySelectorAll('script[type="module"][src]'))
+  const appScript = moduleScripts
+    .map((script) => script.getAttribute('src') ?? '')
+    .find((src) => src.includes('/assets/index-') || src.includes('index-'))
+  if (!appScript) return undefined
+  const fileName = appScript.split('/').pop() ?? appScript
+  return fileName || undefined
+}
+
 type AssistantDebugMeta = {
   correlationId?: string
   actionId?: string
@@ -519,6 +530,12 @@ export function useAIAssistant(ctx: AssistantContext) {
     const traceId = activeSession.id
     const turnId = userMsg.id
     const deviceId = getVoiceDebugDeviceId()
+    const clientBuild = detectClientBuildFingerprint()
+    const clientTraceMeta = {
+      client_trace_present: Boolean(traceId && turnId && deviceId),
+      client_build: clientBuild,
+      client_trace_source: 'use-ai-assistant',
+    }
 
     const runSimpleCommandLane = async (): Promise<SimpleCommandExecution> => {
       if (ctxRef.current.page === 'grocery' || Boolean(image)) return { executed: false }
@@ -557,6 +574,7 @@ export function useAIAssistant(ctx: AssistantContext) {
             turn_id: turnId,
             lane: 'command',
             device_id: deviceId,
+            ...clientTraceMeta,
             sync_mode: 'async',
           },
         })
@@ -624,6 +642,7 @@ export function useAIAssistant(ctx: AssistantContext) {
           turn_id: turnId,
           lane: 'command',
           device_id: deviceId,
+          ...clientTraceMeta,
           sync_mode: 'async',
         },
       })
@@ -715,6 +734,7 @@ export function useAIAssistant(ctx: AssistantContext) {
               turn_id: turnId,
               lane: 'fast_add',
               device_id: deviceId,
+              ...clientTraceMeta,
             },
           })
 
@@ -804,6 +824,7 @@ export function useAIAssistant(ctx: AssistantContext) {
             turn_id: turnId,
             lane: 'llm',
             device_id: deviceId,
+            ...clientTraceMeta,
           },
         })
         const timeoutPromise = new Promise<never>((_, reject) =>
@@ -898,6 +919,7 @@ export function useAIAssistant(ctx: AssistantContext) {
               turn_id: turnId,
               lane: 'tool_action',
               device_id: deviceId,
+              ...clientTraceMeta,
             },
           })
           if (exec.error || exec.data?.success === false) {

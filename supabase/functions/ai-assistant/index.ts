@@ -31,6 +31,9 @@ Deno.serve(async (req) => {
     turn_id: turnIdRaw,
     lane: laneRaw,
     device_id: deviceIdRaw,
+    client_trace_present: clientTracePresentRaw,
+    client_build: clientBuildRaw,
+    client_trace_source: clientTraceSourceRaw,
     dry_run: dryRunRaw,
   } = await req.json()
   const cid = correlationId ?? `${context?.page ?? 'unknown'}:${Date.now().toString(36)}`
@@ -41,6 +44,16 @@ Deno.serve(async (req) => {
   const lane = typeof laneRaw === 'string' && laneRaw.trim().length > 0 ? laneRaw : 'llm'
   const deviceId = typeof deviceIdRaw === 'string' && deviceIdRaw.trim().length > 0 ? deviceIdRaw : null
   const dryRun = dryRunRaw === true
+  const clientBuild = typeof clientBuildRaw === 'string' && clientBuildRaw.trim().length > 0
+    ? clientBuildRaw.slice(0, 120)
+    : null
+  const clientTraceSource = typeof clientTraceSourceRaw === 'string' && clientTraceSourceRaw.trim().length > 0
+    ? clientTraceSourceRaw.slice(0, 80)
+    : null
+  const inferredClientTracePresent = Boolean(traceId && turnId && deviceId)
+  const clientTracePresent = typeof clientTracePresentRaw === 'boolean'
+    ? clientTracePresentRaw
+    : inferredClientTracePresent
   const requestStartMs = Date.now()
   const STAGE_SLO = {
     contextLoadMs: 1200,
@@ -78,7 +91,18 @@ Deno.serve(async (req) => {
     message_count: Array.isArray(messages) ? messages.length : 0,
     has_image: Boolean(image),
     dry_run: dryRun,
+    client_trace_present: clientTracePresent,
+    client_build: clientBuild,
+    client_trace_source: clientTraceSource,
   })
+  if (!dryRun && !clientTracePresent && lane !== 'regression') {
+    appendServerTrace('client_trace_absent_at_ingress', `lane=${lane}`, {
+      lane,
+      client_trace_present: false,
+      client_build: clientBuild,
+      client_trace_source: clientTraceSource,
+    })
+  }
 
   // Load config, saved places, contacts, grocery list, events in parallel
   const now = new Date()
@@ -863,6 +887,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             turn_id: turnId,
             lane: 'tool_action',
             device_id: deviceId,
+            client_trace_present: clientTracePresent,
+            client_build: clientBuild,
+            client_trace_source: clientTraceSource ?? 'ai-assistant-auto',
           },
         })
 
@@ -934,6 +961,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
               turn_id: turnId,
               lane: 'tool_action',
               device_id: deviceId,
+              client_trace_present: clientTracePresent,
+              client_build: clientBuild,
+              client_trace_source: clientTraceSource ?? 'ai-assistant-auto',
             },
           })
 

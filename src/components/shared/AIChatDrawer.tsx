@@ -1745,6 +1745,9 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                           turn_id: turnIdRef.current,
                           lane: 'tool_action',
                           device_id: getVoiceDebugDeviceId(),
+                          client_trace_present: true,
+                          client_build: traceBuildFingerprintRef.current,
+                          client_trace_source: 'ai-chat-drawer',
                           sync_mode: isCalendarWrite ? 'async' : undefined,
                         },
                       })
@@ -1818,6 +1821,9 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                           turn_id: turnIdRef.current,
                           lane: 'tool_action',
                           device_id: getVoiceDebugDeviceId(),
+                          client_trace_present: true,
+                          client_build: traceBuildFingerprintRef.current,
+                          client_trace_source: 'ai-chat-drawer',
                           sync_mode: 'async',
                         },
                       })
