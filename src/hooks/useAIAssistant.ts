@@ -470,7 +470,7 @@ export function useAIAssistant(ctx: AssistantContext) {
   ) => {
     const turnStart = performance.now()
     const trimmedText = text.trim()
-    emitAssistantDebug('send_start', `${ctxRef.current.page}:${trimmedText.slice(0, 140)}`)
+    emitAssistantDebug('send_start', `page=${ctxRef.current.page} chars=${trimmedText.length} text=${trimmedText.slice(0, 140)}`)
     // Check for goodbye phrase → end session
     const looksLikeShortGoodbye = GOODBYE_PHRASES.test(trimmedText) && trimmedText.split(/\s+/).length <= 6
     if (!options?.skipGoodbyeCheck && looksLikeShortGoodbye) {
@@ -503,7 +503,7 @@ export function useAIAssistant(ctx: AssistantContext) {
         const actionId = genId()
         const correlationId = buildCorrelationId(actionId, activeSession.id)
         const eventId = lastDeterministicEventIdRef.current
-        emitAssistantDebug('simple_command_detected', `type=update_event_add_member member=${followupMember} corr=${correlationId.slice(0, 28)}`)
+        emitAssistantDebug('simple_command_detected', `type=update_event_add_member action=${actionId.slice(0, 8)} event=${eventId.slice(0, 8)} member=${followupMember} corr=${correlationId.slice(0, 28)}`)
         const stageStart = performance.now()
         const latestRow = await supabase
           .from('events')
@@ -538,15 +538,18 @@ export function useAIAssistant(ctx: AssistantContext) {
           if (stageDuration > SIMPLE_COMMAND_SLO_MS) emitSloBreach('simple_command', stageDuration, SIMPLE_COMMAND_SLO_MS)
           if (exec.error || exec.data?.success === false) {
             const err = exec.error?.message ?? exec.data?.error ?? 'unknown error'
-            emitAssistantDebug('simple_command_error', err)
+            emitAssistantDebug('simple_command_error', `action=${actionId.slice(0, 8)} event=${eventId.slice(0, 8)} ${err}`)
             return { executed: true, assistantMessage: `I heard you, but I couldn't add ${followupMember} yet: ${err}` }
           }
-          emitAssistantDebug('simple_command_success', `added_member=${followupMember}`)
+          emitAssistantDebug(
+            'simple_command_success',
+            `action=${actionId.slice(0, 8)} event=${eventId.slice(0, 8)} added_member=${followupMember} sync=${exec.data?.sync_status ?? 'unknown'}`,
+          )
           return { executed: true, assistantMessage: `Done — I added ${followupMember} to that appointment.` }
         } catch (err) {
           const stageDuration = Math.round(performance.now() - stageStart)
           emitAssistantDebug('simple_command_stage_ms', `execute_ai_action=${stageDuration}`)
-          emitAssistantDebug('simple_command_exception', (err as Error).message ?? 'unknown error')
+          emitAssistantDebug('simple_command_exception', `action=${actionId.slice(0, 8)} event=${eventId.slice(0, 8)} ${(err as Error).message ?? 'unknown error'}`)
           return { executed: true, assistantMessage: `I heard you, but adding ${followupMember} took too long. Please try once.` }
         }
       }
@@ -556,7 +559,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       const actionId = genId()
       const correlationId = buildCorrelationId(actionId, activeSession.id)
       const stageStart = performance.now()
-      emitAssistantDebug('simple_command_detected', `type=create_event pattern=${parsed.pattern} corr=${correlationId.slice(0, 28)}`)
+      emitAssistantDebug('simple_command_detected', `type=create_event action=${actionId.slice(0, 8)} pattern=${parsed.pattern} corr=${correlationId.slice(0, 28)}`)
 
       const executePromise = supabase.functions.invoke('execute-ai-action', {
         body: {
@@ -588,7 +591,7 @@ export function useAIAssistant(ctx: AssistantContext) {
         }
         if (exec.error || exec.data?.success === false) {
           const err = exec.error?.message ?? exec.data?.error ?? 'unknown error'
-          emitAssistantDebug('simple_command_error', err)
+          emitAssistantDebug('simple_command_error', `action=${actionId.slice(0, 8)} ${err}`)
           return {
             executed: true,
             assistantMessage: `I understood the request, but I couldn't save it yet: ${err}`,
@@ -596,7 +599,10 @@ export function useAIAssistant(ctx: AssistantContext) {
         }
         const createdEventId = typeof exec.data?.event_id === 'string' ? exec.data.event_id : null
         if (createdEventId) lastDeterministicEventIdRef.current = createdEventId
-        emitAssistantDebug('simple_command_success', parsed.title.slice(0, 80))
+        emitAssistantDebug(
+          'simple_command_success',
+          `action=${actionId.slice(0, 8)} event=${createdEventId ? createdEventId.slice(0, 8) : 'none'} sync=${exec.data?.sync_status ?? 'unknown'} title=${parsed.title.slice(0, 80)}`,
+        )
         return {
           executed: true,
           assistantMessage: `Done — I added "${parsed.title}" at ${new Date(parsed.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`,
@@ -604,7 +610,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       } catch (err) {
         const stageDuration = Math.round(performance.now() - stageStart)
         emitAssistantDebug('simple_command_stage_ms', `execute_ai_action=${stageDuration}`)
-        emitAssistantDebug('simple_command_exception', (err as Error).message ?? 'unknown error')
+        emitAssistantDebug('simple_command_exception', `action=${actionId.slice(0, 8)} ${(err as Error).message ?? 'unknown error'}`)
         return {
           executed: true,
           assistantMessage: 'I heard the command, but execution took too long. Please repeat once.',
@@ -769,7 +775,10 @@ export function useAIAssistant(ctx: AssistantContext) {
       }
       if (invokeError) throw invokeError
       if (!data) throw new Error('AI request returned no data')
-      emitAssistantDebug('assistant_invoke_result', `type=${data.type ?? 'unknown'}`)
+      emitAssistantDebug(
+        'assistant_invoke_result',
+        `type=${data.type ?? 'unknown'} code=${data.code ?? 'none'} tool=${typeof data.tool === 'string' ? data.tool : 'none'}`,
+      )
 
       let assistantMsg: AIMessage
 

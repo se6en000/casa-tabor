@@ -80,6 +80,12 @@ type DebugLogEntry = {
   detail?: string
   sessionId?: string
   turnId?: string
+  seq?: number
+  elapsedMs?: number
+  page?: string
+  turnState?: string
+  loading?: boolean
+  queueDepth?: number
 }
 
 type VoiceTurnState = 'idle' | 'wake_armed' | 'listening' | 'endpointed' | 'thinking' | 'responding' | 'closed'
@@ -103,9 +109,7 @@ function eventDebugLevel(event: string): VoiceDebugLevel {
   if (
     event.startsWith('voice_queued') ||
     event.startsWith('voice_requeued') ||
-    event.startsWith('assistant_wake_') ||
-    event.startsWith('speech_bridge_') ||
-    event.startsWith('speech_webspeech_')
+    event.startsWith('assistant_wake_')
   ) {
     return 'verbose'
   }
@@ -775,6 +779,8 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const traceSessionIdRef = useRef<string | null>(null)
+  const traceStartedAtMsRef = useRef(0)
+  const traceSeqRef = useRef(0)
   const turnIdRef = useRef<string>('turn-idle')
   const turnStateRef = useRef<VoiceTurnState>('idle')
   const closeReasonRef = useRef('unknown')
@@ -789,30 +795,36 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     return () => window.removeEventListener('storage', onStorage)
   }, [])
 
-  const appendAuditLog = useCallback((event: string, detail?: string) => {
-    if (!voiceConfig.auditEnabled) return
+  const buildTraceEntry = useCallback((event: string, detail?: string): VoiceAuditEvent => {
+    const now = Date.now()
+    const started = traceStartedAtMsRef.current > 0 ? traceStartedAtMsRef.current : now
     const sessionId = traceSessionIdRef.current ?? 'voice-session-unknown'
     const entry: VoiceAuditEvent = {
-      at: new Date().toISOString(),
+      at: new Date(now).toISOString(),
       event,
       detail,
       sessionId,
       turnId: turnIdRef.current,
+      seq: (traceSeqRef.current += 1),
+      elapsedMs: Math.max(0, now - started),
+      page,
+      turnState: turnStateRef.current,
+      loading,
+      queueDepth: pendingVoiceQueueRef.current.length,
     }
-    console.info('[casa-ai-audit]', JSON.stringify(entry))
-    const updated = appendVoiceAudit(entry)
-    setAuditLog(updated.slice(-MAX_AUDIT_LOG_ENTRIES))
-  }, [voiceConfig.auditEnabled])
+    return entry
+  }, [loading, page])
 
   const appendDebugLog = useCallback((event: string, detail?: string) => {
-    appendAuditLog(event, detail)
+    const entry = buildTraceEntry(event, detail)
+    if (voiceConfig.auditEnabled) {
+      console.info('[casa-ai-audit]', JSON.stringify(entry))
+      const updated = appendVoiceAudit(entry)
+      setAuditLog(updated.slice(-MAX_AUDIT_LOG_ENTRIES))
+    }
     if (!shouldEmitVoiceDebug(voiceConfig.debugLevel, eventDebugLevel(event))) return
     const nextEntry: DebugLogEntry = {
-      at: new Date().toISOString(),
-      event,
-      detail,
-      sessionId: traceSessionIdRef.current ?? undefined,
-      turnId: turnIdRef.current,
+      ...entry,
     }
     console.info('[casa-ai-debug]', JSON.stringify(nextEntry))
     setDebugLog((prev) => {
@@ -824,7 +836,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       }
       return next
     })
-  }, [appendAuditLog, voiceConfig.debugLevel])
+  }, [buildTraceEntry, voiceConfig.auditEnabled, voiceConfig.debugLevel])
 
   const transitionTurnState = useCallback((next: VoiceTurnState, reason: string) => {
     const previous = turnStateRef.current
@@ -839,6 +851,8 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
 
   const beginTraceSession = useCallback(() => {
     traceSessionIdRef.current = `voice-${Date.now().toString(36)}`
+    traceStartedAtMsRef.current = Date.now()
+    traceSeqRef.current = 0
     turnIdRef.current = `turn-${Date.now().toString(36)}`
     turnStateRef.current = 'idle'
     closeReasonRef.current = 'unknown'
@@ -1131,12 +1145,12 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
 
   useEffect(() => {
     if (!open) return
-    appendDebugLog('speech_phase', speech.phase)
+    queueMicrotask(() => appendDebugLog('speech_phase', speech.phase))
   }, [open, speech.phase, appendDebugLog])
 
   useEffect(() => {
     if (!open) return
-    appendDebugLog('loading_state', loading ? 'loading' : 'idle')
+    queueMicrotask(() => appendDebugLog('loading_state', loading ? 'loading' : 'idle'))
   }, [open, loading, appendDebugLog])
 
   useEffect(() => {
@@ -1145,15 +1159,19 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     const summary = latest.toolAction
       ? `${latest.role}:tool:${latest.toolAction.tool}:${latest.toolAction.status}`
       : `${latest.role}:${latest.content.slice(0, 120)}`
-    appendDebugLog('message', summary)
-    if (latest.role === 'assistant') {
-      transitionTurnState('responding', 'assistant_message_received')
-    }
+    queueMicrotask(() => {
+      appendDebugLog('message', summary)
+      if (latest.role === 'assistant') {
+        transitionTurnState('responding', 'assistant_message_received')
+      }
+    })
   }, [open, messages, appendDebugLog, transitionTurnState])
 
   useEffect(() => {
-    if (open) appendDebugLog('drawer_opened', page)
-    else appendDebugLog('drawer_closed', closeReasonRef.current)
+    queueMicrotask(() => {
+      if (open) appendDebugLog('drawer_opened', page)
+      else appendDebugLog('drawer_closed', closeReasonRef.current)
+    })
   }, [open, page, appendDebugLog])
 
   useEffect(() => {
@@ -1163,7 +1181,13 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       wakeSessionActiveRef.current = Boolean(wakeSessionNonce)
       wakeStartedRef.current = Boolean(wakeSessionNonce)
       hadMeaningfulProgressRef.current = false
-      appendDebugLog('trace_started', wakeSessionNonce ? 'source=wake' : 'source=manual')
+      queueMicrotask(() => {
+        appendDebugLog('trace_started', wakeSessionNonce ? 'source=wake' : 'source=manual')
+        appendDebugLog(
+          'trace_context',
+          `page=${page} debug=${voiceConfig.debugLevel} audit=${voiceConfig.auditEnabled ? 1 : 0} coreV2=${voiceConfig.coreV2Enabled ? 1 : 0}`,
+        )
+      })
       transitionTurnState('wake_armed', wakeSessionNonce ? 'wake_open' : 'manual_open')
       if (wakeSessionNonce) trackVoiceMetric('wake_session_started')
       markConversationProgress(false)
@@ -1175,6 +1199,12 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       // Focus textarea slightly after animation settles (UI only, doesn't affect mic)
       setTimeout(() => textareaRef.current?.focus(), 300)
     } else {
+      queueMicrotask(() => {
+        appendDebugLog(
+          'trace_closed',
+          `reason=${closeReasonRef.current} pending=${pendingVoiceQueueRef.current.length} inflight=${voiceSendInFlightRef.current ? 1 : 0}`,
+        )
+      })
       clearAutoSendTimer()
       if (feedbackTimerRef.current) {
         clearTimeout(feedbackTimerRef.current)
@@ -1189,6 +1219,8 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       interimRef.current = ''
       pendingVoiceQueueRef.current = []
       voiceSendInFlightRef.current = false
+      traceStartedAtMsRef.current = 0
+      traceSeqRef.current = 0
       queueMicrotask(() => setAttachedImage(null))
       freshStartedRef.current = null  // allow fresh start next time this event is opened
       traceSessionIdRef.current = null
