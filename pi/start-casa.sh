@@ -28,14 +28,15 @@ if ! flock -n 9; then
   exit 0
 fi
 
-echo "$(date): Casa Tabor launcher starting (KIOSK=$KIOSK)" >> "$HOME/launcher.log"
+echo "$(date): Casa Tabor launcher starting (kiosk hard-lock enabled)" >> "$HOME/launcher.log"
 
-# ── Kiosk toggle ──────────────────────────────────────────────────────────
-# Set to "1" for locked-down fullscreen kiosk (production on the wall).
-# Set to "0" for a normal windowed browser while testing/building (tabs,
-# address bar, and access to the rest of the desktop). Override at launch:
-#   KIOSK=0 /home/jake/start-casa.sh
-KIOSK="${KIOSK:-1}"
+# ── Kiosk hard-lock ───────────────────────────────────────────────────────
+# Production wall mode: always launch locked fullscreen kiosk.
+# Intentionally ignore any KIOSK env override so accidental windowed launches
+# cannot happen from SSH, autostart races, or manual commands.
+if [ "${KIOSK:-1}" != "1" ]; then
+  echo "$(date): ignoring KIOSK=${KIOSK}; forcing kiosk mode" >> "$HOME/launcher.log"
+fi
 
 # Bail out loudly if we somehow booted into Wayland — touch will not work.
 if [ "${XDG_SESSION_TYPE:-x11}" = "wayland" ]; then
@@ -133,15 +134,10 @@ if [ -f "$WHISPER_DIR/main.py" ]; then
   sleep 1
 fi
 
-# Launch Chromium with full touch support.
-# Kiosk flag is added only when KIOSK=1; otherwise launch a normal window.
-KIOSK_FLAG=""
-if [ "$KIOSK" = "1" ]; then
-  KIOSK_FLAG="--kiosk"
-fi
+# Launch Chromium with full touch support in locked kiosk mode.
 
 /usr/lib/chromium/chromium \
-  $KIOSK_FLAG \
+  --kiosk \
   --force-device-scale-factor=1 \
   --password-store=basic \
   --touch-events=enabled \

@@ -949,8 +949,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
             led.confirm()
             void Promise.resolve(run()).then((confirmed) => {
               if (!confirmed) return
-              startFresh()
-              setTimeout(() => requestClose('voice_confirm_completed'), 700)
+              appendDebugLog('voice_confirm_completed', 'keeping session open for follow-up')
             })
           }
           return
@@ -963,8 +962,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
             led.cancel()
             void Promise.resolve(run()).then((cancelled) => {
               if (!cancelled) return
-              startFresh()
-              setTimeout(() => requestClose('voice_cancel_completed'), 700)
+              appendDebugLog('voice_cancel_completed', 'keeping session open for follow-up')
             })
           }
           return
@@ -1010,8 +1008,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       if (!run) return
       void Promise.resolve(run()).then((confirmed) => {
         if (!confirmed) return
-        startFresh()
-        setTimeout(() => requestClose('voice_confirm_completed'), 700)
+        appendDebugLog('voice_confirm_completed', 'keeping session open for follow-up')
       })
     },
     onCancel:  () => {
@@ -1022,8 +1019,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       if (!run) return
       void Promise.resolve(run()).then((cancelled) => {
         if (!cancelled) return
-        startFresh()
-        setTimeout(() => requestClose('voice_cancel_completed'), 700)
+        appendDebugLog('voice_cancel_completed', 'keeping session open for follow-up')
       })
     },
     hasPendingAction: hasPendingToolAction,
