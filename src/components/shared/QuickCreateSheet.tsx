@@ -68,6 +68,8 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
   const [title,   setTitle]   = useState('')
   const [startDT, setStartDT] = useState(toLocalDT(defaultStart))
   const [endDT,   setEndDT]   = useState(toLocalDT(defaultEnd))
+  const [isAllDay, setIsAllDay] = useState(false)
+  const [isMultiDay, setIsMultiDay] = useState(false)
   const [saving,  setSaving]  = useState(false)
 
   // Re-initialise whenever the sheet opens with a new slot
@@ -77,8 +79,24 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     setTitle('')
     setStartDT(toLocalDT(s))
     setEndDT(toLocalDT(addMinutes(s, 30)))
+    setIsAllDay(false)
+    setIsMultiDay(false)
     setSaving(false)
   }, [open, initialStart])
+
+  useEffect(() => {
+    if (isMultiDay) return
+    const startDate = startDT.slice(0, 10)
+    if (!startDate) return
+    if (isAllDay) {
+      const next = `${startDate}T23:59`
+      if (endDT !== next) setEndDT(next)
+      return
+    }
+    const endTime = endDT.slice(11, 16) || '00:00'
+    const next = `${startDate}T${endTime}`
+    if (endDT !== next) setEndDT(next)
+  }, [isAllDay, isMultiDay, startDT, endDT])
 
   useEffect(() => {
     if (!open) return
@@ -169,14 +187,18 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
   const handleSave = async () => {
     if (!title.trim()) return
     setSaving(true)
-    const start = new Date(startDT)
-    const end   = new Date(endDT)
+    const effectiveStart = isAllDay ? `${startDT.slice(0, 10)}T00:00` : startDT
+    const effectiveEnd = isAllDay ? `${endDT.slice(0, 10)}T23:59` : endDT
+    const start = new Date(effectiveStart)
+    const end   = new Date(effectiveEnd)
     if (isNaN(start.getTime()) || isNaN(end.getTime())) { setSaving(false); return }
+    if (end < start) { setSaving(false); alert('End must be after start.'); return }
 
     const { data: inserted, error } = await supabase.from('events').insert({
       title:      title.trim(),
       start_time: start.toISOString(),
       end_time:   end.toISOString(),
+      all_day:    isAllDay,
       status:     'confirmed',
       event_type: 'event',
       created_at: new Date().toISOString(),
@@ -274,31 +296,73 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                 </div>
               </div>
 
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAllDay(v => !v)
+                    if (!isAllDay) {
+                      setStartDT(`${startDT.slice(0, 10)}T00:00`)
+                      setEndDT(`${endDT.slice(0, 10)}T23:59`)
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-full border text-caption font-semibold transition-colors ${isAllDay ? 'border-casa-gold bg-casa-gold/15 text-casa-navy' : 'border-casa-border bg-casa-bg text-casa-text hover:border-casa-gold'}`}
+                >
+                  All day
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsMultiDay(v => !v)}
+                  className={`px-3 py-1.5 rounded-full border text-caption font-semibold transition-colors ${isMultiDay ? 'border-casa-gold bg-casa-gold/15 text-casa-navy' : 'border-casa-border bg-casa-bg text-casa-text hover:border-casa-gold'}`}
+                >
+                  Multi-day
+                </button>
+              </div>
+
               {/* Mobile native picker */}
               <div className="sm:hidden grid grid-cols-1 gap-3">
                 <div>
                   <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">Start</label>
-                  <input
-                    type="datetime-local"
-                    step={900}
-                    value={startDT}
-                    onChange={e => {
-                      const nextStart = parseLocalDT(e.target.value)
-                      setStartDT(toLocalDT(nextStart))
-                      setEndDT(toLocalDT(addMinutes(nextStart, 30)))
-                    }}
-                    className="w-full h-11 rounded-xl border border-casa-border bg-casa-bg px-3 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
-                  />
+                  {isAllDay ? (
+                    <input
+                      type="date"
+                      value={startDT.slice(0, 10)}
+                      onChange={e => setStartDT(`${e.target.value}T00:00`)}
+                      className="w-full h-11 rounded-xl border border-casa-border bg-casa-bg px-3 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                    />
+                  ) : (
+                    <input
+                      type="datetime-local"
+                      step={900}
+                      value={startDT}
+                      onChange={e => {
+                        const nextStart = parseLocalDT(e.target.value)
+                        setStartDT(toLocalDT(nextStart))
+                        setEndDT(toLocalDT(addMinutes(nextStart, 30)))
+                      }}
+                      className="w-full h-11 rounded-xl border border-casa-border bg-casa-bg px-3 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">End</label>
-                  <input
-                    type="datetime-local"
-                    step={900}
-                    value={endDT}
-                    onChange={e => setEndDT(e.target.value)}
-                    className="w-full h-11 rounded-xl border border-casa-border bg-casa-bg px-3 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
-                  />
+                  {isAllDay ? (
+                    <input
+                      type="date"
+                      value={endDT.slice(0, 10)}
+                      onChange={e => setEndDT(`${e.target.value}T23:59`)}
+                      disabled={!isMultiDay}
+                      className="w-full h-11 rounded-xl border border-casa-border bg-casa-bg px-3 text-body-sm text-casa-navy disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                    />
+                  ) : (
+                    <input
+                      type="datetime-local"
+                      step={900}
+                      value={endDT}
+                      onChange={e => setEndDT(e.target.value)}
+                      className="w-full h-11 rounded-xl border border-casa-border bg-casa-bg px-3 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
+                    />
+                  )}
                 </div>
               </div>
 
@@ -315,14 +379,19 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                         <InlineCalendarPicker
                           value={startDT.slice(0, 10)}
                           onChange={(nextDate) => {
-                            const nextStart = parseLocalDT(`${nextDate}T${startDT.slice(11, 16) || '00:00'}`)
+                            const nextStart = parseLocalDT(`${nextDate}T${isAllDay ? '00:00' : (startDT.slice(11, 16) || '00:00')}`)
                             setStartDT(toLocalDT(nextStart))
-                            setEndDT(toLocalDT(addMinutes(nextStart, 30)))
+                            if (isAllDay) {
+                              setEndDT(`${nextDate}T23:59`)
+                            } else {
+                              setEndDT(toLocalDT(addMinutes(nextStart, 30)))
+                            }
                           }}
                         />
                         <p className="text-caption text-casa-muted">
                           Selected: {parseLocalDT(startDT).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
                         </p>
+                        {!isAllDay && (
                         <div className="grid grid-cols-3 gap-1.5">
                           <select
                             data-vk-nav="true"
@@ -350,6 +419,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                             <option value="PM">PM</option>
                           </select>
                         </div>
+                        )}
                       </div>
                     )
                   })()}
@@ -364,11 +434,16 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                       <div className="rounded-xl border border-casa-border bg-casa-bg p-2 space-y-2">
                         <InlineCalendarPicker
                           value={endDT.slice(0, 10)}
-                          onChange={(nextDate) => setEndDT(`${nextDate}T${endDT.slice(11, 16) || '00:00'}`)}
+                          onChange={(nextDate) => {
+                            if (!isMultiDay) return
+                            setEndDT(`${nextDate}T${isAllDay ? '23:59' : (endDT.slice(11, 16) || '00:00')}`)
+                          }}
+                          className={!isMultiDay ? 'pointer-events-none opacity-60' : undefined}
                         />
                         <p className="text-caption text-casa-muted">
-                          Selected: {parseLocalDT(endDT).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                          Selected: {parseLocalDT(endDT).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}{!isMultiDay ? ' (same day)' : ''}
                         </p>
+                        {!isAllDay && (
                         <div className="grid grid-cols-3 gap-1.5">
                           <select
                             data-vk-nav="true"
@@ -396,6 +471,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                             <option value="PM">PM</option>
                           </select>
                         </div>
+                        )}
                       </div>
                     )
                   })()}
