@@ -1,4 +1,4 @@
-import { supabase, supabaseAnonKey, supabaseUrl } from './supabase'
+import { supabaseAnonKey, supabaseUrl } from './supabase'
 import type { VoiceRuntimeConfig } from './voiceRuntimeConfig'
 
 type RemoteVoiceTraceEntry = {
@@ -47,6 +47,7 @@ const REMOTE_CRITICAL_EVENTS = new Set([
   'turn_timeout',
   'asr_no_final',
   'device_heartbeat',
+  'client_runtime_online',
   'speech_listening_stall',
   'speech_trigger_final',
   'voice_final',
@@ -120,27 +121,39 @@ function enqueueTransportEvent(event: string, detail: string) {
 
 function flushQueueKeepalive(reason: string) {
   if (typeof window === 'undefined' || queue.length === 0) return
-  const payload = {
-    entries: queue.slice(0, MAX_BATCH_SIZE).map((item) => item.entry),
-    meta: {
-      device_id: getDeviceId(),
-      user_agent: navigator.userAgent,
-      platform: navigator.platform,
-      origin: window.location.origin,
-      href: window.location.href,
-      source_component: `client:${reason}`,
-    },
-  }
-  void fetch(`${supabaseUrl}/functions/v1/ingest-ai-drawer-debug`, {
+  const entries = queue.slice(0, MAX_BATCH_SIZE).map((item) => item.entry)
+  void postToIngest(entries, `client:${reason}`, true).catch(() => {})
+}
+
+async function postToIngest(
+  entries: RemoteVoiceTraceEntry[],
+  sourceComponent = 'client',
+  keepalive = false,
+): Promise<void> {
+  const res = await fetch(`${supabaseUrl}/functions/v1/ingest-ai-drawer-debug`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       apikey: supabaseAnonKey,
       authorization: `Bearer ${supabaseAnonKey}`,
     },
-    body: JSON.stringify(payload),
-    keepalive: true,
-  }).catch(() => {})
+    body: JSON.stringify({
+      entries,
+      meta: {
+        device_id: getDeviceId(),
+        user_agent: navigator.userAgent,
+        platform: navigator.platform,
+        origin: window.location.origin,
+        href: window.location.href,
+        source_component: sourceComponent,
+      },
+    }),
+    keepalive,
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`ingest status=${res.status} body=${text.slice(0, 200)}`)
+  }
 }
 
 function getDeviceId(): string {
@@ -220,22 +233,7 @@ async function flushQueueNow() {
   const batch = queue.slice(0, MAX_BATCH_SIZE)
   try {
     const payload = batch.map((item) => item.entry)
-    const response = await supabase.functions.invoke('ingest-ai-drawer-debug', {
-      body: {
-        entries: payload,
-        meta: {
-          device_id: getDeviceId(),
-          user_agent: navigator.userAgent,
-          platform: navigator.platform,
-          origin: window.location.origin,
-          href: window.location.href,
-          source_component: 'client',
-        },
-      },
-    })
-    if (response.error) {
-      throw new Error(response.error.message)
-    }
+    await postToIngest(payload)
     queue = queue.slice(batch.length)
     nextFlushDelayMs = FLUSH_INTERVAL_MS
     if (!transportHealthy) {

@@ -22,6 +22,7 @@ import { useWakeWord } from './hooks/useWakeWord'
 import { useIdleTimer } from './hooks/useIdleTimer'
 import { useScreensaverSettings } from './hooks/useScreensaverSettings'
 import { supabase } from './lib/supabase'
+import { enqueueRemoteVoiceTrace } from './lib/remoteVoiceTrace'
 import { readVoiceRuntimeConfig, shouldEmitVoiceDebug } from './lib/voiceRuntimeConfig'
 
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
@@ -53,37 +54,23 @@ function emitClientRuntimeHeartbeat(reason: string) {
   const deviceId = getVoiceDebugDeviceId()
   const build = detectClientBuildFingerprint()
   const sessionId = `runtime-${new Date().toISOString().slice(0, 16)}`
-  const basePayload = {
-    page: 'app',
-    debug: voiceConfig.debugLevel,
-    audit: voiceConfig.auditEnabled,
-    coreV2: voiceConfig.coreV2Enabled,
-    reason,
-    client_build: build,
-  }
-  void supabase.functions.invoke('ingest-ai-drawer-debug', {
-    body: {
-      entries: [
-        {
-          at: new Date().toISOString(),
-          event: 'client_runtime_online',
-          detail: `reason=${reason}`,
-          channel: 'debug',
-          sessionId,
-          turnId: 'runtime',
-          payload: basePayload,
-        },
-      ],
-      meta: {
-        device_id: deviceId,
-        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
-        platform: typeof navigator !== 'undefined' ? navigator.platform : null,
-        origin: window.location.origin,
-        href: window.location.href,
-        source_component: 'client:app-runtime',
-      },
+  enqueueRemoteVoiceTrace({
+    at: new Date().toISOString(),
+    event: 'client_runtime_online',
+    detail: `reason=${reason}`,
+    sessionId,
+    turnId: 'runtime',
+    payload: {
+      page: 'app',
+      debug: voiceConfig.debugLevel,
+      audit: voiceConfig.auditEnabled,
+      coreV2: voiceConfig.coreV2Enabled,
+      reason,
+      client_build: build,
+      client_trace_present: Boolean(deviceId),
+      client_trace_source: 'app-runtime',
     },
-  }).catch(() => {})
+  }, 'debug', voiceConfig)
 }
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
