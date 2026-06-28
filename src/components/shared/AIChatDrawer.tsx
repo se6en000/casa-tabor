@@ -20,6 +20,7 @@ import {
 } from '../../lib/voiceRuntimeConfig'
 import { appendVoiceAudit, clearVoiceAudit, readVoiceAudit, type VoiceAuditEvent } from '../../lib/voiceAudit'
 import { enqueueRemoteVoiceTrace } from '../../lib/remoteVoiceTrace'
+import { drainClientTraceEvents, stageClientTraceEvent } from '../../lib/clientTraceBridge'
 
 const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s all|all done|never mind|nevermind|stop)\b/i
 const STRONG_CONFIRM_PHRASES = new Set([
@@ -849,6 +850,24 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     if (event === 'send_current_input') traceHasSendRef.current = true
     if (event === 'speech_webspeech_end') traceSpeechEndCountRef.current += 1
     const entry = buildTraceEntry(event, detail, meta)
+    stageClientTraceEvent({
+      at: entry.at,
+      event: entry.event,
+      detail: entry.detail,
+      sessionId: entry.sessionId,
+      turnId: entry.turnId,
+      seq: entry.seq,
+      elapsedMs: entry.elapsedMs,
+      page: entry.page,
+      turnState: entry.turnState,
+      loading: entry.loading,
+      queueDepth: entry.queueDepth,
+      correlationId: entry.correlationId,
+      actionId: entry.actionId,
+      lane: entry.lane,
+      payload: entry.payload,
+      channel: 'debug',
+    })
     enqueueRemoteVoiceTrace(entry, 'debug', voiceConfig)
     if (voiceConfig.auditEnabled) {
       enqueueRemoteVoiceTrace(entry, 'audit', voiceConfig)
@@ -1745,6 +1764,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                           turn_id: turnIdRef.current,
                           lane: 'tool_action',
                           device_id: getVoiceDebugDeviceId(),
+                          client_trace_events: drainClientTraceEvents(120),
                           client_trace_present: true,
                           client_build: traceBuildFingerprintRef.current,
                           client_trace_source: 'ai-chat-drawer',
@@ -1821,6 +1841,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                           turn_id: turnIdRef.current,
                           lane: 'tool_action',
                           device_id: getVoiceDebugDeviceId(),
+                          client_trace_events: drainClientTraceEvents(120),
                           client_trace_present: true,
                           client_build: traceBuildFingerprintRef.current,
                           client_trace_source: 'ai-chat-drawer',

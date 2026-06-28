@@ -23,6 +23,7 @@ import { useIdleTimer } from './hooks/useIdleTimer'
 import { useScreensaverSettings } from './hooks/useScreensaverSettings'
 import { supabase } from './lib/supabase'
 import { enqueueRemoteVoiceTrace } from './lib/remoteVoiceTrace'
+import { stageClientTraceEvent } from './lib/clientTraceBridge'
 import { readVoiceRuntimeConfig, shouldEmitVoiceDebug } from './lib/voiceRuntimeConfig'
 
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
@@ -71,6 +72,20 @@ function emitClientRuntimeHeartbeat(reason: string) {
       client_trace_source: 'app-runtime',
     },
   }, 'debug', voiceConfig)
+  stageClientTraceEvent({
+    at: new Date().toISOString(),
+    event: 'client_runtime_online',
+    detail: `reason=${reason}`,
+    sessionId,
+    turnId: 'runtime',
+    page: 'app',
+    payload: {
+      reason,
+      client_build: build,
+      client_trace_source: 'app-runtime',
+    },
+    channel: 'debug',
+  })
 }
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
