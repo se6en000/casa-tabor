@@ -1087,8 +1087,9 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
               if (!confirmed) return
               appendDebugLog('voice_confirm_completed', 'keeping session open for follow-up')
             })
+            return
           }
-          return
+          // No pending callback: fall through to Phase 1
         }
         if (hasPendingToolAction && shouldCancelShortCircuit) {
           appendDebugLog('voice_cancel_budget_short_circuit', finalized.slice(0, 80))
@@ -1100,8 +1101,9 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
               if (!cancelled) return
               appendDebugLog('voice_cancel_completed', 'keeping session open for follow-up')
             })
+            return
           }
-          return
+          // No pending callback: fall through to Phase 1
         }
         if (isLikelyNoiseTranscript(msg, confidence)) {
           appendDebugLog('voice_noise_filtered', msg.slice(0, 140))
