@@ -1253,27 +1253,25 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       // Focus textarea slightly after animation settles (UI only, doesn't affect mic)
       setTimeout(() => textareaRef.current?.focus(), 300)
     } else {
-      queueMicrotask(() => {
-        const outcome = traceHasSendRef.current
-          ? 'completed'
-          : traceHasFinalRef.current
-            ? 'final_no_send'
-            : traceSpeechEndCountRef.current > 0
-              ? 'asr_end_no_final'
-              : 'no_input'
-        appendDebugLog(
-          'trace_outcome',
-          `status=${outcome} final=${traceHasFinalRef.current ? 1 : 0} sent=${traceHasSendRef.current ? 1 : 0} speechEnd=${traceSpeechEndCountRef.current}`,
-        )
-        if (outcome === 'completed') appendDebugLog('turn_completed', 'source=trace_outcome')
-        else if (outcome === 'final_no_send') appendDebugLog('turn_aborted', 'reason=final_without_send')
-        else if (outcome === 'asr_end_no_final') appendDebugLog('asr_no_final', 'reason=speech_ended_without_final')
-        else appendDebugLog('turn_timeout', 'reason=no_input_detected')
-        appendDebugLog(
-          'trace_closed',
-          `reason=${closeReasonRef.current} pending=${pendingVoiceQueueRef.current.length} inflight=${voiceSendInFlightRef.current ? 1 : 0}`,
-        )
-      })
+      const outcome = traceHasSendRef.current
+        ? 'completed'
+        : traceHasFinalRef.current
+          ? 'final_no_send'
+          : traceSpeechEndCountRef.current > 0
+            ? 'asr_end_no_final'
+            : 'no_input'
+      appendDebugLog(
+        'trace_outcome',
+        `status=${outcome} final=${traceHasFinalRef.current ? 1 : 0} sent=${traceHasSendRef.current ? 1 : 0} speechEnd=${traceSpeechEndCountRef.current}`,
+      )
+      if (outcome === 'completed') appendDebugLog('turn_completed', 'source=trace_outcome')
+      else if (outcome === 'final_no_send') appendDebugLog('turn_aborted', 'reason=final_without_send')
+      else if (outcome === 'asr_end_no_final') appendDebugLog('asr_no_final', 'reason=speech_ended_without_final')
+      else appendDebugLog('turn_timeout', 'reason=no_input_detected')
+      appendDebugLog(
+        'trace_closed',
+        `reason=${closeReasonRef.current} pending=${pendingVoiceQueueRef.current.length} inflight=${voiceSendInFlightRef.current ? 1 : 0}`,
+      )
       clearAutoSendTimer()
       if (feedbackTimerRef.current) {
         clearTimeout(feedbackTimerRef.current)

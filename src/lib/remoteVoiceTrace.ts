@@ -39,6 +39,13 @@ const REMOTE_NOISE_EVENTS = new Set([
   'speech_ensure_running_ok',
 ])
 const REMOTE_CRITICAL_EVENTS = new Set([
+  'trace_started',
+  'trace_outcome',
+  'turn_completed',
+  'turn_aborted',
+  'turn_timeout',
+  'asr_no_final',
+  'speech_listening_stall',
   'speech_trigger_final',
   'voice_final',
   'send_current_input',
