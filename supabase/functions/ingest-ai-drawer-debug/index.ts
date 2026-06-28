@@ -122,10 +122,43 @@ Deno.serve(async (req) => {
         throw new Error(upsertError.message)
       }
       console.warn('[ingest-ai-drawer-debug] dedupe_key conflict target unavailable; falling back to insert')
+      const dedupeKeys = rows
+        .map((row) => row.dedupe_key)
+        .filter((key): key is string => typeof key === 'string' && key.length > 0)
+      const existingDedupeKeys = new Set<string>()
+      if (dedupeKeys.length > 0) {
+        const { data: existingRows, error: existingError } = await sb
+          .from('ai_drawer_debug_events')
+          .select('dedupe_key')
+          .in('dedupe_key', dedupeKeys)
+        if (existingError) throw new Error(existingError.message)
+        for (const existing of existingRows ?? []) {
+          if (typeof existing?.dedupe_key === 'string' && existing.dedupe_key.length > 0) {
+            existingDedupeKeys.add(existing.dedupe_key)
+          }
+        }
+      }
+      const rowsToInsert = rows.filter((row) =>
+        !(typeof row.dedupe_key === 'string' && row.dedupe_key.length > 0 && existingDedupeKeys.has(row.dedupe_key))
+      )
+      if (rowsToInsert.length === 0) {
+        return new Response(JSON.stringify({ inserted: 0 }), {
+          status: 200,
+          headers: { ...CORS, 'content-type': 'application/json' },
+        })
+      }
       const { error: insertError } = await sb
         .from('ai_drawer_debug_events')
-        .insert(rows)
-      if (insertError) throw new Error(insertError.message)
+        .insert(rowsToInsert)
+      if (insertError) {
+        const insertMsg = String(insertError.message ?? '').toLowerCase()
+        const duplicateConstraint = insertMsg.includes('duplicate key value violates unique constraint')
+        if (!duplicateConstraint) throw new Error(insertError.message)
+      }
+      return new Response(JSON.stringify({ inserted: rowsToInsert.length }), {
+        status: 200,
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
     }
 
     return new Response(JSON.stringify({ inserted: rows.length }), {
