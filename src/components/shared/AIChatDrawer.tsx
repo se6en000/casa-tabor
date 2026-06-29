@@ -280,6 +280,32 @@ function isMeaningfulInterimSpeech(text: string): boolean {
   return trimmed.length >= 10
 }
 
+function shouldRequestAsrConfirmation(text: string, confidence?: number | null): boolean {
+  // Phase 2: Ask user to confirm if:
+  // 1. Text is short (likely a one-word or two-word command)
+  // 2. Confidence is low (ASR was uncertain)
+  // 3. NOT already a known one-word intent (those are handled by Phase 1)
+  
+  const trimmed = text.trim()
+  if (!trimmed || trimmed.length > 20) return false
+  
+  // Only ask if confidence is available and below 0.75
+  if (typeof confidence !== 'number' || confidence >= 0.75) return false
+  
+  // Skip if it's a very high-confidence even if short
+  if (confidence >= 0.70) return false
+  
+  // Skip if it's already a known one-word intent (Phase 1 will handle it)
+  const oneWordIntents = new Set([
+    'yes', 'yeah', 'yep', 'ok', 'okay', 'sure', 'confirm',
+    'no', 'nope', 'cancel', 'abort', 'dont', "don't",
+    'delete', 'remove', 'move', 'add', 'change',
+  ])
+  if (oneWordIntents.has(trimmed.toLowerCase())) return false
+  
+  return true
+}
+
 /** Quick probe — resolves true if bridge is reachable within 800ms */
 async function probeBridge(): Promise<boolean> {
   try {
@@ -874,6 +900,12 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const turnStateRef = useRef<VoiceTurnState>('idle')
   const closeReasonRef = useRef('unknown')
   const [uiFeedback, setUiFeedback] = useState<'none' | 'confirm' | 'cancel'>('none')
+  
+  // Phase 2: ASR Confidence confirmation modal
+  const [asrConfirmationPending, setAsrConfirmationPending] = useState(false)
+  const [asrConfirmationText, setAsrConfirmationText] = useState('')
+  const [asrConfirmationConfidence, setAsrConfirmationConfidence] = useState(0)
+  const pendingAsrConfirmCallbackRef = useRef<((confirm: boolean) => void) | null>(null)
 
   useEffect(() => {
     const sync = () => setVoiceConfig(readVoiceRuntimeConfig())
@@ -1227,6 +1259,29 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
           appendDebugLog('voice_sleep_command', msg.slice(0, 140))
           onSleepCommand?.()
           setTimeout(() => requestClose('sleep_command'), 300)
+          return
+        }
+        // Phase 2: ASR Confidence feedback - ask user to confirm low-confidence short utterances
+        if (shouldRequestAsrConfirmation(finalized, confidence)) {
+          appendDebugLog('phase2_asr_confidence_check', `text=${finalized} conf=${confidence?.toFixed(2)}`)
+          setAsrConfirmationText(finalized)
+          setAsrConfirmationConfidence(confidence ?? 0)
+          setAsrConfirmationPending(true)
+          
+          pendingAsrConfirmCallbackRef.current = (confirm: boolean) => {
+            setAsrConfirmationPending(false)
+            if (confirm) {
+              appendDebugLog('phase2_asr_confirmation_accepted', finalized)
+              // User confirmed, proceed to Phase 1/LLM
+              queueOrSendVoiceInput(finalized)
+            } else {
+              appendDebugLog('phase2_asr_confirmation_rejected', finalized)
+              // User rejected, clear and keep listening
+              interimRef.current = ''
+              queueMicrotask(() => setInput(''))
+              markConversationProgress(false)
+            }
+          }
           return
         }
         clearAutoSendTimer()
@@ -2255,6 +2310,60 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
             </div>
           </motion.div>
         </>
+      )}
+
+      {/* Phase 2: ASR Confidence Confirmation Modal */}
+      {asrConfirmationPending && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[75] flex items-center justify-center bg-black/50 sm:bg-black/30"
+          onClick={() => {
+            pendingAsrConfirmCallbackRef.current?.(false)
+            setAsrConfirmationPending(false)
+          }}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+            className="bg-white rounded-2xl shadow-2xl max-w-sm mx-4 border border-gray-200"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-6 space-y-5">
+              {/* Header */}
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-gray-500">Did you say…?</p>
+                <p className="text-2xl font-bold text-casa-navy">"{asrConfirmationText}"</p>
+                <p className="text-xs text-gray-400">confidence: {(asrConfirmationConfidence * 100).toFixed(0)}%</p>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    pendingAsrConfirmCallbackRef.current?.(false)
+                    setAsrConfirmationPending(false)
+                  }}
+                  className="flex-1 px-4 py-2.5 rounded-lg font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors text-sm"
+                >
+                  No, repeat
+                </button>
+                <button
+                  onClick={() => {
+                    pendingAsrConfirmCallbackRef.current?.(true)
+                    setAsrConfirmationPending(false)
+                  }}
+                  className="flex-1 px-4 py-2.5 rounded-lg font-medium text-white bg-casa-gold hover:bg-casa-gold/90 transition-colors text-sm"
+                >
+                  Yes, got it
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
       )}
     </AnimatePresence>
   )
