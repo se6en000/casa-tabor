@@ -257,21 +257,18 @@ function isLikelyNoiseTranscript(text: string, confidence?: number | null): bool
   if (!trimmed) return true
 
   const words = trimmed.split(/\s+/).filter(Boolean)
-  const alphaChars = (trimmed.match(/[a-z]/gi) ?? []).length
+  const alphaNumericChars = (trimmed.match(/[a-z0-9]/gi) ?? []).length
   const singleWord = words.length === 1
-  const single = words[0] ?? ''
-  const normalizedWords = words.map(word => word.toLowerCase().replace(/[^a-z0-9']/gi, '')).filter(Boolean)
-  const uniqueWords = new Set(normalizedWords).size
+  const compact = trimmed.toLowerCase().replace(/[^a-z0-9]/gi, '')
 
-  if (singleWord && alphaChars <= 2) return true
-  if (singleWord && /^([a-z])\1+$/i.test(single)) return true
-  if (words.length <= 4 && uniqueWords <= 1) return true
-  if (words.length >= 3 && uniqueWords <= 1) return true
+  // Keep the noise gate narrow: only reject obvious junk, not plausible speech.
+  if (alphaNumericChars === 0) return true
+  if (singleWord && compact.length <= 1) return true
+  if (singleWord && compact.length >= 3 && /^([a-z0-9])\1+$/.test(compact)) return true
 
-  // Low confidence handling: DON'T auto-filter short utterances with low confidence
-  // Phase 2 ASR Confirmation Modal should ask the user to verify instead
-  // Only filter if confidence is genuinely terrible (< 0.35) for short utterances
-  if (typeof confidence === 'number' && confidence < 0.35 && words.length <= 4) {
+  // Let Phase 2 handle uncertain-but-plausible speech. Only auto-drop
+  // ultra-low-confidence fragments that are too small to be real intent.
+  if (typeof confidence === 'number' && confidence < 0.2 && words.length <= 2 && compact.length <= 3) {
     return true
   }
 
@@ -284,7 +281,7 @@ function isMeaningfulInterimSpeech(text: string): boolean {
   if (isLikelyNoiseTranscript(trimmed, null)) return false
   const words = trimmed.split(/\s+/).filter(Boolean)
   if (words.length >= 2) return true
-  return trimmed.length >= 10
+  return trimmed.replace(/[^a-z0-9]/gi, '').length >= 3
 }
 
 function shouldRequestAsrConfirmation(text: string, confidence?: number | null): boolean {
