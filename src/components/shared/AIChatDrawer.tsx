@@ -1973,12 +1973,18 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                         undoStatus: 'idle',
                         undoErrorMsg: undefined,
                       })
+                      // Clear callbacks after action completes so next action starts fresh
+                      pendingConfirmRef.current = null
+                      pendingCancelRef.current = null
                       qc.invalidateQueries({ queryKey: ['events'] })
                       qc.invalidateQueries({ queryKey: ['grocery'] })
                       return true
                     } catch (err) {
                       appendDebugLog('tool_action_error', `${tool}: ${(err as Error).message}`)
                       updateMessageToolStatus(messageId, 'error', { errorMsg: (err as Error).message })
+                      // Clear callbacks on error too
+                      pendingConfirmRef.current = null
+                      pendingCancelRef.current = null
                       return false
                     }
                   }}
