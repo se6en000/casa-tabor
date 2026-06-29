@@ -2371,7 +2371,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
 
 /* ── Message Bubble ─────────────────────────────────────────── */
 
-function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingConfirm, registerPendingCancel }: {
+function MessageBubble({ msg, isLatest: _isLatest, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingConfirm, registerPendingCancel }: {
   msg: AIMessage
   isLatest: boolean
   onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<boolean>
@@ -2400,14 +2400,15 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, o
   }, [msg.id, onCancelToolAction])
 
   useEffect(() => {
-    if (isLatest && hasPendingAction) {
+    if (hasPendingAction) {
       registerPendingConfirm(doConfirm)
       registerPendingCancel(doCancel)
-      console.debug(`[MessageBubble] Registered confirm/cancel callbacks for message ${msg.id}`, { isLatest, hasPendingAction, ta_status: ta?.status })
-    } else if (!isLatest || !hasPendingAction) {
-      console.debug(`[MessageBubble] NOT registering callbacks`, { isLatest, hasPendingAction, ta_status: ta?.status, msg_id: msg.id })
+      console.debug(`[MessageBubble] Registered confirm/cancel callbacks for message ${msg.id}`, { hasPendingAction, ta_status: ta?.status })
+    } else {
+      // Clear callbacks when action is no longer pending
+      console.debug(`[MessageBubble] NOT registering callbacks`, { hasPendingAction, ta_status: ta?.status, msg_id: msg.id })
     }
-  }, [isLatest, hasPendingAction, doConfirm, doCancel, msg.id, ta?.status]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hasPendingAction, doConfirm, doCancel, msg.id, ta?.status]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
