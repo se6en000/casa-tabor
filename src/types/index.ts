@@ -175,6 +175,7 @@ export interface PrepItem {
   dismissed: boolean
   dismissed_at: string | null
   created_at: string
+  source_type?: string | null
 }
 
 // ── Views ───────────────────────────────────────────────────

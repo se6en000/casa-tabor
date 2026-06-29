@@ -68,3 +68,27 @@ export function useSnoozePrepItem() {
     qc.invalidateQueries({ queryKey: ['prep-items'] })
   }
 }
+
+/** Downvotes a prep item (stub — marks as dismissed with low priority) */
+export function useDownvotePrepItem() {
+  const qc = useQueryClient()
+  return async (id: string) => {
+    await supabase
+      .from('prep_items')
+      .update({ dismissed: true, dismissed_at: new Date().toISOString() })
+      .eq('id', id)
+    qc.invalidateQueries({ queryKey: ['prep-items'] })
+  }
+}
+
+/** Fetches details for a single prep item (stub — returns the item as-is from cache) */
+export function usePrepItemDetails(_item: PrepItem | null) {
+  return {
+    data: _item ? {
+      ..._item,
+      relatedItems: [] as { id: string; description: string }[],
+      gmailContext: null as { email_body?: string; subject?: string; from?: string; from_email?: string; date?: string; received_at?: string } | null,
+    } : null,
+    isLoading: false,
+  }
+}

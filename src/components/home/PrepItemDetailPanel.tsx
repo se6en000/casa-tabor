@@ -222,7 +222,7 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
                     <p className="text-caption text-casa-muted">Loading related actions…</p>
                   ) : (data?.relatedItems ?? []).length > 0 ? (
                     <ul className="space-y-2">
-                      {data!.relatedItems.map((related) => (
+                      {data!.relatedItems.map((related: { id: string; description: string }) => (
                         <li key={related.id} className="text-body-sm text-casa-text leading-relaxed">
                           • {related.description}
                         </li>
