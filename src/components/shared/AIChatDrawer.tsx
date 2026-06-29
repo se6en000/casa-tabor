@@ -264,7 +264,10 @@ function isLikelyNoiseTranscript(text: string, confidence?: number | null): bool
   if (words.length <= 4 && uniqueWords <= 1) return true
   if (words.length >= 3 && uniqueWords <= 1) return true
 
-  if (typeof confidence === 'number' && confidence < MIN_FINAL_CONFIDENCE && words.length <= 4) {
+  // Low confidence handling: DON'T auto-filter short utterances with low confidence
+  // Phase 2 ASR Confirmation Modal should ask the user to verify instead
+  // Only filter if confidence is genuinely terrible (< 0.35) for short utterances
+  if (typeof confidence === 'number' && confidence < 0.35 && words.length <= 4) {
     return true
   }
 
@@ -284,16 +287,16 @@ function shouldRequestAsrConfirmation(text: string, confidence?: number | null):
   // Phase 2: Ask user to confirm if:
   // 1. Text is short (likely a one-word or two-word command)
   // 2. Confidence is low (ASR was uncertain)
-  // 3. NOT already a known one-word intent (those are handled by Phase 1)
+  // 3. NOT already a known one-word intent
   
   const trimmed = text.trim()
   if (!trimmed || trimmed.length > 20) return false
   
-  // Only ask if confidence is available and below 0.75
-  if (typeof confidence !== 'number' || confidence >= 0.75) return false
+  // MUST have a confidence score to proceed
+  if (typeof confidence !== 'number') return false
   
-  // Skip if it's a very high-confidence even if short
-  if (confidence >= 0.70) return false
+  // Only ask if confidence is genuinely low
+  if (confidence >= 0.75) return false
   
   // Skip if it's already a known one-word intent (Phase 1 will handle it)
   const oneWordIntents = new Set([
@@ -360,6 +363,17 @@ function useSpeechInput({
   const [reconnecting, setReconnecting] = useState(false)
   const [wakeCooldownRemaining, setWakeCooldownRemaining] = useState(0)
   const supported = !IS_SAFE_MODE
+  
+  // Single source of truth for current speech recognition state
+  // Tracks: cumulative text, best confidence seen so far for this utterance
+  // Reset on each new final recognition, persists across interim updates
+  const currentSpeechStateRef = useRef<{ 
+    text: string
+    // Track best confidence seen during interim results
+    bestConfidenceSoFar: number | null
+    // Track highest confidence in current recognition chain
+    latestConfidence: number | null
+  }>({ text: '', bestConfidenceSoFar: null, latestConfidence: null })
 
   // ── Stable callback refs — always current, never stale inside setInterval ──
   // This is the core pattern for voice agents: the polling loop runs continuously
@@ -646,11 +660,26 @@ function useSpeechInput({
               if (msg.text !== lastInterimRef.current) {
                 lastInterimRef.current = msg.text
                 lastInterimTimeRef.current = Date.now()
+                // Update speech state: track best confidence seen for this utterance
+                const newConfidence = typeof msg.confidence === 'number' ? msg.confidence : null
+                currentSpeechStateRef.current.text = msg.text
+                currentSpeechStateRef.current.latestConfidence = newConfidence
+                // Keep best (highest) confidence observed during this recognition
+                if (newConfidence !== null && (currentSpeechStateRef.current.bestConfidenceSoFar === null || newConfidence > currentSpeechStateRef.current.bestConfidenceSoFar)) {
+                  currentSpeechStateRef.current.bestConfidenceSoFar = newConfidence
+                }
                 onInterimRef.current(msg.text)
               }
               break
             case 'final':
               if (phaseRef.current !== 'processing') {
+                // Final result: lock in the best confidence + latest confidence
+                const newConfidence = typeof msg.confidence === 'number' ? msg.confidence : null
+                currentSpeechStateRef.current.text = msg.text
+                currentSpeechStateRef.current.latestConfidence = newConfidence
+                if (newConfidence !== null && (currentSpeechStateRef.current.bestConfidenceSoFar === null || newConfidence > currentSpeechStateRef.current.bestConfidenceSoFar)) {
+                  currentSpeechStateRef.current.bestConfidenceSoFar = newConfidence
+                }
                 onTrace?.('speech_bridge_final', `${String(msg.text ?? '').slice(0, 140)}${typeof msg.confidence === 'number' ? ` (conf=${Number(msg.confidence).toFixed(2)})` : ''}`)
                 triggerFinal(msg.text, typeof msg.confidence === 'number' ? msg.confidence : null)
               }
@@ -818,6 +847,7 @@ function useSpeechInput({
     ensureRunning,
     listening: phase === 'listening',
     connecting: phase === 'connecting',
+    currentSpeechStateRef,
   }
 }
 
@@ -1177,9 +1207,11 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     },
     onFinalTranscript: (text, confidence) => {
       appendDebugLog('voice_final', text === '__SEND__' ? '__SEND__' : `${text.slice(0, 140)}${typeof confidence === 'number' ? ` (conf=${confidence.toFixed(2)})` : ''}`)
+      
       if (text === '__SEND__') {
         transitionTurnState('endpointed', 'speech_final_received')
         ignoreInterimUntilRef.current = Date.now() + 1200
+        
         const msg = interimRef.current || (textareaRef.current?.value ?? '')
         const finalized = msg.trim()
         if (!finalized) {
@@ -1188,6 +1220,15 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         }
         interimRef.current = finalized
         setInput(finalized)
+        
+        // Use the BEST confidence observed during this entire recognition sequence
+        // This handles cases where bridge sends confidence inconsistently
+        const { bestConfidenceSoFar } = speech.currentSpeechStateRef.current
+        const capturedConfidence = bestConfidenceSoFar
+        
+        // Reset state for next utterance
+        speech.currentSpeechStateRef.current = { text: '', bestConfidenceSoFar: null, latestConfidence: null }
+        
         const normalizedIntent = normalizeIntentPhrase(finalized)
         const shouldConfirmShortCircuit = hasPendingToolAction && isStrongConfirmUtterance(finalized)
         const shouldCancelShortCircuit = hasPendingToolAction && isStrongCancelUtterance(finalized)
@@ -1245,7 +1286,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         ])
         const isKnownOneWordIntent = oneWordIntentKeywords.has(finalized.toLowerCase().trim())
         
-        if (!isKnownOneWordIntent && isLikelyNoiseTranscript(msg, confidence)) {
+        if (!isKnownOneWordIntent && isLikelyNoiseTranscript(msg, capturedConfidence)) {
           appendDebugLog('voice_noise_filtered', msg.slice(0, 140))
           interimRef.current = ''
           queueMicrotask(() => setInput(''))
@@ -1262,10 +1303,10 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
           return
         }
         // Phase 2: ASR Confidence feedback - ask user to confirm low-confidence short utterances
-        if (shouldRequestAsrConfirmation(finalized, confidence)) {
-          appendDebugLog('phase2_asr_confidence_check', `text=${finalized} conf=${confidence?.toFixed(2)}`)
+        if (shouldRequestAsrConfirmation(finalized, capturedConfidence)) {
+          appendDebugLog('phase2_asr_confidence_check', `text=${finalized} conf=${capturedConfidence?.toFixed(2)}`)
           setAsrConfirmationText(finalized)
-          setAsrConfirmationConfidence(confidence ?? 0)
+          setAsrConfirmationConfidence(capturedConfidence ?? 0)
           setAsrConfirmationPending(true)
           
           pendingAsrConfirmCallbackRef.current = (confirm: boolean) => {
@@ -2395,6 +2436,10 @@ function MessageBubble({ msg, isLatest: _isLatest, onConfirmToolAction, onUndoTo
   const isStaleError = !!ta?.errorMsg && ta.errorMsg.toLowerCase().includes('changed since')
   const isDestructiveAction = ta?.tool === 'delete_event' || ta?.tool === 'clear_checked_grocery_items'
 
+  // Use refs to detect actual state changes (not function instance changes)
+  const taRef = useRef<typeof ta>(null)
+  const registeredRef = useRef(false)
+
   const doConfirm = useCallback(async () => {
     if (!ta) return false
     return onConfirmToolAction(msg.id, ta.tool, ta.args)
@@ -2405,13 +2450,20 @@ function MessageBubble({ msg, isLatest: _isLatest, onConfirmToolAction, onUndoTo
     return true
   }, [msg.id, onCancelToolAction])
 
+  // Register callbacks ONLY when ta actually changes AND status is pending
   useEffect(() => {
-    if (hasPendingAction) {
+    const taChanged = taRef.current?.actionId !== ta?.actionId || taRef.current?.status !== ta?.status
+    taRef.current = ta
+
+    if (hasPendingAction && taChanged && !registeredRef.current) {
       console.log(`[MessageBubble] 🎯 Register callbacks: ${msg.id.slice(0,8)} tool=${ta?.tool}`)
       registerPendingConfirm(doConfirm)
       registerPendingCancel(doCancel)
+      registeredRef.current = true
+    } else if (!hasPendingAction) {
+      registeredRef.current = false
     }
-  }, [hasPendingAction, doConfirm, doCancel, msg.id, ta?.status]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hasPendingAction, msg.id, doConfirm, doCancel, registerPendingConfirm, registerPendingCancel, ta?.actionId, ta?.status])
 
   return (
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
