@@ -920,6 +920,16 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const parsedMax = Number(args.max_results ?? 5)
       const maxResults = Number.isFinite(parsedMax) ? Math.max(1, Math.min(8, Math.round(parsedMax))) : 5
       if (!query) return { results: [], count: 0, error: 'Missing query' }
+
+      // Server-side math interceptor: catch tip/percentage/arithmetic queries
+      const mathIntercept = query.match(/^[\s\d\.\+\-\*\/\%\(\)x×÷]+$/) ||
+        /\b(\d+\.?\d*)\s*%\s*(of|tip|off|on)\s+\$?(\d+\.?\d*)/i.test(query) ||
+        /\bwhat\s+is\s+[\d\s\+\-\*\/\.]+\b/i.test(query)
+      if (mathIntercept) {
+        // Don't call Brave — signal the LLM to compute directly
+        return { results: [], count: 0, math_query: true, hint: 'This is a math/calculation query. Answer directly from reasoning — no web search needed.' }
+      }
+
       if (!braveKey) return { results: [], count: 0, error: 'BRAVE_API_KEY not configured' }
 
       try {
