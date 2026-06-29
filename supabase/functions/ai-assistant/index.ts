@@ -705,8 +705,64 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         )
       }
       if (dateHint) {
+        // Resolve relative date hints to actual calendar dates server-side
+        const offsetMatch = utcOffset.match(/([+-])(\d{2}):(\d{2})/)
+        const offsetMs = offsetMatch
+          ? (offsetMatch[1] === '+' ? 1 : -1) * (parseInt(offsetMatch[2]) * 60 + parseInt(offsetMatch[3])) * 60000
+          : 0
+        const localNow = new Date(now.getTime() + offsetMs)
+        const localToday = new Date(localNow)
+        localToday.setUTCHours(0, 0, 0, 0)
+
+        // Build a resolved date range for common relative expressions
+        let resolvedDateStart: Date | null = null
+        let resolvedDateEnd: Date | null = null
+
+        if (dateHint === 'tomorrow') {
+          resolvedDateStart = new Date(localToday.getTime() + 86400000)
+          resolvedDateEnd = new Date(localToday.getTime() + 2 * 86400000)
+        } else if (dateHint === 'today') {
+          resolvedDateStart = localToday
+          resolvedDateEnd = new Date(localToday.getTime() + 86400000)
+        } else if (dateHint === 'this week' || dateHint === 'this week s events') {
+          resolvedDateStart = localToday
+          resolvedDateEnd = new Date(localToday.getTime() + 7 * 86400000)
+        } else if (dateHint === 'next week') {
+          // Monday of next week → Sunday
+          const dayOfWeek = localToday.getUTCDay() // 0=Sun
+          const daysToNextMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek
+          resolvedDateStart = new Date(localToday.getTime() + daysToNextMonday * 86400000)
+          resolvedDateEnd = new Date(resolvedDateStart.getTime() + 7 * 86400000)
+        } else if (dateHint === 'weekend' || dateHint === 'this weekend') {
+          const dayOfWeek = localToday.getUTCDay()
+          const daysToSat = dayOfWeek === 6 ? 0 : (6 - dayOfWeek)
+          resolvedDateStart = new Date(localToday.getTime() + daysToSat * 86400000)
+          resolvedDateEnd = new Date(resolvedDateStart.getTime() + 2 * 86400000)
+        } else {
+          // Try resolving "next monday", "next tuesday", etc.
+          const weekdays = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday']
+          const nextDayMatch = dateHint.match(/^(?:next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)$/)
+          if (nextDayMatch) {
+            const targetDay = weekdays.indexOf(nextDayMatch[1])
+            if (targetDay >= 0) {
+              const currentDay = localToday.getUTCDay()
+              let daysAhead = targetDay - currentDay
+              if (daysAhead <= 0) daysAhead += 7
+              if (dateHint.startsWith('next ') && daysAhead < 7) daysAhead += 7
+              resolvedDateStart = new Date(localToday.getTime() + daysAhead * 86400000)
+              resolvedDateEnd = new Date(resolvedDateStart.getTime() + 86400000)
+            }
+          }
+        }
+
         results = results.filter(e => {
           const d = new Date(e.start_time)
+          // If we resolved to a concrete date range, use that
+          if (resolvedDateStart && resolvedDateEnd) {
+            const eventLocalMs = d.getTime() + offsetMs
+            return eventLocalMs >= resolvedDateStart.getTime() && eventLocalMs < resolvedDateEnd.getTime()
+          }
+          // Fallback: match against day name or date string for specific dates like "june 30", "tuesday"
           const dayName = normalizeSearchText(d.toLocaleDateString('en-US', { weekday: 'long' }))
           const dateStr = normalizeSearchText(d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }))
           return dayName.includes(dateHint) || dateStr.includes(dateHint) || e.start_time.includes(dateHint.replace(/[^0-9-]/g, ''))
@@ -959,13 +1015,18 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         // Read-only tools: execute server-side. Only escalate to a second LLM call when the user likely wants a write.
         if (name === 'search_events' || name === 'search_places' || name === 'search_web') {
           const toolResult = await executeReadTool(name, args)
+          const resultCount = (toolResult as { count?: number }).count ?? 0
+          const resultFound = Boolean((toolResult as { found?: boolean }).found)
+          // Run secondary LLM call when:
+          // - user wants a write (search → then propose change), OR
+          // - multiple results found (list query like "what's on my calendar tomorrow") — LLM needs to generate the full answer
           const shouldRunSecondary =
             name === 'search_events' &&
-            userLikelyRequestedWrite &&
-            Boolean((toolResult as { found?: boolean }).found)
+            resultFound &&
+            (userLikelyRequestedWrite || resultCount > 1)
 
           if (!shouldRunSecondary) {
-            if (name === 'search_events' && (toolResult as { found?: boolean; events?: Array<{ title?: string; start?: string }> }).found) {
+            if (name === 'search_events' && resultFound) {
               const topEvent = (toolResult as { events?: Array<{ title?: string; start?: string }> }).events?.[0]
               if (topEvent?.title && topEvent?.start) {
                 return { type: 'text', text: `I found ${topEvent.title} at ${toLocal(topEvent.start)}.` }
