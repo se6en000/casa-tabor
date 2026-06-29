@@ -1164,6 +1164,16 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     )
     warnIfSlow('request_total', requestTotalMs, STAGE_SLO.requestTotalMs)
     logUsage()
+    
+    // Log detailed breakdown for debugging
+    if (result?.type === 'tool_action') {
+      console.log(`[ai-assistant][${cid}] ✓ TOOL_ACTION: ${result.tool}`)
+    } else if (result?.type === 'text') {
+      console.log(`[ai-assistant][${cid}] → TEXT_RESPONSE: ${String(result.text ?? '').slice(0, 80)}`)
+    } else {
+      console.log(`[ai-assistant][${cid}] ? UNKNOWN_TYPE: ${String(result?.type ?? 'null')}`)
+    }
+    
     return new Response(JSON.stringify({ ...result, correlation_id: cid }), {
       headers: { ...CORS, 'content-type': 'application/json' },
     })
