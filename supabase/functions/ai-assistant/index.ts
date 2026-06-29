@@ -1051,16 +1051,17 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           const toolResult = await executeReadTool(name, args)
           const resultCount = (toolResult as { count?: number }).count ?? 0
           const resultFound = Boolean((toolResult as { found?: boolean }).found)
+          const isMathQuery = Boolean((toolResult as { math_query?: boolean }).math_query)
           // Run secondary LLM call when:
           // - user wants a write (search → then propose change), OR
           // - multiple results found (list query like "what's on my calendar tomorrow") — LLM needs to generate the full answer
           // - any question that requires synthesis/analysis of the results
+          // - math_query intercepted: LLM needs to compute directly
           const userAsksSynthesis = /\b(how many|how busy|compare|summary|briefing|overview|rundown|what.*have|what.*on|what.*week|who.*have|any.*overlap|conflict|together)\b/i
             .test(latestUserText ?? '')
           const shouldRunSecondary =
-            name === 'search_events' &&
-            resultFound &&
-            (userLikelyRequestedWrite || resultCount > 1 || userAsksSynthesis)
+            (name === 'search_events' && resultFound && (userLikelyRequestedWrite || resultCount > 1 || userAsksSynthesis)) ||
+            (name === 'search_web' && isMathQuery)
 
           if (!shouldRunSecondary) {
             if (name === 'search_events' && resultFound) {
@@ -1080,11 +1081,12 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           ]
 
           // Second call for final answer.
-          // Build a focused secondary prompt: for list reads just enumerate; for writes call the tool directly.
           const isListRead = !userLikelyRequestedWrite
-          const secondaryAddendum = isListRead
-            ? '\n\nSECONDARY CALL — LIST MODE: The search_events result above contains all matching events. Enumerate them clearly in a concise list. Do NOT ask for clarification. Do NOT call any write tool.'
-            : '\n\nSECONDARY CALL — WRITE MODE: You have the search result. Now IMMEDIATELY call the appropriate write tool (update_event, delete_event, create_event). Do not output text first — call the tool directly.'
+          const secondaryAddendum = isMathQuery
+            ? '\n\nSECONDARY CALL — MATH MODE: The search_web call was intercepted because this is a math/calculation query. Ignore the empty web results. Compute the answer directly from your own reasoning and give a concise numerical answer.'
+            : isListRead
+              ? '\n\nSECONDARY CALL — LIST MODE: The search_events result above contains all matching events. Enumerate them clearly in a concise list. Do NOT ask for clarification. Do NOT call any write tool.'
+              : '\n\nSECONDARY CALL — WRITE MODE: You have the search result. Now IMMEDIATELY call the appropriate write tool (update_event, delete_event, create_event). Do not output text first — call the tool directly.'
           const secondaryPrompt = systemInstruction + secondaryAddendum
           const secondaryBody = { ...body, system_instruction: { parts: [{ text: secondaryPrompt }] }, contents: newContents }
           const secondaryStartMs = Date.now()
