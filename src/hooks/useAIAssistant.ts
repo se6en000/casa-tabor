@@ -490,26 +490,23 @@ function extractEventReference(event: EventWithDetails): AssistantContext['lastC
 
 // Phase 3: Extract context from tool action args to pin for next turn
 function extractContextFromToolArgs(_tool: string, args: Record<string, unknown>, events: EventWithDetails[]): AssistantContext['lastContextReference'] | null {
-  // Extract event_id if present
-  const eventId = typeof args.event_id === 'string' ? args.event_id : null
+  // Extract id (event ID) - tool schema uses 'id', not 'event_id'
+  const eventId = typeof args.id === 'string' ? args.id : null
   if (eventId) {
     const event = events.find(e => e.id === eventId)
     if (event) return extractEventReference(event)
   }
   
-  // Extract from direct event data
-  const eventTitle = typeof args.event_title === 'string' ? args.event_title : null
-  const eventTime = typeof args.event_time === 'string' ? args.event_time : null
-  const familyMember = typeof args.person_name === 'string' ? args.person_name : null
+  // Extract from direct event data (fallback if event not in list)
+  const eventTitle = typeof args.title === 'string' ? args.title : null
+  const eventTime = typeof args.start === 'string' ? new Date(args.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : null
   
   if (eventTitle) {
     return {
       eventTitle,
       eventTime: eventTime || undefined,
-      familyMemberName: familyMember || undefined,
-      description: familyMember
-        ? `${familyMember}'s ${eventTitle}${eventTime ? ` at ${eventTime}` : ''}`
-        : `${eventTitle}${eventTime ? ` at ${eventTime}` : ''}`,
+      familyMemberName: undefined,
+      description: eventTitle + (eventTime ? ` at ${eventTime}` : ''),
     }
   }
   
