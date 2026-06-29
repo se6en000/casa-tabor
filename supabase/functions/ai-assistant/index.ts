@@ -886,7 +886,12 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         console.log(`[ai-assistant][${cid}] stage=llm_secondary ms=${Date.now() - llmStartMs} status=${res2.status}`)
         if (!res2.ok) return { type: 'error', code: 'llm_error', message: 'Second LLM call failed' }
         const data2 = await res2.json()
-        const finalText = data2.candidates?.[0]?.content?.parts?.find((p: { text?: string }) => p.text)?.text ?? ''
+        const secondaryParts = data2.candidates?.[0]?.content?.parts ?? []
+        // Recursively resolve secondary response in case it contains a tool call (e.g., update_event after search_events)
+        const secondaryResolved = await resolveModelParts(secondaryParts)
+        if (secondaryResolved) return secondaryResolved
+        // Fallback to text if no tool was called
+        const finalText = secondaryParts.find((p: { text?: string }) => p.text)?.text ?? ''
         return { type: 'text', text: finalText || summarizeReadTool(name, toolResult) }
       }
 
