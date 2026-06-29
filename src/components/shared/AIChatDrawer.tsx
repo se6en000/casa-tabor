@@ -114,6 +114,11 @@ const STRONG_CANCEL_PHRASES = new Set([
   'later',
 ])
 
+type PendingAsrConfirmation = {
+  heardText: string
+  confidence: number
+}
+
 /** DeepGram STT bridge — HTTP for probe/display, WS for streaming */
 const BRIDGE    = 'http://127.0.0.1:8766'
 const BRIDGE_WS = 'ws://127.0.0.1:8767'
@@ -283,29 +288,15 @@ function isMeaningfulInterimSpeech(text: string): boolean {
 }
 
 function shouldRequestAsrConfirmation(text: string, confidence?: number | null): boolean {
-  // Phase 2: Ask user to confirm if:
-  // 1. Text is short (likely a one-word or two-word command)
-  // 2. Confidence is low (ASR was uncertain)
-  // 3. NOT already a known one-word intent
-  
+  // Phase 2: divert short, low-confidence utterances into an explicit
+  // conversational confirmation lane before they reach deterministic actions or the LLM.
   const trimmed = text.trim()
-  if (!trimmed || trimmed.length > 20) return false
-  
-  // MUST have a confidence score to proceed
+  if (!trimmed || trimmed.length > 24) return false
+  if (trimmed.length <= 2) return false
+  if (/^([a-z])\1+$/i.test(trimmed.replace(/\s+/g, ''))) return false
   if (typeof confidence !== 'number') return false
-  
-  // Only ask if confidence is genuinely low
   if (confidence >= 0.75) return false
-  
-  // Skip if it's already a known one-word intent (Phase 1 will handle it)
-  const oneWordIntents = new Set([
-    'yes', 'yeah', 'yep', 'ok', 'okay', 'sure', 'confirm',
-    'no', 'nope', 'cancel', 'abort', 'dont', "don't",
-    'delete', 'remove', 'move', 'add', 'change',
-  ])
-  if (oneWordIntents.has(trimmed.toLowerCase())) return false
-  
-  return true
+  return trimmed.split(/\s+/).filter(Boolean).length <= 3
 }
 
 /** Quick probe — resolves true if bridge is reachable within 800ms */
@@ -905,7 +896,19 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
 
-  const { messages, loading, send, retryLast, reset, session, sessionLoading, startFresh, primeMessages, updateMessageToolStatus } = useAIAssistant({ page, events, family, homeCity, focusedEvent, onSessionEnd: onClose })
+  const {
+    messages,
+    loading,
+    send,
+    retryLast,
+    reset,
+    session,
+    sessionLoading,
+    startFresh,
+    primeMessages,
+    appendMessages,
+    updateMessageToolStatus,
+  } = useAIAssistant({ page, events, family, homeCity, focusedEvent, onSessionEnd: onClose })
 
   const led = useLedStrip()
 
@@ -931,11 +934,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const previousOpenRef = useRef(false)  // Track previous open state to detect transitions
   const [uiFeedback, setUiFeedback] = useState<'none' | 'confirm' | 'cancel'>('none')
   
-  // Phase 2: ASR Confidence confirmation modal
-  const [asrConfirmationPending, setAsrConfirmationPending] = useState(false)
-  const [asrConfirmationText, setAsrConfirmationText] = useState('')
-  const [asrConfirmationConfidence, setAsrConfirmationConfidence] = useState(0)
-  const pendingAsrConfirmCallbackRef = useRef<((confirm: boolean) => void) | null>(null)
+  const [pendingAsrConfirmation, setPendingAsrConfirmation] = useState<PendingAsrConfirmation | null>(null)
 
   useEffect(() => {
     const sync = () => setVoiceConfig(readVoiceRuntimeConfig())
@@ -1146,6 +1145,19 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     }, FEEDBACK_LOCK_MS)
   }, [])
 
+  const clearPendingAsrConfirmation = useCallback(() => {
+    setPendingAsrConfirmation(null)
+  }, [])
+
+  const promptForAsrConfirmation = useCallback((heardText: string, confidence: number) => {
+    setPendingAsrConfirmation({ heardText, confidence })
+    appendMessages([{
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: `I heard "${heardText}" but only about ${Math.round(confidence * 100)}% confidently. Say "use it" or "yes" to continue, say "try again" or "no" to discard it, or just say the correction.`,
+    }])
+  }, [appendMessages])
+
   const sendCurrentInput = useCallback(async (text: string) => {
     const trimmed = text.trim()
     if (!trimmed) {
@@ -1196,6 +1208,76 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     }
   }, [loading, sendCurrentInput, appendDebugLog])
 
+  const handlePendingAsrConfirmation = useCallback((
+    replyText: string,
+    source: 'voice' | 'typed',
+    typedImage?: { dataUrl: string; mimeType: string } | null,
+  ): boolean => {
+    const pending = pendingAsrConfirmation
+    const trimmed = replyText.trim()
+    if (!pending || !trimmed) return false
+
+    const normalized = normalizeIntentPhrase(trimmed)
+    const wantsRetry = normalized === 'try again' || normalized === 'repeat that'
+    const wantsAccept = normalized === 'use it' || isStrongConfirmUtterance(trimmed)
+    const wantsReject = wantsRetry || isStrongCancelUtterance(trimmed)
+
+    clearPendingAsrConfirmation()
+
+    if (wantsAccept) {
+      appendDebugLog('phase2_asr_confirmation_accepted', pending.heardText)
+      if (source === 'voice') {
+        void queueOrSendVoiceInput(pending.heardText)
+      } else {
+        turnIdRef.current = `turn-${Date.now().toString(36)}`
+        transitionTurnState('thinking', 'typed_asr_confirmation_accepted')
+        void send(pending.heardText, undefined, {
+          disableFastGroceryLane: isWakeAssistantMode,
+          traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
+          hasPendingToolAction: !!pendingConfirmRef.current || !!pendingCancelRef.current,
+        })
+      }
+      return true
+    }
+
+    if (wantsReject) {
+      appendDebugLog('phase2_asr_confirmation_rejected', pending.heardText)
+      appendMessages([{
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: 'Okay — say it again.',
+      }])
+      interimRef.current = ''
+      queueMicrotask(() => setInput(''))
+      if (textareaRef.current) textareaRef.current.value = ''
+      return true
+    }
+
+    appendDebugLog('phase2_asr_confirmation_corrected', `${pending.heardText} -> ${trimmed}`)
+    if (source === 'voice') {
+      void queueOrSendVoiceInput(trimmed)
+    } else {
+      turnIdRef.current = `turn-${Date.now().toString(36)}`
+      transitionTurnState('thinking', 'typed_asr_confirmation_corrected')
+      void send(trimmed, typedImage ?? undefined, {
+        disableFastGroceryLane: isWakeAssistantMode,
+        traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
+        hasPendingToolAction: !!pendingConfirmRef.current || !!pendingCancelRef.current,
+      })
+    }
+    return true
+  }, [
+    pendingAsrConfirmation,
+    clearPendingAsrConfirmation,
+    appendDebugLog,
+    queueOrSendVoiceInput,
+    transitionTurnState,
+    send,
+    isWakeAssistantMode,
+    session?.id,
+    appendMessages,
+  ])
+
   const speech = useSpeechInput({
     onInterim: (interim) => {
       if (Date.now() < ignoreInterimUntilRef.current) return
@@ -1228,8 +1310,20 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         
         // Reset state for next utterance
         speech.currentSpeechStateRef.current = { text: '', bestConfidenceSoFar: null, latestConfidence: null }
+
+        if (pendingAsrConfirmation) {
+          const handled = handlePendingAsrConfirmation(finalized, 'voice')
+          if (handled) return
+        }
         
         const normalizedIntent = normalizeIntentPhrase(finalized)
+        if (shouldRequestAsrConfirmation(finalized, capturedConfidence)) {
+          appendDebugLog('phase2_asr_confidence_check', `text=${finalized} conf=${capturedConfidence?.toFixed(2)}`)
+          promptForAsrConfirmation(finalized, capturedConfidence ?? 0)
+          interimRef.current = ''
+          queueMicrotask(() => setInput(''))
+          return
+        }
         const shouldConfirmShortCircuit = hasPendingToolAction && isStrongConfirmUtterance(finalized)
         const shouldCancelShortCircuit = hasPendingToolAction && isStrongCancelUtterance(finalized)
         if (hasPendingToolAction && !shouldConfirmShortCircuit && !shouldCancelShortCircuit && normalizedIntent.length > 0) {
@@ -1300,29 +1394,6 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
           appendDebugLog('voice_sleep_command', msg.slice(0, 140))
           onSleepCommand?.()
           setTimeout(() => requestClose('sleep_command'), 300)
-          return
-        }
-        // Phase 2: ASR Confidence feedback - ask user to confirm low-confidence short utterances
-        if (shouldRequestAsrConfirmation(finalized, capturedConfidence)) {
-          appendDebugLog('phase2_asr_confidence_check', `text=${finalized} conf=${capturedConfidence?.toFixed(2)}`)
-          setAsrConfirmationText(finalized)
-          setAsrConfirmationConfidence(capturedConfidence ?? 0)
-          setAsrConfirmationPending(true)
-          
-          pendingAsrConfirmCallbackRef.current = (confirm: boolean) => {
-            setAsrConfirmationPending(false)
-            if (confirm) {
-              appendDebugLog('phase2_asr_confirmation_accepted', finalized)
-              // User confirmed, proceed to Phase 1/LLM
-              queueOrSendVoiceInput(finalized)
-            } else {
-              appendDebugLog('phase2_asr_confirmation_rejected', finalized)
-              // User rejected, clear and keep listening
-              interimRef.current = ''
-              queueMicrotask(() => setInput(''))
-              markConversationProgress(false)
-            }
-          }
           return
         }
         clearAutoSendTimer()
@@ -1497,6 +1568,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         feedbackTimerRef.current = null
       }
       queueMicrotask(() => setUiFeedback('none'))
+      queueMicrotask(() => clearPendingAsrConfirmation())
       ignoreInterimUntilRef.current = 0
       speech.stop()
       led.off()
@@ -1518,7 +1590,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     
     // Always update ref at end to track state for next render
     previousOpenRef.current = open
-  }, [open, markConversationProgress, wakeSessionNonce, clearAutoSendTimer, beginTraceSession, appendDebugLog, transitionTurnState]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, markConversationProgress, wakeSessionNonce, clearAutoSendTimer, beginTraceSession, appendDebugLog, transitionTurnState, clearPendingAsrConfirmation]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open) return
@@ -1670,13 +1742,13 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       // Auto re-arm for active wake sessions and explicit confirmation follow-ups.
       // Grocery voice add should also stay hot between turns (manual mic sessions),
       // so users can chain multiple items without re-tapping the mic.
-      const keepVoiceHot = hasPendingToolAction || wakeSessionActiveRef.current || page === 'grocery' || page === 'app'
+      const keepVoiceHot = !!pendingAsrConfirmation || hasPendingToolAction || wakeSessionActiveRef.current || page === 'grocery' || page === 'app'
       if (open && keepVoiceHot) {
         setTimeout(() => speech.ensureRunning(), 220)
         setTimeout(() => speech.ensureRunning(), 950)
       }
     }
-  }, [loading, open, hasPendingToolAction, page, speech])
+  }, [loading, open, pendingAsrConfirmation, hasPendingToolAction, page, speech])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -1743,6 +1815,14 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     const img = attachedImage
     if ((!text && !img) || loading) return
     markUserInteraction()
+    if (pendingAsrConfirmation && text) {
+      setInput('')
+      interimRef.current = ''
+      if (textareaRef.current) textareaRef.current.value = ''
+      setAttachedImage(null)
+      handlePendingAsrConfirmation(text, 'typed', img)
+      return
+    }
     turnIdRef.current = `turn-${Date.now().toString(36)}`
     transitionTurnState('thinking', 'typed_input_sent')
     setInput('')
@@ -1752,8 +1832,20 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     send(text || '(see attached image)', img ?? undefined, {
       disableFastGroceryLane: isWakeAssistantMode,
       traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
+      hasPendingToolAction: !!pendingConfirmRef.current || !!pendingCancelRef.current,
     })
-  }, [input, attachedImage, loading, send, markUserInteraction, transitionTurnState, isWakeAssistantMode, session?.id])
+  }, [
+    input,
+    attachedImage,
+    loading,
+    send,
+    markUserInteraction,
+    transitionTurnState,
+    isWakeAssistantMode,
+    session?.id,
+    pendingAsrConfirmation,
+    handlePendingAsrConfirmation,
+  ])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -2369,59 +2461,6 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         </>
       )}
 
-      {/* Phase 2: ASR Confidence Confirmation Modal */}
-      {asrConfirmationPending && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[75] flex items-center justify-center bg-black/50 sm:bg-black/30"
-          onClick={() => {
-            pendingAsrConfirmCallbackRef.current?.(false)
-            setAsrConfirmationPending(false)
-          }}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-            className="bg-white rounded-2xl shadow-2xl max-w-sm mx-4 border border-gray-200"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="p-6 space-y-5">
-              {/* Header */}
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-500">Did you say…?</p>
-                <p className="text-2xl font-bold text-casa-navy">"{asrConfirmationText}"</p>
-                <p className="text-xs text-gray-400">confidence: {(asrConfirmationConfidence * 100).toFixed(0)}%</p>
-              </div>
-
-              {/* Buttons */}
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => {
-                    pendingAsrConfirmCallbackRef.current?.(false)
-                    setAsrConfirmationPending(false)
-                  }}
-                  className="flex-1 px-4 py-2.5 rounded-lg font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors text-sm"
-                >
-                  No, repeat
-                </button>
-                <button
-                  onClick={() => {
-                    pendingAsrConfirmCallbackRef.current?.(true)
-                    setAsrConfirmationPending(false)
-                  }}
-                  className="flex-1 px-4 py-2.5 rounded-lg font-medium text-white bg-casa-gold hover:bg-casa-gold/90 transition-colors text-sm"
-                >
-                  Yes, got it
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
     </AnimatePresence>
   )
 }

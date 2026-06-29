@@ -1259,6 +1259,15 @@ export function useAIAssistant(ctx: AssistantContext) {
     })
   }, [saveMessages])
 
+  const appendMessages = useCallback((msgs: AIMessage[]) => {
+    if (msgs.length === 0) return
+    setMessages(prev => {
+      const updated = [...prev, ...msgs]
+      if (sessionRef.current) saveMessages(sessionRef.current.id, updated)
+      return updated
+    })
+  }, [saveMessages])
+
   // Backward-compat reset alias
   const reset = useCallback(() => setMessages([]), [])
 
@@ -1276,6 +1285,7 @@ export function useAIAssistant(ctx: AssistantContext) {
     reset,
     startFresh,
     primeMessages,
+    appendMessages,
     updateMessageToolStatus,
     retryLast,
   }
