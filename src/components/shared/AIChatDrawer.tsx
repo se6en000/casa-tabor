@@ -987,8 +987,8 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     }
   }, [])
 
-  // True when the latest assistant message has a pending tool action awaiting confirmation
-  const hasPendingToolAction = messages.some(m => m.toolAction?.status === 'pending')
+  // True when there's a registered confirm or cancel callback pending (source of truth)
+  const hasPendingToolAction = !!pendingConfirmRef.current || !!pendingCancelRef.current
   const isWakeAssistantMode = page === 'grocery' && Boolean(wakeSessionNonce)
 
   const triggerUiFeedback = useCallback((mode: 'confirm' | 'cancel') => {
