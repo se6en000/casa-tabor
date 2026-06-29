@@ -427,6 +427,27 @@ function parseFollowupAddMemberCommand(text: string, family: FamilyMember[]): st
   return familyMatch?.name ?? null
 }
 
+function buildTemporalAssumptions(now: Date) {
+  const hour = now.getHours()
+  const inferredDefaultDay = hour >= 19 ? 'tomorrow' : 'today'
+  const inferredDefaultDayReason = hour >= 19
+    ? 'Late-day requests should default to tomorrow unless user explicitly says today.'
+    : 'Daytime requests should default to today when still feasible.'
+
+  return {
+    inferredDefaultDay,
+    inferredDefaultDayReason,
+    nowHour24: hour,
+    nearFutureCutoffMinutes: 90,
+    bareHourRules: [
+      '7-11 usually means AM for appointments and school-day scheduling.',
+      '12 usually means 12 PM unless user explicitly says midnight.',
+      '1-6 usually means next upcoming daytime slot; prefer same-day PM when still in the future.',
+      'If inferred same-day time is already in the past by more than 90 minutes, roll to tomorrow unless user explicitly said today.',
+    ],
+  }
+}
+
 function buildContext(ctx: AssistantContext) {
   const now = new Date()
   const offsetMins = -now.getTimezoneOffset()
@@ -434,7 +455,8 @@ function buildContext(ctx: AssistantContext) {
   const offsetAbs = Math.abs(offsetMins)
   const utcOffset = `${offsetSign}${String(Math.floor(offsetAbs / 60)).padStart(2, '0')}:${String(offsetAbs % 60).padStart(2, '0')}`
 
-  const ambiguousTimeDefaultMeridiem = now.getHours() >= 6 && now.getHours() < 18 ? 'PM' : 'AM'
+  const ambiguousTimeDefaultMeridiem = 'AM'
+  const temporalAssumptions = buildTemporalAssumptions(now)
 
   return {
     page: ctx.page,
@@ -453,6 +475,7 @@ function buildContext(ctx: AssistantContext) {
     family: ctx.family.map(f => ({ id: f.id, name: f.name })),
     homeCity: ctx.homeCity,
     ambiguousTimeDefaultMeridiem,
+    temporalAssumptions,
     // Phase 3: Context pinning - provides recent reference for vague pronouns/references
     lastContextReference: ctx.lastContextReference ? {
       summary: ctx.lastContextReference.description,
