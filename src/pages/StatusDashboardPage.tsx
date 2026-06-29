@@ -18,6 +18,7 @@ interface DayBucket { date: string; calls: number; tokens: number }
 
 // Pricing per 1M tokens (input, output) — paid tier estimates
 const PRICING: Record<string, [number, number]> = {
+  'gemini-3.5-flash': [0.30, 2.50],
   'gemini-2.5-flash': [0.075, 0.30],
   'gemini-2.0-flash': [0.10, 0.40],
   'gemini-2.5-pro':   [1.25, 10],
