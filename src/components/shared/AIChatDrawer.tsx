@@ -1055,6 +1055,26 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const hasPendingToolAction = !!pendingConfirmRef.current || !!pendingCancelRef.current
   const isWakeAssistantMode = page === 'grocery' && Boolean(wakeSessionNonce)
 
+  const handleRegisterPendingConfirm = useCallback((fn: (() => Promise<boolean>) | null) => {
+    if (fn) {
+      appendDebugLog('callback_register_pending_confirm', 'fn registered')
+      pendingConfirmRef.current = fn
+    } else {
+      appendDebugLog('callback_register_pending_confirm_null', 'fn is null')
+      pendingConfirmRef.current = null
+    }
+  }, [appendDebugLog])
+
+  const handleRegisterPendingCancel = useCallback((fn: (() => Promise<boolean>) | null) => {
+    if (fn) {
+      appendDebugLog('callback_register_pending_cancel', 'fn registered')
+      pendingCancelRef.current = fn
+    } else {
+      appendDebugLog('callback_register_pending_cancel_null', 'fn is null')
+      pendingCancelRef.current = null
+    }
+  }, [appendDebugLog])
+
   const triggerUiFeedback = useCallback((mode: 'confirm' | 'cancel') => {
     setUiFeedback(mode)
     if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
@@ -1154,9 +1174,10 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
             })
             return
           }
+          // 🔴 BUG: ref is null even though hasPendingToolAction is true
+          appendDebugLog('voice_confirm_short_circuit_FAILED', `hasPendingToolAction=true but ref=null fire=${!!pendingConfirmRef.current}`)
           // No pending callback: fall through to Phase 1
-        }
-        if (hasPendingToolAction && shouldCancelShortCircuit) {
+        } else if (hasPendingToolAction && shouldCancelShortCircuit) {
           appendDebugLog('voice_cancel_budget_short_circuit', finalized.slice(0, 80))
           const run = pendingCancelRef.current
           if (run) {
@@ -1168,6 +1189,12 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
             })
             return
           }
+          // 🔴 BUG: ref is null even though hasPendingToolAction is true
+          appendDebugLog('voice_cancel_short_circuit_FAILED', `hasPendingToolAction=true but ref=null`)
+          // No pending callback: fall through to Phase 1
+        } else if (!hasPendingToolAction && (shouldConfirmShortCircuit || shouldCancelShortCircuit)) {
+          // Shouldn't happen, but log it
+          appendDebugLog('voice_short_circuit_logic_error', `hasPendingToolAction=false confirm=${shouldConfirmShortCircuit} cancel=${shouldCancelShortCircuit}`)
           // No pending callback: fall through to Phase 1
         }
         // Check if this is a known one-word intent (should bypass noise filter)
@@ -1949,8 +1976,8 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                   onRefreshToolAction={() => {
                     qc.invalidateQueries({ queryKey: ['events'] })
                   }}
-                  registerPendingConfirm={(fn) => { pendingConfirmRef.current = fn }}
-                  registerPendingCancel={(fn)  => { pendingCancelRef.current  = fn }}
+                  registerPendingConfirm={handleRegisterPendingConfirm}
+                  registerPendingCancel={handleRegisterPendingCancel}
                 />
               ))}
 
@@ -2267,8 +2294,11 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, o
     if (isLatest && hasPendingAction) {
       registerPendingConfirm(doConfirm)
       registerPendingCancel(doCancel)
+      console.debug(`[MessageBubble] Registered confirm/cancel callbacks for message ${msg.id}`, { isLatest, hasPendingAction, ta_status: ta?.status })
+    } else if (!isLatest || !hasPendingAction) {
+      console.debug(`[MessageBubble] NOT registering callbacks`, { isLatest, hasPendingAction, ta_status: ta?.status, msg_id: msg.id })
     }
-  }, [isLatest, hasPendingAction, doConfirm, doCancel]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLatest, hasPendingAction, doConfirm, doCancel, msg.id, ta?.status]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
