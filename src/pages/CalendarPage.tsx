@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useCalendarStore } from '../stores/calendarStore'
-import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays, subDays, addMonths, subMonths, isValid, startOfDay } from 'date-fns'
+import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays, subDays, addMonths, subMonths } from 'date-fns'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import WeekView from '../components/calendar/WeekView'
 import StackedView from '../components/calendar/StackedView'
@@ -18,7 +18,6 @@ const views: { key: CalendarView; label: string }[] = [
 
 export default function CalendarPage() {
   const { activeView, setActiveView, selectedDate, setSelectedDate } = useCalendarStore()
-  const safeSelectedDate = isValid(selectedDate) ? selectedDate : new Date()
 
 
   // Track slide direction: 1 = forward (next), -1 = backward (prev), 0 = today jump
@@ -28,31 +27,33 @@ export default function CalendarPage() {
   const isMonth = activeView === 'month'
   const isStacked = activeView === 'stacked'
 
-  const headerBase = safeSelectedDate
+  // Stacked view always anchors to today — use today as header base so the
+  // label matches what StackedView actually renders (rolling 8-day window).
+  const headerBase = isStacked ? new Date() : selectedDate
   const weekStart = startOfWeek(headerBase, { weekStartsOn: 0 })
-  const stackedEnd = addDays(headerBase, 7)
+  const stackedEnd = addDays(new Date(), 7)
 
-  const goToToday = () => { setDirection(0); setSelectedDate(startOfDay(new Date())) }
+  const goToToday = () => { setDirection(0); setSelectedDate(new Date()) }
   const goPrev = useCallback(() => {
     setDirection(-1)
-    if (isDay || isStacked) setSelectedDate(startOfDay(subDays(safeSelectedDate, 1)))
-    else if (isMonth) setSelectedDate(subMonths(safeSelectedDate, 1))
-    else setSelectedDate(subWeeks(safeSelectedDate, 1))
-  }, [isDay, isMonth, isStacked, safeSelectedDate, setSelectedDate])
+    if (isDay) setSelectedDate(subDays(selectedDate, 1))
+    else if (isMonth) setSelectedDate(subMonths(selectedDate, 1))
+    else setSelectedDate(subWeeks(selectedDate, 1))
+  }, [isDay, isMonth, selectedDate, setSelectedDate])
   const goNext = useCallback(() => {
     setDirection(1)
-    if (isDay || isStacked) setSelectedDate(startOfDay(addDays(safeSelectedDate, 1)))
-    else if (isMonth) setSelectedDate(addMonths(safeSelectedDate, 1))
-    else setSelectedDate(addWeeks(safeSelectedDate, 1))
-  }, [isDay, isMonth, isStacked, safeSelectedDate, setSelectedDate])
+    if (isDay) setSelectedDate(addDays(selectedDate, 1))
+    else if (isMonth) setSelectedDate(addMonths(selectedDate, 1))
+    else setSelectedDate(addWeeks(selectedDate, 1))
+  }, [isDay, isMonth, selectedDate, setSelectedDate])
 
   const headerLabel = isDay
-    ? format(safeSelectedDate, 'EEEE, MMMM d, yyyy')
+    ? format(selectedDate, 'EEEE, MMMM d, yyyy')
     : isMonth
-    ? format(safeSelectedDate, 'MMMM yyyy')
+    ? format(selectedDate, 'MMMM yyyy')
     : isStacked
-    ? `${format(headerBase, 'MMM d')} – ${format(stackedEnd, stackedEnd.getMonth() === headerBase.getMonth() ? 'd, yyyy' : 'MMM d, yyyy')}`
-    : `${format(weekStart, 'MMMM d')} – ${format(endOfWeek(safeSelectedDate, { weekStartsOn: 0 }), 'd, yyyy')}`
+    ? `${format(new Date(), 'MMM d')} – ${format(stackedEnd, stackedEnd.getMonth() === new Date().getMonth() ? 'd, yyyy' : 'MMM d, yyyy')}`
+    : `${format(weekStart, 'MMMM d')} – ${format(endOfWeek(selectedDate, { weekStartsOn: 0 }), 'd, yyyy')}`
 
   // Touch swipe detection — skip if a modal/panel is open (z-index overlay)
   const touchStartX = useRef<number | null>(null)
@@ -92,7 +93,7 @@ export default function CalendarPage() {
     exit:  (d: number) => ({ x: d === 0 ? 0 : d > 0 ? '-100%' : '100%', opacity: d === 0 ? 0 : 1 }),
   }
 
-  const animKey = `${activeView}-${format(safeSelectedDate, 'yyyy-MM-dd')}`
+  const animKey = `${activeView}-${format(selectedDate, 'yyyy-MM-dd')}`
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -105,14 +106,16 @@ export default function CalendarPage() {
           >
             Today
           </button>
-          <>
-            <button onClick={goPrev} className="p-2.5 rounded-button hover:bg-casa-divider transition-colors text-casa-muted min-w-[44px] min-h-[44px] flex items-center justify-center">
-              <ChevronLeft size={20} />
-            </button>
-            <button onClick={goNext} className="p-2.5 rounded-button hover:bg-casa-divider transition-colors text-casa-muted min-w-[44px] min-h-[44px] flex items-center justify-center">
-              <ChevronRight size={20} />
-            </button>
-          </>
+          {!isStacked && (
+            <>
+              <button onClick={goPrev} className="p-2.5 rounded-button hover:bg-casa-divider transition-colors text-casa-muted min-w-[44px] min-h-[44px] flex items-center justify-center">
+                <ChevronLeft size={20} />
+              </button>
+              <button onClick={goNext} className="p-2.5 rounded-button hover:bg-casa-divider transition-colors text-casa-muted min-w-[44px] min-h-[44px] flex items-center justify-center">
+                <ChevronRight size={20} />
+              </button>
+            </>
+          )}
           <h2 className="font-display text-heading text-casa-text ml-2">
             {headerLabel}
           </h2>

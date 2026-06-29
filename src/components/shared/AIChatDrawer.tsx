@@ -11,132 +11,10 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
-import {
-  readVoiceRuntimeConfig,
-  shouldEmitVoiceDebug,
-  type VoiceDebugLevel,
-  type VoiceRuntimeConfig,
-  writeVoiceRuntimeConfig,
-} from '../../lib/voiceRuntimeConfig'
-import { appendVoiceAudit, clearVoiceAudit, readVoiceAudit, type VoiceAuditEvent } from '../../lib/voiceAudit'
-import { enqueueRemoteVoiceTrace } from '../../lib/remoteVoiceTrace'
 
 const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s all|all done|never mind|nevermind|stop)\b/i
-const STRONG_CONFIRM_PHRASES = new Set([
-  // Universal confirms
-  'yes',
-  'yeah',
-  'yep',
-  'confirm',
-  'confirmed',
-  'ok',
-  'okay',
-  'go ahead',
-  'do it',
-  'sounds good',
-  'correct',
-  'right',
-  'affirmative',
-  'absolutely',
-  'sure',
-  'proceed',
-  'uh huh',
-  'mm hmm',
-  'take it',
-  'go for it',
-  'yup',
-  'please',
-  'yes please',
-  'that is right',
-  'thats right',
-  'do that',
-  'do this',
-  'apply it',
-  'apply that',
-  'apply this',
-  'apply the change',
-  'apply changes',
-  'make it so',
-  'let\'s do it',
-  'let\'s go',
-  'lets do it',
-  'lets go',
-  'accept',
-  'approve',
-  
-  // Action-specific confirms (when shown in red on confirmation UI)
-  // For delete: "Delete this?"
-  'delete',
-  'remove',
-  'trash',
-  'discard',
-  'clear',
-  'wipe',
-  'erase',
-  
-  // For update/move: "Move to X?"
-  'move',
-  'change',
-  'reschedule',
-  'update',
-  'go',
-  'set',
-  'make it',
-  'put it',
-  
-  // For add/create: "Add to calendar?"
-  'add',
-  'create',
-  'make',
-  'schedule',
-  'book',
-  
-  // For send: "Send this?"
-  'send',
-  'submit',
-  'post',
-])
-const STRONG_CANCEL_PHRASES = new Set([
-  // Universal cancels
-  'cancel',
-  'do not',
-  "don't",
-  'abort',
-  'never mind',
-  'nevermind',
-  'undo',
-  'stop',
-  'no',
-  'nope',
-  'uh uh',
-  'nah',
-  
-  // Action-specific rejects
-  // For delete: "Keep it instead"
-  'keep it',
-  'keep',
-  'leave it',
-  'leave',
-  'don\'t delete',
-  'save it',
-  'save',
-  
-  // For move/reschedule: "Keep the old time"
-  'keep the time',
-  'leave it alone',
-  'forget it',
-  'skip it',
-  'skip',
-  
-  // General emphatic rejects
-  'not now',
-  'later',
-])
-
-type PendingAsrConfirmation = {
-  heardText: string
-  confidence: number
-}
+const CONFIRM_PHRASES = /\b(yes|yeah|yep|confirm|ok|okay|go ahead|do it|sounds good|correct|right|affirmative|absolutely|sure|proceed)\b/i
+const CANCEL_PHRASES  = /\b(no|nope|cancel|don't|do not|stop|abort|never mind|nevermind|undo)\b/i
 
 /** DeepGram STT bridge — HTTP for probe/display, WS for streaming */
 const BRIDGE    = 'http://127.0.0.1:8766'
@@ -146,190 +24,10 @@ const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 
 
 type VoicePhase = 'idle' | 'connecting' | 'listening' | 'processing'
 type STTMode = 'unknown' | 'bridge' | 'webspeech'
-type WebSpeechResult = { isFinal: boolean; 0: { transcript: string } }
-type WebSpeechResultEvent = { resultIndex: number; results: ArrayLike<WebSpeechResult> }
-type WebSpeechErrorEvent = { error?: string }
 
 const SILENCE_MS = 1500
 const CONNECT_TIMEOUT_MS = 5000
 const NO_ACTIVITY_AUTO_CLOSE_MS = 30_000
-const WAKE_FOLLOWUP_GRACE_MS = 4500
-const WAKE_MISFIRE_COOLDOWN_SECS = 6
-const TRANSCRIPT_SETTLE_BEFORE_SEND_MS = 250
-const FEEDBACK_LOCK_MS = 2800
-const VOICE_TELEMETRY_KEY = 'casa-voice-telemetry'
-const AI_DEBUG_LOG_KEY = 'casa-ai-debug-log'
-const VOICE_DEBUG_DEVICE_ID_KEY = 'casa-voice-debug-device-id'
-const MAX_DEBUG_LOG_ENTRIES = 500
-const MAX_AUDIT_LOG_ENTRIES = 500
-
-type DebugLogEntry = {
-  at: string
-  event: string
-  detail?: string
-  sessionId?: string
-  turnId?: string
-  seq?: number
-  elapsedMs?: number
-  page?: string
-  turnState?: string
-  loading?: boolean
-  queueDepth?: number
-  correlationId?: string
-  actionId?: string
-  lane?: string
-  payload?: unknown
-}
-
-type TraceMeta = Pick<DebugLogEntry, 'correlationId' | 'actionId' | 'lane' | 'payload'>
-
-type VoiceTurnState = 'idle' | 'wake_armed' | 'listening' | 'endpointed' | 'thinking' | 'responding' | 'closed'
-const TURN_STATE_TRANSITIONS: Record<VoiceTurnState, readonly VoiceTurnState[]> = {
-  idle: ['wake_armed', 'listening', 'thinking', 'closed'],
-  wake_armed: ['listening', 'closed'],
-  listening: ['endpointed', 'thinking', 'closed'],
-  endpointed: ['thinking', 'listening', 'closed'],
-  thinking: ['responding', 'listening', 'endpointed', 'closed'],
-  responding: ['endpointed', 'listening', 'thinking', 'closed'],
-  closed: ['idle', 'wake_armed', 'listening'],
-}
-
-type VoiceUxProfile = {
-  inactivityMs: number
-  wakeFollowupGraceMs: number
-  wakeMisfireCooldownSecs: number
-}
-
-function detectClientBuildFingerprint(): string {
-  if (typeof document === 'undefined') return 'unknown'
-  const moduleScripts = Array.from(document.querySelectorAll('script[type="module"][src]'))
-  const appScript = moduleScripts
-    .map((script) => script.getAttribute('src') ?? '')
-    .find((src) => src.includes('/assets/index-') || src.includes('index-'))
-  if (!appScript) return 'unknown'
-  const fileName = appScript.split('/').pop() ?? appScript
-  return fileName || 'unknown'
-}
-
-function eventDebugLevel(event: string): VoiceDebugLevel {
-  if (
-    event.startsWith('voice_queued') ||
-    event.startsWith('voice_requeued') ||
-    event.startsWith('assistant_wake_')
-  ) {
-    return 'verbose'
-  }
-  return 'minimal'
-}
-
-function normalizeIntentPhrase(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9'\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-// Single-word anchors that are unambiguously confirmations
-const CONFIRM_ANCHOR_WORDS = new Set([
-  'yes', 'yeah', 'yep', 'yup', 'confirm', 'confirmed', 'ok', 'okay',
-  'correct', 'right', 'affirmative', 'absolutely', 'sure', 'proceed',
-  'accept', 'approve', 'apply', 'do', 'go', 'please',
-])
-
-function isStrongConfirmUtterance(value: string): boolean {
-  const normalized = normalizeIntentPhrase(value)
-  if (normalized.length === 0) return false
-  // Exact match
-  if (STRONG_CONFIRM_PHRASES.has(normalized)) return true
-  // Short phrase (≤4 words): accept if first word is an anchor and no cancel word present
-  const words = normalized.split(/\s+/)
-  if (words.length <= 4 && CONFIRM_ANCHOR_WORDS.has(words[0])) {
-    const hasCancel = words.some(w => STRONG_CANCEL_PHRASES.has(w))
-    return !hasCancel
-  }
-  return false
-}
-
-function isStrongCancelUtterance(value: string): boolean {
-  const normalized = normalizeIntentPhrase(value)
-  if (normalized === 'no' || normalized === 'nope' || normalized === 'oh no') return false
-  return normalized.length > 0 && STRONG_CANCEL_PHRASES.has(normalized)
-}
-
-function getVoiceUxProfile(): VoiceUxProfile {
-  if (typeof window === 'undefined') {
-    return {
-      inactivityMs: NO_ACTIVITY_AUTO_CLOSE_MS,
-      wakeFollowupGraceMs: WAKE_FOLLOWUP_GRACE_MS,
-      wakeMisfireCooldownSecs: WAKE_MISFIRE_COOLDOWN_SECS,
-    }
-  }
-  const handheld = window.innerWidth < 900
-  return handheld
-    ? { inactivityMs: 35_000, wakeFollowupGraceMs: 5200, wakeMisfireCooldownSecs: 5 }
-    : { inactivityMs: 30_000, wakeFollowupGraceMs: 4500, wakeMisfireCooldownSecs: 6 }
-}
-
-function trackVoiceMetric(metric: string): void {
-  if (typeof window === 'undefined') return
-  try {
-    const raw = localStorage.getItem(VOICE_TELEMETRY_KEY)
-    const parsed = raw ? JSON.parse(raw) as { counts?: Record<string, number> } : {}
-    const counts = parsed.counts ?? {}
-    counts[metric] = (counts[metric] ?? 0) + 1
-    localStorage.setItem(VOICE_TELEMETRY_KEY, JSON.stringify({
-      counts,
-      updatedAt: new Date().toISOString(),
-    }))
-  } catch {
-    // ignore local telemetry write failures
-  }
-}
-
-function isLikelyNoiseTranscript(text: string, confidence?: number | null): boolean {
-  const trimmed = text.trim()
-  if (!trimmed) return true
-
-  const words = trimmed.split(/\s+/).filter(Boolean)
-  const alphaNumericChars = (trimmed.match(/[a-z0-9]/gi) ?? []).length
-  const singleWord = words.length === 1
-  const compact = trimmed.toLowerCase().replace(/[^a-z0-9]/gi, '')
-
-  // Keep the noise gate narrow: only reject obvious junk, not plausible speech.
-  if (alphaNumericChars === 0) return true
-  if (singleWord && compact.length <= 1) return true
-  if (singleWord && compact.length >= 3 && /^([a-z0-9])\1+$/.test(compact)) return true
-
-  // Let Phase 2 handle uncertain-but-plausible speech. Only auto-drop
-  // ultra-low-confidence fragments that are too small to be real intent.
-  if (typeof confidence === 'number' && confidence < 0.2 && words.length <= 2 && compact.length <= 3) {
-    return true
-  }
-
-  return false
-}
-
-function isMeaningfulInterimSpeech(text: string): boolean {
-  const trimmed = text.trim()
-  if (!trimmed) return false
-  if (isLikelyNoiseTranscript(trimmed, null)) return false
-  const words = trimmed.split(/\s+/).filter(Boolean)
-  if (words.length >= 2) return true
-  return trimmed.replace(/[^a-z0-9]/gi, '').length >= 3
-}
-
-function shouldRequestAsrConfirmation(text: string, confidence?: number | null): boolean {
-  // Phase 2: divert short, low-confidence utterances into an explicit
-  // conversational confirmation lane before they reach deterministic actions or the LLM.
-  const trimmed = text.trim()
-  if (!trimmed || trimmed.length > 24) return false
-  if (trimmed.length <= 2) return false
-  if (/^([a-z])\1+$/i.test(trimmed.replace(/\s+/g, ''))) return false
-  if (typeof confidence !== 'number') return false
-  if (confidence >= 0.75) return false
-  return trimmed.split(/\s+/).filter(Boolean).length <= 3
-}
 
 /** Quick probe — resolves true if bridge is reachable within 800ms */
 async function probeBridge(): Promise<boolean> {
@@ -351,51 +49,30 @@ function useSpeechInput({
   onConfirm,
   onCancel,
   hasPendingAction,
-  keepBridgeAliveBetweenFinals = false,
-  onTrace,
 }: {
   onInterim: (text: string) => void
-  onFinalTranscript: (text: string, confidence?: number | null) => void
+  onFinalTranscript: (text: string) => void
   onDismiss: () => void
   onConfirm: () => void
   onCancel: () => void
   hasPendingAction: boolean
-  keepBridgeAliveBetweenFinals?: boolean
-  onTrace?: (event: string, detail?: string) => void
 }) {
   const wsRef              = useRef<WebSocket | null>(null)
-  const wsGenerationRef    = useRef(0)
   const activeRef          = useRef(false)
   const suppressRef        = useRef(false)
   const modeRef            = useRef<STTMode>('unknown')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef     = useRef<any>(null)
-  const webspeechRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const silenceTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastInterimRef     = useRef('')
   const lastInterimTimeRef = useRef(0)
   const connectStartRef    = useRef(0)
-  const bridgeReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const bridgeConnectingRef = useRef(false)
   const [phase, setPhase]  = useState<VoicePhase>('idle')
   const phaseRef           = useRef<VoicePhase>('idle')
   const setPhaseSync = (p: VoicePhase) => { phaseRef.current = p; setPhase(p) }
   const [volume, setVolume] = useState(0)
   const [bridgeDown, setBridgeDown] = useState(false)
-  const [reconnecting, setReconnecting] = useState(false)
-  const [wakeCooldownRemaining, setWakeCooldownRemaining] = useState(0)
   const supported = !IS_SAFE_MODE
-  
-  // Single source of truth for current speech recognition state
-  // Tracks: cumulative text, best confidence seen so far for this utterance
-  // Reset on each new final recognition, persists across interim updates
-  const currentSpeechStateRef = useRef<{ 
-    text: string
-    // Track best confidence seen during interim results
-    bestConfidenceSoFar: number | null
-    // Track highest confidence in current recognition chain
-    latestConfidence: number | null
-  }>({ text: '', bestConfidenceSoFar: null, latestConfidence: null })
 
   // ── Stable callback refs — always current, never stale inside setInterval ──
   // This is the core pattern for voice agents: the polling loop runs continuously
@@ -423,32 +100,16 @@ function useSpeechInput({
       : null
   ).current
 
-  const clearBridgeReconnectTimer = useCallback(() => {
-    if (bridgeReconnectTimerRef.current) {
-      clearTimeout(bridgeReconnectTimerRef.current)
-      bridgeReconnectTimerRef.current = null
-    }
-  }, [])
-
-  const stopWS = useCallback(() => {
-    clearBridgeReconnectTimer()
-    bridgeConnectingRef.current = false
-    wsGenerationRef.current += 1
+  const stopWS = () => {
     if (wsRef.current) {
       try { wsRef.current.close() } catch { /* ignore */ }
       wsRef.current = null
     }
-  }, [clearBridgeReconnectTimer])
+  }
   const stopSilenceTimer = () => { if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
-  const stopWebSpeechRestartTimer = useCallback(() => {
-    if (webspeechRestartTimerRef.current) {
-      clearTimeout(webspeechRestartTimerRef.current)
-      webspeechRestartTimerRef.current = null
-    }
-  }, [])
 
   // No deps — uses only refs, so triggerFinal/startBridge are created once and never stale
-  const handleFinalTranscript = useCallback((transcript: string, confidence?: number | null) => {
+  const handleFinalTranscript = useCallback((transcript: string) => {
     if (!transcript.trim()) return
     if (suppressRef.current) return
     if (DISMISS_PHRASES.test(transcript)) {
@@ -457,42 +118,36 @@ function useSpeechInput({
       return
     }
     const isShort = transcript.trim().split(/\s+/).length <= 5
-    if (isShort && hasPendingRef.current && isStrongConfirmUtterance(transcript)) {
+    if (isShort && hasPendingRef.current && CONFIRM_PHRASES.test(transcript)) {
       onConfirmRef.current(); onInterimRef.current('')
       return
     }
-    if (isShort && hasPendingRef.current && isStrongCancelUtterance(transcript)) {
+    if (isShort && hasPendingRef.current && CANCEL_PHRASES.test(transcript)) {
       onCancelRef.current(); onInterimRef.current('')
       return
     }
-    onFinalRef.current(transcript.trim(), confidence); onFinalRef.current('__SEND__', confidence)
-  }, [])
+    onFinalRef.current(transcript.trim()); onFinalRef.current('__SEND__')
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const triggerFinal = useCallback((text: string, confidence?: number | null) => {
-    const keepBridgeStreamAlive =
-      keepBridgeAliveBetweenFinals &&
-      modeRef.current === 'bridge' &&
-      activeRef.current
-    if (!keepBridgeStreamAlive) {
-      stopWS()
-    }
+  const triggerFinal = useCallback((text: string) => {
+    stopWS()
     stopSilenceTimer()
-    stopWebSpeechRestartTimer()
     setPhaseSync('processing')
     const finalText = text.trim() || lastInterimRef.current.trim()
-    onTrace?.('speech_trigger_final', `${finalText.slice(0, 140)}${typeof confidence === 'number' ? ` (conf=${confidence.toFixed(2)})` : ''}`)
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
-    handleFinalTranscript(finalText, confidence)
-  }, [handleFinalTranscript, keepBridgeAliveBetweenFinals, onTrace, stopWebSpeechRestartTimer, stopWS])
+    handleFinalTranscript(finalText)
+  }, [handleFinalTranscript])
 
   // ── Web Speech API path (Safari / iOS) ──────────────────────────────────
   const startWebSpeech = useCallback(() => {
     if (!WebSpeech || !activeRef.current) return
-    if (recognitionRef.current) return
-    stopWebSpeechRestartTimer()
+    // Kill any lingering instance to prevent duplicate ghost listeners
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch { /* ignore */ }
+      recognitionRef.current = null
+    }
     setPhaseSync('listening')
-    onTrace?.('speech_webspeech_start')
 
     const recognition = new WebSpeech()
     recognitionRef.current = recognition
@@ -500,25 +155,7 @@ function useSpeechInput({
     recognition.interimResults = true
     recognition.lang = 'en-US'
 
-    const scheduleRecognitionRestart = (delayMs: number) => {
-      if (webspeechRestartTimerRef.current) return
-      webspeechRestartTimerRef.current = setTimeout(() => {
-        webspeechRestartTimerRef.current = null
-        if (!activeRef.current || phaseRef.current === 'processing') return
-        if (recognitionRef.current !== recognition) {
-          recognitionRef.current = recognition
-        }
-        try {
-          recognition.start()
-        } catch {
-          if (recognitionRef.current === recognition) {
-            recognitionRef.current = null
-          }
-        }
-      }, delayMs)
-    }
-
-    recognition.onresult = (event: WebSpeechResultEvent) => {
+    recognition.onresult = (event: any) => {
       let interim = ''
       let finalAccum = ''
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -531,8 +168,10 @@ function useSpeechInput({
       if (finalAccum.trim()) {
         stopSilenceTimer()
         lastInterimRef.current = ''
+        onInterimRef.current(finalAccum.trim())
         try { recognition.stop() } catch { /* ignore */ }
         triggerFinal(finalAccum.trim())
+        if (activeRef.current) setTimeout(() => startWebSpeech(), 300)
         return
       }
 
@@ -550,207 +189,111 @@ function useSpeechInput({
           lastInterimRef.current = ''
           try { recognition.stop() } catch { /* ignore */ }
           triggerFinal(toSend)
+          if (activeRef.current) setTimeout(() => startWebSpeech(), 300)
         }
       }, SILENCE_MS)
     }
 
-    recognition.onerror = (e: WebSpeechErrorEvent) => {
-      if (recognitionRef.current === recognition) {
-        recognitionRef.current = null
-      }
+    recognition.onerror = (e: any) => {
       // 'no-speech' and 'aborted' are expected — no-speech = silence, aborted = we called stop()
       if (e.error === 'no-speech' || e.error === 'aborted') return
-      onTrace?.('speech_webspeech_error', e.error ?? 'unknown')
       console.warn('[WebSpeech] error', e.error)
-      if (
-        activeRef.current &&
-        phaseRef.current !== 'processing' &&
-        !webspeechRestartTimerRef.current
-      ) {
-        scheduleRecognitionRestart(500)
-      }
+      if (activeRef.current) setTimeout(() => startWebSpeech(), 500)
     }
 
     recognition.onend = () => {
-      if (recognitionRef.current === recognition) {
-        recognitionRef.current = null
-      }
-      onTrace?.('speech_webspeech_end')
       // continuous=true can still stop on silence — restart transparently
       // Use phaseRef (not phase) to avoid stale closure
-      if (
-        activeRef.current &&
-        phaseRef.current !== 'processing' &&
-        !webspeechRestartTimerRef.current
-      ) {
-        onTrace?.('speech_webspeech_restart_scheduled', 'onend:150ms')
-        scheduleRecognitionRestart(150)
-      } else {
-        onTrace?.(
-          'speech_webspeech_restart_skipped',
-          `active=${activeRef.current ? 1 : 0} phase=${phaseRef.current} timer=${webspeechRestartTimerRef.current ? 1 : 0}`,
-        )
+      if (activeRef.current && phaseRef.current !== 'processing') {
+        setTimeout(() => startWebSpeech(), 150)
       }
     }
 
-    try {
-      recognition.start()
-    } catch (err) {
-      if (recognitionRef.current === recognition) {
-        recognitionRef.current = null
-      }
-      onTrace?.('speech_webspeech_start_failed', (err as Error).message ?? 'unknown')
-      console.warn('[WebSpeech] start failed', err)
-      if (
-        activeRef.current &&
-        phaseRef.current !== 'processing' &&
-        !webspeechRestartTimerRef.current
-      ) {
-        scheduleRecognitionRestart(300)
-      }
-    }
-  }, [WebSpeech, triggerFinal, stopWebSpeechRestartTimer, onTrace]) // all state accessed via refs
+    recognition.start()
+  }, [WebSpeech, triggerFinal]) // all state accessed via refs
 
   const stopWebSpeech = useCallback(() => {
     stopSilenceTimer()
-    stopWebSpeechRestartTimer()
     if (recognitionRef.current) {
       try { recognitionRef.current.stop() } catch { /* ignore */ }
       recognitionRef.current = null
     }
-  }, [stopWebSpeechRestartTimer])
+  }, [])
 
   // ── Bridge path (Pi / Chromium) ─────────────────────────────────────────
   const startBridge = useCallback(() => {
     if (!activeRef.current) return
-    const existing = wsRef.current
-    if (existing && (existing.readyState === WebSocket.CONNECTING || existing.readyState === WebSocket.OPEN)) {
-      return
-    }
-    if (bridgeConnectingRef.current) return
-    const connectBridge = () => {
-      clearBridgeReconnectTimer()
-      bridgeConnectingRef.current = true
-      lastInterimRef.current = ''
-      lastInterimTimeRef.current = 0
-      connectStartRef.current = Date.now()
-      setPhaseSync('connecting')
-      const generation = wsGenerationRef.current + 1
-      wsGenerationRef.current = generation
+    stopWS()
+    lastInterimRef.current = ''
+    lastInterimTimeRef.current = 0
+    connectStartRef.current = Date.now()
+    setPhaseSync('connecting')
 
-      const ws = new WebSocket(BRIDGE_WS)
-      onTrace?.('speech_bridge_connect_start')
-      wsRef.current = ws
+    const ws = new WebSocket(BRIDGE_WS)
+    wsRef.current = ws
 
-      const scheduleReconnect = (delayMs: number) => {
-        if (bridgeReconnectTimerRef.current) return
-        if (!activeRef.current || phaseRef.current === 'processing') return
-        bridgeReconnectTimerRef.current = setTimeout(() => {
-          bridgeReconnectTimerRef.current = null
-          if (!activeRef.current || phaseRef.current === 'processing') return
-          connectBridge()
-        }, delayMs)
-      }
-
-      ws.onopen = () => {
-        if (wsGenerationRef.current !== generation || wsRef.current !== ws) return
-        bridgeConnectingRef.current = false
-        setReconnecting(false)
-        setBridgeDown(false)
-        onTrace?.('speech_bridge_ws_open')
-        ws.send(JSON.stringify({ type: 'start' }))
-      }
-
-      ws.onmessage = (evt) => {
-        if (wsGenerationRef.current !== generation || wsRef.current !== ws) return
-        if (!activeRef.current) return
-        try {
-          const msg = JSON.parse(evt.data as string)
-          switch (msg.type) {
-            case 'ready':
-              setPhaseSync('listening')
-              onTrace?.('speech_bridge_ready')
-              connectStartRef.current = 0
-              setBridgeDown(false)
-              setReconnecting(false)
-              break
-            case 'volume':
-              setVolume(msg.level ?? 0)
-              break
-            case 'interim':
-              if (phaseRef.current === 'processing') break
-              if (msg.text !== lastInterimRef.current) {
-                lastInterimRef.current = msg.text
-                lastInterimTimeRef.current = Date.now()
-                // Update speech state: track best confidence seen for this utterance
-                const newConfidence = typeof msg.confidence === 'number' ? msg.confidence : null
-                currentSpeechStateRef.current.text = msg.text
-                currentSpeechStateRef.current.latestConfidence = newConfidence
-                // Keep best (highest) confidence observed during this recognition
-                if (newConfidence !== null && (currentSpeechStateRef.current.bestConfidenceSoFar === null || newConfidence > currentSpeechStateRef.current.bestConfidenceSoFar)) {
-                  currentSpeechStateRef.current.bestConfidenceSoFar = newConfidence
-                }
-                onInterimRef.current(msg.text)
-              }
-              break
-            case 'final':
-              if (phaseRef.current !== 'processing') {
-                // Final result: lock in the best confidence + latest confidence
-                const newConfidence = typeof msg.confidence === 'number' ? msg.confidence : null
-                currentSpeechStateRef.current.text = msg.text
-                currentSpeechStateRef.current.latestConfidence = newConfidence
-                if (newConfidence !== null && (currentSpeechStateRef.current.bestConfidenceSoFar === null || newConfidence > currentSpeechStateRef.current.bestConfidenceSoFar)) {
-                  currentSpeechStateRef.current.bestConfidenceSoFar = newConfidence
-                }
-                onTrace?.('speech_bridge_final', `${String(msg.text ?? '').slice(0, 140)}${typeof msg.confidence === 'number' ? ` (conf=${Number(msg.confidence).toFixed(2)})` : ''}`)
-                triggerFinal(msg.text, typeof msg.confidence === 'number' ? msg.confidence : null)
-              }
-              break
-            case 'error':
-              onTrace?.('speech_bridge_error', String(msg.msg ?? 'unknown'))
-              console.warn('[STT] bridge error', msg.msg)
-              stopWS()
-              scheduleReconnect(350)
-              break
-          }
-        } catch {
-          // ignore
-        }
-      }
-
-      ws.onerror = () => {
-        if (wsGenerationRef.current !== generation || wsRef.current !== ws) return
-        onTrace?.('speech_bridge_ws_error')
-        console.warn('[STT] WS connection error')
-      }
-
-      ws.onclose = () => {
-        if (wsGenerationRef.current !== generation || wsRef.current !== ws) return
-        bridgeConnectingRef.current = false
-        wsRef.current = null
-        setVolume(0)
-        onTrace?.('speech_bridge_ws_closed')
-        if (activeRef.current && phaseRef.current !== 'processing') {
-          setReconnecting(true)
-        }
-        if (connectStartRef.current > 0 && Date.now() - connectStartRef.current > CONNECT_TIMEOUT_MS) {
-          console.warn('[STT] connect timeout, retrying')
-          setBridgeDown(true)
-        }
-        scheduleReconnect(500)
-      }
+    ws.onopen = () => {
+      setBridgeDown(false)
+      ws.send(JSON.stringify({ type: 'start' }))
     }
 
-    connectBridge()
-  }, [triggerFinal, onTrace, clearBridgeReconnectTimer, stopWS]) // onInterim/phase via refs
+    ws.onmessage = (evt) => {
+      if (!activeRef.current) return
+      try {
+        const msg = JSON.parse(evt.data as string)
+        switch (msg.type) {
+          case 'ready':
+            setPhaseSync('listening')
+            connectStartRef.current = 0
+            setBridgeDown(false)
+            break
+          case 'volume':
+            setVolume(msg.level ?? 0)
+            break
+          case 'interim':
+            if (msg.text !== lastInterimRef.current) {
+              lastInterimRef.current = msg.text
+              lastInterimTimeRef.current = Date.now()
+              onInterimRef.current(msg.text)
+            }
+            break
+          case 'final':
+            if (phaseRef.current !== 'processing') {
+              triggerFinal(msg.text)
+              if (activeRef.current) setTimeout(() => startBridge(), 300)
+            }
+            break
+          case 'error':
+            console.warn('[STT] bridge error', msg.msg)
+            if (activeRef.current) setTimeout(() => startBridge(), 500)
+            break
+        }
+      } catch { /* ignore */ }
+    }
+
+    ws.onerror = () => {
+      console.warn('[STT] WS connection error')
+    }
+
+    ws.onclose = () => {
+      wsRef.current = null
+      setVolume(0)
+      if (connectStartRef.current > 0 && Date.now() - connectStartRef.current > CONNECT_TIMEOUT_MS) {
+        console.warn('[STT] connect timeout, retrying')
+        setBridgeDown(true)
+      }
+      if (activeRef.current && phaseRef.current !== 'processing') {
+        setTimeout(() => startBridge(), 500)
+      }
+    }
+  }, [triggerFinal]) // onInterim/phase via refs
 
   const stopBridge = useCallback(() => {
-    clearBridgeReconnectTimer()
     if (wsRef.current) {
       try { wsRef.current.send(JSON.stringify({ type: 'stop' })) } catch { /* ignore */ }
     }
     stopWS()
-  }, [clearBridgeReconnectTimer, stopWS])
+  }, [])
 
   // ── Unified start / stop ─────────────────────────────────────────────────
   const stop = useCallback(async () => {
@@ -760,31 +303,27 @@ function useSpeechInput({
     connectStartRef.current = 0
     setPhaseSync('idle')
     setVolume(0)
-    setReconnecting(false)
-    onTrace?.('speech_stop')
     onInterimRef.current('')
     if (modeRef.current === 'webspeech') stopWebSpeech()
     else stopBridge()
-  }, [stopWebSpeech, stopBridge, onTrace])
+  }, [stopWebSpeech, stopBridge])
 
   const start = useCallback(async () => {
     if (activeRef.current) return
     if (IS_SAFE_MODE) return
     activeRef.current = true
     setPhaseSync('connecting')
-    onTrace?.('speech_start_requested')
 
     // Auto-detect once per component lifetime — don't re-probe on every open
     if (modeRef.current === 'unknown') {
       const hasBridge = await probeBridge()
       modeRef.current = hasBridge ? 'bridge' : (WebSpeech ? 'webspeech' : 'bridge')
-      onTrace?.('speech_mode_selected', modeRef.current)
       console.log(`[STT] mode: ${modeRef.current}`)
     }
 
     if (modeRef.current === 'webspeech') startWebSpeech()
     else startBridge()
-  }, [startWebSpeech, startBridge, WebSpeech, onTrace])
+  }, [startWebSpeech, startBridge, WebSpeech])
 
   const toggle = useCallback(() => {
     if (activeRef.current) stop()
@@ -795,34 +334,19 @@ function useSpeechInput({
   const suppress  = useCallback(() => { suppressRef.current = true  }, [])
   const unsuppress = useCallback(() => { suppressRef.current = false }, [])
 
-  // Ensure mic is running — robust re-arm for iOS/WebSpeech after turn handoff.
-  // Reads refs (not state) to avoid stale closure.
+  // Ensure mic is running — restarts WebSpeech if it naturally ended while suppressed.
+  // Reads phaseRef (not state) to avoid stale closure — ensureRunning is created once.
   const ensureRunning = useCallback(() => {
     if (!activeRef.current) return  // fully stopped (drawer closed), don't restart
-    onTrace?.('speech_ensure_running', `mode=${modeRef.current} phase=${phaseRef.current}`)
-
-    if (modeRef.current === 'webspeech') {
-      // On iOS Safari, phase can claim "listening" while the recognizer ended.
-      // Re-arm whenever the recognizer instance is missing OR we're not actively listening.
-      if (!recognitionRef.current || (phaseRef.current !== 'listening' && phaseRef.current !== 'connecting')) {
-        onTrace?.('speech_ensure_running_rearm', 'webspeech')
-        startWebSpeech()
-      } else {
-        onTrace?.('speech_ensure_running_ok', 'webspeech')
-      }
-      return
+    if (
+      modeRef.current === 'webspeech' &&
+      phaseRef.current !== 'listening' &&
+      phaseRef.current !== 'connecting'
+    ) {
+      startWebSpeech()
     }
-
-    // Bridge mode: recover whenever socket is missing.
-    // If we're stuck in processing (final transcript closed WS), reconnect anyway
-    // so wake + follow-up turns continue without requiring a drawer reopen.
-    if (!wsRef.current) {
-      onTrace?.('speech_ensure_running_rearm', 'bridge')
-      startBridge()
-    } else {
-      onTrace?.('speech_ensure_running_ok', 'bridge')
-    }
-  }, [startWebSpeech, startBridge, onTrace]) // phase/resources read via refs
+    // Bridge stays running continuously — no action needed
+  }, [startWebSpeech]) // phase read via phaseRef, no stale closure
 
   // Ensure bridge/webspeech resources are always torn down on component unmount.
   useEffect(() => {
@@ -834,33 +358,11 @@ function useSpeechInput({
     }
   }, [stopWebSpeech, stopBridge])
 
-  useEffect(() => {
-    if (!activeRef.current) {
-      setWakeCooldownRemaining(0)
-      return
-    }
-    if (modeRef.current !== 'bridge') return
-    const timer = setInterval(() => {
-      fetch(`${BRIDGE}/status`)
-        .then((res) => res.ok ? res.json() : null)
-        .then((status: { wake_cooldown_remaining?: number } | null) => {
-          const next = typeof status?.wake_cooldown_remaining === 'number'
-            ? Math.max(0, status.wake_cooldown_remaining)
-            : 0
-          setWakeCooldownRemaining(next)
-        })
-        .catch(() => {})
-    }, 1200)
-    return () => clearInterval(timer)
-  }, [phase])
-
   return {
     phase,
     volume,
     supported,
     bridgeDown,
-    reconnecting,
-    wakeCooldownRemaining,
     start,
     stop,
     toggle,
@@ -869,7 +371,6 @@ function useSpeechInput({
     ensureRunning,
     listening: phase === 'listening',
     connecting: phase === 'connecting',
-    currentSpeechStateRef,
   }
 }
 
@@ -879,8 +380,6 @@ interface Props {
   open: boolean
   onClose: () => void
   anchor?: { right: number; top: number }
-  launchRequest?: { prompt: string; autoSend: boolean; nonce: string }
-  wakeSessionNonce?: string
   page: string
   events: EventWithDetails[]
   family: FamilyMember[]
@@ -891,569 +390,68 @@ interface Props {
 
 const SLEEP_PHRASES = /\b(sleep|goodnight|good night|art mode|screen saver|screensaver|night mode)\b/i
 
-export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wakeSessionNonce, page, events, family, homeCity, onSleepCommand, focusedEvent }: Props) {
+export default function AIChatDrawer({ open, onClose, anchor, page, events, family, homeCity, onSleepCommand, focusedEvent }: Props) {
   const [input, setInput] = useState('')
   const interimRef = useRef('')
-  const ignoreInterimUntilRef = useRef(0)
+  const idleAutoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hadUserInteractionRef = useRef(false)
   const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; mimeType: string } | null>(null)
-  const lastActivityAtRef = useRef(0)
-  const hadMeaningfulProgressRef = useRef(false)
-  const wakeSessionActiveRef = useRef(false)
-  const wakeStartedRef = useRef(false)
-  const autoDismissingRef = useRef(false)
-  const handledWakeNonceRef = useRef<string | null>(null)
-  const bridgeDownLoggedRef = useRef(false)
-  const voiceProfileRef = useRef<VoiceUxProfile>(getVoiceUxProfile())
-  const [inactivityCountdown, setInactivityCountdown] = useState<number | null>(null)
-  const [voiceConfig, setVoiceConfig] = useState<VoiceRuntimeConfig>(() => readVoiceRuntimeConfig())
-  const [showDebugLog, setShowDebugLog] = useState(false)
-  const [debugLog, setDebugLog] = useState<DebugLogEntry[]>(() => {
-    if (typeof window === 'undefined') return []
-    try {
-      const raw = localStorage.getItem(AI_DEBUG_LOG_KEY)
-      if (!raw) return []
-      const parsed = JSON.parse(raw) as DebugLogEntry[]
-      return Array.isArray(parsed) ? parsed.slice(-MAX_DEBUG_LOG_ENTRIES) : []
-    } catch {
-      return []
-    }
-  })
-  const [auditLog, setAuditLog] = useState<VoiceAuditEvent[]>(() => {
-    const all = readVoiceAudit()
-    return all.slice(-MAX_AUDIT_LOG_ENTRIES)
-  })
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
 
-  const {
-    messages,
-    loading,
-    send,
-    retryLast,
-    reset,
-    session,
-    sessionLoading,
-    startFresh,
-    primeMessages,
-    appendMessages,
-    updateMessageToolStatus,
-  } = useAIAssistant({ page, events, family, homeCity, focusedEvent, onSessionEnd: onClose })
+  const { messages, loading, send, reset, session, sessionLoading, startFresh, primeMessages, updateMessageToolStatus } = useAIAssistant({ page, events, family, homeCity, focusedEvent, onSessionEnd: onClose })
 
   const led = useLedStrip()
 
   const pendingConfirmRef = useRef<(() => Promise<boolean>) | null>(null)
   const pendingCancelRef  = useRef<(() => Promise<boolean>) | null>(null)
-  const pendingVoiceQueueRef = useRef<string[]>([])
-  const voiceSendInFlightRef = useRef(false)
-  const voiceSendSeqRef = useRef(0)
-  const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const traceSessionIdRef = useRef<string | null>(null)
-  const traceBuildFingerprintRef = useRef('unknown')
-  const traceStartedAtMsRef = useRef(0)
-  const traceSeqRef = useRef(0)
-  const traceHasFinalRef = useRef(false)
-  const traceHasSendRef = useRef(false)
-  const traceSpeechEndCountRef = useRef(0)
-  const listeningStartedAtRef = useRef<number | null>(null)
-  const speechStallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const turnIdRef = useRef<string>('turn-idle')
-  const turnStateRef = useRef<VoiceTurnState>('idle')
-  const closeReasonRef = useRef('unknown')
-  const previousOpenRef = useRef(false)  // Track previous open state to detect transitions
-  const [uiFeedback, setUiFeedback] = useState<'none' | 'confirm' | 'cancel'>('none')
-  
-  const [pendingAsrConfirmation, setPendingAsrConfirmation] = useState<PendingAsrConfirmation | null>(null)
 
-  useEffect(() => {
-    const sync = () => setVoiceConfig(readVoiceRuntimeConfig())
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === null || event.key === 'casa-voice-runtime-config-v1') sync()
-    }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
-  }, [])
-
-  const buildTraceEntry = useCallback((event: string, detail?: string, meta?: TraceMeta): VoiceAuditEvent => {
-    const now = Date.now()
-    const started = traceStartedAtMsRef.current > 0 ? traceStartedAtMsRef.current : now
-    const sessionId = traceSessionIdRef.current ?? 'voice-session-unknown'
-    const entry: VoiceAuditEvent = {
-      at: new Date(now).toISOString(),
-      event,
-      detail,
-      sessionId,
-      turnId: turnIdRef.current,
-      seq: (traceSeqRef.current += 1),
-      elapsedMs: Math.max(0, now - started),
-      page,
-      turnState: turnStateRef.current,
-      loading,
-      queueDepth: pendingVoiceQueueRef.current.length,
-      correlationId: meta?.correlationId,
-      actionId: meta?.actionId,
-      lane: meta?.lane,
-      payload: meta?.payload,
-    }
-    return entry
-  }, [loading, page])
-
-  const appendDebugLog = useCallback((event: string, detail?: string, meta?: TraceMeta) => {
-    if (event === 'voice_final' && detail && detail !== '__SEND__') traceHasFinalRef.current = true
-    if (event === 'send_current_input') traceHasSendRef.current = true
-    if (event === 'speech_webspeech_end') traceSpeechEndCountRef.current += 1
-    const entry = buildTraceEntry(event, detail, meta)
-    enqueueRemoteVoiceTrace(entry, 'debug', voiceConfig)
-    if (voiceConfig.auditEnabled) {
-      enqueueRemoteVoiceTrace(entry, 'audit', voiceConfig)
-      console.info('[casa-ai-audit]', JSON.stringify(entry))
-      const updated = appendVoiceAudit(entry)
-      setAuditLog(updated.slice(-MAX_AUDIT_LOG_ENTRIES))
-    }
-    if (!shouldEmitVoiceDebug(voiceConfig.debugLevel, eventDebugLevel(event))) return
-    const nextEntry: DebugLogEntry = {
-      ...entry,
-    }
-    console.info('[casa-ai-debug]', JSON.stringify(nextEntry))
-    setDebugLog((prev) => {
-      const next = [...prev, nextEntry].slice(-MAX_DEBUG_LOG_ENTRIES)
-      try {
-        localStorage.setItem(AI_DEBUG_LOG_KEY, JSON.stringify(next))
-      } catch {
-        // ignore storage failures
-      }
-      return next
-    })
-  }, [buildTraceEntry, voiceConfig])
-
-  const transitionTurnState = useCallback((next: VoiceTurnState, reason: string) => {
-    const previous = turnStateRef.current
-    if (previous === next) return
-    if (!TURN_STATE_TRANSITIONS[previous].includes(next)) {
-      appendDebugLog('turn_state_invalid', `${previous} -> ${next} (${reason})`)
-      return
-    }
-    turnStateRef.current = next
-    if (next === 'listening') listeningStartedAtRef.current = Date.now()
-    else if (previous === 'listening') listeningStartedAtRef.current = null
-    appendDebugLog('turn_state', `${previous} -> ${next} (${reason})`)
-  }, [appendDebugLog])
-
-  const beginTraceSession = useCallback(() => {
-    traceSessionIdRef.current = `voice-${Date.now().toString(36)}`
-    traceBuildFingerprintRef.current = detectClientBuildFingerprint()
-    traceStartedAtMsRef.current = Date.now()
-    traceSeqRef.current = 0
-    traceHasFinalRef.current = false
-    traceHasSendRef.current = false
-    traceSpeechEndCountRef.current = 0
-    listeningStartedAtRef.current = null
-    turnIdRef.current = `turn-${Date.now().toString(36)}`
-    turnStateRef.current = 'idle'
-    closeReasonRef.current = 'unknown'
-  }, [])
-
-  const requestClose = useCallback((reason: string) => {
-    closeReasonRef.current = reason
-    transitionTurnState('closed', reason)
-    appendDebugLog('drawer_close_requested', reason)
-    onClose()
-  }, [appendDebugLog, onClose, transitionTurnState])
-
-  useEffect(() => {
-    const onAssistantDebug = (rawEvent: Event) => {
-      const event = rawEvent as CustomEvent<{ event?: string; detail?: string; meta?: TraceMeta }>
-      const name = event.detail?.event?.trim()
-      if (!name) return
-      appendDebugLog(`assistant_${name}`, event.detail?.detail?.slice(0, 1200), event.detail?.meta)
-    }
-    window.addEventListener('casa:ai-debug', onAssistantDebug as EventListener)
-    return () => {
-      window.removeEventListener('casa:ai-debug', onAssistantDebug as EventListener)
-    }
-  }, [appendDebugLog])
-
-  const clearDebugLog = useCallback(() => {
-    setDebugLog([])
-    try {
-      localStorage.removeItem(AI_DEBUG_LOG_KEY)
-    } catch {
-      // ignore storage failures
+  const clearIdleAutoCloseTimer = useCallback(() => {
+    if (idleAutoCloseTimerRef.current) {
+      clearTimeout(idleAutoCloseTimerRef.current)
+      idleAutoCloseTimerRef.current = null
     }
   }, [])
-
-  const copyDebugLog = useCallback(async () => {
-    const payload = JSON.stringify({ exportedAt: new Date().toISOString(), entries: debugLog }, null, 2)
-    try {
-      await navigator.clipboard.writeText(payload)
-      appendDebugLog('debug_log_copied', `entries=${debugLog.length}`)
-    } catch (err) {
-      appendDebugLog('debug_log_copy_failed', (err as Error).message ?? 'unknown error')
-    }
-  }, [debugLog, appendDebugLog])
-
-  const clearAuditLog = useCallback(() => {
-    clearVoiceAudit()
-    setAuditLog([])
-    appendDebugLog('audit_log_cleared')
-  }, [appendDebugLog])
-
-  const copyAuditLog = useCallback(async () => {
-    const payload = JSON.stringify({ exportedAt: new Date().toISOString(), entries: auditLog }, null, 2)
-    try {
-      await navigator.clipboard.writeText(payload)
-      appendDebugLog('audit_log_copied', `entries=${auditLog.length}`)
-    } catch (err) {
-      appendDebugLog('audit_log_copy_failed', (err as Error).message ?? 'unknown error')
-    }
-  }, [auditLog, appendDebugLog])
-
-  const pingWakeMisfireCooldown = useCallback((seconds = voiceProfileRef.current.wakeMisfireCooldownSecs) => {
-    void fetch('http://127.0.0.1:8766/wake-misfire', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ seconds }),
-    }).catch(() => {})
-  }, [])
-
-  const markConversationProgress = useCallback((meaningful = true) => {
-    lastActivityAtRef.current = Date.now()
-    if (meaningful) hadMeaningfulProgressRef.current = true
-  }, [])
-
-  const autoDismissDrawer = useCallback((wakeMisfire: boolean) => {
-    if (autoDismissingRef.current) return
-    autoDismissingRef.current = true
-    trackVoiceMetric(wakeMisfire ? 'wake_misfire_autodismiss' : 'inactivity_autodismiss')
-    if (wakeMisfire) pingWakeMisfireCooldown()
-    startFresh()
-    requestClose(wakeMisfire ? 'wake_misfire_auto_dismiss' : 'inactivity_auto_dismiss')
-  }, [pingWakeMisfireCooldown, requestClose, startFresh])
 
   const markUserInteraction = useCallback(() => {
-    markConversationProgress(true)
-  }, [markConversationProgress])
+    hadUserInteractionRef.current = true
+    clearIdleAutoCloseTimer()
+  }, [clearIdleAutoCloseTimer])
 
-  const clearAutoSendTimer = useCallback(() => {
-    if (autoSendTimerRef.current) {
-      clearTimeout(autoSendTimerRef.current)
-      autoSendTimerRef.current = null
-    }
-  }, [])
+  // True when the latest assistant message has a pending tool action awaiting confirmation
+  const hasPendingToolAction = messages.some(m => m.toolAction?.status === 'pending')
 
-  // True when there's a registered confirm or cancel callback pending (source of truth)
-  const hasPendingToolAction = !!pendingConfirmRef.current || !!pendingCancelRef.current
-  const isWakeAssistantMode = page === 'grocery' && Boolean(wakeSessionNonce)
-
-  const handleRegisterPendingConfirm = useCallback((fn: (() => Promise<boolean>) | null) => {
-    if (fn) {
-      appendDebugLog('callback_register_pending_confirm', 'fn registered')
-      pendingConfirmRef.current = fn
-    } else {
-      appendDebugLog('callback_register_pending_confirm_null', 'fn is null')
-      pendingConfirmRef.current = null
-    }
-  }, [appendDebugLog])
-
-  const handleRegisterPendingCancel = useCallback((fn: (() => Promise<boolean>) | null) => {
-    if (fn) {
-      appendDebugLog('callback_register_pending_cancel', 'fn registered')
-      pendingCancelRef.current = fn
-    } else {
-      appendDebugLog('callback_register_pending_cancel_null', 'fn is null')
-      pendingCancelRef.current = null
-    }
-  }, [appendDebugLog])
-
-  const triggerUiFeedback = useCallback((mode: 'confirm' | 'cancel') => {
-    setUiFeedback(mode)
-    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
-    feedbackTimerRef.current = setTimeout(() => {
-      setUiFeedback('none')
-      feedbackTimerRef.current = null
-    }, FEEDBACK_LOCK_MS)
-  }, [])
-
-  const clearPendingAsrConfirmation = useCallback(() => {
-    setPendingAsrConfirmation(null)
-  }, [])
-
-  const promptForAsrConfirmation = useCallback((heardText: string, confidence: number) => {
-    setPendingAsrConfirmation({ heardText, confidence })
-    appendMessages([{
-      id: crypto.randomUUID(),
-      role: 'assistant',
-      content: `I heard "${heardText}" but only about ${Math.round(confidence * 100)}% confidently. Say "use it" or "yes" to continue, say "try again" or "no" to discard it, or just say the correction.`,
-    }])
-  }, [appendMessages])
-
-  const sendCurrentInput = useCallback(async (
-    text: string,
-    timing?: { speechFinalizedAtMs?: number | null },
-  ) => {
+  const sendCurrentInput = useCallback((text: string) => {
     const trimmed = text.trim()
-    if (!trimmed) {
-      appendDebugLog('voice_send_skipped_empty')
-      return false
-    }
-    if (loading || voiceSendInFlightRef.current) {
-      appendDebugLog(
-        'voice_send_blocked',
-        `loading=${loading ? '1' : '0'} inflight=${voiceSendInFlightRef.current ? '1' : '0'} depth=${pendingVoiceQueueRef.current.length}`
-      )
-      return false
-    }
-    voiceSendInFlightRef.current = true
-    turnIdRef.current = `turn-${Date.now().toString(36)}`
-    transitionTurnState('thinking', 'input_sent_for_assistant')
-    const sendSeq = ++voiceSendSeqRef.current
-    appendDebugLog('send_current_input', `#${sendSeq} depth=${pendingVoiceQueueRef.current.length} ${trimmed.slice(0, 140)}`)
-    clearAutoSendTimer()
-    ignoreInterimUntilRef.current = Date.now() + 1200
-    markUserInteraction()
-    queueMicrotask(() => setInput(''))
+    if (!trimmed || loading) return
+    setInput('')
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
-    await send(trimmed, undefined, {
-      disableFastGroceryLane: isWakeAssistantMode,
-      traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
-      hasPendingToolAction: !!pendingConfirmRef.current || !!pendingCancelRef.current,
-      inputSource: 'voice',
-      speechFinalizedAtMs: timing?.speechFinalizedAtMs ?? undefined,
-    })
-    return true
-  }, [loading, send, markUserInteraction, clearAutoSendTimer, appendDebugLog, transitionTurnState, isWakeAssistantMode, session?.id])
-
-  const queueOrSendVoiceInput = useCallback(async (
-    text: string,
-    timing?: { speechFinalizedAtMs?: number | null },
-  ) => {
-    const trimmed = text.trim()
-    if (!trimmed) return
-    if (loading || voiceSendInFlightRef.current) {
-      pendingVoiceQueueRef.current.push(trimmed)
-      appendDebugLog(
-        'voice_queued',
-        `reason=${loading ? 'loading' : 'inflight'} depth=${pendingVoiceQueueRef.current.length} ${trimmed.slice(0, 110)}`
-      )
-      return
-    }
-    const sent = await sendCurrentInput(trimmed, timing)
-    if (!sent) {
-      pendingVoiceQueueRef.current.push(trimmed)
-      appendDebugLog('voice_requeued', `depth=${pendingVoiceQueueRef.current.length} ${trimmed.slice(0, 110)}`)
-    }
-  }, [loading, sendCurrentInput, appendDebugLog])
-
-  const handlePendingAsrConfirmation = useCallback((
-    replyText: string,
-    source: 'voice' | 'typed',
-    typedImage?: { dataUrl: string; mimeType: string } | null,
-  ): boolean => {
-    const pending = pendingAsrConfirmation
-    const trimmed = replyText.trim()
-    if (!pending || !trimmed) return false
-
-    const normalized = normalizeIntentPhrase(trimmed)
-    const wantsRetry = normalized === 'try again' || normalized === 'repeat that'
-    const wantsAccept = normalized === 'use it' || isStrongConfirmUtterance(trimmed)
-    const wantsReject = wantsRetry || isStrongCancelUtterance(trimmed)
-
-    clearPendingAsrConfirmation()
-
-    if (wantsAccept) {
-      appendDebugLog('phase2_asr_confirmation_accepted', pending.heardText)
-      if (source === 'voice') {
-        void queueOrSendVoiceInput(pending.heardText, { speechFinalizedAtMs: performance.now() })
-      } else {
-        turnIdRef.current = `turn-${Date.now().toString(36)}`
-        transitionTurnState('thinking', 'typed_asr_confirmation_accepted')
-        void send(pending.heardText, undefined, {
-          disableFastGroceryLane: isWakeAssistantMode,
-          traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
-          hasPendingToolAction: !!pendingConfirmRef.current || !!pendingCancelRef.current,
-          inputSource: 'typed',
-        })
-      }
-      return true
-    }
-
-    if (wantsReject) {
-      appendDebugLog('phase2_asr_confirmation_rejected', pending.heardText)
-      appendMessages([{
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: 'Okay — say it again.',
-      }])
-      interimRef.current = ''
-      queueMicrotask(() => setInput(''))
-      if (textareaRef.current) textareaRef.current.value = ''
-      return true
-    }
-
-    appendDebugLog('phase2_asr_confirmation_corrected', `${pending.heardText} -> ${trimmed}`)
-    if (source === 'voice') {
-      void queueOrSendVoiceInput(trimmed, { speechFinalizedAtMs: performance.now() })
-    } else {
-      turnIdRef.current = `turn-${Date.now().toString(36)}`
-      transitionTurnState('thinking', 'typed_asr_confirmation_corrected')
-      void send(trimmed, typedImage ?? undefined, {
-        disableFastGroceryLane: isWakeAssistantMode,
-        traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
-        hasPendingToolAction: !!pendingConfirmRef.current || !!pendingCancelRef.current,
-        inputSource: 'typed',
-      })
-    }
-    return true
-  }, [
-    pendingAsrConfirmation,
-    clearPendingAsrConfirmation,
-    appendDebugLog,
-    queueOrSendVoiceInput,
-    transitionTurnState,
-    send,
-    isWakeAssistantMode,
-    session?.id,
-    appendMessages,
-  ])
+    send(trimmed)
+  }, [loading, send])
 
   const speech = useSpeechInput({
     onInterim: (interim) => {
-      if (Date.now() < ignoreInterimUntilRef.current) return
+      if (interim.trim()) markUserInteraction()
       interimRef.current = interim
       setInput(interim)
-      if (wakeSessionActiveRef.current && isMeaningfulInterimSpeech(interim)) {
-        markConversationProgress(true)
-      }
     },
-    onFinalTranscript: (text, confidence) => {
-      appendDebugLog('voice_final', text === '__SEND__' ? '__SEND__' : `${text.slice(0, 140)}${typeof confidence === 'number' ? ` (conf=${confidence.toFixed(2)})` : ''}`)
-      
+    onFinalTranscript: (text) => {
       if (text === '__SEND__') {
-        transitionTurnState('endpointed', 'speech_final_received')
-        ignoreInterimUntilRef.current = Date.now() + 1200
-        
         const msg = interimRef.current || (textareaRef.current?.value ?? '')
-        const finalized = msg.trim()
-        if (!finalized) {
-          appendDebugLog('voice_send_skipped_empty', 'finalized transcript empty')
-          return
-        }
-        interimRef.current = finalized
-        setInput(finalized)
-        const speechFinalizedAtMs = performance.now()
-        
-        // Use the BEST confidence observed during this entire recognition sequence
-        // This handles cases where bridge sends confidence inconsistently
-        const { bestConfidenceSoFar } = speech.currentSpeechStateRef.current
-        const capturedConfidence = bestConfidenceSoFar
-        
-        // Reset state for next utterance
-        speech.currentSpeechStateRef.current = { text: '', bestConfidenceSoFar: null, latestConfidence: null }
-
-        if (pendingAsrConfirmation) {
-          const handled = handlePendingAsrConfirmation(finalized, 'voice')
-          if (handled) return
-        }
-        
-        const normalizedIntent = normalizeIntentPhrase(finalized)
-        if (shouldRequestAsrConfirmation(finalized, capturedConfidence)) {
-          appendDebugLog('voice_stage_ms', 'stage=speech_to_phase2 elapsed=0', {
-            lane: 'voice',
-            payload: { stage: 'speech_to_phase2', elapsed_ms: 0, text: finalized, confidence: capturedConfidence },
-          })
-          appendDebugLog('phase2_asr_confidence_check', `text=${finalized} conf=${capturedConfidence?.toFixed(2)}`)
-          promptForAsrConfirmation(finalized, capturedConfidence ?? 0)
-          interimRef.current = ''
-          queueMicrotask(() => setInput(''))
-          return
-        }
-        const shouldConfirmShortCircuit = hasPendingToolAction && isStrongConfirmUtterance(finalized)
-        const shouldCancelShortCircuit = hasPendingToolAction && isStrongCancelUtterance(finalized)
-        if (hasPendingToolAction && !shouldConfirmShortCircuit && !shouldCancelShortCircuit && normalizedIntent.length > 0) {
-          appendDebugLog('voice_confirm_short_circuit_miss', normalizedIntent.slice(0, 80))
-        }
-        if (hasPendingToolAction && shouldConfirmShortCircuit) {
-          appendDebugLog('voice_confirm_budget_short_circuit', finalized.slice(0, 80))
-          const run = pendingConfirmRef.current
-          if (run) {
-            triggerUiFeedback('confirm')
-            led.confirm()
-            void Promise.resolve(run()).then((confirmed) => {
-              if (!confirmed) return
-              appendDebugLog('voice_confirm_completed', 'keeping session open for follow-up')
-            })
-            return
-          }
-          // 🔴 BUG: ref is null even though hasPendingToolAction is true
-          appendDebugLog('voice_confirm_short_circuit_FAILED', `hasPendingToolAction=true but ref=null fire=${!!pendingConfirmRef.current}`)
-          // No pending callback: fall through to Phase 1
-        } else if (hasPendingToolAction && shouldCancelShortCircuit) {
-          appendDebugLog('voice_cancel_budget_short_circuit', finalized.slice(0, 80))
-          const run = pendingCancelRef.current
-          if (run) {
-            triggerUiFeedback('cancel')
-            led.cancel()
-            void Promise.resolve(run()).then((cancelled) => {
-              if (!cancelled) return
-              appendDebugLog('voice_cancel_completed', 'keeping session open for follow-up')
-            })
-            return
-          }
-          // 🔴 BUG: ref is null even though hasPendingToolAction is true
-          appendDebugLog('voice_cancel_short_circuit_FAILED', `hasPendingToolAction=true but ref=null`)
-          // No pending callback: fall through to Phase 1
-        } else if (!hasPendingToolAction && (shouldConfirmShortCircuit || shouldCancelShortCircuit)) {
-          // Shouldn't happen, but log it
-          appendDebugLog('voice_short_circuit_logic_error', `hasPendingToolAction=false confirm=${shouldConfirmShortCircuit} cancel=${shouldCancelShortCircuit}`)
-          // No pending callback: fall through to Phase 1
-        }
-        // Check if this is a known one-word intent (should bypass noise filter)
-        const oneWordIntentKeywords = new Set([
-          // Confirms
-          'yes', 'yeah', 'yep', 'ok', 'okay', 'confirm', 'sure', 'uh huh', 'mm hmm', 'yup',
-          'delete', 'remove', 'trash', 'discard', 'clear', 'wipe', 'erase',
-          'move', 'change', 'reschedule', 'update', 'go', 'set', 'make', 'put',
-          'add', 'create', 'schedule', 'book',
-          'send', 'submit', 'post',
-          // Cancels
-          'no', 'nope', 'cancel', 'abort', 'skip', 'dont', 'nah', 'uh uh',
-          'keep', 'leave', 'stop',
-          // Exits
-          'quit', 'exit', 'close', 'goodbye', 'bye', 'done'
-        ])
-        const isKnownOneWordIntent = oneWordIntentKeywords.has(finalized.toLowerCase().trim())
-        
-        if (!isKnownOneWordIntent && isLikelyNoiseTranscript(msg, capturedConfidence)) {
-          appendDebugLog('voice_stage_ms', 'stage=speech_to_noise_filter elapsed=0', {
-            lane: 'voice',
-            payload: { stage: 'speech_to_noise_filter', elapsed_ms: 0, text: finalized, confidence: capturedConfidence },
-          })
-          appendDebugLog('voice_noise_filtered', msg.slice(0, 140))
-          interimRef.current = ''
-          queueMicrotask(() => setInput(''))
-          if (wakeSessionActiveRef.current && !hadMeaningfulProgressRef.current) {
-            autoDismissDrawer(true)
-          }
-          return
-        }
         // Check for sleep command before sending to AI
         if (SLEEP_PHRASES.test(msg)) {
-          appendDebugLog('voice_sleep_command', msg.slice(0, 140))
           onSleepCommand?.()
-          setTimeout(() => requestClose('sleep_command'), 300)
+          setTimeout(onClose, 300)
           return
         }
-        clearAutoSendTimer()
-        autoSendTimerRef.current = setTimeout(() => {
-          autoSendTimerRef.current = null
-          void queueOrSendVoiceInput(finalized, { speechFinalizedAtMs })
-          interimRef.current = ''
-        }, TRANSCRIPT_SETTLE_BEFORE_SEND_MS)
+        sendCurrentInput(msg)
+        interimRef.current = ''
       } else {
+        if (text.trim()) markUserInteraction()
         interimRef.current = text
         setInput(text)
       }
@@ -1462,291 +460,88 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       markUserInteraction()
       // Verbal goodbye — clear session immediately so next open starts fresh
       startFresh()
-      setTimeout(() => requestClose('voice_dismiss_phrase'), 400)
+      setTimeout(onClose, 400)
     },
     onConfirm: () => {
       markUserInteraction()
-      triggerUiFeedback('confirm')
       led.confirm()
       const run = pendingConfirmRef.current
       if (!run) return
       void Promise.resolve(run()).then((confirmed) => {
         if (!confirmed) return
-        appendDebugLog('voice_confirm_completed', 'keeping session open for follow-up')
+        startFresh()
+        setTimeout(onClose, 350)
       })
     },
     onCancel:  () => {
       markUserInteraction()
-      triggerUiFeedback('cancel')
       led.cancel()
       const run = pendingCancelRef.current
       if (!run) return
       void Promise.resolve(run()).then((cancelled) => {
         if (!cancelled) return
-        appendDebugLog('voice_cancel_completed', 'keeping session open for follow-up')
+        startFresh()
+        setTimeout(onClose, 350)
       })
     },
     hasPendingAction: hasPendingToolAction,
-    keepBridgeAliveBetweenFinals: page === 'grocery' && !isWakeAssistantMode,
-    onTrace: appendDebugLog,
   })
 
   useEffect(() => {
-    if (loading) return
-    if (voiceSendInFlightRef.current) {
-      voiceSendInFlightRef.current = false
-      appendDebugLog('voice_send_complete', `pending=${pendingVoiceQueueRef.current.length}`)
+    return () => {
+      led.off()
     }
-    const next = pendingVoiceQueueRef.current.shift()
-    if (!next) return
-    appendDebugLog('voice_dequeued', `depth=${pendingVoiceQueueRef.current.length} ${next.slice(0, 110)}`)
-    
-    // Fire async send without awaiting (queue processing will wait for loading to clear)
-    void sendCurrentInput(next).then((sent) => {
-      if (!sent) {
-        pendingVoiceQueueRef.current.unshift(next)
-        appendDebugLog('voice_requeued', `depth=${pendingVoiceQueueRef.current.length} ${next.slice(0, 110)}`)
-      }
-    })
-  }, [loading, sendCurrentInput, appendDebugLog])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     return () => {
-      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
-      if (speechStallTimerRef.current) clearTimeout(speechStallTimerRef.current)
-      clearAutoSendTimer()
-      led.off()
+      clearIdleAutoCloseTimer()
     }
-  }, [clearAutoSendTimer]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [clearIdleAutoCloseTimer])
 
   useEffect(() => {
-    if (!open) return
-    if (speechStallTimerRef.current) {
-      clearTimeout(speechStallTimerRef.current)
-      speechStallTimerRef.current = null
-    }
-    queueMicrotask(() => appendDebugLog('speech_phase', speech.phase))
-    if (speech.phase === 'listening') {
-      speechStallTimerRef.current = setTimeout(() => {
-        if (!open || speech.phase !== 'listening' || traceHasFinalRef.current) return
-        const since = listeningStartedAtRef.current ? Date.now() - listeningStartedAtRef.current : 0
-        appendDebugLog('speech_listening_stall', `elapsed=${since}`)
-      }, 7000)
-    }
-  }, [open, speech.phase, appendDebugLog])
-
-  useEffect(() => {
-    if (!open) return
-    queueMicrotask(() => appendDebugLog('loading_state', loading ? 'loading' : 'idle'))
-  }, [open, loading, appendDebugLog])
-
-  useEffect(() => {
-    if (!open || messages.length === 0) return
-    const latest = messages[messages.length - 1]
-    const summary = latest.toolAction
-      ? `${latest.role}:tool:${latest.toolAction.tool}:${latest.toolAction.status}`
-      : `${latest.role}:${latest.content.slice(0, 120)}`
-    queueMicrotask(() => {
-      appendDebugLog('message', summary)
-      // Don't force state transitions here - let the natural flow handle it
-      // The message will already be in the UI, and the conversation will continue naturally
-    })
-  }, [open, messages, appendDebugLog])
-
-  useEffect(() => {
-    queueMicrotask(() => {
-      if (open) appendDebugLog('drawer_opened', page)
-      else appendDebugLog('drawer_closed', closeReasonRef.current)
-    })
-  }, [open, page, appendDebugLog])
-
-  useEffect(() => {
-    const isOpeningNow = open && !previousOpenRef.current
-    const isClosingNow = !open && previousOpenRef.current
-
-    if (isOpeningNow) {
-      // Drawer just opened - initialize trace session
-      beginTraceSession()
-      autoDismissingRef.current = false
-      wakeSessionActiveRef.current = Boolean(wakeSessionNonce)
-      wakeStartedRef.current = Boolean(wakeSessionNonce)
-      hadMeaningfulProgressRef.current = false
-      queueMicrotask(() => {
-        appendDebugLog('trace_started', wakeSessionNonce ? 'source=wake' : 'source=manual')
-        appendDebugLog(
-          'trace_context',
-          `page=${page} debug=${voiceConfig.debugLevel} audit=${voiceConfig.auditEnabled ? 1 : 0} build=${traceBuildFingerprintRef.current}`,
-          { payload: { client_build: traceBuildFingerprintRef.current } },
-        )
-      })
-      transitionTurnState('wake_armed', wakeSessionNonce ? 'wake_open' : 'manual_open')
-      if (wakeSessionNonce) trackVoiceMetric('wake_session_started')
-      markConversationProgress(false)
-      if (IS_SAFE_MODE) {
-        previousOpenRef.current = open
-        return
-      }
+    if (open) {
+      hadUserInteractionRef.current = false
+      clearIdleAutoCloseTimer()
+      idleAutoCloseTimerRef.current = setTimeout(() => {
+        if (!hadUserInteractionRef.current) {
+          startFresh()
+          onClose()
+        }
+      }, NO_ACTIVITY_AUTO_CLOSE_MS)
+      if (IS_SAFE_MODE) return
       // Start connecting immediately — don't wait for animation.
       // Bridge buffers audio from /start so by the time the user speaks it's ready.
       speech.start()
-      transitionTurnState('listening', 'speech_start')
       // Focus textarea slightly after animation settles (UI only, doesn't affect mic)
       setTimeout(() => textareaRef.current?.focus(), 300)
-    } else if (isClosingNow) {
-      // Drawer just closed - teardown trace session
-      const outcome = traceHasSendRef.current
-        ? 'completed'
-        : traceHasFinalRef.current
-          ? 'final_no_send'
-          : traceSpeechEndCountRef.current > 0
-            ? 'asr_end_no_final'
-            : 'no_input'
-      appendDebugLog(
-        'trace_outcome',
-        `status=${outcome} final=${traceHasFinalRef.current ? 1 : 0} sent=${traceHasSendRef.current ? 1 : 0} speechEnd=${traceSpeechEndCountRef.current}`,
-      )
-      if (outcome === 'completed') appendDebugLog('turn_completed', 'source=trace_outcome')
-      else if (outcome === 'final_no_send') appendDebugLog('turn_aborted', 'reason=final_without_send')
-      else if (outcome === 'asr_end_no_final') appendDebugLog('asr_no_final', 'reason=speech_ended_without_final')
-      else appendDebugLog('turn_timeout', 'reason=no_input_detected')
-      appendDebugLog(
-        'trace_closed',
-        `reason=${closeReasonRef.current} pending=${pendingVoiceQueueRef.current.length} inflight=${voiceSendInFlightRef.current ? 1 : 0}`,
-      )
-      clearAutoSendTimer()
-      if (feedbackTimerRef.current) {
-        clearTimeout(feedbackTimerRef.current)
-        feedbackTimerRef.current = null
-      }
-      queueMicrotask(() => setUiFeedback('none'))
-      queueMicrotask(() => clearPendingAsrConfirmation())
-      ignoreInterimUntilRef.current = 0
+    } else {
+      clearIdleAutoCloseTimer()
       speech.stop()
       led.off()
       reset()
-      queueMicrotask(() => setInput(''))
+      setInput('')
       interimRef.current = ''
-      pendingVoiceQueueRef.current = []
-      voiceSendInFlightRef.current = false
-      traceStartedAtMsRef.current = 0
-      traceSeqRef.current = 0
-      traceHasFinalRef.current = false
-      traceHasSendRef.current = false
-      traceSpeechEndCountRef.current = 0
-      listeningStartedAtRef.current = null
-      queueMicrotask(() => setAttachedImage(null))
+      setAttachedImage(null)
       freshStartedRef.current = null  // allow fresh start next time this event is opened
-      traceSessionIdRef.current = null
     }
-    
-    // Always update ref at end to track state for next render
-    previousOpenRef.current = open
-  }, [open, markConversationProgress, wakeSessionNonce, clearAutoSendTimer, beginTraceSession, appendDebugLog, transitionTurnState, clearPendingAsrConfirmation]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!open) return
-    if (speech.bridgeDown && !bridgeDownLoggedRef.current) {
-      trackVoiceMetric('bridge_offline')
-      bridgeDownLoggedRef.current = true
-    }
-    if (!speech.bridgeDown) {
-      bridgeDownLoggedRef.current = false
-    }
-  }, [open, speech.bridgeDown])
-
-  useEffect(() => {
-    if (!open) return
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - lastActivityAtRef.current
-      const remaining = voiceProfileRef.current.inactivityMs - elapsed
-      if (remaining > 0) {
-        if (remaining <= 3000) {
-          setInactivityCountdown(Math.max(1, Math.ceil(remaining / 1000)))
-        } else {
-          setInactivityCountdown(null)
-        }
-        return
-      }
-      const wakeMisfire = wakeSessionActiveRef.current && !hadMeaningfulProgressRef.current
-      autoDismissDrawer(wakeMisfire)
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [open, autoDismissDrawer])
-
-  useEffect(() => {
-    if (!open || !wakeSessionNonce) return
-    wakeSessionActiveRef.current = true
-    if (handledWakeNonceRef.current === wakeSessionNonce) return
-    handledWakeNonceRef.current = wakeSessionNonce
-    hadMeaningfulProgressRef.current = false
-    markConversationProgress(false)
-    const timer = setTimeout(() => {
-      if (!open) return
-      if (!hadMeaningfulProgressRef.current) {
-        autoDismissDrawer(true)
-      }
-    }, voiceProfileRef.current.wakeFollowupGraceMs)
-    return () => clearTimeout(timer)
-  }, [open, wakeSessionNonce, autoDismissDrawer, markConversationProgress])
-
-  useEffect(() => {
-    if (!open || messages.length === 0) return
-    markConversationProgress(true)
-    if (wakeStartedRef.current) {
-      trackVoiceMetric('wake_session_success')
-      wakeStartedRef.current = false
-    }
-  }, [open, messages.length, markConversationProgress])
-
-  useEffect(() => {
-    if (!open) return
-    const timer = setInterval(() => {
-      appendDebugLog('device_heartbeat', `phase=${speech.phase} loading=${loading ? 1 : 0}`)
-    }, 10000)
-    return () => clearInterval(timer)
-  }, [open, speech.phase, loading, appendDebugLog])
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const buildCorrelationId = useCallback((suffix: string) => {
     const sessionPart = session?.id ?? 'no-session'
     return `${sessionPart}:${suffix}:${Date.now().toString(36)}`
   }, [session?.id])
-  const getVoiceDebugDeviceId = useCallback((): string | null => {
-    try {
-      return localStorage.getItem(VOICE_DEBUG_DEVICE_ID_KEY)
-    } catch {
-      return null
-    }
-  }, [])
 
   // When in event-edit mode, always start a fresh session so old conversations don't bleed in.
   const firedEventGreetRef = useRef<string | null>(null)
   const freshStartedRef = useRef<string | null>(null)
-  const handledLaunchRef = useRef<string | null>(null)
   useEffect(() => {
     if (!open || !focusedEvent) return
     if (freshStartedRef.current === focusedEvent.id) return
-    // eslint-disable-next-line react-hooks/immutability
     freshStartedRef.current = focusedEvent.id
     firedEventGreetRef.current = null  // reset so greet fires after fresh start
     startFresh()
   }, [open, focusedEvent?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!open || !launchRequest || !launchRequest.prompt) return
-    if (handledLaunchRef.current === launchRequest.nonce) return
-    handledLaunchRef.current = launchRequest.nonce
-    // Treat AI-launched drafts as active interaction so the idle auto-close timer doesn't shut the drawer.
-    markUserInteraction()
-    ignoreInterimUntilRef.current = Date.now() + 1500
-    startFresh()
-    if (launchRequest.autoSend) {
-      setTimeout(() => send(launchRequest.prompt, undefined, {
-        skipGoodbyeCheck: true,
-        disableFastGroceryLane: isWakeAssistantMode,
-        traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
-      }), 120)
-    }
-  }, [open, launchRequest, send, startFresh, markUserInteraction, isWakeAssistantMode, session?.id])
 
   // Once session is fresh (no messages), inject a deterministic event summary greeting
   // so the user immediately sees what event the AI has loaded — no API round-trip needed.
@@ -1785,30 +580,15 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   }, [open, focusedEvent?.id, sessionLoading, messages.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // While AI is thinking, suppress new voice input (don't stop the mic — avoids fade/blue flicker)
-  const lastEnsureRunningRef = useRef(0)
   useEffect(() => {
-    if (loading && page !== 'grocery') {
+    if (loading) {
       speech.suppress()
     } else {
       speech.unsuppress()
-      // Auto re-arm for active wake sessions and explicit confirmation follow-ups.
-      // Grocery voice add should also stay hot between turns (manual mic sessions),
-      // so users can chain multiple items without re-tapping the mic.
-      const keepVoiceHot = !!pendingAsrConfirmation || hasPendingToolAction || wakeSessionActiveRef.current || page === 'grocery' || page === 'app'
-      if (open && keepVoiceHot) {
-        // Debounce: skip re-arms that fire within 1.5s of the last one to suppress log spam
-        const now = Date.now()
-        const timeSinceLast = now - lastEnsureRunningRef.current
-        if (timeSinceLast > 1500) {
-          lastEnsureRunningRef.current = now
-          setTimeout(() => speech.ensureRunning(), 220)
-          setTimeout(() => speech.ensureRunning(), 950)
-        } else {
-          setTimeout(() => speech.ensureRunning(), 950)
-        }
-      }
+      // WebSpeech naturally ends after each utterance — restart it if it went idle while AI was thinking
+      if (open) setTimeout(() => speech.ensureRunning(), 300)
     }
-  }, [loading, open, pendingAsrConfirmation, hasPendingToolAction, page, speech])
+  }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -1875,38 +655,12 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     const img = attachedImage
     if ((!text && !img) || loading) return
     markUserInteraction()
-    if (pendingAsrConfirmation && text) {
-      setInput('')
-      interimRef.current = ''
-      if (textareaRef.current) textareaRef.current.value = ''
-      setAttachedImage(null)
-      handlePendingAsrConfirmation(text, 'typed', img)
-      return
-    }
-    turnIdRef.current = `turn-${Date.now().toString(36)}`
-    transitionTurnState('thinking', 'typed_input_sent')
     setInput('')
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
     setAttachedImage(null)
-    send(text || '(see attached image)', img ?? undefined, {
-      disableFastGroceryLane: isWakeAssistantMode,
-      traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
-      hasPendingToolAction: !!pendingConfirmRef.current || !!pendingCancelRef.current,
-      inputSource: 'typed',
-    })
-  }, [
-    input,
-    attachedImage,
-    loading,
-    send,
-    markUserInteraction,
-    transitionTurnState,
-    isWakeAssistantMode,
-    session?.id,
-    pendingAsrConfirmation,
-    handlePendingAsrConfirmation,
-  ])
+    send(text || '(see attached image)', img ?? undefined)
+  }, [input, attachedImage, loading, send, markUserInteraction])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1921,7 +675,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       speech.stop()
     }
     setInput(value)
-  }, [markUserInteraction, speech])
+  }, [markUserInteraction, speech.connecting, speech.listening, speech.stop])
 
   const handleKeyboardToggle = useCallback(() => {
     markUserInteraction()
@@ -1937,40 +691,11 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const voiceLevel = Math.max(0, Math.min(1, speech.volume / 100))
   const isVoiceActive = speech.listening && voiceLevel > 0.12
   const hasTypedInput = input.trim().length > 0 && !loading && !speech.listening
-  const latestAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
-  const showRetryLast = !!latestAssistant && /try again|something went wrong|timed out|quota/i.test(latestAssistant.content)
-  const modeLabel = page === 'grocery'
-    ? (isWakeAssistantMode ? 'Assistant mode' : 'Grocery rapid mode')
-    : 'Assistant mode'
-  const cooldownSeconds = Math.ceil(speech.wakeCooldownRemaining ?? 0)
-  const diagnosticsLabel = IS_SAFE_MODE
-    ? 'Safe mode'
-    : !voiceConfig.coreV2Enabled
-      ? 'Voice core disabled'
-    : speech.bridgeDown
-      ? 'Bridge offline'
-      : cooldownSeconds > 0
-        ? `Wake cooldown ${cooldownSeconds}s`
-        : speech.reconnecting
-          ? 'Reconnecting mic'
-          : speech.connecting
-            ? 'Connecting mic'
-            : loading || speech.phase === 'processing'
-              ? 'Processing'
-              : speech.listening
-                ? 'Listening'
-                : hasTypedInput
-                  ? 'Typing'
-                  : 'Idle'
-  const aiPresence: 'off' | 'idle' | 'listening' | 'voice_active' | 'processing' | 'typing' | 'confirm' | 'cancel' =
+  const aiPresence: 'off' | 'idle' | 'listening' | 'voice_active' | 'processing' | 'typing' =
     !open
       ? 'off'
-      : uiFeedback === 'confirm'
-        ? 'confirm'
-        : uiFeedback === 'cancel'
-          ? 'cancel'
-          : loading || speech.phase === 'processing'
-            ? 'processing'
+      : loading || speech.phase === 'processing'
+        ? 'processing'
         : hasTypedInput
           ? 'typing'
           : isVoiceActive
@@ -1978,7 +703,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
             : speech.listening || speech.connecting
               ? 'listening'
               : 'idle'
-  const presenceStyle = { ['--voice-level' as const]: String(voiceLevel) } as React.CSSProperties
+  const presenceStyle = { ['--voice-level' as '--voice-level']: String(voiceLevel) } as React.CSSProperties
 
   return (
     <AnimatePresence>
@@ -1989,7 +714,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[65] max-sm:bg-black/40 sm:bg-transparent"
-            onClick={() => requestClose('backdrop_tap')}
+            onClick={onClose}
           />
 
           <motion.div
@@ -2055,7 +780,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                 )}
                 <button
                   type="button"
-                  onClick={() => requestClose('header_close_button')}
+                  onClick={onClose}
                   className="w-8 h-8 flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-full hover:bg-casa-divider transition-colors"
                 >
                   <X size={18} />
@@ -2106,89 +831,36 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                   onConfirmToolAction={async (messageId, tool, args) => {
                     updateMessageToolStatus(messageId, 'loading')
                     try {
-                      const isCalendarWrite = tool === 'create_event' || tool === 'update_event' || tool === 'delete_event'
                       const matchedEvent = tool === 'update_event'
                         ? events.find((event) => event.id === String(args.id ?? ''))
                         : undefined
                       const requestArgs = tool === 'update_event' && matchedEvent && args.expected_updated_at === undefined
                         ? { ...args, expected_updated_at: matchedEvent.updated_at }
                         : args
-                      const invokeExecute = async (payloadArgs: Record<string, unknown>) => supabase.functions.invoke('execute-ai-action', {
+                      const { data, error } = await supabase.functions.invoke('execute-ai-action', {
                         body: {
                           tool,
-                          args: payloadArgs,
+                          args: requestArgs,
                           action_id: messageId,
                           session_id: session?.id ?? null,
                           correlation_id: buildCorrelationId(messageId),
-                          trace_id: traceSessionIdRef.current ?? session?.id ?? null,
-                          turn_id: turnIdRef.current,
-                          lane: 'tool_action',
-                          device_id: getVoiceDebugDeviceId(),
-                          client_trace_present: true,
-                          client_build: traceBuildFingerprintRef.current,
-                          client_trace_source: 'ai-chat-drawer',
-                          sync_mode: isCalendarWrite ? 'async' : undefined,
                         },
                       })
-
-                      let { data, error } = await invokeExecute(requestArgs)
-                      let executeFailure = error ?? (data?.success === false ? new Error(data.error ?? 'Action failed') : null)
-
-                      if (executeFailure && tool === 'update_event' && /changed since/i.test((executeFailure as Error).message ?? '')) {
-                        const eventId = String(args.id ?? '')
-                        if (eventId) {
-                          appendDebugLog('tool_action_retry_stale', `update_event:${eventId}`)
-                          const { data: latestEvent, error: latestEventError } = await supabase
-                            .from('events')
-                            .select('updated_at')
-                            .eq('id', eventId)
-                            .single()
-                          if (latestEventError) throw executeFailure
-                          const retryArgs = {
-                            ...requestArgs,
-                            expected_updated_at: latestEvent.updated_at,
-                          }
-                          const retryResult = await invokeExecute(retryArgs)
-                          data = retryResult.data
-                          error = retryResult.error
-                          executeFailure = error ?? (data?.success === false ? new Error(data.error ?? 'Action failed') : null)
-                        }
-                      }
-
-                      if (executeFailure) throw executeFailure
-                      const normalizedSyncStatus = data?.sync_status === 'queued'
-                        ? 'queued'
-                        : data?.sync_status === 'failed'
-                          ? 'failed'
-                          : data?.sync_status === 'synced'
-                            ? 'synced'
-                            : undefined
-                      const syncStatus = isCalendarWrite ? (normalizedSyncStatus ?? 'failed') : undefined
-                      const syncWarning = data?.sync_warning
-                        ?? (isCalendarWrite && syncStatus === 'failed'
-                          ? 'Saved in Casa Tabor, but sync verification is unavailable right now.'
-                          : undefined)
-                      appendDebugLog('tool_action_success', `${tool}`)
+                      if (error) throw error
+                      if (data?.success === false) throw new Error(data.error ?? 'Action failed')
                       updateMessageToolStatus(messageId, 'done', {
                         actionId: data?.action_id,
                         resultEventId: data?.event_id,
-                        syncWarning,
-                        syncStatus,
+                        syncWarning: data?.sync_warning,
+                        syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
                         undoStatus: 'idle',
                         undoErrorMsg: undefined,
                       })
-                      // Clear callbacks after action completes so next action starts fresh
-                      pendingConfirmRef.current = null
-                      pendingCancelRef.current = null
                       qc.invalidateQueries({ queryKey: ['events'] })
                       qc.invalidateQueries({ queryKey: ['grocery'] })
                       return true
                     } catch (err) {
-                      appendDebugLog('tool_action_error', `${tool}: ${(err as Error).message}`)
                       updateMessageToolStatus(messageId, 'error', { errorMsg: (err as Error).message })
-                      // Clear callbacks on error too
-                      pendingConfirmRef.current = null
-                      pendingCancelRef.current = null
                       return false
                     }
                   }}
@@ -2202,30 +874,13 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                           action_id: `${messageId}:undo`,
                           session_id: session?.id ?? null,
                           correlation_id: buildCorrelationId(`${messageId}:undo`),
-                          trace_id: traceSessionIdRef.current ?? session?.id ?? null,
-                          turn_id: turnIdRef.current,
-                          lane: 'tool_action',
-                          device_id: getVoiceDebugDeviceId(),
-                          client_trace_present: true,
-                          client_build: traceBuildFingerprintRef.current,
-                          client_trace_source: 'ai-chat-drawer',
-                          sync_mode: 'async',
                         },
                       })
                       if (error) throw error
                       if (data?.success === false) throw new Error(data.error ?? 'Undo failed')
-                      const normalizedSyncStatus = data?.sync_status === 'queued'
-                        ? 'queued'
-                        : data?.sync_status === 'failed'
-                          ? 'failed'
-                          : data?.sync_status === 'synced'
-                            ? 'synced'
-                            : 'failed'
                       updateMessageToolStatus(messageId, 'done', {
-                        syncWarning: data?.sync_warning ?? (normalizedSyncStatus === 'failed'
-                          ? 'Undo applied in Casa Tabor, but sync verification is unavailable right now.'
-                          : undefined),
-                        syncStatus: normalizedSyncStatus,
+                        syncWarning: data?.sync_warning,
+                        syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
                         undoStatus: 'done',
                         undoErrorMsg: undefined,
                       })
@@ -2241,15 +896,15 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                   onRefreshToolAction={() => {
                     qc.invalidateQueries({ queryKey: ['events'] })
                   }}
-                  registerPendingConfirm={handleRegisterPendingConfirm}
-                  registerPendingCancel={handleRegisterPendingCancel}
+                  registerPendingConfirm={(fn) => { pendingConfirmRef.current = fn }}
+                  registerPendingCancel={(fn)  => { pendingCancelRef.current  = fn }}
                 />
               ))}
 
               {loading && (
                 <div className="flex items-center gap-2 text-casa-muted pl-1">
                   <Loader2 size={15} className="animate-spin text-casa-gold" />
-                  <span className="text-caption">Got it — working on that…</span>
+                  <span className="text-caption">Thinking…</span>
                 </div>
               )}
               <div ref={bottomRef} />
@@ -2289,13 +944,11 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
 
               <div
                 className={cn(
-                  'ai-presence-composer relative flex items-end gap-2 bg-casa-bg rounded-xl border border-casa-border px-3 py-2 transition-all duration-300',
+                  'ai-presence-composer relative overflow-hidden flex items-end gap-2 bg-casa-bg rounded-xl border border-casa-border px-3 py-2 transition-all duration-300',
                   aiPresence === 'listening' && 'ai-presence-listening',
                   aiPresence === 'voice_active' && 'ai-presence-voice',
                   aiPresence === 'processing' && 'ai-presence-processing',
                   aiPresence === 'typing' && 'ai-presence-typing',
-                  aiPresence === 'confirm' && 'ai-presence-confirm',
-                  aiPresence === 'cancel' && 'ai-presence-cancel',
                   aiPresence === 'idle' && 'ai-presence-idle',
                 )}
                 style={presenceStyle}
@@ -2332,7 +985,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                   style={{ minHeight: '24px', maxHeight: '120px' }}
                 />
 
-                {speech.supported && voiceConfig.coreV2Enabled && (
+                {speech.supported && (
                   <button
                     type="button"
                     onClick={() => { markUserInteraction(); speech.toggle() }}
@@ -2378,8 +1031,6 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
               <p className="text-caption text-casa-muted mt-1.5 text-center opacity-60">
                 {IS_SAFE_MODE
                   ? 'Safe mode enabled: voice capture is disabled'
-                  : !voiceConfig.coreV2Enabled
-                    ? 'Voice core disabled in AI Settings — text input still works'
                   : speech.bridgeDown
                     ? 'Voice bridge offline — text input still works'
                     : speech.supported
@@ -2392,211 +1043,19 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
                       : 'Tap 🎙 to start voice · pause to send'
                   : 'Tap ➤ to send · 📎 gallery · 📷 camera'}
               </p>
-              <div className="mt-1 flex items-center justify-center gap-2 text-[11px] text-casa-muted/80">
-                <span className="inline-flex items-center rounded-full border border-casa-border/70 bg-casa-bg px-2 py-0.5">
-                  {modeLabel}
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-full border border-casa-border/70 px-2 py-0.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-casa-gold/80" />
-                  {diagnosticsLabel}
-                </span>
-                {inactivityCountdown !== null && (
-                  <span className="inline-flex items-center rounded-full border border-casa-border/70 px-2 py-0.5">
-                    Auto-close in {inactivityCountdown}s
-                  </span>
-                )}
-                {showRetryLast && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      trackVoiceMetric('retry_last_clicked')
-                      void retryLast()
-                    }}
-                    className="inline-flex items-center rounded-full border border-casa-border bg-casa-bg px-2 py-0.5 hover:bg-white transition-colors"
-                  >
-                    Retry last
-                  </button>
-                )}
-                {shouldEmitVoiceDebug(voiceConfig.debugLevel, 'minimal') && (
-                  <button
-                    type="button"
-                    onClick={() => setShowDebugLog((prev) => !prev)}
-                    className="inline-flex items-center rounded-full border border-casa-border bg-casa-bg px-2 py-0.5 hover:bg-white transition-colors"
-                  >
-                    {showDebugLog ? 'Hide debug' : 'Show debug'}
-                  </button>
-                )}
-                {voiceConfig.auditEnabled && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = writeVoiceRuntimeConfig({ auditEnabled: false })
-                      setVoiceConfig(next)
-                    }}
-                    className="inline-flex items-center rounded-full border border-casa-border bg-casa-bg px-2 py-0.5 hover:bg-white transition-colors"
-                  >
-                    Disable audit
-                  </button>
-                )}
-              </div>
-              {showDebugLog && shouldEmitVoiceDebug(voiceConfig.debugLevel, 'minimal') && (
-                <div className="mt-2 rounded-xl border border-casa-border bg-casa-bg/70 p-2">
-                  <div className="mb-1 flex items-center justify-between">
-                    <p className="text-[11px] font-semibold text-casa-muted">AI/Voice debug log</p>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => { void copyDebugLog() }}
-                        className="text-[11px] text-casa-muted hover:text-casa-navy"
-                      >
-                        Copy
-                      </button>
-                      <button
-                        type="button"
-                        onClick={clearDebugLog}
-                        className="text-[11px] text-casa-muted hover:text-casa-navy"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  </div>
-                  <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
-                    {debugLog.length === 0 ? (
-                      <p className="text-[11px] text-casa-muted">No debug events yet.</p>
-                    ) : (
-                      debugLog.slice().reverse().map((entry, idx) => (
-                        <div key={`${entry.at}-${idx}`} className="font-mono text-[10px] text-casa-muted break-words">
-                          <span className="text-casa-navy/80">{new Date(entry.at).toLocaleTimeString()}</span>
-                          {' · '}
-                          <span>{entry.event}</span>
-                          {entry.turnId ? ` · ${entry.turnId}` : ''}
-                          {entry.detail ? ` · ${entry.detail}` : ''}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-              {voiceConfig.auditEnabled && showDebugLog && (
-                <div className="mt-2 rounded-xl border border-casa-border bg-casa-bg/70 p-2">
-                  <div className="mb-1 flex items-center justify-between">
-                    <p className="text-[11px] font-semibold text-casa-muted">Wake-to-close audit trail</p>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => { void copyAuditLog() }}
-                        className="text-[11px] text-casa-muted hover:text-casa-navy"
-                      >
-                        Copy
-                      </button>
-                      <button
-                        type="button"
-                        onClick={clearAuditLog}
-                        className="text-[11px] text-casa-muted hover:text-casa-navy"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  </div>
-                  <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
-                    {auditLog.length === 0 ? (
-                      <p className="text-[11px] text-casa-muted">No audit events yet.</p>
-                    ) : (
-                      auditLog.slice().reverse().slice(0, 120).map((entry, idx) => (
-                        <div key={`${entry.at}-${idx}`} className="font-mono text-[10px] text-casa-muted break-words">
-                          <span className="text-casa-navy/80">{new Date(entry.at).toLocaleTimeString()}</span>
-                          {' · '}
-                          <span>{entry.event}</span>
-                          {entry.turnId ? ` · ${entry.turnId}` : ''}
-                          {entry.detail ? ` · ${entry.detail}` : ''}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
 
 
             </div>
           </motion.div>
         </>
       )}
-
     </AnimatePresence>
   )
 }
 
-/* ── Markdown renderer (lightweight, no external dep) ───────── */
-
-function renderMarkdown(text: string): React.ReactNode {
-  // Split on double-newline (paragraphs) or single newline
-  const lines = text.split('\n')
-  const nodes: React.ReactNode[] = []
-  let listItems: string[] = []
-
-  const flushList = (key: string) => {
-    if (listItems.length === 0) return
-    nodes.push(
-      <ul key={key} className="list-disc list-outside pl-4 space-y-0.5 my-1">
-        {listItems.map((item, i) => (
-          <li key={i}>{inlineFormat(item)}</li>
-        ))}
-      </ul>
-    )
-    listItems = []
-  }
-
-  const inlineFormat = (raw: string): React.ReactNode => {
-    // Bold **text**, then return spans
-    const parts = raw.split(/(\*\*[^*]+\*\*)/g)
-    if (parts.length === 1) return raw
-    return parts.map((p, i) =>
-      p.startsWith('**') && p.endsWith('**')
-        ? <strong key={i}>{p.slice(2, -2)}</strong>
-        : p
-    )
-  }
-
-  lines.forEach((line, idx) => {
-    const trimmed = line.trim()
-
-    // Blank line → flush list, add spacing
-    if (trimmed === '') {
-      flushList(`list-${idx}`)
-      return
-    }
-
-    // Bullet: lines starting with - / * / • / numbered (1. 2. etc)
-    const bulletMatch = trimmed.match(/^[-*•]\s+(.+)$/) || trimmed.match(/^\d+\.\s+(.+)$/)
-    if (bulletMatch) {
-      listItems.push(bulletMatch[1])
-      return
-    }
-
-    // Header: ### or ## or #
-    const headerMatch = trimmed.match(/^(#{1,3})\s+(.+)$/)
-    if (headerMatch) {
-      flushList(`list-${idx}`)
-      const level = headerMatch[1].length
-      const cls = level === 1 ? 'font-bold text-base mt-2 mb-0.5'
-                : level === 2 ? 'font-semibold text-sm mt-1.5 mb-0.5'
-                : 'font-semibold text-xs mt-1 mb-0.5 text-casa-muted'
-      nodes.push(<p key={idx} className={cls}>{inlineFormat(headerMatch[2])}</p>)
-      return
-    }
-
-    // Normal text line
-    flushList(`list-${idx}`)
-    nodes.push(<p key={idx} className="leading-snug">{inlineFormat(trimmed)}</p>)
-  })
-
-  flushList('list-final')
-  return <div className="space-y-1">{nodes}</div>
-}
-
 /* ── Message Bubble ─────────────────────────────────────────── */
 
-function MessageBubble({ msg, isLatest: _isLatest, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingConfirm, registerPendingCancel }: {
+function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingConfirm, registerPendingCancel }: {
   msg: AIMessage
   isLatest: boolean
   onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<boolean>
@@ -2609,14 +1068,8 @@ function MessageBubble({ msg, isLatest: _isLatest, onConfirmToolAction, onUndoTo
   const isUser = msg.role === 'user'
   const ta = msg.toolAction
   const hasPendingAction = !!ta && ta.status === 'pending'
-  const isCalendarWrite = !!ta && (ta.tool === 'create_event' || ta.tool === 'update_event' || ta.tool === 'delete_event')
-  const calendarSyncStatus = isCalendarWrite ? (ta.syncStatus ?? 'failed') : null
   const isStaleError = !!ta?.errorMsg && ta.errorMsg.toLowerCase().includes('changed since')
   const isDestructiveAction = ta?.tool === 'delete_event' || ta?.tool === 'clear_checked_grocery_items'
-
-  // Use refs to detect actual state changes (not function instance changes)
-  const taRef = useRef<typeof ta>(null)
-  const registeredRef = useRef(false)
 
   const doConfirm = useCallback(async () => {
     if (!ta) return false
@@ -2628,20 +1081,12 @@ function MessageBubble({ msg, isLatest: _isLatest, onConfirmToolAction, onUndoTo
     return true
   }, [msg.id, onCancelToolAction])
 
-  // Register callbacks ONLY when ta actually changes AND status is pending
   useEffect(() => {
-    const taChanged = taRef.current?.actionId !== ta?.actionId || taRef.current?.status !== ta?.status
-    taRef.current = ta
-
-    if (hasPendingAction && taChanged && !registeredRef.current) {
-      console.log(`[MessageBubble] 🎯 Register callbacks: ${msg.id.slice(0,8)} tool=${ta?.tool}`)
+    if (isLatest && hasPendingAction) {
       registerPendingConfirm(doConfirm)
       registerPendingCancel(doCancel)
-      registeredRef.current = true
-    } else if (!hasPendingAction) {
-      registeredRef.current = false
     }
-  }, [hasPendingAction, msg.id, doConfirm, doCancel, registerPendingConfirm, registerPendingCancel, ta?.actionId, ta?.status])
+  }, [isLatest, hasPendingAction, doConfirm, doCancel]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
@@ -2655,7 +1100,7 @@ function MessageBubble({ msg, isLatest: _isLatest, onConfirmToolAction, onUndoTo
           <img src={msg.imageDataUrl} alt="Attached" className="max-h-40 w-auto rounded-lg mb-2 object-cover" />
         )}
         {msg.content !== '(see attached image)' && msg.content && (
-          <div className="text-sm">{renderMarkdown(msg.content)}</div>
+          <p dangerouslySetInnerHTML={{ __html: msg.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
         )}
 
         {/* Tool action confirmation card */}
@@ -2663,34 +1108,22 @@ function MessageBubble({ msg, isLatest: _isLatest, onConfirmToolAction, onUndoTo
           <div className="mt-2.5 pt-2.5 border-t border-casa-divider">
             {ta.status === 'done' ? (
               <div className="space-y-1">
-                {isCalendarWrite && calendarSyncStatus !== 'synced' ? (
-                  <div className={cn(
-                    'flex items-center gap-1.5 text-caption font-semibold',
-                    calendarSyncStatus === 'queued' ? 'text-amber-600' : 'text-red-600',
-                  )}>
-                    {calendarSyncStatus === 'queued' ? <Loader2 size={13} className="animate-spin" /> : <XCircle size={13} />}
-                    {calendarSyncStatus === 'queued'
-                      ? 'Saved in Casa — Google sync in progress'
-                      : 'Saved in Casa — Google sync not confirmed'}
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 text-emerald-600 text-caption font-semibold">
-                    <Check size={13} />
-                    {ta.tool === 'create_event' ? 'Created and verified ✓'
-                      : ta.tool === 'update_event' ? 'Updated and verified ✓'
-                      : ta.tool === 'delete_event' ? 'Deleted and verified ✓'
-                      : ta.tool === 'add_grocery_items' ? 'Added to grocery list ✓'
-                      : 'Completed ✓'}
-                  </div>
-                )}
+                <div className="flex items-center gap-1.5 text-emerald-600 text-caption font-semibold">
+                  <Check size={13} />
+                  {ta.tool === 'create_event' ? 'Created & added to calendar ✓'
+                    : ta.tool === 'update_event' ? 'Updated ✓'
+                    : ta.tool === 'delete_event' ? 'Deleted ✓'
+                    : ta.tool === 'add_grocery_items' ? 'Added to grocery list ✓'
+                    : 'Done ✓'}
+                </div>
                 {ta.tool === 'create_event' && ta.resultEventId && (
                   <p className="text-caption text-casa-muted">Visible on your calendar now</p>
                 )}
                 {ta.syncWarning && (
                   <p className="text-caption text-amber-600">{ta.syncWarning}</p>
                 )}
-                {isCalendarWrite && calendarSyncStatus && (
-                  <SyncStatusPill status={calendarSyncStatus} />
+                {ta.tool === 'update_event' && (
+                  <SyncStatusPill status={ta.syncStatus ?? (ta.syncWarning ? 'queued' : 'synced')} />
                 )}
                 {ta.tool === 'update_event' && ta.actionId && ta.undoStatus !== 'done' && (
                   <div className="pt-1 space-y-1">

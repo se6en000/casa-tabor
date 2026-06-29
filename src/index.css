@@ -5,7 +5,7 @@
 
 
 /* ── Google Fonts ─────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Lato:wght@400;700&family=Playfair+Display:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 /* ── Touch-first: hover only on devices that support it ───────── */
@@ -21,9 +21,6 @@
   /* ── Core Palette ──────────────────────────────────────────── */
   --color-casa-bg:        #FAF8F5;
   --color-casa-surface:   #FFFFFF;
-  --color-casa-rail:      #F7F3EC;
-  --color-casa-main:      #F3F0E8;
-  --color-casa-card:      #FFFFFF;
   --color-casa-navy:      #1B2A4A;
   --color-casa-gold:      #C9A96E;
   --color-casa-text:      #2D2D2D;
@@ -149,11 +146,6 @@ html {
      All rem-based tokens, spacing, and components scale proportionally.
      clamp(min, preferred, max) — preferred is a linear vw interpolation. */
   font-size: clamp(1rem, calc(0.818rem + 0.777vw), 1.75rem);
-}
-
-/* Desktop density tuning is Mac-only so Pi/mobile stay unchanged. */
-html.mac-desktop {
-  font-size: clamp(0.75rem, calc(0.70rem + 0.32vw), 1.1rem);
 }
 
 body {
@@ -297,8 +289,6 @@ html.midnight-gallery .stacked-event-title {
   --ai-white: #e0f2fe;
   --ai-purple: #7c3aed;
   --ai-border-idle: rgba(30, 58, 138, 0.4);
-  border-width: 1px;
-  transition: border-color 120ms linear, border-width 120ms linear;
   isolation: isolate;
 }
 
@@ -335,125 +325,68 @@ html.midnight-gallery .stacked-event-title {
   animation: ai-outline-breathe 2.8s ease-in-out infinite;
 }
 
-.ai-presence-confirm::after,
-.ai-presence-cancel::after {
+.ai-presence-listening::after,
+.ai-presence-voice::after {
+  opacity: 0.52;
   padding: 1.5px;
-  background-size: 230% 100%;
+  background:
+    linear-gradient(90deg, rgba(34, 211, 238, 0.56), rgba(224, 242, 254, 0.78), rgba(30, 58, 138, 0.58));
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-}
-
-/* Top outline layer: 5px line above glow layer */
-.ai-presence-listening::after,
-.ai-presence-voice::after,
-.ai-presence-processing::after {
-  inset: -3px;
-  border-radius: calc(0.75rem + 3px);
-  border: 5px solid transparent;
-  padding: 0;
-  opacity: 0.9;
-  background: none;
-  box-shadow: none;
-  animation: none;
-  -webkit-mask: none;
-  mask: none;
+  animation: ai-outline-accent 1.35s ease-in-out infinite;
 }
 
 .ai-presence-listening {
-  border-color: rgba(34, 211, 238, 0.72) !important;
-}
-
-.ai-presence-listening::after {
-  border-color: rgba(34, 211, 238, 0.92);
-  opacity: 0.9;
+  border-color: rgba(34, 211, 238, 0.62) !important;
 }
 
 .ai-presence-listening::before {
-  opacity: 0.86;
+  opacity: 0.78;
   box-shadow:
-    0 0 22px rgba(34, 211, 238, 0.34),
-    0 0 34px rgba(30, 58, 138, 0.24);
-  animation: ai-outline-breathe 1.6s ease-in-out infinite;
+    0 0 0 1px rgba(34, 211, 238, 0.55),
+    0 0 18px rgba(34, 211, 238, 0.25);
+  animation: ai-outline-breathe 1.9s ease-in-out infinite;
 }
 
 .ai-presence-voice::after {
-  border-color: rgba(224, 242, 254, 0.96);
-  opacity: calc(0.74 + (var(--voice-level) * 0.24));
+  opacity: calc(0.5 + (var(--voice-level) * 0.35));
+  animation-duration: 0.72s;
 }
 
 .ai-presence-voice {
-  border-color: rgba(224, 242, 254, 0.9) !important;
-  border-width: 1px;
+  border-color: rgba(34, 211, 238, 0.74) !important;
 }
 
 .ai-presence-voice::before {
   opacity: 1;
   box-shadow:
-    0 0 calc(16px + (var(--voice-level) * 30px)) rgba(34, 211, 238, calc(0.36 + (var(--voice-level) * 0.44))),
-    0 0 calc(30px + (var(--voice-level) * 48px)) rgba(34, 211, 238, calc(0.24 + (var(--voice-level) * 0.36))),
-    0 0 calc(44px + (var(--voice-level) * 60px)) rgba(30, 58, 138, calc(0.16 + (var(--voice-level) * 0.26)));
-  animation: ai-outline-voice 0.42s ease-in-out infinite;
+    0 0 0 1px rgba(224, 242, 254, 0.6),
+    0 0 calc(14px + (var(--voice-level) * 20px)) rgba(34, 211, 238, calc(0.24 + (var(--voice-level) * 0.32)));
+  animation: ai-outline-voice 0.64s ease-in-out infinite;
 }
 
 .ai-presence-processing::after {
-  opacity: 0;
-  padding: 0;
-  animation: none;
+  opacity: 0.7;
+  padding: 1.5px;
+  background:
+    linear-gradient(90deg, rgba(124, 58, 237, 0.9), rgba(167, 139, 250, 0.88), rgba(34, 211, 238, 0.5));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: ai-outline-accent 0.85s ease-in-out infinite;
 }
 
 .ai-presence-processing {
-  border-color: rgba(167, 139, 250, 0.92) !important;
-}
-
-.ai-presence-processing::after {
-  border-color: rgba(167, 139, 250, 0.95);
-  opacity: 0.92;
+  border-color: rgba(124, 58, 237, 0.8) !important;
 }
 
 .ai-presence-processing::before {
   opacity: 1;
   box-shadow:
-    0 0 24px rgba(124, 58, 237, 0.48),
-    0 0 40px rgba(124, 58, 237, 0.34),
-    0 0 56px rgba(34, 211, 238, 0.18);
-  animation: ai-outline-tight 0.78s ease-in-out infinite;
-}
-
-.ai-presence-confirm {
-  border-color: rgba(34, 197, 94, 0.94) !important;
-}
-
-.ai-presence-confirm::before {
-  opacity: 1;
-  box-shadow:
-    0 0 0 1.5px rgba(134, 239, 172, 0.92),
-    0 0 28px rgba(34, 197, 94, 0.58);
-  animation: ai-outline-feedback-dim 2.8s ease-out forwards;
-}
-
-.ai-presence-confirm::after {
-  opacity: 0.95;
-  background-image: linear-gradient(100deg, rgba(34, 197, 94, 0.35) 0%, rgba(74, 222, 128, 1) 24%, rgba(220, 252, 231, 0.98) 44%, rgba(74, 222, 128, 0.95) 62%, rgba(34, 197, 94, 0.35) 82%);
-  animation: ai-outline-race 0.34s linear 5, ai-outline-feedback-dim 2.8s ease-out forwards;
-}
-
-.ai-presence-cancel {
-  border-color: rgba(239, 68, 68, 0.95) !important;
-}
-
-.ai-presence-cancel::before {
-  opacity: 1;
-  box-shadow:
-    0 0 0 1.5px rgba(252, 165, 165, 0.9),
-    0 0 28px rgba(239, 68, 68, 0.55);
-  animation: ai-outline-feedback-dim 2.8s ease-out forwards;
-}
-
-.ai-presence-cancel::after {
-  opacity: 0.95;
-  background-image: linear-gradient(100deg, rgba(239, 68, 68, 0.4) 0%, rgba(248, 113, 113, 0.98) 22%, rgba(251, 191, 36, 0.88) 40%, rgba(248, 113, 113, 0.94) 60%, rgba(239, 68, 68, 0.35) 82%);
-  animation: ai-outline-race 0.3s linear 6, ai-outline-feedback-dim 2.8s ease-out forwards;
+    0 0 0 1px rgba(167, 139, 250, 0.75),
+    0 0 20px rgba(124, 58, 237, 0.42);
+  animation: ai-outline-tight 0.9s ease-in-out infinite;
 }
 
 .ai-presence-typing::after {
@@ -476,21 +409,14 @@ html.midnight-gallery .stacked-event-title {
   50% { transform: scale(1.005); opacity: 1; }
 }
 
-@keyframes ai-outline-race {
-  0% { background-position: 0% 50%; opacity: 0.5; }
-  50% { background-position: 100% 50%; opacity: 1; }
-  100% { background-position: 200% 50%; opacity: 0.52; }
-}
-
-@keyframes ai-outline-feedback-dim {
-  0% { opacity: 1; }
-  68% { opacity: 0.95; }
-  100% { opacity: 0.16; }
+@keyframes ai-outline-accent {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.004); }
 }
 
 @keyframes ai-outline-voice {
-  0%, 100% { transform: scale(1); opacity: 0.78; filter: saturate(1.05); }
-  50% { transform: scale(calc(1 + (var(--voice-level) * 0.012))); opacity: 1; filter: saturate(calc(1.08 + (var(--voice-level) * 0.3))); }
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(calc(1 + (var(--voice-level) * 0.01))); }
 }
 
 @keyframes ai-outline-tight {

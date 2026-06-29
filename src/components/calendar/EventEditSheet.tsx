@@ -16,10 +16,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useSavedPlaces } from '../../hooks/useSavedPlaces'
 import BounceScroll from '../shared/BounceScroll'
-import InlineCalendarPicker from '../shared/InlineCalendarPicker'
 
 const ALL_CATEGORIES = Object.keys(CATEGORY_LABEL) as string[]
-const MINUTE_OPTIONS = [0, 15, 30, 45] as const
 
 type EnrichStatus = 'idle' | 'loading' | 'success' | 'error'
 
@@ -96,42 +94,6 @@ function expandRrule(masterStart: string, masterEnd: string, rrule: string): Arr
 function toGoogleUntil(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}T${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`
-}
-
-function toLocalDTFromDate(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-function snapMinuteToQuarter(minute: number): number {
-  let closest: number = MINUTE_OPTIONS[0]
-  let distance = Math.abs(minute - closest)
-  for (const option of MINUTE_OPTIONS) {
-    const nextDistance = Math.abs(minute - option)
-    if (nextDistance < distance) {
-      closest = option
-      distance = nextDistance
-    }
-  }
-  return closest
-}
-
-function getPickerParts(value: string) {
-  const d = new Date(value)
-  const safe = Number.isNaN(d.getTime()) ? new Date() : d
-  const hour24 = safe.getHours()
-  return {
-    year: safe.getFullYear(),
-    month: safe.getMonth(),
-    day: safe.getDate(),
-    hour12: ((hour24 + 11) % 12) + 1,
-    minute: snapMinuteToQuarter(safe.getMinutes()),
-    ampm: hour24 >= 12 ? 'PM' as const : 'AM' as const,
-  }
-}
-
-function addThirtyMinutesLocal(date: Date): Date {
-  return new Date(date.getTime() + 30 * 60 * 1000)
 }
 
 interface Props {
@@ -320,45 +282,6 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   }
   const [startDT, setStartDT] = useState(toLocalDT(event.start_time))
   const [endDT, setEndDT] = useState(toLocalDT(event.end_time))
-  const setStartAndAutoEnd = (start: Date) => {
-    setStartDT(toLocalDTFromDate(start))
-    setEndDT(toLocalDTFromDate(addThirtyMinutesLocal(start)))
-    markDirty()
-  }
-  const updateStartParts = (patch: Partial<ReturnType<typeof getPickerParts>>) => {
-    const parts = { ...getPickerParts(startDT), ...patch }
-    const safeDay = Math.min(parts.day, new Date(parts.year, parts.month + 1, 0).getDate())
-    const hour24 = (parts.hour12 % 12) + (parts.ampm === 'PM' ? 12 : 0)
-    const next = new Date(parts.year, parts.month, safeDay, hour24, snapMinuteToQuarter(parts.minute), 0, 0)
-    setStartAndAutoEnd(next)
-  }
-  const updateEndParts = (patch: Partial<ReturnType<typeof getPickerParts>>) => {
-    const parts = { ...getPickerParts(endDT), ...patch }
-    const safeDay = Math.min(parts.day, new Date(parts.year, parts.month + 1, 0).getDate())
-    const hour24 = (parts.hour12 % 12) + (parts.ampm === 'PM' ? 12 : 0)
-    const next = new Date(parts.year, parts.month, safeDay, hour24, snapMinuteToQuarter(parts.minute), 0, 0)
-    setEndDT(toLocalDTFromDate(next))
-    markDirty()
-  }
-  const applyStartQuickOffset = (days: number) => {
-    const base = new Date(startDT)
-    if (Number.isNaN(base.getTime())) return
-    const next = new Date(base)
-    next.setDate(next.getDate() + days)
-    setStartAndAutoEnd(next)
-  }
-  const applyNow = () => {
-    const now = new Date()
-    now.setMinutes(snapMinuteToQuarter(now.getMinutes()), 0, 0)
-    setStartAndAutoEnd(now)
-  }
-  const applyDuration = (minutes: number) => {
-    const start = new Date(startDT)
-    if (Number.isNaN(start.getTime())) return
-    const end = new Date(start.getTime() + minutes * 60_000)
-    setEndDT(toLocalDTFromDate(end))
-    markDirty()
-  }
   const fields = getFieldsForCategory(category)
 
   function buildForm(enrichment: typeof enr, fieldList: EnrichmentFieldKey[]) {
@@ -492,14 +415,8 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
         if (result.title) setDisplayTitle(result.title)
 
         // Apply AI-parsed time updates (when extra_context contained time info)
-        if (result.start_time) {
-          const parsedStart = new Date(result.start_time as string)
-          if (!Number.isNaN(parsedStart.getTime())) {
-            setStartDT(toLocalDTFromDate(parsedStart))
-            setEndDT(toLocalDTFromDate(addThirtyMinutesLocal(parsedStart)))
-          }
-        }
-        if (!result.start_time && result.end_time) setEndDT(toLocalDT(result.end_time as string))
+        if (result.start_time) setStartDT(toLocalDT(result.start_time as string))
+        if (result.end_time)   setEndDT(toLocalDT(result.end_time as string))
 
         // Sync member roles if AI returned attendees
         if (result.attendees !== undefined || result.primary_attendee !== undefined) {
@@ -794,12 +711,16 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
 
     // Google Calendar sync — strategy depends on scope
     if (scope === 'this') {
-      // Single instance: unified sync (auto create/patch + retry queue)
+      // Single instance: push-to-google (patch) or create-google-event (new)
       try {
-        const syncRes = await supabase.functions.invoke('sync-event-to-google', { body: { event_id: event.id } })
-        if (syncRes.error) console.warn('[EventEditSheet] sync-event-to-google error:', syncRes.error)
+        if (event.google_event_id) {
+          const pushRes = await supabase.functions.invoke('push-to-google', { body: { event_id: event.id } })
+          if (pushRes.error) console.warn('[EventEditSheet] push-to-google error:', pushRes.error)
+        } else {
+          supabase.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {})
+        }
       } catch (pushErr) {
-        console.warn('[EventEditSheet] sync-event-to-google failed:', pushErr)
+        console.warn('[EventEditSheet] push-to-google failed:', pushErr)
       }
       // Weather fetch for this single instance
       supabase.functions.invoke('fetch-event-weather', { body: { event_id: event.id } })
@@ -964,7 +885,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                 </div>
                 {eventType === 'reminder' && (
                   <p className="text-caption text-casa-muted mt-2">
-                    Reminders appear as slim timeline pills with quick Done and Snooze actions.
+                    Reminders appear as a banner on the day — no time slot or travel needed.
                   </p>
                 )}
               </div>
@@ -1118,185 +1039,39 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                   </label>
                 </div>
 
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Quick picks</p>
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" onClick={applyNow} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">Now</button>
-                      <button type="button" onClick={() => applyStartQuickOffset(0)} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">Today</button>
-                      <button type="button" onClick={() => applyStartQuickOffset(1)} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">Tomorrow</button>
-                      <button type="button" onClick={() => applyDuration(30)} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">30m</button>
-                      <button type="button" onClick={() => applyDuration(60)} className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption font-semibold text-casa-text hover:border-casa-gold">1h</button>
-                    </div>
+                {/* Date/time pickers — collapse time when all-day */}
+                {isAllDay ? (
+                  <div>
+                    <p className="text-caption text-casa-muted mb-1">Date</p>
+                    <input
+                      type="date"
+                      value={startDT.slice(0, 10)}
+                      onChange={e => { setStartDT(`${e.target.value}T00:00`); setEndDT(`${e.target.value}T23:59`); markDirty() }}
+                      className={inputCls}
+                    />
                   </div>
-
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={() => { setIsAllDay(v => !v); markDirty() }}
-                      className={`px-3 py-1.5 rounded-full border text-caption font-semibold transition-colors ${isAllDay ? 'border-casa-gold bg-casa-gold/15 text-casa-navy' : 'border-casa-border bg-casa-bg text-casa-text hover:border-casa-gold'}`}
-                    >
-                      All day
-                    </button>
-                    <span className={`px-3 py-1.5 rounded-full border text-caption font-semibold ${startDT.slice(0, 10) !== endDT.slice(0, 10) ? 'border-casa-gold bg-casa-gold/15 text-casa-navy' : 'border-casa-border bg-casa-bg text-casa-muted'}`}>
-                      {startDT.slice(0, 10) !== endDT.slice(0, 10) ? 'Multi-day detected' : 'Single day'}
-                    </span>
-                  </div>
-
-                  <div className="sm:hidden grid grid-cols-1 gap-3">
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">Start</label>
-                      {(() => {
-                        const p = getPickerParts(startDT)
-                        return (
-                          <div className="rounded-xl border border-casa-border bg-casa-bg p-2 space-y-2">
-                            <InlineCalendarPicker
-                              value={startDT.slice(0, 10)}
-                              onChange={(nextDate) => {
-                                if (isAllDay) {
-                                  setStartDT(`${nextDate}T00:00`)
-                                  markDirty()
-                                  return
-                                }
-                                const candidate = new Date(`${nextDate}T${startDT.slice(11, 16) || '00:00'}`)
-                                if (Number.isNaN(candidate.getTime())) return
-                                setStartAndAutoEnd(candidate)
-                              }}
-                            />
-                            <p className="text-caption text-casa-muted">
-                              Selected: {new Date(`${startDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
-                            </p>
-                            {!isAllDay && (
-                              <div className="grid grid-cols-3 gap-1.5">
-                                <select value={p.hour12} onChange={e => updateStartParts({ hour12: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
-                                  {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
-                                </select>
-                                <select value={p.minute} onChange={e => updateStartParts({ minute: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
-                                  {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
-                                </select>
-                                <select value={p.ampm} onChange={e => updateStartParts({ ampm: e.target.value as 'AM' | 'PM' })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm font-semibold text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
-                                  <option value="AM">AM</option>
-                                  <option value="PM">PM</option>
-                                </select>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })()}
+                      <p className="text-caption text-casa-muted mb-1">Start</p>
+                      <input
+                        type="datetime-local"
+                        value={startDT}
+                        onChange={e => { setStartDT(e.target.value); markDirty() }}
+                        className={inputCls}
+                      />
                     </div>
                     <div>
-                      <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">End</label>
-                      {(() => {
-                        const p = getPickerParts(endDT)
-                        return (
-                          <div className="rounded-xl border border-casa-border bg-casa-bg p-2 space-y-2">
-                            <InlineCalendarPicker
-                              value={endDT.slice(0, 10)}
-                              onChange={(nextDate) => {
-                                setEndDT(`${nextDate}T${isAllDay ? '23:59' : (endDT.slice(11, 16) || '00:00')}`)
-                                markDirty()
-                              }}
-                            />
-                            <p className="text-caption text-casa-muted">
-                              Selected: {new Date(`${endDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
-                            </p>
-                            {!isAllDay && (
-                              <div className="grid grid-cols-3 gap-1.5">
-                                <select value={p.hour12} onChange={e => updateEndParts({ hour12: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
-                                  {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
-                                </select>
-                                <select value={p.minute} onChange={e => updateEndParts({ minute: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
-                                  {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
-                                </select>
-                                <select value={p.ampm} onChange={e => updateEndParts({ ampm: e.target.value as 'AM' | 'PM' })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm font-semibold text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
-                                  <option value="AM">AM</option>
-                                  <option value="PM">PM</option>
-                                </select>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })()}
+                      <p className="text-caption text-casa-muted mb-1">End</p>
+                      <input
+                        type="datetime-local"
+                        value={endDT}
+                        onChange={e => { setEndDT(e.target.value); markDirty() }}
+                        className={inputCls}
+                      />
                     </div>
                   </div>
-
-                  <div className="hidden sm:grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">Start</label>
-                      {(() => {
-                        const p = getPickerParts(startDT)
-                        return (
-                          <div className="rounded-xl border border-casa-border bg-casa-bg p-2 space-y-2">
-                            <InlineCalendarPicker
-                              value={startDT.slice(0, 10)}
-                              onChange={(nextDate) => {
-                                if (isAllDay) {
-                                  setStartDT(`${nextDate}T00:00`)
-                                  markDirty()
-                                  return
-                                }
-                                const candidate = new Date(`${nextDate}T${startDT.slice(11, 16) || '00:00'}`)
-                                if (Number.isNaN(candidate.getTime())) return
-                                setStartAndAutoEnd(candidate)
-                              }}
-                            />
-                            <p className="text-caption text-casa-muted">
-                              Selected: {new Date(`${startDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
-                            </p>
-                            {!isAllDay && (
-                              <div className="grid grid-cols-3 gap-1.5">
-                                <select value={p.hour12} onChange={e => updateStartParts({ hour12: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
-                                  {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
-                                </select>
-                                <select value={p.minute} onChange={e => updateStartParts({ minute: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
-                                  {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
-                                </select>
-                                <select value={p.ampm} onChange={e => updateStartParts({ ampm: e.target.value as 'AM' | 'PM' })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm font-semibold text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
-                                  <option value="AM">AM</option>
-                                  <option value="PM">PM</option>
-                                </select>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })()}
-                    </div>
-                    <div>
-                      <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">End</label>
-                      {(() => {
-                        const p = getPickerParts(endDT)
-                        return (
-                          <div className="rounded-xl border border-casa-border bg-casa-bg p-2 space-y-2">
-                            <InlineCalendarPicker
-                              value={endDT.slice(0, 10)}
-                              onChange={(nextDate) => {
-                                setEndDT(`${nextDate}T${isAllDay ? '23:59' : (endDT.slice(11, 16) || '00:00')}`)
-                                markDirty()
-                              }}
-                            />
-                            <p className="text-caption text-casa-muted">
-                              Selected: {new Date(`${endDT.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
-                            </p>
-                            {!isAllDay && (
-                              <div className="grid grid-cols-3 gap-1.5">
-                                <select value={p.hour12} onChange={e => updateEndParts({ hour12: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
-                                  {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <option key={hour} value={hour}>{hour}</option>)}
-                                </select>
-                                <select value={p.minute} onChange={e => updateEndParts({ minute: Number(e.target.value) })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
-                                  {MINUTE_OPTIONS.map(min => <option key={min} value={min}>{String(min).padStart(2, '0')}</option>)}
-                                </select>
-                                <select value={p.ampm} onChange={e => updateEndParts({ ampm: e.target.value as 'AM' | 'PM' })} className="h-10 rounded-lg border border-casa-border bg-casa-surface px-2 text-body-sm font-semibold text-casa-navy focus:outline-none focus:ring-2 focus:ring-casa-gold/40">
-                                  <option value="AM">AM</option>
-                                  <option value="PM">PM</option>
-                                </select>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })()}
-                    </div>
-                  </div>
-                </div>
+                )}
 
                 {/* Recurrence */}
                 <div className="space-y-3">

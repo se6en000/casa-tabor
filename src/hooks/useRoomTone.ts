@@ -32,7 +32,6 @@ export interface DisplayConfig {
 
   // Room Tone
   room_tone_enabled: boolean
-  ambient_auto_mode: boolean // true = pure ambient matching, disables custom override group
   // Schedule — hour boundaries (24h, local time)
   schedule_afternoon_hour: number  // default 15 (3pm)
   schedule_evening_hour: number    // default 19 (7pm)
@@ -50,15 +49,6 @@ export interface DisplayConfig {
   sensor_push_enabled: boolean
   brightness_min: number
   brightness_max: number
-  cct_bias_k: number
-  zone_cct_bias_day: number
-  zone_cct_bias_afternoon: number
-  zone_cct_bias_evening: number
-  zone_cct_bias_night: number
-  zone_cct_bias_late_night: number
-  rgb_trim_r: number
-  rgb_trim_g: number
-  rgb_trim_b: number
   auto_sleep_enabled: boolean   // blank display when room is very dark
   sleep_lux_threshold: number   // lux floor before sleep (default 0.5)
   wake_lux_threshold: number    // lux to wake from sleep (default 3.0)
@@ -74,7 +64,6 @@ export const DISPLAY_DEFAULTS: DisplayConfig = {
   clock_format: '12h',
 
   room_tone_enabled: true,
-  ambient_auto_mode: true,
   schedule_afternoon_hour: 15,
   schedule_evening_hour: 19,
   schedule_night_hour: 21,
@@ -89,15 +78,6 @@ export const DISPLAY_DEFAULTS: DisplayConfig = {
   sensor_push_enabled: false,
   brightness_min: 2,
   brightness_max: 90,
-  cct_bias_k: 0,
-  zone_cct_bias_day: 0,
-  zone_cct_bias_afternoon: 0,
-  zone_cct_bias_evening: -250,
-  zone_cct_bias_night: -500,
-  zone_cct_bias_late_night: -800,
-  rgb_trim_r: 0,
-  rgb_trim_g: 0,
-  rgb_trim_b: 0,
   auto_sleep_enabled: true,
   sleep_lux_threshold: 0.5,
   wake_lux_threshold: 3.0,

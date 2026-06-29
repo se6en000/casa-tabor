@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import { format, addDays, isToday, startOfDay } from 'date-fns'
+import { format, addDays, isToday, isSameDay, startOfDay } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   MapPin, Clock, DollarSign, Phone, AlertTriangle,
@@ -19,7 +19,6 @@ import { WeatherIcon } from '../shared/WeatherIcon'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import BounceScroll from '../shared/BounceScroll'
-import { eventOverlapsDay, getEventDisplayEnd, getMultiDayBoundaryLabel, isEventMultiDay, withColorAlpha } from '../../utils/eventTime'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -41,14 +40,14 @@ function getSnippet(event: EventWithDetails): { icon: React.ReactNode; text: str
 }
 
 export default function StackedView() {
-  const { selectedDate, visibleMembers } = useCalendarStore()
-  const anchorDay = startOfDay(selectedDate)
-  // 8 days: anchor day → anchor day+7
-  const days  = Array.from({ length: 8 }, (_, i) => addDays(anchorDay, i))
+  const { visibleMembers } = useCalendarStore()
+  const today = startOfDay(new Date())
+  // 8 days: today → today+7
+  const days  = Array.from({ length: 8 }, (_, i) => addDays(today, i))
   const row1  = days.slice(0, 4)
   const row2  = days.slice(4, 8)
 
-  const { data: allEvents } = useRollingEvents(anchorDay)
+  const { data: allEvents } = useRollingEvents(today)
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [editEventId,     setEditEventId]     = useState<string | null>(null)
@@ -89,7 +88,7 @@ export default function StackedView() {
         <div key={rowIdx} className="grid grid-cols-4 gap-2 min-h-[160px]">
           {rowDays.map(day => {
             const dayEvents = events
-              .filter(e => eventOverlapsDay(e, day))
+              .filter(e => isSameDay(new Date(e.start_time), day))
               .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
 
             const dayAllDay = dayEvents.filter(isAllDayReminder)
@@ -162,7 +161,6 @@ export default function StackedView() {
                         <EventCard
                           key={event.id}
                           event={event}
-                          day={day}
                           isSelected={selectedEventId === event.id}
                           onClick={() => setSelectedEventId(event.id)}
                           onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
@@ -210,14 +208,13 @@ export default function StackedView() {
 
 interface EventCardProps {
   event: EventWithDetails
-  day: Date
   isSelected: boolean
   onClick: () => void
   onDoubleClick: () => void
   onLongPress: (event: EventWithDetails, x: number, y: number) => void
 }
 
-function EventCard({ event, day, isSelected, onClick, onDoubleClick, onLongPress }: EventCardProps) {
+function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: EventCardProps) {
   const color = getPrimaryColor(event)
   const enr = event.enrichment
   const snippet = getSnippet(event)
@@ -233,9 +230,6 @@ function EventCard({ event, day, isSelected, onClick, onDoubleClick, onLongPress
 
   const start = new Date(event.start_time)
   const end = new Date(event.end_time)
-  const displayEnd = getEventDisplayEnd(event)
-  const multiDay = isEventMultiDay(event)
-  const boundaryLabel = getMultiDayBoundaryLabel(event, day)
 
   // Long-press detection
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -281,7 +275,6 @@ function EventCard({ event, day, isSelected, onClick, onDoubleClick, onLongPress
         'hover:shadow-card-hover transition-all duration-200',
         isSelected ? 'border-casa-gold shadow-card' : 'border-casa-border'
       )}
-      style={{ backgroundColor: multiDay ? withColorAlpha(color, '1A') : undefined }}
     >
       {/* Left color bar */}
       <div
@@ -295,15 +288,8 @@ function EventCard({ event, day, isSelected, onClick, onDoubleClick, onLongPress
         <div className="flex items-center justify-between gap-1 mb-0.5">
           <div className="flex items-center gap-1">
             <p className="text-caption font-semibold text-casa-muted tabular-nums leading-none">
-              {event.all_day
-                ? (boundaryLabel ?? (multiDay ? `${format(start, 'MMM d')}–${format(displayEnd, 'MMM d')} · All day` : 'All day'))
-                : (boundaryLabel ?? (multiDay ? `${format(start, 'MMM d')}–${format(displayEnd, 'MMM d')} · Multi-day` : `${format(start, 'h:mm')}–${format(end, 'h:mma')}`))}
+              {format(start, 'h:mm')}–{format(end, 'h:mma')}
             </p>
-            {multiDay && (
-              <span className="inline-flex px-1 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wide bg-casa-navy/10 text-casa-navy">
-                Multi-day
-              </span>
-            )}
             {event.location_name && (
               <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
             )}

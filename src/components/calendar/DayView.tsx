@@ -1,27 +1,25 @@
 import { useState, useRef, useCallback } from 'react'
-import { addDays, addMinutes, format, isSameDay, parseISO, startOfDay } from 'date-fns'
+import { format, isSameDay, parseISO } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Clock, MapPin, Navigation,
-  Calendar, AlertTriangle, ClipboardList,
+  Clock, MapPin, ChevronRight, Navigation,
+  Calendar, AlertTriangle, ClipboardList, Bell,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useCalendarStore } from '../../stores/calendarStore'
-import { useTodayEvents } from '../../hooks/useCalendarEvents'
+import { useWeekEvents } from '../../hooks/useCalendarEvents'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { usePrepItems, useDismissPrepItem, useSnoozePrepItem } from '../../hooks/usePrepItems'
 import { useWeekConflicts, useResolveConflict } from '../../hooks/useConflicts'
 import EventDetailPanel from './EventDetailPanel'
 import EventEditSheet from './EventEditSheet'
 import EventContextMenu from '../shared/EventContextMenu'
+import { WeatherIcon } from '../shared/WeatherIcon'
 import { differenceInDays } from 'date-fns'
-import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, isTimedReminder } from '../../utils/holidays'
+import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, isAllDayReminder, isTimedReminder, REMINDER_COLOR } from '../../utils/holidays'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import BounceScroll from '../shared/BounceScroll'
-import LargeEventCard from './LargeEventCard'
-import ReminderEventCard from './ReminderEventCard'
-import { eventOverlapsDay, getEventDisplayStartDay } from '../../utils/eventTime'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -29,6 +27,10 @@ function getPrimaryColor(event: EventWithDetails): string {
   if (!event.members?.length || event.members.length >= 5) return SHARED_COLOR
   const primary = event.members.find(m => m.role === 'primary') ?? event.members[0]
   return primary.family_member?.color_hex || SHARED_COLOR
+}
+
+function formatTime(iso: string) {
+  return format(parseISO(iso), 'h:mm a')
 }
 
 // ── Event card (stacked, not time-distributed) ─────────────────────
@@ -39,22 +41,25 @@ function DayEventCard({
   onSelect,
   onEdit,
   onLongPress,
-  onCompleteReminder,
-  onSnoozeReminder,
-  day,
 }: {
   event: EventWithDetails
   selected: boolean
   onSelect: () => void
   onEdit: () => void
   onLongPress: (event: EventWithDetails, x: number, y: number) => void
-  onCompleteReminder: (event: EventWithDetails) => void
-  onSnoozeReminder: (event: EventWithDetails) => void
-  day: Date
 }) {
   const holiday = isHoliday(event)
   const reminder = !holiday && isReminder(event)
-  const color = holiday ? HOLIDAY_COLOR : getPrimaryColor(event)
+  const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(event)
+  const enr = event.enrichment
+  const d = new Date(event.start_time)
+  const isAllDay = holiday || isAllDayReminder(event) || !event.start_time.includes('T') ||
+    (d.getHours() === 0 && d.getMinutes() === 0 && event.end_time && (() => { const e = new Date(event.end_time!); return e.getHours() === 23 && e.getMinutes() === 59 })())
+
+  const primary = event.members.find(m => m.role === 'primary')
+  const otherMembers = event.members.filter(m => m.role !== 'primary')
+  const pipeIdx = event.title.indexOf(' | ')
+  const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
 
   // Long-press detection
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -107,8 +112,27 @@ function DayEventCard({
 
   if (reminder) {
     const timed = isTimedReminder(event)
-    const start = new Date(event.start_time)
-    
+    if (timed) {
+      // Slim pill for timed reminders in the timeline
+      return (
+        <motion.div
+          layout
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.18 }}
+          onClick={e => { e.stopPropagation(); onSelect() }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer hover:opacity-80 transition-opacity"
+          style={{ border: '1.5px solid #C4893A', backgroundColor: '#FDFAF4' }}
+        >
+          <Bell size={13} style={{ color: '#C4893A' }} className="shrink-0" />
+          <span className="text-caption font-semibold" style={{ color: '#7A5520' }}>{event.title}</span>
+          <span className="text-caption ml-1" style={{ color: '#C4893A' }}>
+            {format(new Date(event.start_time), 'h:mm a')}
+          </span>
+        </motion.div>
+      )
+    }
     return (
       <motion.div
         layout
@@ -116,31 +140,18 @@ function DayEventCard({
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -4 }}
         transition={{ duration: 0.18 }}
-        className="grid grid-cols-[96px_1fr] min-h-[80px]"
+        onClick={e => { e.stopPropagation(); onSelect() }}
+        className="flex items-center gap-3 px-4 py-2.5 rounded-card border border-amber-200 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors"
+        style={{ borderLeftColor: REMINDER_COLOR, borderLeftWidth: 4 }}
       >
-        {/* Time column */}
-        {timed ? (
-          <div className="grid content-start justify-items-end pr-3 pl-2 pt-3 border-r border-casa-divider/70">
-            <p className="text-display-sm font-display font-bold text-casa-navy tabular-nums leading-none text-right">
-              {format(start, 'h:mm')}
-            </p>
-            <p className="text-caption text-casa-muted font-semibold uppercase mt-1 text-right">
-              {format(start, 'a')}
-            </p>
-          </div>
-        ) : (
-          <div className="grid content-start justify-items-end pr-3 pl-2 pt-3 border-r border-casa-divider/70">
-            <p className="text-caption font-semibold text-casa-muted text-right">All day</p>
-          </div>
-        )}
-
-        {/* Reminder card */}
-        <ReminderEventCard
-          event={event}
-          onClick={() => onSelect()}
-          onComplete={() => onCompleteReminder(event)}
-          onSnooze={() => onSnoozeReminder(event)}
-        />
+        <Bell size={18} className="text-casa-gold shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-body-sm text-amber-800 leading-snug">{cleanTitle}</p>
+          {primary && <p className="text-caption text-amber-600 mt-0.5">{primary.family_member?.name}</p>}
+        </div>
+        <span className="text-caption font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 shrink-0">
+          Reminder
+        </span>
       </motion.div>
     )
   }
@@ -153,16 +164,86 @@ function DayEventCard({
       exit={{ opacity: 0, y: -4 }}
       transition={{ duration: 0.18 }}
       onClick={e => { e.stopPropagation(); onSelect() }}
-      onDoubleClick={e => { e.stopPropagation(); onEdit() }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       className={cn(
-        'cursor-pointer transition-all touch-pan-y',
-        'hover:shadow-card',
+        'group relative flex gap-3 px-4 py-3.5 rounded-card border cursor-pointer transition-all touch-pan-y',
+        'bg-casa-surface border-casa-border hover:shadow-card',
+        selected && 'shadow-card-hover border-l-4',
       )}
+      style={selected ? { borderLeftColor: color } : {}}
     >
-      <LargeEventCard event={event} color={color} selected={selected} contextDay={day} />
+      {/* Color strip */}
+      <div className="w-1 rounded-full shrink-0 self-stretch" style={{ background: color }} />
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-semibold text-body-sm text-casa-text leading-snug">{cleanTitle}</p>
+          {!isAllDay && (
+            <span className="flex items-center gap-1 text-caption text-casa-muted shrink-0 tabular-nums">
+              {formatTime(event.start_time)}
+              {event.end_time ? ` – ${formatTime(event.end_time)}` : ''}
+              {event.location_name && (
+                <WeatherIcon condition={enr?.weather_at_event} size={12} />
+              )}
+            </span>
+          )}
+          {isAllDay && (
+            <span className="text-caption font-semibold px-2 py-0.5 rounded-full bg-casa-divider text-casa-muted shrink-0">
+              All day
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-x-2 gap-y-1 mt-1 items-center">
+          {/* Owner as full pill */}
+          {primary && (
+            <span
+              className="px-2 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
+              style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
+            >
+              {primary.family_member?.name}
+            </span>
+          )}
+          {/* Other attendees as name pills */}
+          {otherMembers.slice(0, 3).map(m => (
+            <span
+              key={m.id}
+              className="px-2 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
+              style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
+            >
+              {m.family_member?.name ?? '?'}
+            </span>
+          ))}
+          {event.location_name && (
+            <span className="flex items-center gap-1 text-caption text-casa-muted">
+              <MapPin size={11} />
+              {event.location_name}
+            </span>
+          )}
+          {enr?.departure_time && (
+            <span className="flex items-center gap-1 text-caption text-amber-700 font-medium">
+              <Navigation size={11} />
+              Leave by {format(parseISO(enr.departure_time), 'h:mm a')}
+            </span>
+          )}
+        </div>
+
+        {enr?.prep_notes && (
+          <p className="text-caption text-casa-muted mt-1 line-clamp-2">{enr.prep_notes}</p>
+        )}
+      </div>
+
+      {/* Edit on hover */}
+      <button
+        onClick={e => { e.stopPropagation(); onEdit() }}
+        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 self-start mt-0.5 text-casa-muted hover:text-casa-text"
+        title="Edit event"
+      >
+        <ChevronRight size={16} />
+      </button>
     </motion.div>
   )
 }
@@ -312,26 +393,32 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
 export default function DayView() {
   const { selectedDate, visibleMembers } = useCalendarStore()
 
-  const { data: dayRangeEvents } = useTodayEvents(selectedDate)
+  // Use the week that contains the selected date to get events
+  const { data: weekEvents } = useWeekEvents(selectedDate)
   const qc = useQueryClient()
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [editEventId, setEditEventId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ event: EventWithDetails; x: number; y: number } | null>(null)
 
-  const allEvents = (dayRangeEvents ?? []).filter(e =>
+  const allEvents = (weekEvents ?? []).filter(e =>
     isHoliday(e) || isReminder(e) || visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
   )
 
   // Events for the currently selected day
   const dayEvents = allEvents
-    .filter(e => eventOverlapsDay(e, selectedDate))
+    .filter(e => {
+      const start = parseISO(e.start_time)
+      const end = e.end_time ? parseISO(e.end_time) : start
+      return isSameDay(start, selectedDate) ||
+        (start <= selectedDate && end >= selectedDate)
+    })
     .sort((a, b) => {
-      const aAllDay = a.all_day
-      const bAllDay = b.all_day
+      const aAllDay = a.start_time.endsWith('00:00:00+00:00')
+      const bAllDay = b.start_time.endsWith('00:00:00+00:00')
       if (aAllDay && !bAllDay) return -1
       if (!aAllDay && bAllDay) return 1
-      return getEventDisplayStartDay(a).getTime() - getEventDisplayStartDay(b).getTime()
+      return new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
     })
 
   const selectedEvent = selectedEventId ? (dayEvents.find(e => e.id === selectedEventId) ?? null) : null
@@ -345,27 +432,6 @@ export default function DayView() {
 
   const completeEvent = useCallback(async (ev: EventWithDetails) => {
     await supabase.from('events').update({ status: 'cancelled' }).eq('id', ev.id)
-    qc.invalidateQueries({ queryKey: ['events'] })
-  }, [qc])
-
-  const completeReminder = useCallback(async (ev: EventWithDetails) => {
-    await supabase.from('events').update({ status: 'cancelled' }).eq('id', ev.id)
-    qc.invalidateQueries({ queryKey: ['events'] })
-  }, [qc])
-
-  const snoozeReminder = useCallback(async (ev: EventWithDetails) => {
-    const start = new Date(ev.start_time)
-    const end = new Date(ev.end_time)
-    const durationMs = Math.max(15 * 60_000, end.getTime() - start.getTime())
-    const timed = isTimedReminder(ev)
-    const nextStart = timed
-      ? addMinutes(start, 30)
-      : startOfDay(addDays(start, 1))
-    const nextEnd = new Date(nextStart.getTime() + durationMs)
-    await supabase
-      .from('events')
-      .update({ start_time: nextStart.toISOString(), end_time: nextEnd.toISOString(), updated_at: new Date().toISOString() })
-      .eq('id', ev.id)
     qc.invalidateQueries({ queryKey: ['events'] })
   }, [qc])
 
@@ -397,14 +463,9 @@ export default function DayView() {
                     key={event.id}
                     event={event}
                     selected={selectedEventId === event.id}
-                    onSelect={() => {
-                      setSelectedEventId(prev => prev === event.id ? null : event.id)
-                    }}
+                    onSelect={() => setSelectedEventId(prev => prev === event.id ? null : event.id)}
                     onEdit={() => setEditEventId(event.id)}
                     onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
-                    onCompleteReminder={completeReminder}
-                    onSnoozeReminder={snoozeReminder}
-                    day={selectedDate}
                   />
                 ))}
               </div>

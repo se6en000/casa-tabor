@@ -1,19 +1,17 @@
 import { Link } from 'react-router-dom'
-import { Users, Sun, MessageSquare, Bot, ChevronRight, Music2, Home, Activity, BookmarkCheck, Layers, Image, ShoppingBasket } from 'lucide-react'
+import { Users, Sun, MessageSquare, Bot, ChevronRight, Music2, Home, Activity, BookmarkCheck, Layers } from 'lucide-react'
 import BounceScroll from '../components/shared/BounceScroll'
 
 const sections = [
-  { to: '/settings/display',  icon: Sun,           label: 'Display',                 desc: 'Theme colors, room tone, brightness, sensors' },
-  { to: '/settings/art-mode', icon: Image,         label: 'Art Mode',                desc: 'Screensaver, artwork feed, artists, media types' },
-  { to: '/settings/home',     icon: Home,          label: 'Home & Profile',          desc: 'Home address and home screen layout configuration' },
-  { to: '/settings/google',   icon: Layers,        label: 'Google Services',         desc: 'Calendar sync + Gmail inbox scan — one auth per member' },
-  { to: '/settings/ai',       icon: Bot,           label: 'AI & Voice',              desc: 'Provider, voice runtime, SLO dashboard, and forensic telemetry' },
-  { to: '/settings/family',   icon: Users,         label: 'Family',                  desc: 'Members, colors, roles' },
-  { to: '/settings/places',   icon: BookmarkCheck, label: 'Saved Places & Contacts', desc: 'Favorite locations and people the AI can look up by nickname' },
-  { to: '/settings/sms',      icon: MessageSquare, label: 'Notifications',           desc: 'Twilio SMS, briefing time' },
-  { to: '/settings/music',    icon: Music2,        label: 'Spotify / Music',         desc: 'Connect and control music playback' },
-  { to: '/settings/status',   icon: Activity,      label: 'Status Dashboard',        desc: 'AI usage, tokens, and cost monitoring' },
-  { to: '/settings/grocery-intelligence', icon: ShoppingBasket, label: 'Grocery Intelligence', desc: 'Learning, recategorization, dedupe, and aisle coverage stats' },
+  { to: '/settings/display', icon: Sun,           label: 'Display & Art Mode',      desc: 'Theme colors, room tone, brightness, art mode, sensors' },
+  { to: '/settings/home',   icon: Home,           label: 'Home & Profile',          desc: 'Home address and home screen layout configuration' },
+  { to: '/settings/google',  icon: Layers,        label: 'Google Services',         desc: 'Calendar sync + Gmail inbox scan — one auth per member' },
+  { to: '/settings/ai',      icon: Bot,           label: 'AI Settings',             desc: 'Vendor, model, and API key for briefings' },
+  { to: '/settings/family',  icon: Users,         label: 'Family',                  desc: 'Members, colors, roles' },
+  { to: '/settings/places',  icon: BookmarkCheck, label: 'Saved Places & Contacts', desc: 'Favorite locations and people the AI can look up by nickname' },
+  { to: '/settings/sms',     icon: MessageSquare, label: 'Notifications',           desc: 'Twilio SMS, briefing time' },
+  { to: '/settings/music',   icon: Music2,        label: 'Spotify / Music',         desc: 'Connect and control music playback' },
+  { to: '/settings/status',  icon: Activity,      label: 'Status Dashboard',        desc: 'AI usage, tokens, and cost monitoring' },
 ]
 
 export default function SettingsPage() {

@@ -8,18 +8,14 @@ import GoogleServicesPage from '../../pages/GoogleServicesPage'
 import AISettingsPage from '../../pages/AISettingsPage'
 import FamilySettingsPage from '../../pages/FamilySettingsPage'
 import DisplaySettingsPage from '../../pages/DisplaySettingsPage'
-import ArtModeSettingsPage from '../../pages/ArtModeSettingsPage'
 import SmsSettingsPage from '../../pages/SmsSettingsPage'
 import MusicPage from '../../pages/MusicPage'
-import CookPage from '../../pages/CookPage'
 import TabletPrototypePage from '../../pages/TabletPrototypePage'
 import TripDetailPage from '../../pages/TripDetailPage'
 import HomeSettingsPage from '../../pages/HomeSettingsPage'
 import StatusDashboardPage from '../../pages/StatusDashboardPage'
 import DataAnalyticsPage from '../../pages/DataAnalyticsPage'
-import GroceryIntelligenceSettingsPage from '../../pages/GroceryIntelligenceSettingsPage'
 import SavedPlacesSettingsPage from '../../pages/SavedPlacesSettingsPage'
-import ActionHubPage from '../../pages/ActionHubPage'
 import SettingsShell from '../settings/SettingsShell'
 import PageTransition from './PageTransition'
 
@@ -33,10 +29,8 @@ export default function AnimatedRoutes() {
         <Route path="/" element={<PageTransition><HomePage /></PageTransition>} />
         <Route path="/calendar" element={<PageTransition><CalendarPage /></PageTransition>} />
         <Route path="/grocery" element={<PageTransition><GroceryPage /></PageTransition>} />
-        <Route path="/cook" element={<PageTransition><CookPage /></PageTransition>} />
         <Route path="/music" element={<PageTransition><MusicPage /></PageTransition>} />
         <Route path="/briefing" element={<PageTransition><BriefingPage /></PageTransition>} />
-        <Route path="/actions" element={<PageTransition><ActionHubPage /></PageTransition>} />
         <Route path="/prototype" element={<TabletPrototypePage />} />
         <Route path="/trips/:id" element={<PageTransition><TripDetailPage /></PageTransition>} />
 
@@ -54,12 +48,10 @@ export default function AnimatedRoutes() {
           <Route path="sms"        element={<SmsSettingsPage />} />
           <Route path="music"      element={<MusicPage />} />
           <Route path="display"    element={<DisplaySettingsPage />} />
-          <Route path="art-mode"   element={<ArtModeSettingsPage />} />
           <Route path="screensaver" element={<Navigate to="/settings/display" replace />} />
           <Route path="theme"      element={<Navigate to="/settings/display" replace />} />
           <Route path="status"     element={<StatusDashboardPage />} />
           <Route path="analytics"  element={<DataAnalyticsPage />} />
-          <Route path="grocery-intelligence"  element={<GroceryIntelligenceSettingsPage />} />
         </Route>
       </Routes>
     </AnimatePresence>

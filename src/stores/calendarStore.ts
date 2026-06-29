@@ -13,10 +13,7 @@ interface CalendarStore {
 
 export const useCalendarStore = create<CalendarStore>((set) => ({
   selectedDate: new Date(),  // defaults to today
-  setSelectedDate: (date) =>
-    set({
-      selectedDate: Number.isNaN(date.getTime()) ? new Date() : new Date(date),
-    }),
+  setSelectedDate: (date) => set({ selectedDate: date }),
   activeView: 'stacked',
   setActiveView: (view) => set({ activeView: view }),
   visibleMembers: [],

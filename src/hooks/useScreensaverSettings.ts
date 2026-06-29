@@ -8,7 +8,7 @@ export interface ScreensaverSettings {
   enabled: boolean          // master toggle for screensaver
   displaySleepEnabled: boolean
   artDimOffset: number      // how much dimmer than ambient lux in art mode (0–80, default 30%)
-  wakeWordSensitivity: number // 0.1 (very sensitive) – 0.9 (strict), default 0.2
+  wakeWordSensitivity: number // 0.1 (very sensitive) – 0.6 (strict), default 0.3
 }
 
 const DEFAULTS: ScreensaverSettings = {
@@ -19,25 +19,16 @@ const DEFAULTS: ScreensaverSettings = {
   enabled: true,
   displaySleepEnabled: true,
   artDimOffset: 30,
-  wakeWordSensitivity: 0.2,
+  wakeWordSensitivity: 0.3,
 }
 
 const KEY = 'casa-screensaver-settings'
-const WAKE_SENSITIVITY_MIGRATION_KEY = 'casa-wake-sensitivity-v2'
 const SYNC_EVENT = 'casa-screensaver-settings-updated'
 
 function load(): ScreensaverSettings {
   try {
     const raw = localStorage.getItem(KEY)
-    if (raw) {
-      const merged = { ...DEFAULTS, ...JSON.parse(raw) }
-      if (!localStorage.getItem(WAKE_SENSITIVITY_MIGRATION_KEY) && merged.wakeWordSensitivity === 0.3) {
-        merged.wakeWordSensitivity = DEFAULTS.wakeWordSensitivity
-        localStorage.setItem(KEY, JSON.stringify(merged))
-      }
-      localStorage.setItem(WAKE_SENSITIVITY_MIGRATION_KEY, '1')
-      return merged
-    }
+    if (raw) return { ...DEFAULTS, ...JSON.parse(raw) }
   } catch { /* ignore */ }
   return DEFAULTS
 }

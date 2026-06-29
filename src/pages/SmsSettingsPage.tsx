@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { CheckCircle, MessageSquare, Bell, Clock, Send, ExternalLink, Copy, Smartphone, RefreshCw } from 'lucide-react'
+import { CheckCircle, MessageSquare, Bell, Clock, Send, ExternalLink, Copy } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
-import { usePushNotifications } from '../hooks/usePushNotifications'
 
 interface SmsConfig {
   enabled: boolean
@@ -17,8 +16,6 @@ interface SmsConfig {
   quiet_hours_enabled: boolean
   quiet_hours_start: string      // HH:mm local
   quiet_hours_end: string        // HH:mm local
-  push_quiet_hours_enabled: boolean
-  sms_escalation_only: boolean
   escalation_enabled: boolean
   escalation_minutes: number
   notify_members: string[]       // family_member ids to text
@@ -36,8 +33,6 @@ const DEFAULTS: SmsConfig = {
   quiet_hours_enabled: true,
   quiet_hours_start: '22:00',
   quiet_hours_end: '07:00',
-  push_quiet_hours_enabled: true,
-  sms_escalation_only: true,
   escalation_enabled: true,
   escalation_minutes: 90,
   notify_members: [],
@@ -90,16 +85,6 @@ export default function SmsSettingsPage() {
   const [config, setConfig] = useState<SmsConfig>(DEFAULTS)
   const [saved, setSaved] = useState(false)
   const hydratedRef = useRef(false)
-  const {
-    supported: pushSupported,
-    permission: pushPermission,
-    subscribed: pushSubscribed,
-    busy: pushBusy,
-    error: pushError,
-    deviceLabel,
-    enablePush,
-    refreshStatus,
-  } = usePushNotifications()
 
   // Load family members for the notify selector
   const { data: members = [] } = useQuery<{ id: string; name: string; phone: string | null }[]>({
@@ -137,7 +122,6 @@ export default function SmsSettingsPage() {
   })
 
   const [testStatus, setTestStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle')
-  const [pushTestStatus, setPushTestStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle')
   const sendTestBriefing = async () => {
     setTestStatus('sending')
     try {
@@ -147,30 +131,6 @@ export default function SmsSettingsPage() {
       setTestStatus('error')
     }
     setTimeout(() => setTestStatus('idle'), 4000)
-  }
-
-  const sendTestPush = async () => {
-    setPushTestStatus('sending')
-    try {
-      const { data, error } = await supabase.functions.invoke('send-push-notification', {
-        body: {
-          title: 'Casa Tabor test',
-          body: `Push is working on ${deviceLabel}.`,
-          url: '/',
-          tag: 'push-test',
-          eventId: 'test-notification-event',
-        },
-      })
-      if (error) {
-        setPushTestStatus('error')
-      } else {
-        const sent = Number((data as { sent?: number } | null)?.sent ?? 0)
-        setPushTestStatus(sent > 0 ? 'ok' : 'error')
-      }
-    } catch {
-      setPushTestStatus('error')
-    }
-    setTimeout(() => setPushTestStatus('idle'), 4000)
   }
 
   const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sms-webhook`
@@ -216,88 +176,6 @@ export default function SmsSettingsPage() {
       </div>
 
       <div className="space-y-4">
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <div className="flex items-center gap-2 mb-2">
-            <Smartphone size={15} className="text-casa-gold" />
-            <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Phone Push Notifications</p>
-          </div>
-          <p className="text-caption text-casa-muted mb-3">
-            Enable iPhone/Android browser push for event reminders. On iOS, this must be triggered from this button.
-          </p>
-
-          {!pushSupported ? (
-            <p className="text-caption text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              Push notifications are not supported in this browser.
-            </p>
-          ) : (
-            <>
-              <div className="flex flex-wrap items-center gap-2 mb-3">
-                <span className="text-caption px-2.5 py-1 rounded-full border border-casa-border text-casa-muted">
-                  Permission: <span className="font-medium text-casa-navy">{pushPermission}</span>
-                </span>
-                <span className="text-caption px-2.5 py-1 rounded-full border border-casa-border text-casa-muted">
-                  Subscription: <span className={cn('font-medium', pushSubscribed ? 'text-emerald-700' : 'text-casa-navy')}>{pushSubscribed ? 'active' : 'not active'}</span>
-                </span>
-              </div>
-
-              {pushPermission === 'denied' && (
-                <p className="text-caption text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
-                  Notifications are blocked. Re-enable them in iOS Settings → Notifications → Casa Tabor, then tap Enable again.
-                </p>
-              )}
-
-              {pushError && (
-                <p className="text-caption text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
-                  {pushError}
-                </p>
-              )}
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={enablePush}
-                  disabled={pushBusy}
-                  className={cn(
-                    'inline-flex items-center gap-2 px-4 py-2 rounded-lg text-body-sm font-semibold transition-colors',
-                    pushBusy ? 'bg-casa-border text-casa-muted' : 'bg-casa-navy text-white hover:bg-casa-navy/90'
-                  )}
-                >
-                  <Bell size={14} />
-                  {pushBusy ? 'Enabling…' : pushSubscribed ? 'Re-subscribe push' : 'Enable push notifications'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={refreshStatus}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-body-sm font-semibold bg-casa-bg border border-casa-border text-casa-navy hover:border-casa-navy/30 transition-colors"
-                >
-                  <RefreshCw size={14} />
-                  Refresh status
-                </button>
-
-                <button
-                  type="button"
-                  onClick={sendTestPush}
-                  disabled={!pushSubscribed || pushTestStatus === 'sending'}
-                  className={cn(
-                    'inline-flex items-center gap-2 px-4 py-2 rounded-lg text-body-sm font-semibold transition-colors',
-                    (!pushSubscribed || pushTestStatus === 'sending') ? 'bg-casa-border text-casa-muted'
-                    : pushTestStatus === 'ok' ? 'bg-green-100 text-green-700'
-                    : pushTestStatus === 'error' ? 'bg-red-100 text-red-700'
-                    : 'bg-casa-gold/10 text-casa-gold hover:bg-casa-gold/20'
-                  )}
-                >
-                  <Send size={14} />
-                  {pushTestStatus === 'sending' ? 'Sending test…'
-                    : pushTestStatus === 'ok' ? 'Push sent!'
-                    : pushTestStatus === 'error' ? 'Push failed'
-                    : 'Send test push'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-
         {/* Master toggle + Twilio credentials */}
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
           <Toggle
@@ -408,22 +286,8 @@ export default function SmsSettingsPage() {
                   </div>
                 </div>
               )}
-              <div className="pb-3">
-                <Toggle
-                  checked={config.push_quiet_hours_enabled}
-                  onChange={v => set('push_quiet_hours_enabled', v)}
-                  label="Apply quiet hours to push reminders"
-                  desc="When enabled, upcoming event push reminders are also suppressed during quiet hours."
-                />
-              </div>
             </div>
             <div>
-              <Toggle
-                checked={config.sms_escalation_only}
-                onChange={v => set('sms_escalation_only', v)}
-                label="SMS escalation only (Recommended)"
-                desc="Only send SMS for high-severity conflicts and due-soon prep items. Push remains the primary channel."
-              />
               <Toggle
                 checked={config.escalation_enabled}
                 onChange={v => set('escalation_enabled', v)}

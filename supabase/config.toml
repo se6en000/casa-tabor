@@ -26,16 +26,3 @@ verify_jwt = false
 
 [functions.process-google-sync-jobs]
 verify_jwt = false
-
-[functions.register-push-subscription]
-verify_jwt = false
-
-[functions.send-push-notification]
-verify_jwt = false
-
-[functions.notification-action]
-verify_jwt = false
-
-[functions.get-home-schedule]
-verify_jwt = false
-

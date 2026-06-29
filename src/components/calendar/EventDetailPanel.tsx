@@ -9,7 +9,7 @@ import {
   Plane, Loader2, ExternalLink, Paperclip,
   Home, Hotel, Hash, DoorOpen, Armchair, Luggage, Users,
   Sun, CloudRain, CloudSnow, Wind,
-  Crown, Plus, Bookmark, BookmarkCheck, Copy, Check, Map, CheckCircle2, Clock3,
+  Crown, Plus, Bookmark, BookmarkCheck, Copy, Check, Map,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
@@ -359,8 +359,6 @@ function PanelHeader({ event, onClose }: { event: EventWithDetails; onClose: () 
   const confidence = event.enrichment?.confidence as keyof typeof CONFIDENCE_CONFIG | undefined
   const conf = confidence ? CONFIDENCE_CONFIG[confidence] : null
   const category = event.enrichment?.category
-  const showSyncState = event.event_type !== 'reminder'
-  const isGoogleSynced = !!event.google_event_id
 
   return (
     <div className="border-b border-casa-border">
@@ -392,18 +390,6 @@ function PanelHeader({ event, onClose }: { event: EventWithDetails; onClose: () 
             <span className={cn('inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-caption font-semibold border', conf.bg, conf.text, conf.border)}>
               <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: conf.color }} />
               {conf.label}
-            </span>
-          )}
-          {showSyncState && (
-            <span
-              className={cn(
-                'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-caption font-semibold border',
-                isGoogleSynced ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-casa-bg text-casa-muted border-casa-border',
-              )}
-              title={isGoogleSynced ? 'Google sync confirmed' : 'Google sync pending'}
-            >
-              {isGoogleSynced ? <CheckCircle2 size={12} /> : <Clock3 size={12} />}
-              {isGoogleSynced ? 'Google synced' : 'Google pending'}
             </span>
           )}
         </div>
@@ -1416,23 +1402,21 @@ function PanelFooter({ event, onEdit, onEditWithAI }: { event: EventWithDetails;
     : null
 
   return (
-    <div className="p-4 border-t border-casa-border flex gap-2.5 items-stretch">
-      {/* Mobile gets larger tap targets with labels; desktop keeps compact icon buttons */}
+    <div className="p-4 border-t border-casa-border flex gap-2 items-stretch">
+      {/* Icon-only square buttons — aspect-square makes them match the row height */}
       <button
         onClick={onEdit}
         title="Edit Details"
-        className="h-12 min-w-12 px-3 sm:px-0 sm:aspect-square flex items-center justify-center gap-1.5 shrink-0 rounded-button border border-casa-border text-casa-navy hover:bg-casa-bg transition-colors"
+        className="aspect-square flex items-center justify-center shrink-0 rounded-button border border-casa-border text-casa-navy hover:bg-casa-bg transition-colors"
       >
         <Pencil size={18} />
-        <span className="text-body-sm font-semibold sm:hidden">Edit</span>
       </button>
       <button
         onClick={onEditWithAI}
         title="Edit with AI"
-        className="h-12 min-w-12 px-3 sm:px-0 sm:aspect-square flex items-center justify-center gap-1.5 shrink-0 rounded-button border border-casa-gold/60 text-casa-gold hover:bg-casa-gold/10 transition-colors"
+        className="aspect-square flex items-center justify-center shrink-0 rounded-button border border-casa-gold/60 text-casa-gold hover:bg-casa-gold/10 transition-colors"
       >
         <Sparkles size={18} />
-        <span className="text-body-sm font-semibold sm:hidden">AI</span>
       </button>
       {/* Full-size action buttons */}
       {mapsUrl && (
@@ -1440,13 +1424,13 @@ function PanelFooter({ event, onEdit, onEditWithAI }: { event: EventWithDetails;
           href={mapsUrl}
           target="_blank"
           rel="noreferrer"
-          className="flex-1 min-h-12 flex items-center justify-center gap-2 px-4 py-2.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
+          className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
         >
           <Navigation size={15} />
           Directions
         </a>
       )}
-      <button className="flex-1 min-h-12 flex items-center justify-center gap-2 px-4 py-2.5 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 transition-all">
+      <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 transition-all">
         <Share2 size={15} />
         Share
       </button>

@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { format, isAfter, isBefore } from 'date-fns'
-import { Home, Calendar, ShoppingCart, Sun, ChefHat, Settings, ChevronDown, Users, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Home, Calendar, ShoppingCart, Sun, Music, Settings, ChevronDown, Users } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '../../utils/cn'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
@@ -9,7 +9,7 @@ import { useCalendarStore } from '../../stores/calendarStore'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import NotificationDrawer from '../shared/NotificationDrawer'
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import BounceScroll from '../shared/BounceScroll'
 
 const NAV = [
@@ -17,7 +17,7 @@ const NAV = [
   { to: '/calendar', icon: Calendar,     label: 'Calendar' },
   { to: '/grocery',  icon: ShoppingCart, label: 'Grocery' },
   { to: '/briefing', icon: Sun,          label: 'Briefing' },
-  { to: '/cook',     icon: ChefHat,      label: 'Cooking' },
+  { to: '/music',    icon: Music,        label: 'Music' },
   { to: '/settings', icon: Settings,     label: 'Settings' },
 ]
 
@@ -28,19 +28,7 @@ export default function TabletSidebar() {
   useNotifications()
   const [notifOpen, setNotifOpen] = useState(false)
   const [familyOpen, setFamilyOpen] = useState(true)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const { data: todayEvents } = useTodayEvents(now)
-
-  // Load sidebar state from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('sidebar-collapsed')
-    if (saved !== null) setSidebarCollapsed(JSON.parse(saved))
-  }, [])
-
-  // Save sidebar state to localStorage when it changes
-  useEffect(() => {
-    localStorage.setItem('sidebar-collapsed', JSON.stringify(sidebarCollapsed))
-  }, [sidebarCollapsed])
 
   // Infer status per family member
   const homeFamily = useMemo(
@@ -63,113 +51,81 @@ export default function TabletSidebar() {
 
   return (
     <>
-      <aside className={cn(
-        'hidden lg:flex flex-shrink-0 bg-casa-rail border-r border-casa-border flex-col h-full overflow-hidden z-30 transition-all duration-300 relative',
-        sidebarCollapsed ? 'w-20' : 'w-72'
-      )}>
-        <BounceScroll
-          className="flex-1 min-h-0"
-          innerClassName={cn('flex flex-col gap-2 pt-3', sidebarCollapsed ? 'px-2 pb-4' : 'px-4 pb-4')}
-        >
-          {!sidebarCollapsed && (
-            <>
-              <div>
-                <div className="flex items-center justify-between px-2 pt-3 pb-2">
-                  <button
-                    onClick={() => setFamilyOpen(o => !o)}
-                    className="flex items-center gap-1.5 text-caption text-casa-muted uppercase tracking-wider hover:text-casa-navy transition-colors"
-                  >
-                    <Users size={12} className="shrink-0" />
-                    Family
-                    <ChevronDown
-                      size={13}
-                      className={cn('ml-1 transition-transform duration-200', familyOpen ? 'rotate-0' : '-rotate-90')}
-                    />
-                  </button>
-                  <NavLink
-                    to="/settings/family"
-                    className="text-body-sm text-casa-muted hover:text-casa-navy transition-colors"
-                  >
-                    Manage
-                  </NavLink>
+      <aside className="hidden lg:flex w-72 flex-shrink-0 bg-casa-surface border-r border-casa-border flex-col h-screen sticky top-0 overflow-hidden z-30">
+
+        {/* Family — collapsible filter + who's home */}
+        <div className="flex-shrink-0 border-b border-casa-border">
+          <button
+            onClick={() => setFamilyOpen(o => !o)}
+            className="w-full flex items-center gap-1.5 px-6 pt-5 pb-3 text-caption text-casa-muted uppercase tracking-wider hover:text-casa-navy transition-colors"
+          >
+            <Users size={12} className="shrink-0" />
+            Family
+            <ChevronDown
+              size={13}
+              className={cn('ml-auto transition-transform duration-200', familyOpen ? 'rotate-0' : '-rotate-90')}
+            />
+          </button>
+
+          <AnimatePresence initial={false}>
+            {familyOpen && (
+              <motion.div
+                key="family-list"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+                style={{ overflow: 'hidden' }}
+              >
+                <div className="px-4 pb-4 flex flex-col gap-0.5">
+                  {homeFamily.map(m => {
+                    const active = visibleMembers.length === 0 || visibleMembers.includes(m.id)
+                    const status = whoStatus.find(s => s.member.id === m.id)
+                    const busy = !!status?.activeNow
+                    const statusLabel = status?.activeNow
+                      ? status.activeNow.location_name
+                        ? `Out · ${status.activeNow.location_name.split(' ').slice(0, 3).join(' ')}`
+                        : `Busy until ${format(new Date(status.activeNow.end_time), 'h:mm a')}`
+                      : status?.nextUp
+                        ? `Next: ${format(new Date(status.nextUp.start_time), 'h:mm a')}`
+                        : 'Free today'
+
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => toggleMember(m.id)}
+                        className={cn(
+                          'flex items-center gap-3 px-2 py-2.5 rounded-xl transition-all text-left w-full',
+                          active ? 'bg-casa-bg' : 'opacity-35 hover:opacity-60',
+                        )}
+                      >
+                        <span
+                          className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-caption font-bold text-white"
+                          style={{ backgroundColor: m.color_hex }}
+                        >
+                          {m.name[0]}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className={cn('text-body font-medium leading-tight', active ? 'text-casa-navy' : 'text-casa-muted')}>
+                            {m.name}
+                          </p>
+                          <p className="text-caption text-casa-muted truncate mt-0.5">{statusLabel}</p>
+                        </div>
+                        <span className={cn(
+                          'w-2.5 h-2.5 rounded-full flex-shrink-0',
+                          !active ? 'bg-casa-muted/30' : busy ? 'bg-amber-400' : 'bg-emerald-400',
+                        )} />
+                      </button>
+                    )
+                  })}
                 </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
-                <AnimatePresence initial={false}>
-                  {familyOpen && (
-                    <motion.div
-                      key="family-list"
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-                      style={{ overflow: 'hidden' }}
-                    >
-                      <div className="px-0 pb-2 flex flex-col gap-1.5">
-                        {homeFamily.map(m => {
-                          const active = visibleMembers.length === 0 || visibleMembers.includes(m.id)
-                          const status = whoStatus.find(s => s.member.id === m.id)
-                          const busy = !!status?.activeNow
-                          const statusLabel = status?.activeNow
-                            ? status.activeNow.location_name
-                              ? `Out · ${status.activeNow.location_name.split(' ').slice(0, 3).join(' ')}`
-                              : `Busy until ${format(new Date(status.activeNow.end_time), 'h:mm a')}`
-                            : status?.nextUp
-                              ? `Next: ${format(new Date(status.nextUp.start_time), 'h:mm a')}`
-                              : 'Free today'
-
-                          return (
-                            <button
-                              key={m.id}
-                              onClick={() => toggleMember(m.id)}
-                              className={cn(
-                                'w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all text-left',
-                                active
-                                  ? 'bg-transparent hover:bg-casa-bg'
-                                  : 'opacity-40 hover:opacity-70 hover:bg-casa-bg/60',
-                              )}
-                            >
-                              <span
-                                className="relative w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-body-sm font-bold text-white"
-                                style={{ backgroundColor: m.color_hex }}
-                              >
-                                {m.name[0]}
-                                <span className={cn(
-                                  'absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-casa-surface',
-                                  !active ? 'bg-casa-muted/40' : busy ? 'bg-amber-400' : 'bg-emerald-400',
-                                )} />
-                              </span>
-                              <div className="flex-1 min-w-0">
-                                <p className={cn('text-body font-semibold leading-tight', active ? 'text-casa-navy' : 'text-casa-text')}>
-                                  {m.name}
-                                </p>
-                                <p className={cn('text-body-sm truncate mt-0.5', busy ? 'text-casa-gold' : 'text-casa-muted')}>
-                                  {statusLabel}
-                                </p>
-                              </div>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-            </>
-          )}
-
-          <div className={cn('flex items-center py-1', sidebarCollapsed ? 'justify-center' : 'mx-2 gap-2')}>
-            {!sidebarCollapsed && <div className="h-px flex-1 bg-casa-border/70" aria-hidden />}
-            <button
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="p-1.5 rounded-md hover:bg-casa-bg transition-colors text-casa-muted hover:text-casa-navy"
-              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-            </button>
-            {!sidebarCollapsed && <div className="h-px flex-1 bg-casa-border/70" aria-hidden />}
-          </div>
-
+        {/* Nav */}
+        <BounceScroll className="flex-1 min-h-0" innerClassName="px-4 py-4 flex flex-col gap-0.5">
           {NAV.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
@@ -178,19 +134,17 @@ export default function TabletSidebar() {
               onClick={to === '/calendar' ? () => setActiveView('stacked') : undefined}
               className={({ isActive }) =>
                 cn(
-                  'w-full flex items-center rounded-2xl transition-colors font-medium',
-                  sidebarCollapsed ? 'justify-center p-3 aspect-square' : 'justify-start gap-3 px-4 py-3 text-body',
+                  'flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-body font-medium',
                   isActive
-                    ? 'bg-casa-navy text-white shadow-sm'
+                    ? 'bg-casa-navy text-white'
                     : 'text-casa-muted hover:text-casa-navy hover:bg-casa-bg',
                 )
               }
-              title={sidebarCollapsed ? label : undefined}
             >
               {({ isActive }) => (
                 <>
-                  <Icon size={sidebarCollapsed ? 22 : 19} strokeWidth={isActive ? 2 : 1.8} className={sidebarCollapsed ? '' : 'flex-shrink-0'} />
-                  {!sidebarCollapsed && label}
+                  <Icon size={19} strokeWidth={isActive ? 2 : 1.8} />
+                  {label}
                 </>
               )}
             </NavLink>

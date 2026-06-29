@@ -8,67 +8,11 @@ import {
   hasSmartEnrichmentInputs,
 } from '../_shared/enrichment-impact.mjs'
 import { requireEnv } from '../_shared/env.mjs'
-import {
-  normalizeComparableName,
-} from '../_shared/grocery-normalization.ts'
-import {
-  loadAisleMappings,
-  loadCatalogRows,
-  resolveGroceryFromCatalog,
-} from '../_shared/grocery-catalog.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-const NAME_NORMALIZATION_RULES: Array<{ pattern: RegExp; replacement: string }> = [
-  { pattern: /\bcoca[\s-]?cola\b|\bcoke\b/i, replacement: 'Coca-Cola' },
-  { pattern: /\bdr[\s.]?pepper\b/i, replacement: 'Dr Pepper' },
-  { pattern: /\bgatorade\b/i, replacement: 'Gatorade' },
-  { pattern: /\bred ?bull\b/i, replacement: 'Red Bull' },
-  { pattern: /\bpaper ?towels?\b/i, replacement: 'paper towels' },
-  { pattern: /\btoilet ?paper\b/i, replacement: 'toilet paper' },
-]
-
-function toTitleCase(value: string): string {
-  return value
-    .split(' ')
-    .filter(Boolean)
-    .map((part) => part[0]?.toUpperCase() + part.slice(1))
-    .join(' ')
-}
-
-function normalizeGroceryName(rawName: string): { name: string; normalizedFrom?: string } {
-  const trimmed = rawName.trim().replace(/\s+/g, ' ')
-  if (!trimmed) return { name: '' }
-  for (const rule of NAME_NORMALIZATION_RULES) {
-    if (rule.pattern.test(trimmed)) {
-      return { name: rule.replacement, normalizedFrom: trimmed }
-    }
-  }
-  return { name: toTitleCase(trimmed) }
-}
-
-function summarizeIngressArgs(args: unknown): { preview: string | null; size: number } {
-  try {
-    const serialized = JSON.stringify(args ?? null)
-    if (typeof serialized !== 'string') return { preview: null, size: 0 }
-    return {
-      preview: serialized.slice(0, 1800),
-      size: serialized.length,
-    }
-  } catch {
-    return { preview: null, size: 0 }
-  }
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs)),
-  ])
 }
 
 async function getExistingActionResult(sb: ReturnType<typeof createClient>, actionId?: string) {
@@ -124,52 +68,16 @@ async function finalizeEventSync(
   eventId: string,
   historyId: string | null | undefined,
   response: Record<string, unknown>,
-  options?: { asyncMode?: boolean; timeoutMs?: number; correlationId?: string },
 ) {
-  const syncStartMs = Date.now()
-  const asyncMode = options?.asyncMode === true
-  const timeoutMs = options?.timeoutMs ?? 1500
-  const cid = options?.correlationId ?? 'unknown'
-  if (asyncMode) {
-    void sb.functions.invoke('sync-event-to-google', { body: { event_id: eventId } }).catch(() => {})
-    const queuedResponse = {
-      ...response,
-      sync_status: 'queued',
-      sync_warning: 'Saved in Casa Tabor. Google sync is running asynchronously.',
-    }
-    await updateAuditResult(sb, historyId, queuedResponse, 'pending')
-    console.log(`[execute-ai-action][${cid}] stage=sync_finalize async=1 ms=${Date.now() - syncStartMs}`)
-    return queuedResponse
-  }
+  const syncRes = await sb.functions.invoke('push-to-google', {
+    body: { event_id: eventId },
+  }).catch((err: Error) => ({ data: null, error: err }))
 
-  const syncRes = await withTimeout(
-    sb.functions.invoke('sync-event-to-google', {
-      body: { event_id: eventId },
-    }).catch((err: Error) => ({ data: null, error: err })),
-    timeoutMs,
-    `sync-event-to-google timed out after ${timeoutMs}ms`,
-  ).catch((err: Error) => ({ data: null, error: err }))
-
-  const syncStatus = typeof syncRes?.data?.sync_status === 'string' ? syncRes.data.sync_status : null
   const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? null
-  if (!syncError && (syncStatus === 'synced' || syncStatus === 'not_needed')) {
+  if (!syncError) {
     const syncedResponse = { ...response, sync_status: 'synced' }
     await updateAuditResult(sb, historyId, syncedResponse, 'succeeded')
-    console.log(`[execute-ai-action][${cid}] stage=sync_finalize async=0 ms=${Date.now() - syncStartMs} status=synced`)
     return syncedResponse
-  }
-  if (!syncError && syncStatus === 'queued') {
-    const queuedResponse = {
-      ...response,
-      sync_warning: typeof syncRes?.data?.sync_warning === 'string'
-        ? syncRes.data.sync_warning
-        : 'Saved in Casa Tabor. Google sync is queued and still in progress.',
-      sync_status: 'queued',
-      sync_job_id: syncRes?.data?.sync_job_id ?? null,
-    }
-    await updateAuditResult(sb, historyId, queuedResponse, 'pending')
-    console.log(`[execute-ai-action][${cid}] stage=sync_finalize async=0 ms=${Date.now() - syncStartMs} status=queued`)
-    return queuedResponse
   }
 
   try {
@@ -181,7 +89,6 @@ async function finalizeEventSync(
       sync_job_id: syncJobId,
     }
     await updateAuditResult(sb, historyId, queuedResponse, 'pending', syncError)
-    console.log(`[execute-ai-action][${cid}] stage=sync_finalize async=0 ms=${Date.now() - syncStartMs} status=queued error=1`)
     return queuedResponse
   } catch (queueError) {
     const failedResponse = {
@@ -196,7 +103,6 @@ async function finalizeEventSync(
       'failed',
       `${syncError}; retry queue error: ${(queueError as Error).message ?? 'unknown error'}`,
     )
-    console.log(`[execute-ai-action][${cid}] stage=sync_finalize async=0 ms=${Date.now() - syncStartMs} status=failed`)
     return failedResponse
   }
 }
@@ -208,105 +114,15 @@ Deno.serve(async (req) => {
   const {
     tool,
     args,
-    action_id: actionIdRaw,
+    action_id: actionId,
     session_id: sessionId,
     correlation_id: correlationId,
-    trace_id: traceIdRaw,
-    turn_id: turnIdRaw,
-    lane: laneRaw,
-    device_id: deviceIdRaw,
-    client_trace_present: clientTracePresentRaw,
-    client_build: clientBuildRaw,
-    client_trace_source: clientTraceSourceRaw,
-    sync_mode: syncModeRaw,
   } = await req.json()
-  const syncMode = typeof syncModeRaw === 'string' ? syncModeRaw : undefined
-  const cid = correlationId ?? `${sessionId ?? 'no-session'}:${actionIdRaw ?? 'no-action'}`
-  const cidParts = String(cid).split(':')
-  const inferredCorrelationToken = cidParts.length > 1 ? cidParts[1] : null
-  const actionId = typeof actionIdRaw === 'string' && actionIdRaw.trim().length > 0
-    ? actionIdRaw
-    : (typeof inferredCorrelationToken === 'string' && inferredCorrelationToken.trim().length > 0
-      ? inferredCorrelationToken
-      : null)
-  const traceId = typeof traceIdRaw === 'string' && traceIdRaw.trim().length > 0
-    ? traceIdRaw
-    : String(cid.split(':')[0] || cid)
-  const turnId = typeof turnIdRaw === 'string' && turnIdRaw.trim().length > 0
-    ? turnIdRaw
-    : (typeof inferredCorrelationToken === 'string' && inferredCorrelationToken.trim().length > 0 && laneRaw !== 'llm'
-      ? inferredCorrelationToken
-      : null)
-  const lane = typeof laneRaw === 'string' && laneRaw.trim().length > 0 ? laneRaw : tool
-  const deviceId = typeof deviceIdRaw === 'string' && deviceIdRaw.trim().length > 0 ? deviceIdRaw : null
-  const clientBuild = typeof clientBuildRaw === 'string' && clientBuildRaw.trim().length > 0
-    ? clientBuildRaw.slice(0, 120)
-    : null
-  const clientTraceSource = typeof clientTraceSourceRaw === 'string' && clientTraceSourceRaw.trim().length > 0
-    ? clientTraceSourceRaw.slice(0, 80)
-    : null
-  const inferredClientTracePresent = Boolean(traceId && turnId && deviceId)
-  const clientTracePresent = typeof clientTracePresentRaw === 'boolean'
-    ? clientTracePresentRaw
-    : inferredClientTracePresent
-  const requestStartMs = Date.now()
-  const ACTION_SLO_MS = 2500
-  const warnIfSlow = (stage: string, elapsedMs: number, budgetMs: number) => {
-    if (elapsedMs > budgetMs) {
-      console.warn(`[execute-ai-action][${cid}] slo_breach stage=${stage} elapsed=${elapsedMs} budget=${budgetMs}`)
-    }
-  }
+  const cid = correlationId ?? `${sessionId ?? 'no-session'}:${actionId ?? 'no-action'}`
   console.log(`[execute-ai-action][${cid}] start tool=${tool}`)
-  const appendServerTrace = (event: string, detail: string, payload?: Record<string, unknown>) => {
-    const dedupeKey = `${cid}|${event}|${turnId ?? 'no-turn'}|${actionId ?? 'no-action'}|${detail.slice(0, 80)}`
-    sb.from('ai_drawer_debug_events').insert({
-      event,
-      detail: detail.slice(0, 2000),
-      channel: 'debug',
-      session_id: traceId,
-      turn_id: turnId,
-      action_id: actionId ?? null,
-      correlation_id: cid,
-      lane,
-      payload: payload ?? null,
-      device_id: deviceId,
-      page: 'app',
-      source_component: 'server:execute-ai-action',
-      source_origin: 'execute-ai-action',
-      source_href: null,
-      user_agent: null,
-      platform: Deno.build.os,
-      dedupe_key: dedupeKey,
-    }).then(() => {}).catch(() => {})
-  }
-  const ingressArgs = summarizeIngressArgs(args)
-  appendServerTrace('server_execute_action_start', `tool=${tool}`, {
-    tool,
-    sync_mode: syncMode ?? 'default',
-    client_trace_present: clientTracePresent,
-    client_build: clientBuild,
-    client_trace_source: clientTraceSource,
-  })
-  appendServerTrace('server_execute_action_ingress_args', `tool=${tool}`, {
-    tool,
-    args_preview: ingressArgs.preview,
-    args_size: ingressArgs.size,
-    lane,
-    client_build: clientBuild,
-  })
-  if (!clientTracePresent && lane !== 'regression') {
-    appendServerTrace('client_trace_absent_at_ingress', `lane=${lane}`, {
-      lane,
-      tool,
-      client_trace_present: false,
-      client_build: clientBuild,
-      client_trace_source: clientTraceSource,
-    })
-  }
 
   try {
     if (tool === 'create_event') {
-      const createStartMs = Date.now()
       const { data: event, error } = await sb.from('events').insert({
         title: args.title,
         start_time: args.start,
@@ -317,24 +133,9 @@ Deno.serve(async (req) => {
         status: 'confirmed',
         is_enriched: false,
         event_type: args.event_type ?? 'event',
-        ai_origin_trace_id: traceId,
-        ai_origin_turn_id: turnId,
-        ai_origin_action_id: actionId ?? null,
-        ai_origin_lane: lane,
-        ai_origin_device_id: deviceId,
-        ai_last_trace_id: traceId,
-        ai_last_turn_id: turnId,
-        ai_last_action_id: actionId ?? null,
-        ai_last_lane: lane,
-        ai_last_device_id: deviceId,
       }).select().single()
 
       if (error) throw new Error(error.message)
-      appendServerTrace('server_execute_action_event_created', `event_id=${event.id}`, {
-        event_id: event.id,
-        title: event.title,
-      })
-      console.log(`[execute-ai-action][${cid}] stage=create_event_insert ms=${Date.now() - createStartMs}`)
 
       // Add members
       if (args.members?.length > 0) {
@@ -351,28 +152,10 @@ Deno.serve(async (req) => {
 
       // Fire enrichment async (slow — Gemini AI, don't block)
       sb.functions.invoke('enrich-event', { body: { event_id: event.id } }).catch(() => {})
-      // Verify Google sync before claiming completion (create/patch + retry queue).
-      const syncPayload = await finalizeEventSync(
-        sb,
-        event.id,
-        null,
-        {},
-        {
-          asyncMode: syncMode === 'async',
-          timeoutMs: 1200,
-          correlationId: cid,
-        },
-      )
-      const finalSyncStatus = (syncPayload.sync_status as 'synced' | 'failed' | 'queued' | undefined) ?? 'queued'
-      const syncWarning = typeof syncPayload.sync_warning === 'string' ? syncPayload.sync_warning : undefined
+      // Await Google sync — fire-and-forget can be killed before completion in Deno Deploy
+      await sb.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {})
 
-      return new Response(JSON.stringify({
-        success: true,
-        event_id: event.id,
-        sync_status: finalSyncStatus,
-        ...(syncWarning ? { sync_warning: syncWarning } : {}),
-        correlation_id: cid,
-      }), {
+      return new Response(JSON.stringify({ success: true, event_id: event.id, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
@@ -460,19 +243,6 @@ Deno.serve(async (req) => {
         p_ai_session_id: sessionId ?? null,
       })
       if (rpcError) throw new Error(rpcError.message)
-      const { error: provenanceError } = await sb
-        .from('events')
-        .update({
-          ai_last_trace_id: traceId,
-          ai_last_turn_id: turnId,
-          ai_last_action_id: actionId ?? null,
-          ai_last_lane: lane,
-          ai_last_device_id: deviceId,
-        })
-        .eq('id', normalized.eventId)
-      if (provenanceError) {
-        console.warn(`[execute-ai-action][${cid}] provenance_update_failed ${provenanceError.message}`)
-      }
 
       if (targetFields.length > 0) {
         sb.functions.invoke('enrich-event', {
@@ -501,35 +271,13 @@ Deno.serve(async (req) => {
           .limit(1)
         : { data: null, error: null }
       if (historyLoadError) throw new Error(historyLoadError.message)
-      if (historyRow?.[0]?.id) {
-        const { error: historyTraceError } = await sb
-          .from('ai_event_edit_history')
-          .update({
-            trace_id: traceId,
-            turn_id: turnId,
-            lane,
-            device_id: deviceId,
-          })
-          .eq('id', historyRow[0].id)
-        if (historyTraceError) {
-          console.warn(`[execute-ai-action][${cid}] history_trace_update_failed ${historyTraceError.message}`)
-        }
-      }
-      appendServerTrace('server_execute_action_event_updated', `event_id=${normalized.eventId}`, {
-        event_id: normalized.eventId,
-        action_id: actionId ?? null,
-      })
 
       const baseResponse = {
         success: true,
         event_id: normalized.eventId,
         action_id: actionId ?? null,
       }
-      const responsePayload = await finalizeEventSync(sb, normalized.eventId, historyRow?.[0]?.id, baseResponse, {
-        asyncMode: syncMode === 'async',
-        timeoutMs: 1200,
-        correlationId: cid,
-      })
+      const responsePayload = await finalizeEventSync(sb, normalized.eventId, historyRow?.[0]?.id, baseResponse)
 
       return new Response(JSON.stringify({ ...responsePayload, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
@@ -573,11 +321,7 @@ Deno.serve(async (req) => {
         action_id: actionId,
         undid_action_id: targetActionId,
       }
-      const responsePayload = await finalizeEventSync(sb, baseResponse.event_id, historyRow?.[0]?.id, baseResponse, {
-        asyncMode: syncMode === 'async',
-        timeoutMs: 1200,
-        correlationId: cid,
-      })
+      const responsePayload = await finalizeEventSync(sb, baseResponse.event_id, historyRow?.[0]?.id, baseResponse)
 
       return new Response(JSON.stringify({ ...responsePayload, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
@@ -585,169 +329,37 @@ Deno.serve(async (req) => {
     }
 
     if (tool === 'delete_event') {
-      const syncRes = await sb.functions.invoke('delete-google-event', {
-        body: { event_id: args.id },
-      }).catch((err: Error) => ({ data: null, error: err }))
-      const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? null
-      const syncSkipped = typeof syncRes?.data?.skipped === 'string' ? syncRes.data.skipped : null
-
+      await sb.functions.invoke('delete-google-event', { body: { event_id: args.id } }).catch(() => {})
       const { error } = await sb.from('events').update({ status: 'cancelled' }).eq('id', args.id)
       if (error) throw new Error(error.message)
-
-      let syncStatus: 'synced' | 'failed' = 'synced'
-      let syncWarning: string | undefined
-      if (syncError) {
-        syncStatus = 'failed'
-        syncWarning = `Marked cancelled in Casa Tabor, but Google deletion is not confirmed: ${syncError}`
-      } else if (syncSkipped && syncSkipped !== 'no google_event_id') {
-        syncStatus = 'failed'
-        syncWarning = `Marked cancelled in Casa Tabor, but Google deletion is not confirmed (${syncSkipped}).`
-      }
-
-      return new Response(JSON.stringify({
-        success: true,
-        sync_status: syncStatus,
-        ...(syncWarning ? { sync_warning: syncWarning } : {}),
-        correlation_id: cid,
-      }), {
+      return new Response(JSON.stringify({ success: true, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
 
     if (tool === 'add_grocery_items') {
-      const [catalogRows, aisleMappings] = await Promise.all([
-        loadCatalogRows(sb),
-        loadAisleMappings(sb),
-      ])
       const { data: lists } = await sb.from('grocery_lists').select('id').order('created_at').limit(1)
       const listId = lists?.[0]?.id
       if (!listId) throw new Error('No grocery list found')
 
-      const sourceItems = Array.isArray(args.items)
-        ? args.items as { name: string; quantity?: string; unit?: string; category?: string; notes?: string }[]
-        : []
-      const normalizedItems = sourceItems
-        .map((item) => {
-          const normalized = normalizeGroceryName(String(item.name ?? ''))
-          if (!normalized.name) return null
-          const resolved = resolveGroceryFromCatalog(normalized.name, catalogRows, aisleMappings)
-          return {
-            rawName: String(item.name ?? '').trim(),
-            name: normalized.name,
-            normalizedFrom: normalized.normalizedFrom,
-            quantity: item.quantity ?? null,
-            unit: item.unit ?? null,
-            category: resolved.category,
-            subcategory: resolved.subcategory,
-            storeSection: resolved.storeSection,
-            brand: resolved.brand,
-            canonicalItemId: resolved.canonicalItemId,
-            enhancementConfidence: resolved.confidence,
-            notes: item.notes ?? null,
-          }
-        })
-        .filter((item): item is {
-          rawName: string
-          name: string
-          normalizedFrom?: string
-          quantity: string | null
-          unit: string | null
-          category: string
-          subcategory: string | null
-          storeSection: string | null
-          brand: string | null
-          canonicalItemId: string | null
-          enhancementConfidence: number
-          notes: string | null
-        } => item !== null)
-
-      if (normalizedItems.length === 0) throw new Error('No valid grocery item names were provided')
-
-      const { data: existingItems, error: existingItemsError } = await sb
-        .from('grocery_items')
-        .select('name')
-        .eq('list_id', listId)
-        .eq('checked', false)
-        .is('deleted_at', null)
-      if (existingItemsError) throw new Error(existingItemsError.message)
-
-      const seenNames = new Set((existingItems ?? []).map((item) => normalizeComparableName(String(item.name ?? ''))))
-      const skippedExactMatches: string[] = []
-      const uniqueItems = normalizedItems.filter((item) => {
-        const key = normalizeComparableName(item.name)
-        if (seenNames.has(key)) {
-          skippedExactMatches.push(item.name)
-          return false
-        }
-        seenNames.add(key)
-        return true
-      })
-
-      const insertedItems: Array<{
-        name: string
-        category: string
-        subcategory: string | null
-        storeSection: string | null
-        normalizedFrom?: string
-      }> = []
-      if (uniqueItems.length > 0) {
-        for (const item of uniqueItems) {
-          const { data: insertedRows, error } = await sb
-            .from('grocery_items')
-            .insert({
-              list_id: listId,
-              name: item.name,
-              quantity: item.quantity ?? null,
-              unit: item.unit ?? null,
-              category: item.category,
-              subcategory: item.subcategory,
-              store_section: item.storeSection,
-              brand: item.brand,
-              canonical_item_id: item.canonicalItemId,
-              enhancement_confidence: item.enhancementConfidence,
-              enhanced_at: new Date().toISOString(),
-              notes: item.notes ?? null,
-              checked: false,
-              last_modified_source: 'casa',
-            })
-            .select('id')
-
-          if (error && error.code !== '23505') throw new Error(error.message)
-          if ((insertedRows ?? []).length > 0) {
-            insertedItems.push({
-              name: item.name,
-              category: item.category,
-              subcategory: item.subcategory,
-              storeSection: item.storeSection,
-              normalizedFrom: item.normalizedFrom,
-            })
-          } else {
-            skippedExactMatches.push(item.name)
-          }
-        }
-      }
-      return new Response(JSON.stringify({
-        success: true,
-        count: insertedItems.length,
-        items: insertedItems.map((item) => ({
-          name: item.name,
-          category: item.category,
-          subcategory: item.subcategory,
-          store_section: item.storeSection,
-          normalized_from: item.normalizedFrom ?? null,
-        })),
-        skipped_exact_matches: skippedExactMatches,
-        correlation_id: cid,
-      }), {
+      const items = (args.items as { name: string; quantity?: string; unit?: string; category?: string; notes?: string }[]).map(i => ({
+        list_id: listId,
+        name: i.name,
+        quantity: i.quantity ?? null,
+        unit: i.unit ?? null,
+        category: i.category ?? 'other',
+        notes: i.notes ?? null,
+        checked: false,
+      }))
+      const { error } = await sb.from('grocery_items').insert(items)
+      if (error) throw new Error(error.message)
+      return new Response(JSON.stringify({ success: true, count: items.length, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
 
     if (tool === 'check_grocery_item') {
-      const { error } = await sb
-        .from('grocery_items')
-        .update({ checked: args.checked, last_modified_source: 'casa' })
-        .eq('id', args.item_id)
+      const { error } = await sb.from('grocery_items').update({ checked: args.checked }).eq('id', args.item_id)
       if (error) throw new Error(error.message)
       return new Response(JSON.stringify({ success: true, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
@@ -755,11 +367,7 @@ Deno.serve(async (req) => {
     }
 
     if (tool === 'clear_checked_grocery_items') {
-      const { error } = await sb
-        .from('grocery_items')
-        .update({ deleted_at: new Date().toISOString(), last_modified_source: 'casa' })
-        .eq('checked', true)
-        .is('deleted_at', null)
+      const { error } = await sb.from('grocery_items').delete().eq('checked', true)
       if (error) throw new Error(error.message)
       return new Response(JSON.stringify({ success: true, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
@@ -772,18 +380,8 @@ Deno.serve(async (req) => {
   } catch (e) {
     const msg = (e as Error).message ?? 'Action failed'
     console.error(`[execute-ai-action][${cid}] error ${msg}`)
-    console.log(`[execute-ai-action][${cid}] stage=request_total ms=${Date.now() - requestStartMs} status=error`)
-    appendServerTrace('server_execute_action_error', msg, { tool, error: msg })
     return new Response(JSON.stringify({ success: false, error: msg, correlation_id: cid }), {
       status: 200, headers: { ...CORS, 'content-type': 'application/json' },
     })
-  } finally {
-    const requestTotalMs = Date.now() - requestStartMs
-    console.log(`[execute-ai-action][${cid}] stage=request_total ms=${requestTotalMs} tool=${tool}`)
-    appendServerTrace('server_execute_action_complete', `tool=${tool} ms=${requestTotalMs}`, {
-      tool,
-      request_ms: requestTotalMs,
-    })
-    warnIfSlow('request_total', requestTotalMs, ACTION_SLO_MS)
   }
 })

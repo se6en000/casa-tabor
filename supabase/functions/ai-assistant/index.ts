@@ -643,7 +643,7 @@ INSTRUCTIONS:
 - When no date is given, prefer the nearest sensible future slot (today if feasible, otherwise tomorrow) instead of choosing a past time.
 - Fuzzy match titles, nicknames, partial names, relative dates. If multiple events match, ask which one.
 - If an initial event search is empty or returns low confidence, retry with a shorter/broader query (e.g., just "dentist" instead of "dentist appointment") before telling the user nothing was found.
-- Never perform writes when search_events reports ambiguous=true or top confidence < 0.75; ask a disambiguation question first.
+- Never perform writes (update_event, delete_event, create_event) when search_events reports ambiguous=true or top confidence < 0.75; ask a disambiguation question first. This rule applies ONLY to writes — for read/list queries (what's on my calendar, give me a briefing, what's this week), always enumerate all found events regardless of ambiguity score. Do not ask for clarification on list reads.
 - Working context: keep operating on the same event we're discussing unless the user clearly switches.
 - Relative shifts ("push it 1h later"): compute from the event's current start_time.
 - "Add my wife"/"add Kelly": resolve from FAMILY MEMBERS.
@@ -698,6 +698,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const memberName = normalizeSearchText((args.member_name as string) ?? '')
 
       let results = allEvents as DbEvent[] ?? []
+      // Hoist date range resolution so ambiguity check can see it
+      let resolvedDateStart: Date | null = null
+      let resolvedDateEnd: Date | null = null
 
       if (memberName) {
         results = results.filter(e =>
@@ -715,8 +718,6 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         localToday.setUTCHours(0, 0, 0, 0)
 
         // Build a resolved date range for common relative expressions
-        let resolvedDateStart: Date | null = null
-        let resolvedDateEnd: Date | null = null
 
         if (dateHint === 'tomorrow') {
           resolvedDateStart = new Date(localToday.getTime() + 86400000)
@@ -811,7 +812,10 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
       const topConfidence = scoredResults[0]?.confidence ?? 0
       const secondConfidence = scoredResults[1]?.confidence ?? 0
-      const ambiguous = scoredResults.length > 1 && (topConfidence < 0.75 || topConfidence - secondConfidence < 0.15)
+      // Date-range searches (today/tomorrow/this week/next weekend etc.) are deterministic —
+      // all results passed a concrete date filter, so they're not ambiguous even if scores are close.
+      const isDateRangeSearch = Boolean(resolvedDateStart && resolvedDateEnd)
+      const ambiguous = !isDateRangeSearch && scoredResults.length > 1 && (topConfidence < 0.75 || topConfidence - secondConfidence < 0.15)
 
       const payload = {
         found: true,
@@ -1048,12 +1052,13 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             { role: 'user', parts: [{ functionResponse: { name, response: toolResult } } as GeminiPart] },
           ]
 
-          // Second call for final answer
-          // Use a prompt variant that instructs the LLM to propose as a tool call, not text
-          const secondaryPrompt = systemInstruction.replace(
-            'For each write proposal, include "Will change", "Will preserve", and "Needs confirmation".',
-            'For each write proposal, IMMEDIATELY call the appropriate write tool (update_event, delete_event, create_event, or add_grocery_items). Do not describe in text - call the tool.'
-          )
+          // Second call for final answer.
+          // Build a focused secondary prompt: for list reads just enumerate; for writes call the tool directly.
+          const isListRead = !userLikelyRequestedWrite
+          const secondaryAddendum = isListRead
+            ? '\n\nSECONDARY CALL — LIST MODE: The search_events result above contains all matching events. Enumerate them clearly in a concise list. Do NOT ask for clarification. Do NOT call any write tool.'
+            : '\n\nSECONDARY CALL — WRITE MODE: You have the search result. Now IMMEDIATELY call the appropriate write tool (update_event, delete_event, create_event). Do not output text first — call the tool directly.'
+          const secondaryPrompt = systemInstruction + secondaryAddendum
           const secondaryBody = { ...body, system_instruction: { parts: [{ text: secondaryPrompt }] }, contents: newContents }
           const secondaryStartMs = Date.now()
           const res2 = await fetch(
@@ -1082,6 +1087,11 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         }
 
         if (name === 'add_grocery_items') {
+          const itemsList = Array.isArray(args.items) ? args.items.filter((i: { name?: string }) => i?.name?.trim()) : []
+          if (itemsList.length === 0) {
+            return { type: 'text', text: "I didn't catch what you'd like to add to the grocery list. Could you say the item name?" }
+          }
+          args = { ...args, items: itemsList }
           if (dryRun) {
             return {
               type: 'tool_action',

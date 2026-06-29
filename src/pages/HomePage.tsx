@@ -1,9 +1,9 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { format, isAfter, isBefore, addDays, addMinutes, startOfDay } from 'date-fns'
+import { Link } from 'react-router-dom'
+import { format, isAfter, isBefore, addDays } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronRight, RefreshCw } from 'lucide-react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ChevronRight, RefreshCw, MapPin, Clock, Navigation, Bell } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { useTodayEvents } from '../hooks/useCalendarEvents'
@@ -12,90 +12,17 @@ import { useCalendarStore } from '../stores/calendarStore'
 import { cn } from '../utils/cn'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import EventDetailPanel from '../components/calendar/EventDetailPanel'
-import LargeEventCard from '../components/calendar/LargeEventCard'
-import ReminderEventCard from '../components/calendar/ReminderEventCard'
 import MiniPlayer from '../components/music/MiniPlayer'
 import HomeRightPanel from '../components/home/HomeRightPanel'
-import PrepItemDetailPanel from '../components/home/PrepItemDetailPanel'
 import { isAllDayReminder, isTimedReminder } from '../utils/holidays'
+import SwipeableReminderPill from '../components/shared/SwipeableReminderPill'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
-import type { PrepItem } from '../types'
+import { WeatherIcon } from '../components/shared/WeatherIcon'
 
 const SHARED_GOLD = '#C9A96E'
 
-function cleanEventTitle(title: string): string {
-  const pipeIdx = title.indexOf(' | ')
-  return pipeIdx !== -1 ? title.slice(pipeIdx + 3) : title
-}
-
-function normalizeForMatch(value: string | null | undefined): string {
-  return (value ?? '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-interface EventMatchCandidate {
-  id: string
-  title: string
-  start_time: string
-  end_time: string
-}
-
-function extractEventIdFromSourceRef(sourceRef: string | null | undefined): string | null {
-  if (!sourceRef?.startsWith('event:')) return null
-  const [, eventId] = sourceRef.split(':')
-  return eventId || null
-}
-
-function findMatchingEventIdForPrepItem(
-  item: PrepItem,
-  candidateEvents: EventMatchCandidate[],
-): string | null {
-  if (item.event_id) return item.event_id
-
-  const itemTitle = normalizeForMatch(item.event_title)
-  const itemDescription = normalizeForMatch(item.description)
-  const itemDate = item.event_date ? new Date(item.event_date).toDateString() : null
-
-  const sourceTitle = itemTitle || itemDescription
-  if (!sourceTitle) return null
-
-  for (const event of candidateEvents) {
-    const eventTitle = normalizeForMatch(cleanEventTitle(event.title))
-    const titleMatch = (
-      (eventTitle.length > 0 && (eventTitle.includes(sourceTitle) || sourceTitle.includes(eventTitle))) ||
-      (itemDescription.length > 0 && eventTitle.length > 0 && itemDescription.includes(eventTitle))
-    )
-    if (!titleMatch) continue
-    if (itemDate) {
-      const day = new Date(itemDate)
-      day.setHours(0, 0, 0, 0)
-      const dayEnd = addDays(day, 1)
-      const eventStart = new Date(event.start_time)
-      const eventEnd = new Date(event.end_time)
-      if (!(eventStart < dayEnd && eventEnd > day)) continue
-    }
-    return event.id
-  }
-
-  return null
-}
-
-function mapsUrlForEvent(event: EventWithDetails): string | null {
-  const mapsQuery = event.address
-    ? (event.location_name ? `${event.location_name}, ${event.address}` : event.address)
-    : (event.location_name ?? '')
-  return mapsQuery
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
-    : null
-}
-
 function eventColor(ev: EventWithDetails): string {
   if (!ev.members || ev.members.length === 0) return SHARED_GOLD
-  const primary = ev.members.find((m) => m.role === 'primary')
-  if (primary?.family_member?.color_hex) return primary.family_member.color_hex
   if (ev.members.length >= 4) return SHARED_GOLD
   return ev.members[0].family_member?.color_hex ?? SHARED_GOLD
 }
@@ -108,25 +35,12 @@ export default function HomePage() {
   const { data: allTomorrowEvents } = useTodayEvents(tomorrow)
   const { visibleMembers, toggleMember } = useCalendarStore()
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
-  const [selectedPrepItem, setSelectedPrepItem] = useState<PrepItem | null>(null)
-  const [searchParams, setSearchParams] = useSearchParams()
   const scrollRef = useRef<HTMLElement | null>(null)
   const nowLineRef = useRef<HTMLLIElement | null>(null)
   const homeFamily = useMemo(
     () => (family ?? []).filter(m => m.role === 'parent' || m.role === 'child'),
     [family],
   )
-
-  // Handle event_id query param from notification deep-links
-  useEffect(() => {
-    const eventId = searchParams.get('event_id')
-    if (eventId) {
-      setSelectedEventId(eventId)
-      const next = new URLSearchParams(searchParams)
-      next.delete('event_id')
-      setSearchParams(next, { replace: true })
-    }
-  }, [searchParams, setSearchParams])
 
   const events = useMemo<EventWithDetails[]>(() => {
     if (!allTodayEvents) return []
@@ -156,19 +70,6 @@ export default function HomePage() {
     })
   }, [allTomorrowEvents, visibleMembers])
 
-  const prepEventCandidates = useMemo<EventWithDetails[]>(() => {
-    const unique = new Map<string, EventWithDetails>()
-    for (const event of [...(allTodayEvents ?? []), ...(allTomorrowEvents ?? [])]) {
-      unique.set(event.id, event)
-    }
-    return [...unique.values()]
-  }, [allTodayEvents, allTomorrowEvents])
-
-  const nextTodayEvent = useMemo(
-    () => events.find((e) => isAfter(new Date(e.start_time), now)) ?? null,
-    [events, now],
-  )
-
   // Show tomorrow section always (not just when today is done)
 
   // Scroll so the "now" line is near the top of the viewport (with some breathing room above)
@@ -183,161 +84,16 @@ export default function HomePage() {
   const selectedEvent = selectedEventId
     ? (events.find(e => e.id === selectedEventId) ?? tomorrowEvents.find(e => e.id === selectedEventId) ?? reminders.find(e => e.id === selectedEventId) ?? null)
     : null
-  const { data: selectedEventFromDb } = useQuery<EventWithDetails | null>({
-    queryKey: ['events', 'single', selectedEventId],
-    enabled: !!selectedEventId && !selectedEvent,
-    queryFn: async () => {
-      if (!selectedEventId) return null
-      const enrichmentSelect = `
-        id,
-        event_id,
-        category,
-        confidence,
-        what_to_bring,
-        outfit_suggestion,
-        parking_notes,
-        contact_name,
-        contact_phone,
-        cost_estimate,
-        dietary_notes,
-        meal_impact,
-        prep_notes,
-        departure_time,
-        drive_time_mins,
-        route_summary,
-        weather_at_event,
-        weather_summary,
-        enriched_by,
-        enriched_at,
-        created_at,
-        updated_at
-      `
-      const { data, error } = await supabase
-        .from('events')
-        .select(`
-          *,
-          event_members (
-            id,
-            role,
-            family_member:family_members (*)
-          ),
-          event_enrichments (${enrichmentSelect}),
-          event_logistics ( * ),
-          event_checklist_items ( * ),
-          event_action_items ( * )
-        `)
-        .eq('id', selectedEventId)
-        .neq('status', 'cancelled')
-        .maybeSingle()
-
-      if (error) throw error
-      if (!data) return null
-
-      return {
-        ...data,
-        members: data.event_members?.map((em: any) => ({
-          id: em.id,
-          role: em.role,
-          family_member: em.family_member,
-        })) ?? [],
-        enrichment: Array.isArray(data.event_enrichments)
-          ? data.event_enrichments[0] ?? null
-          : (data.event_enrichments ?? null),
-        logistics: (data.event_logistics ?? []).sort((a: any, b: any) => a.sort_order - b.sort_order),
-        checklist: (data.event_checklist_items ?? []).sort((a: any, b: any) => a.sort_order - b.sort_order),
-        actions: data.event_action_items ?? [],
-      } as EventWithDetails
-    },
-    staleTime: 60_000,
-  })
-  const selectedEventResolved = selectedEvent ?? selectedEventFromDb ?? null
-  useEffect(() => {
-    if (selectedEventId) setSelectedPrepItem(null)
-  }, [selectedEventId])
   const qc = useQueryClient()
-
-  const handlePrepItemSelect = useCallback(async (item: PrepItem) => {
-    const linkedEventId = extractEventIdFromSourceRef(item.source_ref) ?? item.event_id
-    if (linkedEventId) {
-      setSelectedPrepItem(null)
-      setSelectedEventId(linkedEventId)
-      return
-    }
-
-    const localMatch = findMatchingEventIdForPrepItem(item, prepEventCandidates)
-    if (localMatch) {
-      setSelectedPrepItem(null)
-      setSelectedEventId(localMatch)
-      return
-    }
-
-    const anchorDate = item.event_date ?? item.due_by ?? null
-    const date = anchorDate ? new Date(anchorDate) : null
-    const isValidDate = !!date && !Number.isNaN(date.getTime())
-
-    const lower = isValidDate ? new Date(date) : addDays(new Date(), -7)
-    const upper = isValidDate ? new Date(date) : addDays(new Date(), 30)
-    if (isValidDate) {
-      lower.setHours(0, 0, 0, 0)
-      upper.setHours(23, 59, 59, 999)
-    }
-
-    const { data: dbCandidates, error } = await supabase
-      .from('events')
-      .select('id, title, start_time, end_time')
-      .neq('status', 'cancelled')
-      .gt('end_time', lower.toISOString())
-      .lt('start_time', upper.toISOString())
-      .order('start_time', { ascending: true })
-      .limit(200)
-
-    if (error) {
-      console.error('[home] failed to resolve prep item event', error)
-      setSelectedEventId(null)
-      setSelectedPrepItem(item)
-      return
-    }
-
-    const dbMatch = findMatchingEventIdForPrepItem(item, (dbCandidates ?? []) as EventMatchCandidate[])
-    if (dbMatch) {
-      setSelectedPrepItem(null)
-      setSelectedEventId(dbMatch)
-      return
-    }
-
-    setSelectedEventId(null)
-    setSelectedPrepItem(item)
-  }, [prepEventCandidates])
-  const { data: displayConfig } = useQuery<Record<string, unknown> | null>({
-    queryKey: ['settings', 'display_config'],
-    queryFn: async () => {
-      const { data } = await supabase.from('settings').select('value').eq('key', 'display_config').single()
-      return (data?.value as Record<string, unknown>) ?? null
-    },
-    staleTime: 60_000,
-    refetchInterval: 60_000,
-  })
-  const showHomeHero = (displayConfig?.show_home_hero as boolean | undefined) ?? true
 
   const completeReminder = useCallback(async (id: string) => {
     await supabase.from('events').update({ status: 'cancelled' }).eq('id', id)
-    qc.invalidateQueries({ queryKey: ['events'] })
+    qc.invalidateQueries({ queryKey: ['today-events'] })
   }, [qc])
 
-  const snoozeReminder = useCallback(async (event: EventWithDetails) => {
-    const start = new Date(event.start_time)
-    const end = new Date(event.end_time)
-    const durationMs = Math.max(15 * 60_000, end.getTime() - start.getTime())
-    const timed = isTimedReminder(event)
-    const nextStart = timed
-      ? addMinutes(start, 30)
-      : startOfDay(addDays(start, 1))
-    const nextEnd = new Date(nextStart.getTime() + durationMs)
-    await supabase
-      .from('events')
-      .update({ start_time: nextStart.toISOString(), end_time: nextEnd.toISOString(), updated_at: new Date().toISOString() })
-      .eq('id', event.id)
-    qc.invalidateQueries({ queryKey: ['events'] })
+  const dismissReminder = useCallback(async (id: string) => {
+    await supabase.from('events').update({ status: 'cancelled' }).eq('id', id)
+    qc.invalidateQueries({ queryKey: ['today-events'] })
   }, [qc])
 
   // ── Scheduled AI analysis: max 5x/day between 6am–10pm, ~3h cooldown ──
@@ -418,18 +174,12 @@ export default function HomePage() {
 
   return (
     // lg: side-by-side with right panel. Mobile: single column.
-    <div
-      className="flex h-full overflow-hidden"
-      onClick={() => {
-        setSelectedEventId(null)
-        setSelectedPrepItem(null)
-      }}
-    >
+    <div className="flex h-full overflow-hidden" onClick={() => setSelectedEventId(null)}>
 
       {/* ── Center content ─────────────────────────────────── */}
       <div
         ref={(el) => { ptrRef(el); scrollRef.current = el }}
-        className="flex-1 min-w-0 overflow-y-auto overscroll-contain touch-pan-y px-6 pt-8 pb-12 lg:px-8 bg-casa-main"
+        className="flex-1 min-w-0 overflow-y-auto overscroll-contain touch-pan-y px-6 pt-8 pb-12 lg:px-8"
       >
         {/* ── Pull-to-refresh indicator ─────────────────────── */}
         <AnimatePresence>
@@ -456,105 +206,53 @@ export default function HomePage() {
           )}
         </AnimatePresence>
 
-        {showHomeHero && (
-          <DesktopHeroCard
-            now={now}
-            nextTodayEvent={nextTodayEvent}
-            fallbackTomorrowEvent={tomorrowEvents[0] ?? null}
-            onViewDetails={(event) => {
-              setSelectedPrepItem(null)
-              setSelectedEventId(event.id)
-            }}
-          />
-        )}
-
         {/* ── Today's timeline — first, front and center ──── */}
-        <section className="mt-4">
+        <section className="mt-2">
           <div className="flex items-baseline justify-between mb-3">
             <h2 className="font-display text-heading text-casa-navy">Today</h2>
             <Link
               to="/calendar"
-              className="text-body-sm text-casa-gold hover:brightness-110 flex items-center gap-0.5 font-medium"
+              className="text-body-sm text-casa-muted hover:text-casa-navy flex items-center gap-0.5"
             >
               Full calendar <ChevronRight size={14} />
             </Link>
           </div>
-          {!isLoading && reminders.length > 0 && (
-            <ol className="space-y-1.5 mb-3">
-              <AnimatePresence>
-                {reminders.map((r) => (
-                  <motion.li
-                    key={r.id}
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, x: -8 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <ReminderEventCard
-                      event={r}
-                      onClick={() => setSelectedEventId(r.id)}
-                      onComplete={() => completeReminder(r.id)}
-                      onSnooze={() => snoozeReminder(r)}
-                    />
-                  </motion.li>
-                ))}
-              </AnimatePresence>
-            </ol>
-          )}
 
           {isLoading ? (
             <div className="text-casa-muted text-body animate-breathe py-8 text-center">
               Loading…
             </div>
           ) : events.length === 0 ? (
-            <div className="bg-casa-card rounded-card border border-casa-border p-8 text-center text-casa-muted text-body">
+            <div className="bg-casa-surface rounded-card border border-casa-border p-8 text-center text-casa-muted text-body">
               Nothing scheduled. Enjoy the quiet.
             </div>
           ) : (
             <ol className="space-y-2">
-              <AnimatePresence>
-                {/* Past events */}
-                {events.filter(e => isBefore(new Date(e.end_time), now)).map((ev, i) => (
-                  <TimelineRow
-                    key={ev.id}
-                    event={ev}
-                    now={now}
-                    index={i}
-                    onClick={() => setSelectedEventId(ev.id)}
-                    onComplete={completeReminder}
-                    onSnooze={snoozeReminder}
-                  />
-                ))}
+              {/* Past events */}
+              {events.filter(e => isBefore(new Date(e.end_time), now)).map((ev, i) => (
+                <TimelineRow key={ev.id} event={ev} now={now} index={i} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
+              ))}
 
-                {/* ── Now line ── */}
-                {events.some(e => isAfter(new Date(e.end_time), now)) && (
-                  <li ref={nowLineRef} className="flex items-center gap-3 py-0.5 select-none pointer-events-none" aria-hidden>
-                    <div className="w-16 shrink-0" />
-                    <span className="w-2 shrink-0" />
-                    <div className="flex-1 flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)] animate-pulse flex-shrink-0" />
-                      <div className="flex-1 h-px bg-red-400/50" />
-                      <span className="text-caption font-bold text-red-500 tabular-nums flex-shrink-0">
-                        {format(now, 'h:mm a')}
-                      </span>
-                      <div className="flex-1 h-px bg-red-400/50" />
-                    </div>
-                  </li>
-                )}
+              {/* ── Now line ── */}
+              {events.some(e => isAfter(new Date(e.end_time), now)) && (
+                <li ref={nowLineRef} className="flex items-center gap-3 py-0.5 select-none pointer-events-none" aria-hidden>
+                  <div className="w-16 shrink-0" />
+                  <span className="w-2 shrink-0" />
+                  <div className="flex-1 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)] animate-pulse flex-shrink-0" />
+                    <div className="flex-1 h-px bg-red-400/50" />
+                    <span className="text-caption font-bold text-red-500 tabular-nums flex-shrink-0">
+                      {format(now, 'h:mm a')}
+                    </span>
+                    <div className="flex-1 h-px bg-red-400/50" />
+                  </div>
+                </li>
+              )}
 
-                {/* Upcoming events */}
-                {events.filter(e => isAfter(new Date(e.end_time), now)).map((ev, i) => (
-                  <TimelineRow
-                    key={ev.id}
-                    event={ev}
-                    now={now}
-                    index={i}
-                    onClick={() => setSelectedEventId(ev.id)}
-                    onComplete={completeReminder}
-                    onSnooze={snoozeReminder}
-                  />
-                ))}
-              </AnimatePresence>
+              {/* Upcoming events */}
+              {events.filter(e => isAfter(new Date(e.end_time), now)).map((ev, i) => (
+                <TimelineRow key={ev.id} event={ev} now={now} index={i} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
+              ))}
             </ol>
           )}
         </section>
@@ -577,20 +275,31 @@ export default function HomePage() {
               </div>
               <ol className="space-y-2">
                 {tomorrowEvents.map((ev, i) => (
-                  <TimelineRow
-                    key={ev.id}
-                    event={ev}
-                    now={now}
-                    index={i}
-                    onClick={() => setSelectedEventId(ev.id)}
-                    onComplete={completeReminder}
-                    onSnooze={snoozeReminder}
-                  />
+                  <TimelineRow key={ev.id} event={ev} now={now} index={i} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
                 ))}
               </ol>
             </motion.section>
           )}
         </AnimatePresence>
+
+        {/* ── Reminders ────────────────────────────────────── */}
+        {reminders.length > 0 && (
+          <section className="mt-6">
+            <div className="flex flex-wrap gap-2">
+              {reminders.map(r => (
+                <SwipeableReminderPill
+                  key={r.id}
+                  id={r.id}
+                  title={r.title}
+                  members={r.members}
+                  onClick={() => { setSelectedEventId(r.id) }}
+                  onComplete={completeReminder}
+                  onDismiss={dismissReminder}
+                />
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── Family filter + music player ─────────────────── */}
         <div className="mt-6 space-y-4">
@@ -604,7 +313,7 @@ export default function HomePage() {
                   className={cn(
                     'flex items-center gap-2 px-3 py-1.5 rounded-pill border text-body-sm font-medium transition-all',
                     active
-                      ? 'bg-casa-card border-casa-border shadow-card'
+                      ? 'bg-casa-surface border-casa-border shadow-card'
                       : 'bg-transparent border-casa-divider text-casa-muted opacity-60',
                   )}
                 >
@@ -622,161 +331,20 @@ export default function HomePage() {
           </div>
         </div>
 
-      </div>
 
-      {/* ── Event & Prep detail panels (outside scroll container) ─── */}
-      <div onClick={e => e.stopPropagation()}>
-        <EventDetailPanel
-          event={selectedEventResolved}
-          onClose={() => setSelectedEventId(null)}
-        />
-      </div>
+        <div onClick={e => e.stopPropagation()}>
+          <EventDetailPanel
+            event={selectedEvent}
+            onClose={() => setSelectedEventId(null)}
+          />
+        </div>
 
-      <div onClick={e => e.stopPropagation()}>
-        <PrepItemDetailPanel
-          item={selectedPrepItem}
-          onClose={() => setSelectedPrepItem(null)}
-        />
+
       </div>
 
       {/* ── Right panel (tablet only) ──────────────────────── */}
-      <HomeRightPanel
-        now={now}
-        allTodayEvents={allTodayEvents ?? []}
-        onSelectPrepItem={(item) => {
-          void handlePrepItemSelect(item)
-        }}
-      />
+      <HomeRightPanel now={now} allTodayEvents={allTodayEvents ?? []} />
     </div>
-  )
-}
-
-function DesktopHeroCard({
-  now,
-  nextTodayEvent,
-  fallbackTomorrowEvent,
-  onViewDetails,
-}: {
-  now: Date
-  nextTodayEvent: EventWithDetails | null
-  fallbackTomorrowEvent: EventWithDetails | null
-  onViewDetails: (event: EventWithDetails) => void
-}) {
-  const focusEvent = nextTodayEvent ?? fallbackTomorrowEvent
-  if (!focusEvent) return null
-
-  const focusStart = new Date(focusEvent.start_time)
-  const isTodayFocus = !!nextTodayEvent
-  const minutesUntil = Math.max(0, Math.round((focusStart.getTime() - now.getTime()) / 60000))
-  const hours = Math.floor(minutesUntil / 60)
-  const mins = minutesUntil % 60
-  const countdown = hours > 0 ? `${hours}H ${mins}M` : `${mins}M`
-  const dayHour = now.getHours()
-  const daypart = dayHour < 12 ? 'MORNING' : dayHour < 17 ? 'MIDDAY' : 'TONIGHT'
-  const leadLabel = isTodayFocus
-    ? `UP NEXT · IN ${countdown}`
-    : `${daypart} · YOU'RE CLEAR`
-
-  const primary = focusEvent.members?.find((m) => m.role === 'primary')
-  const orderedMembers = [
-    ...(primary ? [primary] : []),
-    ...((focusEvent.members ?? []).filter((m) => m.role !== 'primary').slice(0, 3)),
-  ]
-  const leaveAt = focusEvent.enrichment?.departure_time
-    ? new Date(focusEvent.enrichment.departure_time)
-    : new Date(focusEvent.start_time)
-  const eventLabel = cleanEventTitle(focusEvent.title)
-  const primaryName = primary?.family_member?.name ?? 'You'
-  const heroTitle = isTodayFocus
-    ? (focusEvent.enrichment?.departure_time
-      ? `Leave by ${format(leaveAt, 'h:mm a')} for ${primaryName.toLowerCase() === 'you' ? 'your' : `${primaryName}'s`} ${eventLabel.toLowerCase()}`
-      : `${primaryName}'s ${eventLabel.toLowerCase()} starts at ${format(new Date(focusEvent.start_time), 'h:mm a')}`)
-    : `Nothing left today — first move is ${format(new Date(focusEvent.start_time), 'h:mm a')} tomorrow`
-  const detailText = focusEvent.enrichment?.prep_notes
-    ?? focusEvent.description
-    ?? (isTodayFocus
-      ? `${eventLabel} is at ${format(new Date(focusEvent.start_time), 'h:mm a')}${focusEvent.location_name ? ` at ${focusEvent.location_name}` : ''}.`
-      : `${eventLabel} is queued for tomorrow${focusEvent.location_name ? ` at ${focusEvent.location_name}` : ''}.`)
-
-  const leaveLabel = focusEvent.enrichment?.departure_time ? 'LEAVE BY' : 'STARTS AT'
-  const mapsUrl = mapsUrlForEvent(focusEvent)
-  const weatherLabel = focusEvent.enrichment?.weather_at_event
-  const locationLabel = focusEvent.location_name
-  const driveLabel = focusEvent.enrichment?.drive_time_mins
-    ? `${focusEvent.enrichment.drive_time_mins} min drive`
-    : null
-
-  return (
-    <section className="hidden lg:block mt-2 mb-6" onClick={(e) => e.stopPropagation()}>
-      <div className="relative rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-6 grid grid-cols-[1fr_236px] xl:grid-cols-[1fr_248px] gap-6 overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/8 via-transparent to-black/10" />
-        <div className="pointer-events-none absolute inset-0 ring-1 ring-white/10 rounded-[22px]" />
-
-        <div className="relative min-w-0">
-          <p className="text-caption font-bold tracking-[0.16em] text-casa-gold">{leadLabel}</p>
-          <h1 className="font-display text-display-md leading-[1.02] mt-2 !text-white max-w-none pr-1">{heroTitle}</h1>
-          <p className="text-body mt-3 text-white/86 max-w-[60ch] line-clamp-2">{detailText}</p>
-
-          {orderedMembers.length > 0 && (
-            <div className="mt-4 flex items-center gap-2">
-              {orderedMembers.map((m) => (
-                <span
-                  key={m.id}
-                  className="px-2.5 py-1 rounded-full text-caption font-bold leading-none whitespace-nowrap text-white border flex items-center gap-1.5"
-                  style={{
-                    background: `linear-gradient(180deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.08) 100%)`,
-                    borderColor: `${m.family_member?.color_hex ?? '#62708F'}AA`,
-                  }}
-                >
-                  <span
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: m.family_member?.color_hex ?? '#62708F' }}
-                  />
-                  {m.family_member?.name}
-                </span>
-              ))}
-              <span className="text-white/35 text-caption">•</span>
-            </div>
-          )}
-
-          <div className="mt-4 flex items-center flex-wrap gap-x-3 gap-y-1 text-body-sm text-white/88">
-            {driveLabel && <span>{driveLabel}</span>}
-            {locationLabel && <><span>•</span><span>{locationLabel}</span></>}
-            {weatherLabel && <><span>•</span><span>{weatherLabel}</span></>}
-          </div>
-        </div>
-
-        <div className="relative flex flex-col gap-3 min-w-[236px]">
-          <div className="rounded-card border border-white/20 bg-gradient-to-b from-white/10 to-white/5 px-4 py-3 text-right shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
-            <p className="text-caption font-semibold tracking-[0.08em] text-white/80">{leaveLabel}</p>
-            <p className="font-display text-display-sm leading-none text-casa-gold mt-1 whitespace-nowrap">{format(leaveAt, 'h:mm a')}</p>
-          </div>
-          {mapsUrl ? (
-            <a
-              href={mapsUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="h-11 rounded-button bg-casa-gold text-casa-navy font-semibold flex items-center justify-center whitespace-nowrap hover:brightness-110 transition-all border border-casa-gold/50 shadow-[0_1px_0_rgba(255,255,255,0.25)_inset]"
-            >
-              Get directions
-            </a>
-          ) : (
-            <button
-              disabled
-              className="h-11 rounded-button border border-white/20 bg-white/5 text-white/60 font-semibold whitespace-nowrap"
-            >
-              Get directions
-            </button>
-          )}
-          <button
-            onClick={() => onViewDetails(focusEvent)}
-            className="h-11 rounded-button border border-white/25 bg-gradient-to-b from-white/6 to-white/[0.03] text-white font-semibold whitespace-nowrap hover:from-white/12 hover:to-white/[0.06] transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
-          >
-            View details
-          </button>
-        </div>
-      </div>
-    </section>
   )
 }
 
@@ -788,45 +356,81 @@ function TimelineRow({
   index,
   onClick,
   onComplete,
-  onSnooze,
 }: {
   event: EventWithDetails
   now: Date
   index: number
   onClick: () => void
   onComplete?: (id: string) => void
-  onSnooze?: (event: EventWithDetails) => void
 }) {
+  const start = new Date(event.start_time)
   const end = new Date(event.end_time)
   const past = isBefore(end, now)
+  const happening = isBefore(start, now) && isAfter(end, now)
   const color = eventColor(event)
   const timed = isTimedReminder(event)
 
-  // Timed reminders use the same card shell and time rail as normal events.
+  const [checking, setChecking] = useState(false)
+
+  // Timed reminder — slim amber pill in the timeline with dismiss checkbox
   if (timed) {
+    async function handleCheck(e: React.MouseEvent) {
+      e.stopPropagation()
+      if (checking || !onComplete) return
+      setChecking(true)
+      await new Promise(r => setTimeout(r, 320))
+      onComplete(event.id)
+    }
     return (
       <motion.li
         initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: past ? 0.4 : 1, x: 0 }}
-        exit={{ opacity: 0, scale: 0.95, x: -8 }}
+        exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
         transition={{ duration: 0.3, delay: index * 0.04 }}
-        className="grid grid-cols-[96px_1fr] min-h-[80px]"
+        className="flex items-center gap-3 cursor-pointer"
+        onClick={e => { e.stopPropagation(); onClick() }}
       >
-        <div className="grid content-start justify-items-end pr-3 pl-2 pt-3 border-r border-casa-divider/70">
-          <p className="text-display-sm font-display font-bold text-casa-navy tabular-nums leading-none text-right">
-            {format(new Date(event.start_time), 'h:mm')}
-          </p>
-          <p className="text-caption text-casa-muted font-semibold uppercase mt-1 text-right">
-            {format(new Date(event.start_time), 'a')}
+        <div className="w-16 shrink-0 text-right">
+          <p className="text-body-sm font-semibold text-casa-navy tabular-nums">
+            {format(start, 'h:mm')}
+            <span className="text-caption text-casa-muted ml-0.5">{format(start, 'a')}</span>
           </p>
         </div>
-
-        <ReminderEventCard
-          event={event}
-          onClick={() => onClick()}
-          onComplete={onComplete ? () => onComplete(event.id) : undefined}
-          onSnooze={onSnooze ? () => onSnooze(event) : undefined}
-        />
+        <span className="w-2 rounded-full self-stretch" style={{ backgroundColor: '#C4893A' }} />
+        <div
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-caption font-semibold"
+          style={{ border: '1.5px solid #C4893A', backgroundColor: '#FDFAF4', color: '#7A5520' }}
+        >
+          {/* Dismiss checkbox */}
+          <button
+            onClick={handleCheck}
+            className={`shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+              checking ? 'bg-green-500 border-green-500' : 'border-amber-400 hover:border-green-400 bg-transparent'
+            }`}
+            title="Mark done"
+          >
+            {checking && (
+              <svg width="8" height="6" viewBox="0 0 9 7" fill="none">
+                <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </button>
+          <Bell size={13} style={{ color: '#C4893A' }} className="shrink-0" />
+          <span className={checking ? 'line-through opacity-50' : ''}>{event.title}</span>
+          {event.members.length > 0 && (
+            <div className="flex gap-1 ml-0.5">
+              {event.members.slice(0, 4).map(m => (
+                <span
+                  key={m.id}
+                  className="px-1.5 py-0.5 rounded-full text-white text-[9px] font-bold leading-none whitespace-nowrap"
+                  style={{ backgroundColor: m.family_member?.color_hex }}
+                >
+                  {m.family_member?.name}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       </motion.li>
     )
   }
@@ -836,10 +440,91 @@ function TimelineRow({
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: past ? 0.45 : 1, x: 0 }}
       transition={{ duration: 0.3, delay: index * 0.04 }}
-      className="cursor-pointer"
+      className="flex items-center gap-3 cursor-pointer"
       onClick={e => { e.stopPropagation(); onClick() }}
     >
-      <LargeEventCard event={event} color={color} now={now} />
+      <div className="w-16 shrink-0 text-right">
+        <p className="text-body-sm font-semibold text-casa-navy tabular-nums">
+          {format(start, 'h:mm')}
+          <span className="text-caption text-casa-muted ml-0.5">{format(start, 'a')}</span>
+        </p>
+      </div>
+      <span
+        className={cn('w-2 rounded-full self-stretch', happening && 'animate-pulse-gold')}
+        style={{ backgroundColor: color }}
+      />
+      <div className="flex-1 min-w-0 bg-casa-surface rounded-card border border-casa-border px-4 py-3 shadow-card">
+        {/* Row 1: title + members */}
+        <div className="flex items-center justify-between gap-3">
+          {(() => {
+            // Strip "OwnerName | " prefix from title if it matches the primary member
+            const primary = event.members?.find(m => m.role === 'primary')
+            const others = event.members?.filter(m => m.role !== 'primary') ?? []
+            const ownerName = primary?.family_member?.name ?? ''
+            const pipeIdx = event.title.indexOf(' | ')
+            const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
+
+            return (
+              <>
+                <p className="font-body font-semibold text-casa-text truncate">{cleanTitle}</p>
+                {event.members && event.members.length > 0 && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    {/* Owner as full pill */}
+                    {primary && (
+                      <span
+                        className="px-2 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
+                        style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
+                        title={ownerName}
+                      >
+                        {ownerName}
+                      </span>
+                    )}
+                    {/* Other attendees as name pills */}
+                    {others.slice(0, 3).map((m) => (
+                      <span
+                        key={m.id}
+                        className="px-2 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
+                        style={{ backgroundColor: m.family_member?.color_hex }}
+                      >
+                        {m.family_member?.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
+            )
+          })()}
+        </div>
+
+        {/* Row 2: time range + location */}
+        <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1">
+          <span className="flex items-center gap-1 text-caption text-casa-muted tabular-nums">
+            <Clock size={11} className="shrink-0" />
+            {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
+            {event.location_name && (
+              <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
+            )}
+          </span>
+          {event.location_name && (
+            <span className="flex items-center gap-1 text-caption text-casa-muted truncate max-w-[180px]">
+              <MapPin size={11} className="shrink-0 text-casa-error" />
+              {event.location_name}
+            </span>
+          )}
+        </div>
+
+        {/* Row 3: departure alert or prep note */}
+        {event.enrichment?.departure_time && !happening && (
+          <div className="flex items-center gap-1 mt-1.5 text-caption font-semibold text-amber-700">
+            <Navigation size={11} className="shrink-0" />
+            Leave by {format(new Date(event.enrichment.departure_time), 'h:mm a')}
+            {event.enrichment.drive_time_mins && ` · ${event.enrichment.drive_time_mins} min`}
+          </div>
+        )}
+        {!event.enrichment?.departure_time && event.enrichment?.prep_notes && (
+          <p className="text-caption text-casa-muted mt-1 line-clamp-1">{event.enrichment.prep_notes}</p>
+        )}
+      </div>
     </motion.li>
   )
 }

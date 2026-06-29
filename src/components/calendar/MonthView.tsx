@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
-  addDays, isSameMonth, isToday,
+  addDays, isSameMonth, isSameDay, isToday, parseISO,
 } from 'date-fns'
 import { AnimatePresence, motion } from 'framer-motion'
 import { X, Clock, MapPin } from 'lucide-react'
@@ -10,7 +10,6 @@ import { useCalendarStore } from '../../stores/calendarStore'
 import { useMonthEvents } from '../../hooks/useCalendarEvents'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, REMINDER_COLOR } from '../../utils/holidays'
-import { eventOverlapsDay, getEventDisplayEnd, isEventMultiDay } from '../../utils/eventTime'
 import EventDetailPanel from './EventDetailPanel'
 import QuickCreateSheet from '../shared/QuickCreateSheet'
 
@@ -83,10 +82,8 @@ function DayPopover({ day, events, onClose, onSelectDay, onSelectEvent }: DayPop
           const holiday = isHoliday(event)
           const reminder = !holiday && isReminder(event)
           const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(event)
-          const start = new Date(event.start_time)
-          const displayEnd = getEventDisplayEnd(event)
-          const isAllDay = event.all_day
-          const multiDay = isEventMultiDay(event)
+          const start = parseISO(event.start_time)
+          const isAllDay = event.start_time.endsWith('00:00:00+00:00') && event.end_time?.endsWith('00:00:00+00:00')
           return (
             <div
               key={event.id}
@@ -104,29 +101,14 @@ function DayPopover({ day, events, onClose, onSelectDay, onSelectEvent }: DayPop
                 )}>
                   {holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : event.title}
                 </p>
-                {multiDay && !holiday && !reminder && (
-                  <span className="inline-flex mt-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-casa-navy/10 text-casa-navy">
-                    Multi-day
-                  </span>
-                )}
                 {reminder && (
                   <span className="text-[9px] font-semibold text-amber-500 uppercase tracking-wide">Reminder</span>
                 )}
                 <div className="flex items-center gap-3 mt-0.5">
-                  {!isAllDay && !reminder && !multiDay && (
+                  {!isAllDay && !reminder && (
                     <span className="flex items-center gap-1 text-caption text-casa-muted">
                       <Clock size={10} />
                       {format(start, 'h:mm a')}
-                    </span>
-                  )}
-                  {isAllDay && !multiDay && !reminder && (
-                    <span className="text-caption font-semibold text-casa-muted">All day</span>
-                  )}
-                  {multiDay && !reminder && (
-                    <span className="text-caption font-semibold text-casa-gold">
-                      {isAllDay
-                        ? `${format(start, 'MMM d')} – ${format(displayEnd, 'MMM d')} · All day`
-                        : `${format(start, 'MMM d')} – ${format(displayEnd, 'MMM d')} · Multi-day`}
                     </span>
                   )}
                   {event.location_name && (
@@ -228,7 +210,6 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
             const holiday = isHoliday(event)
             const reminder = !holiday && isReminder(event)
             const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(event)
-            const multiDay = isEventMultiDay(event)
             return (
               <div
                 key={event.id}
@@ -245,11 +226,6 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
                   className="w-1.5 h-1.5 rounded-full shrink-0"
                   style={{ backgroundColor: color }}
                 />
-                {multiDay && !holiday && !reminder && (
-                  <span className="shrink-0 px-1 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wide bg-casa-navy/10 text-casa-navy">
-                    Multi
-                  </span>
-                )}
                 <span className="truncate">{holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}</span>
               </div>
             )
@@ -340,7 +316,7 @@ export default function MonthView() {
   const selectedEvent = selectedEventId ? (events.find(e => e.id === selectedEventId) ?? null) : null
 
   function eventsForDay(day: Date): EventWithDetails[] {
-    return events.filter(e => eventOverlapsDay(e, day))
+    return events.filter(e => isSameDay(parseISO(e.start_time), day))
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
   }
 

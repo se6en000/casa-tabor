@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useRef } from 'react'
 import {
   Users, Sun, MessageSquare, Bot, Home, Activity,
-  BookmarkCheck, Layers, ChevronRight, Music2, LineChart, Image, ShoppingBasket,
+  BookmarkCheck, Layers, ChevronRight, Music2, LineChart,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import BounceScroll from '../shared/BounceScroll'
@@ -13,8 +13,7 @@ const NAV_GROUPS = [
   {
     label: 'Visual & Display',
     items: [
-      { to: '/settings/display',  icon: Sun,   label: 'Display',   desc: 'Theme, colors, brightness, room tone, sensors' },
-      { to: '/settings/art-mode', icon: Image, label: 'Art Mode',  desc: 'Screensaver, artwork feed & sources' },
+      { to: '/settings/display', icon: Sun,           label: 'Display & Art Mode',  desc: 'Theme, colors, brightness, art mode, sensors' },
     ],
   },
   {
@@ -35,7 +34,7 @@ const NAV_GROUPS = [
     items: [
       { to: '/settings/google',  icon: Layers,        label: 'Google Services',     desc: 'Calendar sync + Gmail' },
       { to: '/settings/music',   icon: Music2,        label: 'Spotify / Music',     desc: 'Connect music playback' },
-      { to: '/settings/ai',      icon: Bot,           label: 'AI & Voice',          desc: 'Provider, runtime controls, SLO + forensic telemetry' },
+      { to: '/settings/ai',      icon: Bot,           label: 'AI Provider',         desc: 'Vendor, model, API key' },
       { to: '/settings/sms',     icon: MessageSquare, label: 'Notifications',       desc: 'SMS briefings & alerts' },
     ],
   },
@@ -44,7 +43,6 @@ const NAV_GROUPS = [
     items: [
       { to: '/settings/analytics', icon: LineChart,     label: 'Data & Analytics',    desc: 'Orchestration and graph health' },
       { to: '/settings/status',  icon: Activity,      label: 'Status Dashboard',    desc: 'AI usage and cost' },
-      { to: '/settings/grocery-intelligence', icon: ShoppingBasket, label: 'Grocery Intelligence', desc: 'Learning, recategorization, dedupe, and aisle stats' },
     ],
   },
 ]

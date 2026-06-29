@@ -11,7 +11,6 @@ import QuickCreateSheet from '../shared/QuickCreateSheet'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, REMINDER_COLOR } from '../../utils/holidays'
-import { eventOverlapsDay, getEventDisplayEnd, getEventDisplayStartDay, isEventMultiDay } from '../../utils/eventTime'
 
 const HOUR_HEIGHT = 60
 const START_HOUR = 6
@@ -195,7 +194,7 @@ export default function WeekView() {
       updated_at: new Date().toISOString(),
     }).eq('id', d.event.id)
     qc.invalidateQueries({ queryKey: ['events'] })
-    supabase.functions.invoke('sync-event-to-google', { body: { event_id: d.event.id } }).catch(() => {})
+    supabase.functions.invoke('push-to-google', { body: { event_id: d.event.id } }).catch(() => {})
   }, [qc])
 
   // Non-passive native touch listeners so we can preventDefault during drag
@@ -256,7 +255,9 @@ export default function WeekView() {
     const multi: EventWithDetails[] = []
     const single: EventWithDetails[] = []
     for (const ev of events) {
-      if (isEventMultiDay(ev)) multi.push(ev)
+      const sDay = format(new Date(ev.start_time), 'yyyy-MM-dd')
+      const eDay = format(new Date(ev.end_time), 'yyyy-MM-dd')
+      if (sDay !== eDay) multi.push(ev)
       else single.push(ev)
     }
     return { multiDayEvents: multi, singleDayEvents: single }
@@ -264,8 +265,8 @@ export default function WeekView() {
 
   // Column span for a multi-day event (0–6, clamped to visible week)
   function getMultiDaySpan(ev: EventWithDetails): { startCol: number; endCol: number } | null {
-    const evStart = getEventDisplayStartDay(ev)
-    const evEnd = startOfDay(getEventDisplayEnd(ev))
+    const evStart = startOfDay(new Date(ev.start_time))
+    const evEnd = startOfDay(new Date(ev.end_time))
     if (evEnd < weekStart || evStart > weekEnd) return null
     const clampStart = evStart < weekStart ? weekStart : evStart
     const clampEnd = evEnd > weekEnd ? weekEnd : evEnd
@@ -277,15 +278,13 @@ export default function WeekView() {
   // Group single-day events by day key
   const eventsByDay = useMemo(() => {
     const grouped: Record<string, EventWithDetails[]> = {}
-    for (const day of days) {
-      const dayKey = format(day, 'yyyy-MM-dd')
-      const dayEvents = singleDayEvents
-        .filter(event => eventOverlapsDay(event, day))
-        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-      grouped[dayKey] = dayEvents
+    for (const event of singleDayEvents) {
+      const dayKey = format(new Date(event.start_time), 'yyyy-MM-dd')
+      if (!grouped[dayKey]) grouped[dayKey] = []
+      grouped[dayKey].push(event)
     }
     return grouped
-  }, [days, singleDayEvents])
+  }, [singleDayEvents])
 
   // Event count per day (single + multi-day that span that day)
   function getDayEventCount(day: Date): number {

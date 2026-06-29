@@ -7,12 +7,6 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-function toGoogleAllDayEndDate(inclusiveEndTime: string): string {
-  const d = new Date(inclusiveEndTime)
-  d.setUTCDate(d.getUTCDate() + 1)
-  return d.toISOString().slice(0, 10)
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
@@ -118,7 +112,7 @@ Deno.serve(async (req) => {
       ? { date: new Date(event.start_time).toISOString().slice(0, 10) }
       : { dateTime: toISO(event.start_time), timeZone: TZ },
     end: isAllDay
-      ? { date: toGoogleAllDayEndDate(event.end_time) }
+      ? { date: new Date(event.end_time).toISOString().slice(0, 10) }
       : { dateTime: toISO(event.end_time), timeZone: TZ },
   }
   console.log('[push-to-google] patch payload:', JSON.stringify(patch))

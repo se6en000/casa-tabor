@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback, Component, type ReactNode } from 'react'
-import { BrowserRouter, useLocation, useNavigate } from 'react-router-dom'
+import { useState, useEffect, Component, type ReactNode } from 'react'
+import { BrowserRouter, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import NavBar from './components/shared/NavBar'
 import AnimatedRoutes from './components/shared/AnimatedRoutes'
 import TabletSidebar from './components/layout/TabletSidebar'
 import { useRoomTone } from './hooks/useRoomTone'
 import { useTravelScan } from './hooks/useTravelScan'
+import { usePushNotifications } from './hooks/usePushNotifications'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 import { TopBarC } from './components/shared/TopBar'
 import PinGate from './components/shared/PinGate'
@@ -21,57 +22,9 @@ import { useLiveClock } from './hooks/useLiveClock'
 import { useWakeWord } from './hooks/useWakeWord'
 import { useIdleTimer } from './hooks/useIdleTimer'
 import { useScreensaverSettings } from './hooks/useScreensaverSettings'
-import { supabase } from './lib/supabase'
-import { enqueueRemoteVoiceTrace } from './lib/remoteVoiceTrace'
-import { readVoiceRuntimeConfig, shouldEmitVoiceDebug } from './lib/voiceRuntimeConfig'
 
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
 const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
-const VOICE_DEBUG_DEVICE_ID_KEY = 'casa-voice-debug-device-id'
-
-function detectClientBuildFingerprint(): string | null {
-  if (typeof document === 'undefined') return null
-  const moduleScripts = Array.from(document.querySelectorAll('script[type="module"][src]'))
-  const appScript = moduleScripts
-    .map((script) => script.getAttribute('src') ?? '')
-    .find((src) => src.includes('/assets/index-') || src.includes('index-'))
-  if (!appScript) return null
-  return appScript.split('/').pop() ?? appScript
-}
-
-function getVoiceDebugDeviceId(): string | null {
-  if (typeof window === 'undefined') return null
-  try {
-    return localStorage.getItem(VOICE_DEBUG_DEVICE_ID_KEY)
-  } catch {
-    return null
-  }
-}
-
-function emitClientRuntimeHeartbeat(reason: string) {
-  if (typeof window === 'undefined') return
-  const voiceConfig = readVoiceRuntimeConfig()
-  const deviceId = getVoiceDebugDeviceId()
-  const build = detectClientBuildFingerprint()
-  const sessionId = `runtime-${new Date().toISOString().slice(0, 16)}`
-  enqueueRemoteVoiceTrace({
-    at: new Date().toISOString(),
-    event: 'client_runtime_online',
-    detail: `reason=${reason}`,
-    sessionId,
-    turnId: 'runtime',
-    payload: {
-      page: 'app',
-      debug: voiceConfig.debugLevel,
-      audit: voiceConfig.auditEnabled,
-      coreV2: voiceConfig.coreV2Enabled,
-      reason,
-      client_build: build,
-      client_trace_present: Boolean(deviceId),
-      client_trace_source: 'app-runtime',
-    },
-  }, 'debug', voiceConfig)
-}
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
@@ -116,10 +69,7 @@ function GlobalAIDrawer({
   setOpen: (open: boolean) => void
   safeMode: boolean
 }) {
-  const location = useLocation()
   const [anchor, setAnchor] = useState<{ right: number; top: number } | undefined>()
-  const [launchRequest, setLaunchRequest] = useState<{ prompt: string; autoSend: boolean; nonce: string } | null>(null)
-  const [wakeSessionNonce, setWakeSessionNonce] = useState<string | undefined>(undefined)
   const now = useLiveClock(60_000)
   const { data: events = [] } = useRollingEvents(now)
   const { data: family = [] } = useFamilyMembers()
@@ -128,31 +78,8 @@ function GlobalAIDrawer({
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ right?: number; top?: number; prompt?: string; autoSend?: boolean; source?: string } | undefined>).detail
-      if (typeof window !== 'undefined') {
-        const voiceConfig = readVoiceRuntimeConfig()
-        if (shouldEmitVoiceDebug(voiceConfig.debugLevel, 'minimal')) {
-          window.dispatchEvent(new CustomEvent('casa:ai-debug', {
-            detail: {
-              event: 'drawer_open_event_received',
-              detail: `source=${detail?.source ?? 'manual'} autoSend=${detail?.autoSend ? '1' : '0'} prompt=${detail?.prompt ? '1' : '0'}`,
-            },
-          }))
-        }
-      }
-      if (detail && typeof detail.right === 'number' && typeof detail.top === 'number') {
-        setAnchor({ right: detail.right, top: detail.top })
-      }
-      setWakeSessionNonce(detail?.source === 'wake' ? crypto.randomUUID() : undefined)
-      if (detail?.prompt) {
-        setLaunchRequest({
-          prompt: detail.prompt,
-          autoSend: detail.autoSend ?? false,
-          nonce: crypto.randomUUID(),
-        })
-      } else {
-        setLaunchRequest(null)
-      }
+      const detail = (e as CustomEvent).detail
+      if (detail) setAnchor(detail)
       setOpen(true)
     }
     document.addEventListener('open-ai-chat', handler)
@@ -164,13 +91,11 @@ function GlobalAIDrawer({
       open={open}
       onClose={() => setOpen(false)}
       anchor={anchor}
-      page={location.pathname.startsWith('/grocery') ? 'grocery' : 'app'}
+      page="app"
       events={events}
       family={family}
       homeCity={weather?.city}
       onSleepCommand={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
-      launchRequest={launchRequest ?? undefined}
-      wakeSessionNonce={wakeSessionNonce}
     />
   )
 }
@@ -179,6 +104,7 @@ function AppShell() {
   const { currentZone } = useRoomTone()
   const { setRoomToneZone } = useTheme()
   useTravelScan()
+  usePushNotifications()
 
   const { settings } = useScreensaverSettings()
   const ssMs   = settings.enabled && !IS_SAFE_MODE ? settings.screensaverMins * 60_000 : Infinity
@@ -189,24 +115,7 @@ function AppShell() {
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
   const location = useLocation()
-  const hideFab = location.pathname.startsWith('/settings') || location.pathname.startsWith('/grocery') || screensaverActive
-  const navigate = useNavigate()
-
-  const handlePushAction = useCallback(async (action: string, eventId?: string | null, url?: string, prepItemId?: string | null) => {
-    if (action === 'open') {
-      if (eventId) {
-        navigate(`/?event_id=${encodeURIComponent(eventId)}`)
-      } else if (url) {
-        window.location.assign(url)
-      }
-      return
-    }
-    // For other actions (done, snooze), invoke the backend
-    if (!eventId && !prepItemId) return
-    await supabase.functions.invoke('notification-action', {
-      body: { action, event_id: eventId, prep_item_id: prepItemId },
-    }).catch(() => {})
-  }, [navigate])
+  const hideFab = location.pathname.startsWith('/settings') || screensaverActive
 
   useEffect(() => {
     setRoomToneZone(currentZone)
@@ -237,47 +146,8 @@ function AppShell() {
     }).catch(() => {})
   }, [settings.wakeWordSensitivity])
 
-  useEffect(() => {
-    emitClientRuntimeHeartbeat('app_mount')
-    const interval = setInterval(() => {
-      emitClientRuntimeHeartbeat('interval_30s')
-    }, 30000)
-    const onVisibility = () => {
-      emitClientRuntimeHeartbeat(document.visibilityState === 'hidden' ? 'visibility_hidden' : 'visibility_visible')
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      clearInterval(interval)
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [])
-
-  useEffect(() => {
-    const onMessage = (event: MessageEvent) => {
-      const data = event.data as { type?: string; action?: string; eventId?: string | null; prepItemId?: string | null; url?: string } | null
-      if (!data || data.type !== 'PUSH_NOTIFICATION_ACTION') return
-      handlePushAction(data.action ?? 'open', data.eventId ?? null, data.url, data.prepItemId ?? null)
-    }
-    navigator.serviceWorker?.addEventListener('message', onMessage)
-    return () => navigator.serviceWorker?.removeEventListener('message', onMessage)
-  }, [handlePushAction])
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const action = params.get('push_action')
-    const eventId = params.get('event_id')
-    const prepItemId = params.get('prep_item_id')
-    if (!action) return
-    handlePushAction(action, eventId, undefined, prepItemId)
-    params.delete('push_action')
-    params.delete('event_id')
-    params.delete('prep_item_id')
-    const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash}`
-    window.history.replaceState({}, '', next)
-  }, [handlePushAction])
-
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-casa-main">
+    <div className="flex flex-col h-screen overflow-hidden bg-casa-bg">
       {/* Full-width top bar — sticky, never scrolls */}
       <TopBarC />
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Home, Calendar, ShoppingCart, Sun, Settings, ChefHat, MoreHorizontal, Bell, Sparkles } from 'lucide-react'
+import { Home, Calendar, ShoppingCart, Sun, Settings, Music, MoreHorizontal, Bell } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useNotifications } from '../../hooks/useNotifications'
 import NotificationDrawer from './NotificationDrawer'
@@ -11,7 +11,7 @@ const primaryTabs = [
   { to: '/', icon: Home, label: 'Home' },
   { to: '/calendar', icon: Calendar, label: 'Calendar' },
   { to: '/grocery', icon: ShoppingCart, label: 'Grocery' },
-  { to: '/cook', icon: ChefHat, label: 'Cooking' },
+  { to: '/briefing', icon: Sun, label: 'Briefing' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 
@@ -107,22 +107,12 @@ export default function NavBar() {
               <div className="py-2">
                 <button
                   className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors"
-                  onClick={() => { navigate('/briefing'); setMoreOpen(false) }}
+                  onClick={() => { navigate('/music'); setMoreOpen(false) }}
                 >
                   <div className="w-9 h-9 rounded-xl bg-casa-gold/15 flex items-center justify-center flex-shrink-0">
-                    <Sun size={18} strokeWidth={1.8} className="text-casa-gold" />
+                    <Music size={18} strokeWidth={1.8} className="text-casa-gold" />
                   </div>
-                  <span className="text-body-md font-medium text-casa-navy">Briefing</span>
-                </button>
-
-                <button
-                  className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors"
-                  onClick={() => { navigate('/actions'); setMoreOpen(false) }}
-                >
-                  <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                    <Sparkles size={18} strokeWidth={1.8} className="text-blue-600" />
-                  </div>
-                  <span className="text-body-md font-medium text-casa-navy">Action Hub</span>
+                  <span className="text-body-md font-medium text-casa-navy">Music</span>
                 </button>
 
                 <button

@@ -28,15 +28,12 @@ if ! flock -n 9; then
   exit 0
 fi
 
-echo "$(date): Casa Tabor launcher starting (kiosk hard-lock enabled)" >> "$HOME/launcher.log"
-
-# ── Kiosk hard-lock ───────────────────────────────────────────────────────
-# Production wall mode: always launch locked fullscreen kiosk.
-# Intentionally ignore any KIOSK env override so accidental windowed launches
-# cannot happen from SSH, autostart races, or manual commands.
-if [ "${KIOSK:-1}" != "1" ]; then
-  echo "$(date): ignoring KIOSK=${KIOSK}; forcing kiosk mode" >> "$HOME/launcher.log"
-fi
+# ── Kiosk toggle ──────────────────────────────────────────────────────────
+# Set to "1" for locked-down fullscreen kiosk (production on the wall).
+# Set to "0" for a normal windowed browser while testing/building (tabs,
+# address bar, and access to the rest of the desktop). Override at launch:
+#   KIOSK=0 /home/jake/start-casa.sh
+KIOSK="${KIOSK:-1}"
 
 # Bail out loudly if we somehow booted into Wayland — touch will not work.
 if [ "${XDG_SESSION_TYPE:-x11}" = "wayland" ]; then
@@ -48,37 +45,8 @@ fi
 export DISPLAY="${DISPLAY:-:0}"
 export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
 
-is_x11_ready() {
-  if command -v xdpyinfo >/dev/null 2>&1; then
-    xdpyinfo >/dev/null 2>&1
-    return $?
-  fi
-  xset q >/dev/null 2>&1
-  return $?
-}
-
-# If current Xauthority does not work, fall back to common lightdm cookie path.
-if ! is_x11_ready; then
-  for candidate in "$HOME/.Xauthority" "/var/run/lightdm/root/:0"; do
-    [ -f "$candidate" ] || continue
-    export XAUTHORITY="$candidate"
-    is_x11_ready && break
-  done
-fi
-
-# Wait for X11 display to be ready (up to 20 seconds), then fail loudly.
-DISPLAY_READY=0
-for i in $(seq 1 20); do
-  if is_x11_ready; then
-    DISPLAY_READY=1
-    break
-  fi
-  sleep 1
-done
-if [ "$DISPLAY_READY" != "1" ]; then
-  echo "Casa Tabor: X11 display not ready (DISPLAY=$DISPLAY XAUTHORITY=$XAUTHORITY)" >&2
-  exit 1
-fi
+# Wait for X11 display to be ready (up to 20 seconds)
+for i in $(seq 1 20); do xdpyinfo >/dev/null 2>&1 && break; sleep 1; done
 
 # Restore QHD resolution — xrandr --auto can drop it to 1024x768 on reconnect.
 # This custom mode matches the Pisichen 23.8" 2560x1440 panel via HDMI-2.
@@ -101,14 +69,6 @@ kill $(pgrep -f "matchbox-keyboard" 2>/dev/null) 2>/dev/null
 
 # Wait for network
 sleep 3
-
-# Ensure only one Chromium browser instance is active before launch.
-# Without this, a stale previous root process can survive and create a
-# second half-initialized kiosk window.
-for pid in $(pgrep -f "[/]usr/lib/chromium/chromium --" 2>/dev/null); do
-  kill "$pid" 2>/dev/null || true
-done
-sleep 2
 
 # ── Kill stale bridges before starting new ones ─────────────────────────────
 # Prevents port conflicts and socket hang-ups when restarting
@@ -134,12 +94,17 @@ if [ -f "$WHISPER_DIR/main.py" ]; then
   sleep 1
 fi
 
-# Launch Chromium with full touch support in locked kiosk mode.
+# Launch Chromium with full touch support.
+# Kiosk flag is added only when KIOSK=1; otherwise launch a normal window.
+KIOSK_FLAG=""
+if [ "$KIOSK" = "1" ]; then
+  KIOSK_FLAG="--kiosk"
+fi
 
-/usr/lib/chromium/chromium \
-  --kiosk \
-  --force-device-scale-factor=1 \
+chromium-browser \
+  $KIOSK_FLAG \
   --password-store=basic \
+  --no-sandbox \
   --touch-events=enabled \
   --enable-touch-drag-drop \
   --disable-pinch \
@@ -151,9 +116,6 @@ fi
   --disable-restore-session-state \
   --disable-background-networking \
   --check-for-update-interval=31536000 \
-  --enable-logging=stderr \
-  --log-level=0 \
-  --v=1 \
   --start-maximized \
   --window-position=0,0 \
-  https://casa-tabor.vercel.app 2>&1 | tee -a "$HOME/chromium.log"
+  https://casa-tabor.vercel.app
