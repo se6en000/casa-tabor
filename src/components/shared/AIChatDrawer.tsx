@@ -2401,6 +2401,7 @@ function MessageBubble({ msg, isLatest: _isLatest, onConfirmToolAction, onUndoTo
 
   useEffect(() => {
     if (hasPendingAction) {
+      console.log(`[MessageBubble] Registering callbacks for ${msg.id}`, { tool: ta?.tool, hasPendingAction })
       registerPendingConfirm(doConfirm)
       registerPendingCancel(doCancel)
       console.debug(`[MessageBubble] Registered confirm/cancel callbacks for message ${msg.id}`, { hasPendingAction, ta_status: ta?.status })

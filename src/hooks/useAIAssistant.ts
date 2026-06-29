@@ -1129,11 +1129,13 @@ export function useAIAssistant(ctx: AssistantContext) {
         assistantMsg = { id: genId(), role: 'assistant', content: (data.text ?? '') as string }
       }
 
+      const hasToolAction = !!assistantMsg.toolAction
       emitAssistantDebug(
         'assistant_response_text',
         assistantMsg.content.slice(0, 240),
-        { correlationId: aiCorrelationId, lane: data.type === 'tool_action' ? 'tool_action' : 'llm', payload: { content: assistantMsg.content } },
+        { correlationId: aiCorrelationId, lane: data.type === 'tool_action' ? 'tool_action' : 'llm', payload: { content: assistantMsg.content, hasToolAction, dataType: data.type } },
       )
+      console.log(`[useAIAssistant][${aiCorrelationId.slice(0,16)}] response type=${data.type} hasToolAction=${hasToolAction} tool=${assistantMsg.toolAction?.tool ?? 'none'}`, assistantMsg)
       setMessages(prev => {
         const updated = [...prev, assistantMsg]
         if (activeSession) saveMessages(activeSession.id, updated)

@@ -887,8 +887,10 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         if (!res2.ok) return { type: 'error', code: 'llm_error', message: 'Second LLM call failed' }
         const data2 = await res2.json()
         const secondaryParts = data2.candidates?.[0]?.content?.parts ?? []
+        console.log(`[ai-assistant][${cid}] secondary_parts_count=${secondaryParts.length} has_func_call=${secondaryParts.some((p: any) => p.functionCall)} has_text=${secondaryParts.some((p: any) => p.text)}`)
         // Recursively resolve secondary response in case it contains a tool call (e.g., update_event after search_events)
         const secondaryResolved = await resolveModelParts(secondaryParts)
+        console.log(`[ai-assistant][${cid}] secondary_resolved type=${secondaryResolved?.type ?? 'null'}`)
         if (secondaryResolved) return secondaryResolved
         // Fallback to text if no tool was called
         const finalText = secondaryParts.find((p: { text?: string }) => p.text)?.text ?? ''
