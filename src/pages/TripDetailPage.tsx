@@ -264,8 +264,7 @@ export default function TripDetailPage() {
   function toggleItem(i: number) {
     setCheckedItems(prev => {
       const next = new Set(prev)
-      next.has(i) ? next.delete(i) : next.add(i)
-      return next
+      return next.has(i) ? next.delete(i) : next.add(i)
     })
   }
 

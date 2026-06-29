@@ -75,11 +75,13 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
   useEffect(() => {
     if (!open) return
     const s = initialStart ?? new Date()
-    setTitle('')
-    setStartDT(toLocalDT(s))
-    setEndDT(toLocalDT(addMinutes(s, 30)))
-    setIsAllDay(false)
-    setSaving(false)
+    queueMicrotask(() => {
+      setTitle('')
+      setStartDT(toLocalDT(s))
+      setEndDT(toLocalDT(addMinutes(s, 30)))
+      setIsAllDay(false)
+      setSaving(false)
+    })
   }, [open, initialStart])
 
   const isMultiDay = startDT.slice(0, 10) !== endDT.slice(0, 10)
