@@ -1027,6 +1027,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     await send(trimmed, undefined, {
       disableFastGroceryLane: isWakeAssistantMode,
       traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
+      hasPendingToolAction: !!pendingConfirmRef.current || !!pendingCancelRef.current,
     })
     return true
   }, [loading, send, markUserInteraction, clearAutoSendTimer, appendDebugLog, transitionTurnState, isWakeAssistantMode, session?.id])

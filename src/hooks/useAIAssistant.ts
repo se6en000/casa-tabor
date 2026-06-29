@@ -58,6 +58,7 @@ type SendOptions = {
   skipGoodbyeCheck?: boolean
   disableFastGroceryLane?: boolean
   traceId?: string
+  hasPendingToolAction?: boolean
 }
 
 function isRetriableAssistantError(error: unknown): boolean {
@@ -461,6 +462,7 @@ function buildContext(ctx: AssistantContext) {
 function parseOneWordIntent(
   trimmedText: string,
   currentPage: string,
+  hasPendingToolAction?: boolean,
 ): OneWordIntentResult | null {
   const normalized = trimmedText.toLowerCase().trim()
   const words = normalized.split(/\s+/)
@@ -468,32 +470,49 @@ function parseOneWordIntent(
   if (words.length === 1) {
     const word = words[0]
 
-    // YES / CONFIRM
-    if (['yes', 'confirm', 'ok', 'okay', 'yep', 'sure', 'go', 'do it', 'yeah'].includes(word)) {
-      return {
-        response: 'Done.',
-        action: 'skip',
+    // YES / CONFIRM - only if NO pending action (let short-circuit handler deal with pending actions)
+    if (['yes', 'yeah', 'yep', 'ok', 'okay', 'confirm', 'sure', 'yup', 'aye', 'absolutely', 'affirmative', 'right'].includes(word)) {
+      if (!hasPendingToolAction) {
+        return {
+          response: 'Done.',
+          action: 'skip',
+        }
       }
+      // If pending action, don't intercept - let short-circuit handler below run
+      return null
     }
 
-    // NO / CANCEL
-    if (['no', 'cancel', 'nope', 'abort', 'skip', 'nevermind', 'dont'].includes(word)) {
-      return {
-        response: 'Cancelled. What else?',
-        action: 'skip',
+    // NO / CANCEL - only if NO pending action
+    if (['no', 'nope', 'cancel', 'abort', 'skip', 'nevermind', 'dont', 'never', 'nah'].includes(word)) {
+      if (!hasPendingToolAction) {
+        return {
+          response: 'Cancelled. What else?',
+          action: 'skip',
+        }
       }
+      // If pending action, don't intercept - let short-circuit handler below run
+      return null
     }
 
-    // QUIT / EXIT
-    if (['quit', 'exit', 'close', 'goodbye', 'bye', 'done'].includes(word)) {
+    // QUIT / EXIT / STOP
+    if (['quit', 'exit', 'close', 'goodbye', 'bye', 'done', 'stop', 'later', 'peace', 'ciao', 'farewell', 'adios'].includes(word)) {
       return {
         response: 'Goodbye!',
         action: 'cancel',
       }
     }
 
+    // OTHER COMMON ACTIONS
+    // Help / repeat / retry
+    if (['help', 'retry', 'again', 'repeat', 'wait', 'pause'].includes(word)) {
+      return {
+        response: 'How can I help? What would you like to do?',
+        action: 'skip',
+      }
+    }
+
     // Single noun on grocery page
-    if (currentPage === 'grocery' && !['what', 'show', 'list', 'where', 'when', 'how'].includes(word)) {
+    if (currentPage === 'grocery' && !['what', 'show', 'list', 'where', 'when', 'how', 'yes', 'no', 'ok'].includes(word)) {
       return {
         response: `Adding **${word}** to grocery…`,
         action: 'execute',
@@ -595,6 +614,7 @@ export function useAIAssistant(ctx: AssistantContext) {
     const oneWordResult = parseOneWordIntent(
       trimmedText,
       ctxRef.current.page,
+      options?.hasPendingToolAction,
     )
     if (oneWordResult) {
       emitAssistantDebug(
