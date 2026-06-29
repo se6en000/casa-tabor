@@ -740,9 +740,12 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           resolvedDateStart = new Date(localToday.getTime() + daysToSat * 86400000)
           resolvedDateEnd = new Date(resolvedDateStart.getTime() + 2 * 86400000)
         } else if (dateHint === 'next weekend') {
-          // "next weekend" from any weekday = the Saturday/Sunday at least 7 days out
+          // "next weekend" = the next upcoming Saturday/Sunday from today's perspective.
+          // On Mon-Fri: next Sat is (6 - dayOfWeek) days away (e.g. Monday → 5 days to Sat)
+          // On Sat: next Sat is 7 days
+          // On Sun: next Sat is 6 days
           const dayOfWeek = localToday.getUTCDay()
-          const daysToSat = dayOfWeek === 6 ? 7 : (6 - dayOfWeek) + 7
+          const daysToSat = dayOfWeek === 0 ? 6 : dayOfWeek === 6 ? 7 : (6 - dayOfWeek)
           resolvedDateStart = new Date(localToday.getTime() + daysToSat * 86400000)
           resolvedDateEnd = new Date(resolvedDateStart.getTime() + 2 * 86400000)
         } else {
@@ -1091,20 +1094,20 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           if (itemsList.length === 0) {
             return { type: 'text', text: "I didn't catch what you'd like to add to the grocery list. Could you say the item name?" }
           }
-          args = { ...args, items: itemsList }
+          const groceryArgs = { ...args, items: itemsList }
           if (dryRun) {
             return {
               type: 'tool_action',
               tool: name,
-              args,
-              display_text: buildDisplayText(name, args),
+              args: groceryArgs,
+              display_text: buildDisplayText(name, groceryArgs),
             }
           }
           const autoActionId = `auto-grocery-${Date.now().toString(36)}`
           const execResult = await sb.functions.invoke('execute-ai-action', {
             body: {
               tool: name,
-              args,
+              args: groceryArgs,
               action_id: autoActionId,
               session_id: traceId,
               correlation_id: `${cid}:auto-grocery:${Date.now().toString(36)}`,
