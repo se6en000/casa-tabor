@@ -1173,7 +1173,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         recordLlmCall('llm_retry', retryElapsedMs, retryRes.status)
       }
 
-      const latestUserText = [...contents]
+      const fallbackUserText = [...contents]
         .reverse()
         .find((turn) => turn.role === 'user')
         ?.parts.flatMap((part) => 'text' in part && typeof part.text === 'string' ? [part.text.trim()] : [])
@@ -1181,14 +1181,14 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
       // Last-resort reliability pass: no tools, compact prompt, latest user turn only.
       // This avoids occasional empty tool-call responses from Gemini under load.
-      if (latestUserText) {
+      if (fallbackUserText) {
         const fallbackBody = {
           system_instruction: {
             parts: [{
               text: 'You are the Casa Tabor assistant. Respond helpfully in 1-3 concise sentences. If data is missing, ask one clear follow-up question.',
             }],
           },
-          contents: [{ role: 'user', parts: [{ text: latestUserText }] }],
+          contents: [{ role: 'user', parts: [{ text: fallbackUserText }] }],
           generation_config: { temperature: 0.2, max_output_tokens: 320 },
         }
         const fallbackStartMs = Date.now()
