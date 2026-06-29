@@ -488,7 +488,7 @@ Deno.serve(async (req) => {
       },
       {
         name: 'search_web',
-        description: 'Search the live web for current information, reviews, news, prices, and factual lookups that need fresh sources.',
+        description: 'Search the live web for current information, reviews, news, prices, and factual lookups that need fresh sources. DO NOT use for: math/calculations, weather (already in context), general knowledge, or anything answerable from model reasoning.',
         parameters: {
           type: 'OBJECT',
           properties: {
@@ -662,10 +662,10 @@ INSTRUCTIONS:
 - Prefer edit over create: if a similar event exists at the same time, update it instead of creating a duplicate.
 - Tone: warm, concise (1–3 sentences). Be proactive — flag conflicts, drive-time buffers, busy days.
 - For timeless facts and general knowledge (e.g., ages/biographies/math/history), answer directly from model knowledge and simple reasoning. Do not refuse just because live web access is unavailable.
-- For weather questions AND activity-based weather questions ("is it a good day to X?", "should I bring an umbrella?", "what should I wear?", "will it be hot?"): if weather data is shown in context above, answer directly from it — do NOT call search_web for weather.
+- For weather questions AND activity-based weather questions ("is it a good day to X?", "should I bring an umbrella?", "what should I wear?", "will it be hot?", "is it nice outside?", "is it a good beach day?"): the current weather IS provided in context. Answer directly from it with a confident recommendation — say what the temperature, humidity, and feel-like are and give a direct yes/no recommendation. Do NOT say you "don't have access to weather data" because you do — it's in the system prompt above.
 - For live/public info requests (latest news, current prices, recent reviews, sports scores, stock prices), use search_web first. For local business lookups (address/phone/location), use search_places. When using search_web, cite the source links you used in your reply.
 - DISMISSAL PHRASES ("never mind", "forget it", "cancel that", "actually never mind", "stop", "nvm"): respond with a brief acknowledgment ONLY — do not search, do not list events, do not take any action. Example: "No problem!" or "Got it, ignoring that."
-- GROCERY LIST READS ("how many items", "what's on the grocery list", "show me the grocery list"): answer directly from GROCERY LIST context above — do NOT call search_events.
+- GROCERY LIST READS ("how many items", "what's on the grocery list", "show me the grocery list", "what do I need to buy"): answer directly from GROCERY LIST context above — enumerate the items. Do NOT call search_events.
 - RELATIVE DATE RESOLUTION: for "next weekend", "this Saturday", "next Friday", call search_events with the correct concrete date — do NOT ask the user what date they mean. Use the TEMPORAL ASSUMPTIONS and current date to resolve it first.${customInstructions ? `\n\nUSER'S CUSTOM RULES (always apply, override defaults if they conflict):\n${customInstructions}` : ''}
 ${AMBIGUITY_GUARDRAILS}
 ${DIFF_AND_OUTPUT_GUARDRAILS}
@@ -731,47 +731,42 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         const localToday = new Date(localNow)
         localToday.setUTCHours(0, 0, 0, 0)
 
-        // Build a resolved date range for common relative expressions
+        // Normalize "this X" → "X" so the weekday matcher handles it
+        const normalizedDateHint = dateHint.replace(/^this\s+/i, '').trim()
 
-        if (dateHint === 'tomorrow') {
-          resolvedDateStart = new Date(localToday.getTime() + 86400000)
-          resolvedDateEnd = new Date(localToday.getTime() + 2 * 86400000)
-        } else if (dateHint === 'today') {
+        // Build a resolved date range for common relative expressions
+        const dow = localToday.getUTCDay() // 0=Sun
+        if (normalizedDateHint === 'today') {
           resolvedDateStart = localToday
           resolvedDateEnd = new Date(localToday.getTime() + 86400000)
-        } else if (dateHint === 'this week' || dateHint === 'this week s events') {
+        } else if (normalizedDateHint === 'tomorrow') {
+          resolvedDateStart = new Date(localToday.getTime() + 86400000)
+          resolvedDateEnd = new Date(localToday.getTime() + 2 * 86400000)
+        } else if (normalizedDateHint === 'week' || normalizedDateHint === "week's events" || normalizedDateHint === 'week s events') {
           resolvedDateStart = localToday
           resolvedDateEnd = new Date(localToday.getTime() + 7 * 86400000)
         } else if (dateHint === 'next week') {
-          // Monday of next week → Sunday
-          const dayOfWeek = localToday.getUTCDay() // 0=Sun
-          const daysToNextMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek
+          const daysToNextMonday = dow === 0 ? 1 : 8 - dow
           resolvedDateStart = new Date(localToday.getTime() + daysToNextMonday * 86400000)
           resolvedDateEnd = new Date(resolvedDateStart.getTime() + 7 * 86400000)
-        } else if (dateHint === 'weekend' || dateHint === 'this weekend') {
-          const dayOfWeek = localToday.getUTCDay()
-          const daysToSat = dayOfWeek === 6 ? 0 : (6 - dayOfWeek)
+        } else if (normalizedDateHint === 'weekend') {
+          const daysToSat = dow === 6 ? 0 : (6 - dow)
           resolvedDateStart = new Date(localToday.getTime() + daysToSat * 86400000)
           resolvedDateEnd = new Date(resolvedDateStart.getTime() + 2 * 86400000)
         } else if (dateHint === 'next weekend') {
-          // "next weekend" = the next upcoming Saturday/Sunday from today's perspective.
-          // On Mon-Fri: next Sat is (6 - dayOfWeek) days away (e.g. Monday → 5 days to Sat)
-          // On Sat: next Sat is 7 days
-          // On Sun: next Sat is 6 days
-          const dayOfWeek = localToday.getUTCDay()
-          const daysToSat = dayOfWeek === 0 ? 6 : dayOfWeek === 6 ? 7 : (6 - dayOfWeek)
+          const daysToSat = dow === 0 ? 6 : dow === 6 ? 7 : (6 - dow)
           resolvedDateStart = new Date(localToday.getTime() + daysToSat * 86400000)
           resolvedDateEnd = new Date(resolvedDateStart.getTime() + 2 * 86400000)
         } else {
-          // Try resolving "next monday", "next tuesday", etc.
+          // Resolve "saturday", "next monday", "this friday", etc.
           const weekdays = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday']
-          const nextDayMatch = dateHint.match(/^(?:next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)$/)
-          if (nextDayMatch) {
-            const targetDay = weekdays.indexOf(nextDayMatch[1])
+          const dayMatch = normalizedDateHint.match(/^(?:next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)$/)
+          if (dayMatch) {
+            const targetDay = weekdays.indexOf(dayMatch[1])
             if (targetDay >= 0) {
-              const currentDay = localToday.getUTCDay()
-              let daysAhead = targetDay - currentDay
+              let daysAhead = targetDay - dow
               if (daysAhead <= 0) daysAhead += 7
+              // "next X" forces at least 7 days ahead
               if (dateHint.startsWith('next ') && daysAhead < 7) daysAhead += 7
               resolvedDateStart = new Date(localToday.getTime() + daysAhead * 86400000)
               resolvedDateEnd = new Date(resolvedDateStart.getTime() + 86400000)
