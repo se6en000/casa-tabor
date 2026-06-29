@@ -315,14 +315,28 @@ Deno.serve(async (req) => {
     event_members: { family_members: { id: string; name: string } | null }[];
   }
 
-  const eventsText = !allEvents || allEvents.length === 0
-    ? 'No upcoming events.'
-    : (allEvents as DbEvent[]).map(e => {
+  const PROMPT_EVENT_WINDOW_DAYS = 21
+  const PROMPT_EVENT_CAP = 80
+  const promptEventWindowEnd = new Date(now.getTime() + PROMPT_EVENT_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+  const promptEvents = (allEvents as DbEvent[] ?? [])
+    .filter((e) => {
+      const start = new Date(e.start_time).getTime()
+      return Number.isFinite(start) && start <= promptEventWindowEnd.getTime()
+    })
+    .slice(0, PROMPT_EVENT_CAP)
+  const omittedPromptEventCount = Math.max(0, (allEvents as DbEvent[] ?? []).length - promptEvents.length)
+
+  const eventsText = promptEvents.length === 0
+    ? 'No upcoming events in the next 21 days.'
+    : promptEvents.map(e => {
         const members = e.event_members?.map(m => m.family_members?.name).filter(Boolean).join(', ') ?? ''
         const loc = e.address ?? e.location_name ?? ''
         const timeStr = e.all_day ? 'all-day' : `${toLocal(e.start_time)} – ${toLocal(e.end_time)}`
         return `- ID:${e.id} | updated_at:${e.updated_at} | "${e.title}" | ${timeStr}${loc ? ` | 📍${loc}` : ''}${members ? ` | 👤${members}` : ''}`
       }).join('\n')
+      + (omittedPromptEventCount > 0
+        ? `\n- … ${omittedPromptEventCount} additional events omitted from prompt for latency. Use search_events when needed.`
+        : '')
 
   const placesText = savedPlaces && savedPlaces.length > 0
     ? savedPlaces.map((p: {name: string; aliases?: string[]; address?: string; city?: string; state?: string; zip?: string; phone?: string; notes?: string}) => {
@@ -597,7 +611,7 @@ RECENT CONTEXT (helps you infer vague references like "it", "that", "her"):
 Last mentioned: ${context.lastContextReference.summary}
 When the user says "change it", "move that", "add her", etc., they likely refer to the above.` : ''}
 
-ALL UPCOMING EVENTS (full year, use exact IDs):
+UPCOMING EVENTS SNAPSHOT (next ${PROMPT_EVENT_WINDOW_DAYS} days, capped; use search_events for anything outside snapshot):
 ${eventsText}
 
 GROCERY LIST (unchecked items):
@@ -939,9 +953,26 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
         const { name, args } = (funcCallPart as { functionCall: { name: string; args: Record<string, unknown> } }).functionCall
 
-        // Read-only tools: execute server-side, feed result back for final answer
+        const userLikelyRequestedWrite = /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push)\b/i
+          .test(latestUserText ?? '')
+
+        // Read-only tools: execute server-side. Only escalate to a second LLM call when the user likely wants a write.
         if (name === 'search_events' || name === 'search_places' || name === 'search_web') {
           const toolResult = await executeReadTool(name, args)
+          const shouldRunSecondary =
+            name === 'search_events' &&
+            userLikelyRequestedWrite &&
+            Boolean((toolResult as { found?: boolean }).found)
+
+          if (!shouldRunSecondary) {
+            if (name === 'search_events' && (toolResult as { found?: boolean; events?: Array<{ title?: string; start?: string }> }).found) {
+              const topEvent = (toolResult as { events?: Array<{ title?: string; start?: string }> }).events?.[0]
+              if (topEvent?.title && topEvent?.start) {
+                return { type: 'text', text: `I found ${topEvent.title} at ${toLocal(topEvent.start)}.` }
+              }
+            }
+            return { type: 'text', text: summarizeReadTool(name, toolResult) }
+          }
 
           // Feed result back to Gemini for final answer
           const newContents: GeminiContent[] = [

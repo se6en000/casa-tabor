@@ -56,6 +56,8 @@ const ASSISTANT_TOTAL_BUDGET_MS = 9_000
 const COMMAND_SYNC_TIMEOUT_MS = 1_800
 const SIMPLE_COMMAND_SLO_MS = 2_000
 const TURN_SLO_MS = 6_000
+const LLM_HISTORY_MAX_MESSAGES = 12
+const LLM_HISTORY_MAX_CHARS_PER_MESSAGE = 700
 const AI_LATENCY_METRICS_KEY = 'casa-ai-latency-rollup'
 const AI_LATENCY_WINDOW_SIZE = 120
 const VOICE_DEBUG_DEVICE_ID_KEY = 'casa-voice-debug-device-id'
@@ -1079,7 +1081,12 @@ export function useAIAssistant(ctx: AssistantContext) {
 
     try {
       const currentMessages = [...messagesRef.current, userMsg]
-      const allMsgsForApi = currentMessages.map(m => ({ role: m.role, content: m.content }))
+      const allMsgsForApi = currentMessages
+        .slice(-LLM_HISTORY_MAX_MESSAGES)
+        .map((m) => ({
+          role: m.role,
+          content: m.content.slice(-LLM_HISTORY_MAX_CHARS_PER_MESSAGE),
+        }))
       const aiCorrelationId = buildCorrelationId(userMsg.id, activeSession.id)
       const llmInvokeStart = performance.now()
       emitLatencyStage('send_to_llm_invoke', Math.max(0, Math.round(llmInvokeStart - turnStart)), {
@@ -1097,7 +1104,16 @@ export function useAIAssistant(ctx: AssistantContext) {
       emitAssistantDebug(
         'assistant_invoke_start',
         `messages=${allMsgsForApi.length} corr=${aiCorrelationId.slice(0, 28)}`,
-        { correlationId: aiCorrelationId, lane: 'llm', payload: { messages: allMsgsForApi.length, inputSource } },
+        {
+          correlationId: aiCorrelationId,
+          lane: 'llm',
+          payload: {
+            messages: allMsgsForApi.length,
+            inputSource,
+            history_max_messages: LLM_HISTORY_MAX_MESSAGES,
+            history_max_chars_per_message: LLM_HISTORY_MAX_CHARS_PER_MESSAGE,
+          },
+        },
       )
 
       const invokeAssistant = async (timeoutMs: number) => {
