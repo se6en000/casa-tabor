@@ -523,6 +523,11 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}
  
 ON OPEN (the [EVENT_EDIT_MODE] signal): Give a concise friendly summary of the event so the user knows you're primed — include title, date/time, who's attending, and location if set. Then highlight any ⚠️ MISSING fields as things worth filling in, and ask what they'd like to change or add first.` : ''}
 
+${context.lastContextReference?.summary ? `
+RECENT CONTEXT (helps you infer vague references like "it", "that", "her"):
+Last mentioned: ${context.lastContextReference.summary}
+When the user says "change it", "move that", "add her", etc., they likely refer to the above.` : ''}
+
 ALL UPCOMING EVENTS (full year, use exact IDs):
 ${eventsText}
 

@@ -14,6 +14,13 @@ export interface AssistantContext {
   homeCity?: string
   focusedEvent?: EventWithDetails
   onSessionEnd?: () => void
+  // Phase 3: Context pinning - helps LLM infer vague references
+  lastContextReference?: {
+    eventTitle?: string
+    eventTime?: string
+    familyMemberName?: string
+    description?: string // Human-readable summary
+  }
 }
 
 const genId = (): string =>
@@ -418,6 +425,13 @@ function buildContext(ctx: AssistantContext) {
     family: ctx.family.map(f => ({ id: f.id, name: f.name })),
     homeCity: ctx.homeCity,
     ambiguousTimeDefaultMeridiem,
+    // Phase 3: Context pinning - provides recent reference for vague pronouns/references
+    lastContextReference: ctx.lastContextReference ? {
+      summary: ctx.lastContextReference.description,
+      eventTitle: ctx.lastContextReference.eventTitle,
+      eventTime: ctx.lastContextReference.eventTime,
+      familyMember: ctx.lastContextReference.familyMemberName,
+    } : null,
     focusedEvent: ctx.focusedEvent ? {
       id: ctx.focusedEvent.id,
       title: ctx.focusedEvent.title,
@@ -457,6 +471,49 @@ function buildContext(ctx: AssistantContext) {
       })),
     } : undefined,
   }
+}
+
+// Phase 3: Extract event reference for context pinning
+function extractEventReference(event: EventWithDetails): AssistantContext['lastContextReference'] {
+  const timeStr = event.start_time ? new Date(event.start_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : ''
+  const memberNames = event.members.map(m => m.family_member?.name).filter(Boolean).join(' & ')
+  
+  return {
+    eventTitle: event.title,
+    eventTime: timeStr,
+    familyMemberName: memberNames || undefined,
+    description: memberNames
+      ? `${memberNames}'s ${event.title}${timeStr ? ` at ${timeStr}` : ''}`
+      : `${event.title}${timeStr ? ` at ${timeStr}` : ''}`,
+  }
+}
+
+// Phase 3: Extract context from tool action args to pin for next turn
+function extractContextFromToolArgs(_tool: string, args: Record<string, unknown>, events: EventWithDetails[]): AssistantContext['lastContextReference'] | null {
+  // Extract event_id if present
+  const eventId = typeof args.event_id === 'string' ? args.event_id : null
+  if (eventId) {
+    const event = events.find(e => e.id === eventId)
+    if (event) return extractEventReference(event)
+  }
+  
+  // Extract from direct event data
+  const eventTitle = typeof args.event_title === 'string' ? args.event_title : null
+  const eventTime = typeof args.event_time === 'string' ? args.event_time : null
+  const familyMember = typeof args.person_name === 'string' ? args.person_name : null
+  
+  if (eventTitle) {
+    return {
+      eventTitle,
+      eventTime: eventTime || undefined,
+      familyMemberName: familyMember || undefined,
+      description: familyMember
+        ? `${familyMember}'s ${eventTitle}${eventTime ? ` at ${eventTime}` : ''}`
+        : `${eventTitle}${eventTime ? ` at ${eventTime}` : ''}`,
+    }
+  }
+  
+  return null
 }
 
 function parseOneWordIntent(
@@ -587,6 +644,7 @@ export function useAIAssistant(ctx: AssistantContext) {
   const messagesRef = useRef(messages)
   const ctxRef = useRef(ctx)
   const lastDeterministicEventIdRef = useRef<string | null>(null)
+  const lastContextReferenceRef = useRef<AssistantContext['lastContextReference'] | null>(null)
   const lastRequestRef = useRef<{
     text: string
     image?: { dataUrl: string; mimeType: string }
@@ -615,6 +673,7 @@ export function useAIAssistant(ctx: AssistantContext) {
   const startFresh = useCallback(() => {
     endSession()   // clear localStorage so next open is truly blank
     lastDeterministicEventIdRef.current = null
+    lastContextReferenceRef.current = null
     setMessages([])
     startNewSession()
   }, [endSession, startNewSession])
@@ -1127,6 +1186,18 @@ export function useAIAssistant(ctx: AssistantContext) {
         }
       } else {
         assistantMsg = { id: genId(), role: 'assistant', content: (data.text ?? '') as string }
+      }
+
+      // Phase 3: Update context reference for next turn if this was an event tool action
+      if (data.type === 'tool_action') {
+        const tool = (data.tool as string) ?? ''
+        const args = (data.args as Record<string, unknown>) ?? {}
+        const contextRef = extractContextFromToolArgs(tool, args, ctxRef.current.events)
+        if (contextRef) {
+          lastContextReferenceRef.current = contextRef
+          // Update the context passed to next buildContext call
+          ctxRef.current.lastContextReference = contextRef
+        }
       }
 
       const hasToolAction = !!assistantMsg.toolAction

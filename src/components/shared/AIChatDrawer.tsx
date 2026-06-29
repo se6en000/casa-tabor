@@ -133,7 +133,6 @@ const WAKE_FOLLOWUP_GRACE_MS = 4500
 const WAKE_MISFIRE_COOLDOWN_SECS = 6
 const TRANSCRIPT_SETTLE_BEFORE_SEND_MS = 250
 const FEEDBACK_LOCK_MS = 2800
-const MIN_FINAL_CONFIDENCE = 0.55
 const VOICE_TELEMETRY_KEY = 'casa-voice-telemetry'
 const AI_DEBUG_LOG_KEY = 'casa-ai-debug-log'
 const VOICE_DEBUG_DEVICE_ID_KEY = 'casa-voice-debug-device-id'
