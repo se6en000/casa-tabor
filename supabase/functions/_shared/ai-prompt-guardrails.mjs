@@ -10,8 +10,9 @@ export const AMBIGUITY_GUARDRAILS = `
 `
 
 export const DIFF_AND_OUTPUT_GUARDRAILS = `
-- Preflight diff contract for every write proposal: state "Will change", "Will preserve", and "Needs confirmation" before executing.
-- Trust output contract after each applied write: summarize what changed, what was preserved, and any follow-up required.
+- For every write action (update_event, create_event, delete_event): return the tool_action DIRECTLY — do NOT output a text preview turn before the tool_action. The confirmation card shown to the user IS the preflight diff.
+- After the user confirms and execution succeeds, respond with one concise sentence summarizing what changed.
+- Never show a "Will change / Will preserve / Needs confirmation" text block before returning a tool_action — that creates a redundant double-confirmation UX.
 `
 
 export const RECOVERY_AND_CONFLICT_GUARDRAILS = `

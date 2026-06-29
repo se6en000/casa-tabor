@@ -628,10 +628,10 @@ INSTRUCTIONS:
 - what_to_bring is a full replacement field. When adding/removing one item, preserve existing items from the selected event and send the complete final list.
 - Always apply append/replace/clear/transform intent classification before building update_event args.
 - Prefer append semantics for "add/include/also/plus" phrasing unless user explicitly asks to replace.
-- For each write proposal, include "Will change", "Will preserve", and "Needs confirmation".
+- IMPORTANT: For write proposals (update_event, create_event, delete_event) — return the tool_action DIRECTLY. Do NOT show a "Will change / Will preserve" text turn before the tool_action. The confirmation card in the UI is the preflight diff. One step only.
 - For add_grocery_items, do NOT ask for confirmation. Just add items immediately. If you inferred/corrected an item name or category, mention it briefly after adding.
 - Treat shopping, groceries, pantry restocks, and food purchase intents as add_grocery_items by default. Unless user explicitly asks a question instead of an action, auto-add immediately.
-- Confirmation budget: never ask for more than one explicit confirmation for the same write. If user already confirmed once in this turn/thread, proceed.
+- Confirmation budget: one confirmation only. If the user says "yes", "confirmed", "ok", "do it", or similar — that IS the confirmation; execute immediately.
 - For low-risk write intents (add_grocery_items and straightforward create_event), execute immediately and offer undo language instead of asking for confirmation.
 - Never claim "done/completed/updated/saved" for write actions unless the tool execution result confirms success; for calendar writes, only use completion wording when sync_status is synced.
 - If user already stated a time, do not ask for time again unless there is a true ambiguity conflict.
@@ -1231,35 +1231,29 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   function buildDisplayText(name: string, args: Record<string, unknown>): string {
     if (name === 'create_event') return `Create: **${args.title}** on ${args.start}`
     if (name === 'update_event') {
-      const labels: string[] = []
-      if (args.title !== undefined) labels.push('title')
-      if (args.start !== undefined || args.end !== undefined) labels.push('time')
-      if (args.location !== undefined || args.address !== undefined) labels.push('location')
-      if (args.notes !== undefined) labels.push('notes')
-      if (args.description !== undefined) labels.push('description')
-      if (args.category !== undefined) labels.push('category')
-      if (args.what_to_bring !== undefined) labels.push('bring list')
-      if (args.checklist_items !== undefined) labels.push('checklist')
-      if (args.action_items !== undefined) labels.push('actions')
-      if ((args.members_add as string[])?.length || (args.members_remove as string[])?.length) labels.push('attendees')
+      // Build a human-readable single-line summary of what will change
+      const parts: string[] = []
+      if (args.title !== undefined) parts.push(`title → "${String(args.title).slice(0, 40)}"`)
+      if (args.start !== undefined) parts.push(`time → ${String(args.start).slice(0, 30)}`)
+      if (args.location !== undefined || args.address !== undefined) parts.push(`location → "${String(args.location ?? args.address ?? '').slice(0, 30)}"`)
+      if (args.notes !== undefined) parts.push('notes updated')
+      if (args.category !== undefined) parts.push(`category → ${String(args.category)}`)
+      if (args.what_to_bring !== undefined) parts.push('bring list updated')
+      if (args.checklist_items !== undefined) parts.push('checklist updated')
+      if (args.action_items !== undefined) parts.push('actions updated')
+      if ((args.members_add as string[])?.length) parts.push(`add ${(args.members_add as string[]).join(', ')}`)
+      if ((args.members_remove as string[])?.length) parts.push(`remove ${(args.members_remove as string[]).join(', ')}`)
       if (
-        args.outfit_suggestion !== undefined ||
-        args.parking_notes !== undefined ||
-        args.contact_name !== undefined ||
-        args.contact_phone !== undefined ||
-        args.cost_estimate !== undefined ||
-        args.dietary_notes !== undefined ||
+        args.outfit_suggestion !== undefined || args.parking_notes !== undefined ||
+        args.contact_name !== undefined || args.contact_phone !== undefined ||
+        args.cost_estimate !== undefined || args.dietary_notes !== undefined ||
         args.meal_impact !== undefined
-      ) {
-        labels.push('details')
-      }
+      ) parts.push('details updated')
 
-      const uniqueLabels = [...new Set(labels)]
-      const preview = uniqueLabels.slice(0, 3).join(', ')
-      const extra = uniqueLabels.length > 3 ? ` +${uniqueLabels.length - 3} more` : ''
-      return uniqueLabels.length > 0
-        ? `Review update: ${preview}${extra}`
-        : 'Review event update'
+      if (parts.length === 0) return 'Update event'
+      const preview = parts.slice(0, 3).join(' · ')
+      const extra = parts.length > 3 ? ` +${parts.length - 3} more` : ''
+      return `Update: ${preview}${extra}`
     }
     if (name === 'delete_event') return `Delete: **${args.title}**`
     if (name === 'add_grocery_items') {

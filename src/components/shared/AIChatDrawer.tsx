@@ -28,6 +28,7 @@ const STRONG_CONFIRM_PHRASES = new Set([
   'yeah',
   'yep',
   'confirm',
+  'confirmed',
   'ok',
   'okay',
   'go ahead',
@@ -44,6 +45,24 @@ const STRONG_CONFIRM_PHRASES = new Set([
   'take it',
   'go for it',
   'yup',
+  'please',
+  'yes please',
+  'that is right',
+  'thats right',
+  'do that',
+  'do this',
+  'apply it',
+  'apply that',
+  'apply this',
+  'apply the change',
+  'apply changes',
+  'make it so',
+  'let\'s do it',
+  'let\'s go',
+  'lets do it',
+  'lets go',
+  'accept',
+  'approve',
   
   // Action-specific confirms (when shown in red on confirmation UI)
   // For delete: "Delete this?"
@@ -170,7 +189,7 @@ const TURN_STATE_TRANSITIONS: Record<VoiceTurnState, readonly VoiceTurnState[]> 
   wake_armed: ['listening', 'closed'],
   listening: ['endpointed', 'thinking', 'closed'],
   endpointed: ['thinking', 'listening', 'closed'],
-  thinking: ['responding', 'listening', 'closed'],
+  thinking: ['responding', 'listening', 'endpointed', 'closed'],
   responding: ['endpointed', 'listening', 'thinking', 'closed'],
   closed: ['idle', 'wake_armed', 'listening'],
 }
@@ -211,9 +230,25 @@ function normalizeIntentPhrase(value: string): string {
     .trim()
 }
 
+// Single-word anchors that are unambiguously confirmations
+const CONFIRM_ANCHOR_WORDS = new Set([
+  'yes', 'yeah', 'yep', 'yup', 'confirm', 'confirmed', 'ok', 'okay',
+  'correct', 'right', 'affirmative', 'absolutely', 'sure', 'proceed',
+  'accept', 'approve', 'apply', 'do', 'go', 'please',
+])
+
 function isStrongConfirmUtterance(value: string): boolean {
   const normalized = normalizeIntentPhrase(value)
-  return normalized.length > 0 && STRONG_CONFIRM_PHRASES.has(normalized)
+  if (normalized.length === 0) return false
+  // Exact match
+  if (STRONG_CONFIRM_PHRASES.has(normalized)) return true
+  // Short phrase (≤4 words): accept if first word is an anchor and no cancel word present
+  const words = normalized.split(/\s+/)
+  if (words.length <= 4 && CONFIRM_ANCHOR_WORDS.has(words[0])) {
+    const hasCancel = words.some(w => STRONG_CANCEL_PHRASES.has(w))
+    return !hasCancel
+  }
+  return false
 }
 
 function isStrongCancelUtterance(value: string): boolean {
@@ -1750,6 +1785,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   }, [open, focusedEvent?.id, sessionLoading, messages.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // While AI is thinking, suppress new voice input (don't stop the mic — avoids fade/blue flicker)
+  const lastEnsureRunningRef = useRef(0)
   useEffect(() => {
     if (loading && page !== 'grocery') {
       speech.suppress()
@@ -1760,8 +1796,16 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       // so users can chain multiple items without re-tapping the mic.
       const keepVoiceHot = !!pendingAsrConfirmation || hasPendingToolAction || wakeSessionActiveRef.current || page === 'grocery' || page === 'app'
       if (open && keepVoiceHot) {
-        setTimeout(() => speech.ensureRunning(), 220)
-        setTimeout(() => speech.ensureRunning(), 950)
+        // Debounce: skip re-arms that fire within 1.5s of the last one to suppress log spam
+        const now = Date.now()
+        const timeSinceLast = now - lastEnsureRunningRef.current
+        if (timeSinceLast > 1500) {
+          lastEnsureRunningRef.current = now
+          setTimeout(() => speech.ensureRunning(), 220)
+          setTimeout(() => speech.ensureRunning(), 950)
+        } else {
+          setTimeout(() => speech.ensureRunning(), 950)
+        }
       }
     }
   }, [loading, open, pendingAsrConfirmation, hasPendingToolAction, page, speech])
