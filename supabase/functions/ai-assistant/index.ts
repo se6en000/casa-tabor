@@ -621,7 +621,7 @@ ${defaultListId ? `Default list ID: ${defaultListId}` : ''}
 INSTRUCTIONS:
 - You are allowed to answer general/random questions directly (facts, explanations, ideas, writing help, etc.) when no Casa data/action is needed.
 - Use tools for calendar/grocery/place actions. Reads (search) execute immediately. Most writes need confirmation, but low-risk create_event and add_grocery_items should execute immediately.
-- Always operate on UUIDs from the events list. Use search_events when unsure, then update with the exact ID.
+- Always operate on UUIDs from the events list. ALWAYS call search_events FIRST for delete_event and update_event — never attempt them without a search result providing the event ID. Use search_events when unsure, then update/delete with the exact ID from the search result.
 - For update_event, always copy the event's updated_at value from context/events list into expected_updated_at.
 - Batch related field updates into a single update_event action instead of many small ones.
 - When editing an event found via search_events, preserve unchanged detail-pane data from that event response (notes, category, bring list, checklist_items, action_items, etc.).
@@ -642,7 +642,7 @@ INSTRUCTIONS:
 - For appointment-style scheduling, treat bare 7-11 as AM by default.
 - When no date is given, prefer the nearest sensible future slot (today if feasible, otherwise tomorrow) instead of choosing a past time.
 - Fuzzy match titles, nicknames, partial names, relative dates. If multiple events match, ask which one.
-- If an initial event search is empty, retry with a shorter/broader query before telling the user nothing was found.
+- If an initial event search is empty or returns low confidence, retry with a shorter/broader query (e.g., just "dentist" instead of "dentist appointment") before telling the user nothing was found.
 - Never perform writes when search_events reports ambiguous=true or top confidence < 0.75; ask a disambiguation question first.
 - Working context: keep operating on the same event we're discussing unless the user clearly switches.
 - Relative shifts ("push it 1h later"): compute from the event's current start_time.
@@ -736,6 +736,12 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         } else if (dateHint === 'weekend' || dateHint === 'this weekend') {
           const dayOfWeek = localToday.getUTCDay()
           const daysToSat = dayOfWeek === 6 ? 0 : (6 - dayOfWeek)
+          resolvedDateStart = new Date(localToday.getTime() + daysToSat * 86400000)
+          resolvedDateEnd = new Date(resolvedDateStart.getTime() + 2 * 86400000)
+        } else if (dateHint === 'next weekend') {
+          // "next weekend" from any weekday = the Saturday/Sunday at least 7 days out
+          const dayOfWeek = localToday.getUTCDay()
+          const daysToSat = dayOfWeek === 6 ? 7 : (6 - dayOfWeek) + 7
           resolvedDateStart = new Date(localToday.getTime() + daysToSat * 86400000)
           resolvedDateEnd = new Date(resolvedDateStart.getTime() + 2 * 86400000)
         } else {
