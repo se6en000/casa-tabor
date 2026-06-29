@@ -95,6 +95,7 @@ function GlobalAIDrawer({
       events={events}
       family={family}
       homeCity={weather?.city}
+      weather={weather ? { temp: weather.temp, condition: weather.condition, humidity: weather.humidity, feelsLike: weather.feelsLike, city: weather.city } : null}
       onSleepCommand={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
     />
   )
