@@ -524,27 +524,10 @@ function parseOneWordIntent(
   if (words.length === 1) {
     const word = words[0]
 
-    // YES / CONFIRM - only if NO pending action (let short-circuit handler deal with pending actions)
-    if (['yes', 'yeah', 'yep', 'ok', 'okay', 'confirm', 'sure', 'yup', 'aye', 'absolutely', 'affirmative', 'right', 'uh huh', 'mm hmm'].includes(word)) {
-      if (!hasPendingToolAction) {
-        return {
-          response: 'Done.',
-          action: 'skip',
-        }
-      }
-      // If pending action, don't intercept - let short-circuit handler below run
-      return null
-    }
-
-    // NO / CANCEL - only if NO pending action
-    if (['no', 'nope', 'cancel', 'abort', 'skip', 'nevermind', 'dont', 'never', 'nah', 'uh uh'].includes(word)) {
-      if (!hasPendingToolAction) {
-        return {
-          response: 'Cancelled. What else?',
-          action: 'skip',
-        }
-      }
-      // If pending action, don't intercept - let short-circuit handler below run
+    // YES / CONFIRM and NO / CANCEL - Always defer to short-circuit handler or LLM
+    // The short-circuit handler in AIChatDrawer will execute if there's a pending action
+    // Otherwise, LLM handles the confirmation/cancellation in context of conversation
+    if (['yes', 'yeah', 'yep', 'ok', 'okay', 'confirm', 'sure', 'yup', 'aye', 'absolutely', 'affirmative', 'right', 'uh huh', 'mm hmm', 'no', 'nope', 'cancel', 'abort', 'skip', 'nevermind', 'dont', 'never', 'nah', 'uh uh'].includes(word)) {
       return null
     }
 
