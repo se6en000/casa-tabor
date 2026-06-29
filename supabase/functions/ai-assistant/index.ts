@@ -69,7 +69,11 @@ Deno.serve(async (req) => {
     client_build: clientBuildRaw,
     client_trace_source: clientTraceSourceRaw,
     dry_run: dryRunRaw,
+    model_override: modelOverrideRaw,
   } = await req.json()
+  const modelOverride = typeof modelOverrideRaw === 'string' && modelOverrideRaw.trim().length > 0
+    ? modelOverrideRaw.trim()
+    : null
   const cid = correlationId ?? `${context?.page ?? 'unknown'}:${Date.now().toString(36)}`
   const traceId = typeof traceIdRaw === 'string' && traceIdRaw.trim().length > 0
     ? traceIdRaw
@@ -204,7 +208,7 @@ Deno.serve(async (req) => {
 
   const config = cfgRow?.[0]?.value ?? { provider: 'gemini', model: 'gemini-1.5-flash', api_key: '' }
   const apiKey = config.api_key as string
-  const model = (config.model as string) || 'gemini-1.5-flash'
+  const model = modelOverride ?? ((config.model as string) || 'gemini-2.5-flash-lite')
   const llmTelemetry: LlmTelemetry = {
     provider: String(config.provider ?? 'unknown'),
     model,
@@ -625,6 +629,7 @@ ${defaultListId ? `Default list ID: ${defaultListId}` : ''}
 
 INSTRUCTIONS:
 - You are allowed to answer general/random questions directly (facts, explanations, ideas, writing help, etc.) when no Casa data/action is needed.
+- For simple math and calculations (tips, percentages, unit conversions, arithmetic) — answer directly from reasoning. Do NOT call search_web.
 - Use tools for calendar/grocery/place actions. Reads (search) execute immediately. Most writes need confirmation, but low-risk create_event and add_grocery_items should execute immediately.
 - Always operate on UUIDs from the events list. ALWAYS call search_events FIRST for delete_event and update_event — never attempt them without a search result providing the event ID. Use search_events when unsure, then update/delete with the exact ID from the search result.
 - For update_event, always copy the event's updated_at value from context/events list into expected_updated_at.
@@ -657,8 +662,11 @@ INSTRUCTIONS:
 - Prefer edit over create: if a similar event exists at the same time, update it instead of creating a duplicate.
 - Tone: warm, concise (1–3 sentences). Be proactive — flag conflicts, drive-time buffers, busy days.
 - For timeless facts and general knowledge (e.g., ages/biographies/math/history), answer directly from model knowledge and simple reasoning. Do not refuse just because live web access is unavailable.
-- For weather questions: if weather data is shown above in context, answer directly from it — do NOT call search_web for weather. Only use search_web for live news, reviews, prices, or info that isn't already in context.
-- For local business lookups (address/phone/location), use search_places. When using search_web, cite the source links you used in your reply.${customInstructions ? `\n\nUSER'S CUSTOM RULES (always apply, override defaults if they conflict):\n${customInstructions}` : ''}
+- For weather questions AND activity-based weather questions ("is it a good day to X?", "should I bring an umbrella?", "what should I wear?", "will it be hot?"): if weather data is shown in context above, answer directly from it — do NOT call search_web for weather.
+- For live/public info requests (latest news, current prices, recent reviews, sports scores, stock prices), use search_web first. For local business lookups (address/phone/location), use search_places. When using search_web, cite the source links you used in your reply.
+- DISMISSAL PHRASES ("never mind", "forget it", "cancel that", "actually never mind", "stop", "nvm"): respond with a brief acknowledgment ONLY — do not search, do not list events, do not take any action. Example: "No problem!" or "Got it, ignoring that."
+- GROCERY LIST READS ("how many items", "what's on the grocery list", "show me the grocery list"): answer directly from GROCERY LIST context above — do NOT call search_events.
+- RELATIVE DATE RESOLUTION: for "next weekend", "this Saturday", "next Friday", call search_events with the correct concrete date — do NOT ask the user what date they mean. Use the TEMPORAL ASSUMPTIONS and current date to resolve it first.${customInstructions ? `\n\nUSER'S CUSTOM RULES (always apply, override defaults if they conflict):\n${customInstructions}` : ''}
 ${AMBIGUITY_GUARDRAILS}
 ${DIFF_AND_OUTPUT_GUARDRAILS}
 ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
@@ -1039,10 +1047,13 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           // Run secondary LLM call when:
           // - user wants a write (search → then propose change), OR
           // - multiple results found (list query like "what's on my calendar tomorrow") — LLM needs to generate the full answer
+          // - any question that requires synthesis/analysis of the results
+          const userAsksSynthesis = /\b(how many|how busy|compare|summary|briefing|overview|rundown|what.*have|what.*on|what.*week|who.*have|any.*overlap|conflict|together)\b/i
+            .test(latestUserText ?? '')
           const shouldRunSecondary =
             name === 'search_events' &&
             resultFound &&
-            (userLikelyRequestedWrite || resultCount > 1)
+            (userLikelyRequestedWrite || resultCount > 1 || userAsksSynthesis)
 
           if (!shouldRunSecondary) {
             if (name === 'search_events' && resultFound) {
