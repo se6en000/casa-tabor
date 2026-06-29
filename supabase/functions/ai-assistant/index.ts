@@ -14,12 +14,39 @@ const CORS = {
 }
 
 interface ImagePayload { mimeType: string; data: string }
+type GeminiUsageMetadata = {
+  promptTokenCount?: number
+  candidatesTokenCount?: number
+  totalTokenCount?: number
+}
+type LlmTelemetry = {
+  provider: string
+  model: string
+  llm_calls: number
+  llm_inference_ms: number
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+}
 
 function sanitizeIngressText(value: unknown, maxLen = 1800): string | null {
  if (typeof value !== 'string') return null
  const normalized = value.replace(/\s+/g, ' ').trim()
  if (!normalized) return null
  return normalized.slice(0, maxLen)
+}
+
+function toNonNegativeInt(value: unknown): number {
+ return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : 0
+}
+
+function extractGeminiUsage(payload: unknown): { inputTokens: number; outputTokens: number; totalTokens: number } {
+ const usage = (payload as { usageMetadata?: GeminiUsageMetadata } | null)?.usageMetadata
+ return {
+   inputTokens: toNonNegativeInt(usage?.promptTokenCount),
+   outputTokens: toNonNegativeInt(usage?.candidatesTokenCount),
+   totalTokens: toNonNegativeInt(usage?.totalTokenCount),
+ }
 }
 
 Deno.serve(async (req) => {
@@ -178,6 +205,39 @@ Deno.serve(async (req) => {
   const config = cfgRow?.[0]?.value ?? { provider: 'gemini', model: 'gemini-1.5-flash', api_key: '' }
   const apiKey = config.api_key as string
   const model = (config.model as string) || 'gemini-1.5-flash'
+  const llmTelemetry: LlmTelemetry = {
+    provider: String(config.provider ?? 'unknown'),
+    model,
+    llm_calls: 0,
+    llm_inference_ms: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+    total_tokens: 0,
+  }
+  const recordLlmCall = (stage: string, elapsedMs: number, status: number, payload?: unknown) => {
+    const usage = extractGeminiUsage(payload)
+    llmTelemetry.llm_calls += 1
+    llmTelemetry.llm_inference_ms += elapsedMs
+    llmTelemetry.input_tokens += usage.inputTokens
+    llmTelemetry.output_tokens += usage.outputTokens
+    llmTelemetry.total_tokens += usage.totalTokens
+    appendServerTrace('server_ai_assistant_llm_call', `${stage} ms=${elapsedMs} status=${status}`, {
+      stage,
+      elapsed_ms: elapsedMs,
+      status,
+      provider: llmTelemetry.provider,
+      model: llmTelemetry.model,
+      input_tokens: usage.inputTokens,
+      output_tokens: usage.outputTokens,
+      total_tokens: usage.totalTokens,
+      llm_calls: llmTelemetry.llm_calls,
+    })
+  }
+  appendServerTrace('server_ai_assistant_context_load', `ms=${contextLoadMs}`, {
+    context_load_ms: contextLoadMs,
+    events_loaded: allEvents?.length ?? 0,
+    grocery_items_loaded: Array.isArray(groceryItems) ? groceryItems.length : 0,
+  })
 
   if (!apiKey) {
     return new Response(JSON.stringify({ type: 'error', code: 'no_api_key', message: 'No AI API key configured. Go to Settings → AI to add one.', correlation_id: cid }), {
@@ -822,183 +882,113 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     )
     const llmPrimaryMs = Date.now() - llmStartMs
     console.log(`[ai-assistant][${cid}] stage=llm_primary ms=${llmPrimaryMs} status=${res.status}`)
-    warnIfSlow('llm_primary', llmPrimaryMs, STAGE_SLO.llmPrimaryMs)
+    if (res.ok) {
+      const data = await res.json()
+      recordLlmCall('llm_primary', llmPrimaryMs, res.status, data)
+      warnIfSlow('llm_primary', llmPrimaryMs, STAGE_SLO.llmPrimaryMs)
 
-    if (!res.ok) {
-      const errText = await res.text()
-      const isQuota = res.status === 429 || errText.includes('RESOURCE_EXHAUSTED')
-      return { type: 'error', code: isQuota ? 'quota_exceeded' : 'llm_error', message: errText.slice(0, 200) }
-    }
+      const candidate = data.candidates?.[0]
+      if (!candidate) return { type: 'error', code: 'llm_error', message: 'No response from AI' }
 
-    const data = await res.json()
-    const candidate = data.candidates?.[0]
-    if (!candidate) return { type: 'error', code: 'llm_error', message: 'No response from AI' }
-
-    // Check for safety/finish reason blocks
-    const finishReason = candidate.finishReason
-    if (finishReason && finishReason !== 'STOP' && finishReason !== 'TOOL_USE' && !candidate.content) {
-      return { type: 'text', text: `I had trouble processing that (${finishReason}). Could you rephrase?` }
-    }
-
-    const summarizeReadTool = (name: string, toolResult: Record<string, unknown>): string => {
-      if (name === 'search_events') {
-        const count = Number(toolResult.count ?? 0)
-        if (count > 0) return `I found ${count} matching event${count === 1 ? '' : 's'}.`
-        return 'I could not find any matching events.'
-      }
-      if (name === 'search_places') {
-        const count = Number(toolResult.count ?? 0)
-        if (count > 0) return `I found ${count} place option${count === 1 ? '' : 's'}.`
-        return 'I could not find a matching place yet.'
-      }
-      if (name === 'search_web') {
-        const count = Number(toolResult.count ?? 0)
-        if (count > 0) return `I found ${count} web result${count === 1 ? '' : 's'} for that query.`
-        return 'I could not find web results for that query.'
-      }
-      return 'I found results for your request.'
-    }
-
-    const resolveModelParts = async (parts: GeminiPart[]) => {
-      const funcCallPart = parts.find((p: { functionCall?: { name: string; args: Record<string, unknown> } }) => p.functionCall)
-      const textParts = parts
-        .flatMap((p) => 'text' in p && typeof p.text === 'string' && p.text.trim() ? [p.text.trim()] : [])
-
-      if (!funcCallPart && textParts.length > 0) {
-        return { type: 'text', text: textParts.join('\n') }
+      // Check for safety/finish reason blocks
+      const finishReason = candidate.finishReason
+      if (finishReason && finishReason !== 'STOP' && finishReason !== 'TOOL_USE' && !candidate.content) {
+        return { type: 'text', text: `I had trouble processing that (${finishReason}). Could you rephrase?` }
       }
 
-      if (!funcCallPart) return null
-
-      const { name, args } = (funcCallPart as { functionCall: { name: string; args: Record<string, unknown> } }).functionCall
-
-      // Read-only tools: execute server-side, feed result back for final answer
-      if (name === 'search_events' || name === 'search_places' || name === 'search_web') {
-        const toolResult = await executeReadTool(name, args)
-
-        // Feed result back to Gemini for final answer
-        const newContents: GeminiContent[] = [
-          ...contents,
-          { role: 'model', parts: [funcCallPart as GeminiPart] },
-          { role: 'user', parts: [{ functionResponse: { name, response: toolResult } } as GeminiPart] },
-        ]
-
-        // Second call for final answer
-        // Use a prompt variant that instructs the LLM to propose as a tool call, not text
-        const secondaryPrompt = systemInstruction.replace(
-          'For each write proposal, include "Will change", "Will preserve", and "Needs confirmation".',
-          'For each write proposal, IMMEDIATELY call the appropriate write tool (update_event, delete_event, create_event, or add_grocery_items). Do not describe in text - call the tool.'
-        )
-        const secondaryBody = { ...body, system_instruction: { parts: [{ text: secondaryPrompt }] }, contents: newContents }
-        const res2 = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(secondaryBody) }
-        )
-        console.log(`[ai-assistant][${cid}] stage=llm_secondary ms=${Date.now() - llmStartMs} status=${res2.status}`)
-        if (!res2.ok) return { type: 'error', code: 'llm_error', message: 'Second LLM call failed' }
-        const data2 = await res2.json()
-        const secondaryParts = data2.candidates?.[0]?.content?.parts ?? []
-        console.log(`[ai-assistant][${cid}] secondary_parts_count=${secondaryParts.length} has_func_call=${secondaryParts.some((p: any) => p.functionCall)} has_text=${secondaryParts.some((p: any) => p.text)}`)
-        // Recursively resolve secondary response in case it contains a tool call (e.g., update_event after search_events)
-        const secondaryResolved = await resolveModelParts(secondaryParts)
-        console.log(`[ai-assistant][${cid}] secondary_resolved type=${secondaryResolved?.type ?? 'null'}`)
-        if (secondaryResolved) return secondaryResolved
-        // Fallback to text if no tool was called
-        const finalText = secondaryParts.find((p: { text?: string }) => p.text)?.text ?? ''
-        return { type: 'text', text: finalText || summarizeReadTool(name, toolResult) }
+      const summarizeReadTool = (name: string, toolResult: Record<string, unknown>): string => {
+        if (name === 'search_events') {
+          const count = Number(toolResult.count ?? 0)
+          if (count > 0) return `I found ${count} matching event${count === 1 ? '' : 's'}.`
+          return 'I could not find any matching events.'
+        }
+        if (name === 'search_places') {
+          const count = Number(toolResult.count ?? 0)
+          if (count > 0) return `I found ${count} place option${count === 1 ? '' : 's'}.`
+          return 'I could not find a matching place yet.'
+        }
+        if (name === 'search_web') {
+          const count = Number(toolResult.count ?? 0)
+          if (count > 0) return `I found ${count} web result${count === 1 ? '' : 's'} for that query.`
+          return 'I could not find web results for that query.'
+        }
+        return 'I found results for your request.'
       }
 
-      if (name === 'add_grocery_items') {
-        if (dryRun) {
-          return {
-            type: 'tool_action',
-            tool: name,
-            args,
-            display_text: buildDisplayText(name, args),
+      const resolveModelParts = async (parts: GeminiPart[]) => {
+        const funcCallPart = parts.find((p: { functionCall?: { name: string; args: Record<string, unknown> } }) => p.functionCall)
+        const textParts = parts
+          .flatMap((p) => 'text' in p && typeof p.text === 'string' && p.text.trim() ? [p.text.trim()] : [])
+
+        if (!funcCallPart && textParts.length > 0) {
+          return { type: 'text', text: textParts.join('\n') }
+        }
+
+        if (!funcCallPart) return null
+
+        const { name, args } = (funcCallPart as { functionCall: { name: string; args: Record<string, unknown> } }).functionCall
+
+        // Read-only tools: execute server-side, feed result back for final answer
+        if (name === 'search_events' || name === 'search_places' || name === 'search_web') {
+          const toolResult = await executeReadTool(name, args)
+
+          // Feed result back to Gemini for final answer
+          const newContents: GeminiContent[] = [
+            ...contents,
+            { role: 'model', parts: [funcCallPart as GeminiPart] },
+            { role: 'user', parts: [{ functionResponse: { name, response: toolResult } } as GeminiPart] },
+          ]
+
+          // Second call for final answer
+          // Use a prompt variant that instructs the LLM to propose as a tool call, not text
+          const secondaryPrompt = systemInstruction.replace(
+            'For each write proposal, include "Will change", "Will preserve", and "Needs confirmation".',
+            'For each write proposal, IMMEDIATELY call the appropriate write tool (update_event, delete_event, create_event, or add_grocery_items). Do not describe in text - call the tool.'
+          )
+          const secondaryBody = { ...body, system_instruction: { parts: [{ text: secondaryPrompt }] }, contents: newContents }
+          const secondaryStartMs = Date.now()
+          const res2 = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+            { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(secondaryBody) }
+          )
+          const secondaryElapsedMs = Date.now() - secondaryStartMs
+          console.log(`[ai-assistant][${cid}] stage=llm_secondary ms=${secondaryElapsedMs} status=${res2.status}`)
+          if (!res2.ok) {
+            recordLlmCall('llm_secondary', secondaryElapsedMs, res2.status)
+            return { type: 'error', code: 'llm_error', message: 'Second LLM call failed' }
           }
-        }
-        const autoActionId = `auto-grocery-${Date.now().toString(36)}`
-        const execResult = await sb.functions.invoke('execute-ai-action', {
-          body: {
-            tool: name,
-            args,
-            action_id: autoActionId,
-            session_id: traceId,
-            correlation_id: `${cid}:auto-grocery:${Date.now().toString(36)}`,
-            trace_id: traceId,
-            turn_id: turnId,
-            lane: 'tool_action',
-            device_id: deviceId,
-            client_trace_present: clientTracePresent,
-            client_build: clientBuild,
-            client_trace_source: clientTraceSource ?? 'ai-assistant-auto',
-          },
-        })
-
-        const execError = execResult.error?.message ?? (execResult.data as { error?: string } | null)?.error ?? null
-        if (execError) {
-          return { type: 'text', text: `I couldn't add that to grocery yet: ${execError}` }
+          const data2 = await res2.json()
+          recordLlmCall('llm_secondary', secondaryElapsedMs, res2.status, data2)
+          const secondaryParts = data2.candidates?.[0]?.content?.parts ?? []
+          console.log(
+            `[ai-assistant][${cid}] secondary_parts_count=${secondaryParts.length} has_func_call=${secondaryParts.some((p: { functionCall?: unknown }) => Boolean(p.functionCall))} has_text=${secondaryParts.some((p: { text?: unknown }) => Boolean(p.text))}`,
+          )
+          // Recursively resolve secondary response in case it contains a tool call (e.g., update_event after search_events)
+          const secondaryResolved = await resolveModelParts(secondaryParts)
+          console.log(`[ai-assistant][${cid}] secondary_resolved type=${secondaryResolved?.type ?? 'null'}`)
+          if (secondaryResolved) return secondaryResolved
+          // Fallback to text if no tool was called
+          const finalText = secondaryParts.find((p: { text?: string }) => p.text)?.text ?? ''
+          return { type: 'text', text: finalText || summarizeReadTool(name, toolResult) }
         }
 
-        const payload = (execResult.data as {
-          success?: boolean
-          count?: number
-          items?: { name: string; category?: string; normalized_from?: string | null }[]
-        } | null) ?? {}
-        if (!payload.success) {
-          return { type: 'text', text: "I couldn't add that to grocery right now. Please try again." }
-        }
-
-        const addedItems = Array.isArray(payload.items) ? payload.items : []
-        const names = addedItems.map((item) => item.name).filter(Boolean)
-        const corrected = addedItems
-          .filter((item) => item.normalized_from && item.normalized_from !== item.name)
-          .map((item) => `${item.normalized_from} → ${item.name}`)
-
-        const addedLine = names.length > 0
-          ? `Added to grocery: ${names.join(', ')}.`
-          : `Added ${payload.count ?? 0} grocery item${payload.count === 1 ? '' : 's'}.`
-        const correctionLine = corrected.length > 0
-          ? ` I interpreted ${corrected.join('; ')}.`
-          : ''
-
-        return { type: 'text', text: `${addedLine}${correctionLine}` }
-      }
-
-      if (name === 'create_event') {
-        const title = typeof args.title === 'string' ? args.title.trim() : ''
-        const start = typeof args.start === 'string' ? args.start : ''
-        const end = typeof args.end === 'string' ? args.end : ''
-        const location = typeof args.location === 'string' ? args.location.trim() : ''
-        const notes = typeof args.notes === 'string' ? args.notes.trim() : ''
-        const members = Array.isArray(args.members)
-          ? args.members.filter((member): member is string => typeof member === 'string' && member.trim().length > 0)
-          : []
-        const startMs = Date.parse(start)
-        const endMs = Date.parse(end)
-        const durationMinutes = Number.isFinite(startMs) && Number.isFinite(endMs)
-          ? (endMs - startMs) / 60000
-          : NaN
-        const isLowRiskCreate = (
-          title.length >= 3 &&
-          title.length <= 140 &&
-          Number.isFinite(durationMinutes) &&
-          durationMinutes >= 5 &&
-          durationMinutes <= 240 &&
-          members.length <= 2 &&
-          location.length === 0 &&
-          notes.length === 0
-        )
-
-        if (isLowRiskCreate && !dryRun) {
-          const autoActionId = `auto-create-${Date.now().toString(36)}`
+        if (name === 'add_grocery_items') {
+          if (dryRun) {
+            return {
+              type: 'tool_action',
+              tool: name,
+              args,
+              display_text: buildDisplayText(name, args),
+            }
+          }
+          const autoActionId = `auto-grocery-${Date.now().toString(36)}`
           const execResult = await sb.functions.invoke('execute-ai-action', {
             body: {
               tool: name,
               args,
               action_id: autoActionId,
               session_id: traceId,
-              correlation_id: `${cid}:auto-create:${Date.now().toString(36)}`,
+              correlation_id: `${cid}:auto-grocery:${Date.now().toString(36)}`,
               trace_id: traceId,
               turn_id: turnId,
               lane: 'tool_action',
@@ -1011,97 +1001,189 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
           const execError = execResult.error?.message ?? (execResult.data as { error?: string } | null)?.error ?? null
           if (execError) {
-            return { type: 'text', text: `I heard you but couldn't auto-create that yet: ${execError}` }
+            return { type: 'text', text: `I couldn't add that to grocery yet: ${execError}` }
           }
 
-          const payload = (execResult.data as { success?: boolean; sync_status?: 'synced' | 'queued' | 'failed'; sync_warning?: string } | null) ?? {}
+          const payload = (execResult.data as {
+            success?: boolean
+            count?: number
+            items?: { name: string; category?: string; normalized_from?: string | null }[]
+          } | null) ?? {}
           if (!payload.success) {
-            return { type: 'text', text: "I couldn't auto-create that yet. Please try once more." }
+            return { type: 'text', text: "I couldn't add that to grocery right now. Please try again." }
           }
 
-          if (payload.sync_status === 'synced') {
-            return { type: 'text', text: `Confirmed — I created "${title}" at ${start}.` }
+          const addedItems = Array.isArray(payload.items) ? payload.items : []
+          const names = addedItems.map((item) => item.name).filter(Boolean)
+          const corrected = addedItems
+            .filter((item) => item.normalized_from && item.normalized_from !== item.name)
+            .map((item) => `${item.normalized_from} → ${item.name}`)
+
+          const addedLine = names.length > 0
+            ? `Added to grocery: ${names.join(', ')}.`
+            : `Added ${payload.count ?? 0} grocery item${payload.count === 1 ? '' : 's'}.`
+          const correctionLine = corrected.length > 0
+            ? ` I interpreted ${corrected.join('; ')}.`
+            : ''
+
+          return { type: 'text', text: `${addedLine}${correctionLine}` }
+        }
+
+        if (name === 'create_event') {
+          const title = typeof args.title === 'string' ? args.title.trim() : ''
+          const start = typeof args.start === 'string' ? args.start : ''
+          const end = typeof args.end === 'string' ? args.end : ''
+          const location = typeof args.location === 'string' ? args.location.trim() : ''
+          const notes = typeof args.notes === 'string' ? args.notes.trim() : ''
+          const members = Array.isArray(args.members)
+            ? args.members.filter((member): member is string => typeof member === 'string' && member.trim().length > 0)
+            : []
+          const startMs = Date.parse(start)
+          const endMs = Date.parse(end)
+          const durationMinutes = Number.isFinite(startMs) && Number.isFinite(endMs)
+            ? (endMs - startMs) / 60000
+            : NaN
+          const isLowRiskCreate = (
+            title.length >= 3 &&
+            title.length <= 140 &&
+            Number.isFinite(durationMinutes) &&
+            durationMinutes >= 5 &&
+            durationMinutes <= 240 &&
+            members.length <= 2 &&
+            location.length === 0 &&
+            notes.length === 0
+          )
+
+          if (isLowRiskCreate && !dryRun) {
+            const autoActionId = `auto-create-${Date.now().toString(36)}`
+            const execResult = await sb.functions.invoke('execute-ai-action', {
+              body: {
+                tool: name,
+                args,
+                action_id: autoActionId,
+                session_id: traceId,
+                correlation_id: `${cid}:auto-create:${Date.now().toString(36)}`,
+                trace_id: traceId,
+                turn_id: turnId,
+                lane: 'tool_action',
+                device_id: deviceId,
+                client_trace_present: clientTracePresent,
+                client_build: clientBuild,
+                client_trace_source: clientTraceSource ?? 'ai-assistant-auto',
+              },
+            })
+
+            const execError = execResult.error?.message ?? (execResult.data as { error?: string } | null)?.error ?? null
+            if (execError) {
+              return { type: 'text', text: `I heard you but couldn't auto-create that yet: ${execError}` }
+            }
+
+            const payload = (execResult.data as { success?: boolean; sync_status?: 'synced' | 'queued' | 'failed'; sync_warning?: string } | null) ?? {}
+            if (!payload.success) {
+              return { type: 'text', text: "I couldn't auto-create that yet. Please try once more." }
+            }
+
+            if (payload.sync_status === 'synced') {
+              return { type: 'text', text: `Confirmed — I created "${title}" at ${start}.` }
+            }
+            if (payload.sync_status === 'queued') {
+              return { type: 'text', text: `Saved in Casa Tabor. Google sync is queued and still in progress for "${title}".` }
+            }
+            return {
+              type: 'text',
+              text: payload.sync_warning
+                ? payload.sync_warning
+                : `Saved in Casa Tabor, but I could not confirm Google sync yet for "${title}".`,
+            }
           }
-          if (payload.sync_status === 'queued') {
-            return { type: 'text', text: `Saved in Casa Tabor. Google sync is queued and still in progress for "${title}".` }
-          }
-          return {
-            type: 'text',
-            text: payload.sync_warning
-              ? payload.sync_warning
-              : `Saved in Casa Tabor, but I could not confirm Google sync yet for "${title}".`,
-          }
+        }
+
+        // Write tools: return to frontend for confirmation
+        return {
+          type: 'tool_action',
+          tool: name,
+          args,
+          display_text: buildDisplayText(name, args),
         }
       }
 
-      // Write tools: return to frontend for confirmation
-      return {
-        type: 'tool_action',
-        tool: name,
-        args,
-        display_text: buildDisplayText(name, args),
-      }
-    }
+      const initialParts = candidate.content?.parts ?? []
+      const initialResolved = await resolveModelParts(initialParts)
+      if (initialResolved) return initialResolved
 
-    const initialParts = candidate.content?.parts ?? []
-    const initialResolved = await resolveModelParts(initialParts)
-    if (initialResolved) return initialResolved
-
-    // Rare provider edge case: retry once before surfacing fallback copy.
-    console.error('[ai-assistant] Empty Gemini response. finishReason:', finishReason, 'parts:', JSON.stringify(initialParts))
-    const retryRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
-    )
-    console.log(`[ai-assistant][${cid}] stage=llm_retry ms=${Date.now() - llmStartMs} status=${retryRes.status}`)
-    if (retryRes.ok) {
-      const retryData = await retryRes.json()
-      const retryParts = retryData.candidates?.[0]?.content?.parts ?? []
-      const retryResolved = await resolveModelParts(retryParts)
-      if (retryResolved) return retryResolved
-      console.error('[ai-assistant] Empty retry response. finishReason:', retryData.candidates?.[0]?.finishReason, 'parts:', JSON.stringify(retryParts))
-    }
-
-    const latestUserText = [...contents]
-      .reverse()
-      .find((turn) => turn.role === 'user')
-      ?.parts.flatMap((part) => 'text' in part && typeof part.text === 'string' ? [part.text.trim()] : [])
-      .find((part) => part.length > 0)
-
-    // Last-resort reliability pass: no tools, compact prompt, latest user turn only.
-    // This avoids occasional empty tool-call responses from Gemini under load.
-    if (latestUserText) {
-      const fallbackBody = {
-        system_instruction: {
-          parts: [{
-            text: 'You are the Casa Tabor assistant. Respond helpfully in 1-3 concise sentences. If data is missing, ask one clear follow-up question.',
-          }],
-        },
-        contents: [{ role: 'user', parts: [{ text: latestUserText }] }],
-        generation_config: { temperature: 0.2, max_output_tokens: 320 },
-      }
-      const fallbackRes = await fetch(
+      // Rare provider edge case: retry once before surfacing fallback copy.
+      console.error('[ai-assistant] Empty Gemini response. finishReason:', finishReason, 'parts:', JSON.stringify(initialParts))
+      const retryStartMs = Date.now()
+      const retryRes = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(fallbackBody) }
+        { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
       )
-      console.log(`[ai-assistant][${cid}] stage=llm_fallback ms=${Date.now() - llmStartMs} status=${fallbackRes.status}`)
-      if (fallbackRes.ok) {
-        const fallbackData = await fallbackRes.json()
-        const fallbackParts = fallbackData.candidates?.[0]?.content?.parts ?? []
-        const fallbackText = fallbackParts
-          .flatMap((part: { text?: string }) => typeof part.text === 'string' && part.text.trim() ? [part.text.trim()] : [])
-          .join('\n')
-        if (fallbackText) {
-          console.log(`[ai-assistant][${cid}] recovered empty response via compact fallback`)
-          return { type: 'text', text: fallbackText }
-        }
+      const retryElapsedMs = Date.now() - retryStartMs
+      console.log(`[ai-assistant][${cid}] stage=llm_retry ms=${retryElapsedMs} status=${retryRes.status}`)
+      if (retryRes.ok) {
+        const retryData = await retryRes.json()
+        recordLlmCall('llm_retry', retryElapsedMs, retryRes.status, retryData)
+        const retryParts = retryData.candidates?.[0]?.content?.parts ?? []
+        const retryResolved = await resolveModelParts(retryParts)
+        if (retryResolved) return retryResolved
+        console.error('[ai-assistant] Empty retry response. finishReason:', retryData.candidates?.[0]?.finishReason, 'parts:', JSON.stringify(retryParts))
       } else {
-        const fallbackErr = await fallbackRes.text().catch(() => '')
-        console.error(`[ai-assistant][${cid}] compact fallback failed status=${fallbackRes.status} body=${fallbackErr.slice(0, 180)}`)
+        recordLlmCall('llm_retry', retryElapsedMs, retryRes.status)
       }
-    }
 
-    return { type: 'text', text: 'I heard you, but I hit a brief response issue. Please continue and I will keep going.' }
+      const latestUserText = [...contents]
+        .reverse()
+        .find((turn) => turn.role === 'user')
+        ?.parts.flatMap((part) => 'text' in part && typeof part.text === 'string' ? [part.text.trim()] : [])
+        .find((part) => part.length > 0)
+
+      // Last-resort reliability pass: no tools, compact prompt, latest user turn only.
+      // This avoids occasional empty tool-call responses from Gemini under load.
+      if (latestUserText) {
+        const fallbackBody = {
+          system_instruction: {
+            parts: [{
+              text: 'You are the Casa Tabor assistant. Respond helpfully in 1-3 concise sentences. If data is missing, ask one clear follow-up question.',
+            }],
+          },
+          contents: [{ role: 'user', parts: [{ text: latestUserText }] }],
+          generation_config: { temperature: 0.2, max_output_tokens: 320 },
+        }
+        const fallbackStartMs = Date.now()
+        const fallbackRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(fallbackBody) }
+        )
+        const fallbackElapsedMs = Date.now() - fallbackStartMs
+        console.log(`[ai-assistant][${cid}] stage=llm_fallback ms=${fallbackElapsedMs} status=${fallbackRes.status}`)
+        if (fallbackRes.ok) {
+          const fallbackData = await fallbackRes.json()
+          recordLlmCall('llm_fallback', fallbackElapsedMs, fallbackRes.status, fallbackData)
+          const fallbackParts = fallbackData.candidates?.[0]?.content?.parts ?? []
+          const fallbackText = fallbackParts
+            .flatMap((part: { text?: string }) => typeof part.text === 'string' && part.text.trim() ? [part.text.trim()] : [])
+            .join('\n')
+          if (fallbackText) {
+            console.log(`[ai-assistant][${cid}] recovered empty response via compact fallback`)
+            return { type: 'text', text: fallbackText }
+          }
+        } else {
+          recordLlmCall('llm_fallback', fallbackElapsedMs, fallbackRes.status)
+          const fallbackErr = await fallbackRes.text().catch(() => '')
+          console.error(`[ai-assistant][${cid}] compact fallback failed status=${fallbackRes.status} body=${fallbackErr.slice(0, 180)}`)
+        }
+      }
+
+      return { type: 'text', text: 'I heard you, but I hit a brief response issue. Please continue and I will keep going.' }
+    }
+    warnIfSlow('llm_primary', llmPrimaryMs, STAGE_SLO.llmPrimaryMs)
+    recordLlmCall('llm_primary', llmPrimaryMs, res.status)
+    if (!res.ok) {
+      const errText = await res.text()
+      const isQuota = res.status === 429 || errText.includes('RESOURCE_EXHAUSTED')
+      return { type: 'error', code: isQuota ? 'quota_exceeded' : 'llm_error', message: errText.slice(0, 200) }
+    }
+    return { type: 'error', code: 'llm_error', message: 'Primary LLM call failed without details' }
   }
 
   function buildDisplayText(name: string, args: Record<string, unknown>): string {
@@ -1150,10 +1232,10 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   const logUsage = () => {
     sb.from('ai_usage_log').insert({
       function_name: 'ai-assistant',
-      provider: config.provider,
-      model: config.model,
-      input_tokens: 0,
-      output_tokens: 0,
+      provider: llmTelemetry.provider,
+      model: llmTelemetry.model,
+      input_tokens: llmTelemetry.input_tokens,
+      output_tokens: llmTelemetry.output_tokens,
       cached: false,
     }).then(() => {}).catch(() => {})
   }
@@ -1163,11 +1245,25 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     const requestTotalMs = Date.now() - requestStartMs
     console.log(`[ai-assistant][${cid}] stage=request_total ms=${requestTotalMs} result_type=${String(result?.type ?? 'unknown')}`)
     appendServerTrace(
+      'server_ai_assistant_llm_usage',
+      `calls=${llmTelemetry.llm_calls} ms=${llmTelemetry.llm_inference_ms} input=${llmTelemetry.input_tokens} output=${llmTelemetry.output_tokens}`,
+      {
+        ...llmTelemetry,
+        request_total_ms: requestTotalMs,
+        context_load_ms: contextLoadMs,
+      },
+    )
+    appendServerTrace(
       'server_ai_assistant_result',
       `type=${String(result?.type ?? 'unknown')} ms=${requestTotalMs}`,
       {
         result_type: String(result?.type ?? 'unknown'),
         request_ms: requestTotalMs,
+        llm_calls: llmTelemetry.llm_calls,
+        llm_inference_ms: llmTelemetry.llm_inference_ms,
+        input_tokens: llmTelemetry.input_tokens,
+        output_tokens: llmTelemetry.output_tokens,
+        total_tokens: llmTelemetry.total_tokens,
         response_text: typeof (result as { text?: unknown })?.text === 'string'
           ? String((result as { text?: string }).text).slice(0, 1200)
           : null,
@@ -1185,7 +1281,15 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       console.log(`[ai-assistant][${cid}] ? UNKNOWN_TYPE: ${String(result?.type ?? 'null')}`)
     }
     
-    return new Response(JSON.stringify({ ...result, correlation_id: cid }), {
+    return new Response(JSON.stringify({
+      ...result,
+      correlation_id: cid,
+      telemetry: {
+        ...llmTelemetry,
+        request_total_ms: requestTotalMs,
+        context_load_ms: contextLoadMs,
+      },
+    }), {
       headers: { ...CORS, 'content-type': 'application/json' },
     })
   } catch (e) {

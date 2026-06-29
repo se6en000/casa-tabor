@@ -1155,7 +1155,10 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     }])
   }, [appendMessages])
 
-  const sendCurrentInput = useCallback(async (text: string) => {
+  const sendCurrentInput = useCallback(async (
+    text: string,
+    timing?: { speechFinalizedAtMs?: number | null },
+  ) => {
     const trimmed = text.trim()
     if (!trimmed) {
       appendDebugLog('voice_send_skipped_empty')
@@ -1183,11 +1186,16 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       disableFastGroceryLane: isWakeAssistantMode,
       traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
       hasPendingToolAction: !!pendingConfirmRef.current || !!pendingCancelRef.current,
+      inputSource: 'voice',
+      speechFinalizedAtMs: timing?.speechFinalizedAtMs ?? undefined,
     })
     return true
   }, [loading, send, markUserInteraction, clearAutoSendTimer, appendDebugLog, transitionTurnState, isWakeAssistantMode, session?.id])
 
-  const queueOrSendVoiceInput = useCallback(async (text: string) => {
+  const queueOrSendVoiceInput = useCallback(async (
+    text: string,
+    timing?: { speechFinalizedAtMs?: number | null },
+  ) => {
     const trimmed = text.trim()
     if (!trimmed) return
     if (loading || voiceSendInFlightRef.current) {
@@ -1198,7 +1206,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       )
       return
     }
-    const sent = await sendCurrentInput(trimmed)
+    const sent = await sendCurrentInput(trimmed, timing)
     if (!sent) {
       pendingVoiceQueueRef.current.push(trimmed)
       appendDebugLog('voice_requeued', `depth=${pendingVoiceQueueRef.current.length} ${trimmed.slice(0, 110)}`)
@@ -1224,7 +1232,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     if (wantsAccept) {
       appendDebugLog('phase2_asr_confirmation_accepted', pending.heardText)
       if (source === 'voice') {
-        void queueOrSendVoiceInput(pending.heardText)
+        void queueOrSendVoiceInput(pending.heardText, { speechFinalizedAtMs: performance.now() })
       } else {
         turnIdRef.current = `turn-${Date.now().toString(36)}`
         transitionTurnState('thinking', 'typed_asr_confirmation_accepted')
@@ -1232,6 +1240,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
           disableFastGroceryLane: isWakeAssistantMode,
           traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
           hasPendingToolAction: !!pendingConfirmRef.current || !!pendingCancelRef.current,
+          inputSource: 'typed',
         })
       }
       return true
@@ -1252,7 +1261,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
 
     appendDebugLog('phase2_asr_confirmation_corrected', `${pending.heardText} -> ${trimmed}`)
     if (source === 'voice') {
-      void queueOrSendVoiceInput(trimmed)
+      void queueOrSendVoiceInput(trimmed, { speechFinalizedAtMs: performance.now() })
     } else {
       turnIdRef.current = `turn-${Date.now().toString(36)}`
       transitionTurnState('thinking', 'typed_asr_confirmation_corrected')
@@ -1260,6 +1269,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         disableFastGroceryLane: isWakeAssistantMode,
         traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
         hasPendingToolAction: !!pendingConfirmRef.current || !!pendingCancelRef.current,
+        inputSource: 'typed',
       })
     }
     return true
@@ -1299,6 +1309,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         }
         interimRef.current = finalized
         setInput(finalized)
+        const speechFinalizedAtMs = performance.now()
         
         // Use the BEST confidence observed during this entire recognition sequence
         // This handles cases where bridge sends confidence inconsistently
@@ -1315,6 +1326,10 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         
         const normalizedIntent = normalizeIntentPhrase(finalized)
         if (shouldRequestAsrConfirmation(finalized, capturedConfidence)) {
+          appendDebugLog('voice_stage_ms', 'stage=speech_to_phase2 elapsed=0', {
+            lane: 'voice',
+            payload: { stage: 'speech_to_phase2', elapsed_ms: 0, text: finalized, confidence: capturedConfidence },
+          })
           appendDebugLog('phase2_asr_confidence_check', `text=${finalized} conf=${capturedConfidence?.toFixed(2)}`)
           promptForAsrConfirmation(finalized, capturedConfidence ?? 0)
           interimRef.current = ''
@@ -1378,6 +1393,10 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         const isKnownOneWordIntent = oneWordIntentKeywords.has(finalized.toLowerCase().trim())
         
         if (!isKnownOneWordIntent && isLikelyNoiseTranscript(msg, capturedConfidence)) {
+          appendDebugLog('voice_stage_ms', 'stage=speech_to_noise_filter elapsed=0', {
+            lane: 'voice',
+            payload: { stage: 'speech_to_noise_filter', elapsed_ms: 0, text: finalized, confidence: capturedConfidence },
+          })
           appendDebugLog('voice_noise_filtered', msg.slice(0, 140))
           interimRef.current = ''
           queueMicrotask(() => setInput(''))
@@ -1396,7 +1415,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         clearAutoSendTimer()
         autoSendTimerRef.current = setTimeout(() => {
           autoSendTimerRef.current = null
-          queueOrSendVoiceInput(finalized)
+          void queueOrSendVoiceInput(finalized, { speechFinalizedAtMs })
           interimRef.current = ''
         }, TRANSCRIPT_SETTLE_BEFORE_SEND_MS)
       } else {
@@ -1830,6 +1849,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       disableFastGroceryLane: isWakeAssistantMode,
       traceId: traceSessionIdRef.current ?? session?.id ?? undefined,
       hasPendingToolAction: !!pendingConfirmRef.current || !!pendingCancelRef.current,
+      inputSource: 'typed',
     })
   }, [
     input,

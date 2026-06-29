@@ -36,6 +36,17 @@ type AIAssistantResponse = {
   tool?: unknown
   args?: unknown
   display_text?: string
+  telemetry?: {
+    provider?: string
+    model?: string
+    llm_calls?: number
+    llm_inference_ms?: number
+    input_tokens?: number
+    output_tokens?: number
+    total_tokens?: number
+    request_total_ms?: number
+    context_load_ms?: number
+  }
 }
 
 const GOODBYE_PHRASES = /\b(thank you|thanks|goodbye|bye|that'?s all|all done|good night|ciao|close session|new session|start over|end session)\b/i
@@ -66,6 +77,8 @@ type SendOptions = {
   disableFastGroceryLane?: boolean
   traceId?: string
   hasPendingToolAction?: boolean
+  inputSource?: 'voice' | 'typed'
+  speechFinalizedAtMs?: number
 }
 
 function isRetriableAssistantError(error: unknown): boolean {
@@ -135,6 +148,21 @@ function emitAssistantDebug(event: string, detail?: string, meta?: AssistantDebu
 
 function emitSloBreach(stage: string, elapsedMs: number, budgetMs: number) {
   emitAssistantDebug('assistant_slo_breach', `${stage} elapsed=${elapsedMs} budget=${budgetMs}`)
+}
+
+function emitLatencyStage(stage: string, elapsedMs: number, meta?: AssistantDebugMeta) {
+  emitAssistantDebug(
+    'assistant_latency_stage_ms',
+    `stage=${stage} elapsed=${elapsedMs}`,
+    {
+      ...meta,
+      payload: {
+        stage,
+        elapsed_ms: elapsedMs,
+        ...(meta?.payload && typeof meta.payload === 'object' ? meta.payload as Record<string, unknown> : {}),
+      },
+    },
+  )
 }
 
 function percentile(values: number[], p: number): number {
@@ -677,11 +705,19 @@ export function useAIAssistant(ctx: AssistantContext) {
   ) => {
     const turnStart = performance.now()
     const trimmedText = text.trim()
+    const inputSource = options?.inputSource ?? 'typed'
+    const speechFinalizedAtMs = typeof options?.speechFinalizedAtMs === 'number' ? options.speechFinalizedAtMs : null
     emitAssistantDebug(
       'send_start',
       `page=${ctxRef.current.page} chars=${trimmedText.length} text=${trimmedText.slice(0, 140)}`,
-      { payload: { page: ctxRef.current.page, chars: trimmedText.length, text: trimmedText.slice(0, 600) } },
+      { payload: { page: ctxRef.current.page, chars: trimmedText.length, text: trimmedText.slice(0, 600), inputSource } },
     )
+    if (inputSource === 'voice' && speechFinalizedAtMs !== null) {
+      emitLatencyStage('speech_to_send', Math.max(0, Math.round(turnStart - speechFinalizedAtMs)), {
+        lane: 'voice',
+        payload: { inputSource },
+      })
+    }
     // Check for goodbye phrase → end session
     const looksLikeShortGoodbye = GOODBYE_PHRASES.test(trimmedText) && trimmedText.split(/\s+/).length <= 6
     if (!options?.skipGoodbyeCheck && looksLikeShortGoodbye) {
@@ -704,10 +740,16 @@ export function useAIAssistant(ctx: AssistantContext) {
       options?.hasPendingToolAction,
     )
     if (oneWordResult) {
+      if (inputSource === 'voice' && speechFinalizedAtMs !== null) {
+        emitLatencyStage('speech_to_phase1', Math.max(0, Math.round(performance.now() - speechFinalizedAtMs)), {
+          lane: 'phase1',
+          payload: { inputSource, action: oneWordResult.action },
+        })
+      }
       emitAssistantDebug(
         'phase1_one_word_matched',
         `text=${trimmedText.slice(0, 60)} action=${oneWordResult.action} response=${oneWordResult.response.slice(0, 80)}`,
-        { payload: { text: trimmedText, action: oneWordResult.action, response: oneWordResult.response } }
+        { payload: { text: trimmedText, action: oneWordResult.action, response: oneWordResult.response, inputSource } }
       )
       const assistantMsg: AIMessage = {
         id: genId(),
@@ -1016,10 +1058,23 @@ export function useAIAssistant(ctx: AssistantContext) {
       const currentMessages = [...messagesRef.current, userMsg]
       const allMsgsForApi = currentMessages.map(m => ({ role: m.role, content: m.content }))
       const aiCorrelationId = buildCorrelationId(userMsg.id, activeSession.id)
+      const llmInvokeStart = performance.now()
+      emitLatencyStage('send_to_llm_invoke', Math.max(0, Math.round(llmInvokeStart - turnStart)), {
+        correlationId: aiCorrelationId,
+        lane: 'llm',
+        payload: { inputSource },
+      })
+      if (inputSource === 'voice' && speechFinalizedAtMs !== null) {
+        emitLatencyStage('speech_to_llm_invoke', Math.max(0, Math.round(llmInvokeStart - speechFinalizedAtMs)), {
+          correlationId: aiCorrelationId,
+          lane: 'llm',
+          payload: { inputSource },
+        })
+      }
       emitAssistantDebug(
         'assistant_invoke_start',
         `messages=${allMsgsForApi.length} corr=${aiCorrelationId.slice(0, 28)}`,
-        { correlationId: aiCorrelationId, lane: 'llm', payload: { messages: allMsgsForApi.length } },
+        { correlationId: aiCorrelationId, lane: 'llm', payload: { messages: allMsgsForApi.length, inputSource } },
       )
 
       const invokeAssistant = async (timeoutMs: number) => {
@@ -1094,11 +1149,28 @@ export function useAIAssistant(ctx: AssistantContext) {
       }
       if (invokeError) throw invokeError
       if (!data) throw new Error('AI request returned no data')
+      const llmResponseMs = Math.max(0, Math.round(performance.now() - llmInvokeStart))
+      emitLatencyStage('llm_response', llmResponseMs, {
+        correlationId: aiCorrelationId,
+        lane: 'llm',
+        payload: { inputSource },
+      })
       emitAssistantDebug(
         'assistant_invoke_result',
         `type=${data.type ?? 'unknown'} code=${data.code ?? 'none'} tool=${typeof data.tool === 'string' ? data.tool : 'none'}`,
         { correlationId: aiCorrelationId, lane: 'llm', payload: { type: data.type, code: data.code, tool: data.tool } },
       )
+      if (data.telemetry) {
+        emitAssistantDebug(
+          'assistant_llm_usage',
+          `calls=${data.telemetry.llm_calls ?? 0} ms=${data.telemetry.llm_inference_ms ?? 0} input=${data.telemetry.input_tokens ?? 0} output=${data.telemetry.output_tokens ?? 0}`,
+          {
+            correlationId: aiCorrelationId,
+            lane: 'llm',
+            payload: data.telemetry,
+          },
+        )
+      }
 
       let assistantMsg: AIMessage
 
@@ -1202,6 +1274,16 @@ export function useAIAssistant(ctx: AssistantContext) {
         if (activeSession) saveMessages(activeSession.id, updated)
         return updated
       })
+      const responseReadyAt = performance.now()
+      if (typeof window !== 'undefined') {
+        window.requestAnimationFrame(() => {
+          emitLatencyStage('response_to_display', Math.max(0, Math.round(performance.now() - responseReadyAt)), {
+            correlationId: aiCorrelationId,
+            lane: hasToolAction ? 'tool_action' : 'llm',
+            payload: { inputSource, hasToolAction },
+          })
+        })
+      }
       const turnDuration = Math.round(performance.now() - turnStart)
       emitAssistantDebug('assistant_turn_ms', `lane=llm elapsed=${turnDuration}`, { correlationId: aiCorrelationId, lane: 'llm', payload: { elapsed: turnDuration } })
       recordLatencyMetric('llm', turnDuration)

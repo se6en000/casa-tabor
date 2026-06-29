@@ -56,6 +56,8 @@ const REMOTE_CRITICAL_EVENTS = new Set([
   'assistant_assistant_invoke_result',
   'assistant_assistant_turn_ms',
   'assistant_assistant_stage_ms',
+  'assistant_assistant_latency_stage_ms',
+  'assistant_assistant_llm_usage',
   'assistant_simple_command_detected',
   'assistant_simple_command_success',
   'assistant_simple_command_error',
@@ -63,6 +65,7 @@ const REMOTE_CRITICAL_EVENTS = new Set([
   'message',
   'trace_context',
   'trace_closed',
+  'voice_stage_ms',
 ])
 
 let queue: RemoteQueueItem[] = []
