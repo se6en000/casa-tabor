@@ -2526,6 +2526,74 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   )
 }
 
+/* ── Markdown renderer (lightweight, no external dep) ───────── */
+
+function renderMarkdown(text: string): React.ReactNode {
+  // Split on double-newline (paragraphs) or single newline
+  const lines = text.split('\n')
+  const nodes: React.ReactNode[] = []
+  let listItems: string[] = []
+
+  const flushList = (key: string) => {
+    if (listItems.length === 0) return
+    nodes.push(
+      <ul key={key} className="list-disc list-outside pl-4 space-y-0.5 my-1">
+        {listItems.map((item, i) => (
+          <li key={i}>{inlineFormat(item)}</li>
+        ))}
+      </ul>
+    )
+    listItems = []
+  }
+
+  const inlineFormat = (raw: string): React.ReactNode => {
+    // Bold **text**, then return spans
+    const parts = raw.split(/(\*\*[^*]+\*\*)/g)
+    if (parts.length === 1) return raw
+    return parts.map((p, i) =>
+      p.startsWith('**') && p.endsWith('**')
+        ? <strong key={i}>{p.slice(2, -2)}</strong>
+        : p
+    )
+  }
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim()
+
+    // Blank line → flush list, add spacing
+    if (trimmed === '') {
+      flushList(`list-${idx}`)
+      return
+    }
+
+    // Bullet: lines starting with - / * / • / numbered (1. 2. etc)
+    const bulletMatch = trimmed.match(/^[-*•]\s+(.+)$/) || trimmed.match(/^\d+\.\s+(.+)$/)
+    if (bulletMatch) {
+      listItems.push(bulletMatch[1])
+      return
+    }
+
+    // Header: ### or ## or #
+    const headerMatch = trimmed.match(/^(#{1,3})\s+(.+)$/)
+    if (headerMatch) {
+      flushList(`list-${idx}`)
+      const level = headerMatch[1].length
+      const cls = level === 1 ? 'font-bold text-base mt-2 mb-0.5'
+                : level === 2 ? 'font-semibold text-sm mt-1.5 mb-0.5'
+                : 'font-semibold text-xs mt-1 mb-0.5 text-casa-muted'
+      nodes.push(<p key={idx} className={cls}>{inlineFormat(headerMatch[2])}</p>)
+      return
+    }
+
+    // Normal text line
+    flushList(`list-${idx}`)
+    nodes.push(<p key={idx} className="leading-snug">{inlineFormat(trimmed)}</p>)
+  })
+
+  flushList('list-final')
+  return <div className="space-y-1">{nodes}</div>
+}
+
 /* ── Message Bubble ─────────────────────────────────────────── */
 
 function MessageBubble({ msg, isLatest: _isLatest, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingConfirm, registerPendingCancel }: {
@@ -2587,7 +2655,7 @@ function MessageBubble({ msg, isLatest: _isLatest, onConfirmToolAction, onUndoTo
           <img src={msg.imageDataUrl} alt="Attached" className="max-h-40 w-auto rounded-lg mb-2 object-cover" />
         )}
         {msg.content !== '(see attached image)' && msg.content && (
-          <p dangerouslySetInnerHTML={{ __html: msg.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+          <div className="text-sm">{renderMarkdown(msg.content)}</div>
         )}
 
         {/* Tool action confirmation card */}
