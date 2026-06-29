@@ -879,9 +879,15 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         ]
 
         // Second call for final answer
+        // Use a prompt variant that instructs the LLM to propose as a tool call, not text
+        const secondaryPrompt = systemInstruction.replace(
+          'For each write proposal, include "Will change", "Will preserve", and "Needs confirmation".',
+          'For each write proposal, IMMEDIATELY call the appropriate write tool (update_event, delete_event, create_event, or add_grocery_items). Do not describe in text - call the tool.'
+        )
+        const secondaryBody = { ...body, system_instruction: { parts: [{ text: secondaryPrompt }] }, contents: newContents }
         const res2 = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...body, contents: newContents }) }
+          { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(secondaryBody) }
         )
         console.log(`[ai-assistant][${cid}] stage=llm_secondary ms=${Date.now() - llmStartMs} status=${res2.status}`)
         if (!res2.ok) return { type: 'error', code: 'llm_error', message: 'Second LLM call failed' }
