@@ -922,11 +922,13 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       if (!query) return { results: [], count: 0, error: 'Missing query' }
 
       // Server-side math interceptor: catch tip/percentage/arithmetic queries
-      const mathIntercept = query.match(/^[\s\d\.\+\-\*\/\%\(\)x×÷]+$/) ||
-        /\b(\d+\.?\d*)\s*%\s*(of|tip|off|on)\s+\$?(\d+\.?\d*)/i.test(query) ||
-        /\bwhat\s+is\s+[\d\s\+\-\*\/\.]+\b/i.test(query)
+      const mathIntercept =
+        /^[\s\d\.\+\-\*\/x×÷()]+$/.test(query) ||
+        /\b\d+\s*(percent|%)\s*(tip|off|of|on)\s+\$?\d+/i.test(query) ||
+        /\btip\b.*\$?\d+/i.test(query) ||
+        /\b(what\s+is|calc(ulate)?|compute|solve)\b.{0,30}\b\d+\b.{0,20}\b\d+\b/i.test(query) ||
+        /\b\d+\s*(divided\s+by|times|plus|minus|multiplied)\s*\d+/i.test(query)
       if (mathIntercept) {
-        // Don't call Brave — signal the LLM to compute directly
         return { results: [], count: 0, math_query: true, hint: 'This is a math/calculation query. Answer directly from reasoning — no web search needed.' }
       }
 
