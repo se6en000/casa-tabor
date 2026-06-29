@@ -928,6 +928,7 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   const turnIdRef = useRef<string>('turn-idle')
   const turnStateRef = useRef<VoiceTurnState>('idle')
   const closeReasonRef = useRef('unknown')
+  const previousOpenRef = useRef(false)  // Track previous open state to detect transitions
   const [uiFeedback, setUiFeedback] = useState<'none' | 'confirm' | 'cancel'>('none')
   
   // Phase 2: ASR Confidence confirmation modal
@@ -1425,16 +1426,10 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       : `${latest.role}:${latest.content.slice(0, 120)}`
     queueMicrotask(() => {
       appendDebugLog('message', summary)
-      if (latest.role === 'assistant') {
-        // Only transition to responding if we're in a state that allows it
-        // (thinking, endpointed, or already responding)
-        const current = turnStateRef.current
-        if (['thinking', 'endpointed', 'responding'].includes(current)) {
-          transitionTurnState('responding', 'assistant_message_received')
-        }
-      }
+      // Don't force state transitions here - let the natural flow handle it
+      // The message will already be in the UI, and the conversation will continue naturally
     })
-  }, [open, messages, appendDebugLog, transitionTurnState])
+  }, [open, messages, appendDebugLog])
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -1444,7 +1439,11 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
   }, [open, page, appendDebugLog])
 
   useEffect(() => {
-    if (open) {
+    const isOpeningNow = open && !previousOpenRef.current
+    const isClosingNow = !open && previousOpenRef.current
+
+    if (isOpeningNow) {
+      // Drawer just opened - initialize trace session
       beginTraceSession()
       autoDismissingRef.current = false
       wakeSessionActiveRef.current = Boolean(wakeSessionNonce)
@@ -1461,14 +1460,18 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       transitionTurnState('wake_armed', wakeSessionNonce ? 'wake_open' : 'manual_open')
       if (wakeSessionNonce) trackVoiceMetric('wake_session_started')
       markConversationProgress(false)
-      if (IS_SAFE_MODE) return
+      if (IS_SAFE_MODE) {
+        previousOpenRef.current = open
+        return
+      }
       // Start connecting immediately — don't wait for animation.
       // Bridge buffers audio from /start so by the time the user speaks it's ready.
       speech.start()
       transitionTurnState('listening', 'speech_start')
       // Focus textarea slightly after animation settles (UI only, doesn't affect mic)
       setTimeout(() => textareaRef.current?.focus(), 300)
-    } else {
+    } else if (isClosingNow) {
+      // Drawer just closed - teardown trace session
       const outcome = traceHasSendRef.current
         ? 'completed'
         : traceHasFinalRef.current
@@ -1512,6 +1515,9 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
       freshStartedRef.current = null  // allow fresh start next time this event is opened
       traceSessionIdRef.current = null
     }
+    
+    // Always update ref at end to track state for next render
+    previousOpenRef.current = open
   }, [open, markConversationProgress, wakeSessionNonce, clearAutoSendTimer, beginTraceSession, appendDebugLog, transitionTurnState]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
