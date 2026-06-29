@@ -23,6 +23,7 @@ import { enqueueRemoteVoiceTrace } from '../../lib/remoteVoiceTrace'
 
 const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s all|all done|never mind|nevermind|stop)\b/i
 const STRONG_CONFIRM_PHRASES = new Set([
+  // Universal confirms
   'yes',
   'yeah',
   'yep',
@@ -38,8 +39,46 @@ const STRONG_CONFIRM_PHRASES = new Set([
   'absolutely',
   'sure',
   'proceed',
+  'uh huh',
+  'mm hmm',
+  'take it',
+  'go for it',
+  'yup',
+  
+  // Action-specific confirms (when shown in red on confirmation UI)
+  // For delete: "Delete this?"
+  'delete',
+  'remove',
+  'trash',
+  'discard',
+  'clear',
+  'wipe',
+  'erase',
+  
+  // For update/move: "Move to X?"
+  'move',
+  'change',
+  'reschedule',
+  'update',
+  'go',
+  'set',
+  'make it',
+  'put it',
+  
+  // For add/create: "Add to calendar?"
+  'add',
+  'create',
+  'make',
+  'schedule',
+  'book',
+  
+  // For send: "Send this?"
+  'send',
+  'submit',
+  'post',
 ])
 const STRONG_CANCEL_PHRASES = new Set([
+  // Universal cancels
   'cancel',
   'do not',
   "don't",
@@ -48,6 +87,31 @@ const STRONG_CANCEL_PHRASES = new Set([
   'nevermind',
   'undo',
   'stop',
+  'no',
+  'nope',
+  'uh uh',
+  'nah',
+  
+  // Action-specific rejects
+  // For delete: "Keep it instead"
+  'keep it',
+  'keep',
+  'leave it',
+  'leave',
+  'don\'t delete',
+  'save it',
+  'save',
+  
+  // For move/reschedule: "Keep the old time"
+  'keep the time',
+  'leave it alone',
+  'forget it',
+  'skip it',
+  'skip',
+  
+  // General emphatic rejects
+  'not now',
+  'later',
 ])
 
 /** DeepGram STT bridge — HTTP for probe/display, WS for streaming */
@@ -1108,8 +1172,16 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
         }
         // Check if this is a known one-word intent (should bypass noise filter)
         const oneWordIntentKeywords = new Set([
-          'yes', 'yeah', 'yep', 'ok', 'okay', 'confirm',
-          'no', 'nope', 'cancel', 'abort', 'skip', 'dont',
+          // Confirms
+          'yes', 'yeah', 'yep', 'ok', 'okay', 'confirm', 'sure', 'uh huh', 'mm hmm', 'yup',
+          'delete', 'remove', 'trash', 'discard', 'clear', 'wipe', 'erase',
+          'move', 'change', 'reschedule', 'update', 'go', 'set', 'make', 'put',
+          'add', 'create', 'schedule', 'book',
+          'send', 'submit', 'post',
+          // Cancels
+          'no', 'nope', 'cancel', 'abort', 'skip', 'dont', 'nah', 'uh uh',
+          'keep', 'leave', 'stop',
+          // Exits
           'quit', 'exit', 'close', 'goodbye', 'bye', 'done'
         ])
         const isKnownOneWordIntent = oneWordIntentKeywords.has(finalized.toLowerCase().trim())

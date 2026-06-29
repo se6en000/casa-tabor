@@ -471,7 +471,7 @@ function parseOneWordIntent(
     const word = words[0]
 
     // YES / CONFIRM - only if NO pending action (let short-circuit handler deal with pending actions)
-    if (['yes', 'yeah', 'yep', 'ok', 'okay', 'confirm', 'sure', 'yup', 'aye', 'absolutely', 'affirmative', 'right'].includes(word)) {
+    if (['yes', 'yeah', 'yep', 'ok', 'okay', 'confirm', 'sure', 'yup', 'aye', 'absolutely', 'affirmative', 'right', 'uh huh', 'mm hmm'].includes(word)) {
       if (!hasPendingToolAction) {
         return {
           response: 'Done.',
@@ -483,7 +483,7 @@ function parseOneWordIntent(
     }
 
     // NO / CANCEL - only if NO pending action
-    if (['no', 'nope', 'cancel', 'abort', 'skip', 'nevermind', 'dont', 'never', 'nah'].includes(word)) {
+    if (['no', 'nope', 'cancel', 'abort', 'skip', 'nevermind', 'dont', 'never', 'nah', 'uh uh'].includes(word)) {
       if (!hasPendingToolAction) {
         return {
           response: 'Cancelled. What else?',
@@ -492,6 +492,47 @@ function parseOneWordIntent(
       }
       // If pending action, don't intercept - let short-circuit handler below run
       return null
+    }
+
+    // ACTION-SPECIFIC KEYWORDS (for pending confirmations)
+    // Delete: delete, remove, trash, discard, clear, wipe, erase
+    if (['delete', 'remove', 'trash', 'discard', 'clear', 'wipe', 'erase'].includes(word)) {
+      if (!hasPendingToolAction) {
+        return { response: 'Nothing to delete.', action: 'skip' }
+      }
+      return null // Let short-circuit handler process
+    }
+
+    // Move/Update: move, change, reschedule, update, go, set, make, put
+    if (['move', 'change', 'reschedule', 'update', 'go', 'set', 'make', 'put'].includes(word)) {
+      if (!hasPendingToolAction) {
+        return { response: 'OK.', action: 'skip' }
+      }
+      return null // Let short-circuit handler process
+    }
+
+    // Add/Create: add, create, schedule, book
+    if (['add', 'create', 'schedule', 'book'].includes(word)) {
+      if (!hasPendingToolAction) {
+        return { response: 'Ready to add. What would you like?', action: 'skip' }
+      }
+      return null // Let short-circuit handler process
+    }
+
+    // Send/Submit: send, submit, post
+    if (['send', 'submit', 'post'].includes(word)) {
+      if (!hasPendingToolAction) {
+        return { response: 'Nothing to send.', action: 'skip' }
+      }
+      return null // Let short-circuit handler process
+    }
+
+    // Keep/Leave (for cancelling delete/remove actions)
+    if (['keep', 'leave'].includes(word)) {
+      if (!hasPendingToolAction) {
+        return { response: 'OK, keeping it.', action: 'skip' }
+      }
+      return null // Let short-circuit handler process
     }
 
     // QUIT / EXIT / STOP
