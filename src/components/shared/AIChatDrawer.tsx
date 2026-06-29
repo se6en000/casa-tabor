@@ -1426,7 +1426,12 @@ export default function AIChatDrawer({ open, onClose, anchor, launchRequest, wak
     queueMicrotask(() => {
       appendDebugLog('message', summary)
       if (latest.role === 'assistant') {
-        transitionTurnState('responding', 'assistant_message_received')
+        // Only transition to responding if we're in a state that allows it
+        // (thinking, endpointed, or already responding)
+        const current = turnStateRef.current
+        if (['thinking', 'endpointed', 'responding'].includes(current)) {
+          transitionTurnState('responding', 'assistant_message_received')
+        }
       }
     })
   }, [open, messages, appendDebugLog, transitionTurnState])
