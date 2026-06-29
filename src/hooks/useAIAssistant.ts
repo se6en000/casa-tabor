@@ -1135,7 +1135,10 @@ export function useAIAssistant(ctx: AssistantContext) {
         assistantMsg.content.slice(0, 240),
         { correlationId: aiCorrelationId, lane: data.type === 'tool_action' ? 'tool_action' : 'llm', payload: { content: assistantMsg.content, hasToolAction, dataType: data.type } },
       )
-      console.log(`[useAIAssistant][${aiCorrelationId.slice(0,16)}] response type=${data.type} hasToolAction=${hasToolAction} tool=${assistantMsg.toolAction?.tool ?? 'none'}`, assistantMsg)
+      // Only log at API boundaries, not on every render
+      if (data.type === 'tool_action') {
+        console.log(`[useAIAssistant] ✓ tool_action response: ${assistantMsg.toolAction?.tool}`)
+      }
       setMessages(prev => {
         const updated = [...prev, assistantMsg]
         if (activeSession) saveMessages(activeSession.id, updated)

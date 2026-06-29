@@ -2401,13 +2401,9 @@ function MessageBubble({ msg, isLatest: _isLatest, onConfirmToolAction, onUndoTo
 
   useEffect(() => {
     if (hasPendingAction) {
-      console.log(`[MessageBubble] Registering callbacks for ${msg.id}`, { tool: ta?.tool, hasPendingAction })
+      console.log(`[MessageBubble] 🎯 Register callbacks: ${msg.id.slice(0,8)} tool=${ta?.tool}`)
       registerPendingConfirm(doConfirm)
       registerPendingCancel(doCancel)
-      console.debug(`[MessageBubble] Registered confirm/cancel callbacks for message ${msg.id}`, { hasPendingAction, ta_status: ta?.status })
-    } else {
-      // Clear callbacks when action is no longer pending
-      console.debug(`[MessageBubble] NOT registering callbacks`, { hasPendingAction, ta_status: ta?.status, msg_id: msg.id })
     }
   }, [hasPendingAction, doConfirm, doCancel, msg.id, ta?.status]) // eslint-disable-line react-hooks/exhaustive-deps
 
