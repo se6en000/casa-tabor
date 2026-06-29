@@ -949,11 +949,15 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   // Call Gemini with function calling — up to 2 rounds (tool call → result → final answer)
   async function callGeminiWithTools(contents: GeminiContent[]): Promise<{ type: string; [key: string]: unknown }> {
     const llmStartMs = Date.now()
+    // For Gemini thinking models (2.5+, 3.5+), thinking tokens eat into max_output_tokens.
+    // Cap thinking budget to leave ample room for actual response text.
+    const isThinkingModel = model.includes('2.5') || model.includes('3.5')
     const body = {
       system_instruction: { parts: [{ text: systemInstruction }] },
       contents,
       tools,
-      generation_config: { temperature: 0.4, max_output_tokens: 1024 },
+      generation_config: { temperature: 0.4, max_output_tokens: 4096 },
+      ...(isThinkingModel ? { thinking_config: { thinking_budget: 512 } } : {}),
       tool_config: { function_calling_config: { mode: 'AUTO' } },
     }
 
