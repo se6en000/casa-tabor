@@ -649,7 +649,14 @@ export function useAIAssistant(ctx: AssistantContext) {
   } | null>(null)
   useEffect(() => { sessionRef.current = session }, [session])
   useEffect(() => { messagesRef.current = messages }, [messages])
-  useEffect(() => { ctxRef.current = ctx })
+  useEffect(() => { 
+    ctxRef.current = ctx
+    // Phase 3: Apply any tracked context reference to the context ref
+    // (so it's picked up on the next LLM invoke)
+    if (lastContextReferenceRef.current) {
+      ctxRef.current.lastContextReference = lastContextReferenceRef.current
+    }
+  })
 
   // Sync messages from session when session loads — but never overwrite messages
   // already accumulated (e.g. user spoke before sessionLoading resolved)
