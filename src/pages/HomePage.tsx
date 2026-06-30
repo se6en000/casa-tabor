@@ -22,6 +22,20 @@ import { LeaveByCard } from '../components/shared/LeaveByCard'
 
 const SHARED_GOLD = '#C9A96E'
 
+function cleanEventTitle(title: string): string {
+  const pipeIdx = title.indexOf(' | ')
+  return pipeIdx !== -1 ? title.slice(pipeIdx + 3) : title
+}
+
+function mapsUrlForEvent(event: EventWithDetails): string | null {
+  const mapsQuery = event.address
+    ? (event.location_name ? `${event.location_name}, ${event.address}` : event.address)
+    : (event.location_name ?? '')
+  return mapsQuery
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
+    : null
+}
+
 function eventColor(ev: EventWithDetails): string {
   if (!ev.members || ev.members.length === 0) return SHARED_GOLD
   if (ev.members.length >= 4) return SHARED_GOLD
@@ -70,6 +84,10 @@ export default function HomePage() {
       return isTimedReminder(ev) && memberOk(ev)
     })
   }, [allTomorrowEvents, visibleMembers])
+  const nextTodayEvent = useMemo(
+    () => events.find((e) => isAfter(new Date(e.start_time), now)) ?? null,
+    [events, now],
+  )
 
   // Show tomorrow section always (not just when today is done)
 
@@ -206,6 +224,13 @@ export default function HomePage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        <DesktopHeroCard
+          now={now}
+          nextTodayEvent={nextTodayEvent}
+          fallbackTomorrowEvent={tomorrowEvents[0] ?? null}
+          onViewDetails={(event) => setSelectedEventId(event.id)}
+        />
 
         {/* ── Today's timeline — first, front and center ──── */}
         <section className="mt-2">
@@ -346,6 +371,85 @@ export default function HomePage() {
       {/* ── Right panel (tablet only) ──────────────────────── */}
       <HomeRightPanel now={now} allTodayEvents={allTodayEvents ?? []} />
     </div>
+  )
+}
+
+function DesktopHeroCard({
+  now,
+  nextTodayEvent,
+  fallbackTomorrowEvent,
+  onViewDetails,
+}: {
+  now: Date
+  nextTodayEvent: EventWithDetails | null
+  fallbackTomorrowEvent: EventWithDetails | null
+  onViewDetails: (event: EventWithDetails) => void
+}) {
+  const focusEvent = nextTodayEvent ?? fallbackTomorrowEvent
+  if (!focusEvent) return null
+
+  const focusStart = new Date(focusEvent.start_time)
+  const isTodayFocus = !!nextTodayEvent
+  const minutesUntil = Math.max(0, Math.round((focusStart.getTime() - now.getTime()) / 60000))
+  const countdown = minutesUntil >= 60
+    ? `${Math.floor(minutesUntil / 60)}H ${minutesUntil % 60}M`
+    : `${minutesUntil}M`
+  const leadLabel = isTodayFocus ? `UP NEXT · IN ${countdown}` : `TOMORROW · FIRST UP`
+  const leaveAt = focusEvent.enrichment?.departure_time
+    ? new Date(focusEvent.enrichment.departure_time)
+    : new Date(focusEvent.start_time)
+  const leaveLabel = focusEvent.enrichment?.departure_time ? 'LEAVE BY' : 'STARTS AT'
+  const eventLabel = cleanEventTitle(focusEvent.title)
+  const mapsUrl = mapsUrlForEvent(focusEvent)
+  const detailText = focusEvent.enrichment?.prep_notes
+    ?? focusEvent.description
+    ?? `${eventLabel}${focusEvent.location_name ? ` at ${focusEvent.location_name}` : ''}`
+
+  return (
+    <section className="hidden lg:block mt-2 mb-6" onClick={(e) => e.stopPropagation()}>
+      <div className="relative rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-6 grid grid-cols-[1fr_236px] gap-6 overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/8 via-transparent to-black/10" />
+        <div className="relative min-w-0">
+          <p className="text-caption font-bold tracking-[0.16em] text-casa-gold">{leadLabel}</p>
+          <h1 className="font-display text-display-md leading-[1.02] mt-2 !text-white max-w-none pr-1">
+            {isTodayFocus ? `Leave by ${format(leaveAt, 'h:mm a')}` : `Tomorrow starts at ${format(leaveAt, 'h:mm a')}`}
+          </h1>
+          <p className="text-body mt-3 text-white/86 max-w-[60ch] line-clamp-2">{detailText}</p>
+          <div className="mt-4 flex items-center flex-wrap gap-x-3 gap-y-1 text-body-sm text-white/88">
+            {focusEvent.enrichment?.drive_time_mins && <span>{focusEvent.enrichment.drive_time_mins} min drive</span>}
+            {focusEvent.location_name && <><span>•</span><span>{focusEvent.location_name}</span></>}
+            {focusEvent.enrichment?.weather_at_event && <><span>•</span><span>{focusEvent.enrichment.weather_at_event}</span></>}
+          </div>
+        </div>
+
+        <div className="relative flex flex-col gap-3 min-w-[236px]">
+          <div className="rounded-card border border-white/20 bg-gradient-to-b from-white/10 to-white/5 px-4 py-3 text-right">
+            <p className="text-caption font-semibold tracking-[0.08em] text-white/80">{leaveLabel}</p>
+            <p className="font-display text-display-sm leading-none text-casa-gold mt-1 whitespace-nowrap">{format(leaveAt, 'h:mm a')}</p>
+          </div>
+          {mapsUrl ? (
+            <a
+              href={mapsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="h-11 rounded-button bg-casa-gold text-casa-navy font-semibold flex items-center justify-center whitespace-nowrap hover:brightness-110 transition-all border border-casa-gold/50"
+            >
+              Get directions
+            </a>
+          ) : (
+            <button disabled className="h-11 rounded-button border border-white/20 bg-white/5 text-white/60 font-semibold whitespace-nowrap">
+              Get directions
+            </button>
+          )}
+          <button
+            onClick={() => onViewDetails(focusEvent)}
+            className="h-11 rounded-button border border-white/25 bg-gradient-to-b from-white/6 to-white/[0.03] text-white font-semibold whitespace-nowrap hover:from-white/12 hover:to-white/[0.06] transition-all"
+          >
+            View details
+          </button>
+        </div>
+      </div>
+    </section>
   )
 }
 
