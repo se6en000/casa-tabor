@@ -12,6 +12,7 @@ import SmsSettingsPage from '../../pages/SmsSettingsPage'
 import MusicPage from '../../pages/MusicPage'
 import TabletPrototypePage from '../../pages/TabletPrototypePage'
 import TripDetailPage from '../../pages/TripDetailPage'
+import CookPage from '../../pages/CookPage'
 import HomeSettingsPage from '../../pages/HomeSettingsPage'
 import StatusDashboardPage from '../../pages/StatusDashboardPage'
 import DataAnalyticsPage from '../../pages/DataAnalyticsPage'
@@ -29,6 +30,7 @@ export default function AnimatedRoutes() {
         <Route path="/" element={<PageTransition><HomePage /></PageTransition>} />
         <Route path="/calendar" element={<PageTransition><CalendarPage /></PageTransition>} />
         <Route path="/grocery" element={<PageTransition><GroceryPage /></PageTransition>} />
+        <Route path="/cook" element={<PageTransition><CookPage /></PageTransition>} />
         <Route path="/music" element={<PageTransition><MusicPage /></PageTransition>} />
         <Route path="/briefing" element={<PageTransition><BriefingPage /></PageTransition>} />
         <Route path="/prototype" element={<TabletPrototypePage />} />

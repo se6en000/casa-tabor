@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { format, isAfter, isBefore } from 'date-fns'
-import { Home, Calendar, ShoppingCart, Sun, Music, Settings, ChevronDown, Users } from 'lucide-react'
+import { Home, Calendar, ShoppingCart, Sun, Music, Settings, ChevronDown, Users, ChefHat, ChevronLeft, ChevronRight } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '../../utils/cn'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
@@ -9,13 +9,14 @@ import { useCalendarStore } from '../../stores/calendarStore'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import NotificationDrawer from '../shared/NotificationDrawer'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import BounceScroll from '../shared/BounceScroll'
 
 const NAV = [
   { to: '/',         icon: Home,         label: 'Home' },
   { to: '/calendar', icon: Calendar,     label: 'Calendar' },
   { to: '/grocery',  icon: ShoppingCart, label: 'Grocery' },
+  { to: '/cook',     icon: ChefHat,      label: 'Cooking' },
   { to: '/briefing', icon: Sun,          label: 'Briefing' },
   { to: '/music',    icon: Music,        label: 'Music' },
   { to: '/settings', icon: Settings,     label: 'Settings' },
@@ -28,7 +29,17 @@ export default function TabletSidebar() {
   useNotifications()
   const [notifOpen, setNotifOpen] = useState(false)
   const [familyOpen, setFamilyOpen] = useState(true)
+  const [collapsed, setCollapsed] = useState(false)
   const { data: todayEvents } = useTodayEvents(now)
+
+  useEffect(() => {
+    const saved = localStorage.getItem('sidebar-collapsed')
+    if (saved !== null) setCollapsed(JSON.parse(saved))
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem('sidebar-collapsed', JSON.stringify(collapsed))
+  }, [collapsed])
 
   // Infer status per family member
   const homeFamily = useMemo(
@@ -51,10 +62,13 @@ export default function TabletSidebar() {
 
   return (
     <>
-      <aside className="hidden lg:flex w-72 flex-shrink-0 bg-casa-surface border-r border-casa-border flex-col h-screen sticky top-0 overflow-hidden z-30">
+      <aside className={cn(
+        'hidden lg:flex flex-shrink-0 bg-casa-surface border-r border-casa-border flex-col h-screen sticky top-0 overflow-hidden z-30 transition-all duration-300',
+        collapsed ? 'w-20' : 'w-72',
+      )}>
 
         {/* Family — collapsible filter + who's home */}
-        <div className="flex-shrink-0 border-b border-casa-border">
+        {!collapsed && <div className="flex-shrink-0 border-b border-casa-border">
           <button
             onClick={() => setFamilyOpen(o => !o)}
             className="w-full flex items-center gap-1.5 px-6 pt-5 pb-3 text-caption text-casa-muted uppercase tracking-wider hover:text-casa-navy transition-colors"
@@ -122,19 +136,36 @@ export default function TabletSidebar() {
               </motion.div>
             )}
           </AnimatePresence>
+        </div>}
+
+        <div className={cn('flex items-center py-1', collapsed ? 'justify-center' : 'mx-2 gap-2')}>
+          {!collapsed && <div className="h-px flex-1 bg-casa-border/70" aria-hidden />}
+          <button
+            onClick={() => setCollapsed(c => !c)}
+            className="p-1.5 rounded-md hover:bg-casa-bg transition-colors text-casa-muted hover:text-casa-navy"
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          </button>
+          {!collapsed && <div className="h-px flex-1 bg-casa-border/70" aria-hidden />}
         </div>
 
         {/* Nav */}
-        <BounceScroll className="flex-1 min-h-0" innerClassName="px-4 py-4 flex flex-col gap-0.5">
+        <BounceScroll
+          className="flex-1 min-h-0"
+          innerClassName={cn('py-4 flex flex-col gap-0.5', collapsed ? 'px-2' : 'px-4')}
+        >
           {NAV.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}
               end={to === '/'}
               onClick={to === '/calendar' ? () => setActiveView('stacked') : undefined}
+              title={collapsed ? label : undefined}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-body font-medium',
+                  'flex items-center rounded-xl transition-colors font-medium',
+                  collapsed ? 'justify-center p-3 aspect-square' : 'gap-3 px-4 py-3 text-body',
                   isActive
                     ? 'bg-casa-navy text-white'
                     : 'text-casa-muted hover:text-casa-navy hover:bg-casa-bg',
@@ -143,8 +174,8 @@ export default function TabletSidebar() {
             >
               {({ isActive }) => (
                 <>
-                  <Icon size={19} strokeWidth={isActive ? 2 : 1.8} />
-                  {label}
+                  <Icon size={collapsed ? 22 : 19} strokeWidth={isActive ? 2 : 1.8} />
+                  {!collapsed && label}
                 </>
               )}
             </NavLink>
