@@ -499,6 +499,18 @@ Deno.serve(async (req) => {
         },
       },
       {
+        name: 'get_weather_forecast',
+        description: 'Get live weather forecast for a city with current conditions, next-hour outlook, and next 3 days. Use this for weather beyond the in-context snapshot (forecast, rain timing, UV outlook, tomorrow/weekend weather).',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            location: { type: 'STRING', description: 'City or location name. Defaults to home city when omitted.' },
+            hours_ahead: { type: 'NUMBER', description: 'How many upcoming hours to summarize (1-24). Default 12.' },
+          },
+          required: [],
+        },
+      },
+      {
         name: 'add_grocery_items',
         description: 'Add one or more items to the grocery list immediately (no confirmation step). Infer category and normalize likely product names/brands when needed.',
         parameters: {
@@ -662,7 +674,12 @@ INSTRUCTIONS:
 - Prefer edit over create: if a similar event exists at the same time, update it instead of creating a duplicate.
 - Tone: warm, concise (1–3 sentences). Be proactive — flag conflicts, drive-time buffers, busy days.
 - For timeless facts and general knowledge (e.g., ages/biographies/math/history), answer directly from model knowledge and simple reasoning. Do not refuse just because live web access is unavailable.
-- For weather questions AND activity-based weather questions ("is it a good day to X?", "should I bring an umbrella?", "what should I wear?", "will it be hot?", "is it nice outside?", "is it a good beach day?"): the current weather IS provided in context. Answer directly from it with a confident recommendation — say what the temperature, humidity, and feel-like are and give a direct yes/no recommendation. Do NOT say you "don't have access to weather data" because you do — it's in the system prompt above.
+- For weather questions: if asking about **right now**, answer from the in-context weather snapshot above. If asking about forecast/tomorrow/weekend/rain timing/hourly trend/UV outlook, call get_weather_forecast first, then answer clearly.
+- For weather activity decisions ("beach day", "kayaking", "umbrella", "what should I wear"), combine current context weather + get_weather_forecast when future timing is implied and give a concrete recommendation.
+- If user asks weather-based scheduling advice ("should I keep or move it because of weather?"), treat it as weather guidance unless they explicitly ask to modify a calendar event.
+- If user asks weather for a location other than home city, ALWAYS call get_weather_forecast with that location (even for right-now questions).
+- If get_weather_forecast cannot resolve a location, say that clearly and ask for a corrected city/region. Do not pretend you can only check the home city.
+- Never use search_web for weather unless get_weather_forecast fails.
 - For live/public info requests (latest news, current prices, recent reviews, sports scores, stock prices), use search_web first. For local business lookups (address/phone/location), use search_places. When using search_web, cite the source links you used in your reply.
 - DISMISSAL PHRASES ("never mind", "forget it", "cancel that", "actually never mind", "stop", "nvm"): respond with a brief acknowledgment ONLY — do not search, do not list events, do not take any action. Example: "No problem!" or "Got it, ignoring that."
 - GROCERY LIST READS ("how many items", "what's on the grocery list", "show me the grocery list", "what do I need to buy"): answer directly from GROCERY LIST context above — enumerate the items. Do NOT call search_events.
@@ -915,6 +932,140 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       }
     }
 
+    if (name === 'get_weather_forecast') {
+      const rawLocation = String(args.location ?? '').trim()
+      const location = rawLocation || String(context.homeCity ?? 'West Palm Beach')
+      const requestedHours = Number(args.hours_ahead ?? 12)
+      const hoursAhead = Number.isFinite(requestedHours) ? Math.max(1, Math.min(24, Math.round(requestedHours))) : 12
+
+      const weatherCodeLabel = (code: number | null): string => {
+        const map: Record<number, string> = {
+          0: 'Clear sky',
+          1: 'Mainly clear',
+          2: 'Partly cloudy',
+          3: 'Overcast',
+          45: 'Fog',
+          48: 'Depositing rime fog',
+          51: 'Light drizzle',
+          53: 'Moderate drizzle',
+          55: 'Dense drizzle',
+          56: 'Light freezing drizzle',
+          57: 'Dense freezing drizzle',
+          61: 'Slight rain',
+          63: 'Moderate rain',
+          65: 'Heavy rain',
+          66: 'Light freezing rain',
+          67: 'Heavy freezing rain',
+          71: 'Slight snow',
+          73: 'Moderate snow',
+          75: 'Heavy snow',
+          77: 'Snow grains',
+          80: 'Slight rain showers',
+          81: 'Moderate rain showers',
+          82: 'Violent rain showers',
+          85: 'Slight snow showers',
+          86: 'Heavy snow showers',
+          95: 'Thunderstorm',
+          96: 'Thunderstorm with slight hail',
+          99: 'Thunderstorm with heavy hail',
+        }
+        return map[code ?? -1] ?? 'Unknown'
+      }
+
+      try {
+        const geoUrl = new URL('https://geocoding-api.open-meteo.com/v1/search')
+        geoUrl.searchParams.set('name', location)
+        geoUrl.searchParams.set('count', '1')
+        geoUrl.searchParams.set('language', 'en')
+        geoUrl.searchParams.set('format', 'json')
+        const geoRes = await fetch(geoUrl.toString())
+        const geoData = await geoRes.json()
+        const place = geoData?.results?.[0]
+        if (!place || !Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) {
+          return { location, found: false, error: `Could not resolve weather location: ${location}` }
+        }
+
+        const forecastUrl = new URL('https://api.open-meteo.com/v1/forecast')
+        forecastUrl.searchParams.set('latitude', String(place.latitude))
+        forecastUrl.searchParams.set('longitude', String(place.longitude))
+        forecastUrl.searchParams.set('timezone', 'auto')
+        forecastUrl.searchParams.set('forecast_days', '3')
+        forecastUrl.searchParams.set('temperature_unit', 'fahrenheit')
+        forecastUrl.searchParams.set('windspeed_unit', 'mph')
+        forecastUrl.searchParams.set('precipitation_unit', 'inch')
+        forecastUrl.searchParams.set('current', 'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,uv_index')
+        forecastUrl.searchParams.set('hourly', 'temperature_2m,precipitation_probability,precipitation,weather_code')
+        forecastUrl.searchParams.set('daily', 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max,sunrise,sunset')
+        const fcRes = await fetch(forecastUrl.toString())
+        const fcData = await fcRes.json()
+        if (!fcRes.ok) {
+          return { location, found: false, error: 'Weather provider request failed' }
+        }
+
+        const nowIso = String(fcData?.current?.time ?? '')
+        const hourlyTime = Array.isArray(fcData?.hourly?.time) ? fcData.hourly.time : []
+        const idxNow = Math.max(0, hourlyTime.findIndex((t: string) => t >= nowIso))
+        const endIdx = Math.min(hourlyTime.length, idxNow + hoursAhead)
+
+        const hourly = hourlyTime.slice(idxNow, endIdx).map((time: string, i: number) => {
+          const at = idxNow + i
+          return {
+            time,
+            temp_f: fcData?.hourly?.temperature_2m?.[at] ?? null,
+            precip_probability: fcData?.hourly?.precipitation_probability?.[at] ?? null,
+            precip_mm: fcData?.hourly?.precipitation?.[at] ?? null,
+            weather_code: fcData?.hourly?.weather_code?.[at] ?? null,
+            weather_label: weatherCodeLabel(fcData?.hourly?.weather_code?.[at] ?? null),
+          }
+        })
+
+        const dailyTime = Array.isArray(fcData?.daily?.time) ? fcData.daily.time : []
+        const daily = dailyTime.slice(0, 3).map((date: string, i: number) => ({
+          date,
+          temp_max_f: fcData?.daily?.temperature_2m_max?.[i] ?? null,
+          temp_min_f: fcData?.daily?.temperature_2m_min?.[i] ?? null,
+          precip_probability_max: fcData?.daily?.precipitation_probability_max?.[i] ?? null,
+          uv_index_max: fcData?.daily?.uv_index_max?.[i] ?? null,
+          weather_code: fcData?.daily?.weather_code?.[i] ?? null,
+          weather_label: weatherCodeLabel(fcData?.daily?.weather_code?.[i] ?? null),
+          sunrise: fcData?.daily?.sunrise?.[i] ?? null,
+          sunset: fcData?.daily?.sunset?.[i] ?? null,
+        }))
+
+        const payload = {
+          found: true,
+          location: `${place.name}${place.admin1 ? `, ${place.admin1}` : ''}${place.country_code ? ` (${place.country_code})` : ''}`,
+          latitude: place.latitude,
+          longitude: place.longitude,
+          timezone: fcData?.timezone ?? null,
+          current: {
+            time: fcData?.current?.time ?? null,
+            temp_f: fcData?.current?.temperature_2m ?? null,
+            feels_like_f: fcData?.current?.apparent_temperature ?? null,
+            humidity: fcData?.current?.relative_humidity_2m ?? null,
+            precip_mm: fcData?.current?.precipitation ?? null,
+            wind_mph: fcData?.current?.wind_speed_10m ?? null,
+            uv_index: fcData?.current?.uv_index ?? null,
+            weather_code: fcData?.current?.weather_code ?? null,
+            weather_label: weatherCodeLabel(fcData?.current?.weather_code ?? null),
+          },
+          hourly,
+          daily,
+          rain_expected_next_hours: hourly.some((h: { precip_probability?: number; precip_mm?: number }) => (h.precip_probability ?? 0) >= 40 || (h.precip_mm ?? 0) > 0.5),
+          alerts: {
+            provider: 'open-meteo',
+            official_alerts_available: false,
+            note: 'Open-Meteo endpoint used here does not provide official government warning feeds.',
+          },
+        }
+        console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=${payload.daily.length}`)
+        return payload
+      } catch {
+        console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=0 error=weather_fetch_failed`)
+        return { location, found: false, error: 'Unable to reach weather provider' }
+      }
+    }
+
     if (name === 'search_web') {
       const query = String(args.query ?? '').trim()
       const parsedMax = Number(args.max_results ?? 5)
@@ -1027,6 +1178,15 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           if (count > 0) return `I found ${count} web result${count === 1 ? '' : 's'} for that query.`
           return 'I could not find web results for that query.'
         }
+        if (name === 'get_weather_forecast') {
+          const found = Boolean(toolResult.found)
+          if (!found) return String(toolResult.error ?? 'I could not retrieve weather forecast data right now.')
+          const loc = String(toolResult.location ?? 'that location')
+          const cur = toolResult.current as { temp_f?: number; weather_label?: string } | undefined
+          const t = typeof cur?.temp_f === 'number' ? `${Math.round(cur.temp_f)}°F` : 'current weather'
+          const label = cur?.weather_label ? String(cur.weather_label).toLowerCase() : 'conditions'
+          return `I pulled the weather forecast for ${loc}: ${t}, ${label}.`
+        }
         return 'I found results for your request.'
       }
 
@@ -1036,6 +1196,39 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           .flatMap((p) => 'text' in p && typeof p.text === 'string' && p.text.trim() ? [p.text.trim()] : [])
 
         if (!funcCallPart && textParts.length > 0) {
+          const userText = latestUserText ?? ''
+          const homeCity = String(context.homeCity ?? 'West Palm Beach').toLowerCase()
+          const weatherLocRaw = userText.match(/\b(?:weather|forecast)\s+(?:in|for)\s+([a-zA-Z][a-zA-Z\s,'-]{1,80})/i)?.[1] ?? ''
+          const weatherLoc = weatherLocRaw
+            .split(/\b(?:today|tomorrow|tonight|this|next|and|with|should|do|will)\b|[?,.]/i)[0]
+            .trim()
+          const isNonHomeWeatherLocation = weatherLoc.length > 1 && !weatherLoc.toLowerCase().includes(homeCity)
+
+          // Deterministic weather rescue lane:
+          // If user explicitly asked weather for a non-home location but model didn't call tools,
+          // fetch forecast directly so we never respond with a false "home city only" limitation.
+          if (isNonHomeWeatherLocation) {
+            const weatherResult = await executeReadTool('get_weather_forecast', { location: weatherLoc, hours_ahead: 12 })
+            if (!(weatherResult as { found?: boolean }).found) {
+              return {
+                type: 'text',
+                text: `I couldn't find weather for "${weatherLoc}" yet. Try a nearby city plus region (for example: "London, UK" or "Springfield, IL").`,
+              }
+            }
+            const wr = weatherResult as {
+              location?: string
+              current?: { temp_f?: number; weather_label?: string }
+              daily?: Array<{ temp_max_f?: number; temp_min_f?: number; precip_probability_max?: number }>
+            }
+            const loc = wr.location ?? weatherLoc
+            const currentTemp = typeof wr.current?.temp_f === 'number' ? `${Math.round(wr.current.temp_f)}°F` : 'current conditions'
+            const currentLabel = wr.current?.weather_label ? String(wr.current.weather_label).toLowerCase() : 'conditions'
+            const tomorrow = wr.daily?.[1]
+            const tomorrowText = tomorrow
+              ? ` Tomorrow looks like a high near ${Math.round(Number(tomorrow.temp_max_f ?? 0))}°F, low near ${Math.round(Number(tomorrow.temp_min_f ?? 0))}°F, with up to ${Math.round(Number(tomorrow.precip_probability_max ?? 0))}% rain chance.`
+              : ''
+            return { type: 'text', text: `In ${loc}, current weather is ${currentTemp} and ${currentLabel}.${tomorrowText}` }
+          }
           return { type: 'text', text: textParts.join('\n') }
         }
 
@@ -1047,11 +1240,12 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           .test(latestUserText ?? '')
 
         // Read-only tools: execute server-side. Only escalate to a second LLM call when the user likely wants a write.
-        if (name === 'search_events' || name === 'search_places' || name === 'search_web') {
+        if (name === 'search_events' || name === 'search_places' || name === 'search_web' || name === 'get_weather_forecast') {
           const toolResult = await executeReadTool(name, args)
           const resultCount = (toolResult as { count?: number }).count ?? 0
           const resultFound = Boolean((toolResult as { found?: boolean }).found)
           const isMathQuery = Boolean((toolResult as { math_query?: boolean }).math_query)
+          const isWeatherForecast = name === 'get_weather_forecast'
           // Run secondary LLM call when:
           // - user wants a write (search → then propose change), OR
           // - multiple results found (list query like "what's on my calendar tomorrow") — LLM needs to generate the full answer
@@ -1061,7 +1255,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             .test(latestUserText ?? '')
           const shouldRunSecondary =
             (name === 'search_events' && resultFound && (userLikelyRequestedWrite || resultCount > 1 || userAsksSynthesis)) ||
-            (name === 'search_web' && isMathQuery)
+            (name === 'search_web' && isMathQuery) ||
+            (name === 'get_weather_forecast' && resultFound)
 
           if (!shouldRunSecondary) {
             if (name === 'search_events' && resultFound) {
@@ -1084,6 +1279,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           const isListRead = !userLikelyRequestedWrite
           const secondaryAddendum = isMathQuery
             ? '\n\nSECONDARY CALL — MATH MODE: The search_web call was intercepted because this is a math/calculation query. Ignore the empty web results. Compute the answer directly from your own reasoning and give a concise numerical answer.'
+            : isWeatherForecast
+              ? '\n\nSECONDARY CALL — WEATHER MODE: Use the get_weather_forecast result above to answer directly and concretely. Include practical guidance (umbrella/heat timing/UV/rain window) when relevant. Do NOT call other tools unless weather data is missing.'
             : isListRead
               ? '\n\nSECONDARY CALL — LIST MODE: The search_events result above contains all matching events. Enumerate them clearly in a concise list. Do NOT ask for clarification. Do NOT call any write tool.'
               : '\n\nSECONDARY CALL — WRITE MODE: You have the search result. Now IMMEDIATELY call the appropriate write tool (update_event, delete_event, create_event). Do not output text first — call the tool directly.'
