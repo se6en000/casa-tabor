@@ -23,6 +23,7 @@ import { LeaveByCard } from '../shared/LeaveByCard'
 import type { Trip } from '../../hooks/useTrips'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useSavedPlaces, useSavePlace, findSavedPlace } from '../../hooks/useSavedPlaces'
+import { useTravelEta } from '../../hooks/useTravelEta'
 import BounceScroll from '../shared/BounceScroll'
 
 const CONFIDENCE_CONFIG = {
@@ -1054,6 +1055,17 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
   }
   const hasDestinationExtras = hasText(enr?.parking_notes) || hasText(enr?.contact_name) || hasText(enr?.contact_phone)
   const hasDestinationInfo = !!(event.location_name || event.address || hasDestinationExtras || weatherAtVenue)
+  const commuteDestination = event.address ?? event.location_name ?? null
+  const commuteQuery = useTravelEta({
+    destination: commuteDestination,
+    eventStartIso: event.start_time,
+    enabled: !reminder && Boolean(commuteDestination),
+    bufferMins: 10,
+  })
+  const liveLeaveBy = commuteQuery.data?.found && commuteQuery.data.leave_by
+    ? new Date(commuteQuery.data.leave_by)
+    : null
+  const shouldSyncLogisticsLeave = Boolean(liveLeaveBy)
 
   return (
     <BounceScroll className="flex-1" innerClassName="p-6 space-y-6">
@@ -1078,8 +1090,11 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
         <section>
           <SectionLabel>Live Commute</SectionLabel>
           <LeaveByCard
-            destination={event.address ?? event.location_name}
+            destination={commuteDestination}
             eventStartIso={event.start_time}
+            travelEta={commuteQuery.data}
+            travelEtaLoading={commuteQuery.isLoading}
+            travelEtaError={commuteQuery.isError}
           />
         </section>
       )}
@@ -1095,16 +1110,30 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
                   {i < event.logistics.length - 1 && <div className="w-px flex-1 bg-casa-divider mt-1" />}
                 </div>
                 <div className="pb-3 min-w-0">
+                  {(() => {
+                    const isLeaveStep = /leave\b/i.test(step.title)
+                    const displayTime = shouldSyncLogisticsLeave && isLeaveStep
+                      ? liveLeaveBy
+                      : (step.time ? new Date(step.time) : null)
+                    const isSynced = Boolean(shouldSyncLogisticsLeave && isLeaveStep && displayTime)
+                    return (
+                      <>
                   <p className="text-body-sm font-semibold text-casa-navy leading-tight">
                     {step.title}
-                    {step.time && <span className="font-normal text-casa-muted ml-1.5">{format(new Date(step.time), 'h:mm a')}</span>}
+                    {displayTime && <span className="font-normal text-casa-muted ml-1.5">{format(displayTime, 'h:mm a')}</span>}
                   </p>
+                  {isSynced && (
+                    <p className="text-[11px] text-casa-muted mt-0.5">Synced with Live Commute traffic timing</p>
+                  )}
                   {step.description && <p className="text-caption text-casa-muted mt-0.5">{step.description}</p>}
                   {(step.location_name || step.address) && (
                     <div className="mt-1">
                       <LocationBlock locationName={step.location_name} address={step.address ?? null} />
                     </div>
                   )}
+                      </>
+                    )
+                  })()}
                 </div>
               </li>
             ))}

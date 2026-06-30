@@ -1,6 +1,6 @@
 import { format, differenceInMinutes, isAfter } from 'date-fns'
 import { Loader2, Navigation, Clock3, AlertTriangle } from 'lucide-react'
-import { useTravelEta } from '../../hooks/useTravelEta'
+import { useTravelEta, type TravelEtaResult } from '../../hooks/useTravelEta'
 import { cn } from '../../utils/cn'
 
 export function LeaveByCard({
@@ -8,20 +8,29 @@ export function LeaveByCard({
   eventStartIso,
   className,
   compact = false,
+  travelEta,
+  travelEtaLoading,
+  travelEtaError,
 }: {
   destination: string | null
   eventStartIso: string | null
   className?: string
   compact?: boolean
+  travelEta?: TravelEtaResult | null
+  travelEtaLoading?: boolean
+  travelEtaError?: boolean
 }) {
   const start = eventStartIso ? new Date(eventStartIso) : null
   const shouldRun = Boolean(destination && start && isAfter(start, new Date()))
-  const { data, isLoading, isError } = useTravelEta({
+  const query = useTravelEta({
     destination,
     eventStartIso,
-    enabled: shouldRun,
+    enabled: shouldRun && !travelEta,
     bufferMins: 10,
   })
+  const data = travelEta ?? query.data
+  const isLoading = travelEtaLoading ?? query.isLoading
+  const isError = travelEtaError ?? query.isError
 
   if (!shouldRun) return null
   if (isLoading) {
