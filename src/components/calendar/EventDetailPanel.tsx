@@ -19,6 +19,7 @@ import type { EventChecklistItem } from '../../types'
 import { getFieldsForCategory, CATEGORY_LABEL } from './categoryFields'
 import EventEditSheet from './EventEditSheet'
 import AIChatDrawer from '../shared/AIChatDrawer'
+import { LeaveByCard } from '../shared/LeaveByCard'
 import type { Trip } from '../../hooks/useTrips'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useSavedPlaces, useSavePlace, findSavedPlace } from '../../hooks/useSavedPlaces'
@@ -1069,6 +1070,16 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
             contactName={shows('contact_name') || hasText(enr?.contact_name) ? enr?.contact_name : null}
             contactPhone={shows('contact_phone') || hasText(enr?.contact_phone) ? enr?.contact_phone : null}
             weatherAtVenue={weatherAtVenue}
+          />
+        </section>
+      )}
+
+      {!reminder && (event.address || event.location_name) && (
+        <section>
+          <SectionLabel>Live Commute</SectionLabel>
+          <LeaveByCard
+            destination={event.address ?? event.location_name}
+            eventStartIso={event.start_time}
           />
         </section>
       )}

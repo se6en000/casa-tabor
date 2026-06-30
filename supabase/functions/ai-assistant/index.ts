@@ -6,6 +6,7 @@ import {
   RECOVERY_AND_CONFLICT_GUARDRAILS,
 } from '../_shared/ai-prompt-guardrails.mjs'
 import { optionalEnv, requireEnv } from '../_shared/env.mjs'
+import { computeTravelEta } from '../_shared/travel-eta.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -168,6 +169,7 @@ Deno.serve(async (req) => {
   const contextLoadStartMs = Date.now()
   const [
     { data: cfgRow },
+    homeConfigResult,
     { data: savedPlaces },
     savedContactsResult,
     eventsResult,
@@ -175,6 +177,7 @@ Deno.serve(async (req) => {
     { data: groceryItems },
   ] = await Promise.all([
     sb.from('settings').select('value').eq('key', 'llm_config').limit(1),
+    sb.from('settings').select('value').eq('key', 'home_config').maybeSingle(),
     sb.from('saved_places').select('name, aliases, address, city, state, zip, category, notes, phone').order('name'),
     sb.from('saved_contacts').select('name, aliases, phone, email, address, relationship, notes').order('name').then(r => r).catch(() => ({ data: null, error: null })),
     sb.from('events')
@@ -191,6 +194,8 @@ Deno.serve(async (req) => {
       .order('category')
       .order('name'),
   ])
+  const homeConfig = homeConfigResult?.data?.value as { address?: string; city?: string; state?: string; zip?: string } | null
+  const homeAddress = [homeConfig?.address, homeConfig?.city, homeConfig?.state, homeConfig?.zip].filter(Boolean).join(', ')
 
   if (eventsResult.error) {
     console.error('[ai-assistant] events query error:', JSON.stringify(eventsResult.error))
@@ -277,6 +282,34 @@ Deno.serve(async (req) => {
 
   function tokenized(value: string): string[] {
     return normalizeSearchText(value).split(' ').filter((token) => token.length > 1)
+  }
+
+  function sanitizeTravelLocation(value: string): string {
+    return value
+      .replace(/\b(right now|now|today|tomorrow|tonight|please|thanks)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  function inferTravelDestinationFromText(text: string): string | null {
+    if (!text) return null
+    const cleaned = text.replace(/\s+/g, ' ').trim()
+    const toMatches = Array.from(cleaned.matchAll(/\bto\s+(.+?)(?=\s+(?:right now|now|today|tomorrow|tonight|when|how|what)\b|[?.!,]|$)/gi))
+    const toCandidate = toMatches.length > 0 ? toMatches[toMatches.length - 1]?.[1] : null
+    if (toCandidate) return sanitizeTravelLocation(toCandidate).replace(/^home\s+to\s+/i, '').replace(/^drive\s+from\s+/i, '').trim() || null
+    const atMatch = cleaned.match(/\bat\s+(.+?)(?:\s+at\s+\d|\s+(?:today|tomorrow|tonight|when|how|what)\b|[?.!,]|$)/i)
+    if (atMatch?.[1]) return sanitizeTravelLocation(atMatch[1]).trim() || null
+    return null
+  }
+
+  function inferTravelOriginFromText(text: string): string | null {
+    if (!text) return null
+    const cleaned = text.replace(/\s+/g, ' ').trim()
+    const fromMatch = cleaned.match(/\bfrom\s+(.+?)\s+to\s+/i)
+    if (!fromMatch?.[1]) return null
+    const inferred = sanitizeTravelLocation(fromMatch[1])
+    if (!inferred || /^home$/i.test(inferred)) return null
+    return inferred
   }
 
   // Build context strings
@@ -511,6 +544,21 @@ Deno.serve(async (req) => {
         },
       },
       {
+        name: 'get_travel_eta',
+        description: 'Get live traffic-aware drive ETA, leave-by recommendation, and route summary between origin and destination. Use for "when should we leave", "how long is the drive", and commute timing decisions.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            destination: { type: 'STRING', description: 'Destination address or place.' },
+            origin: { type: 'STRING', description: 'Origin address. Defaults to home address when omitted.' },
+            arrival_time: { type: 'STRING', description: 'Desired arrival ISO datetime with UTC offset. Optional.' },
+            departure_time: { type: 'STRING', description: 'Planned departure ISO datetime with UTC offset. Optional.' },
+            buffer_mins: { type: 'NUMBER', description: 'Arrival buffer minutes before event start. Default 10.' },
+          },
+          required: ['destination'],
+        },
+      },
+      {
         name: 'add_grocery_items',
         description: 'Add one or more items to the grocery list immediately (no confirmation step). Infer category and normalize likely product names/brands when needed.',
         parameters: {
@@ -675,6 +723,8 @@ INSTRUCTIONS:
 - If user asks weather for a location other than home city, ALWAYS call get_weather_forecast with that location (even for right-now questions).
 - If get_weather_forecast cannot resolve a location, say that clearly and ask for a corrected city/region. Do not pretend you can only check the home city.
 - Never use search_web for weather unless get_weather_forecast fails.
+- For commute/traffic timing ("when should we leave", "how long will it take", "do we have enough buffer"), call get_travel_eta with destination and relevant arrival/departure time.
+- For upcoming events with a destination, proactively offer a leave-by recommendation when useful.
 - For live/public info requests (latest news, current prices, recent reviews, sports scores, stock prices), use search_web first. For local business lookups (address/phone/location), use search_places. When using search_web, cite the source links you used in your reply.
 - DISMISSAL PHRASES ("never mind", "forget it", "cancel that", "actually never mind", "stop", "nvm"): respond with a brief acknowledgment ONLY — do not search, do not list events, do not take any action. Example: "No problem!" or "Got it, ignoring that."
 - GROCERY LIST READS ("how many items", "what's on the grocery list", "show me the grocery list", "what do I need to buy"): answer directly from GROCERY LIST context above — enumerate the items. Do NOT call search_events.
@@ -1061,6 +1111,58 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       }
     }
 
+    if (name === 'get_travel_eta') {
+      const destination = String(args.destination ?? '').trim()
+      if (!destination) return { found: false, error: 'Missing destination for travel ETA' }
+      const origin = String(args.origin ?? '').trim() || homeAddress || String(context.homeCity ?? '')
+      if (!origin) return { found: false, error: 'No origin available. Configure home address in Settings.' }
+
+      const arrivalTimeIso = typeof args.arrival_time === 'string' ? String(args.arrival_time) : null
+      const departureTimeIso = typeof args.departure_time === 'string' ? String(args.departure_time) : null
+      const rawBuffer = Number(args.buffer_mins ?? 10)
+      const bufferMins = Number.isFinite(rawBuffer) ? Math.max(0, Math.min(45, Math.round(rawBuffer))) : 10
+
+      let payload = await computeTravelEta({
+        mapsKey,
+        origin,
+        destination,
+        arrivalTimeIso,
+        departureTimeIso,
+        bufferMins,
+      })
+      if (!payload.found && /no route found/i.test(String(payload.error ?? ''))) {
+        const cleanedDestination = sanitizeTravelLocation(destination)
+        const cleanedOriginRaw = sanitizeTravelLocation(origin)
+        const cleanedOrigin = /^home$/i.test(cleanedOriginRaw) ? (homeAddress || String(context.homeCity ?? '')) : cleanedOriginRaw
+        if ((cleanedDestination && cleanedDestination !== destination) || (cleanedOrigin && cleanedOrigin !== origin)) {
+          payload = await computeTravelEta({
+            mapsKey,
+            origin: cleanedOrigin || origin,
+            destination: cleanedDestination || destination,
+            arrivalTimeIso,
+            departureTimeIso,
+            bufferMins,
+          })
+        }
+      }
+      if (!payload.found && /no route found/i.test(String(payload.error ?? ''))) {
+        const inferredDestination = inferTravelDestinationFromText(String(latestUserText ?? ''))
+        if (inferredDestination) {
+          const inferredOrigin = inferTravelOriginFromText(String(latestUserText ?? ''))
+          payload = await computeTravelEta({
+            mapsKey,
+            origin: inferredOrigin || homeAddress || String(context.homeCity ?? '') || origin,
+            destination: inferredDestination,
+            arrivalTimeIso,
+            departureTimeIso,
+            bufferMins,
+          })
+        }
+      }
+      console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} found=${payload.found ? 1 : 0}`)
+      return payload
+    }
+
     if (name === 'search_web') {
       const query = String(args.query ?? '').trim()
       const parsedMax = Number(args.max_results ?? 5)
@@ -1182,6 +1284,27 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           const label = cur?.weather_label ? String(cur.weather_label).toLowerCase() : 'conditions'
           return `I pulled the weather forecast for ${loc}: ${t}, ${label}.`
         }
+        if (name === 'get_travel_eta') {
+          const found = Boolean(toolResult.found)
+          if (!found) {
+            const error = String(toolResult.error ?? 'I could not retrieve travel ETA right now.')
+            if (/no route found/i.test(error)) {
+              return "I couldn't resolve that route yet. Try adding a city or full address for the destination."
+            }
+            return error
+          }
+          const drive = Number(toolResult.drive_time_mins ?? 0)
+          const leaveBy = typeof toolResult.leave_by === 'string' ? toLocal(toolResult.leave_by) : null
+          const summary = typeof toolResult.route_summary === 'string' ? toolResult.route_summary : null
+          const assumedTomorrow = Boolean(toolResult.assumed_next_day)
+          if (leaveBy) {
+            const prefix = assumedTomorrow
+              ? `That arrival time already passed today, so I shifted it to tomorrow. Leave by ${leaveBy}.`
+              : `Leave by ${leaveBy}.`
+            return `${prefix} ${summary ?? `${drive} min drive`}`.trim()
+          }
+          return summary ?? `${drive} min drive`
+        }
         return 'I found results for your request.'
       }
 
@@ -1235,12 +1358,13 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           .test(latestUserText ?? '')
 
         // Read-only tools: execute server-side. Only escalate to a second LLM call when the user likely wants a write.
-        if (name === 'search_events' || name === 'search_places' || name === 'search_web' || name === 'get_weather_forecast') {
+        if (name === 'search_events' || name === 'search_places' || name === 'search_web' || name === 'get_weather_forecast' || name === 'get_travel_eta') {
           const toolResult = await executeReadTool(name, args)
           const resultCount = (toolResult as { count?: number }).count ?? 0
           const resultFound = Boolean((toolResult as { found?: boolean }).found)
           const isMathQuery = Boolean((toolResult as { math_query?: boolean }).math_query)
           const isWeatherForecast = name === 'get_weather_forecast'
+          const isTravelEta = name === 'get_travel_eta'
           // Run secondary LLM call when:
           // - user wants a write (search → then propose change), OR
           // - multiple results found (list query like "what's on my calendar tomorrow") — LLM needs to generate the full answer
@@ -1276,6 +1400,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             ? '\n\nSECONDARY CALL — MATH MODE: The search_web call was intercepted because this is a math/calculation query. Ignore the empty web results. Compute the answer directly from your own reasoning and give a concise numerical answer.'
             : isWeatherForecast
               ? '\n\nSECONDARY CALL — WEATHER MODE: Use the get_weather_forecast result above to answer directly and concretely. Include practical guidance (umbrella/heat timing/UV/rain window) when relevant. Do NOT call other tools unless weather data is missing.'
+            : isTravelEta
+              ? '\n\nSECONDARY CALL — TRAVEL MODE: Use get_travel_eta result above to answer with a concrete leave-by recommendation, drive duration, and traffic impact. Keep it operationally clear.'
             : isListRead
               ? '\n\nSECONDARY CALL — LIST MODE: The search_events result above contains all matching events. Enumerate them clearly in a concise list. Do NOT ask for clarification. Do NOT call any write tool.'
               : '\n\nSECONDARY CALL — WRITE MODE: You have the search result. Now IMMEDIATELY call the appropriate write tool (update_event, delete_event, create_event). Do not output text first — call the tool directly.'

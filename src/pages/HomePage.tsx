@@ -18,6 +18,7 @@ import { isAllDayReminder, isTimedReminder } from '../utils/holidays'
 import SwipeableReminderPill from '../components/shared/SwipeableReminderPill'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import { WeatherIcon } from '../components/shared/WeatherIcon'
+import { LeaveByCard } from '../components/shared/LeaveByCard'
 
 const SHARED_GOLD = '#C9A96E'
 
@@ -514,7 +515,15 @@ function TimelineRow({
         </div>
 
         {/* Row 3: departure alert or prep note */}
-        {event.enrichment?.departure_time && !happening && (
+        {index === 0 && !happening && (event.address || event.location_name) && (
+          <LeaveByCard
+            destination={event.address ?? event.location_name}
+            eventStartIso={event.start_time}
+            compact
+            className="mt-1.5"
+          />
+        )}
+        {index !== 0 && event.enrichment?.departure_time && !happening && (
           <div className="flex items-center gap-1 mt-1.5 text-caption font-semibold text-amber-700">
             <Navigation size={11} className="shrink-0" />
             Leave by {format(new Date(event.enrichment.departure_time), 'h:mm a')}
