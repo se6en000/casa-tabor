@@ -30,6 +30,17 @@ type LlmTelemetry = {
   total_tokens: number
 }
 
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash-lite'
+const SUPPORTED_GEMINI_MODELS = new Set([
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-3.5-flash',
+])
+
+function isSupportedGeminiModel(value: string): boolean {
+  return SUPPORTED_GEMINI_MODELS.has(value)
+}
+
 function sanitizeIngressText(value: unknown, maxLen = 1800): string | null {
  if (typeof value !== 'string') return null
  const normalized = value.replace(/\s+/g, ' ').trim()
@@ -211,11 +222,19 @@ Deno.serve(async (req) => {
 
   const savedContacts = (savedContactsResult as { data: unknown }).data
 
-  const config = cfgRow?.[0]?.value ?? { provider: 'gemini', model: 'gemini-1.5-flash', api_key: '' }
+  const config = cfgRow?.[0]?.value ?? { provider: 'gemini', model: DEFAULT_GEMINI_MODEL, api_key: '' }
   const apiKey = config.api_key as string
-  const model = modelOverride ?? ((config.model as string) || 'gemini-2.5-flash-lite')
+  const provider = String(config.provider ?? 'gemini')
+  const configuredModel = ((config.model as string) || DEFAULT_GEMINI_MODEL).trim()
+  const validatedConfiguredModel = provider === 'gemini' && !isSupportedGeminiModel(configuredModel)
+    ? DEFAULT_GEMINI_MODEL
+    : configuredModel
+  const validatedOverrideModel = modelOverride && provider === 'gemini' && !isSupportedGeminiModel(modelOverride)
+    ? null
+    : modelOverride
+  const model = validatedOverrideModel ?? validatedConfiguredModel
   const llmTelemetry: LlmTelemetry = {
-    provider: String(config.provider ?? 'unknown'),
+    provider,
     model,
     llm_calls: 0,
     llm_inference_ms: 0,
@@ -247,6 +266,20 @@ Deno.serve(async (req) => {
     events_loaded: allEvents?.length ?? 0,
     grocery_items_loaded: Array.isArray(groceryItems) ? groceryItems.length : 0,
   })
+  if (modelOverride && !validatedOverrideModel) {
+    appendServerTrace('server_ai_assistant_model_override_rejected', `unsupported_override=${modelOverride}`, {
+      requested_model_override: modelOverride,
+      fallback_model: model,
+      provider,
+    })
+  }
+  if (provider === 'gemini' && configuredModel !== validatedConfiguredModel) {
+    appendServerTrace('server_ai_assistant_config_model_fallback', `unsupported_config_model=${configuredModel}`, {
+      configured_model: configuredModel,
+      fallback_model: validatedConfiguredModel,
+      provider,
+    })
+  }
 
   if (!apiKey) {
     return new Response(JSON.stringify({ type: 'error', code: 'no_api_key', message: 'No AI API key configured. Go to Settings → AI to add one.', correlation_id: cid }), {
@@ -352,8 +385,8 @@ Deno.serve(async (req) => {
     event_members: { family_members: { id: string; name: string } | null }[];
   }
 
-  const PROMPT_EVENT_WINDOW_DAYS = 21
-  const PROMPT_EVENT_CAP = 80
+  const PROMPT_EVENT_WINDOW_DAYS = 14
+  const PROMPT_EVENT_CAP = 50
   const promptEventWindowEnd = new Date(now.getTime() + PROMPT_EVENT_WINDOW_DAYS * 24 * 60 * 60 * 1000)
   const promptEvents = (allEvents as DbEvent[] ?? [])
     .filter((e) => {
@@ -1235,7 +1268,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       system_instruction: { parts: [{ text: systemInstruction }] },
       contents,
       tools,
-      generation_config: { temperature: 0.4, max_output_tokens: 4096 },
+      generation_config: { temperature: 0.4, max_output_tokens: 2048 },
       tool_config: { function_calling_config: { mode: 'AUTO' } },
     }
 
