@@ -19,6 +19,8 @@ import SwipeableReminderPill from '../components/shared/SwipeableReminderPill'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import { WeatherIcon } from '../components/shared/WeatherIcon'
 import { LeaveByCard } from '../components/shared/LeaveByCard'
+import { useTravelEta, type TravelEtaResult } from '../hooks/useTravelEta'
+import { DepartureRiskBanner } from '../components/shared/DepartureRiskBanner'
 
 const SHARED_GOLD = '#C9A96E'
 
@@ -88,6 +90,13 @@ export default function HomePage() {
     () => events.find((e) => isAfter(new Date(e.start_time), now)) ?? null,
     [events, now],
   )
+  const heroDestination = nextTodayEvent ? (nextTodayEvent.address ?? nextTodayEvent.location_name) : null
+  const heroTravelEta = useTravelEta({
+    destination: heroDestination,
+    eventStartIso: nextTodayEvent?.start_time ?? null,
+    enabled: Boolean(nextTodayEvent && heroDestination),
+    bufferMins: 10,
+  })
 
   // Show tomorrow section always (not just when today is done)
 
@@ -230,6 +239,7 @@ export default function HomePage() {
           nextTodayEvent={nextTodayEvent}
           fallbackTomorrowEvent={tomorrowEvents[0] ?? null}
           onViewDetails={(event) => setSelectedEventId(event.id)}
+          travelEta={heroTravelEta.data}
         />
 
         {/* ── Today's timeline — first, front and center ──── */}
@@ -379,11 +389,13 @@ function DesktopHeroCard({
   nextTodayEvent,
   fallbackTomorrowEvent,
   onViewDetails,
+  travelEta,
 }: {
   now: Date
   nextTodayEvent: EventWithDetails | null
   fallbackTomorrowEvent: EventWithDetails | null
   onViewDetails: (event: EventWithDetails) => void
+  travelEta?: TravelEtaResult | null
 }) {
   const focusEvent = nextTodayEvent ?? fallbackTomorrowEvent
   if (!focusEvent) return null
@@ -420,6 +432,14 @@ function DesktopHeroCard({
             {focusEvent.location_name && <><span>•</span><span>{focusEvent.location_name}</span></>}
             {focusEvent.enrichment?.weather_at_event && <><span>•</span><span>{focusEvent.enrichment.weather_at_event}</span></>}
           </div>
+          {isTodayFocus && travelEta?.found && (
+            <DepartureRiskBanner
+              event={focusEvent}
+              travelEta={travelEta}
+              className="mt-4"
+              enableSmartAlerts
+            />
+          )}
         </div>
 
         <div className="relative flex flex-col gap-3 min-w-[236px]">

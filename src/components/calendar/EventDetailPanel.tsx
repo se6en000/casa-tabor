@@ -20,6 +20,7 @@ import { getFieldsForCategory, CATEGORY_LABEL } from './categoryFields'
 import EventEditSheet from './EventEditSheet'
 import AIChatDrawer from '../shared/AIChatDrawer'
 import { LeaveByCard } from '../shared/LeaveByCard'
+import { DepartureRiskBanner } from '../shared/DepartureRiskBanner'
 import type { Trip } from '../../hooks/useTrips'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useSavedPlaces, useSavePlace, findSavedPlace } from '../../hooks/useSavedPlaces'
@@ -1096,6 +1097,13 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
             travelEtaLoading={commuteQuery.isLoading}
             travelEtaError={commuteQuery.isError}
           />
+          {commuteQuery.data?.found && (
+            <DepartureRiskBanner
+              event={event}
+              travelEta={commuteQuery.data}
+              enableSmartAlerts
+            />
+          )}
         </section>
       )}
 
