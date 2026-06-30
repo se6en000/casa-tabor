@@ -384,14 +384,13 @@ interface Props {
   events: EventWithDetails[]
   family: FamilyMember[]
   homeCity?: string
-  weather?: { temp: number; condition: string; humidity?: number; feelsLike?: number; city?: string } | null
   onSleepCommand?: () => void
   focusedEvent?: EventWithDetails
 }
 
 const SLEEP_PHRASES = /\b(sleep|goodnight|good night|art mode|screen saver|screensaver|night mode)\b/i
 
-export default function AIChatDrawer({ open, onClose, anchor, page, events, family, homeCity, weather, onSleepCommand, focusedEvent }: Props) {
+export default function AIChatDrawer({ open, onClose, anchor, page, events, family, homeCity, onSleepCommand, focusedEvent }: Props) {
   const [input, setInput] = useState('')
   const interimRef = useRef('')
   const idleAutoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -403,7 +402,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
 
-  const { messages, loading, send, reset, session, sessionLoading, startFresh, primeMessages, updateMessageToolStatus } = useAIAssistant({ page, events, family, homeCity, weather, focusedEvent, onSessionEnd: onClose })
+  const { messages, loading, send, reset, session, sessionLoading, startFresh, primeMessages, updateMessageToolStatus } = useAIAssistant({ page, events, family, homeCity, focusedEvent, onSessionEnd: onClose })
 
   const led = useLedStrip()
 

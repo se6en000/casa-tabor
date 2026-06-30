@@ -13,13 +13,6 @@ export interface AssistantContext {
   homeCity?: string
   focusedEvent?: EventWithDetails
   onSessionEnd?: () => void
-  weather?: {
-    temp: number
-    condition: string
-    humidity?: number
-    feelsLike?: number
-    city?: string
-  } | null
 }
 
 const genId = (): string =>
@@ -52,7 +45,6 @@ function buildContext(ctx: AssistantContext) {
     })),
     family: ctx.family.map(f => ({ id: f.id, name: f.name })),
     homeCity: ctx.homeCity,
-    weather: ctx.weather ?? null,
     focusedEvent: ctx.focusedEvent ? {
       id: ctx.focusedEvent.id,
       title: ctx.focusedEvent.title,

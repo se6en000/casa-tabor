@@ -560,15 +560,10 @@ Deno.serve(async (req) => {
   const customRow = await sb.from('settings').select('value').eq('key', 'ai_custom_instructions').maybeSingle()
   const customInstructions = (customRow.data?.value as { text?: string } | null)?.text?.trim() || ''
 
-  const weatherSnippet = (context.weather as { temp?: number; condition?: string; humidity?: number; feelsLike?: number } | null)
-    ? `Current weather in ${context.homeCity ?? 'West Palm Beach'}: ${(context.weather as {temp:number}).temp}°F, ${(context.weather as {condition:string}).condition}${(context.weather as {feelsLike?:number}).feelsLike ? `, feels like ${(context.weather as {feelsLike:number}).feelsLike}°F` : ''}${(context.weather as {humidity?:number}).humidity ? `, ${(context.weather as {humidity:number}).humidity}% humidity` : ''}`
-    : null
-
   const systemInstruction = `You are the Casa Tabor family assistant — a smart, warm, conversational AI for the ${familyNames} family.
 Current date/time: ${context.currentDate}
 User's local UTC offset: ${context.utcOffset ?? '-04:00'} (use this for all times you generate)
 Home city: ${context.homeCity ?? 'West Palm Beach'}
-${weatherSnippet ? `${weatherSnippet}\n` : ''}
 TEMPORAL ASSUMPTIONS (default unless user clearly overrides):
 - Default day: ${context.temporalAssumptions?.inferredDefaultDay ?? 'today'}.
 - Reason: ${context.temporalAssumptions?.inferredDefaultDayReason ?? 'Prefer near-future scheduling when date is omitted.'}
@@ -674,8 +669,8 @@ INSTRUCTIONS:
 - Prefer edit over create: if a similar event exists at the same time, update it instead of creating a duplicate.
 - Tone: warm, concise (1–3 sentences). Be proactive — flag conflicts, drive-time buffers, busy days.
 - For timeless facts and general knowledge (e.g., ages/biographies/math/history), answer directly from model knowledge and simple reasoning. Do not refuse just because live web access is unavailable.
-- For weather questions: if asking about **right now**, answer from the in-context weather snapshot above. If asking about forecast/tomorrow/weekend/rain timing/hourly trend/UV outlook, call get_weather_forecast first, then answer clearly.
-- For weather activity decisions ("beach day", "kayaking", "umbrella", "what should I wear"), combine current context weather + get_weather_forecast when future timing is implied and give a concrete recommendation.
+- For weather questions (including “right now”), call get_weather_forecast first, then answer clearly from tool data.
+- For weather activity decisions ("beach day", "kayaking", "umbrella", "what should I wear"), use get_weather_forecast and give a concrete recommendation.
 - If user asks weather-based scheduling advice ("should I keep or move it because of weather?"), treat it as weather guidance unless they explicitly ask to modify a calendar event.
 - If user asks weather for a location other than home city, ALWAYS call get_weather_forecast with that location (even for right-now questions).
 - If get_weather_forecast cannot resolve a location, say that clearly and ask for a corrected city/region. Do not pretend you can only check the home city.
