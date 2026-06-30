@@ -148,6 +148,15 @@ html {
   font-size: clamp(1rem, calc(0.818rem + 0.777vw), 1.75rem);
 }
 
+/* Desktop density tuning:
+   keep touch/kiosk sizing as-is, but tighten mouse/trackpad desktop layouts
+   so standard monitors don't feel like ~125% zoom. */
+@media (hover: hover) and (pointer: fine) {
+  html {
+    font-size: clamp(0.95rem, calc(0.80rem + 0.42vw), 1.3rem);
+  }
+}
+
 body {
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
