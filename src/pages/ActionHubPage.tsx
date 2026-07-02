@@ -1,15 +1,17 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
-import { ClipboardList, Bell, ChevronLeft, Mail, Bot, ThumbsDown, CalendarPlus, BellPlus } from 'lucide-react'
+import { ClipboardList, Bell, ChevronLeft, Mail, Bot, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../utils/cn'
 import { supabase } from '../lib/supabase'
 import { usePrepItems, useDismissPrepItem, useDownvotePrepItem, useSnoozePrepItem } from '../hooks/usePrepItems'
 import { useNotifications } from '../hooks/useNotifications'
+import { useWeekConflicts } from '../hooks/useConflicts'
 import type { PrepItem } from '../types'
 import PrepItemDetailPanel from '../components/home/PrepItemDetailPanel'
 import { useLiveClock } from '../hooks/useLiveClock'
+import ConflictAlertsSection from '../components/shared/ConflictAlertsSection'
 
 function sourceBadge(item: PrepItem) {
   const source = item.source_type ?? 'calendar_ai'
@@ -35,6 +37,7 @@ export default function ActionHubPage() {
   const snooze = useSnoozePrepItem()
   const downvote = useDownvotePrepItem()
   const { notifications, unreadCount, markRead, clearAll } = useNotifications()
+  const { data: conflicts = [] } = useWeekConflicts()
   const [selected, setSelected] = useState<PrepItem | null>(null)
   const [actingId, setActingId] = useState<string | null>(null)
 
@@ -73,10 +76,11 @@ export default function ActionHubPage() {
       `${dueSoon} due soon`,
       `${billingQueue} billing items`,
       `${cancellations} cancellations`,
+      `${conflicts.length} heads up`,
       `${unreadCount} unread activity`,
       `${gmailHealth?.recentProcessed ?? 0} messages processed in 6h`,
     ]
-  }, [prepItems, unreadCount, gmailHealth?.recentProcessed, now])
+  }, [prepItems, unreadCount, gmailHealth?.recentProcessed, now, conflicts.length])
 
   async function run(action: 'dismiss' | 'snooze' | 'downvote', id: string) {
     setActingId(id)
@@ -212,6 +216,23 @@ export default function ActionHubPage() {
           </div>
         </section>
       </div>
+
+      <section className="mt-5 rounded-[1.2rem] border border-casa-border bg-casa-surface p-4 shadow-card">
+        <div className="flex items-center justify-between mb-3.5">
+          <h2 className="font-display text-heading text-casa-navy flex items-center gap-2">
+            <AlertTriangle size={16} className="text-amber-500" />
+            Heads Up
+          </h2>
+          <span className="text-caption font-semibold rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">
+            {conflicts.length}
+          </span>
+        </div>
+        {conflicts.length > 0 ? (
+          <ConflictAlertsSection />
+        ) : (
+          <p className="text-body-sm text-casa-muted">No active heads up right now.</p>
+        )}
+      </section>
 
       <PrepItemDetailPanel item={selected} onClose={() => setSelected(null)} />
     </div>

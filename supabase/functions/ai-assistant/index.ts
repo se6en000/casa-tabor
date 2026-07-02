@@ -186,6 +186,7 @@ Deno.serve(async (req) => {
     eventsResult,
     { data: groceryLists },
     { data: groceryItems },
+    { data: recipes },
   ] = await Promise.all([
     sb.from('settings').select('value').eq('key', 'llm_config').limit(1),
     sb.from('settings').select('value').eq('key', 'home_config').maybeSingle(),
@@ -204,6 +205,11 @@ Deno.serve(async (req) => {
       .is('deleted_at', null)
       .order('category')
       .order('name'),
+    sb.from('recipes')
+      .select('id, name, cook_time, servings')
+      .order('last_used_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
+      .limit(30),
   ])
   const homeConfig = homeConfigResult?.data?.value as { address?: string; city?: string; state?: string; zip?: string } | null
   const homeAddress = [homeConfig?.address, homeConfig?.city, homeConfig?.state, homeConfig?.zip].filter(Boolean).join(', ')
@@ -347,6 +353,9 @@ Deno.serve(async (req) => {
 
   // Build context strings
   const familyNames = (context.family as {name: string}[]).map(f => f.name).join(', ')
+  const recipesText = (recipes ?? []).map((row: { name: string; cook_time?: string | null; servings?: string | null }, idx: number) =>
+    `${idx + 1}. ${row.name}${row.cook_time ? ` · ${row.cook_time}` : ''}${row.servings ? ` · serves ${row.servings}` : ''}`
+  ).join('\n')
 
   type DbEvent = {
     id: string; title: string; start_time: string; end_time: string; updated_at: string;
@@ -480,6 +489,12 @@ Deno.serve(async (req) => {
             address: { type: 'STRING', description: 'New street address. Use empty string to clear.' },
             members_add: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Family member names to ADD to the event' },
             members_remove: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Family member names to REMOVE from the event' },
+            members_primary: { type: 'STRING', description: 'Set the PRIMARY family member for the event (single name)' },
+            members_attendees: {
+              type: 'ARRAY',
+              items: { type: 'STRING' },
+              description: 'Full replacement list of attendee family members (secondary participants). Primary member is managed separately.',
+            },
             notes: { type: 'STRING', description: 'Visible Notes field in the event details panel (prep_notes). Use empty string to clear.' },
             description: { type: 'STRING', description: 'Underlying calendar description/body text. Use empty string to clear.' },
             all_day: { type: 'BOOLEAN', description: 'Toggle all-day status' },
@@ -529,6 +544,80 @@ Deno.serve(async (req) => {
         },
       },
       {
+        name: 'bulk_update_events',
+        description: 'Apply the same event-detail updates to multiple events at once. Use after search_events confirms exact matches.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            ids: {
+              type: 'ARRAY',
+              items: { type: 'STRING' },
+              description: 'Exact event UUIDs to update (from search_events)',
+            },
+            title_query: { type: 'STRING', description: 'Shared title phrase used for matching' },
+            count: { type: 'NUMBER', description: 'Expected number of events to update' },
+            title: { type: 'STRING', description: 'New title' },
+            start: { type: 'STRING', description: 'New start ISO datetime with UTC offset' },
+            end: { type: 'STRING', description: 'New end ISO datetime with UTC offset' },
+            location: { type: 'STRING', description: 'New location name or venue label. Use empty string to clear.' },
+            address: { type: 'STRING', description: 'New street address. Use empty string to clear.' },
+            members_add: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Family member names to ADD to each event' },
+            members_remove: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Family member names to REMOVE from each event' },
+            members_primary: { type: 'STRING', description: 'Set the PRIMARY family member for each event (single name)' },
+            members_attendees: {
+              type: 'ARRAY',
+              items: { type: 'STRING' },
+              description: 'Full replacement attendee list for each event (secondary participants).',
+            },
+            notes: { type: 'STRING', description: 'Visible Notes field in the event details panel (prep_notes). Use empty string to clear.' },
+            description: { type: 'STRING', description: 'Underlying calendar description/body text. Use empty string to clear.' },
+            all_day: { type: 'BOOLEAN', description: 'Toggle all-day status' },
+            category: { type: 'STRING', description: 'Category like appointment, school, sports, dining, travel, social, other. Use empty string to clear.' },
+            what_to_bring: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Full replacement list for What to Bring. Send the complete final list.' },
+            outfit_suggestion: { type: 'STRING', description: 'What to Wear field. Use empty string to clear.' },
+            parking_notes: { type: 'STRING', description: 'Parking field. Use empty string to clear.' },
+            contact_name: { type: 'STRING', description: 'Contact name. Use empty string to clear.' },
+            contact_phone: { type: 'STRING', description: 'Contact phone number. Use empty string to clear.' },
+            cost_estimate: { type: 'STRING', description: 'Cost Estimate field. Use empty string to clear.' },
+            dietary_notes: { type: 'STRING', description: 'Dietary Notes field. Use empty string to clear.' },
+            meal_impact: { type: 'STRING', description: 'Meal Impact field. Use empty string to clear.' },
+            checklist_items: {
+              type: 'ARRAY',
+              description: 'Full replacement checklist for each event. Send the complete final list; use [] to clear.',
+              items: {
+                type: 'OBJECT',
+                properties: {
+                  id: { type: 'STRING', description: 'Existing checklist item ID when editing an existing item' },
+                  label: { type: 'STRING', description: 'Checklist item text' },
+                  note: { type: 'STRING', description: 'Optional secondary note. Use empty string to clear.' },
+                  checked: { type: 'BOOLEAN', description: 'Whether the item is already checked off' },
+                  category: { type: 'STRING', description: 'Optional grouping/category label. Use empty string to clear.' },
+                },
+                required: ['label'],
+              },
+            },
+            action_items: {
+              type: 'ARRAY',
+              description: 'Full replacement action-item list for each event. Send the complete final list; use [] to clear.',
+              items: {
+                type: 'OBJECT',
+                properties: {
+                  id: { type: 'STRING', description: 'Existing action item ID when editing an existing item' },
+                  title: { type: 'STRING', description: 'Action item title' },
+                  description: { type: 'STRING', description: 'Optional longer description. Use empty string to clear.' },
+                  due_date: { type: 'STRING', description: 'Optional ISO datetime with UTC offset. Use empty string to clear.' },
+                  is_urgent: { type: 'BOOLEAN', description: 'True if this should appear as the urgent banner' },
+                  completed: { type: 'BOOLEAN', description: 'Whether the action is already completed' },
+                  assigned_to: { type: 'STRING', description: 'Optional assignee name. Use empty string to clear.' },
+                },
+                required: ['title'],
+              },
+            },
+          },
+          required: ['ids'],
+        },
+      },
+      {
         name: 'delete_event',
         description: 'Delete (cancel) a calendar event. Requires user confirmation before executing.',
         parameters: {
@@ -538,6 +627,23 @@ Deno.serve(async (req) => {
             title: { type: 'STRING', description: 'Event title for confirmation display' },
           },
           required: ['id', 'title'],
+        },
+      },
+      {
+        name: 'delete_events_by_title',
+        description: 'Delete (cancel) multiple calendar events that match the same appointment title. Use after search_events confirms the exact matches. Requires user confirmation before executing.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            ids: {
+              type: 'ARRAY',
+              items: { type: 'STRING' },
+              description: 'Exact event UUIDs to cancel (from search_events)',
+            },
+            title_query: { type: 'STRING', description: 'Shared title phrase used for matching, e.g. "Liv Med-Check Appointment"' },
+            count: { type: 'NUMBER', description: 'Number of matched events expected to be deleted' },
+          },
+          required: ['ids', 'title_query'],
         },
       },
       {
@@ -633,6 +739,43 @@ Deno.serve(async (req) => {
         description: 'Remove all checked/completed items from the grocery list.',
         parameters: { type: 'OBJECT', properties: {} },
       },
+      {
+        name: 'create_recipe',
+        description: 'Save a recipe to the Recipe Library with structured ingredients and steps. Requires confirmation before executing.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            name: { type: 'STRING', description: 'Recipe name/title' },
+            servings: { type: 'STRING', description: 'Serving size text, e.g. "4" or "serves 6"' },
+            cook_time: { type: 'STRING', description: 'Cook/total time text, e.g. "35 min"' },
+            source_url: { type: 'STRING', description: 'Optional source URL' },
+            image_url: { type: 'STRING', description: 'Optional recipe image URL. If omitted, the server may auto-select one.' },
+            ingredients: {
+              type: 'ARRAY',
+              description: 'Structured ingredient lines.',
+              items: {
+                type: 'OBJECT',
+                properties: {
+                  raw_text: { type: 'STRING', description: 'Full line, e.g. "2 tbsp olive oil"' },
+                  name: { type: 'STRING', description: 'Ingredient name, e.g. "olive oil"' },
+                  quantity: { type: 'STRING', description: 'Quantity text, e.g. "2"' },
+                  unit: { type: 'STRING', description: 'Unit text, e.g. "tbsp"' },
+                  optional: { type: 'BOOLEAN', description: 'Whether ingredient is optional' },
+                },
+                required: ['name'],
+              },
+            },
+            steps: {
+              type: 'ARRAY',
+              description: 'Ordered direction steps.',
+              items: {
+                type: 'STRING',
+              },
+            },
+          },
+          required: ['name', 'ingredients', 'steps'],
+        },
+      },
     ],
   }]
 
@@ -715,22 +858,30 @@ GROCERY LIST (unchecked items):
 ${groceryText}
 ${defaultListId ? `Default list ID: ${defaultListId}` : ''}
 
+RECIPE LIBRARY SNAPSHOT (recent):
+${recipesText || 'No recipes saved yet.'}
+
 INSTRUCTIONS:
 - You are allowed to answer general/random questions directly (facts, explanations, ideas, writing help, etc.) when no Casa data/action is needed.
+- If assistant_mode is "chef", bias responses toward cooking, recipe planning, pantry-aware substitutions, and grocery execution.
+- When the user asks you to save/store/add a recipe to the Recipe Library, call create_recipe with complete structured ingredients and ordered steps.
+- create_recipe is low-risk and should execute immediately once structured details are ready.
 - For simple math and calculations (tips, percentages, unit conversions, arithmetic) — answer directly from reasoning. Do NOT call search_web.
-- Use tools for calendar/grocery/place actions. Reads (search) execute immediately. Most writes need confirmation, but low-risk create_event and add_grocery_items should execute immediately.
-- Always operate on UUIDs from the events list. ALWAYS call search_events FIRST for delete_event and update_event — never attempt them without a search result providing the event ID. Use search_events when unsure, then update/delete with the exact ID from the search result.
+- Use tools for calendar/grocery/place actions. Reads (search) execute immediately. Most writes need confirmation, but low-risk create_event, create_recipe, and add_grocery_items should execute immediately.
+- Always operate on UUIDs from the events list. ALWAYS call search_events FIRST for delete_event, delete_events_by_title, bulk_update_events, and update_event — never attempt them without a search result providing the event ID(s). Use search_events when unsure, then update/delete with the exact ID(s) from the search result.
 - For update_event, always copy the event's updated_at value from context/events list into expected_updated_at.
 - Batch related field updates into a single update_event action instead of many small ones.
 - When editing an event found via search_events, preserve unchanged detail-pane data from that event response (notes, category, bring list, checklist_items, action_items, etc.).
 - what_to_bring is a full replacement field. When adding/removing one item, preserve existing items from the selected event and send the complete final list.
 - Always apply append/replace/clear/transform intent classification before building update_event args.
 - Prefer append semantics for "add/include/also/plus" phrasing unless user explicitly asks to replace.
-- IMPORTANT: For write proposals (update_event, create_event, delete_event) — return the tool_action DIRECTLY. Do NOT show a "Will change / Will preserve" text turn before the tool_action. The confirmation card in the UI is the preflight diff. One step only.
+- IMPORTANT: For write proposals (update_event, bulk_update_events, create_event, create_recipe, delete_event, delete_events_by_title) — return the tool_action DIRECTLY. Do NOT show a "Will change / Will preserve" text turn before the tool_action. The confirmation card in the UI is the preflight diff. One step only.
+- If user asks to delete all appointments/events with a specific name, run search_events first and then use delete_events_by_title with every matched ID in one confirmation.
+- If user asks to update all events/appointments matching a title, run search_events first and then use bulk_update_events with every matched ID in one confirmation.
 - For add_grocery_items, do NOT ask for confirmation. Just add items immediately. If you inferred/corrected an item name or category, mention it briefly after adding.
 - Treat shopping, groceries, pantry restocks, and food purchase intents as add_grocery_items by default. Unless user explicitly asks a question instead of an action, auto-add immediately.
 - Confirmation budget: one confirmation only. If the user says "yes", "confirmed", "ok", "do it", or similar — that IS the confirmation; execute immediately.
-- For low-risk write intents (add_grocery_items and straightforward create_event), execute immediately and offer undo language instead of asking for confirmation.
+- For low-risk write intents (add_grocery_items, create_recipe, and straightforward create_event), execute immediately and offer undo language instead of asking for confirmation.
 - Never claim "done/completed/updated/saved" for write actions unless the tool execution result confirms success; for calendar writes, only use completion wording when sync_status is synced.
 - If user already stated a time, do not ask for time again unless there is a true ambiguity conflict.
 - Default time window: when no date is given, search from NOW (${context.currentDate}) forward — never return past events.
@@ -741,7 +892,7 @@ INSTRUCTIONS:
 - When no date is given, prefer the nearest sensible future slot (today if feasible, otherwise tomorrow) instead of choosing a past time.
 - Fuzzy match titles, nicknames, partial names, relative dates. If multiple events match, ask which one.
 - If an initial event search is empty or returns low confidence, retry with a shorter/broader query (e.g., just "dentist" instead of "dentist appointment") before telling the user nothing was found.
-- Never perform writes (update_event, delete_event, create_event) when search_events reports ambiguous=true or top confidence < 0.75; ask a disambiguation question first. This rule applies ONLY to writes — for read/list queries (what's on my calendar, give me a briefing, what's this week), always enumerate all found events regardless of ambiguity score. Do not ask for clarification on list reads.
+- Never perform writes (update_event, bulk_update_events, delete_event, delete_events_by_title, create_event) when search_events reports ambiguous=true or top confidence < 0.75; ask a disambiguation question first. This rule applies ONLY to writes — for read/list queries (what's on my calendar, give me a briefing, what's this week), always enumerate all found events regardless of ambiguity score. Do not ask for clarification on list reads.
 - Working context: keep operating on the same event we're discussing unless the user clearly switches.
 - Relative shifts ("push it 1h later"): compute from the event's current start_time.
 - "Add my wife"/"add Kelly": resolve from FAMILY MEMBERS.
@@ -1437,7 +1588,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
               ? '\n\nSECONDARY CALL — TRAVEL MODE: Use get_travel_eta result above to answer with a concrete leave-by recommendation, drive duration, and traffic impact. Keep it operationally clear.'
             : isListRead
               ? '\n\nSECONDARY CALL — LIST MODE: The search_events result above contains all matching events. Enumerate them clearly in a concise list. Do NOT ask for clarification. Do NOT call any write tool.'
-              : '\n\nSECONDARY CALL — WRITE MODE: You have the search result. Now IMMEDIATELY call the appropriate write tool (update_event, delete_event, create_event). Do not output text first — call the tool directly.'
+              : '\n\nSECONDARY CALL — WRITE MODE: You have the search result. Now IMMEDIATELY call the appropriate write tool (update_event, bulk_update_events, delete_event, delete_events_by_title, create_event, create_recipe). Do not output text first — call the tool directly.'
           const secondaryPrompt = systemInstruction + secondaryAddendum
           const secondaryBody = { ...body, system_instruction: { parts: [{ text: secondaryPrompt }] }, contents: newContents }
           const secondaryStartMs = Date.now()
@@ -1597,6 +1748,42 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           }
         }
 
+        if (name === 'create_recipe' && !dryRun) {
+          const autoActionId = `auto-recipe-${Date.now().toString(36)}`
+          const execResult = await sb.functions.invoke('execute-ai-action', {
+            body: {
+              tool: name,
+              args,
+              action_id: autoActionId,
+              session_id: traceId,
+              correlation_id: `${cid}:auto-recipe:${Date.now().toString(36)}`,
+              trace_id: traceId,
+              turn_id: turnId,
+              lane: 'tool_action',
+              device_id: deviceId,
+              client_trace_present: clientTracePresent,
+              client_build: clientBuild,
+              client_trace_source: clientTraceSource ?? 'ai-assistant-auto',
+            },
+          })
+
+          const execError = execResult.error?.message ?? (execResult.data as { error?: string } | null)?.error ?? null
+          if (execError) {
+            return { type: 'text', text: `I couldn't save that recipe yet: ${execError}` }
+          }
+
+          const payload = (execResult.data as { success?: boolean; recipe_id?: string; image_url?: string | null } | null) ?? {}
+          if (!payload.success) {
+            return { type: 'text', text: "I couldn't save that recipe yet. Please try once more." }
+          }
+          return {
+            type: 'text',
+            text: payload.image_url
+              ? 'Saved to Recipe Library with ingredients, steps, and a photo.'
+              : 'Saved to Recipe Library with complete ingredients and steps. (No photo found yet.)',
+          }
+        }
+
         // Write tools: return to frontend for confirmation
         return {
           type: 'tool_action',
@@ -1687,6 +1874,11 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
   function buildDisplayText(name: string, args: Record<string, unknown>): string {
     if (name === 'create_event') return `Create: **${args.title}** on ${args.start}`
+    if (name === 'create_recipe') {
+      const ingredients = Array.isArray(args.ingredients) ? args.ingredients.length : 0
+      const steps = Array.isArray(args.steps) ? args.steps.length : 0
+      return `Save recipe: **${String(args.name ?? 'Untitled recipe')}** · ${ingredients} ingredient${ingredients === 1 ? '' : 's'} · ${steps} step${steps === 1 ? '' : 's'}`
+    }
     if (name === 'update_event') {
       // Build a human-readable single-line summary of what will change
       const parts: string[] = []
@@ -1712,7 +1904,21 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const extra = parts.length > 3 ? ` +${parts.length - 3} more` : ''
       return `Update: ${preview}${extra}`
     }
+    if (name === 'bulk_update_events') {
+      const ids = Array.isArray(args.ids) ? args.ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0) : []
+      const count = Number.isFinite(Number(args.count)) ? Number(args.count) : ids.length
+      const titleQuery = String(args.title_query ?? '').trim()
+      const label = titleQuery.length > 0 ? titleQuery : 'matching events'
+      return `Update ${count} event${count === 1 ? '' : 's'} matching **${label}**`
+    }
     if (name === 'delete_event') return `Delete: **${args.title}**`
+    if (name === 'delete_events_by_title') {
+      const ids = Array.isArray(args.ids) ? args.ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0) : []
+      const titleQuery = String(args.title_query ?? '').trim()
+      const count = Number.isFinite(Number(args.count)) ? Number(args.count) : ids.length
+      const label = titleQuery.length > 0 ? titleQuery : 'matching appointments'
+      return `Delete ${count} event${count === 1 ? '' : 's'} named **${label}**`
+    }
     if (name === 'add_grocery_items') {
       const items = args.items as { name: string; quantity?: string }[]
       return `Add to grocery list: ${items.map(i => `${i.name}${i.quantity ? ` (${i.quantity})` : ''}`).join(', ')}`

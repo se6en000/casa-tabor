@@ -149,10 +149,10 @@ html {
 }
 
 /* Desktop density tuning:
-   keep touch/kiosk sizing as-is, but tighten mouse/trackpad desktop layouts
-   so standard monitors don't feel like ~125% zoom. */
+   only apply on true desktop profiles we explicitly mark in main.tsx.
+   This keeps Pi/touch kiosk sizing unchanged. */
 @media (hover: hover) and (pointer: fine) {
-  html {
+  html.mac-desktop {
     font-size: clamp(0.95rem, calc(0.80rem + 0.42vw), 1.3rem);
   }
 }

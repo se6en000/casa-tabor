@@ -33,8 +33,40 @@ type ExtractedRecipe = {
   servings?: string | null
   cook_time?: string | null
   image_url?: string | null
+  image_urls?: string[]
   source_excerpt?: string | null
   confidence: number
+}
+
+async function fetchMealDbImage(name: string): Promise<string | null> {
+  const query = name.trim()
+  if (!query) return null
+  try {
+    const res = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(query)}`)
+    if (!res.ok) return null
+    const data = await res.json()
+    const firstMeal = Array.isArray(data?.meals) ? data.meals[0] : null
+    const thumb = typeof firstMeal?.strMealThumb === 'string' ? firstMeal.strMealThumb.trim() : ''
+    return thumb || null
+  } catch {
+    return null
+  }
+}
+
+function buildRecipeFallbackImage(name: string): string {
+  const lock = encodeURIComponent(name.trim().toLowerCase() || 'recipe')
+  return `https://loremflickr.com/1200/900/food?lock=${lock}`
+}
+
+function normalizeUniqueImageUrls(raw: unknown[]): string[] {
+  const seen = new Set<string>()
+  for (const row of raw) {
+    if (typeof row !== 'string') continue
+    const cleaned = row.trim()
+    if (!cleaned) continue
+    seen.add(cleaned)
+  }
+  return Array.from(seen)
 }
 
 function parseJsonObject(raw: string): Record<string, unknown> {
@@ -101,16 +133,20 @@ function normalizeExtractedRecipe(payload: Record<string, unknown>, fallbackName
   const steps = stepsRaw
     .map((row, index) => normalizeStep(row, index))
     .filter((row): row is RecipeStep => row !== null)
-    .sort((a, b) => a.step_number - b.step_number)
     .map((step, index) => ({ ...step, step_number: index + 1 }))
 
+  const imageUrls = normalizeUniqueImageUrls([
+    ...(Array.isArray(payload.image_urls) ? payload.image_urls : []),
+    payload.image_url,
+  ])
   return {
     name,
     ingredients,
     steps,
     servings: typeof payload.servings === 'string' ? payload.servings.trim() || null : null,
     cook_time: typeof payload.cook_time === 'string' ? payload.cook_time.trim() || null : null,
-    image_url: typeof payload.image_url === 'string' ? payload.image_url.trim() || null : null,
+    image_url: imageUrls[0] ?? null,
+    image_urls: imageUrls,
     source_excerpt: typeof payload.source_excerpt === 'string' ? payload.source_excerpt.trim() || null : null,
     confidence: Math.max(0, Math.min(1, Number(payload.confidence ?? 0.7) || 0.7)),
   }
@@ -128,20 +164,21 @@ function stripHtmlToText(html: string): string {
 }
 
 function readRecipeFromJsonLd(html: string): ExtractedRecipe | null {
-  const coerceImageUrl = (value: unknown): string | null => {
-    if (typeof value === 'string') return value.trim() || null
+  const coerceImageUrls = (value: unknown): string[] => {
+    if (typeof value === 'string') return value.trim() ? [value.trim()] : []
     if (Array.isArray(value)) {
+      const list: string[] = []
       for (const item of value) {
-        const fromItem = coerceImageUrl(item)
-        if (fromItem) return fromItem
+        const fromItem = coerceImageUrls(item)
+        if (fromItem.length > 0) list.push(...fromItem)
       }
-      return null
+      return normalizeUniqueImageUrls(list)
     }
     if (value && typeof value === 'object') {
       const row = value as Record<string, unknown>
-      return coerceImageUrl(row.url ?? row.contentUrl)
+      return coerceImageUrls(row.url ?? row.contentUrl)
     }
-    return null
+    return []
   }
 
   const scripts = Array.from(html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi))
@@ -202,24 +239,27 @@ function readRecipeFromJsonLd(html: string): ExtractedRecipe | null {
 
       if (ingredients.length === 0 || steps.length === 0) continue
 
+      const imageUrls = coerceImageUrls(recipe.image)
       return {
         name,
         ingredients,
         steps,
         servings: typeof recipe.recipeYield === 'string' ? recipe.recipeYield : null,
         cook_time: typeof recipe.totalTime === 'string' ? recipe.totalTime : null,
-        image_url: coerceImageUrl(recipe.image),
+        image_url: imageUrls[0] ?? null,
+        image_urls: imageUrls,
         source_excerpt: null,
         confidence: 0.96,
       }
     }
 
-    function readOgImage(html: string): string | null {
-      const match = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i)
-      return match?.[1]?.trim() || null
-    }
   }
   return null
+}
+
+function readOgImage(html: string): string | null {
+  const match = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i)
+  return match?.[1]?.trim() || null
 }
 
 async function callGeminiJson(config: Required<LlmConfig>, parts: Array<Record<string, unknown>>): Promise<string> {
@@ -249,11 +289,13 @@ async function callGeminiJson(config: Required<LlmConfig>, parts: Array<Record<s
 
 async function extractFromTextWithLlm(config: Required<LlmConfig>, text: string, fallbackName: string): Promise<ExtractedRecipe> {
   const prompt = [
-    'Extract a cooking recipe from the provided content.',
+    'Extract a cooking recipe from the provided content in strict OCR/LITERAL mode.',
     'Return strict JSON:',
     '{"name":"...","servings":"...","cook_time":"...","ingredients":[{"raw_text":"...","name":"...","quantity":"...","unit":"...","optional":false}],"steps":[{"step_number":1,"instruction":"..."}],"source_excerpt":"...","confidence":0.0}',
-    'Keep ingredient raw_text exactly as seen when possible.',
-    'Steps must be ordered and concise.',
+    'Do not paraphrase, summarize, infer, or rewrite recipe content.',
+    'Ingredients: copy raw_text exactly from source lines (spelling, punctuation, order).',
+    'Steps: copy instruction wording exactly as written and keep original order.',
+    'If text is unclear, keep best-effort literal text and use [illegible] for unreadable words instead of guessing.',
     '',
     'Content:',
     text.slice(0, 18000),
@@ -271,16 +313,49 @@ async function extractFromBinaryWithLlm(
   fallbackName: string,
 ): Promise<ExtractedRecipe> {
   const prompt = [
-    'Extract recipe information from this file.',
+    'Extract recipe information from this file in strict OCR/LITERAL mode.',
     'Return strict JSON:',
     '{"name":"...","servings":"...","cook_time":"...","ingredients":[{"raw_text":"...","name":"...","quantity":"...","unit":"...","optional":false}],"steps":[{"step_number":1,"instruction":"..."}],"source_excerpt":"...","confidence":0.0}',
-    'For scanned recipes: infer clean ingredient names and instruction steps.',
+    'Do not paraphrase, summarize, infer, or rewrite recipe content.',
+    'For scanned recipes, preserve exact wording and order from the source.',
+    'Ingredients raw_text must be copied exactly from visible lines.',
+    'Steps must preserve original wording and order. Use [illegible] for unreadable words instead of guessing.',
   ].join('\n')
 
   const raw = await callGeminiJson(config, [
     { text: prompt },
     { inline_data: { mime_type: mimeType, data: fileBase64 } },
   ])
+  const parsed = parseJsonObject(raw)
+  return normalizeExtractedRecipe(parsed, fallbackName)
+}
+
+async function extractFromBinaryBatchWithLlm(
+  config: Required<LlmConfig>,
+  files: Array<{ file_base64: string; mime_type: string }>,
+  fallbackName: string,
+): Promise<ExtractedRecipe> {
+  if (files.length === 0) throw new Error('At least one file is required')
+  const prompt = [
+    'Extract one complete recipe from the provided files (multiple photos/pages of the same recipe) in strict OCR/LITERAL mode.',
+    'Do not paraphrase, summarize, infer, or rewrite recipe content.',
+    'Preserve ingredient and step wording exactly as written in source and keep source order.',
+    'Only remove exact duplicate lines caused by overlapping photos of the same line.',
+    'Use [illegible] for unreadable words instead of guessing.',
+    'Return strict JSON:',
+    '{"name":"...","servings":"...","cook_time":"...","ingredients":[{"raw_text":"...","name":"...","quantity":"...","unit":"...","optional":false}],"steps":[{"step_number":1,"instruction":"..."}],"source_excerpt":"...","confidence":0.0}',
+  ].join('\n')
+
+  const parts: Array<Record<string, unknown>> = [{ text: prompt }]
+  for (const file of files) {
+    parts.push({
+      inline_data: {
+        mime_type: file.mime_type,
+        data: file.file_base64,
+      },
+    })
+  }
+  const raw = await callGeminiJson(config, parts)
   const parsed = parseJsonObject(raw)
   return normalizeExtractedRecipe(parsed, fallbackName)
 }
@@ -293,6 +368,8 @@ Deno.serve(async (req) => {
       source_type: sourceTypeRaw,
       source_url: sourceUrlRaw,
       file_base64: fileBase64Raw,
+      files: filesRaw,
+      meal_photo_index: mealPhotoIndexRaw,
       mime_type: mimeTypeRaw,
       fallback_name: fallbackNameRaw,
     } = await req.json().catch(() => ({}))
@@ -304,6 +381,23 @@ Deno.serve(async (req) => {
 
     const sourceUrl = String(sourceUrlRaw ?? '').trim()
     const fileBase64 = String(fileBase64Raw ?? '').trim()
+    const files = Array.isArray(filesRaw) ? filesRaw : []
+    const normalizedFiles = files
+      .map((row) => {
+        if (!row || typeof row !== 'object') return null
+        const item = row as Record<string, unknown>
+        const data = String(item.file_base64 ?? '').trim()
+        const mime = String(item.mime_type ?? '').trim()
+        if (!data) return null
+        return {
+          file_base64: data,
+          mime_type: mime || 'image/jpeg',
+        }
+      })
+      .filter((row): row is { file_base64: string; mime_type: string } => row !== null)
+    const mealPhotoIndex = mealPhotoIndexRaw === null || mealPhotoIndexRaw === undefined || mealPhotoIndexRaw === ''
+      ? null
+      : Number(mealPhotoIndexRaw)
     const mimeType = String(mimeTypeRaw ?? '').trim()
     const fallbackName = String(fallbackNameRaw ?? 'Imported recipe').trim() || 'Imported recipe'
 
@@ -339,13 +433,44 @@ Deno.serve(async (req) => {
         extracted.image_url = readOgImage(html)
       }
     } else {
-      if (!fileBase64) throw new Error('file_base64 is required for image/pdf imports')
-      const resolvedMime = sourceType === 'pdf' ? 'application/pdf' : (mimeType || 'image/jpeg')
-      extracted = await extractFromBinaryWithLlm(llmConfig, fileBase64, resolvedMime, fallbackName)
+      if (normalizedFiles.length > 0) {
+        const filesForExtraction = normalizedFiles.map((file) => ({
+          file_base64: file.file_base64,
+          mime_type: sourceType === 'pdf' ? 'application/pdf' : file.mime_type || 'image/jpeg',
+        }))
+        extracted = await extractFromBinaryBatchWithLlm(llmConfig, filesForExtraction, fallbackName)
+      } else {
+        if (!fileBase64) throw new Error('file_base64 or files[] is required for image/pdf imports')
+        const resolvedMime = sourceType === 'pdf' ? 'application/pdf' : (mimeType || 'image/jpeg')
+        extracted = await extractFromBinaryWithLlm(llmConfig, fileBase64, resolvedMime, fallbackName)
+      }
     }
 
     if (!sourceExcerpt) {
       sourceExcerpt = extracted.source_excerpt ?? ''
+    }
+
+    const imageCandidates = normalizeUniqueImageUrls([
+      ...(Array.isArray(extracted.image_urls) ? extracted.image_urls : []),
+      extracted.image_url,
+    ])
+    extracted.image_urls = imageCandidates
+
+    if (!extracted.image_url) {
+      const mealDbImage = await fetchMealDbImage(extracted.name)
+      extracted.image_url = mealDbImage ?? buildRecipeFallbackImage(extracted.name)
+    }
+    if (extracted.image_url && !extracted.image_urls.includes(extracted.image_url)) {
+      extracted.image_urls.unshift(extracted.image_url)
+    }
+    if (normalizedFiles.length > 0 && mealPhotoIndex !== null && Number.isFinite(mealPhotoIndex)) {
+      const boundedMealPhotoIndex = Math.max(0, Math.min(Math.floor(mealPhotoIndex), normalizedFiles.length - 1))
+      const selectedFile = normalizedFiles[boundedMealPhotoIndex]
+      if (selectedFile) {
+        const dataUrl = `data:${selectedFile.mime_type};base64,${selectedFile.file_base64}`
+        if (!extracted.image_urls.includes(dataUrl)) extracted.image_urls.unshift(dataUrl)
+        extracted.image_url = dataUrl
+      }
     }
 
     const { error: importError } = await sb

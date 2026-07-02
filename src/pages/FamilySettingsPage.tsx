@@ -5,19 +5,43 @@ import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import type { FamilyMember } from '../types'
 
-// Preset color palette
-const COLOR_OPTIONS = [
+// Profile color palette (alert-like hues intentionally excluded)
+const PROFILE_COLOR_OPTIONS = [
   { hex: '#2C3E6B', name: 'Navy' },
   { hex: '#C8A96E', name: 'Gold' },
   { hex: '#4A7C59', name: 'Forest' },
-  { hex: '#C0392B', name: 'Red' },
   { hex: '#8E44AD', name: 'Purple' },
   { hex: '#2980B9', name: 'Blue' },
-  { hex: '#E67E22', name: 'Orange' },
   { hex: '#16A085', name: 'Teal' },
-  { hex: '#D35400', name: 'Burnt Orange' },
+  { hex: '#6B7FD7', name: 'Indigo' },
+  { hex: '#4F9D9D', name: 'Sea Glass' },
   { hex: '#7F8C8D', name: 'Slate' },
 ]
+
+const ALERT_RESERVED_COLORS = [
+  { hex: '#C0392B', name: 'Red (alerts)' },
+  { hex: '#E67E22', name: 'Orange (alerts)' },
+  { hex: '#D35400', name: 'Burnt Orange (alerts)' },
+]
+
+const ALL_COLOR_OPTIONS = [
+  ...PROFILE_COLOR_OPTIONS,
+  ...ALERT_RESERVED_COLORS,
+]
+
+const COLOR_NAME_BY_HEX = new Map(
+  ALL_COLOR_OPTIONS.map((color) => [color.hex, color.name]),
+)
+
+const FALLBACK_PROFILE_COLOR = PROFILE_COLOR_OPTIONS[0].hex
+
+const getDisplayColor = (hex?: string | null) =>
+  hex && hex.trim().length > 0 ? hex : FALLBACK_PROFILE_COLOR
+
+const normalizeProfileColorName = (hex: string) =>
+  COLOR_NAME_BY_HEX.get(hex) ?? hex
+
+const COLOR_OPTIONS = PROFILE_COLOR_OPTIONS
 
 const ROLE_OPTIONS = [
   { value: 'parent', label: 'Parent' },
@@ -95,10 +119,11 @@ export default function FamilySettingsPage() {
       // Update existing members that have edits
       const updates = Object.entries(edits).map(([id, changes]) => {
         const base = members.find(m => m.id === id)!
-        const colorMatch = COLOR_OPTIONS.find(c => c.hex === (changes.color_hex ?? base.color_hex))
+        const selectedColor = getDisplayColor(changes.color_hex ?? base.color_hex)
         return supabase.from('family_members').update({
           ...changes,
-          color_name: colorMatch?.name ?? base.color_name,
+          color_hex: selectedColor,
+          color_name: normalizeProfileColorName(selectedColor),
           updated_at: new Date().toISOString(),
         }).eq('id', id)
       })
@@ -107,13 +132,13 @@ export default function FamilySettingsPage() {
       const inserts = newMembers
         .filter(m => m.name?.trim())
         .map((m, i) => {
-          const colorMatch = COLOR_OPTIONS.find(c => c.hex === m.color_hex)
+          const selectedColor = getDisplayColor(m.color_hex)
           return supabase.from('family_members').insert({
             name: m.name!.trim(),
             full_name: m.full_name?.trim() || null,
             role: m.role ?? 'child',
-            color_hex: m.color_hex!,
-            color_name: colorMatch?.name ?? m.color_hex!,
+            color_hex: selectedColor,
+            color_name: normalizeProfileColorName(selectedColor),
             phone: m.phone?.trim() || null,
             email: m.email?.trim() || null,
             is_admin: m.is_admin ?? false,
@@ -182,7 +207,7 @@ export default function FamilySettingsPage() {
           const id = m.id ?? m._tempId!
           const isNew = !!m._isNew
           const isExpanded = expandedId === id
-          const colorHex = m.color_hex ?? '#2C3E6B'
+          const colorHex = getDisplayColor(m.color_hex ?? '#2C3E6B')
 
           return (
             <div key={id} className="bg-casa-surface rounded-card border border-casa-border shadow-card overflow-hidden">
@@ -272,6 +297,9 @@ export default function FamilySettingsPage() {
                         />
                       ))}
                     </div>
+                    <p className="mt-2 text-caption text-casa-muted">
+                      Red/orange hues are reserved for alerts to reduce confusion.
+                    </p>
                   </div>
 
                   {/* Contact */}

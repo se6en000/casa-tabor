@@ -104,10 +104,32 @@ async function refreshToken(rt: string, clientId: string, clientSecret: string) 
 
 // ── LLM call ──────────────────────────────────────────────────────
 
-async function callLLM(llmConfig: { provider?: string; model?: string; api_key: string }, prompt: string): Promise<string> {
-  const model = llmConfig.model ?? 'gemini-2.5-flash'
+type UsageAccumulator = {
+  inputTokens: number
+  outputTokens: number
+}
+
+function toNonNegativeInt(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : 0
+}
+
+function resolveGeminiModel(model?: string): string {
+  const normalized = (model ?? '').trim().toLowerCase()
+  if (!normalized) return 'gemini-2.5-flash-lite'
+  if (normalized === 'gemini-2.5-flash') return 'gemini-2.5-flash-lite'
+  if (normalized === 'gemini-2.5-pro') return 'gemini-2.5-flash-lite'
+  return model as string
+}
+
+async function callLLM(
+  llmConfig: { provider?: string; model?: string; api_key: string },
+  prompt: string,
+  usage?: UsageAccumulator,
+): Promise<string> {
+  const provider = llmConfig.provider ?? 'gemini'
+  const model = provider === 'gemini' ? resolveGeminiModel(llmConfig.model) : (llmConfig.model ?? 'gpt-4o-mini')
   const apiKey = llmConfig.api_key
-  if (llmConfig.provider === 'openai') {
+  if (provider === 'openai') {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -122,11 +144,15 @@ async function callLLM(llmConfig: { provider?: string; model?: string; api_key: 
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 1000, temperature: 0.1, responseMimeType: 'application/json' },
+        generationConfig: { maxOutputTokens: 400, temperature: 0.1, responseMimeType: 'application/json' },
       }),
     })
     if (!res.ok) throw new Error(`Gemini ${res.status}`)
     const data = await res.json()
+    if (usage) {
+      usage.inputTokens += toNonNegativeInt(data?.usageMetadata?.promptTokenCount)
+      usage.outputTokens += toNonNegativeInt(data?.usageMetadata?.candidatesTokenCount)
+    }
     return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
   }
 }
@@ -167,6 +193,7 @@ async function classifyEmail(
   body: string,
   familyMembers: { id: string; name: string; role: string }[],
   llmConfig: { provider?: string; model?: string; api_key: string },
+  usage?: UsageAccumulator,
 ): Promise<EmailIntent | null> {
   const today = new Date().toISOString().slice(0, 10)
   const prompt = `You are the inbox classifier for a family calendar app. Today is ${today}.
@@ -201,7 +228,7 @@ Reply ONLY with JSON:
 }`
 
   try {
-    const raw = await callLLM(llmConfig, prompt)
+    const raw = await callLLM(llmConfig, prompt, usage)
     return JSON.parse(raw.replace(/```json\n?|\n?```/g, '').trim()) as EmailIntent
   } catch { return null }
 }
@@ -213,6 +240,7 @@ async function extractInboxActions(
   body: string,
   familyMembers: { id: string; name: string; role: string }[],
   llmConfig: { provider?: string; model?: string; api_key: string },
+  usage?: UsageAccumulator,
 ): Promise<InboxActionItem[]> {
   const today = new Date().toISOString().slice(0, 10)
   const prompt = `You extract actionable family inbox tasks. Today is ${today}.
@@ -247,7 +275,7 @@ Respond ONLY JSON:
 If no actionable task exists, return {"actions":[]}.`
 
   try {
-    const raw = await callLLM(llmConfig, prompt)
+    const raw = await callLLM(llmConfig, prompt, usage)
     const parsed = JSON.parse(raw.replace(/```json\n?|\n?```/g, '').trim()) as { actions?: InboxActionItem[] }
     return (parsed.actions ?? []).filter(a => !!a?.description && !!a?.type)
   } catch {
@@ -388,6 +416,7 @@ Deno.serve(async (req) => {
   const { data: tokens } = await query
 
   const results: { member_id: string; scanned: number; created: number; updated: number; travel: number; skipped: number; conflicts: number; actions: number; error?: string }[] = []
+  const llmUsage: UsageAccumulator = { inputTokens: 0, outputTokens: 0 }
 
   for (const tok of (tokens ?? [])) {
     const memberId = tok.family_member_id
@@ -440,8 +469,10 @@ Deno.serve(async (req) => {
 
       // ── AI classification ──────────────────────────────────────
       const [classified, extractedActions] = await Promise.all([
-        classifyEmail(details.subject, details.from, details.date, details.body, familyMembers, llm),
-        extractInboxActions(details.subject, details.from, details.date, details.body, familyMembers, llm),
+        classifyEmail(details.subject, details.from, details.date, details.body, familyMembers, llm, llmUsage),
+        isActionCandidate
+          ? extractInboxActions(details.subject, details.from, details.date, details.body, familyMembers, llm, llmUsage)
+          : Promise.resolve([] as InboxActionItem[]),
       ])
 
       const emailReceivedAt = details.date ? new Date(details.date).toISOString() : new Date().toISOString()
@@ -670,6 +701,20 @@ Deno.serve(async (req) => {
     }
 
     results.push({ member_id: memberId, scanned, created, updated, travel, skipped, conflicts, actions })
+  }
+
+  if (llmUsage.inputTokens > 0 || llmUsage.outputTokens > 0) {
+    const usageModel = (llm.provider ?? 'gemini') === 'gemini'
+      ? resolveGeminiModel(llm.model)
+      : (llm.model ?? 'unknown')
+    await sb.from('ai_usage_log').insert({
+      function_name: 'scan-gmail-inbox',
+      provider: llm.provider ?? 'gemini',
+      model: usageModel,
+      input_tokens: llmUsage.inputTokens,
+      output_tokens: llmUsage.outputTokens,
+      cached: false,
+    }).then(() => {}).catch(() => {})
   }
 
   return new Response(JSON.stringify({ ok: true, results }), { headers: { ...CORS, 'content-type': 'application/json' } })

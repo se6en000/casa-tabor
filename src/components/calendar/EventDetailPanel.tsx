@@ -15,16 +15,19 @@ import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
-import type { EventChecklistItem } from '../../types'
+import type { EventChecklistItem, EventEnrichment } from '../../types'
 import { getFieldsForCategory, CATEGORY_LABEL } from './categoryFields'
 import EventEditSheet from './EventEditSheet'
 import AIChatDrawer from '../shared/AIChatDrawer'
-import { LeaveByCard } from '../shared/LeaveByCard'
 import { DepartureRiskBanner } from '../shared/DepartureRiskBanner'
 import type { Trip } from '../../hooks/useTrips'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useSavedPlaces, useSavePlace, findSavedPlace } from '../../hooks/useSavedPlaces'
 import { useTravelEta } from '../../hooks/useTravelEta'
+import {
+  inferEventMode, derivePlan, eventAccentColor, trafficPill,
+  type PlanModel,
+} from '../../lib/eventCommandCenter'
 import BounceScroll from '../shared/BounceScroll'
 
 const CONFIDENCE_CONFIG = {
@@ -77,17 +80,16 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
 
   return (
     <>
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {event && (
           <>
-            {/* Backdrop — both mobile and desktop */}
             <motion.div
               key="backdrop"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/40 z-[54]"
+              className="fixed inset-0 bg-transparent z-[54]"
               data-panel-overlay
               onClick={onClose}
               onTouchStart={stopTouch}
@@ -97,13 +99,13 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
             />
 
             {isMobile ? (
-              /* ── Mobile: bottom sheet, swipe-down from handle only ── */
+              /* ── Mobile: simple expand/dismiss sheet ── */
               <motion.div
-                key="panel"
+                key="mobile-panel-shell"
                 initial={{ y: '100%' }}
                 animate={{ y: 0 }}
-                exit={{ y: '100%' }}
-                transition={{ type: 'tween', duration: 0.38, ease: [0.32, 0.72, 0, 1] }}
+                exit={{ y: '100%', transition: { duration: 0.26, ease: [0.4, 0, 1, 1] } }}
+                transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
                 drag="y"
                 dragControls={mobileDragControls}
                 dragListener={false}
@@ -113,8 +115,8 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 onDragEnd={(_e, info) => {
                   if (info.velocity.y > 500 || info.offset.y > 200) onClose()
                 }}
-                style={{ willChange: 'transform' }}
-                className="fixed inset-x-0 bottom-0 top-[5vh] bg-casa-surface rounded-t-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col overflow-hidden"
+                style={{ willChange: 'transform', backfaceVisibility: 'hidden' }}
+                className="fixed inset-x-2 bottom-2 top-[5vh] bg-casa-surface rounded-3xl shadow-[0_14px_44px_rgba(27,42,74,0.22)] z-[55] flex flex-col overflow-hidden transform-gpu"
                 data-panel-overlay
                 onClick={e => e.stopPropagation()}
                 onPointerDown={stopTouch}
@@ -128,7 +130,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                     <div
                       className="flex-shrink-0 flex flex-col items-center justify-end pb-3 pt-5 cursor-grab active:cursor-grabbing min-h-[52px]"
                       style={{
-                        background: `linear-gradient(to bottom, ${color}45 0%, transparent 100%)`,
+                        background: `linear-gradient(to bottom, ${color}12 0%, transparent 100%)`,
                         touchAction: 'none',
                       }}
                       onPointerDown={e => mobileDragControls.start(e)}
@@ -138,17 +140,17 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   )
                 })()}
                 <PanelHeader event={event} onClose={onClose} />
-                <PanelBody event={event} />
+                <PanelBody event={event} onEdit={() => setShowEdit(true)} />
                 <PanelFooter event={event} onEdit={() => setShowEdit(true)} onEditWithAI={handleEditWithAI} />
               </motion.div>
             ) : (
-              /* ── Desktop: right side panel, swipe-right from handle only ── */
+              /* ── Desktop: simple expand/dismiss panel ── */
               <motion.div
-                key="panel"
+                key="desktop-panel-shell"
                 initial={{ x: '100%' }}
                 animate={{ x: 0 }}
-                exit={{ x: '100%' }}
-                transition={{ type: 'spring', damping: 32, stiffness: 200 }}
+                exit={{ x: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }}
+                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                 drag="y"
                 dragControls={desktopDragControls}
                 dragListener={false}
@@ -158,8 +160,8 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 onDragEnd={(_e, info) => {
                   if (info.velocity.y > 500 || info.offset.y > 200) onClose()
                 }}
-                style={{ willChange: 'transform' }}
-                className="fixed top-0 right-0 h-full w-[960px] bg-casa-surface border-l border-casa-border shadow-[−4px_0_40px_rgba(0,0,0,0.18)] z-[55] flex flex-col overflow-hidden"
+                style={{ willChange: 'transform', backfaceVisibility: 'hidden' }}
+                className="fixed top-4 right-4 bottom-4 h-auto w-[min(960px,calc(100vw-2rem))] bg-casa-surface border border-casa-border rounded-3xl shadow-[0_18px_52px_rgba(27,42,74,0.24)] z-[55] flex flex-col overflow-hidden transform-gpu"
                 data-panel-overlay
                 onClick={e => e.stopPropagation()}
                 onPointerDown={stopTouch}
@@ -167,14 +169,13 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 onTouchMove={stopTouch}
                 onTouchEnd={stopTouch}
               >
-                {/* Gradient eyebrow + drag handle */}
                 {(() => {
                   const color = event.members[0]?.family_member?.color_hex ?? '#C9A96E'
                   return (
                     <div
                       className="flex-shrink-0 flex flex-col items-center justify-end pb-3 pt-5 cursor-grab active:cursor-grabbing min-h-[52px]"
                       style={{
-                        background: `linear-gradient(to bottom, ${color}45 0%, transparent 100%)`,
+                        background: `linear-gradient(to bottom, ${color}12 0%, transparent 100%)`,
                         touchAction: 'none',
                       }}
                       onPointerDown={e => desktopDragControls.start(e)}
@@ -184,7 +185,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   )
                 })()}
                 <PanelHeader event={event} onClose={onClose} />
-                <PanelBody event={event} />
+                <PanelBody event={event} onEdit={() => setShowEdit(true)} />
                 <PanelFooter event={event} onEdit={() => setShowEdit(true)} onEditWithAI={handleEditWithAI} />
               </motion.div>
             )}
@@ -362,6 +363,12 @@ function PanelHeader({ event, onClose }: { event: EventWithDetails; onClose: () 
   const confidence = event.enrichment?.confidence as keyof typeof CONFIDENCE_CONFIG | undefined
   const conf = confidence ? CONFIDENCE_CONFIG[confidence] : null
   const category = event.enrichment?.category
+  const accent = eventAccentColor(event)
+  const primary = event.members?.find((m) => m.role === 'primary') ?? event.members?.[0]
+  const eyebrow = primary?.family_member?.name
+    ? `${primary.family_member.name}${event.members.length > 1 ? ` +${event.members.length - 1}` : ''}`
+    : null
+  const isRecurring = Boolean(event.rrule || event.recurrence_master_id)
 
   return (
     <div className="border-b border-casa-border">
@@ -373,6 +380,28 @@ function PanelHeader({ event, onClose }: { event: EventWithDetails; onClose: () 
           <X size={18} />
         </button>
 
+        {/* Type + recurring chips */}
+        <div className="flex items-center flex-wrap gap-2 mb-2">
+          {category && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-caption font-semibold bg-casa-bg border border-casa-border text-casa-muted capitalize">
+              {CATEGORY_LABEL[category] ?? category}
+            </span>
+          )}
+          {isRecurring && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption font-semibold bg-casa-bg border border-casa-border text-casa-muted">
+              <Clock size={10} /> Recurring
+            </span>
+          )}
+        </div>
+
+        {/* Eyebrow — color-dotted uppercase kicker naming whose event it is */}
+        {eyebrow && (
+          <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-casa-muted mb-1.5">
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: accent }} />
+            {eyebrow}
+          </p>
+        )}
+
         <h2 className="font-display text-display-md text-casa-navy pr-8 mb-1 leading-tight">
           {event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}
         </h2>
@@ -382,23 +411,14 @@ function PanelHeader({ event, onClose }: { event: EventWithDetails; onClose: () 
           {format(new Date(event.start_time), 'h:mm a')} – {format(new Date(event.end_time), 'h:mm a')}
         </p>
 
-        {/* Confidence + category pills */}
-        <div className="flex items-center flex-wrap gap-2 mt-3">
-          {category && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-caption font-semibold bg-casa-bg border border-casa-border text-casa-muted capitalize">
-              {CATEGORY_LABEL[category] ?? category}
-            </span>
-          )}
-          {conf && (
+        {conf && (
+          <div className="flex items-center flex-wrap gap-2 mt-3">
             <span className={cn('inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-caption font-semibold border', conf.bg, conf.text, conf.border)}>
               <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: conf.color }} />
               {conf.label}
             </span>
-          )}
-        </div>
-
-        {/* Inline member editor — tap × to remove, crown to promote, + to add */}
-        <MemberEditor event={event} />
+          </div>
+        )}
 
         {/* Urgent action banner */}
         {urgentAction && (
@@ -839,7 +859,7 @@ async function findTrip(memberId: string, eventDate: string, event: EventWithDet
   return match ?? nearby[0] as Trip
 }
 
-function PanelBody({ event, onEventUpdated }: { event: EventWithDetails; onEventUpdated?: () => void }) {
+function PanelBody({ event, onEventUpdated, onEdit }: { event: EventWithDetails; onEventUpdated?: () => void; onEdit?: () => void }) {
   const enr = event.enrichment
   const category = enr?.category
   const isTravel = TRAVEL_CATEGORIES.includes(category ?? '')
@@ -1034,18 +1054,17 @@ function PanelBody({ event, onEventUpdated }: { event: EventWithDetails; onEvent
         />
       </div>
     )
-    return <StandardPanelBody event={event} topSlot={scanPrompt} />
+    return <StandardPanelBody event={event} topSlot={scanPrompt} onEdit={onEdit} />
   }
 
   // ── Non-travel or still loading ──
-  return <StandardPanelBody event={event} />
+  return <StandardPanelBody event={event} onEdit={onEdit} />
 }
 
-function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlot?: React.ReactNode }) {
+function StandardPanelBody({ event, topSlot, onEdit }: { event: EventWithDetails; topSlot?: React.ReactNode; onEdit?: () => void }) {
   const enr = event.enrichment
   const weatherAtVenue = enr?.weather_at_event || enr?.weather_summary
   const reminder = event.event_type === 'reminder'
-  const hasLogistics = !reminder && event.logistics?.length > 0
   const hasChecklist = event.checklist?.length > 0
   const hasActions = event.actions?.filter((a) => !a.is_urgent).length > 0
   const activeFields = getFieldsForCategory(enr?.category)
@@ -1054,8 +1073,8 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
     if (typeof value === 'string') return value.trim() !== ''
     return value !== null && value !== undefined
   }
-  const hasDestinationExtras = hasText(enr?.parking_notes) || hasText(enr?.contact_name) || hasText(enr?.contact_phone)
-  const hasDestinationInfo = !!(event.location_name || event.address || hasDestinationExtras || weatherAtVenue)
+  const { data: household = [] } = useFamilyMembers()
+
   const commuteDestination = event.address ?? event.location_name ?? null
   const commuteQuery = useTravelEta({
     destination: commuteDestination,
@@ -1063,19 +1082,65 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
     enabled: !reminder && Boolean(commuteDestination),
     bufferMins: 10,
   })
-  const liveLeaveBy = commuteQuery.data?.found && commuteQuery.data.leave_by
-    ? new Date(commuteQuery.data.leave_by)
-    : null
-  const shouldSyncLogisticsLeave = Boolean(liveLeaveBy)
+
+  // Phase 1 verify heuristic: geocoded coords present → confirmed; else unverified.
+  const verified = Boolean(event.lat != null && event.lng != null)
+  const hasDestination = Boolean(event.location_name || event.address)
+
+  const mode = inferEventMode(event)
+  const plan = reminder ? null : derivePlan(event, mode, {
+    household,
+    eta: commuteQuery.data,
+    verified,
+  })
+
+  const hostedAtHome = mode === 'hosted'
 
   return (
-    <BounceScroll className="flex-1" innerClassName="p-6 space-y-6">
+    <BounceScroll className="flex-1" innerClassName="p-6 space-y-5">
       {topSlot}
 
-      {/* Target location — always at top when available */}
-      {!reminder && hasDestinationInfo && (
+      {/* ── Going ── */}
+      {!reminder && (
         <section>
-          <SectionLabel>Destination</SectionLabel>
+          <SectionLabel>{hostedAtHome ? 'At home' : 'Going'}</SectionLabel>
+          <MemberEditor event={event} />
+        </section>
+      )}
+
+      {/* ── Destination + verify (at-a-glance) ── */}
+      {!reminder && hasDestination && (
+        <section>
+          <DestinationHeaderCard
+            locationName={event.location_name}
+            address={event.address}
+            verified={verified}
+            atHome={hostedAtHome}
+            onCheckAddress={onEdit}
+          />
+        </section>
+      )}
+
+      {/* ── The Plan ── */}
+      {plan && (
+        <section>
+          <PlanBlock plan={plan} loading={commuteQuery.isLoading && !commuteQuery.data} />
+          {commuteQuery.data?.found && (
+            <div className="mt-3">
+              <DepartureRiskBanner
+                event={event}
+                travelEta={commuteQuery.data}
+                enableSmartAlerts
+              />
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ── Where (map + weather + verify state) ── */}
+      {!reminder && hasDestination && (
+        <section>
+          <SectionLabel>{mode === 'hosted' ? 'Location' : mode === 'trip' ? 'Destination' : 'Where'}</SectionLabel>
           <LocationBlock
             locationName={event.location_name}
             address={event.address}
@@ -1084,92 +1149,27 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
             contactPhone={shows('contact_phone') || hasText(enr?.contact_phone) ? enr?.contact_phone : null}
             weatherAtVenue={weatherAtVenue}
           />
+          <div className={cn(
+            'mt-2 flex items-center gap-1.5 text-caption font-medium',
+            verified ? 'text-emerald-600' : 'text-amber-600',
+          )}>
+            {verified ? <Check size={12} /> : <AlertTriangle size={12} />}
+            {verified ? 'Address confirmed · drive times are live' : 'Drive times are estimates until you confirm the address'}
+          </div>
         </section>
       )}
 
-      {!reminder && (event.address || event.location_name) && (
-        <section>
-          <SectionLabel>Live Commute</SectionLabel>
-          <LeaveByCard
-            destination={commuteDestination}
-            eventStartIso={event.start_time}
-            travelEta={commuteQuery.data}
-            travelEtaLoading={commuteQuery.isLoading}
-            travelEtaError={commuteQuery.isError}
-          />
-          {commuteQuery.data?.found && (
-            <DepartureRiskBanner
-              event={event}
-              travelEta={commuteQuery.data}
-              enableSmartAlerts
-            />
-          )}
-        </section>
-      )}
-
-      {hasLogistics && (
-        <section>
-          <SectionLabel>Logistics</SectionLabel>
-          <ol className="space-y-3">
-            {event.logistics.map((step, i) => (
-              <li key={step.id} className="flex gap-3">
-                <div className="flex flex-col items-center">
-                  <span className="font-display text-heading leading-none">{step.icon ?? '•'}</span>
-                  {i < event.logistics.length - 1 && <div className="w-px flex-1 bg-casa-divider mt-1" />}
-                </div>
-                <div className="pb-3 min-w-0">
-                  {(() => {
-                    const isLeaveStep = /leave\b/i.test(step.title)
-                    const displayTime = shouldSyncLogisticsLeave && isLeaveStep
-                      ? liveLeaveBy
-                      : (step.time ? new Date(step.time) : null)
-                    const isSynced = Boolean(shouldSyncLogisticsLeave && isLeaveStep && displayTime)
-                    return (
-                      <>
-                  <p className="text-body-sm font-semibold text-casa-navy leading-tight">
-                    {step.title}
-                    {displayTime && <span className="font-normal text-casa-muted ml-1.5">{format(displayTime, 'h:mm a')}</span>}
-                  </p>
-                  {isSynced && (
-                    <p className="text-[11px] text-casa-muted mt-0.5">Synced with Live Commute traffic timing</p>
-                  )}
-                  {step.description && <p className="text-caption text-casa-muted mt-0.5">{step.description}</p>}
-                  {(step.location_name || step.address) && (
-                    <div className="mt-1">
-                      <LocationBlock locationName={step.location_name} address={step.address ?? null} />
-                    </div>
-                  )}
-                      </>
-                    )
-                  })()}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-
-      {!hasLogistics && !reminder && enr?.departure_time && (
-        <section>
-          <SectionLabel>Travel</SectionLabel>
-          <InfoRow icon={<Clock size={16} className="text-casa-gold" />}>
-            <p className="text-body-sm font-semibold text-casa-navy">Leave by {format(new Date(enr.departure_time), 'h:mm a')}</p>
-            {enr.route_summary && <p className="text-caption text-casa-muted">{enr.route_summary}</p>}
-            {enr.drive_time_mins && <p className="text-caption text-casa-muted">{enr.drive_time_mins} min drive</p>}
-          </InfoRow>
-        </section>
-      )}
-
+      {/* ── Bring / Pack ── */}
       {hasChecklist && (
         <section>
-          <SectionLabel>What to Bring</SectionLabel>
+          <SectionLabel>{mode === 'trip' ? 'Pack' : 'Bring'}</SectionLabel>
           <ChecklistSection items={event.checklist} eventId={event.id} />
         </section>
       )}
 
       {!hasChecklist && enr?.what_to_bring && enr.what_to_bring.length > 0 && (
         <section>
-          <SectionLabel>What to Bring</SectionLabel>
+          <SectionLabel>{mode === 'trip' ? 'Pack' : 'Bring'}</SectionLabel>
           <div className="space-y-2">
             {enr.what_to_bring.map((item, i) => (
               <div key={i} className="flex items-center gap-3">
@@ -1181,6 +1181,7 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
         </section>
       )}
 
+      {/* ── To Do (non-urgent action items) ── */}
       {hasActions && (
         <section>
           <SectionLabel>To Do</SectionLabel>
@@ -1202,56 +1203,231 @@ function StandardPanelBody({ event, topSlot }: { event: EventWithDetails; topSlo
         </section>
       )}
 
+      {/* ── Reference (collapsible: contact, cost, notes, dietary, outfit) ── */}
       {enr && (
-        <>
-          {hasText(enr.outfit_suggestion) && (
-            <section><SectionLabel>What to Wear</SectionLabel><p className="text-body-sm text-casa-text">{enr.outfit_suggestion}</p></section>
-          )}
-          {(hasText(enr.contact_name) || hasText(enr.contact_phone)) && (
-            <section>
-              <SectionLabel>Contact</SectionLabel>
-              <InfoRow icon={<Phone size={16} className="text-casa-muted" />}>
-                {enr.contact_name && <p className="text-body-sm font-semibold text-casa-navy">{enr.contact_name}</p>}
-                {enr.contact_phone && (
-                  <a
-                    href={`tel:${enr.contact_phone.replace(/\D/g, '')}`}
-                    className="text-caption text-casa-gold hover:text-casa-navy transition-colors hover:underline"
-                  >
-                    {enr.contact_phone}
-                  </a>
-                )}
-              </InfoRow>
-            </section>
-          )}
-          {hasText(enr.cost_estimate) && (
-            <section>
-              <SectionLabel>Cost Estimate</SectionLabel>
-              <InfoRow icon={<DollarSign size={16} className="text-casa-muted" />}><p className="text-body-sm text-casa-navy">{enr.cost_estimate}</p></InfoRow>
-            </section>
-          )}
-          {hasText(enr.dietary_notes) && (
-            <section><SectionLabel>Dietary Notes</SectionLabel><p className="text-body-sm text-casa-text">{enr.dietary_notes}</p></section>
-          )}
-          {hasText(enr.meal_impact) && (
-            <section>
-              <SectionLabel>Meal Impact</SectionLabel>
-              <InfoRow icon={<Utensils size={16} className="text-casa-muted" />}><p className="text-body-sm text-casa-text">{enr.meal_impact}</p></InfoRow>
-            </section>
-          )}
-          {hasText(enr.prep_notes) && (
-            <section><SectionLabel>Notes</SectionLabel><p className="text-body-sm text-casa-text whitespace-pre-line leading-relaxed">{enr.prep_notes}</p></section>
-          )}
-        </>
+        <ReferenceBlock enr={enr} hasText={hasText} />
       )}
 
-      {!enr && (
-        <div className="flex flex-col items-center gap-2 py-8 text-center">
+      {!enr && !reminder && (
+        <div className="flex flex-col items-center gap-2 py-6 text-center">
           <Sparkles size={22} className="text-casa-muted" />
           <p className="text-body-sm text-casa-muted">No AI enrichment yet.</p>
           <p className="text-caption text-casa-muted">Tap Re-enrich above to generate details for this event.</p>
         </div>
       )}
     </BounceScroll>
+  )
+}
+
+/* ── Command Center blocks ──────────────────────────────────── */
+
+function DestinationHeaderCard({ locationName, address, verified, atHome, onCheckAddress }: {
+  locationName: string | null
+  address: string | null
+  verified: boolean
+  atHome: boolean
+  onCheckAddress?: () => void
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-card border border-casa-border bg-casa-bg px-3.5 py-3">
+      <MapPin size={16} className="text-casa-error shrink-0" />
+      <div className="min-w-0 flex-1">
+        {locationName && <p className="text-body-sm font-semibold text-casa-navy truncate">{locationName}</p>}
+        {address && <p className="text-caption text-casa-muted truncate">{address}</p>}
+      </div>
+      {verified ? (
+        <span className="shrink-0 inline-flex items-center gap-1 rounded-pill bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-caption font-semibold text-emerald-700">
+          <Check size={11} /> Confirmed
+        </span>
+      ) : atHome ? (
+        <span className="shrink-0 inline-flex items-center gap-1 rounded-pill bg-casa-surface border border-casa-border px-2.5 py-1 text-caption font-semibold text-casa-muted">
+          <Home size={11} /> At home
+        </span>
+      ) : (
+        <button
+          onClick={onCheckAddress}
+          className="shrink-0 inline-flex items-center gap-1 rounded-pill bg-amber-50 border border-amber-200 px-2.5 py-1 text-caption font-semibold text-amber-700 hover:bg-amber-100 transition-colors"
+        >
+          Check address <ChevronRight size={11} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+function TrafficBadge({ deltaMin }: { deltaMin: number | null | undefined }) {
+  const pill = trafficPill(deltaMin)
+  if (!pill) return null
+  const tone =
+    pill.tone === 'clear' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    : pill.tone === 'light' ? 'bg-amber-50 text-amber-700 border-amber-200'
+    : 'bg-red-50 text-red-700 border-red-200'
+  return (
+    <span className={cn('inline-flex items-center rounded-pill border px-2 py-0.5 text-[11px] font-semibold', tone)}>
+      {pill.label}
+    </span>
+  )
+}
+
+function DriverChip({ driver }: { driver: { name: string; initial: string; color: string } | null | undefined }) {
+  if (!driver) return null
+  return (
+    <div
+      className="shrink-0 inline-flex items-center gap-1.5 rounded-pill pl-1 pr-2.5 py-1 text-white text-caption font-semibold"
+      style={{ backgroundColor: driver.color }}
+    >
+      <span className="w-4 h-4 rounded-full bg-white/25 flex items-center justify-center text-[9px] font-bold">
+        {driver.initial}
+      </span>
+      {driver.name}
+    </div>
+  )
+}
+
+function PlanBlock({ plan, loading }: { plan: PlanModel; loading?: boolean }) {
+  const legDotColor = (kind: string) =>
+    kind === 'drop' || kind === 'depart' ? 'bg-casa-navy'
+    : kind === 'stay' ? 'bg-casa-gold'
+    : 'bg-emerald-500'
+
+  return (
+    <div className="rounded-card overflow-hidden border border-casa-border">
+      {/* Navy header */}
+      <div className="bg-casa-navy px-4 py-3 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/45">The Plan</p>
+          {plan.headline && <p className="text-body-sm font-semibold text-white truncate">{plan.headline}</p>}
+        </div>
+        <span className="shrink-0 inline-flex items-center gap-1.5 rounded-pill bg-white/10 px-2.5 py-1 text-caption font-semibold text-white">
+          {plan.pattern}
+          <span className="text-[9px] font-bold uppercase tracking-wide text-casa-gold">Auto</span>
+        </span>
+      </div>
+
+      {/* Legs */}
+      <div className="bg-casa-surface px-4 py-3">
+        <p className="text-[11px] text-casa-muted mb-2.5">Drivers derived from attendees · editing coming soon</p>
+        <ol className="space-y-3">
+          {plan.legs.map((leg, i) => (
+            <li key={i} className="flex items-start gap-3">
+              <div className="flex flex-col items-center pt-1">
+                <span className={cn('w-2.5 h-2.5 rounded-full', legDotColor(leg.kind))} />
+                {i < plan.legs.length - 1 && <div className="w-px flex-1 min-h-[16px] bg-casa-divider mt-1" />}
+              </div>
+              <div className="min-w-0 flex-1 flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-body-sm font-semibold text-casa-navy leading-tight">{leg.title}</p>
+                  {leg.detail && <p className="text-caption text-casa-muted mt-0.5">{leg.detail}</p>}
+                  {leg.trafficDeltaMin != null && (
+                    <div className="mt-1"><TrafficBadge deltaMin={leg.trafficDeltaMin} /></div>
+                  )}
+                </div>
+                <DriverChip driver={leg.driver} />
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        {loading && (
+          <p className="text-caption text-casa-muted mt-2 flex items-center gap-1.5">
+            <Loader2 size={12} className="animate-spin" /> Calculating drive times…
+          </p>
+        )}
+
+        {plan.legs.some((l) => l.estimate) && (
+          <div className="mt-3 flex items-start gap-1.5 rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-1.5">
+            <AlertTriangle size={12} className="text-amber-500 mt-0.5 shrink-0" />
+            <p className="text-caption text-amber-700">Drive times are estimates until you confirm the address above.</p>
+          </div>
+        )}
+
+        {plan.twoDrivers && (
+          <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-casa-bg border border-casa-border px-2.5 py-1.5">
+            <Users size={12} className="text-casa-navy shrink-0" />
+            <p className="text-caption text-casa-navy font-medium">Two drivers — both need to be locked in.</p>
+          </div>
+        )}
+
+        {plan.yourTime && (
+          <div className="mt-3 rounded-lg bg-casa-bg px-3 py-2">
+            <p className="text-caption text-casa-navy">
+              <span className="font-bold">Your time:</span> {plan.yourTime}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ReferenceBlock({ enr, hasText }: { enr: EventEnrichment; hasText: (v: unknown) => boolean }) {
+  const [open, setOpen] = useState(false)
+  const rows: React.ReactNode[] = []
+
+  if (hasText(enr.outfit_suggestion)) {
+    rows.push(<div key="outfit"><SectionLabel>What to Wear</SectionLabel><p className="text-body-sm text-casa-text">{enr.outfit_suggestion}</p></div>)
+  }
+  if (hasText(enr.contact_name) || hasText(enr.contact_phone)) {
+    rows.push(
+      <div key="contact">
+        <SectionLabel>Contact</SectionLabel>
+        <InfoRow icon={<Phone size={16} className="text-casa-muted" />}>
+          {enr.contact_name && <p className="text-body-sm font-semibold text-casa-navy">{enr.contact_name}</p>}
+          {enr.contact_phone && (
+            <a href={`tel:${enr.contact_phone.replace(/\D/g, '')}`} className="text-caption text-casa-gold hover:text-casa-navy transition-colors hover:underline">{enr.contact_phone}</a>
+          )}
+        </InfoRow>
+      </div>,
+    )
+  }
+  if (hasText(enr.cost_estimate)) {
+    rows.push(
+      <div key="cost">
+        <SectionLabel>Cost Estimate</SectionLabel>
+        <InfoRow icon={<DollarSign size={16} className="text-casa-muted" />}><p className="text-body-sm text-casa-navy">{enr.cost_estimate}</p></InfoRow>
+      </div>,
+    )
+  }
+  if (hasText(enr.dietary_notes)) {
+    rows.push(<div key="diet"><SectionLabel>Dietary Notes</SectionLabel><p className="text-body-sm text-casa-text">{enr.dietary_notes}</p></div>)
+  }
+  if (hasText(enr.meal_impact)) {
+    rows.push(
+      <div key="meal">
+        <SectionLabel>Meal Impact</SectionLabel>
+        <InfoRow icon={<Utensils size={16} className="text-casa-muted" />}><p className="text-body-sm text-casa-text">{enr.meal_impact}</p></InfoRow>
+      </div>,
+    )
+  }
+  if (hasText(enr.prep_notes)) {
+    rows.push(<div key="notes"><SectionLabel>Notes</SectionLabel><p className="text-body-sm text-casa-text whitespace-pre-line leading-relaxed">{enr.prep_notes}</p></div>)
+  }
+
+  if (rows.length === 0) return null
+
+  return (
+    <section>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center justify-between w-full text-left"
+      >
+        <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Reference</span>
+        <ChevronRight size={16} className={cn('text-casa-muted transition-transform', open && 'rotate-90')} />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="pt-4 space-y-4">{rows}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
   )
 }
 

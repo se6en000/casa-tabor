@@ -15,6 +15,8 @@ import BounceScroll from '../shared/BounceScroll'
 const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s all|all done|never mind|nevermind|stop)\b/i
 const CONFIRM_PHRASES = /\b(yes|yeah|yep|confirm|ok|okay|go ahead|do it|sounds good|correct|right|affirmative|absolutely|sure|proceed)\b/i
 const CANCEL_PHRASES  = /\b(no|nope|cancel|don't|do not|stop|abort|never mind|nevermind|undo)\b/i
+const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
+const LOW_CONFIDENCE_REJECT_PHRASES = /\b(no|nope|try again|wrong|not that|cancel)\b/i
 
 /** DeepGram STT bridge — HTTP for probe/display, WS for streaming */
 const BRIDGE    = 'http://127.0.0.1:8766'
@@ -51,7 +53,7 @@ function useSpeechInput({
   hasPendingAction,
 }: {
   onInterim: (text: string) => void
-  onFinalTranscript: (text: string) => void
+  onFinalTranscript: (text: string, meta?: { confidence?: number | null }) => void
   onDismiss: () => void
   onConfirm: () => void
   onCancel: () => void
@@ -66,6 +68,7 @@ function useSpeechInput({
   const silenceTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastInterimRef     = useRef('')
   const lastInterimTimeRef = useRef(0)
+  const lastConfidenceRef  = useRef<number | null>(null)
   const connectStartRef    = useRef(0)
   const [phase, setPhase]  = useState<VoicePhase>('idle')
   const phaseRef           = useRef<VoicePhase>('idle')
@@ -90,6 +93,12 @@ function useSpeechInput({
   useEffect(() => { onConfirmRef.current  = onConfirm },         [onConfirm])
   useEffect(() => { onCancelRef.current   = onCancel },          [onCancel])
   useEffect(() => { hasPendingRef.current = hasPendingAction },  [hasPendingAction])
+
+  const normalizeConfidence = useCallback((raw: unknown): number | null => {
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) return null
+    if (raw > 1 && raw <= 100) return Math.max(0, Math.min(1, raw / 100))
+    return Math.max(0, Math.min(1, raw))
+  }, [])
 
   // Stable ref — avoids recreating startWebSpeech on every render
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -126,7 +135,8 @@ function useSpeechInput({
       onCancelRef.current(); onInterimRef.current('')
       return
     }
-    onFinalRef.current(transcript.trim()); onFinalRef.current('__SEND__')
+    onFinalRef.current(transcript.trim(), { confidence: lastConfidenceRef.current })
+    onFinalRef.current('__SEND__', { confidence: lastConfidenceRef.current })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const triggerFinal = useCallback((text: string) => {
@@ -158,14 +168,19 @@ function useSpeechInput({
     recognition.onresult = (event: any) => {
       let interim = ''
       let finalAccum = ''
+      let finalConfidence: number | null = null
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const t = event.results[i][0].transcript
-        if (event.results[i].isFinal) finalAccum += t
+        if (event.results[i].isFinal) {
+          finalAccum += t
+          finalConfidence = normalizeConfidence(event.results[i][0].confidence)
+        }
         else interim += t
       }
 
       // Use final result immediately (authoritative — no silence timer needed)
       if (finalAccum.trim()) {
+        lastConfidenceRef.current = finalConfidence
         stopSilenceTimer()
         lastInterimRef.current = ''
         onInterimRef.current(finalAccum.trim())
@@ -210,7 +225,7 @@ function useSpeechInput({
     }
 
     recognition.start()
-  }, [WebSpeech, triggerFinal]) // all state accessed via refs
+  }, [WebSpeech, triggerFinal, normalizeConfidence]) // all state accessed via refs
 
   const stopWebSpeech = useCallback(() => {
     stopSilenceTimer()
@@ -254,11 +269,13 @@ function useSpeechInput({
             if (msg.text !== lastInterimRef.current) {
               lastInterimRef.current = msg.text
               lastInterimTimeRef.current = Date.now()
+              lastConfidenceRef.current = normalizeConfidence(msg.confidence)
               onInterimRef.current(msg.text)
             }
             break
           case 'final':
             if (phaseRef.current !== 'processing') {
+              lastConfidenceRef.current = normalizeConfidence(msg.confidence)
               triggerFinal(msg.text)
               if (activeRef.current) setTimeout(() => startBridge(), 300)
             }
@@ -286,7 +303,7 @@ function useSpeechInput({
         setTimeout(() => startBridge(), 500)
       }
     }
-  }, [triggerFinal]) // onInterim/phase via refs
+  }, [triggerFinal, normalizeConfidence]) // onInterim/phase via refs
 
   const stopBridge = useCallback(() => {
     if (wsRef.current) {
@@ -300,6 +317,7 @@ function useSpeechInput({
     activeRef.current = false
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
+    lastConfidenceRef.current = null
     connectStartRef.current = 0
     setPhaseSync('idle')
     setVolume(0)
@@ -381,6 +399,14 @@ interface Props {
   onClose: () => void
   anchor?: { right: number; top: number }
   page: string
+  launchContext?: {
+    launchId: string
+    prompt?: string
+    autoSend?: boolean
+    source?: string
+    page?: string
+    agent?: 'general' | 'chef'
+  }
   events: EventWithDetails[]
   family: FamilyMember[]
   homeCity?: string
@@ -390,7 +416,7 @@ interface Props {
 
 const SLEEP_PHRASES = /\b(sleep|goodnight|good night|art mode|screen saver|screensaver|night mode)\b/i
 
-export default function AIChatDrawer({ open, onClose, anchor, page, events, family, homeCity, onSleepCommand, focusedEvent }: Props) {
+export default function AIChatDrawer({ open, onClose, anchor, page, launchContext, events, family, homeCity, onSleepCommand, focusedEvent }: Props) {
   const [input, setInput] = useState('')
   const interimRef = useRef('')
   const idleAutoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -402,12 +428,24 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
 
-  const { messages, loading, send, reset, session, sessionLoading, startFresh, primeMessages, updateMessageToolStatus } = useAIAssistant({ page, events, family, homeCity, focusedEvent, onSessionEnd: onClose })
+  const { messages, loading, send, reset, session, sessionLoading, startFresh, primeMessages, appendSyntheticMessage, updateMessageToolStatus } = useAIAssistant({
+    page,
+    assistantMode: launchContext?.agent ?? 'general',
+    events,
+    family,
+    homeCity,
+    focusedEvent,
+    onSessionEnd: onClose,
+  })
 
   const led = useLedStrip()
 
   const pendingConfirmRef = useRef<(() => Promise<boolean>) | null>(null)
   const pendingCancelRef  = useRef<(() => Promise<boolean>) | null>(null)
+  const pendingLowConfidenceRef = useRef<{ transcript: string; confidence: number } | null>(null)
+  const latestVoiceConfidenceRef = useRef<number | null>(null)
+  const appliedLaunchRef = useRef<string | null>(null)
+  const firedChefGreetRef = useRef<string | null>(null)
 
   const clearIdleAutoCloseTimer = useCallback(() => {
     if (idleAutoCloseTimerRef.current) {
@@ -424,14 +462,72 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
   // True when the latest assistant message has a pending tool action awaiting confirmation
   const hasPendingToolAction = messages.some(m => m.toolAction?.status === 'pending')
 
-  const sendCurrentInput = useCallback((text: string) => {
+  const sendCurrentInput = useCallback((text: string, opts?: { fromVoice?: boolean; confidence?: number | null }) => {
     const trimmed = text.trim()
     if (!trimmed || loading) return
+    if (pendingLowConfidenceRef.current) {
+      const pending = pendingLowConfidenceRef.current
+      if (LOW_CONFIDENCE_CONFIRM_PHRASES.test(trimmed)) {
+        pendingLowConfidenceRef.current = null
+        appendSyntheticMessage({
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: `Great — using “${pending.transcript}.”`,
+        })
+        setInput('')
+        interimRef.current = ''
+        if (textareaRef.current) textareaRef.current.value = ''
+        send(pending.transcript)
+        return
+      }
+      if (LOW_CONFIDENCE_REJECT_PHRASES.test(trimmed)) {
+        pendingLowConfidenceRef.current = null
+        setInput('')
+        interimRef.current = ''
+        if (textareaRef.current) textareaRef.current.value = ''
+        appendSyntheticMessage({
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: "No problem — please say it again.",
+        })
+        return
+      }
+      pendingLowConfidenceRef.current = null
+    } else if (opts?.fromVoice) {
+      const confidence = opts.confidence
+      const isLowConfidenceShortVoice = typeof confidence === 'number' && confidence < 0.75 && trimmed.length < 10
+      if (isLowConfidenceShortVoice) {
+        pendingLowConfidenceRef.current = { transcript: trimmed, confidence }
+        setInput('')
+        interimRef.current = ''
+        if (textareaRef.current) textareaRef.current.value = ''
+        appendSyntheticMessage({
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: `I heard “${trimmed}” with low confidence (${Math.round(confidence * 100)}%). Say “yes” to use it, say “no” to retry, or just say the corrected phrase.`,
+        })
+        return
+      }
+    }
     setInput('')
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
     send(trimmed)
-  }, [loading, send])
+  }, [loading, send, appendSyntheticMessage])
+
+  const quickSaveRecipeSuggestion = useCallback(async (recipeMessage: string) => {
+    if (loading) return
+    markUserInteraction()
+    const recipeExcerpt = recipeMessage.trim().slice(0, 3500)
+    const prompt = [
+      'Save the recipe you just suggested to my Recipe Library for 2 servings.',
+      'Use your previous recipe details as the source of truth.',
+      'Include complete ingredients with quantities/units and full numbered cooking steps.',
+      'If you can find a suitable photo, include it; otherwise save without one.',
+      recipeExcerpt ? `\nRecipe draft:\n${recipeExcerpt}` : '',
+    ].join('\n')
+    await send(prompt)
+  }, [loading, markUserInteraction, send])
 
   const speech = useSpeechInput({
     onInterim: (interim) => {
@@ -439,7 +535,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       interimRef.current = interim
       setInput(interim)
     },
-    onFinalTranscript: (text) => {
+    onFinalTranscript: (text, meta) => {
+      latestVoiceConfidenceRef.current = meta?.confidence ?? null
       if (text === '__SEND__') {
         const msg = interimRef.current || (textareaRef.current?.value ?? '')
         // Check for sleep command before sending to AI
@@ -448,8 +545,9 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
           setTimeout(onClose, 300)
           return
         }
-        sendCurrentInput(msg)
+        sendCurrentInput(msg, { fromVoice: true, confidence: latestVoiceConfidenceRef.current })
         interimRef.current = ''
+        latestVoiceConfidenceRef.current = null
       } else {
         if (text.trim()) markUserInteraction()
         interimRef.current = text
@@ -522,10 +620,28 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
       reset()
       setInput('')
       interimRef.current = ''
+      pendingLowConfidenceRef.current = null
+      latestVoiceConfidenceRef.current = null
       setAttachedImage(null)
       freshStartedRef.current = null  // allow fresh start next time this event is opened
+      firedChefGreetRef.current = null
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open || !launchContext?.launchId) return
+    if (appliedLaunchRef.current === launchContext.launchId) return
+    appliedLaunchRef.current = launchContext.launchId
+    const prompt = launchContext.prompt?.trim() ?? ''
+    if (!prompt) return
+    markUserInteraction()
+    setInput(prompt)
+    interimRef.current = prompt
+    setTimeout(() => textareaRef.current?.focus(), 50)
+    if (launchContext.autoSend) {
+      setTimeout(() => sendCurrentInput(prompt), 0)
+    }
+  }, [open, launchContext?.launchId, launchContext?.prompt, launchContext?.autoSend, markUserInteraction, sendCurrentInput])
 
   const buildCorrelationId = useCallback((suffix: string) => {
     const sessionPart = session?.id ?? 'no-session'
@@ -578,6 +694,20 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
     primeMessages([{ id: crypto.randomUUID(), role: 'assistant', content }])
   }, [open, focusedEvent?.id, sessionLoading, messages.length]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open || focusedEvent || loading) return
+    if (launchContext?.agent !== 'chef') return
+    if (sessionLoading) return
+    if (messages.length > 0) return
+    if (firedChefGreetRef.current === launchContext.launchId) return
+    firedChefGreetRef.current = launchContext.launchId
+    primeMessages([{
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: "Chef Agent online 👨‍🍳\n\nI can help you plan weeknight meals, optimize for budget/speed, build overlap-friendly grocery lists, and adapt dinners based on what's in your pantry.\n\nTry: “Plan 4 quick dinners under 30 minutes” or “Use what we already have and keep cost low.”",
+    }])
+  }, [open, focusedEvent, loading, launchContext?.agent, launchContext?.launchId, sessionLoading, messages.length, primeMessages])
 
   // While AI is thinking, suppress new voice input (don't stop the mic — avoids fade/blue flicker)
   useEffect(() => {
@@ -828,6 +958,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
                   key={msg.id}
                   msg={msg}
                   isLatest={idx === messages.length - 1}
+                  enableQuickSaveRecipe={page === 'cook' || launchContext?.agent === 'chef'}
+                  onQuickSaveRecipe={quickSaveRecipeSuggestion}
                   onConfirmToolAction={async (messageId, tool, args) => {
                     updateMessageToolStatus(messageId, 'loading')
                     try {
@@ -1055,9 +1187,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, events, fami
 
 /* ── Message Bubble ─────────────────────────────────────────── */
 
-function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingConfirm, registerPendingCancel }: {
+function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingConfirm, registerPendingCancel }: {
   msg: AIMessage
   isLatest: boolean
+  enableQuickSaveRecipe?: boolean
+  onQuickSaveRecipe?: (recipeMessage: string) => Promise<void>
   onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<boolean>
   onUndoToolAction: (messageId: string, actionId: string) => Promise<void>
   onCancelToolAction: (messageId: string) => void
@@ -1067,9 +1201,14 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, o
 }) {
   const isUser = msg.role === 'user'
   const ta = msg.toolAction
+  const [quickSaving, setQuickSaving] = useState(false)
   const hasPendingAction = !!ta && ta.status === 'pending'
+  const showQuickSaveRecipe = !isUser && !ta && Boolean(onQuickSaveRecipe) && Boolean(enableQuickSaveRecipe) && looksLikeRecipeSuggestion(msg.content)
   const isStaleError = !!ta?.errorMsg && ta.errorMsg.toLowerCase().includes('changed since')
-  const isDestructiveAction = ta?.tool === 'delete_event' || ta?.tool === 'clear_checked_grocery_items'
+  const isDestructiveAction =
+    ta?.tool === 'delete_event' ||
+    ta?.tool === 'delete_events_by_title' ||
+    ta?.tool === 'clear_checked_grocery_items'
 
   const doConfirm = useCallback(async () => {
     if (!ta) return false
@@ -1100,7 +1239,26 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, o
           <img src={msg.imageDataUrl} alt="Attached" className="max-h-40 w-auto rounded-lg mb-2 object-cover" />
         )}
         {msg.content !== '(see attached image)' && msg.content && (
-          <p dangerouslySetInnerHTML={{ __html: msg.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+          isUser
+            ? <p className="whitespace-pre-wrap">{msg.content}</p>
+            : <MarkdownMessage content={msg.content} />
+        )}
+        {showQuickSaveRecipe && (
+          <div className="mt-2">
+            <button
+              type="button"
+              disabled={quickSaving}
+              onClick={() => {
+                if (!onQuickSaveRecipe) return
+                setQuickSaving(true)
+                void onQuickSaveRecipe(msg.content).finally(() => setQuickSaving(false))
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-button border border-casa-gold/40 bg-casa-gold/10 text-caption font-semibold text-casa-navy hover:bg-casa-gold/15 disabled:opacity-60"
+            >
+              {quickSaving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+              Save to Recipe Library (2 servings)
+            </button>
+          </div>
         )}
 
         {/* Tool action confirmation card */}
@@ -1111,13 +1269,19 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, o
                 <div className="flex items-center gap-1.5 text-emerald-600 text-caption font-semibold">
                   <Check size={13} />
                   {ta.tool === 'create_event' ? 'Created & added to calendar ✓'
+                    : ta.tool === 'create_recipe' ? 'Saved to recipe library ✓'
                     : ta.tool === 'update_event' ? 'Updated ✓'
+                    : ta.tool === 'bulk_update_events' ? 'Bulk updates applied ✓'
                     : ta.tool === 'delete_event' ? 'Deleted ✓'
+                    : ta.tool === 'delete_events_by_title' ? 'Deleted matching events ✓'
                     : ta.tool === 'add_grocery_items' ? 'Added to grocery list ✓'
                     : 'Done ✓'}
                 </div>
                 {ta.tool === 'create_event' && ta.resultEventId && (
                   <p className="text-caption text-casa-muted">Visible on your calendar now</p>
+                )}
+                {ta.tool === 'create_recipe' && (
+                  <p className="text-caption text-casa-muted">Visible in Cook → Recipe library now</p>
                 )}
                 {ta.syncWarning && (
                   <p className="text-caption text-amber-600">{ta.syncWarning}</p>
@@ -1195,6 +1359,8 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, o
                       : isDestructiveAction
                         ? ta.tool === 'delete_event'
                           ? 'Delete event'
+                          : ta.tool === 'delete_events_by_title'
+                            ? 'Delete matching events'
                           : 'Clear checked items'
                         : 'Confirm'}
                   </button>
@@ -1213,6 +1379,216 @@ function MessageBubble({ msg, isLatest, onConfirmToolAction, onUndoToolAction, o
       </div>
     </div>
   )
+}
+
+function renderInlineMarkdown(text: string, keyPrefix: string): React.ReactNode[] {
+  const tokenRegex = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\((https?:\/\/[^)\s]+)\))/g
+  const nodes: React.ReactNode[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+  let tokenIndex = 0
+
+  while ((match = tokenRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index))
+    }
+    const token = match[0]
+    if (token.startsWith('**') && token.endsWith('**')) {
+      nodes.push(<strong key={`${keyPrefix}-b-${tokenIndex}`}>{token.slice(2, -2)}</strong>)
+    } else if (token.startsWith('`') && token.endsWith('`')) {
+      nodes.push(
+        <code key={`${keyPrefix}-c-${tokenIndex}`} className="px-1 py-0.5 rounded bg-casa-surface border border-casa-border text-[0.85em]">
+          {token.slice(1, -1)}
+        </code>,
+      )
+    } else {
+      const linkMatch = token.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/)
+      if (linkMatch) {
+        nodes.push(
+          <a
+            key={`${keyPrefix}-a-${tokenIndex}`}
+            href={linkMatch[2]}
+            target="_blank"
+            rel="noreferrer"
+            className="text-casa-gold underline underline-offset-2"
+          >
+            {linkMatch[1]}
+          </a>,
+        )
+      } else {
+        nodes.push(token)
+      }
+    }
+    lastIndex = tokenRegex.lastIndex
+    tokenIndex += 1
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex))
+  }
+  return nodes
+}
+
+function splitMarkdownTableRow(line: string): string[] {
+  const cleaned = line.trim().replace(/^\|/, '').replace(/\|$/, '')
+  return cleaned.split('|').map((cell) => cell.trim())
+}
+
+function looksLikeRecipeSuggestion(text: string): boolean {
+  const normalized = text.toLowerCase()
+  const hasIngredients = /\bingredients?\b/.test(normalized)
+  const hasSteps = /\b(steps?|instructions?|directions?|method)\b/.test(normalized)
+  const hasListLikeContent = /(^|\n)\s*(?:[-*]\s+|\d+\.\s+)/m.test(text)
+  return hasIngredients && hasSteps && hasListLikeContent
+}
+
+function isMarkdownTableSeparator(line: string, columns: number): boolean {
+  const cells = splitMarkdownTableRow(line)
+  if (cells.length !== columns || columns < 2) return false
+  return cells.every((cell) => /^:?-{3,}:?$/.test(cell))
+}
+
+function MarkdownMessage({ content }: { content: string }) {
+  const lines = content.replace(/\r\n/g, '\n').trim().split('\n')
+  const blocks: React.ReactNode[] = []
+  let i = 0
+  let paragraphBuffer: string[] = []
+
+  const flushParagraph = () => {
+    if (paragraphBuffer.length === 0) return
+    const text = paragraphBuffer.join(' ').trim()
+    if (text) {
+      blocks.push(
+        <p key={`p-${blocks.length}`} className="whitespace-pre-wrap">
+          {renderInlineMarkdown(text, `p-${blocks.length}`)}
+        </p>,
+      )
+    }
+    paragraphBuffer = []
+  }
+
+  while (i < lines.length) {
+    const line = lines[i]
+    const trimmed = line.trim()
+    if (trimmed.length === 0) {
+      flushParagraph()
+      i += 1
+      continue
+    }
+
+    if (trimmed.startsWith('```')) {
+      flushParagraph()
+      i += 1
+      const codeLines: string[] = []
+      while (i < lines.length && !lines[i].trim().startsWith('```')) {
+        codeLines.push(lines[i])
+        i += 1
+      }
+      if (i < lines.length) i += 1
+      blocks.push(
+        <pre key={`code-${blocks.length}`} className="rounded-lg border border-casa-border bg-casa-surface px-3 py-2 overflow-x-auto text-[12px] leading-relaxed">
+          <code>{codeLines.join('\n')}</code>
+        </pre>,
+      )
+      continue
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,4})\s+(.+)$/)
+    if (headingMatch) {
+      flushParagraph()
+      blocks.push(
+        <p key={`h-${blocks.length}`} className="font-semibold text-casa-navy">
+          {renderInlineMarkdown(headingMatch[2], `h-${blocks.length}`)}
+        </p>,
+      )
+      i += 1
+      continue
+    }
+
+    if (trimmed.includes('|') && i + 1 < lines.length) {
+      const headerCells = splitMarkdownTableRow(lines[i])
+      if (isMarkdownTableSeparator(lines[i + 1] ?? '', headerCells.length)) {
+        flushParagraph()
+        const rows: string[][] = []
+        i += 2
+        while (i < lines.length) {
+          const rowLine = lines[i].trim()
+          if (!rowLine || !rowLine.includes('|')) break
+          const rowCells = splitMarkdownTableRow(lines[i])
+          if (rowCells.length !== headerCells.length) break
+          rows.push(rowCells)
+          i += 1
+        }
+        blocks.push(
+          <div key={`table-${blocks.length}`} className="overflow-x-auto">
+            <table className="min-w-full border border-casa-border rounded-lg bg-casa-surface text-caption">
+              <thead className="bg-casa-bg">
+                <tr>
+                  {headerCells.map((cell, idx) => (
+                    <th key={`th-${idx}`} className="px-2 py-1 text-left border-b border-casa-border font-semibold text-casa-navy">
+                      {renderInlineMarkdown(cell, `th-${blocks.length}-${idx}`)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, rowIdx) => (
+                  <tr key={`tr-${rowIdx}`} className="border-b last:border-b-0 border-casa-border">
+                    {row.map((cell, cellIdx) => (
+                      <td key={`td-${rowIdx}-${cellIdx}`} className="px-2 py-1 align-top">
+                        {renderInlineMarkdown(cell, `td-${blocks.length}-${rowIdx}-${cellIdx}`)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>,
+        )
+        continue
+      }
+    }
+
+    if (/^[-*]\s+/.test(trimmed)) {
+      flushParagraph()
+      const items: string[] = []
+      while (i < lines.length && /^[-*]\s+/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^[-*]\s+/, ''))
+        i += 1
+      }
+      blocks.push(
+        <ul key={`ul-${blocks.length}`} className="list-disc pl-5 space-y-1">
+          {items.map((item, idx) => (
+            <li key={`ul-${blocks.length}-${idx}`}>{renderInlineMarkdown(item, `ul-${blocks.length}-${idx}`)}</li>
+          ))}
+        </ul>,
+      )
+      continue
+    }
+
+    if (/^\d+\.\s+/.test(trimmed)) {
+      flushParagraph()
+      const items: string[] = []
+      while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^\d+\.\s+/, ''))
+        i += 1
+      }
+      blocks.push(
+        <ol key={`ol-${blocks.length}`} className="list-decimal pl-5 space-y-1">
+          {items.map((item, idx) => (
+            <li key={`ol-${blocks.length}-${idx}`}>{renderInlineMarkdown(item, `ol-${blocks.length}-${idx}`)}</li>
+          ))}
+        </ol>,
+      )
+      continue
+    }
+
+    paragraphBuffer.push(trimmed)
+    i += 1
+  }
+
+  flushParagraph()
+  return <div className="space-y-2">{blocks}</div>
 }
 
 function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, unknown> }) {
@@ -1261,11 +1637,51 @@ function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, 
       </div>
     )
   }
+  if (tool === 'bulk_update_events') {
+    const count = Number.isFinite(Number(args.count))
+      ? Number(args.count)
+      : (Array.isArray(args.ids) ? args.ids.length : 0)
+    const titleQuery = String(args.title_query ?? '').trim()
+    const changes = summarizeUpdateArgs(args).filter((change) => change !== 'id')
+    return (
+      <div className="space-y-2">
+        <p className="text-caption font-semibold text-casa-navy">
+          Update {count} matching event{count === 1 ? '' : 's'}{titleQuery ? ` for "${titleQuery}"` : ''}
+        </p>
+        {changes.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {changes.slice(0, 8).map((change) => (
+              <span
+                key={change}
+                className="inline-flex items-center rounded-full bg-casa-surface border border-casa-border px-2 py-0.5 text-[11px] text-casa-muted"
+              >
+                {change}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
   if (tool === 'delete_event') {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2">
         <p className="text-caption text-red-700 font-semibold">Delete this event permanently?</p>
         <p className="text-caption text-red-600 mt-0.5">"{args.title as string}" will be removed from your calendar and synced deletion will follow.</p>
+      </div>
+    )
+  }
+  if (tool === 'delete_events_by_title') {
+    const titleQuery = String(args.title_query ?? '').trim()
+    const count = Number.isFinite(Number(args.count))
+      ? Number(args.count)
+      : (Array.isArray(args.ids) ? args.ids.length : 0)
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2">
+        <p className="text-caption text-red-700 font-semibold">Delete all matching events?</p>
+        <p className="text-caption text-red-600 mt-0.5">
+          {count} event{count === 1 ? '' : 's'} matching "{titleQuery || 'selected title'}" will be removed and synced deletion will follow.
+        </p>
       </div>
     )
   }
@@ -1276,6 +1692,18 @@ function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, 
         {items.map((i, idx) => (
           <p key={idx}>+ {i.name}{i.quantity ? ` (${i.quantity})` : ''}</p>
         ))}
+      </div>
+    )
+  }
+  if (tool === 'create_recipe') {
+    const ingredients = Array.isArray(args.ingredients) ? args.ingredients : []
+    const steps = Array.isArray(args.steps) ? args.steps : []
+    return (
+      <div className="space-y-1 text-caption text-casa-muted">
+        <p className="font-semibold text-casa-navy text-body-sm">{String(args.name ?? 'Untitled recipe')}</p>
+        <p>{ingredients.length} ingredient{ingredients.length === 1 ? '' : 's'} · {steps.length} step{steps.length === 1 ? '' : 's'}</p>
+        {typeof args.cook_time === 'string' && args.cook_time.trim().length > 0 && <p>⏱ {args.cook_time}</p>}
+        {typeof args.servings === 'string' && args.servings.trim().length > 0 && <p>🍽 {args.servings}</p>}
       </div>
     )
   }
@@ -1345,4 +1773,6 @@ const SUGGESTIONS: Record<string, string[]> = {
   calendar: ["What does tomorrow look like?", "Add a new appointment", "Who's busiest this week?"],
   briefing: ["Summarize today for me", "Add an event", "Any prep needed today?"],
   grocery: ["Add milk and eggs", "What's on the list?", "Clear checked items"],
+  cook: ["Plan 4 quick weeknight dinners", "Optimize my meals for budget", "Build grocery list from the plan"],
+  app: ["What's next up today?", "Add an event tonight", "What's on the grocery list?"],
 }

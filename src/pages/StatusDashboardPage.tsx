@@ -16,11 +16,14 @@ interface UsageRow {
 
 interface DayBucket { date: string; calls: number; tokens: number }
 
-// Pricing per 1M tokens (input, output) — paid tier estimates
+// Pricing per 1M tokens (input, output) — paid tier estimates.
+// These are directional estimates; Google Billing remains source of truth.
 const PRICING: Record<string, [number, number]> = {
-  'gemini-2.5-flash': [0.075, 0.30],
+  'gemini-2.5-flash-lite': [0.25, 1.50],
+  'gemini-2.5-flash': [1.50, 9.00],
   'gemini-2.0-flash': [0.10, 0.40],
-  'gemini-2.5-pro':   [1.25, 10],
+  'gemini-2.5-pro':   [2.00, 12.00],
+  'gemini-3.5-flash': [1.50, 9.00],
   'gpt-4o-mini':      [0.15, 0.60],
   'gpt-4.1-nano':     [0.10, 0.40],
   'gpt-4o':           [2.50, 10],
@@ -128,9 +131,6 @@ export default function StatusDashboardPage() {
   }
   const maxCalls = Math.max(...last7.map(d => d.calls), 1)
 
-  const isGeminiFree = llmConfig?.provider === 'gemini'
-  const GEMINI_FREE_LIMIT = 10_000
-
   if (loading) return <div className="p-6 text-casa-muted animate-breathe">Loading…</div>
 
   return (
@@ -160,9 +160,6 @@ export default function StatusDashboardPage() {
             <p className="text-body-sm text-casa-navy font-medium">
               {llmConfig.provider.charAt(0).toUpperCase() + llmConfig.provider.slice(1)} — {llmConfig.model}
             </p>
-            {isGeminiFree && (
-              <p className="text-caption text-casa-muted">Free tier: {fmt(GEMINI_FREE_LIMIT)} requests/day limit</p>
-            )}
           </div>
           <Link to="/settings/ai" className="ml-auto text-caption text-casa-gold hover:underline">Change →</Link>
         </div>
@@ -175,9 +172,7 @@ export default function StatusDashboardPage() {
           <StatCard
             label="AI Calls"
             value={fmt(today.calls)}
-            sub={isGeminiFree ? `of ${fmt(GEMINI_FREE_LIMIT)} free/day` : undefined}
             icon={<Activity size={16} />}
-            accent={isGeminiFree && today.calls > GEMINI_FREE_LIMIT * 0.7}
           />
           <StatCard
             label="Tokens Used"
@@ -190,7 +185,7 @@ export default function StatusDashboardPage() {
           <StatCard
             label="Est. Cost"
             value={today.calls > 0 ? fmtCost(today.cost) : '—'}
-            sub={isGeminiFree ? 'Free tier — no charge' : undefined}
+            sub="Token estimate only"
             icon={<DollarSign size={16} />}
           />
           <StatCard
@@ -230,11 +225,9 @@ export default function StatusDashboardPage() {
               <span className="text-casa-muted">Est. cost</span>
               <span className="font-semibold text-casa-navy">{month.calls > 0 ? fmtCost(month.cost) : '—'}</span>
             </div>
-            {isGeminiFree && (
-              <p className="text-caption text-casa-muted bg-casa-bg/60 rounded px-2 py-1.5">
-                💡 Gemini free tier — no charges apply. Cost shown is what you'd pay on a paid plan.
-              </p>
-            )}
+            <p className="text-caption text-casa-muted bg-casa-bg/60 rounded px-2 py-1.5">
+              Estimated token spend from ai_usage_log only. Google Billing includes other SKUs (for example Search/Maps queries and any non-logged workloads).
+            </p>
           </div>
         </div>
 

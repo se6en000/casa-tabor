@@ -1,14 +1,15 @@
 /**
  * PrepActionSection — right-panel collapsible "Prep & Action" section.
- * Shows upcoming prep tasks ordered by urgency with color-coded horizons.
- * Checkmark dismisses; snooze pushes to tomorrow morning.
+ * Unified across sources (calendar AI + Gmail) with relevance feedback.
  */
-import { useState } from 'react'
+import { useMemo, useState, type ElementType } from 'react'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ClipboardList, ChevronDown, Gift, Plane, Stethoscope, CreditCard, ShoppingBag, Moon } from 'lucide-react'
+import { ClipboardList, ChevronDown, Gift, Plane, Stethoscope, CreditCard, ShoppingBag, Ban, Moon, ThumbsDown, Mail, Bot, Check } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { cn } from '../../utils/cn'
-import { usePrepItems, useDismissPrepItem, useSnoozePrepItem } from '../../hooks/usePrepItems'
+import { usePrepItems, useDismissPrepItem, useSnoozePrepItem, useDownvotePrepItem } from '../../hooks/usePrepItems'
+import type { PrepItem } from '../../types'
 
 const PREP_SECTION_KEY = 'casa-home-prep-section-open-v1'
 
@@ -27,11 +28,15 @@ function daysUntil(eventDate: string | null): number {
   return differenceInDays(parseISO(eventDate), new Date())
 }
 
-const TYPE_ICON: Record<string, React.ElementType> = {
-  gift:    Gift,
-  travel:  Plane,
+const TYPE_ICON: Record<string, ElementType> = {
+  gift: Gift,
+  travel: Plane,
   medical: Stethoscope,
   payment: CreditCard,
+  billing: CreditCard,
+  cancellation: Ban,
+  delivery: ShoppingBag,
+  return: ShoppingBag,
 }
 
 function PrepTypeIcon({ type }: { type: string }) {
@@ -39,64 +44,218 @@ function PrepTypeIcon({ type }: { type: string }) {
   return <Icon size={12} className="text-casa-gold shrink-0 mt-[1px]" strokeWidth={1.8} />
 }
 
+function sourceBadge(item: PrepItem) {
+  const source = item.source_type ?? 'calendar_ai'
+  if (source === 'gmail') return { label: 'Email', icon: Mail, tone: 'text-purple-700 bg-purple-50 border-purple-200' }
+  if (source === 'calendar_ai') return { label: 'Calendar', icon: Bot, tone: 'text-sky-700 bg-sky-50 border-sky-200' }
+  return { label: 'System', icon: ClipboardList, tone: 'text-casa-muted bg-casa-bg border-casa-border' }
+}
+
 function urgencyConfig(days: number): {
   dot: string
   badge: string
   badgeText: string
-  label: string
+  bucket: 'today' | 'soon' | 'later'
 } {
-  if (days <= 0) return { dot: 'bg-red-500', badge: 'bg-red-500 text-white', badgeText: 'Today', label: 'Today' }
-  if (days === 1) return { dot: 'bg-red-500', badge: 'bg-red-500 text-white', badgeText: 'Tomorrow', label: 'Tomorrow' }
-  if (days < 3)  return { dot: 'bg-red-400',  badge: 'bg-red-400 text-white',   badgeText: `In ${days}d`, label: `In ${days} days` }
-  if (days < 7)  return { dot: 'bg-amber-400', badge: 'bg-amber-400 text-white', badgeText: `In ${days}d`, label: `In ${days} days` }
-  return           { dot: 'bg-green-400',  badge: 'bg-green-400 text-white',  badgeText: `In ${days}d`, label: `In ${days} days` }
+  if (days <= 1) return { dot: 'bg-red-500', badge: 'bg-red-500 text-white', badgeText: days <= 0 ? 'Today' : 'Tomorrow', bucket: 'today' }
+  if (days <= 4) return { dot: 'bg-amber-400', badge: 'bg-amber-400 text-white', badgeText: `In ${days}d`, bucket: 'soon' }
+  return { dot: 'bg-green-400', badge: 'bg-green-400 text-white', badgeText: `In ${days}d`, bucket: 'later' }
 }
 
-export default function PrepActionSection() {
+function groupItems(items: PrepItem[]) {
+  const grouped: Record<'today' | 'soon' | 'later', PrepItem[]> = { today: [], soon: [], later: [] }
+  for (const item of items) {
+    const days = daysUntil(item.event_date)
+    grouped[urgencyConfig(days).bucket].push(item)
+  }
+  return grouped
+}
+
+interface PrepActionSectionProps {
+  onSelectItem?: (item: PrepItem) => void
+  seeAllHref?: string
+}
+
+export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions' }: PrepActionSectionProps) {
   const { data: items = [] } = usePrepItems()
   const dismiss = useDismissPrepItem()
   const snooze = useSnoozePrepItem()
+  const downvote = useDownvotePrepItem()
   const [open, setOpen] = useState(loadOpenState)
   const [checking, setChecking] = useState<string | null>(null)
+  const [snoozingId, setSnoozingId] = useState<string | null>(null)
+  const [downvoting, setDownvoting] = useState<string | null>(null)
+
+  const grouped = useMemo(() => groupItems(items), [items])
 
   if (items.length === 0) return null
 
   async function handleCheck(id: string) {
     setChecking(id)
-    await new Promise(r => setTimeout(r, 350)) // brief animation pause
+    await new Promise(r => setTimeout(r, 300))
     await dismiss(id)
+    await new Promise(r => setTimeout(r, 180))
     setChecking(null)
+  }
+
+  async function handleSnooze(id: string) {
+    setSnoozingId(id)
+    await new Promise(r => setTimeout(r, 300))
+    await snooze(id)
+    await new Promise(r => setTimeout(r, 180))
+    setSnoozingId(null)
+  }
+
+  async function handleDownvote(id: string) {
+    setDownvoting(id)
+    await downvote(id)
+    setDownvoting(null)
+  }
+
+  const renderGroup = (label: string, groupItems: PrepItem[]) => {
+    if (groupItems.length === 0) return null
+
+    return (
+      <div key={label} className="space-y-1">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-casa-muted px-0.5">{label}</p>
+        {groupItems.map((item) => {
+          const days = daysUntil(item.event_date)
+          const urg = urgencyConfig(days)
+          const src = sourceBadge(item)
+          const isDone = checking === item.id
+          const isSnoozed = snoozingId === item.id
+          const isDownvoting = downvoting === item.id
+          const isDismissing = isDone || isSnoozed
+          const SourceIcon = src.icon
+
+          return (
+            <motion.div
+              key={item.id}
+              layout
+              initial={{ opacity: 0, y: 4 }}
+             animate={isDismissing ? { opacity: 0, scale: 0.95, x: -8 } : (isDownvoting ? { opacity: 0.45 } : { opacity: 1, y: 0 })}
+              exit={{ opacity: 0, height: 0, marginTop: 0, overflow: 'hidden' }}
+             transition={{ duration: isDismissing ? 0.3 : 0.25 }}
+             className={cn('py-2.5 border-b border-casa-divider last:border-0 group')}
+            >
+              <div className="flex items-start gap-2.5">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onSelectItem?.(item)
+                  }}
+                  className="flex-1 min-w-0 text-left"
+                >
+                  <div className="flex items-start gap-1.5">
+                    <span className={cn('mt-1.5 h-2.5 w-2.5 rounded-full shrink-0', urg.dot)} />
+                    <p
+                      className={cn(
+                        'text-body-sm leading-relaxed',
+                        isDone && 'line-through text-casa-muted',
+                      )}
+                      style={{ fontFamily: "'DM Sans', system-ui, sans-serif", color: isDone ? undefined : 'var(--color-casa-text)' }}
+                    >
+                      <span className="mr-1 inline-flex align-top"><PrepTypeIcon type={item.type} /></span>
+                      {item.description}
+                    </p>
+                  </div>
+
+                  <div className="mt-2 flex items-center gap-1.5 flex-wrap pl-4">
+                    <span className={cn('inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border', src.tone)}>
+                      <SourceIcon size={9} /> {src.label}
+                    </span>
+                    {item.event_title && (
+                      <span className="text-caption text-casa-muted truncate max-w-[150px]">
+                        {item.event_title}
+                      </span>
+                    )}
+                    <span className={cn('text-[9px] font-bold leading-none px-1.5 py-0.5 rounded-full whitespace-nowrap shrink-0', urg.badge)}>
+                      {urg.badgeText}
+                    </span>
+                  </div>
+                </button>
+
+                <div className="shrink-0 flex flex-col items-center gap-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleCheck(item.id)
+                    }}
+                    className={cn(
+                      'w-8 h-8 rounded-full flex items-center justify-center border bg-white transition-colors',
+                      isDone
+                        ? 'border-green-500 text-green-600'
+                        : 'border-casa-border text-casa-muted hover:text-casa-navy hover:bg-casa-bg',
+                    )}
+                    title="Mark done"
+                  >
+                    <Check size={15} strokeWidth={2.2} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleSnooze(item.id)
+                    }}
+                    className="w-8 h-8 rounded-full flex items-center justify-center border border-casa-border bg-white text-casa-muted hover:text-casa-text hover:bg-casa-bg transition-colors"
+                    title="Snooze until tomorrow"
+                  >
+                    <Moon size={15} strokeWidth={2.1} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDownvote(item.id)
+                    }}
+                    className={cn(
+                      'w-8 h-8 rounded-full flex items-center justify-center border bg-white transition-colors',
+                      isDownvoting
+                        ? 'border-red-300 text-red-500'
+                        : 'border-casa-border text-casa-muted hover:text-red-500 hover:bg-red-50',
+                    )}
+                    title="Not relevant — teach AI"
+                  >
+                    <ThumbsDown size={15} strokeWidth={2.1} />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )
+        })}
+      </div>
+    )
   }
 
   return (
     <div className="px-5 py-5 border-b border-casa-border">
-      {/* Header */}
-      <button
-        onClick={() => setOpen(v => {
-          const next = !v
-          try {
-            localStorage.setItem(PREP_SECTION_KEY, next ? '1' : '0')
-          } catch {
-            // Ignore storage failures.
-          }
-          return next
-        })}
-        className="w-full flex items-center justify-between"
-      >
-        <div className="flex items-center gap-1.5 text-body font-semibold text-casa-text">
+      <div className="w-full flex items-center justify-between">
+        <button
+          onClick={() => setOpen(v => {
+            const next = !v
+            try {
+              localStorage.setItem(PREP_SECTION_KEY, next ? '1' : '0')
+            } catch {
+              // ignore localStorage failures
+            }
+            return next
+          })}
+          className="flex-1 flex items-center gap-1.5 text-body font-semibold text-casa-text text-left"
+        >
           <ClipboardList size={15} className="text-casa-gold" />
           Prep &amp; Action
           <span className="ml-1 text-caption font-bold bg-casa-gold/20 text-casa-gold px-1.5 py-0.5 rounded-full">
             {items.length}
           </span>
-        </div>
-        <ChevronDown
-          size={13}
-          className={cn('text-casa-muted transition-transform duration-200', open ? 'rotate-0' : '-rotate-90')}
-        />
-      </button>
+          <ChevronDown
+            size={13}
+            className={cn('ml-auto text-casa-muted transition-transform duration-200', open ? 'rotate-0' : '-rotate-90')}
+          />
+        </button>
+        <Link to={seeAllHref} className="ml-2 text-caption text-casa-gold hover:brightness-110">
+          See all <span aria-hidden>→</span>
+        </Link>
+      </div>
 
-      {/* Items */}
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
@@ -106,76 +265,11 @@ export default function PrepActionSection() {
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="mt-3 space-y-2">
+            <div className="mt-3 space-y-3">
               <AnimatePresence initial={false}>
-                {items.map((item) => {
-                  const days = daysUntil(item.event_date)
-                  const urg = urgencyConfig(days)
-                  const isDone = checking === item.id
-
-                  return (
-                    <motion.div
-                      key={item.id}
-                      layout
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: isDone ? 0.4 : 1, y: 0 }}
-                      exit={{ opacity: 0, height: 0, marginTop: 0, overflow: 'hidden' }}
-                      transition={{ duration: 0.25 }}
-                      className="flex items-start gap-2.5"
-                    >
-                      {/* Urgency dot + checkbox */}
-                      <button
-                        onClick={() => handleCheck(item.id)}
-                        className="shrink-0 mt-0.5 flex flex-col items-center gap-1 group"
-                        title="Mark done"
-                      >
-                        <div className={cn(
-                          'w-4 h-4 rounded border-2 flex items-center justify-center transition-colors',
-                          isDone
-                            ? 'bg-green-500 border-green-500'
-                            : 'border-casa-border group-hover:border-casa-gold bg-white',
-                        )}>
-                          {isDone && (
-                            <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
-                              <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          )}
-                        </div>
-                        <div className={cn('w-1.5 h-1.5 rounded-full', urg.dot)} />
-                      </button>
-
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className={cn(isDone && 'line-through text-casa-muted')}
-                          style={{ fontSize: '0.8125rem', lineHeight: '1.5', fontFamily: "'DM Sans', system-ui, sans-serif", color: isDone ? undefined : 'var(--color-casa-text)' }}
-                        >
-                          <span className="mr-1 inline-flex"><PrepTypeIcon type={item.type} /></span>
-                          {item.description}
-                        </p>
-                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                          {item.event_title && (
-                            <span className="text-caption text-casa-muted truncate max-w-[120px]">
-                              {item.event_title}
-                            </span>
-                          )}
-                          <span className={cn('text-[9px] font-bold leading-none px-1.5 py-0.5 rounded-full whitespace-nowrap shrink-0', urg.badge)}>
-                            {urg.badgeText}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Snooze */}
-                      <button
-                        onClick={() => snooze(item.id)}
-                        className="shrink-0 text-casa-muted hover:text-casa-text transition-colors mt-0.5 px-1"
-                        title="Snooze until tomorrow"
-                      >
-                        <Moon size={11} strokeWidth={1.8} />
-                      </button>
-                    </motion.div>
-                  )
-                })}
+                {renderGroup('Today / Tomorrow', grouped.today)}
+                {renderGroup('Soon', grouped.soon)}
+                {renderGroup('Later', grouped.later)}
               </AnimatePresence>
             </div>
           </motion.div>

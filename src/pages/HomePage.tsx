@@ -407,10 +407,12 @@ function DesktopHeroCard({
     ? `${Math.floor(minutesUntil / 60)}H ${minutesUntil % 60}M`
     : `${minutesUntil}M`
   const leadLabel = isTodayFocus ? `UP NEXT · IN ${countdown}` : `TOMORROW · FIRST UP`
-  const leaveAt = focusEvent.enrichment?.departure_time
-    ? new Date(focusEvent.enrichment.departure_time)
-    : new Date(focusEvent.start_time)
-  const leaveLabel = focusEvent.enrichment?.departure_time ? 'LEAVE BY' : 'STARTS AT'
+  const liveLeaveBy = isTodayFocus && travelEta?.found && travelEta.leave_by
+    ? new Date(travelEta.leave_by)
+    : null
+  const leaveAt = liveLeaveBy
+    ?? (focusEvent.enrichment?.departure_time ? new Date(focusEvent.enrichment.departure_time) : new Date(focusEvent.start_time))
+  const leaveLabel = (liveLeaveBy || focusEvent.enrichment?.departure_time) ? 'LEAVE BY' : 'STARTS AT'
   const eventLabel = cleanEventTitle(focusEvent.title)
   const mapsUrl = mapsUrlForEvent(focusEvent)
   const detailText = focusEvent.enrichment?.prep_notes
@@ -428,7 +430,9 @@ function DesktopHeroCard({
           </h1>
           <p className="text-body mt-3 text-white/86 max-w-[60ch] line-clamp-2">{detailText}</p>
           <div className="mt-4 flex items-center flex-wrap gap-x-3 gap-y-1 text-body-sm text-white/88">
-            {focusEvent.enrichment?.drive_time_mins && <span>{focusEvent.enrichment.drive_time_mins} min drive</span>}
+            {(isTodayFocus && travelEta?.found && typeof travelEta.drive_time_mins === 'number')
+              ? <span>{travelEta.drive_time_mins} min drive</span>
+              : (focusEvent.enrichment?.drive_time_mins ? <span>{focusEvent.enrichment.drive_time_mins} min drive</span> : null)}
             {focusEvent.location_name && <><span>•</span><span>{focusEvent.location_name}</span></>}
             {focusEvent.enrichment?.weather_at_event && <><span>•</span><span>{focusEvent.enrichment.weather_at_event}</span></>}
           </div>
@@ -639,7 +643,7 @@ function TimelineRow({
         </div>
 
         {/* Row 3: departure alert or prep note */}
-        {index === 0 && !happening && (event.address || event.location_name) && (
+        {!happening && (event.address || event.location_name) && (
           <LeaveByCard
             destination={event.address ?? event.location_name}
             eventStartIso={event.start_time}
@@ -647,7 +651,7 @@ function TimelineRow({
             className="mt-1.5"
           />
         )}
-        {index !== 0 && event.enrichment?.departure_time && !happening && (
+        {!(event.address || event.location_name) && event.enrichment?.departure_time && !happening && (
           <div className="flex items-center gap-1 mt-1.5 text-caption font-semibold text-amber-700">
             <Navigation size={11} className="shrink-0" />
             Leave by {format(new Date(event.enrichment.departure_time), 'h:mm a')}

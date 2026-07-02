@@ -15,6 +15,26 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function normalizeOptionalText(value: unknown, maxLen = 300): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return trimmed.slice(0, maxLen)
+}
+
+function toIngredientRawText(input: {
+  rawText: string | null
+  quantity: string | null
+  unit: string | null
+  name: string
+}): string {
+  if (input.rawText) return input.rawText
+  const parts = [input.quantity, input.unit, input.name]
+    .map((value) => (value ?? '').trim())
+    .filter((value) => value.length > 0)
+  return parts.join(' ')
+}
+
 async function getExistingActionResult(sb: ReturnType<typeof createClient>, actionId?: string) {
   if (!actionId) return null
   const { data, error } = await sb
@@ -107,6 +127,108 @@ async function finalizeEventSync(
   }
 }
 
+function extractMemberRoleOverrides(args: Record<string, unknown>) {
+  const membersPrimary = typeof args.members_primary === 'string' && args.members_primary.trim().length > 0
+    ? args.members_primary.trim()
+    : undefined
+  const membersAttendees = Array.isArray(args.members_attendees)
+    ? args.members_attendees
+      .map((value) => String(value).trim())
+      .filter((value) => value.length > 0)
+    : undefined
+  const cleanArgs = { ...args }
+  delete cleanArgs.members_primary
+  delete cleanArgs.members_attendees
+  return {
+    cleanArgs,
+    membersPrimary,
+    membersAttendees,
+  }
+}
+
+async function resolveFamilyMembersByName(
+  sb: ReturnType<typeof createClient>,
+  names: string[],
+) {
+  if (names.length === 0) return { resolvedIds: new Map<string, string>(), unresolved: [] as string[] }
+  const { data: family, error } = await sb.from('family_members').select('id, name')
+  if (error) throw new Error(error.message)
+
+  const familyByName = new Map((family ?? []).map((member: { id: string; name: string }) => [member.name.toLowerCase(), member.id]))
+  const resolvedIds = new Map<string, string>()
+  const unresolved: string[] = []
+  for (const rawName of names) {
+    const key = rawName.toLowerCase()
+    const id = familyByName.get(key)
+    if (!id) {
+      unresolved.push(rawName)
+      continue
+    }
+    resolvedIds.set(rawName, id)
+  }
+  return { resolvedIds, unresolved }
+}
+
+async function applyMemberRoleOverrides(
+  sb: ReturnType<typeof createClient>,
+  eventId: string,
+  membersPrimary?: string,
+  membersAttendees?: string[],
+) {
+  if (!membersPrimary && membersAttendees === undefined) return
+
+  const candidateNames = [
+    ...(membersPrimary ? [membersPrimary] : []),
+    ...(membersAttendees ?? []),
+  ]
+  const { resolvedIds, unresolved } = await resolveFamilyMembersByName(sb, candidateNames)
+  if (unresolved.length > 0) {
+    throw new Error(`Unknown family member(s): ${unresolved.join(', ')}`)
+  }
+
+  const primaryId = membersPrimary ? resolvedIds.get(membersPrimary) : undefined
+  const attendeeIds = (membersAttendees ?? [])
+    .map((name) => resolvedIds.get(name))
+    .filter((id): id is string => Boolean(id))
+    .filter((id) => id !== primaryId)
+
+  if (primaryId) {
+    await sb
+      .from('event_members')
+      .update({ role: 'attendee' })
+      .eq('event_id', eventId)
+      .eq('role', 'primary')
+
+    await sb
+      .from('event_members')
+      .upsert({ event_id: eventId, family_member_id: primaryId, role: 'primary', rsvp_status: 'accepted' })
+  }
+
+  if (membersAttendees !== undefined) {
+    const attendeeSet = new Set(attendeeIds)
+    const { data: existingMembers, error: existingError } = await sb
+      .from('event_members')
+      .select('id, family_member_id, role')
+      .eq('event_id', eventId)
+    if (existingError) throw new Error(existingError.message)
+
+    const removeIds = (existingMembers ?? [])
+      .filter((member: { id: string; family_member_id: string; role: string }) => member.role === 'attendee' && !attendeeSet.has(member.family_member_id))
+      .map((member: { id: string }) => member.id)
+
+    if (removeIds.length > 0) {
+      const { error: removeError } = await sb.from('event_members').delete().in('id', removeIds)
+      if (removeError) throw new Error(removeError.message)
+    }
+
+    for (const attendeeId of attendeeIds) {
+      await sb
+        .from('event_members')
+        .upsert({ event_id: eventId, family_member_id: attendeeId, role: 'attendee', rsvp_status: 'accepted' })
+    }
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
@@ -160,6 +282,110 @@ Deno.serve(async (req) => {
       })
     }
 
+    if (tool === 'create_recipe') {
+      const recipeName = normalizeOptionalText(args?.name, 180)
+      if (!recipeName) throw new Error('Recipe name is required')
+
+      const rawIngredients = Array.isArray(args?.ingredients) ? args.ingredients : []
+      if (rawIngredients.length === 0) throw new Error('At least one ingredient is required')
+      if (rawIngredients.length > 80) throw new Error('Too many ingredients (max 80)')
+
+      const rawSteps = Array.isArray(args?.steps) ? args.steps : []
+      if (rawSteps.length === 0) throw new Error('At least one step is required')
+      if (rawSteps.length > 120) throw new Error('Too many steps (max 120)')
+
+      const ingredients = rawIngredients
+        .map((row) => {
+          const obj = row as Record<string, unknown>
+          const name = normalizeOptionalText(obj.name, 160)
+          if (!name) return null
+          const quantity = normalizeOptionalText(obj.quantity, 40)
+          const unit = normalizeOptionalText(obj.unit, 60)
+          const rawText = normalizeOptionalText(obj.raw_text, 280)
+          return {
+            name,
+            quantity,
+            unit,
+            raw_text: toIngredientRawText({ rawText, quantity, unit, name }),
+            optional: obj.optional === true,
+          }
+        })
+        .filter((row): row is { name: string; quantity: string | null; unit: string | null; raw_text: string; optional: boolean } => row !== null)
+      if (ingredients.length === 0) throw new Error('No valid ingredients found')
+
+      const steps = rawSteps
+        .map((row) => normalizeOptionalText(row, 2000))
+        .filter((step): step is string => Boolean(step))
+      if (steps.length === 0) throw new Error('No valid steps found')
+
+      let selectedImageUrl = normalizeOptionalText(args?.image_url, 1000)
+      if (!selectedImageUrl) {
+        const imageLookup = await sb.functions.invoke('recipe-image-search', {
+          body: { query: recipeName, limit: 1 },
+        }).catch(() => ({ data: null, error: null }))
+        const imageData = imageLookup.data as { results?: Array<{ url?: string }> } | null
+        selectedImageUrl = normalizeOptionalText(imageData?.results?.[0]?.url, 1000)
+      }
+
+      const recipeInsert = {
+        name: recipeName,
+        source_url: normalizeOptionalText(args?.source_url, 1000),
+        image_url: selectedImageUrl,
+        servings: normalizeOptionalText(args?.servings, 60),
+        cook_time: normalizeOptionalText(args?.cook_time, 60),
+        instructions_text: steps.map((step, index) => `${index + 1}. ${step}`).join('\n'),
+        last_used_at: new Date().toISOString(),
+      }
+
+      const { data: recipeRow, error: recipeError } = await sb
+        .from('recipes')
+        .insert(recipeInsert)
+        .select('id')
+        .single()
+      if (recipeError) throw new Error(recipeError.message)
+
+      const recipeId = String(recipeRow.id)
+      const ingredientRows = ingredients.map((ingredient, index) => ({
+        recipe_id: recipeId,
+        raw_text: ingredient.raw_text,
+        name: ingredient.name,
+        quantity: ingredient.quantity,
+        unit: ingredient.unit,
+        optional: ingredient.optional,
+        sort_order: index,
+      }))
+      const { error: ingredientError } = await sb.from('recipe_ingredients').insert(ingredientRows)
+      if (ingredientError) throw new Error(ingredientError.message)
+
+      const stepRows = steps.map((instruction, index) => ({
+        recipe_id: recipeId,
+        step_number: index + 1,
+        instruction,
+      }))
+      const { error: stepError } = await sb.from('recipe_steps').insert(stepRows)
+      if (stepError) throw new Error(stepError.message)
+
+      if (selectedImageUrl) {
+        const { error: imageError } = await sb.from('recipe_images').insert([{
+          recipe_id: recipeId,
+          image_url: selectedImageUrl,
+          is_primary: true,
+          sort_order: 0,
+        }])
+        const missingRecipeImagesTable = imageError?.code === '42P01' || imageError?.code === 'PGRST205'
+        if (imageError && !missingRecipeImagesTable) throw new Error(imageError.message)
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        recipe_id: recipeId,
+        image_url: selectedImageUrl,
+        correlation_id: cid,
+      }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
     if (tool === 'update_event') {
       const existingResult = await getExistingActionResult(sb, actionId)
       if (existingResult) {
@@ -168,7 +394,8 @@ Deno.serve(async (req) => {
         })
       }
 
-      const { errors, normalized } = buildValidatedUpdatePayload(args)
+      const { cleanArgs, membersPrimary, membersAttendees } = extractMemberRoleOverrides(args as Record<string, unknown>)
+      const { errors, normalized } = buildValidatedUpdatePayload(cleanArgs)
       if (errors.length > 0) {
         throw new Error(errors.join('; '))
       }
@@ -239,10 +466,12 @@ Deno.serve(async (req) => {
         p_members_remove: removeIds,
         p_action_id: actionId ?? null,
         p_expected_updated_at: normalized.expectedUpdatedAt,
-        p_request_payload: args,
+        p_request_payload: cleanArgs,
         p_ai_session_id: sessionId ?? null,
       })
       if (rpcError) throw new Error(rpcError.message)
+
+      await applyMemberRoleOverrides(sb, normalized.eventId, membersPrimary, membersAttendees)
 
       if (targetFields.length > 0) {
         sb.functions.invoke('enrich-event', {
@@ -280,6 +509,128 @@ Deno.serve(async (req) => {
       const responsePayload = await finalizeEventSync(sb, normalized.eventId, historyRow?.[0]?.id, baseResponse)
 
       return new Response(JSON.stringify({ ...responsePayload, correlation_id: cid }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
+    if (tool === 'bulk_update_events') {
+      const rawIds = Array.isArray(args?.ids)
+        ? (args.ids as unknown[])
+          .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+          .map((id) => id.trim())
+        : []
+      const ids = [...new Set(rawIds)]
+      if (ids.length === 0) throw new Error('ids must include at least one event id')
+      if (ids.length > 75) throw new Error('Cannot bulk update more than 75 events at once')
+
+      const { cleanArgs, membersPrimary, membersAttendees } = extractMemberRoleOverrides(args as Record<string, unknown>)
+      delete (cleanArgs as Record<string, unknown>).ids
+      delete (cleanArgs as Record<string, unknown>).title_query
+      delete (cleanArgs as Record<string, unknown>).count
+
+      const hasUpdateFields = Object.keys(cleanArgs).length > 0
+      const hasRoleOverrides = Boolean(membersPrimary) || membersAttendees !== undefined
+      if (!hasUpdateFields && !hasRoleOverrides) {
+        throw new Error('bulk_update_events must include at least one editable field')
+      }
+
+      const { data: rows, error: rowsError } = await sb
+        .from('events')
+        .select('id, title, updated_at, recurrence_master_id, rrule')
+        .in('id', ids)
+      if (rowsError) throw new Error(rowsError.message)
+      if (!rows || rows.length === 0) throw new Error('No matching events found for bulk update')
+
+      const recurringTitles = rows.filter((row) => row.recurrence_master_id || row.rrule).map((row) => row.title)
+      if (recurringTitles.length > 0) {
+        throw new Error(`Recurring events are not supported in bulk AI edit yet: ${recurringTitles.slice(0, 3).join(', ')}`)
+      }
+
+      const updatedEventIds: string[] = []
+      const failedEvents: { id: string; title: string; error: string }[] = []
+
+      for (const row of rows) {
+        try {
+          if (hasUpdateFields) {
+            const singleArgs = {
+              ...cleanArgs,
+              id: row.id,
+              expected_updated_at: row.updated_at,
+            }
+            const { errors, normalized } = buildValidatedUpdatePayload(singleArgs)
+            if (errors.length > 0) throw new Error(errors.join('; '))
+
+            let addIds: string[] = []
+            if (normalized.membersAdd && normalized.membersAdd.length > 0) {
+              const { data: family } = await sb.from('family_members').select('id, name')
+              const unresolved = normalized.membersAdd.filter((name) => !(family ?? []).some((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase()))
+              if (unresolved.length > 0) {
+                throw new Error(`Unknown family member(s): ${unresolved.join(', ')}`)
+              }
+              addIds = normalized.membersAdd
+                .map((name) => (family ?? []).find((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase())?.id)
+                .filter(Boolean) as string[]
+            }
+
+            let removeIds: string[] = []
+            if (normalized.membersRemove && normalized.membersRemove.length > 0) {
+              const { data: family } = await sb.from('family_members').select('id, name')
+              const unresolved = normalized.membersRemove.filter((name) => !(family ?? []).some((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase()))
+              if (unresolved.length > 0) {
+                throw new Error(`Unknown family member(s): ${unresolved.join(', ')}`)
+              }
+              removeIds = normalized.membersRemove
+                .map((name) => (family ?? []).find((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase())?.id)
+                .filter(Boolean) as string[]
+            }
+
+            const eventUpdates = {
+              ...normalized.eventUpdates,
+              ...(normalized.destinationChanged ? { is_enriched: false } : {}),
+            }
+
+            const { error: rpcError } = await sb.rpc('ai_apply_event_update', {
+              p_event_id: normalized.eventId,
+              p_event_updates: eventUpdates,
+              p_enrichment_updates: normalized.enrichmentUpdates,
+              p_checklist_items: normalized.checklistItems ?? null,
+              p_action_items: normalized.actionItems ?? null,
+              p_members_add: addIds,
+              p_members_remove: removeIds,
+              p_action_id: actionId ? `${actionId}:${row.id}` : null,
+              p_expected_updated_at: normalized.expectedUpdatedAt,
+              p_request_payload: singleArgs,
+              p_ai_session_id: sessionId ?? null,
+            })
+            if (rpcError) throw new Error(rpcError.message)
+          }
+
+          await applyMemberRoleOverrides(sb, row.id, membersPrimary, membersAttendees)
+          updatedEventIds.push(row.id)
+        } catch (error) {
+          failedEvents.push({
+            id: row.id,
+            title: row.title,
+            error: (error as Error).message ?? 'Unknown error',
+          })
+        }
+      }
+
+      for (const eventId of updatedEventIds) {
+        void sb.functions.invoke('push-to-google', { body: { event_id: eventId } }).catch(() => {})
+      }
+
+      return new Response(JSON.stringify({
+        success: failedEvents.length === 0,
+        updated_count: updatedEventIds.length,
+        failed_count: failedEvents.length,
+        failed_events: failedEvents.slice(0, 10),
+        sync_status: updatedEventIds.length > 0 ? 'queued' : 'failed',
+        sync_warning: updatedEventIds.length > 0
+          ? `Updated ${updatedEventIds.length} events in Casa Tabor. Google sync has been queued in the background.`
+          : 'No events were updated.',
+        correlation_id: cid,
+      }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
@@ -333,6 +684,47 @@ Deno.serve(async (req) => {
       const { error } = await sb.from('events').update({ status: 'cancelled' }).eq('id', args.id)
       if (error) throw new Error(error.message)
       return new Response(JSON.stringify({ success: true, correlation_id: cid }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
+    if (tool === 'delete_events_by_title') {
+      const ids = Array.isArray(args?.ids)
+        ? (args.ids as unknown[])
+          .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+          .map((id) => id.trim())
+        : []
+      const uniqueIds = [...new Set(ids)]
+      if (uniqueIds.length === 0) throw new Error('ids must include at least one event id')
+      if (uniqueIds.length > 50) throw new Error('Cannot delete more than 50 events at once')
+
+      const { data: matchedRows, error: matchedLoadError } = await sb
+        .from('events')
+        .select('id, title')
+        .in('id', uniqueIds)
+      if (matchedLoadError) throw new Error(matchedLoadError.message)
+      if (!matchedRows || matchedRows.length === 0) throw new Error('No matching events found for bulk delete')
+
+      const matchedIds = matchedRows.map((row) => row.id)
+      const missingCount = uniqueIds.length - matchedIds.length
+
+      for (const eventId of matchedIds) {
+        await sb.functions.invoke('delete-google-event', { body: { event_id: eventId } }).catch(() => {})
+      }
+
+      const { error: updateError } = await sb
+        .from('events')
+        .update({ status: 'cancelled' })
+        .in('id', matchedIds)
+      if (updateError) throw new Error(updateError.message)
+
+      return new Response(JSON.stringify({
+        success: true,
+        deleted_count: matchedIds.length,
+        deleted_titles: matchedRows.map((row) => row.title),
+        missing_count: missingCount,
+        correlation_id: cid,
+      }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }

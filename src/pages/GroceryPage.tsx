@@ -1,10 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ShoppingCart, Trash2, Check, X, Plus, RefreshCw, Mic, GripVertical, Link2, Upload, BookOpen, ChefHat, ChevronLeft, ChevronRight, Clock3, ExternalLink } from 'lucide-react'
+import { ShoppingCart, Trash2, Check, X, Plus, Minus, RefreshCw, Mic, GripVertical, Link2, Upload, BookOpen, ChefHat, ChevronLeft, ChevronRight, Clock3, ExternalLink, Camera } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '../utils/cn'
 import { useGroceryList, GROCERY_CATEGORIES, type GroceryItem } from '../hooks/useGroceryList'
 import { inferCategoryFromName } from '../utils/groceryCategorization'
+import { normalizeRecipeIngredientFields } from '../utils/recipeIngredientParsing'
 import { supabase } from '../lib/supabase'
+import { formatSupabaseError } from '../lib/formatSupabaseError'
+import {
+  appendPantryInventoryAudit,
+  inferDefaultPackageMeta,
+  normalizePackageUnit,
+  normalizePantryKey,
+  sanitizePantryInventoryAudit,
+  type PantryInventoryAuditEntry,
+} from '../lib/pantryInventoryUtils'
+import recipeFallbackHero from '../assets/hero.png'
 
 const SYNC_CURSOR_KEY = 'grocery-sync-cursor-v1'
 const SYNC_LAST_AT_KEY = 'grocery-sync-last-at-v1'
@@ -103,8 +115,18 @@ type RecipeDraft = {
   source_type: 'url' | 'image' | 'pdf'
   source_url: string | null
   image_url: string | null
+  image_urls: string[]
+  primary_image_index: number | null
   ingredients: RecipeDraftIngredient[]
   steps: RecipeDraftStep[]
+}
+
+type RecipeImportCaptureFile = {
+  id: string
+  name: string
+  mimeType: string
+  fileBase64: string
+  previewUrl: string
 }
 
 type RecipePreset = {
@@ -113,6 +135,7 @@ type RecipePreset = {
   source_type: 'url' | 'image' | 'pdf' | 'manual'
   source_url: string | null
   image_url: string | null
+  image_urls: string[]
   servings: string | null
   cook_time: string | null
   last_used_at: string | null
@@ -131,12 +154,121 @@ type RecipeMealPlan = {
   notes: string | null
 }
 
+type PantryInventoryEntry = {
+  name: string
+  category: string
+  package_unit: string | null
+  package_size: string | null
+  on_hand_packages: number
+  low_stock_threshold: number
+  updated_at: string
+}
+
+type ReconciledCheckedItems = Record<string, string>
+type PantryReconcileMode = 'planner-only' | 'all-done'
+type PantryDepletionStatus = 'low' | 'out'
+type PantryReviewStatus = 'ok' | PantryDepletionStatus
+type PantryReconcileDraftRow = {
+  item_id: string
+  name: string
+  category: string
+  package_unit: string | null
+  package_size: string | null
+  package_count: number
+  source: 'checked-item' | 'manual-depletion'
+  review_status: PantryReviewStatus
+}
+
+type PantryReconcileDraft = {
+  mode: PantryReconcileMode
+  rows: PantryReconcileDraftRow[]
+  skipped_already_reconciled: number
+  pantry_inventory: Record<string, PantryInventoryEntry>
+  reconciled_items: ReconciledCheckedItems
+  audit_log: PantryInventoryAuditEntry[]
+}
+
 function detectCategory(name: string): string {
   return inferCategoryFromName(name)
 }
 
 function normalizeItemName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function pantryInventoryKey(name: string, category: string): string {
+  return normalizePantryKey(name, category)
+}
+
+function parseQuantityAsPackages(raw: string | null): number {
+  if (!raw) return 1
+  const value = raw.trim()
+  if (!value) return 1
+  const mixed = value.match(/^(\d+)\s+(\d+)\/(\d+)$/)
+  if (mixed) {
+    const whole = Number(mixed[1] ?? 0)
+    const numerator = Number(mixed[2] ?? 0)
+    const denominator = Number(mixed[3] ?? 1)
+    if (denominator > 0) return Math.max(0, whole + numerator / denominator)
+  }
+  const fraction = value.match(/^(\d+)\/(\d+)$/)
+  if (fraction) {
+    const numerator = Number(fraction[1] ?? 0)
+    const denominator = Number(fraction[2] ?? 1)
+    if (denominator > 0) return Math.max(0, numerator / denominator)
+  }
+  const numeric = Number(value)
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 1
+}
+
+function defaultLowStockThreshold(category: string): number {
+  if (category === 'pantry') return 0.5
+  if (category === 'other') return 0.35
+  return 0.25
+}
+
+function parsePackageSizeFromNotes(notes: string | null): string | null {
+  if (!notes) return null
+  const match = notes.match(/Buy\s+\d+(?:\.\d+)?\s+\S+\s+\(([^)]+)\)/i)
+  if (!match) return null
+  return String(match[1] ?? '').trim() || null
+}
+
+function sanitizePantryInventory(raw: unknown): Record<string, PantryInventoryEntry> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const output: Record<string, PantryInventoryEntry> = {}
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue
+    const row = value as Record<string, unknown>
+    const onHand = Number(row.on_hand_packages)
+    if (!Number.isFinite(onHand) || onHand < 0) continue
+    const lowThreshold = Number(row.low_stock_threshold)
+    output[key] = {
+      name: String(row.name ?? '').trim(),
+      category: String(row.category ?? 'other').trim().toLowerCase() || 'other',
+      package_unit: typeof row.package_unit === 'string' ? row.package_unit : null,
+      package_size: typeof row.package_size === 'string' ? row.package_size : null,
+      on_hand_packages: Number(onHand.toFixed(2)),
+      low_stock_threshold: Number.isFinite(lowThreshold) && lowThreshold >= 0 ? Number(lowThreshold.toFixed(2)) : 0.5,
+      updated_at: typeof row.updated_at === 'string' ? row.updated_at : new Date().toISOString(),
+    }
+  }
+  return output
+}
+
+function sanitizeReconciledCheckedItems(raw: unknown): ReconciledCheckedItems {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const output: ReconciledCheckedItems = {}
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value !== 'string') continue
+    output[id] = value
+  }
+  return output
+}
+
+function isPlannerGeneratedGrocery(item: GroceryItem): boolean {
+  const notes = (item.notes ?? '').toLowerCase()
+  return notes.includes('meal planner ai')
 }
 
 function chunkArray<T>(items: T[], size: number): T[][] {
@@ -252,6 +384,74 @@ function splitCategoryLabel(raw: string): { icon: string; label: string } {
   const match = trimmed.match(/^(\S+)\s+(.*)$/)
   if (!match) return { icon: '🛒', label: trimmed }
   return { icon: match[1], label: match[2] }
+}
+
+function getRecipeDraftImage(recipe: { id?: string; name: string; image_url: string | null; image_urls?: string[]; primary_image_index?: number | null }): string {
+  const gallery = Array.isArray(recipe.image_urls) ? recipe.image_urls : []
+  const preferred = typeof recipe.primary_image_index === 'number'
+    ? (gallery[Math.max(0, recipe.primary_image_index)] ?? null)
+    : null
+  const fallbackGallery = gallery[0] ?? null
+  const imageChoice = preferred ?? fallbackGallery
+  if (imageChoice) return imageChoice
+  if (recipe.image_url) return recipe.image_url
+  const seed = recipe.id ?? recipe.name
+  return `https://loremflickr.com/1200/900/food?lock=${encodeURIComponent(seed)}`
+}
+
+function normalizeRecipeImageUrls(imageUrlsRaw: unknown, imageUrlRaw: unknown): { imageUrls: string[]; primaryIndex: number | null } {
+  const urls = new Set<string>()
+  if (Array.isArray(imageUrlsRaw)) {
+    for (const row of imageUrlsRaw) {
+      if (typeof row !== 'string') continue
+      const trimmed = row.trim()
+      if (!trimmed) continue
+      urls.add(trimmed)
+    }
+  }
+  const imageUrl = typeof imageUrlRaw === 'string' ? imageUrlRaw.trim() : ''
+  if (imageUrl) urls.add(imageUrl)
+  const imageUrls = Array.from(urls)
+  const primaryIndex = imageUrl
+    ? Math.max(0, imageUrls.findIndex((row) => row === imageUrl))
+    : (imageUrls.length > 0 ? 0 : null)
+  return { imageUrls, primaryIndex }
+}
+
+function isPersistableImageUrl(url: string): boolean {
+  const candidate = url.trim()
+  if (!candidate || candidate.length > 2048) return false
+  try {
+    const parsed = new URL(candidate)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function isLikelyImageFile(file: File): boolean {
+  if ((file.type ?? '').toLowerCase().startsWith('image/')) return true
+  return /\.(png|jpe?g|webp|gif|heic|heif|bmp|avif)$/i.test(file.name)
+}
+
+function shouldAcceptImportFile(file: File, source: 'upload' | 'camera'): { isPdf: boolean; isImage: boolean } {
+  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+  const isImage = isLikelyImageFile(file) || (source === 'camera' && file.size > 0 && !isPdf)
+  return { isPdf, isImage }
+}
+
+function triggerFileInput(ref: { current: HTMLInputElement | null }) {
+  const node = ref.current
+  if (!node) return
+  node.value = ''
+  node.click()
+}
+
+function renumberDraftSteps(steps: RecipeDraftStep[]): RecipeDraftStep[] {
+  return steps.map((step, index) => ({
+    ...step,
+    step_number: index + 1,
+  }))
 }
 
 function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging = false, isSpotlighted = false, isReviewing = false, onRequestReview, onChooseReviewCategory, onDismissReview, onMovePointerDown, onMovePointerMove, onMovePointerUp, onMovePointerCancel }: {
@@ -385,6 +585,8 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
 }
 
 export default function GroceryPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const {
     items,
     defaultListId,
@@ -438,7 +640,7 @@ export default function GroceryPage() {
       if (recipeRows.length === 0) return [] as RecipePreset[]
 
       const ids = recipeRows.map((row) => row.id)
-      const [{ data: ingredientRows, error: ingredientsError }, { data: stepRows, error: stepsError }] = await Promise.all([
+      const [{ data: ingredientRows, error: ingredientsError }, { data: stepRows, error: stepsError }, { data: imageRows, error: imageRowsError }] = await Promise.all([
         supabase
           .from('recipe_ingredients')
           .select('recipe_id,raw_text,name,quantity,unit,optional,sort_order')
@@ -449,9 +651,15 @@ export default function GroceryPage() {
           .select('recipe_id,step_number,instruction')
           .in('recipe_id', ids)
           .order('step_number', { ascending: true }),
+        supabase
+          .from('recipe_images')
+          .select('recipe_id,image_url,is_primary,sort_order')
+          .in('recipe_id', ids)
+          .order('sort_order', { ascending: true }),
       ])
       if (ingredientsError) throw ingredientsError
       if (stepsError) throw stepsError
+      if (imageRowsError && imageRowsError.code !== '42P01') throw imageRowsError
 
       const ingredientsByRecipe = new Map<string, RecipeDraftIngredient[]>()
       for (const row of (ingredientRows ?? []) as Array<{
@@ -488,8 +696,33 @@ export default function GroceryPage() {
         stepsByRecipe.set(row.recipe_id, bucket)
       }
 
+      const imagesByRecipe = new Map<string, Array<{ image_url: string; is_primary: boolean; sort_order: number }>>()
+      for (const row of (imageRows ?? []) as Array<{
+        recipe_id: string
+        image_url: string
+        is_primary: boolean
+        sort_order: number
+      }>) {
+        const imageUrl = String(row.image_url ?? '').trim()
+        if (!imageUrl) continue
+        const bucket = imagesByRecipe.get(row.recipe_id) ?? []
+        bucket.push({
+          image_url: imageUrl,
+          is_primary: Boolean(row.is_primary),
+          sort_order: Number(row.sort_order ?? bucket.length),
+        })
+        imagesByRecipe.set(row.recipe_id, bucket)
+      }
+
       return recipeRows.map((row) => ({
         ...row,
+        image_urls: (() => {
+          const fromTable = imagesByRecipe.get(row.id) ?? []
+          const ordered = [...fromTable].sort((a, b) => Number(b.is_primary) - Number(a.is_primary) || a.sort_order - b.sort_order)
+          const urls = ordered.map((entry) => entry.image_url)
+          if (row.image_url && !urls.includes(row.image_url)) urls.unshift(row.image_url)
+          return urls
+        })(),
         ingredients: ingredientsByRecipe.get(row.id) ?? [],
         steps: stepsByRecipe.get(row.id) ?? [],
       }))
@@ -515,10 +748,14 @@ export default function GroceryPage() {
   const [inputValue, setInputValue] = useState('')
   const [isAddPanelOpen, setIsAddPanelOpen] = useState(false)
   const [addPanelMode, setAddPanelMode] = useState<'quick' | 'recipe' | 'library'>('quick')
+  const [recipeImportStep, setRecipeImportStep] = useState<1 | 2 | 3>(1)
   const [recipeUrlInput, setRecipeUrlInput] = useState('')
   const [recipeImporting, setRecipeImporting] = useState(false)
   const [recipeImportError, setRecipeImportError] = useState<string | null>(null)
   const [parsedRecipe, setParsedRecipe] = useState<RecipeDraft | null>(null)
+  const [recipeExtraImageUrl, setRecipeExtraImageUrl] = useState('')
+  const [recipeImportFiles, setRecipeImportFiles] = useState<RecipeImportCaptureFile[]>([])
+  const [recipeMealPhotoIndex, setRecipeMealPhotoIndex] = useState<number | null>(null)
   const [selectedRecipeIngredientIndexes, setSelectedRecipeIngredientIndexes] = useState<Set<number>>(new Set())
   const [savingRecipe, setSavingRecipe] = useState(false)
   const [recipeScale, setRecipeScale] = useState(1)
@@ -526,6 +763,13 @@ export default function GroceryPage() {
   const [cookTimer, setCookTimer] = useState<{ totalSeconds: number; remainingSeconds: number; label: string } | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
+  const [preparingPantryReconcileReview, setPreparingPantryReconcileReview] = useState(false)
+  const [reconcilingPantry, setReconcilingPantry] = useState(false)
+  const [pantryReconcileDraft, setPantryReconcileDraft] = useState<PantryReconcileDraft | null>(null)
+  const [pantryReconcileMessage, setPantryReconcileMessage] = useState<string | null>(null)
+  const [pantryReconcileError, setPantryReconcileError] = useState<string | null>(null)
+  const [pantryReconcileMode, setPantryReconcileMode] = useState<PantryReconcileMode>('planner-only')
+  const [expandedReconcileQtyIds, setExpandedReconcileQtyIds] = useState<Set<string>>(new Set())
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => localStorage.getItem(SYNC_LAST_AT_KEY))
   const [lastSyncSummary, setLastSyncSummary] = useState<string>(() => localStorage.getItem(SYNC_LAST_SUMMARY_KEY) ?? 'Not synced yet')
   const [showCompletedArchive, setShowCompletedArchive] = useState(false)
@@ -543,14 +787,42 @@ export default function GroceryPage() {
   const [analysisNow, setAnalysisNow] = useState(() => Date.now())
   const inputRef = useRef<HTMLInputElement>(null)
   const recipeFileInputRef = useRef<HTMLInputElement>(null)
+  const recipeCameraInputRef = useRef<HTMLInputElement>(null)
   const syncInFlightRef = useRef(false)
   const dismissBatchTimerRef = useRef<number | null>(null)
   const dismissExitTimerRef = useRef<number | null>(null)
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set())
   const [dismissingExitingIds, setDismissingExitingIds] = useState<Set<string>>(new Set())
   const dismissingIdsRef = useRef<Set<string>>(new Set())
+  const hasRecipeImportSource = recipeUrlInput.trim().length > 0 || recipeImportFiles.length > 0
 
   const activeItems = items.filter((item) => !item.checked)
+  const checkedItems = useMemo(
+    () => items.filter((item) => item.checked && !item.deleted_at),
+    [items],
+  )
+  const checkedPlannerItems = useMemo(
+    () => checkedItems.filter((item) => isPlannerGeneratedGrocery(item)),
+    [checkedItems],
+  )
+  const reconcileCandidateItems = pantryReconcileMode === 'all-done'
+    ? checkedItems
+    : checkedPlannerItems
+  const pantryReconcileRowsByCategory = useMemo(() => {
+    if (!pantryReconcileDraft) return [] as Array<{ category: string; rows: PantryReconcileDraftRow[] }>
+    const grouped = new Map<string, PantryReconcileDraftRow[]>()
+    for (const row of pantryReconcileDraft.rows) {
+      const bucket = grouped.get(row.category)
+      if (bucket) bucket.push(row)
+      else grouped.set(row.category, [row])
+    }
+    return Array.from(grouped.entries())
+      .map(([category, rows]) => ({
+        category,
+        rows: [...rows].sort((a, b) => a.name.localeCompare(b.name)),
+      }))
+      .sort((a, b) => a.category.localeCompare(b.category))
+  }, [pantryReconcileDraft])
 
   const findMergeSuggestion = useCallback((name: string) => {
     const normalized = normalizeItemName(name)
@@ -785,9 +1057,11 @@ export default function GroceryPage() {
     sourceType: 'url' | 'image' | 'pdf'
     sourceUrl?: string
     fileBase64?: string
+    files?: Array<{ fileBase64: string; mimeType: string }>
+    mealPhotoIndex?: number | null
     mimeType?: string
     fallbackName?: string
-  }) => {
+  }): Promise<boolean> => {
     setRecipeImportError(null)
     setRecipeImporting(true)
     try {
@@ -796,6 +1070,11 @@ export default function GroceryPage() {
           source_type: payload.sourceType,
           source_url: payload.sourceUrl ?? null,
           file_base64: payload.fileBase64 ?? null,
+          files: (payload.files ?? []).map((file) => ({
+            file_base64: file.fileBase64,
+            mime_type: file.mimeType,
+          })),
+          meal_photo_index: payload.mealPhotoIndex ?? null,
           mime_type: payload.mimeType ?? null,
           fallback_name: payload.fallbackName ?? 'Imported recipe',
         },
@@ -807,6 +1086,7 @@ export default function GroceryPage() {
 
       const ingredientsRaw = Array.isArray(recipeRaw.ingredients) ? recipeRaw.ingredients : []
       const stepsRaw = Array.isArray(recipeRaw.steps) ? recipeRaw.steps : []
+      const { imageUrls, primaryIndex } = normalizeRecipeImageUrls(recipeRaw.image_urls, recipeRaw.image_url)
       const recipe: RecipeDraft = {
         name: String(recipeRaw.name ?? 'Imported recipe').trim() || 'Imported recipe',
         servings: typeof recipeRaw.servings === 'string' ? recipeRaw.servings : null,
@@ -814,18 +1094,26 @@ export default function GroceryPage() {
         confidence: Math.max(0, Math.min(1, Number(recipeRaw.confidence ?? 0.7) || 0.7)),
         source_type: payload.sourceType,
         source_url: payload.sourceType === 'url' ? (payload.sourceUrl ?? null) : null,
-        image_url: typeof recipeRaw.image_url === 'string' ? recipeRaw.image_url : null,
+        image_url: primaryIndex === null ? null : (imageUrls[primaryIndex] ?? null),
+        image_urls: imageUrls,
+        primary_image_index: primaryIndex,
         ingredients: ingredientsRaw
           .map((row) => {
             if (!row || typeof row !== 'object') return null
             const item = row as Record<string, unknown>
             const rawText = String(item.raw_text ?? '').trim()
             if (!rawText) return null
-            return {
-              raw_text: rawText,
+            const normalized = normalizeRecipeIngredientFields({
+              rawText,
               name: typeof item.name === 'string' ? item.name : null,
               quantity: typeof item.quantity === 'string' ? item.quantity : null,
               unit: typeof item.unit === 'string' ? item.unit : null,
+            })
+            return {
+              raw_text: rawText,
+              name: normalized.name,
+              quantity: normalized.quantity,
+              unit: normalized.unit,
               optional: Boolean(item.optional),
             } as RecipeDraftIngredient
           })
@@ -842,51 +1130,118 @@ export default function GroceryPage() {
             } as RecipeDraftStep
           })
           .filter((row): row is RecipeDraftStep => row !== null)
-          .sort((a, b) => a.step_number - b.step_number)
           .map((step, index) => ({ ...step, step_number: index + 1 })),
       }
 
       if (recipe.ingredients.length === 0) {
         throw new Error('No ingredients found in this recipe')
       }
+      const hasChosenMealPhoto = Array.isArray(payload.files) && payload.files.length > 0 && payload.mealPhotoIndex !== null && payload.mealPhotoIndex !== undefined
+      if (!hasChosenMealPhoto) {
+        const { data: imageSearchData, error: imageSearchError } = await supabase.functions.invoke('recipe-image-search', {
+          body: { query: recipe.name, limit: 8 },
+        })
+        if (!imageSearchError && Array.isArray(imageSearchData?.results)) {
+          const extraUrls = (imageSearchData.results as unknown[])
+            .map((row: unknown) => {
+              if (!row || typeof row !== 'object') return null
+              const candidate = (row as { url?: unknown }).url
+              const url = typeof candidate === 'string'
+                ? candidate.trim()
+                : ''
+              return url || null
+            })
+            .filter((url: string | null): url is string => Boolean(url))
+          if (extraUrls.length > 0) {
+            const merged = Array.from(new Set([...recipe.image_urls, ...extraUrls]))
+            recipe.image_urls = merged
+            if (!recipe.image_url && merged[0]) {
+              recipe.image_url = merged[0]
+              if (recipe.primary_image_index === null) {
+                recipe.primary_image_index = 0
+              }
+            }
+          }
+        }
+      }
       setParsedRecipe(recipe)
+      setRecipeExtraImageUrl('')
       setSelectedRecipeIngredientIndexes(defaultSelectedRecipeIndexes(recipe))
       setRecipeScale(1)
       setAddPanelMode('recipe')
       setIsAddPanelOpen(true)
+      setRecipeImportStep(3)
+      return true
     } catch (err) {
       setRecipeImportError(err instanceof Error ? err.message : 'Recipe import failed')
+      return false
     } finally {
       setRecipeImporting(false)
     }
   }, [defaultSelectedRecipeIndexes])
 
-  const handleRecipeUrlImport = useCallback(async () => {
+  const addRecipeImportFiles = useCallback(async (files: File[], source: 'upload' | 'camera') => {
+    if (files.length === 0) {
+      if (source === 'camera') {
+        setRecipeImportError('No photo was captured. Please try again.')
+      }
+      return
+    }
+    setRecipeImportError(null)
+    const nextFiles: RecipeImportCaptureFile[] = []
+    for (const file of files) {
+      const { isPdf, isImage } = shouldAcceptImportFile(file, source)
+      if (!isPdf && !isImage) continue
+      const buffer = await file.arrayBuffer()
+      const base64 = arrayBufferToBase64(buffer)
+      const mimeType = file.type || (isPdf ? 'application/pdf' : 'image/jpeg')
+      const previewUrl = isImage ? `data:${mimeType};base64,${base64}` : recipeFallbackHero
+      nextFiles.push({
+        id: `${file.name}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
+        name: file.name,
+        mimeType,
+        fileBase64: base64,
+        previewUrl,
+      })
+    }
+    if (nextFiles.length === 0) {
+      setRecipeImportError(source === 'camera' ? 'Could not read that photo. Please try another shot.' : 'Please upload recipe photos or a PDF')
+      return
+    }
+    setRecipeImportFiles((current) => [...current, ...nextFiles])
+    setRecipeImportStep((current) => (current < 2 ? 2 : current))
+  }, [])
+
+  const removeRecipeImportFile = useCallback((fileId: string) => {
+    setRecipeImportFiles((current) => {
+      const next = current.filter((file) => file.id !== fileId)
+      setRecipeMealPhotoIndex((existing) => {
+        if (next.length === 0 || existing === null) return null
+        return Math.max(0, Math.min(existing, next.length - 1))
+      })
+      return next
+    })
+  }, [])
+
+  const runRecipeImportFromCurrentSources = useCallback(async () => {
     const url = recipeUrlInput.trim()
-    if (!url) {
-      setRecipeImportError('Paste a recipe URL first')
+    if (!url && recipeImportFiles.length === 0) {
+      setRecipeImportError('Add a URL or one or more photos first.')
+      return
+    }
+    if (recipeImportFiles.length > 0) {
+      const hasPdf = recipeImportFiles.some((file) => file.mimeType === 'application/pdf')
+      const sourceType: 'image' | 'pdf' = hasPdf ? 'pdf' : 'image'
+      await importRecipeFromSource({
+        sourceType,
+        files: recipeImportFiles.map((file) => ({ fileBase64: file.fileBase64, mimeType: file.mimeType })),
+        mealPhotoIndex: recipeMealPhotoIndex,
+        fallbackName: 'Captured recipe',
+      })
       return
     }
     await importRecipeFromSource({ sourceType: 'url', sourceUrl: url, fallbackName: 'Web recipe' })
-  }, [importRecipeFromSource, recipeUrlInput])
-
-  const handleRecipeFilePick = useCallback(async (file: File | null) => {
-    if (!file) return
-    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-    const isImage = file.type.startsWith('image/')
-    if (!isPdf && !isImage) {
-      setRecipeImportError('Please upload a recipe photo or PDF')
-      return
-    }
-    const buffer = await file.arrayBuffer()
-    const base64 = arrayBufferToBase64(buffer)
-    await importRecipeFromSource({
-      sourceType: isPdf ? 'pdf' : 'image',
-      fileBase64: base64,
-      mimeType: file.type || (isPdf ? 'application/pdf' : 'image/jpeg'),
-      fallbackName: file.name.replace(/\.[^.]+$/, ''),
-    })
-  }, [importRecipeFromSource])
+  }, [importRecipeFromSource, recipeImportFiles, recipeMealPhotoIndex, recipeUrlInput])
 
   const addSelectedRecipeIngredientsToCart = useCallback((recipe: RecipeDraft) => {
     if (!defaultListId) return
@@ -917,50 +1272,176 @@ export default function GroceryPage() {
     })
   }, [])
 
+  const updateParsedStep = useCallback((index: number, instruction: string) => {
+    setParsedRecipe((current) => {
+      if (!current) return current
+      const nextSteps = current.steps.map((step, stepIndex) =>
+        stepIndex === index ? { ...step, instruction } : step)
+      return { ...current, steps: renumberDraftSteps(nextSteps) }
+    })
+  }, [])
+
+  const moveParsedStep = useCallback((index: number, direction: -1 | 1) => {
+    setParsedRecipe((current) => {
+      if (!current) return current
+      const targetIndex = index + direction
+      if (targetIndex < 0 || targetIndex >= current.steps.length) return current
+      const nextSteps = [...current.steps]
+      const [moved] = nextSteps.splice(index, 1)
+      nextSteps.splice(targetIndex, 0, moved)
+      return { ...current, steps: renumberDraftSteps(nextSteps) }
+    })
+  }, [])
+
+  const addParsedStepAfter = useCallback((index: number) => {
+    setParsedRecipe((current) => {
+      if (!current) return current
+      const nextSteps = [...current.steps]
+      nextSteps.splice(index + 1, 0, { step_number: index + 2, instruction: '' })
+      return { ...current, steps: renumberDraftSteps(nextSteps) }
+    })
+  }, [])
+
+  const removeParsedStep = useCallback((index: number) => {
+    setParsedRecipe((current) => {
+      if (!current) return current
+      if (current.steps.length <= 1) return current
+      const nextSteps = current.steps.filter((_, stepIndex) => stepIndex !== index)
+      return { ...current, steps: renumberDraftSteps(nextSteps) }
+    })
+  }, [])
+
+  const choosePrimaryRecipeImage = useCallback((index: number) => {
+    setParsedRecipe((current) => {
+      if (!current) return current
+      const boundedIndex = Math.max(0, Math.min(index, current.image_urls.length - 1))
+      if (current.primary_image_index === boundedIndex) {
+        return {
+          ...current,
+          primary_image_index: null,
+          image_url: null,
+        }
+      }
+      return {
+        ...current,
+        primary_image_index: boundedIndex,
+        image_url: current.image_urls[boundedIndex] ?? null,
+      }
+    })
+  }, [])
+
+  const addRecipeImageUrl = useCallback(() => {
+    const candidate = recipeExtraImageUrl.trim()
+    if (!candidate) return
+    try {
+      const parsed = new URL(candidate)
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        throw new Error('Invalid protocol')
+      }
+    } catch {
+      setRecipeImportError('Please add a valid image URL (http/https).')
+      return
+    }
+    setRecipeImportError(null)
+    setParsedRecipe((current) => {
+      if (!current) return current
+      if (current.image_urls.includes(candidate)) return current
+      const nextImageUrls = [...current.image_urls, candidate]
+      const nextPrimaryIndex = current.primary_image_index === null
+        ? null
+        : (current.image_urls.length === 0 ? 0 : current.primary_image_index)
+      return {
+        ...current,
+        image_urls: nextImageUrls,
+        primary_image_index: nextPrimaryIndex,
+        image_url: nextPrimaryIndex === null ? null : (nextImageUrls[nextPrimaryIndex] ?? null),
+      }
+    })
+    setRecipeExtraImageUrl('')
+  }, [recipeExtraImageUrl])
+
   const saveRecipePreset = useCallback(async (options: { addSelectedToCart: boolean }) => {
     if (!parsedRecipe) return
     setSavingRecipe(true)
     setRecipeImportError(null)
     try {
+      const cleanedSteps = renumberDraftSteps(
+        parsedRecipe.steps
+          .map((step) => ({ ...step, instruction: step.instruction.trim() }))
+          .filter((step) => step.instruction.length > 0),
+      )
+      if (cleanedSteps.length === 0) {
+        throw new Error('Add at least one direction step before saving.')
+      }
+      const normalizedImageUrls = Array.from(new Set(parsedRecipe.image_urls.map((url) => url.trim()).filter(Boolean)))
+      const selectedPrimaryImageCandidate = parsedRecipe.primary_image_index === null
+        ? null
+        : (normalizedImageUrls[parsedRecipe.primary_image_index] ?? parsedRecipe.image_url ?? null)
+      const persistableImageUrls = Array.from(new Set(normalizedImageUrls.filter((url) => isPersistableImageUrl(url))))
+      const selectedPrimaryImage = selectedPrimaryImageCandidate && isPersistableImageUrl(selectedPrimaryImageCandidate)
+        ? selectedPrimaryImageCandidate
+        : (persistableImageUrls[0] ?? null)
       const { data: recipeRow, error: recipeError } = await supabase
         .from('recipes')
         .insert({
           name: parsedRecipe.name,
           source_type: parsedRecipe.source_type,
           source_url: parsedRecipe.source_url,
-          image_url: parsedRecipe.image_url,
+          image_url: selectedPrimaryImage,
           servings: parsedRecipe.servings,
           cook_time: parsedRecipe.cook_time,
-          instructions_text: parsedRecipe.steps.map((step) => `${step.step_number}. ${step.instruction}`).join('\n'),
+          instructions_text: cleanedSteps.map((step) => `${step.step_number}. ${step.instruction}`).join('\n'),
           last_used_at: new Date().toISOString(),
         })
         .select('id')
         .single()
-      if (recipeError) throw recipeError
+      if (recipeError) throw new Error(`Saving recipe header failed: ${formatSupabaseError(recipeError, 'Unable to create recipe')}`)
 
       const recipeId = String(recipeRow.id)
-      const ingredientRows = parsedRecipe.ingredients.map((ingredient, index) => ({
-        recipe_id: recipeId,
-        raw_text: ingredient.raw_text,
-        name: ingredient.name,
-        quantity: ingredient.quantity,
-        unit: ingredient.unit,
-        optional: ingredient.optional,
-        sort_order: index,
-      }))
+      const ingredientRows = parsedRecipe.ingredients.map((ingredient, index) => {
+        const normalized = normalizeRecipeIngredientFields({
+          rawText: ingredient.raw_text,
+          name: ingredient.name,
+          quantity: ingredient.quantity,
+          unit: ingredient.unit,
+        })
+        return {
+          recipe_id: recipeId,
+          raw_text: ingredient.raw_text,
+          name: normalized.name,
+          quantity: normalized.quantity,
+          unit: normalized.unit,
+          optional: ingredient.optional,
+          sort_order: index,
+        }
+      })
       if (ingredientRows.length > 0) {
         const { error: ingredientError } = await supabase.from('recipe_ingredients').insert(ingredientRows)
-        if (ingredientError) throw ingredientError
+        if (ingredientError) throw new Error(`Saving ingredients failed: ${formatSupabaseError(ingredientError, 'Unable to save ingredients')}`)
       }
 
-      const stepRows = parsedRecipe.steps.map((step, index) => ({
+      const stepRows = cleanedSteps.map((step, index) => ({
         recipe_id: recipeId,
         step_number: index + 1,
         instruction: step.instruction,
       }))
       if (stepRows.length > 0) {
         const { error: stepError } = await supabase.from('recipe_steps').insert(stepRows)
-        if (stepError) throw stepError
+        if (stepError) throw new Error(`Saving directions failed: ${formatSupabaseError(stepError, 'Unable to save directions')}`)
+      }
+
+      if (persistableImageUrls.length > 0) {
+        const imageRows = persistableImageUrls.map((imageUrl, index) => ({
+          recipe_id: recipeId,
+          image_url: imageUrl,
+          is_primary: imageUrl === selectedPrimaryImage,
+          sort_order: index,
+        }))
+        const { error: imageError } = await supabase.from('recipe_images').insert(imageRows)
+        const missingRecipeImagesTable = imageError?.code === '42P01' || imageError?.code === 'PGRST205'
+        if (imageError && !missingRecipeImagesTable) {
+          throw new Error(`Saving recipe photos failed: ${formatSupabaseError(imageError, 'Unable to save recipe photos')}`)
+        }
       }
 
       if (options.addSelectedToCart) {
@@ -969,11 +1450,17 @@ export default function GroceryPage() {
 
       await refetchRecipeLibrary()
       setParsedRecipe(null)
+      setRecipeExtraImageUrl('')
+      setRecipeImportFiles([])
+      setRecipeMealPhotoIndex(null)
+      setRecipeUrlInput('')
+      setRecipeImportStep(1)
       setSelectedRecipeIngredientIndexes(new Set())
       setRecipeScale(1)
       setAddPanelMode('library')
     } catch (err) {
-      setRecipeImportError(err instanceof Error ? err.message : 'Could not save recipe')
+      console.error('[GroceryPage] saveRecipePreset failed', err)
+      setRecipeImportError(formatSupabaseError(err, 'Could not save recipe'))
     } finally {
       setSavingRecipe(false)
     }
@@ -1009,6 +1496,14 @@ export default function GroceryPage() {
   }, [refetchMealPlans])
 
   const loadRecipeIntoChecklist = useCallback((recipe: RecipePreset) => {
+    const imageUrls = recipe.image_urls.length > 0
+      ? recipe.image_urls
+      : recipe.image_url
+        ? [recipe.image_url]
+        : []
+    const primaryImageIndex = recipe.image_url
+      ? Math.max(0, imageUrls.findIndex((url) => url === recipe.image_url))
+      : null
     const draft: RecipeDraft = {
       name: recipe.name,
       servings: recipe.servings,
@@ -1016,16 +1511,44 @@ export default function GroceryPage() {
       confidence: 0.95,
       source_type: recipe.source_type === 'manual' ? 'url' : recipe.source_type,
       source_url: recipe.source_url,
-      image_url: recipe.image_url,
-      ingredients: recipe.ingredients,
+      image_url: primaryImageIndex === null ? null : (imageUrls[primaryImageIndex] ?? recipe.image_url),
+      image_urls: imageUrls,
+      primary_image_index: primaryImageIndex,
+      ingredients: recipe.ingredients.map((ingredient) => {
+        const normalized = normalizeRecipeIngredientFields({
+          rawText: ingredient.raw_text,
+          name: ingredient.name,
+          quantity: ingredient.quantity,
+          unit: ingredient.unit,
+        })
+        return {
+          ...ingredient,
+          name: normalized.name,
+          quantity: normalized.quantity,
+          unit: normalized.unit,
+        }
+      }),
       steps: recipe.steps,
     }
     setParsedRecipe(draft)
+    setRecipeExtraImageUrl('')
     setSelectedRecipeIngredientIndexes(defaultSelectedRecipeIndexes(draft))
     setRecipeScale(1)
+    setRecipeImportStep(3)
     setAddPanelMode('recipe')
     setIsAddPanelOpen(true)
   }, [defaultSelectedRecipeIndexes])
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    if (params.get('add') !== 'recipe') return
+    setIsAddPanelOpen(true)
+    setAddPanelMode('recipe')
+    setRecipeImportStep(1)
+    params.delete('add')
+    const nextSearch = params.toString()
+    navigate({ pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : '' }, { replace: true })
+  }, [location.pathname, location.search, navigate])
 
   useEffect(() => {
     return () => {
@@ -1211,6 +1734,250 @@ export default function GroceryPage() {
     }
   }, [items])
 
+  const handlePreparePantryReconcileReview = useCallback(async () => {
+    if (reconcileCandidateItems.length === 0 || preparingPantryReconcileReview) return
+    setPreparingPantryReconcileReview(true)
+    setPantryReconcileDraft(null)
+    setExpandedReconcileQtyIds(new Set())
+    setPantryReconcileMessage(null)
+    setPantryReconcileError(null)
+    try {
+      const settingKeys = ['meal_planner_pantry_inventory', 'meal_planner_reconciled_checked_items', 'meal_planner_pantry_audit_log']
+      const { data: settingRows, error: loadError } = await supabase
+        .from('settings')
+        .select('key,value')
+        .in('key', settingKeys)
+      if (loadError) throw loadError
+
+      const rowMap = new Map((settingRows ?? []).map((row) => [row.key, row.value]))
+      const pantryInventory = sanitizePantryInventory(rowMap.get('meal_planner_pantry_inventory'))
+      const reconciledItems = sanitizeReconciledCheckedItems(rowMap.get('meal_planner_reconciled_checked_items'))
+      const auditLog = sanitizePantryInventoryAudit(rowMap.get('meal_planner_pantry_audit_log'))
+
+      let skippedCount = 0
+      const draftRows: PantryReconcileDraftRow[] = []
+
+      for (const item of reconcileCandidateItems) {
+        if (reconciledItems[item.id]) {
+          skippedCount += 1
+          continue
+        }
+        const category = item.category?.trim().toLowerCase() || 'other'
+        const name = item.name.trim()
+        if (!name) continue
+        const key = pantryInventoryKey(name, category)
+        const existing = pantryInventory[key]
+        const packageCount = parseQuantityAsPackages(item.quantity)
+        const packageSizeFromNotes = parsePackageSizeFromNotes(item.notes)
+        const inferred = inferDefaultPackageMeta(name, category)
+        draftRows.push({
+          item_id: item.id,
+          name,
+          category,
+          package_unit: normalizePackageUnit(existing?.package_unit ?? item.unit ?? inferred.unit),
+          package_size: existing?.package_size ?? packageSizeFromNotes ?? inferred.size,
+          package_count: Number(packageCount.toFixed(2)),
+          source: 'checked-item',
+          review_status: 'ok',
+        })
+      }
+
+      if (draftRows.length === 0) {
+        setPantryReconcileMessage(skippedCount > 0
+          ? `Nothing new to restock (${pantryReconcileMode === 'all-done' ? 'all done' : 'planner only'}). ${skippedCount} item${skippedCount === 1 ? '' : 's'} already reconciled.`
+          : 'No done items were eligible for pantry restock.')
+        return
+      }
+
+      setPantryReconcileDraft({
+        mode: pantryReconcileMode,
+        rows: draftRows,
+        skipped_already_reconciled: skippedCount,
+        pantry_inventory: pantryInventory,
+        reconciled_items: reconciledItems,
+        audit_log: auditLog,
+      })
+    } catch (error) {
+      setPantryReconcileError(formatSupabaseError(error, 'Could not restock pantry from done items'))
+    } finally {
+      setPreparingPantryReconcileReview(false)
+    }
+  }, [pantryReconcileMode, preparingPantryReconcileReview, reconcileCandidateItems])
+
+  const updatePantryReconcileDraftRow = useCallback((itemId: string, packageCount: number) => {
+    setPantryReconcileDraft((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        rows: current.rows.map((row) => row.item_id === itemId
+          ? { ...row, package_count: Number(Math.max(0, packageCount).toFixed(2)) }
+          : row),
+      }
+    })
+  }, [])
+
+  const updatePantryReconcileRowStatus = useCallback((itemId: string, status: PantryReviewStatus) => {
+    setPantryReconcileDraft((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        rows: current.rows.map((row) => row.item_id === itemId
+          ? {
+            ...row,
+            review_status: status,
+            package_count: status === 'ok' ? Math.max(0.25, row.package_count || 1) : 0,
+          }
+          : row),
+      }
+    })
+  }, [])
+
+  const toggleReconcileQtyEditor = useCallback((itemId: string) => {
+    setExpandedReconcileQtyIds((current) => {
+      const next = new Set(current)
+      if (next.has(itemId)) next.delete(itemId)
+      else next.add(itemId)
+      return next
+    })
+  }, [])
+
+  const removePantryReconcileDraftRow = useCallback((itemId: string) => {
+    setPantryReconcileDraft((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        rows: current.rows.filter((row) => row.item_id !== itemId),
+      }
+    })
+  }, [])
+
+  const handleReconcilePantryFromDone = useCallback(async () => {
+    if (!pantryReconcileDraft || reconcilingPantry) return
+    setReconcilingPantry(true)
+    setPantryReconcileMessage(null)
+    setPantryReconcileError(null)
+    try {
+      const nowIso = new Date().toISOString()
+      const pantryInventory = { ...pantryReconcileDraft.pantry_inventory }
+      const reconciledItems = { ...pantryReconcileDraft.reconciled_items }
+      const auditEntries: PantryInventoryAuditEntry[] = []
+      let addedCount = 0
+      let depletionFlaggedCount = 0
+      const skippedCount = pantryReconcileDraft.skipped_already_reconciled
+
+      for (const row of pantryReconcileDraft.rows) {
+        const key = pantryInventoryKey(row.name, row.category)
+        const existing = pantryInventory[key]
+        const packageUnit = normalizePackageUnit(existing?.package_unit ?? row.package_unit)
+        const packageSize = existing?.package_size ?? row.package_size
+        const lowStockThreshold = existing?.low_stock_threshold ?? defaultLowStockThreshold(row.category)
+
+        if (row.review_status !== 'ok') {
+          const lowTarget = Number(Math.max(0.1, lowStockThreshold * 0.5).toFixed(2))
+          const before = existing?.on_hand_packages ?? (row.review_status === 'out' ? 0 : lowTarget)
+          const after = row.review_status === 'out'
+            ? 0
+            : Number(Math.min(before, lowTarget).toFixed(2))
+          pantryInventory[key] = {
+            name: row.name,
+            category: row.category,
+            package_unit: packageUnit,
+            package_size: packageSize,
+            on_hand_packages: after,
+            low_stock_threshold: lowStockThreshold,
+            updated_at: nowIso,
+          }
+          auditEntries.push({
+            id: crypto.randomUUID(),
+            created_at: nowIso,
+            source: 'manual',
+            reason: row.review_status === 'out'
+              ? 'Marked manually as out during quick pantry check'
+              : 'Marked manually as low during quick pantry check',
+            item_key: key,
+            name: row.name,
+            category: row.category,
+            package_unit: packageUnit,
+            package_size: packageSize,
+            before_packages: Number(before.toFixed(2)),
+            delta_packages: Number((after - before).toFixed(2)),
+            after_packages: after,
+          })
+          if (row.source === 'checked-item') {
+            reconciledItems[row.item_id] = nowIso
+          }
+          depletionFlaggedCount += 1
+          continue
+        }
+
+        if (row.package_count <= 0) continue
+
+        const before = existing?.on_hand_packages ?? 0
+        const after = Number((before + row.package_count).toFixed(2))
+        pantryInventory[key] = {
+          name: row.name,
+          category: row.category,
+          package_unit: packageUnit,
+          package_size: packageSize,
+          on_hand_packages: after,
+          low_stock_threshold: lowStockThreshold,
+          updated_at: nowIso,
+        }
+        auditEntries.push({
+          id: crypto.randomUUID(),
+          created_at: nowIso,
+          source: 'reconcile',
+          reason: pantryReconcileDraft.mode === 'all-done' ? 'Reconciled from all done groceries' : 'Reconciled from planner done groceries',
+          item_key: key,
+          name: row.name,
+          category: row.category,
+          package_unit: packageUnit,
+          package_size: packageSize,
+          before_packages: Number(before.toFixed(2)),
+          delta_packages: Number(row.package_count.toFixed(2)),
+          after_packages: after,
+        })
+        if (row.source === 'checked-item') {
+          reconciledItems[row.item_id] = nowIso
+        }
+        addedCount += 1
+      }
+
+      if (addedCount === 0 && depletionFlaggedCount === 0) {
+        setPantryReconcileDraft(null)
+        setExpandedReconcileQtyIds(new Set())
+        setPantryReconcileMessage('Review complete, but no restock quantities or low/out flags were set.')
+        return
+      }
+
+      const nextAuditLog = appendPantryInventoryAudit(pantryReconcileDraft.audit_log, auditEntries)
+      const { error: saveError } = await supabase.from('settings').upsert([
+        { key: 'meal_planner_pantry_inventory', value: pantryInventory, updated_at: nowIso },
+        { key: 'meal_planner_reconciled_checked_items', value: reconciledItems, updated_at: nowIso },
+        { key: 'meal_planner_pantry_audit_log', value: nextAuditLog, updated_at: nowIso },
+      ], { onConflict: 'key' })
+      if (saveError) throw saveError
+
+      setPantryReconcileDraft(null)
+      setExpandedReconcileQtyIds(new Set())
+      setPantryReconcileMessage(
+        [
+          addedCount > 0
+            ? `Restocked ${addedCount} ${pantryReconcileDraft.mode === 'all-done' ? 'done' : 'planner'} item${addedCount === 1 ? '' : 's'}`
+            : '',
+          depletionFlaggedCount > 0
+            ? `flagged ${depletionFlaggedCount} item${depletionFlaggedCount === 1 ? '' : 's'} as low/out`
+            : '',
+          skippedCount > 0 ? `${skippedCount} already reconciled` : '',
+        ].filter(Boolean).join(' · '),
+      )
+    } catch (error) {
+      setPantryReconcileError(formatSupabaseError(error, 'Could not restock pantry from done items'))
+    } finally {
+      setReconcilingPantry(false)
+    }
+  }, [pantryReconcileDraft, reconcilingPantry])
+
   const detectDropCategory = useCallback((x: number, y: number) => {
     const target = document.elementFromPoint(x, y) as HTMLElement | null
     const dropZone = target?.closest<HTMLElement>('[data-drop-category]')
@@ -1369,6 +2136,55 @@ export default function GroceryPage() {
               {syncing ? 'Syncing…' : 'Clean + Sync'}
             </button>
             {checkedCount > 0 && (
+              <div className="flex items-center rounded-full border border-casa-border bg-casa-bg p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setPantryReconcileMode('planner-only')}
+                  className={cn(
+                    'px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors',
+                    pantryReconcileMode === 'planner-only'
+                      ? 'bg-casa-gold/15 text-casa-navy'
+                      : 'text-casa-muted hover:text-casa-navy',
+                  )}
+                >
+                  Planner only
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPantryReconcileMode('all-done')}
+                  className={cn(
+                    'px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors',
+                    pantryReconcileMode === 'all-done'
+                      ? 'bg-casa-gold/15 text-casa-navy'
+                      : 'text-casa-muted hover:text-casa-navy',
+                  )}
+                >
+                  All done
+                </button>
+              </div>
+            )}
+            {checkedCount > 0 && (
+              <details className="relative">
+                <summary className="list-none flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-casa-border bg-casa-bg text-[11px] font-semibold text-casa-muted hover:text-casa-navy">
+                  i
+                </summary>
+                <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border border-casa-border bg-casa-surface p-2 text-[11px] leading-snug text-casa-muted shadow-card">
+                  Planner only = Meal Planner AI items. All done = every checked item.
+                </div>
+              </details>
+            )}
+            {checkedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => void handlePreparePantryReconcileReview()}
+                disabled={preparingPantryReconcileReview || reconcilingPantry || reconcileCandidateItems.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-button text-caption font-medium text-casa-muted border border-casa-border hover:bg-casa-bg transition-colors disabled:opacity-60"
+              >
+                <Upload size={13} />
+                {preparingPantryReconcileReview ? 'Preparing…' : `Review restock (${reconcileCandidateItems.length})`}
+              </button>
+            )}
+            {checkedCount > 0 && (
               <button
                 type="button"
                 onClick={() => clearChecked.mutate()}
@@ -1383,6 +2199,154 @@ export default function GroceryPage() {
         </div>
         {syncError && (
           <p className="pb-3 text-[11px] text-red-600">Sync error: {syncError}</p>
+        )}
+        {pantryReconcileError && (
+          <p className="pb-3 text-[11px] text-red-600">Pantry restock error: {pantryReconcileError}</p>
+        )}
+        {!pantryReconcileError && pantryReconcileMessage && (
+          <p className="pb-3 text-[11px] text-casa-muted">{pantryReconcileMessage}</p>
+        )}
+        {pantryReconcileDraft && (
+          <div className="pb-3">
+            <div className="rounded-2xl border border-casa-border bg-casa-bg p-3">
+              <p className="text-[11px] font-semibold text-casa-navy">
+                Review pantry restock ({pantryReconcileDraft.rows.length})
+              </p>
+              <p className="mt-0.5 text-[11px] text-casa-muted">
+                Adjust package counts before saving to pantry inventory.
+              </p>
+              <div className="mt-2 max-h-52 space-y-2 overflow-y-auto pr-1">
+                {pantryReconcileRowsByCategory.map((group) => (
+                  <div key={`reconcile-group-${group.category}`} className="rounded-xl border border-casa-border bg-casa-surface p-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-casa-muted">
+                      {GROCERY_CATEGORIES.find((category) => category.key === group.category)?.label ?? group.category}
+                    </p>
+                    <div className="mt-1.5 grid grid-cols-1 gap-1.5 lg:grid-cols-4">
+                      {group.rows.map((row) => (
+                        <div key={`reconcile-draft-${row.item_id}`} className="rounded-lg border border-casa-border bg-casa-bg px-2 py-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-[11px] font-semibold text-casa-text">{row.name}</p>
+                              <p className="text-[10px] text-casa-muted">
+                                {row.package_unit || 'pack'}{row.package_size ? ` · ${row.package_size}` : ''}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removePantryReconcileDraftRow(row.item_id)}
+                              className="rounded-md border border-casa-border p-1 text-casa-muted hover:text-casa-error"
+                              aria-label={`Remove ${row.name} from pantry restock review`}
+                              title="Remove from review"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                          <div className="mt-2 grid grid-cols-3 gap-1">
+                            <button
+                              type="button"
+                              onClick={() => updatePantryReconcileRowStatus(row.item_id, 'out')}
+                              className={cn(
+                                'rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors',
+                                row.review_status === 'out'
+                                  ? 'border-red-300 bg-red-50 text-red-700'
+                                  : 'border-casa-border bg-casa-surface text-casa-muted hover:bg-red-50/70'
+                              )}
+                            >
+                              Out
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updatePantryReconcileRowStatus(row.item_id, 'low')}
+                              className={cn(
+                                'rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors',
+                                row.review_status === 'low'
+                                  ? 'border-amber-300 bg-amber-50 text-amber-700'
+                                  : 'border-casa-border bg-casa-surface text-casa-muted hover:bg-amber-50/70'
+                              )}
+                            >
+                              Low
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updatePantryReconcileRowStatus(row.item_id, 'ok')}
+                              className={cn(
+                                'rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors',
+                                row.review_status === 'ok'
+                                  ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                                  : 'border-casa-border bg-casa-surface text-casa-muted hover:bg-emerald-50/70'
+                              )}
+                            >
+                              OK
+                            </button>
+                          </div>
+                          {row.review_status === 'ok' && (
+                            <div className="mt-1.5">
+                              <button
+                                type="button"
+                                onClick={() => toggleReconcileQtyEditor(row.item_id)}
+                                className="text-[10px] font-semibold text-casa-muted hover:text-casa-navy"
+                              >
+                                Qty: {row.package_count} {expandedReconcileQtyIds.has(row.item_id) ? '▲' : '▼'}
+                              </button>
+                              {expandedReconcileQtyIds.has(row.item_id) && (
+                                <div className="mt-1 flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => updatePantryReconcileDraftRow(row.item_id, Math.max(0, row.package_count - 0.25))}
+                                    className="rounded-md border border-casa-border bg-casa-surface p-1 text-casa-muted"
+                                    aria-label={`Decrease ${row.name} restock quantity`}
+                                  >
+                                    <Minus size={11} />
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step={0.25}
+                                    value={row.package_count}
+                                    onChange={(event) => updatePantryReconcileDraftRow(row.item_id, Number(event.target.value))}
+                                    className="w-16 rounded-md border border-casa-border bg-casa-surface px-1 py-1 text-center text-[11px] text-casa-navy"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => updatePantryReconcileDraftRow(row.item_id, row.package_count + 0.25)}
+                                    className="rounded-md border border-casa-border bg-casa-surface p-1 text-casa-muted"
+                                    aria-label={`Increase ${row.name} restock quantity`}
+                                  >
+                                    <Plus size={11} />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleReconcilePantryFromDone()}
+                  disabled={reconcilingPantry}
+                  className="px-3 py-1.5 rounded-button border border-casa-gold/40 bg-casa-gold/10 text-[11px] font-semibold text-casa-navy disabled:opacity-60"
+                >
+                  {reconcilingPantry ? 'Saving…' : 'Confirm restock'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPantryReconcileDraft(null)
+                    setExpandedReconcileQtyIds(new Set())
+                  }}
+                  disabled={reconcilingPantry}
+                  className="px-3 py-1.5 rounded-button border border-casa-border text-[11px] text-casa-muted disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
@@ -1698,7 +2662,10 @@ export default function GroceryPage() {
             </button>
             <button
               type="button"
-              onClick={() => setAddPanelMode('recipe')}
+              onClick={() => {
+                setAddPanelMode('recipe')
+                if (!parsedRecipe) setRecipeImportStep(1)
+              }}
               className={cn(
                 'px-2.5 py-1 rounded-pill border text-[11px] transition-colors inline-flex items-center gap-1',
                 addPanelMode === 'recipe'
@@ -1802,6 +2769,9 @@ export default function GroceryPage() {
           {addPanelMode === 'recipe' && (
             <div>
               <div className="rounded-2xl border border-casa-border bg-casa-bg p-3">
+                <p className="text-[11px] text-casa-muted mb-2">
+                  {recipeImportStep === 1 ? 'Step 1 of 3 · Add sources' : recipeImportStep === 2 ? 'Step 2 of 3 · Confirm sources' : 'Step 3 of 3 · Review + save'}
+                </p>
                 <p className="text-[11px] text-casa-muted mb-1">Paste a public recipe URL</p>
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-2 flex-1 bg-casa-surface rounded-button border border-casa-border px-3 py-2">
@@ -1814,36 +2784,129 @@ export default function GroceryPage() {
                       className="flex-1 bg-transparent text-body-sm text-casa-text placeholder:text-casa-muted outline-none"
                     />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void handleRecipeUrlImport()}
-                    disabled={recipeImporting}
-                    className="px-3 py-2 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-main transition-colors disabled:opacity-60"
-                  >
-                    Import URL
-                  </button>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => recipeFileInputRef.current?.click()}
-                    disabled={recipeImporting}
-                    className="px-3 py-1.5 rounded-pill border border-casa-border text-[11px] text-casa-muted hover:bg-casa-surface transition-colors disabled:opacity-60 inline-flex items-center gap-1"
+                    onClick={() => triggerFileInput(recipeFileInputRef)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-pill border border-casa-border text-[11px] text-casa-muted hover:bg-casa-surface transition-colors inline-flex items-center gap-1 cursor-pointer',
+                      recipeImporting && 'opacity-60 pointer-events-none',
+                    )}
                   >
                     <Upload size={12} />
-                    Upload photo or PDF
+                    Upload file(s)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => triggerFileInput(recipeCameraInputRef)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-pill border border-casa-border text-[11px] text-casa-muted hover:bg-casa-surface transition-colors inline-flex items-center gap-1 cursor-pointer',
+                      recipeImporting && 'opacity-60 pointer-events-none',
+                    )}
+                  >
+                    <Camera size={12} />
+                    Take photo(s)
                   </button>
                   <input
+                    id="grocery-import-file-input"
                     ref={recipeFileInputRef}
                     type="file"
                     accept="image/*,.pdf,application/pdf"
-                    className="hidden"
+                    multiple
+                    className="absolute left-[-9999px] h-px w-px opacity-0 pointer-events-none"
                     onChange={(event) => {
-                      const file = event.target.files?.[0] ?? null
+                      const files = event.target.files ? Array.from(event.target.files) : []
                       event.currentTarget.value = ''
-                      void handleRecipeFilePick(file)
+                      void addRecipeImportFiles(files, 'upload')
                     }}
                   />
+                  <input
+                    id="grocery-import-camera-input"
+                    ref={recipeCameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="absolute left-[-9999px] h-px w-px opacity-0 pointer-events-none"
+                    onChange={(event) => {
+                      const files = event.target.files ? Array.from(event.target.files) : []
+                      event.currentTarget.value = ''
+                      void addRecipeImportFiles(files, 'camera')
+                    }}
+                  />
+                </div>
+                {recipeImportFiles.length > 0 && (
+                  <div className="mt-2 grid grid-cols-3 sm:grid-cols-5 gap-2">
+                    {recipeImportFiles.map((file, index) => {
+                      const selected = recipeMealPhotoIndex !== null && index === recipeMealPhotoIndex
+                      return (
+                        <div key={file.id} className={cn('rounded-lg border overflow-hidden', selected ? 'border-casa-gold' : 'border-casa-border')}>
+                          <button
+                            type="button"
+                            onClick={() => setRecipeMealPhotoIndex((current) => (current === index ? null : index))}
+                            className="block w-full"
+                          >
+                            <img src={file.previewUrl} alt={file.name} className="h-16 w-full object-cover bg-casa-surface" loading="lazy" />
+                            <span className={cn('block px-1 py-1 text-[10px] truncate text-left', selected ? 'text-casa-navy font-semibold' : 'text-casa-muted')}>
+                              {selected ? 'Meal photo' : 'Mark meal'}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeRecipeImportFile(file.id)}
+                            className="w-full border-t border-casa-divider px-1 py-1 text-[10px] text-casa-muted hover:bg-casa-bg"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                {recipeImportFiles.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setRecipeMealPhotoIndex(null)}
+                    className={cn(
+                      'mt-2 px-2.5 py-1.5 rounded-button border text-[11px] transition-colors',
+                      recipeMealPhotoIndex === null
+                        ? 'border-casa-gold bg-casa-gold/10 text-casa-navy font-semibold'
+                        : 'border-casa-border text-casa-muted hover:bg-casa-surface',
+                    )}
+                  >
+                    No meal photo
+                  </button>
+                )}
+                <div className="mt-2 flex items-center justify-end gap-2">
+                  {recipeImportStep > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setRecipeImportStep((current) => (current === 3 ? 2 : 1))}
+                      className="px-3 py-1.5 rounded-pill border border-casa-border text-[11px] text-casa-muted hover:bg-casa-surface"
+                    >
+                      Back
+                    </button>
+                  )}
+                  {recipeImportStep < 2 && (
+                    <button
+                      type="button"
+                      disabled={!hasRecipeImportSource}
+                      onClick={() => setRecipeImportStep(2)}
+                      className="px-3 py-1.5 rounded-pill bg-casa-navy text-white text-[11px] font-semibold hover:bg-casa-navy/90 disabled:opacity-60"
+                    >
+                      Next
+                    </button>
+                  )}
+                  {recipeImportStep === 2 && (
+                    <button
+                      type="button"
+                      disabled={recipeImporting || !hasRecipeImportSource}
+                      onClick={() => void runRecipeImportFromCurrentSources()}
+                      className="px-3 py-1.5 rounded-pill bg-casa-navy text-white text-[11px] font-semibold hover:bg-casa-navy/90 disabled:opacity-60"
+                    >
+                      {recipeImporting ? 'Importing…' : 'Import'}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1854,17 +2917,101 @@ export default function GroceryPage() {
                 <p className="mt-2 text-[11px] text-casa-error">{recipeImportError}</p>
               )}
 
-              {parsedRecipe && (
+              {recipeImportStep === 3 && parsedRecipe && (
                 <div className="mt-2 rounded-2xl border border-casa-border bg-casa-surface p-3 space-y-2">
                   <div className="flex items-start justify-between gap-2">
-                    <div>
+                    <div className="flex items-start gap-3 min-w-0">
+                      <img
+                        src={getRecipeDraftImage(parsedRecipe)}
+                        alt={parsedRecipe.name}
+                        className="h-16 w-16 rounded-xl border border-casa-border object-cover bg-casa-bg flex-shrink-0"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        onError={(event) => {
+                          const target = event.currentTarget
+                          if (target.src !== recipeFallbackHero) {
+                            target.src = recipeFallbackHero
+                          }
+                        }}
+                      />
+                      <div className="min-w-0">
                       <p className="text-body-sm font-semibold text-casa-navy">{parsedRecipe.name}</p>
                       <p className="text-[11px] text-casa-muted">
                         {parsedRecipe.ingredients.length} ingredients · {parsedRecipe.steps.length} steps · {Math.round(parsedRecipe.confidence * 100)}% confidence
                         {parsedRecipe.servings ? ` · ${parsedRecipe.servings}` : ''}
                         {parsedRecipe.cook_time ? ` · ${parsedRecipe.cook_time}` : ''}
                       </p>
+                      </div>
                     </div>
+                  </div>
+
+                  <div className="rounded-xl border border-casa-border bg-casa-bg p-2">
+                    <p className="text-[11px] text-casa-muted mb-2">Recipe photos (cover image optional)</p>
+                    <div className="flex items-center gap-2 mb-2">
+                      <input
+                        type="url"
+                        value={recipeExtraImageUrl}
+                        onChange={(event) => setRecipeExtraImageUrl(event.target.value)}
+                        placeholder="https://.../another-photo.jpg"
+                        className="flex-1 rounded-button border border-casa-border bg-casa-surface px-2.5 py-1.5 text-[11px] text-casa-text outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={addRecipeImageUrl}
+                        className="px-2.5 py-1.5 rounded-button border border-casa-border text-[11px] text-casa-navy hover:bg-casa-surface transition-colors"
+                      >
+                        Add image
+                      </button>
+                    </div>
+                    {parsedRecipe.image_urls.length === 0 ? (
+                      <p className="text-[11px] text-casa-muted">No images yet. Add one above.</p>
+                    ) : (
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        {parsedRecipe.image_urls.map((imageUrl, imageIndex) => {
+                          const selected = parsedRecipe.primary_image_index !== null && imageIndex === parsedRecipe.primary_image_index
+                          return (
+                            <button
+                              key={`${imageUrl}-${imageIndex}`}
+                              type="button"
+                              onClick={() => choosePrimaryRecipeImage(imageIndex)}
+                              className={cn(
+                                'rounded-lg overflow-hidden border text-left transition-colors',
+                                selected ? 'border-casa-gold' : 'border-casa-border hover:border-casa-gold/40',
+                              )}
+                            >
+                              <img
+                                src={imageUrl}
+                                alt={`${parsedRecipe.name} image ${imageIndex + 1}`}
+                                className="h-20 w-full object-cover"
+                                loading="lazy"
+                                referrerPolicy="no-referrer"
+                                onError={(event) => {
+                                  const target = event.currentTarget
+                                  if (target.src !== recipeFallbackHero) target.src = recipeFallbackHero
+                                }}
+                              />
+                              <span className="block px-1.5 py-1 text-[10px] text-casa-muted">
+                                {selected ? 'Meal cover' : 'Set as cover'}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setParsedRecipe((current) => current ? { ...current, primary_image_index: null, image_url: null } : current)
+                      }}
+                      className={cn(
+                        'mt-2 px-2.5 py-1.5 rounded-button border text-[11px] transition-colors',
+                        parsedRecipe.primary_image_index === null
+                          ? 'border-casa-gold bg-casa-gold/10 text-casa-navy font-semibold'
+                          : 'border-casa-border text-casa-muted hover:bg-casa-surface',
+                      )}
+                    >
+                      No meal photo
+                    </button>
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
@@ -1946,14 +3093,73 @@ export default function GroceryPage() {
                     </div>
 
                     <div className="rounded-xl border border-casa-border bg-casa-bg p-2">
-                      <p className="text-[11px] text-casa-muted mb-1">Directions</p>
-                      <div className="max-h-44 overflow-y-auto space-y-1 pr-1">
-                        {parsedRecipe.steps.map((step) => (
-                          <p key={`${step.step_number}-${step.instruction}`} className="text-[11px] text-casa-text">
-                            <span className="font-semibold mr-1">{step.step_number}.</span>
-                            {step.instruction}
-                          </p>
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-[11px] text-casa-muted">Directions (literal text, ordered)</p>
+                        <button
+                          type="button"
+                          onClick={() => void runRecipeImportFromCurrentSources()}
+                          disabled={recipeImporting}
+                          className="px-2 py-1 rounded-pill border border-casa-border text-[10px] text-casa-navy hover:bg-casa-surface disabled:opacity-60"
+                        >
+                          {recipeImporting ? 'Re-extracting…' : 'Re-extract'}
+                        </button>
+                      </div>
+                      <div className="max-h-52 overflow-y-auto space-y-2 pr-1">
+                        {parsedRecipe.steps.map((step, stepIndex) => (
+                          <div key={`${step.step_number}-${stepIndex}`} className="rounded-lg border border-casa-border bg-casa-surface px-2 py-1.5">
+                            <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
+                              <p className="text-[10px] font-semibold text-casa-muted">Step {stepIndex + 1}</p>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => moveParsedStep(stepIndex, -1)}
+                                  disabled={stepIndex === 0}
+                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-[10px] text-casa-muted hover:bg-casa-bg disabled:opacity-50"
+                                >
+                                  Up
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => moveParsedStep(stepIndex, 1)}
+                                  disabled={stepIndex >= parsedRecipe.steps.length - 1}
+                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-[10px] text-casa-muted hover:bg-casa-bg disabled:opacity-50"
+                                >
+                                  Down
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => addParsedStepAfter(stepIndex)}
+                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-[10px] text-casa-navy hover:bg-casa-bg"
+                                >
+                                  Add
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeParsedStep(stepIndex)}
+                                  disabled={parsedRecipe.steps.length <= 1}
+                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-[10px] text-casa-error hover:bg-casa-bg disabled:opacity-50"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                            <textarea
+                              value={step.instruction}
+                              onChange={(event) => updateParsedStep(stepIndex, event.target.value)}
+                              rows={3}
+                              className="w-full rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-[11px] text-casa-text outline-none resize-y"
+                            />
+                          </div>
                         ))}
+                        {parsedRecipe.steps.length === 0 && (
+                          <button
+                            type="button"
+                            onClick={() => addParsedStepAfter(-1)}
+                            className="w-full px-2 py-1.5 rounded-button border border-casa-border text-[11px] text-casa-navy hover:bg-casa-surface"
+                          >
+                            Add first step
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2144,13 +3350,21 @@ export default function GroceryPage() {
                 )}
               </div>
               <div className="grid grid-cols-2 gap-2">
-                {cookView.recipe.ingredients.map((ingredient, index) => (
-                  <div key={`${cookView.recipe.id}-${index}`} className="rounded-xl border border-casa-border bg-casa-bg px-2 py-1.5">
-                    <p className="text-[11px] text-casa-text">
-                      {[ingredient.quantity, ingredient.unit].filter(Boolean).join(' ')} {(ingredient.name || ingredient.raw_text).trim()}
-                    </p>
-                  </div>
-                ))}
+                {cookView.recipe.ingredients.map((ingredient, index) => {
+                  const normalized = normalizeRecipeIngredientFields({
+                    rawText: ingredient.raw_text,
+                    name: ingredient.name,
+                    quantity: ingredient.quantity,
+                    unit: ingredient.unit,
+                  })
+                  return (
+                    <div key={`${cookView.recipe.id}-${index}`} className="rounded-xl border border-casa-border bg-casa-bg px-2 py-1.5">
+                      <p className="text-[11px] text-casa-text">
+                        {[normalized.quantity, normalized.unit].filter(Boolean).join(' ')} {(normalized.name || ingredient.raw_text).trim()}
+                      </p>
+                    </div>
+                  )
+                })}
               </div>
             </div>
             <div className="px-4 py-3 border-t border-casa-divider flex items-center justify-between gap-2">

@@ -8,6 +8,7 @@ export type { AIMessage }
 
 export interface AssistantContext {
   page: string
+  assistantMode?: 'general' | 'chef'
   events: EventWithDetails[]
   family: FamilyMember[]
   homeCity?: string
@@ -21,8 +22,29 @@ const genId = (): string =>
     : Math.random().toString(36).slice(2) + Date.now().toString(36)
 
 const GOODBYE_PHRASES = /\b(thank you|thanks|goodbye|bye|that'?s all|all done|good night|ciao|close session|new session|start over|end session)\b/i
+const CONTEXTLESS_USER_PHRASES = /\b(yes|yeah|yep|ok|okay|no|nope|cancel|stop|do it|sounds good|correct|right|thanks|thank you|never mind|nvm)\b/i
+const VAGUE_REFERENCE_ONLY = /\b(it|that|this|one|him|her|them|there)\b/i
 
-function buildContext(ctx: AssistantContext) {
+function deriveLastContextReference(messages: AIMessage[]): { summary: string } | undefined {
+  const recentUserMessages = messages
+    .filter((m) => m.role === 'user')
+    .slice(-8)
+    .reverse()
+
+  for (const message of recentUserMessages) {
+    const text = message.content.replace(/\s+/g, ' ').trim()
+    if (!text) continue
+    if (CONTEXTLESS_USER_PHRASES.test(text) && text.split(/\s+/).length <= 5) continue
+    const words = text.toLowerCase().split(/\s+/).filter(Boolean)
+    const vagueWordCount = words.filter((w) => VAGUE_REFERENCE_ONLY.test(w)).length
+    if (vagueWordCount > 0 && vagueWordCount >= words.length - 1) continue
+    return { summary: text.slice(0, 220) }
+  }
+
+  return undefined
+}
+
+function buildContext(ctx: AssistantContext, messages: AIMessage[]) {
   const now = new Date()
   const offsetMins = -now.getTimezoneOffset()
   const offsetSign = offsetMins >= 0 ? '+' : '-'
@@ -31,6 +53,7 @@ function buildContext(ctx: AssistantContext) {
 
   return {
     page: ctx.page,
+    assistant_mode: ctx.assistantMode ?? 'general',
     currentDate: now.toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }),
     utcOffset,
     events: ctx.events.map(e => ({
@@ -45,6 +68,7 @@ function buildContext(ctx: AssistantContext) {
     })),
     family: ctx.family.map(f => ({ id: f.id, name: f.name })),
     homeCity: ctx.homeCity,
+    lastContextReference: deriveLastContextReference(messages),
     focusedEvent: ctx.focusedEvent ? {
       id: ctx.focusedEvent.id,
       title: ctx.focusedEvent.title,
@@ -153,7 +177,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       const invokePromise = supabase.functions.invoke('ai-assistant', {
         body: {
           messages: allMsgsForApi,
-          context: buildContext(ctxRef.current),
+          context: buildContext(ctxRef.current, currentMessages),
           image: imagePayload,
           session_id: activeSession.id,
           correlation_id: buildCorrelationId(userMsg.id, activeSession.id),
@@ -247,6 +271,14 @@ export function useAIAssistant(ctx: AssistantContext) {
     setMessages(msgs)
   }, [])
 
+  const appendSyntheticMessage = useCallback((msg: AIMessage) => {
+    setMessages(prev => {
+      const updated = [...prev, msg]
+      if (sessionRef.current) saveMessages(sessionRef.current.id, updated)
+      return updated
+    })
+  }, [saveMessages])
+
   return {
     messages,
     loading,
@@ -256,6 +288,7 @@ export function useAIAssistant(ctx: AssistantContext) {
     reset,
     startFresh,
     primeMessages,
+    appendSyntheticMessage,
     updateMessageToolStatus,
   }
 }

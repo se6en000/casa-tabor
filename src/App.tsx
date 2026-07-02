@@ -58,44 +58,96 @@ const queryClient = new QueryClient({
   },
 })
 
+type LaunchAgent = 'general' | 'chef'
+
+interface AIDrawerLaunchContext {
+  launchId: string
+  prompt?: string
+  autoSend?: boolean
+  source?: string
+  page?: string
+  agent?: LaunchAgent
+}
+
+type OpenAIChatDetail = {
+  right?: number
+  top?: number
+  anchor?: { right: number; top: number }
+  prompt?: string
+  autoSend?: boolean
+  source?: string
+  page?: string
+  agent?: LaunchAgent
+}
+
 function GlobalAIDrawer({
   screensaverActive,
   open,
   setOpen,
   safeMode,
+  routePath,
 }: {
   screensaverActive: boolean
   open: boolean
   setOpen: (open: boolean) => void
   safeMode: boolean
+  routePath: string
 }) {
   const [anchor, setAnchor] = useState<{ right: number; top: number } | undefined>()
+  const [launchContext, setLaunchContext] = useState<AIDrawerLaunchContext | undefined>()
   const now = useLiveClock(60_000)
   const { data: events = [] } = useRollingEvents(now)
   const { data: family = [] } = useFamilyMembers()
   const { data: weather } = useHomeWeather()
   useWakeWord(open, screensaverActive, !safeMode)
 
+  const routePage = routePath.startsWith('/calendar')
+    ? 'calendar'
+    : routePath.startsWith('/grocery')
+      ? 'grocery'
+      : routePath.startsWith('/cook')
+        ? 'cook'
+        : routePath.startsWith('/briefing')
+          ? 'briefing'
+          : routePath === '/'
+            ? 'home'
+            : 'app'
+
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail
-      if (detail) setAnchor(detail)
+      const detail = ((e as CustomEvent<OpenAIChatDetail>).detail ?? {}) as OpenAIChatDetail
+      const anchorFromEvent = detail.anchor ?? (
+        typeof detail.right === 'number' && typeof detail.top === 'number'
+          ? { right: detail.right, top: detail.top }
+          : undefined
+      )
+      if (anchorFromEvent) setAnchor(anchorFromEvent)
+      const inferredAgent: LaunchAgent = detail.agent ?? (routePage === 'cook' ? 'chef' : 'general')
+      setLaunchContext({
+        launchId: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        prompt: detail.prompt,
+        autoSend: detail.autoSend,
+        source: detail.source,
+        page: detail.page ?? routePage,
+        agent: inferredAgent,
+      })
       setOpen(true)
     }
     document.addEventListener('open-ai-chat', handler)
     return () => document.removeEventListener('open-ai-chat', handler)
-  }, [setOpen])
+  }, [routePage, setOpen])
 
   return (
     <AIChatDrawer
       open={open}
       onClose={() => setOpen(false)}
       anchor={anchor}
-      page="app"
+      page={launchContext?.page ?? routePage}
       events={events}
       family={family}
       homeCity={weather?.city}
       onSleepCommand={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
+      launchContext={launchContext}
     />
   )
 }
@@ -178,6 +230,7 @@ function AppShell() {
         open={aiDrawerOpen}
         setOpen={setAiDrawerOpen}
         safeMode={IS_SAFE_MODE}
+        routePath={location.pathname}
       />
 
       {/* Art screensaver overlay — always available when triggered manually; idle auto-fire respects settings.enabled */}

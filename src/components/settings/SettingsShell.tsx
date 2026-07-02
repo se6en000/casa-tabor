@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 import {
   Users, Sun, MessageSquare, Bot, Home, Activity,
   BookmarkCheck, Layers, ChevronRight, Music2, LineChart,
+  Palette, ShoppingCart, ChefHat,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import BounceScroll from '../shared/BounceScroll'
@@ -14,6 +15,7 @@ const NAV_GROUPS = [
     label: 'Visual & Display',
     items: [
       { to: '/settings/display', icon: Sun,           label: 'Display & Art Mode',  desc: 'Theme, colors, brightness, art mode, sensors' },
+      { to: '/settings/art-mode', icon: Palette,      label: 'Art Mode',            desc: 'Art feed, rotation cadence, and display behavior' },
     ],
   },
   {
@@ -21,6 +23,8 @@ const NAV_GROUPS = [
     items: [
       { to: '/settings/home',    icon: Home,          label: 'Home & Profile',      desc: 'Address, home screen layout' },
       { to: '/settings/places',  icon: BookmarkCheck, label: 'Saved Places',        desc: 'Locations & people nicknames' },
+      { to: '/settings/food-profile', icon: ChefHat,   label: 'Food Profile',        desc: 'Meal planning preferences and budget' },
+      { to: '/settings/pantry-inventory', icon: ShoppingCart, label: 'Pantry Inventory', desc: 'Stock levels and low-inventory thresholds' },
     ],
   },
   {
@@ -33,6 +37,7 @@ const NAV_GROUPS = [
     label: 'Connections',
     items: [
       { to: '/settings/google',  icon: Layers,        label: 'Google Services',     desc: 'Calendar sync + Gmail' },
+      { to: '/settings/grocery-intelligence', icon: ShoppingCart, label: 'Grocery Intelligence', desc: 'Smart aisle ordering and scan preferences' },
       { to: '/settings/music',   icon: Music2,        label: 'Spotify / Music',     desc: 'Connect music playback' },
       { to: '/settings/ai',      icon: Bot,           label: 'AI Provider',         desc: 'Vendor, model, API key' },
       { to: '/settings/sms',     icon: MessageSquare, label: 'Notifications',       desc: 'SMS briefings & alerts' },
