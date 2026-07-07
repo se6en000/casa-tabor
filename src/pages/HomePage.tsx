@@ -21,7 +21,12 @@ import { WeatherIcon } from '../components/shared/WeatherIcon'
 import { LeaveByCard } from '../components/shared/LeaveByCard'
 import { useTravelEta, type TravelEtaResult } from '../hooks/useTravelEta'
 import { DepartureRiskBanner } from '../components/shared/DepartureRiskBanner'
-import { locationSignature, overridesStorageKey, resolveEventMode } from '../lib/eventPlanOverrides'
+import {
+  getPersistedDriverOverrideMemberIds,
+  locationSignature,
+  overridesStorageKey,
+  resolveEventMode,
+} from '../lib/eventPlanOverrides'
 import { derivePlan, type DerivedPerson } from '../lib/eventCommandCenter'
 import { useMemberAvailability } from '../hooks/useMemberAvailability'
 import type { FamilyMember } from '../types'
@@ -193,8 +198,15 @@ export default function HomePage() {
   )
   const familyStatusByMember = useMemo(() => {
     const sourceEvents = allTodayEvents ?? []
+    const assignedDriverOverridesByEvent = new Map(
+      sourceEvents.map((event) => [event.id, getPersistedDriverOverrideMemberIds(event)]),
+    )
     return new Map(homeFamily.map((member) => {
-      const mine = sourceEvents.filter((event) => event.members?.some((eventMember) => eventMember.family_member.id === member.id))
+      const mine = sourceEvents.filter((event) => {
+        const isAttendee = event.members?.some((eventMember) => eventMember.family_member.id === member.id)
+        const isAssignedViaOverride = assignedDriverOverridesByEvent.get(event.id)?.has(member.id) ?? false
+        return Boolean(isAttendee || isAssignedViaOverride)
+      })
       const activeNow = mine.find((event) => isBefore(new Date(event.start_time), now) && isAfter(new Date(event.end_time), now))
       const nextUp = mine
         .filter((event) => isAfter(new Date(event.start_time), now))

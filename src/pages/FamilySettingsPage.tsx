@@ -311,9 +311,10 @@ export default function FamilySettingsPage() {
         }).eq('id', id)
       })
 
-      // Insert new members
-      const inserts = newMembers
-        .filter(m => m.name?.trim())
+      // Insert only complete new members; keep incomplete drafts in-place.
+      const insertableNewMembers = newMembers.filter(m => m.name?.trim())
+      const draftNewMembers = newMembers.filter(m => !m.name?.trim())
+      const inserts = insertableNewMembers
         .map((m, i) => {
           const selectedColor = getDisplayColor(m.color_hex)
           return supabase.from('family_members').insert({
@@ -334,7 +335,7 @@ export default function FamilySettingsPage() {
 
       await Promise.all([...updates, ...inserts])
       setEdits({})
-      setNewMembers([])
+      setNewMembers(draftNewMembers)
       qc.invalidateQueries({ queryKey: ['family-members'] })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)

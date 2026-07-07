@@ -4,6 +4,8 @@ import { inferEventMode } from './eventCommandCenter'
 
 type PersistedPlanOverrides = {
   modeOverride?: EventMode | 'travel' | null
+  waits?: boolean | null
+  driverOverrides?: Record<number, string>
   locationSignature?: string
 }
 
@@ -27,7 +29,7 @@ function normalizeModeOverride(mode: PersistedPlanOverrides['modeOverride']): Ev
   return mode ?? null
 }
 
-export function getPersistedModeOverride(event: EventWithDetails): EventMode | null {
+function getPersistedPlanOverrides(event: EventWithDetails): PersistedPlanOverrides | null {
   if (typeof window === 'undefined') return null
 
   const raw = (() => {
@@ -45,11 +47,24 @@ export function getPersistedModeOverride(event: EventWithDetails): EventMode | n
     if (!parsed || typeof parsed !== 'object') return null
     const payload = parsed as PersistedPlanOverrides
     if (payload.locationSignature !== locationSignature(event)) return null
-    return normalizeModeOverride(payload.modeOverride)
+    return payload
   } catch (error) {
     console.warn('eventPlanOverrides: failed to parse persisted plan overrides', error)
     return null
   }
+}
+
+export function getPersistedModeOverride(event: EventWithDetails): EventMode | null {
+  const payload = getPersistedPlanOverrides(event)
+  if (!payload) return null
+  return normalizeModeOverride(payload.modeOverride)
+}
+
+export function getPersistedDriverOverrideMemberIds(event: EventWithDetails): Set<string> {
+  const payload = getPersistedPlanOverrides(event)
+  if (!payload?.driverOverrides) return new Set<string>()
+  const ids = Object.values(payload.driverOverrides).filter((value): value is string => typeof value === 'string' && value.length > 0)
+  return new Set(ids)
 }
 
 export function resolveEventMode(event: EventWithDetails): EventMode {

@@ -14,6 +14,7 @@ import {
   indexAvailabilityExceptionsByMember,
   indexAvailabilityRulesByMember,
 } from '../../lib/memberAvailability'
+import { getPersistedDriverOverrideMemberIds } from '../../lib/eventPlanOverrides'
 import NotificationDrawer from '../shared/NotificationDrawer'
 import { useState, useMemo, useEffect } from 'react'
 import BounceScroll from '../shared/BounceScroll'
@@ -68,8 +69,15 @@ export default function TabletSidebar() {
   // Infer status per family member
   const whoStatus = useMemo(() => {
     if (!todayEvents) return []
+    const assignedDriverOverridesByEvent = new Map(
+      todayEvents.map((event) => [event.id, getPersistedDriverOverrideMemberIds(event)]),
+    )
     return homeFamily.map(m => {
-      const mine = todayEvents.filter(e => e.members?.some(em => em.family_member.id === m.id))
+      const mine = todayEvents.filter((event) => {
+        const isAttendee = event.members?.some((membership) => membership.family_member.id === m.id)
+        const isAssignedViaOverride = assignedDriverOverridesByEvent.get(event.id)?.has(m.id) ?? false
+        return Boolean(isAttendee || isAssignedViaOverride)
+      })
       const activeNow = mine.find(e => isBefore(new Date(e.start_time), now) && isAfter(new Date(e.end_time), now))
       const nextUp = mine
         .filter(e => isAfter(new Date(e.start_time), now))
