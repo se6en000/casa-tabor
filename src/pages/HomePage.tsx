@@ -706,10 +706,25 @@ function TimelineRow({
   const isHosted = mode === 'hosted'
 
   const [checking, setChecking] = useState(false)
+  const [overrideVersion, setOverrideVersion] = useState(0)
   const cleanTitle = cleanEventTitle(event.title)
+
+  // Re-derive responsibility whenever the event panel writes new driver overrides.
+  useEffect(() => {
+    function handleOverridesUpdated(e: Event) {
+      const detail = (e as CustomEvent<{ eventId?: string }>).detail
+      if (!detail?.eventId || detail.eventId === event.id) {
+        setOverrideVersion((v) => v + 1)
+      }
+    }
+    window.addEventListener('casa:overrides-updated', handleOverridesUpdated)
+    return () => window.removeEventListener('casa:overrides-updated', handleOverridesUpdated)
+  }, [event.id])
+
   const responsibility = useMemo(
     () => deriveHomeCardResponsibility(event, mode, household),
-    [event, household, mode],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [event, household, mode, overrideVersion],
   )
   const showLiveLeaveBy = !happening && !isHosted && Boolean(event.address || event.location_name)
   const showFallbackLeaveBy = !happening && !isHosted && !(event.address || event.location_name) && Boolean(event.enrichment?.departure_time)

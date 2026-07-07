@@ -164,6 +164,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
       } catch (error) {
         console.warn('EventDetailPanel: failed to clear persisted plan overrides', error)
       }
+      window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
       return
     }
     try {
@@ -178,10 +179,12 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
           locationSignature: locationSignature(event),
         }),
       )
+      window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
     } catch (error) {
       console.warn('EventDetailPanel: failed to persist plan overrides', error)
     }
   }, [event?.id, verifiedOverride, waitsOverride, driverOverrides, modeOverride, twoDriverConfirmed])
+
 
   // Lock body scroll while panel is open so the calendar can't scroll behind it
   useEffect(() => {
