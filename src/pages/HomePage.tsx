@@ -668,7 +668,7 @@ function DesktopHeroCard({
   const ringProgress = isTodayFocus && !isAllDay
     ? Math.max(0.06, Math.min(1, minutesUntilLeave / ringWindowMins))
     : 1
-  const ringRadius = 90
+  const ringRadius = 94
   const ringCircumference = 2 * Math.PI * ringRadius
   const ringDashOffset = ringCircumference * (1 - ringProgress)
   const ringValue = isTodayFocus
@@ -682,7 +682,7 @@ function DesktopHeroCard({
 
   return (
     <section className="hidden lg:block mt-2 mb-6" onClick={(e) => e.stopPropagation()}>
-      <div className="relative rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-7 grid grid-cols-[1fr_320px] gap-8 overflow-hidden">
+      <div className="relative rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-7 grid grid-cols-[1fr_360px] gap-8 overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/8 via-transparent to-black/10" />
         <div className="relative min-w-0 flex flex-col">
           <p className="text-caption font-bold tracking-[0.16em] text-casa-gold">{leadLabel}</p>
@@ -717,8 +717,8 @@ function DesktopHeroCard({
           </div>
         </div>
 
-        <div className="relative min-w-[320px] flex items-center justify-center">
-          <div className="relative h-[228px] w-[228px]">
+        <div className="relative min-w-[360px] flex items-center justify-center">
+          <div className="relative h-[268px] w-[268px]">
             <svg className="h-full w-full -rotate-90" viewBox="0 0 220 220" aria-hidden>
               <circle
                 cx="110"
@@ -744,10 +744,10 @@ function DesktopHeroCard({
               <p className="font-display text-display-md leading-none !text-white">{ringValue}</p>
               <p className="mt-2 text-caption tracking-[0.12em] text-white/72">{ringLabel}</p>
               <span className={cn(
-                'mt-3 inline-flex items-center gap-2 rounded-pill border px-3 py-1 text-body-sm font-semibold',
+                'mt-2.5 inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-0.5 text-caption font-semibold',
                 heroStatusClasses(status.tone),
               )}>
-                <span className="h-2.5 w-2.5 rounded-full bg-current opacity-85" />
+                <span className="h-2 w-2 rounded-full bg-current opacity-85" />
                 {status.label}
               </span>
             </div>
