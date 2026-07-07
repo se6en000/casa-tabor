@@ -21,7 +21,7 @@ import { WeatherIcon } from '../components/shared/WeatherIcon'
 import { LeaveByCard } from '../components/shared/LeaveByCard'
 import { useTravelEta, type TravelEtaResult } from '../hooks/useTravelEta'
 import { DepartureRiskBanner } from '../components/shared/DepartureRiskBanner'
-import { resolveEventMode } from '../lib/eventPlanOverrides'
+import { locationSignature, overridesStorageKey, resolveEventMode } from '../lib/eventPlanOverrides'
 import { derivePlan, type DerivedPerson } from '../lib/eventCommandCenter'
 import { useMemberAvailability } from '../hooks/useMemberAvailability'
 import type { FamilyMember } from '../types'
@@ -69,7 +69,10 @@ function fallbackResponsiblePerson(event: EventWithDetails): DerivedPerson | nul
 
 function deriveHomeCardResponsibility(event: EventWithDetails, mode: ReturnType<typeof resolveEventMode>, household: FamilyMember[]) {
   const plan = derivePlan(event, mode, { household })
-  const firstDriverLeg = plan.legs.find((leg) => leg.driver)
+  const persisted = readPersistedCardPlanOverrides(event)
+  const effectiveLegs = applyPersistedDriverOverrides(event, plan.legs, household, persisted.driverOverrides, persisted.waits)
+  const transportLeg = effectiveLegs.find((leg) => leg.kind === 'drop' || leg.kind === 'depart' || leg.kind === 'pickup' || leg.kind === 'return')
+  const firstDriverLeg = transportLeg ?? effectiveLegs.find((leg) => leg.driver)
   const responsible = firstDriverLeg?.driver ?? fallbackResponsiblePerson(event)
   const attendees = (() => {
     if (!responsible) return event.members
@@ -77,16 +80,19 @@ function deriveHomeCardResponsibility(event: EventWithDetails, mode: ReturnType<
     return withoutResponsible.length > 0 ? withoutResponsible : event.members
   })()
   const name = responsible?.name ?? (mode === 'hosted' ? 'Caregiver' : 'Driver')
+  const stayLeg = effectiveLegs.find((leg) => leg.kind === 'stay')
+  const hasDropOrDepart = effectiveLegs.some((leg) => leg.kind === 'drop' || leg.kind === 'depart')
+  const hasPickupOrReturn = effectiveLegs.some((leg) => leg.kind === 'pickup' || leg.kind === 'return')
   const summary = mode === 'hosted'
     ? `${name} supervising`
-    : plan.pattern === 'Stay & wait'
+    : stayLeg?.waits
       ? `${name} drives & stays`
-      : plan.pattern === 'Drop-off only'
-        ? `${name} drops off`
-        : plan.pattern === 'Pickup only'
-          ? `${name} picks up`
-          : plan.pattern === 'Pickup / Drop-off'
-            ? `${name} runs pickup / drop-off`
+      : hasDropOrDepart && hasPickupOrReturn
+        ? `${name} drives`
+        : hasDropOrDepart
+          ? `${name} drops off`
+          : hasPickupOrReturn
+            ? `${name} picks up`
             : `${name} drives`
   return {
     responsible,
@@ -94,6 +100,69 @@ function deriveHomeCardResponsibility(event: EventWithDetails, mode: ReturnType<
     summary,
     roleBadge: mode === 'hosted' ? 'supervise' as const : 'drive' as const,
   }
+}
+
+function toDerivedPersonFromMember(member: FamilyMember | undefined | null): DerivedPerson | null {
+  if (!member) return null
+  return {
+    id: member.id,
+    name: member.name,
+    initial: member.name?.[0]?.toUpperCase() ?? '?',
+    color: member.color_hex ?? SHARED_GOLD,
+    role: member.role,
+  }
+}
+
+function readPersistedCardPlanOverrides(event: EventWithDetails): {
+  driverOverrides: Record<number, string>
+  waits: boolean | null
+} {
+  if (typeof window === 'undefined') return { driverOverrides: {}, waits: null }
+  try {
+    const raw = window.localStorage.getItem(overridesStorageKey(event.id))
+    if (!raw) return { driverOverrides: {}, waits: null }
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return { driverOverrides: {}, waits: null }
+    const payload = parsed as {
+      driverOverrides?: Record<number, string>
+      waits?: boolean | null
+      locationSignature?: string
+    }
+    if (payload.locationSignature !== locationSignature(event)) {
+      return { driverOverrides: {}, waits: null }
+    }
+    return {
+      driverOverrides: payload.driverOverrides ?? {},
+      waits: payload.waits ?? null,
+    }
+  } catch {
+    return { driverOverrides: {}, waits: null }
+  }
+}
+
+function applyPersistedDriverOverrides(
+  event: EventWithDetails,
+  legs: ReturnType<typeof derivePlan>['legs'],
+  household: FamilyMember[],
+  driverOverrides: Record<number, string>,
+  waitsOverride: boolean | null,
+) {
+  const attendeeById = new Map(event.members.map((m) => [m.family_member.id, m.family_member]))
+  const householdById = new Map(household.map((m) => [m.id, m]))
+  const withDriverOverrides = legs.map((leg, index) => {
+    const overrideDriverId = driverOverrides[index]
+    if (!overrideDriverId || !leg.driver) return leg
+    const familyMember = attendeeById.get(overrideDriverId) ?? householdById.get(overrideDriverId)
+    const overrideDriver = toDerivedPersonFromMember(familyMember)
+    return overrideDriver ? { ...leg, driver: overrideDriver } : leg
+  })
+  const waits = waitsOverride ?? Boolean(withDriverOverrides.find((leg) => leg.kind === 'stay')?.waits)
+  return withDriverOverrides.map((leg) => {
+    if (leg.kind !== 'stay') return leg
+    if (!waits) return { ...leg, waits: false }
+    const driveLeg = withDriverOverrides.find((item) => item.kind === 'drop' || item.kind === 'depart')
+    return { ...leg, waits: true, title: `${driveLeg?.driver?.name ?? 'Driver'} waits on site` }
+  })
 }
 
 export default function HomePage() {
@@ -370,13 +439,11 @@ export default function HomePage() {
 
               {/* ── Now line ── */}
               {events.some(e => isAfter(new Date(e.end_time), now)) && (
-                <li ref={nowLineRef} className="flex items-center gap-3 py-0.5 select-none pointer-events-none" aria-hidden>
-                  <div className="w-16 shrink-0" />
-                  <span className="w-2 shrink-0" />
-                  <div className="flex-1 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)] animate-pulse flex-shrink-0" />
+                <li ref={nowLineRef} className="py-0.5 select-none pointer-events-none" aria-hidden>
+                  <div className="w-full flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)] animate-pulse shrink-0" />
                     <div className="flex-1 h-px bg-red-400/50" />
-                    <span className="text-caption font-bold text-red-500 tabular-nums flex-shrink-0">
+                    <span className="text-caption font-bold text-red-500 tabular-nums shrink-0">
                       {format(now, 'h:mm a')}
                     </span>
                     <div className="flex-1 h-px bg-red-400/50" />
@@ -651,49 +718,46 @@ function TimelineRow({
         animate={{ opacity: past ? 0.4 : 1, x: 0 }}
         exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
         transition={{ duration: 0.3, delay: index * 0.04 }}
-        className="flex items-center gap-3 cursor-pointer"
+        className="cursor-pointer"
         onClick={e => { e.stopPropagation(); onClick() }}
       >
-        <div className="w-16 shrink-0 text-right">
-          <p className="text-body-sm font-semibold text-casa-navy tabular-nums">
-            {format(start, 'h:mm')}
-            <span className="text-caption text-casa-muted ml-0.5">{format(start, 'a')}</span>
-          </p>
-        </div>
-        <span className="w-2 rounded-full self-stretch" style={{ backgroundColor: '#C4893A' }} />
         <div
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-caption font-semibold"
-          style={{ border: '1.5px solid #C4893A', backgroundColor: '#FDFAF4', color: '#7A5520' }}
+          className="relative w-full overflow-hidden rounded-card border border-casa-accent-soft-border bg-casa-accent-subtle px-4 py-2.5"
         >
-          {/* Dismiss checkbox */}
-          <button
-            onClick={handleCheck}
-            className={`shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
-              checking ? 'bg-green-500 border-green-500' : 'border-amber-400 hover:border-green-400 bg-transparent'
-            }`}
-            title="Mark done"
-          >
-            {checking && (
-              <svg width="8" height="6" viewBox="0 0 9 7" fill="none">
-                <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+          <span className="absolute left-0 top-0 bottom-0 w-[8px] rounded-l-card bg-casa-warning" />
+          <div className="flex items-center gap-2 pl-1 text-caption font-semibold text-casa-top-pick-band">
+            <button
+              onClick={handleCheck}
+              className={`shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                checking ? 'bg-green-500 border-green-500' : 'border-casa-accent-soft-border hover:border-casa-success bg-transparent'
+              }`}
+              title="Mark done"
+            >
+              {checking && (
+                <svg width="8" height="6" viewBox="0 0 9 7" fill="none">
+                  <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </button>
+            <Bell size={13} className="shrink-0 text-casa-warning" />
+            <span className="text-casa-muted tabular-nums">
+              {format(start, 'h:mm a')}
+            </span>
+            <span className={cn(checking && 'line-through opacity-50')}>{event.title}</span>
+            {event.members.length > 0 && (
+              <div className="flex gap-1 ml-0.5">
+                {event.members.slice(0, 3).map((m) => (
+                  <span
+                    key={m.id}
+                    className="px-1.5 py-0.5 rounded-pill text-white text-[9px] font-bold leading-none whitespace-nowrap"
+                    style={{ backgroundColor: m.family_member?.color_hex ?? SHARED_GOLD }}
+                  >
+                    {m.family_member?.name}
+                  </span>
+                ))}
+              </div>
             )}
-          </button>
-          <Bell size={13} style={{ color: '#C4893A' }} className="shrink-0" />
-          <span className={checking ? 'line-through opacity-50' : ''}>{event.title}</span>
-          {event.members.length > 0 && (
-            <div className="flex gap-1 ml-0.5">
-              {event.members.slice(0, 4).map(m => (
-                <span
-                  key={m.id}
-                  className="px-1.5 py-0.5 rounded-full text-white text-[9px] font-bold leading-none whitespace-nowrap"
-                  style={{ backgroundColor: m.family_member?.color_hex }}
-                >
-                  {m.family_member?.name}
-                </span>
-              ))}
-            </div>
-          )}
+          </div>
         </div>
       </motion.li>
     )
@@ -704,25 +768,19 @@ function TimelineRow({
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: past ? 0.45 : 1, x: 0 }}
       transition={{ duration: 0.3, delay: index * 0.04 }}
-      className="flex items-center gap-3 cursor-pointer"
+      className="cursor-pointer"
       onClick={e => { e.stopPropagation(); onClick() }}
     >
-      <div className="w-16 shrink-0 text-right">
-        <p className="text-body-sm font-semibold text-casa-navy tabular-nums">
-          {format(start, 'h:mm')}
-          <span className="text-caption text-casa-muted ml-0.5">{format(start, 'a')}</span>
-        </p>
-      </div>
-      <span
-        className={cn('w-2 rounded-full self-stretch', happening && 'animate-pulse-gold')}
-        style={{ backgroundColor: color }}
-      />
-      <div className="flex-1 min-w-0 bg-casa-surface rounded-card border border-casa-border px-4 py-3 shadow-card">
+      <div className="relative w-full min-w-0 overflow-hidden bg-casa-surface rounded-card border border-casa-border px-4 py-3 shadow-card">
+        <span
+          className={cn('absolute left-0 top-0 bottom-0 w-[12px] rounded-l-card', happening && 'animate-pulse-gold')}
+          style={{ backgroundColor: color }}
+        />
         <div className="flex items-start gap-3">
-          <div className="relative shrink-0 pt-0.5">
+          <div className="relative shrink-0 pl-1 pt-0.5">
             <span
               className={cn(
-                'w-11 h-11 rounded-full text-white flex items-center justify-center text-[15px] font-bold shadow-card',
+                'w-12 h-12 rounded-full text-white flex items-center justify-center text-[18px] font-bold shadow-card',
                 responsibility.responsible?.role === 'caregiver' && 'ring-2 ring-casa-gold/55 ring-offset-2 ring-offset-casa-surface',
               )}
               style={{ backgroundColor: responsibility.responsible?.color ?? 'var(--color-casa-gold)' }}
