@@ -102,6 +102,21 @@ type RecipeRegexQuickAction = {
   flags?: string | null
 }
 
+type CookLandingMode = 'cook-now' | 'plan-week'
+type RecipeBrowseFilter = 'all' | 'quick' | 'planned'
+type CookMood = 'quick' | 'family' | 'new' | 'fancy' | 'pantry'
+
+type RecipeMoodInsight = {
+  recipe: Recipe
+  minutes: number | null
+  ingredientsCount: number
+  planned: boolean
+  usedAtMs: number | null
+  createdAtMs: number
+  nameLower: string
+  scoreByMood: Record<CookMood, number>
+}
+
 type MealPlannerMeal = {
   recipe_id: string
   recipe_name: string
@@ -197,6 +212,17 @@ const DEFAULT_MEAL_PLANNER_LEARNING: MealPlannerLearning = {
 }
 
 const RECIPE_QUICK_ACTIONS_STORAGE_KEY = 'casa-recipe-quick-actions-v1'
+const COOK_LANDING_MODE_STORAGE_KEY = 'casa-cook-landing-mode-v2'
+const COOK_MOOD_STORAGE_KEY = 'casa-cook-mood-v2'
+const COOK_PROGRESS_STORAGE_KEY = 'casa-cook-progress-v2'
+
+const COOK_MOOD_OPTIONS: Array<{ id: CookMood; label: string; shortlistLabel: string }> = [
+  { id: 'quick', label: 'Something quick', shortlistLabel: 'quick' },
+  { id: 'family', label: 'Family favorite', shortlistLabel: 'family favorite' },
+  { id: 'new', label: 'Something new', shortlistLabel: 'new' },
+  { id: 'fancy', label: 'A little fancy', shortlistLabel: 'fancy' },
+  { id: 'pantry', label: 'Use up the pantry', shortlistLabel: 'pantry' },
+]
 
 const SLOT_LABELS: Record<RecipeMealPlan['slot'], string> = {
   tonight: 'Tonight',
@@ -205,6 +231,37 @@ const SLOT_LABELS: Record<RecipeMealPlan['slot'], string> = {
 }
 
 const SLOT_ORDER: RecipeMealPlan['slot'][] = ['tonight', 'tomorrow', 'this-week']
+
+function parseCookMinutes(value: string | null): number | null {
+  if (!value) return null
+  const raw = value.trim().toLowerCase()
+  if (!raw) return null
+  let total = 0
+  let matched = false
+  const hourMatch = raw.match(/(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours)\b/)
+  if (hourMatch) {
+    total += Number(hourMatch[1] ?? 0) * 60
+    matched = true
+  }
+  const minMatch = raw.match(/(\d+(?:\.\d+)?)\s*(m|min|mins|minute|minutes)\b/)
+  if (minMatch) {
+    total += Number(minMatch[1] ?? 0)
+    matched = true
+  }
+  if (matched && Number.isFinite(total) && total > 0) return Math.round(total)
+  const firstNumber = raw.match(/(\d+(?:\.\d+)?)/)
+  if (!firstNumber) return null
+  const fallback = Number(firstNumber[1] ?? Number.NaN)
+  return Number.isFinite(fallback) && fallback > 0 ? Math.round(fallback) : null
+}
+
+function isCookLandingMode(value: string | null): value is CookLandingMode {
+  return value === 'cook-now' || value === 'plan-week'
+}
+
+function isCookMood(value: string | null): value is CookMood {
+  return value === 'quick' || value === 'family' || value === 'new' || value === 'fancy' || value === 'pantry'
+}
 
 function scaleQuantityValue(value: string | null, scale: number): string | null {
   if (!value) return value
@@ -412,6 +469,55 @@ export default function CookPage() {
   const navigate = useNavigate()
   const [cookRecipeId, setCookRecipeId] = useState<string | null>(null)
   const [recipeSearch, setRecipeSearch] = useState('')
+  const [cookLandingMode, setCookLandingMode] = useState<CookLandingMode>(() => {
+    try {
+      const raw = localStorage.getItem(COOK_LANDING_MODE_STORAGE_KEY)
+      return isCookLandingMode(raw) ? raw : 'cook-now'
+    } catch {
+      return 'cook-now'
+    }
+  })
+  const [cookMood, setCookMood] = useState<CookMood>(() => {
+    try {
+      const raw = localStorage.getItem(COOK_MOOD_STORAGE_KEY)
+      return isCookMood(raw) ? raw : 'quick'
+    } catch {
+      return 'quick'
+    }
+  })
+  const [shortlistOffsets, setShortlistOffsets] = useState<Record<CookMood, number>>({
+    quick: 0,
+    family: 0,
+    new: 0,
+    fancy: 0,
+    pantry: 0,
+  })
+  const [recipeProgress, setRecipeProgress] = useState<Record<string, { stepIndex: number; totalSteps: number; updatedAt: string }>>(() => {
+    try {
+      const raw = localStorage.getItem(COOK_PROGRESS_STORAGE_KEY)
+      if (!raw) return {}
+      const parsed = JSON.parse(raw) as Record<string, unknown>
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+      const normalized: Record<string, { stepIndex: number; totalSteps: number; updatedAt: string }> = {}
+      for (const [recipeId, value] of Object.entries(parsed)) {
+        if (!recipeId || !value || typeof value !== 'object' || Array.isArray(value)) continue
+        const row = value as Record<string, unknown>
+        const stepIndex = Number(row.stepIndex)
+        const totalSteps = Number(row.totalSteps)
+        if (!Number.isFinite(stepIndex) || !Number.isFinite(totalSteps)) continue
+        if (stepIndex <= 0 || totalSteps <= 0 || stepIndex >= totalSteps) continue
+        normalized[recipeId] = {
+          stepIndex: Math.round(stepIndex),
+          totalSteps: Math.round(totalSteps),
+          updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : new Date().toISOString(),
+        }
+      }
+      return normalized
+    } catch {
+      return {}
+    }
+  })
+  const [recipeBrowseFilter, setRecipeBrowseFilter] = useState<RecipeBrowseFilter>('all')
   const [stepIndex, setStepIndex] = useState(0)
   const [recipeScale, setRecipeScale] = useState(1)
   const [showCupsConversion, setShowCupsConversion] = useState(false)
@@ -752,21 +858,164 @@ export default function CookPage() {
   const plannedRecipes = mealPlans
     .map((plan) => ({ plan, recipe: recipeById.get(plan.recipe_id) }))
     .filter((row): row is { plan: RecipeMealPlan; recipe: Recipe } => Boolean(row.recipe))
+  const quickTonightCount = useMemo(
+    () => recipes.filter((recipe) => {
+      const minutes = parseCookMinutes(recipe.cook_time)
+      return typeof minutes === 'number' && minutes <= 30
+    }).length,
+    [recipes],
+  )
+  const plannedRecipeIds = useMemo(
+    () => new Set(plannedRecipes.map(({ recipe }) => recipe.id)),
+    [plannedRecipes],
+  )
+  const recipesWithMoodInsights = useMemo<RecipeMoodInsight[]>(() => {
+    const nowMs = Date.now()
+    const isFancyRecipe = (nameLower: string) => /salmon|cod|barramundi|dijon|creamy|scampi|caesar|salsa/i.test(nameLower)
+    const isFamilyRecipe = (nameLower: string) => /family|favorite|kid|kids|taco|alfredo|pasta|playtime/i.test(nameLower)
+    const isPantryRecipe = (nameLower: string) => /pantry|leftover|leftovers|rice|noodles|fried|cottage|garlic/i.test(nameLower)
+    return recipes.map((recipe) => {
+      const minutes = parseCookMinutes(recipe.cook_time)
+      const ingredientsCount = ingredientsByRecipe.get(recipe.id)?.length ?? 0
+      const planned = plannedRecipeIds.has(recipe.id)
+      const usedAtMs = recipe.last_used_at ? new Date(recipe.last_used_at).getTime() : null
+      const createdAtMs = new Date(recipe.created_at).getTime()
+      const ageDays = Number.isFinite(createdAtMs) ? Math.max(0, (nowMs - createdAtMs) / 86_400_000) : 30
+      const nameLower = recipe.name.toLowerCase()
+      const quickScore = (minutes ? Math.max(0, 40 - minutes) : 6) + (minutes && minutes <= 30 ? 48 : -12) + (planned ? 8 : 0)
+      const familyScore = (planned ? 36 : 0) + (usedAtMs ? 20 : 0) + (isFamilyRecipe(nameLower) ? 12 : 0) + (minutes && minutes <= 35 ? 8 : 0)
+      const newScore = (!usedAtMs ? 45 : 0) + Math.max(0, 25 - ageDays) + (planned ? -12 : 0)
+      const fancyScore = (minutes && minutes >= 30 ? 30 : 8) + (isFancyRecipe(nameLower) ? 18 : 0) + (planned ? 6 : 0)
+      const pantryScore = (ingredientsCount > 0 ? Math.max(0, 18 - ingredientsCount) * 2 : 4) + (minutes && minutes <= 30 ? 12 : 0) + (isPantryRecipe(nameLower) ? 14 : 0)
+      return {
+        recipe,
+        minutes,
+        ingredientsCount,
+        planned,
+        usedAtMs,
+        createdAtMs,
+        nameLower,
+        scoreByMood: {
+          quick: quickScore,
+          family: familyScore,
+          new: newScore,
+          fancy: fancyScore,
+          pantry: pantryScore,
+        },
+      }
+    })
+  }, [ingredientsByRecipe, plannedRecipeIds, recipes])
+  const moodRankedRecipes = useMemo<Record<CookMood, RecipeMoodInsight[]>>(() => {
+    const sortByMood = (mood: CookMood) => [...recipesWithMoodInsights].sort((a, b) => {
+      const byScore = b.scoreByMood[mood] - a.scoreByMood[mood]
+      if (Math.abs(byScore) > 0.001) return byScore
+      const aMinutes = a.minutes ?? Number.MAX_SAFE_INTEGER
+      const bMinutes = b.minutes ?? Number.MAX_SAFE_INTEGER
+      if (aMinutes !== bMinutes) return aMinutes - bMinutes
+      return b.createdAtMs - a.createdAtMs
+    })
+    return {
+      quick: sortByMood('quick'),
+      family: sortByMood('family'),
+      new: sortByMood('new'),
+      fancy: sortByMood('fancy'),
+      pantry: sortByMood('pantry'),
+    }
+  }, [recipesWithMoodInsights])
+  const moodShortlistRecipes = useMemo(() => {
+    const ranked = moodRankedRecipes[cookMood] ?? []
+    if (ranked.length === 0) return []
+    const rotation = (shortlistOffsets[cookMood] ?? 0) % ranked.length
+    const rotated = [...ranked.slice(rotation), ...ranked.slice(0, rotation)]
+    return rotated.slice(0, 3)
+  }, [cookMood, moodRankedRecipes, shortlistOffsets])
+  const shortlistHeadingLabel = COOK_MOOD_OPTIONS.find((option) => option.id === cookMood)?.shortlistLabel ?? 'quick'
+  const resumeRecipeCandidates = useMemo(() => {
+    return Object.entries(recipeProgress)
+      .map(([recipeId, progress]) => {
+        const recipe = recipeById.get(recipeId)
+        if (!recipe) return null
+        if (progress.stepIndex <= 0 || progress.stepIndex >= progress.totalSteps) return null
+        const updatedAtMs = new Date(progress.updatedAt).getTime()
+        return {
+          recipe,
+          progress,
+          updatedAtMs: Number.isFinite(updatedAtMs) ? updatedAtMs : 0,
+        }
+      })
+      .filter((row): row is { recipe: Recipe; progress: { stepIndex: number; totalSteps: number; updatedAt: string }; updatedAtMs: number } => row !== null)
+      .sort((a, b) => b.updatedAtMs - a.updatedAtMs)
+  }, [recipeById, recipeProgress])
+  const resumeRecipe = resumeRecipeCandidates[0] ?? null
+  const resumeRecentLabel = useMemo(() => {
+    const names = recipes
+      .filter((recipe) => recipe.id !== resumeRecipe?.recipe.id)
+      .slice(0, 2)
+      .map((recipe) => recipe.name)
+    return names.join(' · ')
+  }, [recipes, resumeRecipe?.recipe.id])
   const filteredRecipes = useMemo(() => {
     const query = recipeSearch.trim().toLowerCase()
-    if (!query) return recipes
     return recipes.filter((recipe) => {
       const haystack = `${recipe.name} ${recipe.cook_time ?? ''} ${recipe.servings ?? ''}`.toLowerCase()
-      return haystack.includes(query)
+      if (query && !haystack.includes(query)) return false
+      if (recipeBrowseFilter === 'quick') {
+        const minutes = parseCookMinutes(recipe.cook_time)
+        return typeof minutes === 'number' && minutes <= 30
+      }
+      if (recipeBrowseFilter === 'planned') return plannedRecipeIds.has(recipe.id)
+      return true
     })
-  }, [recipes, recipeSearch])
-  const featuredRecipe = plannedRecipes[0]?.recipe ?? filteredRecipes[0] ?? null
+  }, [recipes, recipeSearch, recipeBrowseFilter, plannedRecipeIds])
 
   const cookRecipe = cookRecipeId ? recipeById.get(cookRecipeId) ?? null : null
   const photoEditorOpen = Boolean(photoEditorRecipeId)
   const cookSteps = cookRecipeId ? stepsByRecipe.get(cookRecipeId) ?? [] : []
   const cookIngredients = cookRecipeId ? ingredientsByRecipe.get(cookRecipeId) ?? [] : []
   const currentStep = cookSteps[stepIndex] ?? null
+
+  useEffect(() => {
+    localStorage.setItem(COOK_LANDING_MODE_STORAGE_KEY, cookLandingMode)
+  }, [cookLandingMode])
+
+  useEffect(() => {
+    localStorage.setItem(COOK_MOOD_STORAGE_KEY, cookMood)
+  }, [cookMood])
+
+  useEffect(() => {
+    localStorage.setItem(COOK_PROGRESS_STORAGE_KEY, JSON.stringify(recipeProgress))
+  }, [recipeProgress])
+
+  useEffect(() => {
+    if (!cookRecipeId) return
+    const totalSteps = cookSteps.length
+    if (totalSteps <= 1) return
+    setRecipeProgress((current) => {
+      const existing = current[cookRecipeId]
+      if (stepIndex > 0 && stepIndex < totalSteps) {
+        const nextProgress = {
+          stepIndex,
+          totalSteps,
+          updatedAt: new Date().toISOString(),
+        }
+        if (
+          existing
+          && existing.stepIndex === nextProgress.stepIndex
+          && existing.totalSteps === nextProgress.totalSteps
+        ) {
+          return current
+        }
+        return {
+          ...current,
+          [cookRecipeId]: nextProgress,
+        }
+      }
+      if (!existing) return current
+      const next = { ...current }
+      delete next[cookRecipeId]
+      return next
+    })
+  }, [cookRecipeId, cookSteps.length, stepIndex])
 
   useEffect(() => {
     if (!mealPlannerPlan) {
@@ -2541,43 +2790,131 @@ export default function CookPage() {
     setImportStep(1)
   }
 
+  const cookIngredientRows = cookIngredients.map((ingredient, index) => {
+    const normalized = normalizeRecipeIngredientFields({
+      rawText: ingredient.raw_text,
+      name: ingredient.name,
+      quantity: ingredient.quantity,
+      unit: ingredient.unit,
+    })
+    const name = normalized.name || ingredient.raw_text
+    const qty = quantityLabel(ingredient)
+    const searchableName = name.toLowerCase()
+    const searchTokens = searchableName
+      .split(/[^a-z0-9]+/i)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 4)
+    return {
+      id: `${ingredient.recipe_id}-${index}`,
+      name,
+      qty,
+      searchableName,
+      searchTokens,
+    }
+  })
+  const currentStepInstruction = currentStep?.instruction?.toLowerCase() ?? ''
+  const neededNowIngredientRows = (() => {
+    if (cookIngredientRows.length === 0) return []
+    if (!currentStepInstruction) return cookIngredientRows.slice(0, 4)
+    const matched = cookIngredientRows.filter((row) =>
+      currentStepInstruction.includes(row.searchableName)
+      || row.searchTokens.some((token) => currentStepInstruction.includes(token))
+    )
+    return (matched.length > 0 ? matched : cookIngredientRows).slice(0, 4)
+  })()
+  const landingMetaLabel = `${new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date())} · ${plannedRecipes.length} planned this week`
+  const buildMoodReason = (insight: RecipeMoodInsight): string => {
+    if (cookMood === 'quick') {
+      if (typeof insight.minutes === 'number') return `${insight.minutes} min and weeknight-friendly.`
+      return 'Fast prep flow with low decision overhead.'
+    }
+    if (cookMood === 'family') {
+      if (insight.planned) return 'Already in the family plan, so dinner is a one-tap launch.'
+      return 'High-confidence crowd-pleaser based on your recent rotations.'
+    }
+    if (cookMood === 'new') {
+      return insight.usedAtMs ? 'Fresh variation with different flavor profile from recent meals.' : 'Not recently cooked, so it keeps the week feeling new.'
+    }
+    if (cookMood === 'fancy') {
+      return 'Restaurant-style finish while staying practical for home cooking.'
+    }
+    if (insight.ingredientsCount > 0) {
+      return `Uses a tighter ingredient set (${insight.ingredientsCount}) to reduce extra shopping.`
+    }
+    return 'Pantry-first pick tuned to reduce additional purchases.'
+  }
+  const buildTopPickApproval = (insight: RecipeMoodInsight): string | null => {
+    if (insight.planned) return 'Already planned'
+    if (cookMood === 'new' && !insight.usedAtMs) return 'New this week'
+    if (cookMood === 'pantry') return 'Pantry-first'
+    if (typeof insight.minutes === 'number' && insight.minutes <= 20) return 'Fast favorite'
+    return null
+  }
+
   return (
-    <div className="h-full overflow-y-auto p-4 lg:p-6 space-y-4">
-      <section className="rounded-3xl border border-casa-border bg-casa-surface overflow-hidden">
-        <div className="h-1.5 w-full bg-gradient-to-r from-casa-gold via-family-liv to-family-kelly" />
-        <div className="p-5 lg:p-6">
-          <p className="text-[11px] uppercase tracking-[0.16em] text-casa-muted font-semibold inline-flex items-center gap-1.5">
-            <Sparkles size={12} />
-            Dinner Control Center
-          </p>
-          <div className="mt-3 grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-4">
-            <div className="rounded-2xl border border-casa-border bg-casa-bg/60 p-4">
-              <p className="text-title font-semibold text-casa-navy">What should we cook tonight?</p>
-              <p className="text-body-sm text-casa-muted mt-1">Fast decision-making for busy family nights, with recipes ready to cook in one tap.</p>
-              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div className="rounded-xl border border-casa-border bg-casa-surface px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-casa-muted">Library</p>
-                  <p className="text-body-sm font-semibold text-casa-navy">{recipes.length}</p>
-                </div>
-                <div className="rounded-xl border border-casa-border bg-casa-surface px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-casa-muted">Planned</p>
-                  <p className="text-body-sm font-semibold text-casa-navy">{plannedRecipes.length}</p>
-                </div>
-                <div className="rounded-xl border border-casa-border bg-casa-surface px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-casa-muted">Quick tonight</p>
-                  <p className="text-body-sm font-semibold text-casa-navy">{recipes.filter((recipe) => (recipe.cook_time ?? '').toLowerCase().includes('30')).length}</p>
-                </div>
+    <div className="cook-v2-shell h-full overflow-y-auto p-4 lg:p-6 space-y-4">
+      <section className="rounded-[14px] border border-casa-border bg-casa-surface p-4 lg:p-6 shadow-card">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="cook-v2-topline-toggle inline-flex items-center rounded-pill p-1">
+            {([
+              { id: 'cook-now', label: 'Cook tonight' },
+              { id: 'plan-week', label: 'Plan the week' },
+            ] as const).map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => setCookLandingMode(mode.id)}
+                className={cn(
+                  'cook-v2-topline-toggle-btn px-4 py-2 rounded-pill text-body-sm font-semibold transition-colors inline-flex items-center gap-1.5',
+                  cookLandingMode === mode.id && 'cook-v2-topline-toggle-btn-active',
+                )}
+                aria-pressed={cookLandingMode === mode.id}
+              >
+                {mode.id === 'plan-week' && <Sparkles size={14} className="text-casa-info" />}
+                {mode.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-body-sm text-casa-text-tertiary">{landingMetaLabel}</p>
+        </div>
+
+        {cookLandingMode === 'cook-now' ? (
+          <div className="mt-4">
+            <h2 className="font-body text-[2rem] leading-[1.15] tracking-[-0.01em] font-bold text-casa-navy">What are we feeling tonight?</h2>
+            <div className="mt-3 flex flex-wrap gap-2.5">
+              {COOK_MOOD_OPTIONS.map((mood) => (
                 <button
+                  key={mood.id}
                   type="button"
-                  onClick={() => navigate('/grocery')}
-                  className="rounded-xl border border-casa-gold/40 bg-casa-gold/10 px-3 py-2 text-left hover:bg-casa-gold/15 transition-colors"
+                  onClick={() => {
+                    setCookMood(mood.id)
+                    setShortlistOffsets((current) => ({ ...current, [mood.id]: 0 }))
+                  }}
+                  className={cn(
+                    'cook-v2-mood-chip px-4 py-2 rounded-pill border text-body font-semibold transition-colors',
+                    cookMood === mood.id && 'cook-v2-mood-chip-active',
+                  )}
+                  aria-pressed={cookMood === mood.id}
                 >
-                  <p className="text-[10px] uppercase tracking-wide text-casa-muted">Jump</p>
-                  <p className="text-body-sm font-semibold text-casa-navy inline-flex items-center gap-1">
-                    <ShoppingCart size={13} />
-                    Grocery
-                  </p>
+                  {mood.label}
                 </button>
+              ))}
+            </div>
+
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <p className="text-body-sm font-semibold text-casa-navy">3 {shortlistHeadingLabel} picks for tonight</p>
+              <button
+                type="button"
+                onClick={() => setShortlistOffsets((current) => ({ ...current, [cookMood]: current[cookMood] + 1 }))}
+                className="text-body-sm font-semibold text-casa-text-secondary hover:text-casa-navy"
+              >
+                Shuffle →
+              </button>
+            </div>
+
+            {moodShortlistRecipes.length === 0 ? (
+              <div className="mt-3 rounded-[12px] border border-casa-border bg-casa-surface-subtle px-4 py-4">
+                <p className="text-body text-casa-text-secondary">Import recipes from Grocery to unlock your mood-based shortlist.</p>
                 <button
                   type="button"
                   onClick={() => {
@@ -2589,73 +2926,129 @@ export default function CookPage() {
                     setImportMealPhotoIndex(null)
                     setImportStep(1)
                   }}
-                  className="rounded-xl border border-casa-border bg-casa-surface px-3 py-2 text-left hover:bg-casa-main transition-colors"
+                  className="mt-3 cook-v2-btn-primary px-4 py-2 rounded-button text-body-sm font-semibold"
                 >
-                  <p className="text-[10px] uppercase tracking-wide text-casa-muted">Import</p>
-                  <p className="text-body-sm font-semibold text-casa-navy inline-flex items-center gap-1">
-                    <Upload size={13} />
-                    Recipe
-                  </p>
+                  Import recipe
                 </button>
               </div>
-            </div>
-            <div className="rounded-2xl border border-casa-border bg-casa-bg p-3">
-              {featuredRecipe ? (
-                <div className="w-full text-left">
-                  {(() => {
-                    const focus = parseRecipeImageFocus(featuredRecipe.image_url)
-                    return (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCookRecipeId(featuredRecipe.id)
-                            setStepIndex(0)
-                            setRecipeScale(1)
-                            setDirectionsViewMode('step')
-                          }}
-                          className="w-full text-left"
-                        >
-                          <RecipeImage
-                            src={getRecipeImage(featuredRecipe)}
-                            alt={featuredRecipe.name}
-                            focalX={focus.focalX}
-                            focalY={focus.focalY}
-                            className="h-36 w-full rounded-xl object-cover border border-casa-border"
-                          />
-                          <p className="mt-2 text-[11px] uppercase tracking-wide text-casa-muted">Recommended now</p>
-                          <p className="text-body font-semibold text-casa-navy">{featuredRecipe.name}</p>
-                          <p className="text-[11px] text-casa-muted mt-1 inline-flex items-center gap-2">
+            ) : (
+              <div className="mt-3 grid grid-cols-1 xl:grid-cols-[1.25fr_1fr_1fr] gap-4">
+                {moodShortlistRecipes.map((insight, index) => {
+                  const focus = parseRecipeImageFocus(insight.recipe.image_url)
+                  const isTop = index === 0
+                  const minutesLabel = insight.minutes ? `${insight.minutes} min` : (insight.recipe.cook_time ?? 'Quick cook')
+                  const approvalLabel = isTop ? buildTopPickApproval(insight) : null
+                  return (
+                    <article
+                      key={`${insight.recipe.id}-${index}`}
+                      className={cn(
+                        'cook-v2-shortlist-card rounded-[14px] border overflow-hidden flex flex-col',
+                        isTop ? 'cook-v2-shortlist-card-top border-2' : 'border',
+                      )}
+                    >
+                      {isTop && (
+                        <div className="cook-v2-shortlist-band px-4 py-2 text-[11px] font-bold uppercase tracking-[0.12em]">
+                          Top pick for tonight
+                        </div>
+                      )}
+                      <RecipeImage
+                        src={getRecipeImage(insight.recipe)}
+                        alt={insight.recipe.name}
+                        focalX={focus.focalX}
+                        focalY={focus.focalY}
+                        className={cn('w-full object-cover', isTop ? 'h-44' : 'h-36')}
+                      />
+                      <div className={cn('p-4 flex flex-col flex-1', !isTop && 'p-3.5')}>
+                        <p className={cn('font-semibold text-casa-navy leading-tight', isTop ? 'text-heading' : 'text-body')}>{insight.recipe.name}</p>
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span className="cook-v2-chip-time inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-body-sm font-semibold">
                             <Clock3 size={12} />
-                            {featuredRecipe.cook_time ?? 'Quick cook'}
-                            <Users size={12} className="ml-2" />
-                            {featuredRecipe.servings ?? 'Family size'}
+                            {minutesLabel}
+                          </span>
+                          {approvalLabel && (
+                            <span className="cook-v2-chip-positive inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-body-sm font-semibold">
+                              <Users size={12} />
+                              {approvalLabel}
+                            </span>
+                          )}
+                        </div>
+                        {isTop && (
+                          <p className="mt-2 text-body-sm text-casa-text-tertiary">
+                            {buildMoodReason(insight)}
                           </p>
-                        </button>
+                        )}
                         <button
                           type="button"
-                          onClick={() => openPhotoEditor(featuredRecipe)}
-                          className="mt-2 px-2.5 py-1 rounded-pill border border-casa-border text-[11px] text-casa-muted hover:bg-casa-surface inline-flex items-center gap-1"
+                          onClick={() => openRecipeForCookMode(insight.recipe.id)}
+                          className={cn(
+                            'mt-auto pt-3 px-3 py-2 rounded-button text-body-sm font-semibold transition-colors',
+                            isTop ? 'cook-v2-btn-primary' : 'cook-v2-btn-secondary',
+                          )}
                         >
-                          <Camera size={12} />
-                          Edit photo
+                          Start cooking
                         </button>
-                      </>
-                    )
-                  })()}
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
+
+            {resumeRecipe && (
+              <button
+                type="button"
+                onClick={() => {
+                  openRecipeForCookMode(resumeRecipe.recipe.id)
+                  setStepIndex(Math.max(0, Math.min(resumeRecipe.progress.stepIndex, Math.max(0, resumeRecipe.progress.totalSteps - 1))))
+                }}
+                className="mt-4 cook-v2-resume w-full rounded-[11px] border px-4 py-3 text-left"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-body-sm font-semibold text-casa-navy">Jump back in</span>
+                  <span className="text-body-sm font-semibold text-casa-navy">{resumeRecipe.recipe.name}</span>
+                  <span className="text-caption font-semibold uppercase tracking-[0.12em] text-casa-info-strong">
+                    Step {resumeRecipe.progress.stepIndex + 1} of {resumeRecipe.progress.totalSteps}
+                  </span>
+                  {resumeRecentLabel && (
+                    <span className="text-body-sm text-casa-text-faint">Also recent: {resumeRecentLabel}</span>
+                  )}
                 </div>
-              ) : (
-                <p className="text-body-sm text-casa-muted">Import recipes from Grocery to unlock your visual cookbook.</p>
-              )}
+                <div className="cook-v2-progress-track mt-2 h-1 rounded-pill overflow-hidden">
+                  <span
+                    className="cook-v2-progress-bar block h-full rounded-pill"
+                    style={{ width: `${Math.round(((resumeRecipe.progress.stepIndex + 1) / Math.max(1, resumeRecipe.progress.totalSteps)) * 100)}%` }}
+                  />
+                </div>
+              </button>
+            )}
+
+            <div className="mt-4 cook-v2-planner-hint rounded-[11px] border border-dashed px-4 py-3 flex items-start gap-2.5">
+              <Sparkles size={16} className="text-casa-info shrink-0 mt-0.5" />
+              <p className="text-body-sm text-casa-text-secondary">
+                Thinking ahead? The <span className="font-semibold text-casa-navy">Plan the week</span> tab opens Meal Planner AI — build a weekly plan, optimize budget, and push groceries to shopping.
+              </p>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="mt-4 rounded-[14px] border cook-v2-plan-box p-4">
+            <p className="cook-v2-plan-eyebrow text-[11px] font-semibold uppercase tracking-[0.14em]">Meal Planner AI</p>
+            <h2 className="mt-1 font-body text-[1.25rem] leading-[1.2] font-bold text-casa-navy">Build an overlap-optimized weekly plan</h2>
+            <p className="mt-1 text-body-sm text-casa-text-tertiary">
+              Profile: {foodProfile.householdSize} people · ${foodProfile.weeklyBudgetUsd}/week · {foodProfile.defaultMealsPerWeek} meals · {foodProfile.weeknightMaxMinutes} min weeknights
+            </p>
+            <p className="mt-2 text-body-sm text-casa-text-secondary">
+              Use the planner workspace below to generate, optimize, and apply your weekly meal + grocery plan.
+            </p>
+          </div>
+        )}
       </section>
 
-      <section className="rounded-2xl border border-casa-border bg-casa-surface p-4 space-y-3">
+      {cookLandingMode === 'plan-week' && (
+      <>
+      <section className="cook-v2-plan-shell rounded-2xl border border-casa-border bg-casa-surface p-4 space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-body-sm font-semibold text-casa-navy">Meal Planner AI</p>
+            <p className="cook-v2-plan-eyebrow text-[11px] font-semibold uppercase tracking-[0.14em]">Meal Planner AI</p>
             <p className="text-[11px] text-casa-muted mt-1">
               Build an overlap-optimized weekly plan, then confirm groceries + queue actions.
             </p>
@@ -2668,7 +3061,7 @@ export default function CookPage() {
             Food profile
           </button>
         </div>
-        <div className="rounded-xl border border-casa-border bg-casa-bg p-3">
+        <div className="cook-v2-plan-box rounded-xl border border-casa-border bg-casa-bg p-3">
           <p className="text-[11px] text-casa-muted">
             Profile: {foodProfile.householdSize} people · ${foodProfile.weeklyBudgetUsd}/week · {foodProfile.defaultMealsPerWeek} meals · {foodProfile.weeknightMaxMinutes} min weeknights
           </p>
@@ -2677,14 +3070,14 @@ export default function CookPage() {
             onChange={(event) => setMealPlannerPrompt(event.target.value)}
             rows={2}
             placeholder="Plan 5 dinners this week under $140 with overlapping ingredients and one fish meal."
-            className="mt-2 w-full rounded-button border border-casa-border bg-casa-surface px-3 py-2 text-body-sm text-casa-text placeholder:text-casa-muted outline-none"
+            className="mt-2 w-full rounded-button border border-casa-control-border bg-casa-surface-subtle px-3 py-2 text-body-sm text-casa-text placeholder:text-casa-text-faint outline-none"
           />
           <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
             <button
               type="button"
               onClick={() => void generateMealPlan()}
               disabled={mealPlannerLoading}
-              className="px-3 py-2 rounded-button border border-casa-gold/40 bg-casa-gold/10 text-body-sm font-semibold text-casa-navy hover:bg-casa-gold/15 disabled:opacity-60"
+              className="cook-v2-btn-primary px-3 py-2 rounded-button text-body-sm font-semibold disabled:opacity-60"
             >
               {mealPlannerLoading ? 'Planning…' : 'Generate plan'}
             </button>
@@ -2692,7 +3085,7 @@ export default function CookPage() {
               type="button"
               onClick={() => void optimizeCurrentPlanForBudget()}
               disabled={mealPlannerLoading || !mealPlannerPlan}
-              className="px-3 py-2 rounded-button border border-casa-border bg-casa-surface text-body-sm font-semibold text-casa-navy hover:bg-casa-main disabled:opacity-60"
+              className="cook-v2-btn-secondary px-3 py-2 rounded-button text-body-sm font-semibold disabled:opacity-60"
             >
               Optimize budget
             </button>
@@ -2700,7 +3093,7 @@ export default function CookPage() {
               type="button"
               onClick={() => void applyPlannerGroceries()}
               disabled={mealPlannerAddingGroceries || pendingPlannerGroceries.length === 0}
-              className="px-3 py-2 rounded-button border border-casa-gold/40 bg-casa-gold/10 text-body-sm font-semibold text-casa-navy hover:bg-casa-gold/15 disabled:opacity-60"
+              className="cook-v2-btn-primary px-3 py-2 rounded-button text-body-sm font-semibold disabled:opacity-60"
             >
               {mealPlannerAddingGroceries
                 ? `Adding groceries... (${pendingPlannerGroceries.length})`
@@ -2722,14 +3115,14 @@ export default function CookPage() {
                   },
                 }))
               }}
-              className="px-2.5 py-1.5 rounded-pill border border-casa-border bg-casa-surface text-[11px] text-casa-muted hover:text-casa-navy"
+              className="cook-v2-btn-secondary px-2.5 py-1.5 rounded-pill text-[11px] text-casa-text-secondary"
             >
               Talk to Chef
             </button>
             <button
               type="button"
               onClick={() => setPlannerAdvancedOpen((value) => !value)}
-              className="px-2.5 py-1.5 rounded-pill border border-casa-border bg-casa-surface text-[11px] text-casa-muted hover:text-casa-navy"
+              className="cook-v2-btn-secondary px-2.5 py-1.5 rounded-pill text-[11px] text-casa-text-secondary"
             >
               {plannerAdvancedOpen ? 'Hide advanced' : 'Show advanced'}
             </button>
@@ -3060,7 +3453,7 @@ export default function CookPage() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-casa-border bg-casa-surface p-4">
+      <section className="cook-v2-plan-shell rounded-2xl border border-casa-border bg-casa-surface p-4">
         <div className="flex items-center justify-between gap-2 mb-3">
           <p className="text-body-sm font-semibold text-casa-navy">Planned meals</p>
           <p className="text-[11px] text-casa-muted">Drag planning happens in Grocery</p>
@@ -3144,18 +3537,49 @@ export default function CookPage() {
           </div>
         )}
       </section>
+      </>
+      )}
 
       <section className="rounded-2xl border border-casa-border bg-casa-surface p-4">
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <p className="text-body-sm font-semibold text-casa-navy">Recipe library</p>
-          <div className="flex items-center gap-2 rounded-button border border-casa-border bg-casa-bg px-3 py-1.5 min-w-[15rem]">
-            <Search size={14} className="text-casa-muted" />
-            <input
-              value={recipeSearch}
-              onChange={(event) => setRecipeSearch(event.target.value)}
-              placeholder="Search recipes..."
-              className="w-full bg-transparent text-body-sm text-casa-text placeholder:text-casa-muted outline-none"
-            />
+        <div className="flex flex-col gap-2 mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-heading font-semibold text-casa-navy">Recipe library</p>
+              <p className="text-body-sm text-casa-text-tertiary mt-1">
+                Browse all {recipes.length} recipes.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 rounded-[8px] border border-casa-control-border bg-casa-surface px-3 py-2 min-w-[15rem]">
+              <Search size={14} className="text-casa-text-tertiary" />
+              <input
+                value={recipeSearch}
+                onChange={(event) => setRecipeSearch(event.target.value)}
+                placeholder="Search recipes..."
+                className="w-full bg-transparent text-body-sm text-casa-text placeholder:text-casa-text-faint outline-none"
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {([
+              { id: 'all', label: `All (${recipes.length})` },
+              { id: 'quick', label: `Quick (${quickTonightCount})` },
+              { id: 'planned', label: `Planned (${plannedRecipes.length})` },
+            ] as const).map((filter) => (
+              <button
+                key={filter.id}
+                type="button"
+                onClick={() => setRecipeBrowseFilter(filter.id)}
+                className={cn(
+                  'px-3 py-1.5 rounded-pill border text-body-sm font-semibold transition-colors',
+                  recipeBrowseFilter === filter.id
+                    ? 'border-casa-accent-soft-border bg-casa-accent-soft text-casa-navy'
+                    : 'border-casa-control-border bg-casa-surface text-casa-text-secondary hover:text-casa-navy',
+                )}
+                aria-pressed={recipeBrowseFilter === filter.id}
+              >
+                {filter.label}
+              </button>
+            ))}
           </div>
         </div>
         {libraryActionError && (
@@ -3163,6 +3587,11 @@ export default function CookPage() {
         )}
         {!libraryActionError && libraryActionStatus && (
           <p className="mb-2 text-[11px] text-casa-muted">{libraryActionStatus}</p>
+        )}
+        {filteredRecipes.length === 0 && (
+          <p className="mb-2 text-[11px] text-casa-muted">
+            No recipes match this filter yet. Try switching filters or importing a recipe.
+          </p>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
           {filteredRecipes.slice(0, 24).map((recipe) => (
@@ -3177,7 +3606,7 @@ export default function CookPage() {
                   openRecipeForCookMode(recipe.id)
                 }
               }}
-              className="rounded-2xl border border-casa-border bg-casa-bg overflow-hidden cursor-pointer hover:border-casa-gold/40 transition-colors"
+              className="rounded-2xl border border-casa-border bg-casa-surface overflow-hidden cursor-pointer hover:border-casa-accent-soft-border transition-colors"
             >
               {(() => {
                 const focus = parseRecipeImageFocus(recipe.image_url)
@@ -3205,7 +3634,7 @@ export default function CookPage() {
                       void smartAddIngredientsToShoppingList(recipe)
                     }}
                     disabled={smartAddingRecipeId === recipe.id}
-                    className="flex-1 px-3 py-2 rounded-button border border-casa-gold/40 bg-casa-gold/10 text-body-sm font-semibold text-casa-navy hover:bg-casa-gold/15 transition-colors inline-flex items-center justify-center gap-2"
+                    className="flex-1 px-3 py-2 rounded-button border border-casa-accent-subtle-border bg-casa-accent-subtle text-body-sm font-semibold text-casa-navy hover:bg-casa-accent-soft transition-colors inline-flex items-center justify-center gap-2"
                   >
                     <ShoppingCart size={14} />
                     {smartAddingRecipeId === recipe.id ? 'Adding…' : 'Smart add ingredients'}
@@ -4100,77 +4529,8 @@ export default function CookPage() {
                   </div>
                 </>
               ) : (
-                <>
-                  <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden shrink-0">
-                    <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-2">
-                      <div>
-                        <p className="text-body font-semibold text-casa-navy">Ingredients</p>
-                        <p className="text-[11px] text-casa-muted">{cookIngredients.length} items</p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setShowCupsConversion((current) => !current)}
-                          className={cn(
-                            'px-2 py-1 rounded-pill border text-[10px] transition-colors',
-                            showCupsConversion
-                              ? 'border-casa-gold/50 bg-casa-gold/10 text-casa-navy'
-                              : 'border-casa-border text-casa-muted hover:bg-casa-surface'
-                          )}
-                        >
-                          {showCupsConversion ? 'Show grams' : 'g → cups'}
-                        </button>
-                        {[0.5, 1, 2].map((scale) => (
-                          <button
-                            key={scale}
-                            type="button"
-                            onClick={() => setRecipeScale(scale)}
-                            className={cn(
-                              'px-2 py-1 rounded-pill border text-[10px] transition-colors',
-                              Math.abs(recipeScale - scale) < 0.001
-                                ? 'border-casa-gold/50 bg-casa-gold/10 text-casa-navy'
-                                : 'border-casa-border text-casa-muted hover:bg-casa-surface'
-                            )}
-                          >
-                            {scale}x
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div
-                      className="h-2.5 w-full"
-                      style={{ backgroundColor: 'var(--color-family-liv)' }}
-                      aria-hidden
-                    />
-                    <div className="p-4">
-                    {cookIngredients.length === 0 ? (
-                      <p className="text-body-sm text-casa-muted">No ingredient breakdown saved for this recipe.</p>
-                    ) : (
-                      <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                        {cookIngredients.map((ingredient, index) => {
-                          const normalized = normalizeRecipeIngredientFields({
-                            rawText: ingredient.raw_text,
-                            name: ingredient.name,
-                            quantity: ingredient.quantity,
-                            unit: ingredient.unit,
-                          })
-                          const name = normalized.name || ingredient.raw_text
-                          const qty = quantityLabel(ingredient)
-                          return (
-                            <div key={`${ingredient.recipe_id}-${index}`} className="flex items-center justify-between gap-3 text-body">
-                              <span className="text-casa-text font-medium">{name}</span>
-                              <span className="text-casa-muted whitespace-nowrap">
-                                {qty}
-                              </span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden flex-1 min-h-0 flex flex-col">
+                <div className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_17.5rem] gap-3">
+                  <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden order-1 flex-1 min-h-0 flex flex-col">
                     <div className="px-4 pt-3 pb-2 flex items-start justify-between gap-2">
                       <div>
                         <p className="text-body font-semibold text-casa-navy">Directions</p>
@@ -4207,6 +4567,24 @@ export default function CookPage() {
                         </button>
                       </div>
                     </div>
+                    <div className="px-4 pb-2">
+                      <p className="text-[10px] uppercase tracking-[0.14em] text-casa-muted">Needed now</p>
+                      {neededNowIngredientRows.length === 0 ? (
+                        <p className="text-[11px] text-casa-muted mt-1">No ingredient highlights yet.</p>
+                      ) : (
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {neededNowIngredientRows.map((row) => (
+                            <span
+                              key={`needed-now-${row.id}`}
+                              className="inline-flex items-center gap-1 rounded-pill border border-casa-gold/35 bg-casa-gold/10 px-2.5 py-1 text-[11px] text-casa-navy"
+                            >
+                              <span className="font-semibold">{row.name}</span>
+                              {row.qty && <span className="text-casa-muted">{row.qty}</span>}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <div
                       className="h-2.5 w-full"
                       style={{ backgroundColor: 'var(--color-casa-gold)' }}
@@ -4214,7 +4592,9 @@ export default function CookPage() {
                     />
                     <div className="p-4 flex-1 min-h-0">
                       {directionsViewMode === 'step' ? (
-                        <p className="text-body text-casa-text leading-relaxed">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
+                        <div className="h-full overflow-y-auto pr-1">
+                          <p className="text-body text-casa-text leading-relaxed">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
+                        </div>
                       ) : (
                         <div className="space-y-2 h-full overflow-y-auto pr-1">
                           {(cookSteps.length > 0 ? cookSteps : [{ step_number: 1, instruction: 'No directions saved for this recipe yet.' }]).map((step, index) => {
@@ -4244,7 +4624,64 @@ export default function CookPage() {
                       )}
                     </div>
                   </div>
-                </>
+
+                  <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden order-2 shrink-0 lg:shrink lg:min-h-0 lg:flex lg:flex-col">
+                    <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-body font-semibold text-casa-navy">Ingredients</p>
+                        <p className="text-[11px] text-casa-muted">{cookIngredients.length} items · low-touch shelf</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowCupsConversion((current) => !current)}
+                          className={cn(
+                            'px-2 py-1 rounded-pill border text-[10px] transition-colors',
+                            showCupsConversion
+                              ? 'border-casa-gold/50 bg-casa-gold/10 text-casa-navy'
+                              : 'border-casa-border text-casa-muted hover:bg-casa-surface'
+                          )}
+                        >
+                          {showCupsConversion ? 'Show grams' : 'g → cups'}
+                        </button>
+                        {[0.5, 1, 2].map((scale) => (
+                          <button
+                            key={scale}
+                            type="button"
+                            onClick={() => setRecipeScale(scale)}
+                            className={cn(
+                              'px-2 py-1 rounded-pill border text-[10px] transition-colors',
+                              Math.abs(recipeScale - scale) < 0.001
+                                ? 'border-casa-gold/50 bg-casa-gold/10 text-casa-navy'
+                                : 'border-casa-border text-casa-muted hover:bg-casa-surface'
+                            )}
+                          >
+                            {scale}x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div
+                      className="h-2.5 w-full"
+                      style={{ backgroundColor: 'var(--color-family-liv)' }}
+                      aria-hidden
+                    />
+                    <div className="p-4 lg:flex-1 lg:min-h-0">
+                      {cookIngredientRows.length === 0 ? (
+                        <p className="text-body-sm text-casa-muted">No ingredient breakdown saved for this recipe.</p>
+                      ) : (
+                        <div className="space-y-1 max-h-28 lg:max-h-none lg:h-full overflow-y-auto pr-1">
+                          {cookIngredientRows.map((row) => (
+                            <div key={row.id} className="flex items-center justify-between gap-3 text-body">
+                              <span className="text-casa-text font-medium">{row.name}</span>
+                              <span className="text-casa-muted whitespace-nowrap">{row.qty}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
             <div className="px-4 py-3 border-t border-casa-divider flex items-center justify-between">
@@ -4269,7 +4706,7 @@ export default function CookPage() {
                 </>
               ) : (
                 <>
-                  <button type="button" onClick={() => setStepIndex((current) => Math.max(0, current - 1))} disabled={directionsViewMode === 'all' || stepIndex <= 0} className="px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-muted disabled:opacity-50 inline-flex items-center gap-1">
+                  <button type="button" onClick={() => setStepIndex((current) => Math.max(0, current - 1))} disabled={directionsViewMode === 'all' || stepIndex <= 0} className="min-h-[46px] px-4 py-2.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-muted disabled:opacity-50 inline-flex items-center gap-1">
                     <ChevronLeft size={14} />
                     Prev
                   </button>
@@ -4277,7 +4714,7 @@ export default function CookPage() {
                     type="button"
                     onClick={() => setCookRecipeId(null)}
                     className={cn(
-                      'px-3 py-2 rounded-button border text-body-sm transition-colors',
+                      'min-h-[46px] px-4 py-2.5 rounded-button border text-body-sm font-semibold transition-colors',
                       directionsViewMode === 'all'
                         ? 'border-casa-navy bg-casa-navy text-white font-semibold hover:bg-casa-navy/90'
                         : 'border-casa-border text-casa-muted hover:bg-casa-main'
@@ -4290,7 +4727,7 @@ export default function CookPage() {
                     onClick={() => setStepIndex((current) => Math.min(Math.max(0, cookSteps.length - 1), current + 1))}
                     disabled={directionsViewMode === 'all' || stepIndex >= cookSteps.length - 1}
                     className={cn(
-                      'px-3 py-2 rounded-button border text-body-sm disabled:opacity-50 inline-flex items-center gap-1 transition-colors',
+                      'min-h-[46px] px-4 py-2.5 rounded-button border text-body-sm font-semibold disabled:opacity-50 inline-flex items-center gap-1 transition-colors',
                       directionsViewMode === 'step'
                         ? 'border-casa-navy bg-casa-navy text-white font-semibold hover:bg-casa-navy/90'
                         : 'border-casa-border text-casa-muted'

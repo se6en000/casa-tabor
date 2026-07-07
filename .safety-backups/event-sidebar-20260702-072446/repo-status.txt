@@ -1,0 +1,3 @@
+ M src/components/calendar/EventDetailPanel.tsx
+ M src/index.css
+?? .safety-backups/

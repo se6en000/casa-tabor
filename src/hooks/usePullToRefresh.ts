@@ -30,6 +30,8 @@ export function usePullToRefresh({ threshold = 64, onRefresh, onPull, onReset }:
   const handleTouchStart = useCallback((e: TouchEvent) => {
     const el = elRef.current
     if (!el || el.scrollTop > 2) return
+    const target = e.target as Element | null
+    if (target?.closest('[data-panel-overlay], [data-native-drag], [data-ptr-ignore]')) return
     startY.current     = e.touches[0].clientY
     lastTravel.current = 0
     active.current     = false

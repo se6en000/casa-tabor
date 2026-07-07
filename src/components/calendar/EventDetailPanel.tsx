@@ -1,39 +1,82 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { format } from 'date-fns'
-import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence, useDragControls } from 'framer-motion'
 import {
-  X, MapPin, Clock, Cloud, AlertTriangle,
-  Pencil, Navigation, Share2, CheckSquare, Square,
-  Phone, DollarSign, Utensils, ChevronRight, Sparkles,
-  Plane, Loader2, ExternalLink, Paperclip,
-  Home, Hotel, Hash, DoorOpen, Armchair, Luggage, Users,
-  Sun, CloudRain, CloudSnow, Wind,
-  Crown, Plus, Bookmark, BookmarkCheck, Copy, Check, Map,
+  X, MapPin, Navigation, ChevronRight,
+  Loader2, Crown, Plus, Check, Pencil, Share2, Phone, MessageSquare,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
-import type { EventWithDetails } from '../../hooks/useCalendarEvents'
-import type { EventChecklistItem, EventEnrichment } from '../../types'
+import { useTodayEvents, type EventWithDetails } from '../../hooks/useCalendarEvents'
+import type { EventChecklistItem, EventEnrichment, EventActionItem, EventLogistic, SavedPlace } from '../../types'
 import { getFieldsForCategory, CATEGORY_LABEL } from './categoryFields'
 import EventEditSheet from './EventEditSheet'
-import AIChatDrawer from '../shared/AIChatDrawer'
-import { DepartureRiskBanner } from '../shared/DepartureRiskBanner'
-import type { Trip } from '../../hooks/useTrips'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useSavedPlaces, useSavePlace, findSavedPlace } from '../../hooks/useSavedPlaces'
 import { useTravelEta } from '../../hooks/useTravelEta'
+import { useMemberAvailability } from '../../hooks/useMemberAvailability'
+import { DepartureRiskBanner } from '../shared/DepartureRiskBanner'
 import {
-  inferEventMode, derivePlan, eventAccentColor, trafficPill,
-  type PlanModel,
+  inferEventMode, derivePlan, eventAccentColor, trafficPill, eventAttendees,
+  deriveSingleStopPattern, type PlanModel, type EventMode,
 } from '../../lib/eventCommandCenter'
-import BounceScroll from '../shared/BounceScroll'
+import {
+  evaluateMemberAvailabilityForWindow,
+  indexAvailabilityExceptionsByMember,
+  indexAvailabilityRulesByMember,
+} from '../../lib/memberAvailability'
+import { locationSignature, overridesStorageKey } from '../../lib/eventPlanOverrides'
+import { getEventDisplayStartDay } from '../../utils/eventTime'
 
-const CONFIDENCE_CONFIG = {
-  high:   { color: '#22c55e', label: 'High confidence', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
-  medium: { color: '#f59e0b', label: 'Needs review',    bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200'   },
-  low:    { color: '#ef4444', label: 'Needs attention', bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-200'     },
+// ── Exact design tokens from the Event Command Center handoff (SPEC §2) ──────
+const S = {
+  navy: 'var(--color-casa-navy)',
+  navyHex: '#1B2A44',
+  muted: 'var(--color-casa-muted)',
+  label: 'color-mix(in srgb, var(--color-casa-muted) 85%, white)',
+  eyebrow: 'color-mix(in srgb, var(--color-casa-muted) 75%, white)',
+  planLabel: 'color-mix(in srgb, white 65%, var(--color-casa-navy))',
+  chipFill: 'var(--color-casa-bg)',
+  yourTimeFill: 'var(--color-casa-bg)',
+  coverFill: 'var(--color-casa-bg)',
+  gold: 'var(--color-casa-gold)',
+  goldHex: '#C6A15B',
+  goldBadge: 'color-mix(in srgb, var(--color-casa-gold) 72%, white)',
+  goldText: 'color-mix(in srgb, var(--color-casa-warning) 70%, var(--color-casa-text))',
+  amberBg: '#FCF3E0',
+  amberBorder: '#EAD3A0',
+  green: 'var(--color-casa-success)',
+  greenHex: '#2F8F5B',
+  greenBg: '#E6F4EC',
+  red: 'var(--color-casa-error)',
+  redBg: '#FBEAE7',
+  borderSoft: 'color-mix(in srgb, var(--color-casa-navy) 8%, transparent)',
+  borderMed: 'color-mix(in srgb, var(--color-casa-navy) 10%, transparent)',
+  hair: 'color-mix(in srgb, var(--color-casa-navy) 6%, transparent)',
+}
+const serif = { fontFamily: "'Source Serif 4', Georgia, serif" }
+const MODE_OVERRIDE_OPTIONS: Array<{ value: 'auto' | EventMode; label: string; helper?: string }> = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'appointment', label: 'Appointment' },
+  { value: 'pickup', label: 'Pickup' },
+  { value: 'hosted', label: 'Hosted' },
+  { value: 'trip', label: 'Trip' },
+]
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '')
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
+  const n = parseInt(full, 16)
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
+  return `rgba(${r},${g},${b},${alpha})`
+}
+
+function verifyFromTrustedSource(event: EventWithDetails, savedPlaces: SavedPlace[] = []): boolean {
+  if (findSavedPlace(savedPlaces ?? [], event.location_name, event.address)) return true
+  if (event.lat == null || event.lng == null) return false
+  if (event.enrichment?.confidence === 'low') return false
+  return true
 }
 
 interface EventDetailPanelProps {
@@ -56,19 +99,89 @@ const stopTouch = (e: React.TouchEvent | React.PointerEvent) => e.stopPropagatio
 
 export default function EventDetailPanel({ event, onClose }: EventDetailPanelProps) {
   const [showEdit, setShowEdit] = useState(false)
-  const [showAIEdit, setShowAIEdit] = useState(false)
-  const [aiEditEvent, setAIEditEvent] = useState<EventWithDetails | null>(null)
-  const { data: familyMembers = [] } = useFamilyMembers()
+  const [verifiedOverride, setVerifiedOverride] = useState<boolean | null>(null)
+  const [waitsOverride, setWaitsOverride] = useState<boolean | null>(null)
+  const [driverOverrides, setDriverOverrides] = useState<Record<number, string>>({})
+  const [modeOverride, setModeOverride] = useState<EventMode | null>(null)
+  const [twoDriverConfirmed, setTwoDriverConfirmed] = useState(false)
+  const { data: savedPlaces = [] } = useSavedPlaces()
   const isMobile = useIsMobile()
-  const mobileDragControls = useDragControls()
-  const desktopDragControls = useDragControls()
+  const panelDragControls = useDragControls()
+  const dragDismissOffset = isMobile ? 150 : 180
+  const dragDismissVelocity = isMobile ? 550 : 700
+  const sourceVerified = event ? verifyFromTrustedSource(event, savedPlaces) : false
+  const effectiveVerified = verifiedOverride ?? sourceVerified
 
-  function handleEditWithAI() {
+  useEffect(() => {
     if (!event) return
-    setAIEditEvent(event)   // snapshot event before panel closes
-    onClose()               // animate panel out (~300ms spring)
-    setTimeout(() => setShowAIEdit(true), 350)
-  }
+    let raw: string | null = null
+    try {
+      raw = localStorage.getItem(overridesStorageKey(event.id))
+    } catch (error) {
+      console.warn('EventDetailPanel: failed to read persisted plan overrides', error)
+    }
+    if (!raw) {
+      setVerifiedOverride(null)
+      setWaitsOverride(null)
+      setDriverOverrides({})
+      setModeOverride(null)
+      setTwoDriverConfirmed(false)
+      return
+    }
+    try {
+      const parsed = JSON.parse(raw) as {
+        verified?: boolean | null
+        waits?: boolean | null
+        driverOverrides?: Record<number, string>
+        modeOverride?: EventMode | 'travel' | null
+        twoDriverConfirmed?: boolean
+        locationSignature?: string
+      }
+      const currentLocationSignature = locationSignature(event)
+      const locationMatches = parsed.locationSignature === currentLocationSignature
+      setVerifiedOverride(locationMatches ? (parsed.verified ?? null) : null)
+      setWaitsOverride(parsed.waits ?? null)
+      setDriverOverrides(parsed.driverOverrides ?? {})
+      const persistedMode = parsed.modeOverride ?? null
+      setModeOverride(persistedMode === 'travel' ? 'appointment' : persistedMode)
+      setTwoDriverConfirmed(Boolean(parsed.twoDriverConfirmed))
+    } catch (error) {
+      console.warn('EventDetailPanel: failed to parse persisted plan overrides', error)
+      setVerifiedOverride(null)
+      setWaitsOverride(null)
+      setDriverOverrides({})
+      setModeOverride(null)
+      setTwoDriverConfirmed(false)
+    }
+  }, [event?.id])
+
+  useEffect(() => {
+    if (!event) return
+    const hasOverrides = verifiedOverride != null || waitsOverride != null || Object.keys(driverOverrides).length > 0 || modeOverride != null || twoDriverConfirmed
+    if (!hasOverrides) {
+      try {
+        localStorage.removeItem(overridesStorageKey(event.id))
+      } catch (error) {
+        console.warn('EventDetailPanel: failed to clear persisted plan overrides', error)
+      }
+      return
+    }
+    try {
+      localStorage.setItem(
+        overridesStorageKey(event.id),
+        JSON.stringify({
+          verified: verifiedOverride,
+          waits: waitsOverride,
+          driverOverrides,
+          modeOverride,
+          twoDriverConfirmed,
+          locationSignature: locationSignature(event),
+        }),
+      )
+    } catch (error) {
+      console.warn('EventDetailPanel: failed to persist plan overrides', error)
+    }
+  }, [event?.id, verifiedOverride, waitsOverride, driverOverrides, modeOverride, twoDriverConfirmed])
 
   // Lock body scroll while panel is open so the calendar can't scroll behind it
   useEffect(() => {
@@ -89,7 +202,8 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-transparent z-[54]"
+              className="fixed inset-0 z-[54]"
+              style={{ background: 'linear-gradient(180deg,rgba(27,42,68,0.28),rgba(27,42,68,0.12) 45%,rgba(27,42,68,0.06))' }}
               data-panel-overlay
               onClick={onClose}
               onTouchStart={stopTouch}
@@ -98,113 +212,82 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
               onPointerDown={stopTouch}
             />
 
-            {isMobile ? (
-              /* ── Mobile: simple expand/dismiss sheet ── */
-              <motion.div
-                key="mobile-panel-shell"
-                initial={{ y: '100%' }}
-                animate={{ y: 0 }}
-                exit={{ y: '100%', transition: { duration: 0.26, ease: [0.4, 0, 1, 1] } }}
-                transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-                drag="y"
-                dragControls={mobileDragControls}
-                dragListener={false}
-                dragConstraints={{ top: 0 }}
-                dragElastic={{ top: 0, bottom: 0.15 }}
-                dragMomentum={false}
-                onDragEnd={(_e, info) => {
-                  if (info.velocity.y > 500 || info.offset.y > 200) onClose()
-                }}
-                style={{ willChange: 'transform', backfaceVisibility: 'hidden' }}
-                className="fixed inset-x-2 bottom-2 top-[5vh] bg-casa-surface rounded-3xl shadow-[0_14px_44px_rgba(27,42,74,0.22)] z-[55] flex flex-col overflow-hidden transform-gpu"
-                data-panel-overlay
-                onClick={e => e.stopPropagation()}
-                onPointerDown={stopTouch}
-                onTouchStart={stopTouch}
-                onTouchMove={stopTouch}
-                onTouchEnd={stopTouch}
-              >
-                {(() => {
-                  const color = event.members[0]?.family_member?.color_hex ?? '#C9A96E'
-                  return (
-                    <div
-                      className="flex-shrink-0 flex flex-col items-center justify-end pb-3 pt-5 cursor-grab active:cursor-grabbing min-h-[52px]"
-                      style={{
-                        background: `linear-gradient(to bottom, ${color}12 0%, transparent 100%)`,
-                        touchAction: 'none',
-                      }}
-                      onPointerDown={e => mobileDragControls.start(e)}
-                    >
-                      <div className="w-12 h-[5px] rounded-full opacity-60" style={{ backgroundColor: color }} />
-                    </div>
-                  )
-                })()}
-                <PanelHeader event={event} onClose={onClose} />
-                <PanelBody event={event} onEdit={() => setShowEdit(true)} />
-                <PanelFooter event={event} onEdit={() => setShowEdit(true)} onEditWithAI={handleEditWithAI} />
-              </motion.div>
-            ) : (
-              /* ── Desktop: simple expand/dismiss panel ── */
-              <motion.div
-                key="desktop-panel-shell"
-                initial={{ x: '100%' }}
-                animate={{ x: 0 }}
-                exit={{ x: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }}
-                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                drag="y"
-                dragControls={desktopDragControls}
-                dragListener={false}
-                dragConstraints={{ top: 0 }}
-                dragElastic={{ top: 0, bottom: 0.15 }}
-                dragMomentum={false}
-                onDragEnd={(_e, info) => {
-                  if (info.velocity.y > 500 || info.offset.y > 200) onClose()
-                }}
-                style={{ willChange: 'transform', backfaceVisibility: 'hidden' }}
-                className="fixed top-4 right-4 bottom-4 h-auto w-[min(960px,calc(100vw-2rem))] bg-casa-surface border border-casa-border rounded-3xl shadow-[0_18px_52px_rgba(27,42,74,0.24)] z-[55] flex flex-col overflow-hidden transform-gpu"
-                data-panel-overlay
-                onClick={e => e.stopPropagation()}
-                onPointerDown={stopTouch}
-                onTouchStart={stopTouch}
-                onTouchMove={stopTouch}
-                onTouchEnd={stopTouch}
-              >
-                {(() => {
-                  const color = event.members[0]?.family_member?.color_hex ?? '#C9A96E'
-                  return (
-                    <div
-                      className="flex-shrink-0 flex flex-col items-center justify-end pb-3 pt-5 cursor-grab active:cursor-grabbing min-h-[52px]"
-                      style={{
-                        background: `linear-gradient(to bottom, ${color}12 0%, transparent 100%)`,
-                        touchAction: 'none',
-                      }}
-                      onPointerDown={e => desktopDragControls.start(e)}
-                    >
-                      <div className="w-12 h-[5px] rounded-full opacity-60" style={{ backgroundColor: color }} />
-                    </div>
-                  )
-                })()}
-                <PanelHeader event={event} onClose={onClose} />
-                <PanelBody event={event} onEdit={() => setShowEdit(true)} />
-                <PanelFooter event={event} onEdit={() => setShowEdit(true)} onEditWithAI={handleEditWithAI} />
-              </motion.div>
-            )}
+            <motion.div
+              key="event-panel-shell"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }}
+              transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.92, bounce: 0.18 }}
+              drag="y"
+              dragControls={panelDragControls}
+              dragListener={false}
+              dragConstraints={{ top: 0 }}
+              dragElastic={{ top: 0, bottom: 0.22 }}
+              dragMomentum={false}
+              onDragEnd={(_e, info) => {
+                if (info.velocity.y > dragDismissVelocity || info.offset.y > dragDismissOffset) onClose()
+              }}
+              style={{ willChange: 'transform', backfaceVisibility: 'hidden' }}
+              className="event-command-center fixed inset-x-2 bottom-2 top-[5vh] lg:top-[6vh] lg:bottom-4 lg:left-auto lg:right-4 lg:w-[40vw] bg-white rounded-3xl shadow-[0_14px_44px_rgba(6,10,36,0.28)] z-[55] flex flex-col overflow-hidden transform-gpu"
+              data-panel-overlay
+              data-native-drag
+              data-ptr-ignore
+              onClick={e => e.stopPropagation()}
+              onPointerDown={stopTouch}
+              onTouchStart={stopTouch}
+              onTouchMove={stopTouch}
+              onTouchEnd={stopTouch}
+            >
+              <div className="flex-shrink-0 px-3 pt-3 pb-1.5">
+                <button
+                  type="button"
+                  className="mx-auto block h-6 w-[86px] cursor-grab active:cursor-grabbing"
+                  aria-label="Drag down to dismiss panel"
+                  style={{ touchAction: 'none' }}
+                  data-native-drag
+                  data-ptr-ignore
+                  onPointerDown={e => panelDragControls.start(e)}
+                >
+                  <span className="mx-auto mt-1.5 block w-11 h-[5px] rounded-full" style={{ background: 'rgba(27,42,68,0.18)' }} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain" data-native-drag data-ptr-ignore>
+                <PanelHeader
+                  event={event}
+                  verified={effectiveVerified}
+                  modeOverride={modeOverride}
+                  onClose={onClose}
+                  onEdit={() => setShowEdit(true)}
+                />
+                <PanelBody
+                  event={event}
+                  verified={effectiveVerified}
+                  modeOverride={modeOverride}
+                  waitsOverride={waitsOverride}
+                  driverOverrides={driverOverrides}
+                  twoDriverConfirmed={twoDriverConfirmed}
+                  onSetWaitsOverride={(next) => {
+                    setTwoDriverConfirmed(false)
+                    setWaitsOverride(next)
+                  }}
+                  onSetDriverOverride={(legIndex, driverId) => {
+                    setTwoDriverConfirmed(false)
+                    setDriverOverrides((prev) => ({ ...prev, [legIndex]: driverId }))
+                  }}
+                  onSetModeOverride={setModeOverride}
+                  onSetTwoDriverConfirmed={setTwoDriverConfirmed}
+                  onSetVerifiedOverride={setVerifiedOverride}
+                  onEdit={() => setShowEdit(true)}
+                />
+              </div>
+              <PanelFooter event={event} modeOverride={modeOverride} onEdit={() => setShowEdit(true)} />
+            </motion.div>
           </>
         )}
       </AnimatePresence>
 
       {event && (
         <EventEditSheet event={event} open={showEdit} onClose={() => setShowEdit(false)} />
-      )}
-      {aiEditEvent && (
-        <AIChatDrawer
-          open={showAIEdit}
-          onClose={() => { setShowAIEdit(false); setAIEditEvent(null) }}
-          page="event-edit"
-          events={[aiEditEvent]}
-          family={familyMembers}
-          focusedEvent={aiEditEvent}
-        />
       )}
     </>
   )
@@ -263,48 +346,57 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 mt-3 relative">
+    <div className="flex flex-wrap items-center gap-2 relative">
       {sorted.map((m) => {
         const isPrimary = m.role === 'primary'
         const isLoading = saving === m.id || saving === m.family_member?.id
+        const color = m.family_member?.color_hex ?? 'var(--color-casa-muted)'
         return (
           <div
             key={m.id}
-            className="flex items-center gap-1 pl-2 pr-1 py-1 rounded-pill text-white text-caption font-semibold transition-opacity"
-            style={{ backgroundColor: m.family_member?.color_hex ?? '#888', opacity: isLoading ? 0.6 : 1 }}
+            className="group inline-flex items-center gap-1.5 rounded-pill pl-1 pr-2 py-1 text-[13px] font-semibold transition-opacity"
+            style={{ background: S.chipFill, border: `1px solid ${S.borderSoft}`, color: S.navy, opacity: isLoading ? 0.6 : 1 }}
           >
-            {/* Initial circle */}
-            <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[9px] font-bold shrink-0">
+            <span
+              className="w-[22px] h-[22px] rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
+              style={{ backgroundColor: color }}
+            >
               {m.family_member?.name?.[0]}
             </span>
             <span>{m.family_member?.name}</span>
 
-            {/* Crown: shown on primary (to indicate), clickable on non-primary to promote */}
-            {!isPrimary && (
+            {/* Promote primary directly from the attendee pill (touch + desktop). */}
+            {!isPrimary ? (
               <button
                 onClick={() => makeOwner(m.family_member!.id)}
-                className="ml-0.5 w-5 h-5 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
-                title="Make primary"
+                className="ml-0.5 w-5 h-5 rounded-full flex items-center justify-center transition-colors"
+                style={{ color: S.label, background: 'transparent' }}
+                title={`Make ${m.family_member?.name ?? 'member'} primary`}
+                aria-label={`Make ${m.family_member?.name ?? 'member'} primary`}
               >
-                <Crown size={11} />
+                <Crown size={12} />
               </button>
-            )}
-            {isPrimary && (
-              <span className="ml-0.5 w-5 h-5 flex items-center justify-center opacity-80" title="Primary">
-                <Crown size={11} />
+            ) : (
+              <span
+                className="ml-0.5 w-5 h-5 rounded-full flex items-center justify-center"
+                style={{ color: S.goldText, background: S.amberBg }}
+                title="Primary attendee"
+                aria-label="Primary attendee"
+              >
+                <Crown size={12} />
               </span>
             )}
-
-            {/* Remove — always available (even primary, just can't remove last person) */}
-            {event.members.length > 1 || !isPrimary ? (
+            {(event.members.length > 1 || !isPrimary) && (
               <button
                 onClick={() => removeMember(m.id)}
-                className="w-5 h-5 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
+                className="ml-0.5 w-5 h-5 rounded-full flex items-center justify-center transition-colors hover:bg-casa-bg"
+                style={{ color: S.label, background: 'transparent' }}
                 title="Remove"
+                aria-label={`Remove ${m.family_member?.name ?? 'member'}`}
               >
-                <X size={11} />
+                <X size={12} />
               </button>
-            ) : null}
+            )}
           </div>
         )
       })}
@@ -313,7 +405,8 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
       <div className="relative" ref={pickerRef}>
         <button
           onClick={() => setShowPicker(p => !p)}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-pill border-2 border-dashed border-casa-border text-casa-muted text-caption font-semibold hover:border-casa-gold hover:text-casa-gold transition-colors"
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-pill border border-dashed text-[13px] font-semibold transition-colors"
+          style={{ borderColor: S.borderMed, color: S.label }}
         >
           <Plus size={12} /> Add
         </button>
@@ -325,7 +418,8 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -4, scale: 0.96 }}
               transition={{ duration: 0.15 }}
-              className="absolute top-full mt-1.5 left-0 z-20 bg-casa-surface border border-casa-border rounded-card shadow-modal p-2 flex flex-col gap-1 min-w-[140px]"
+              className="absolute top-full mt-1.5 left-0 z-20 bg-white border rounded-2xl shadow-[0_12px_32px_rgba(6,10,36,0.16)] p-2 flex flex-col gap-1 min-w-[150px]"
+              style={{ borderColor: S.borderSoft }}
             >
               {allMembers
                 .filter(fm => !assignedIds.has(fm.id))
@@ -337,16 +431,16 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
                     className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-casa-bg transition-colors text-left"
                   >
                     <span
-                      className="w-6 h-6 rounded-full text-white text-caption font-bold flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: fm.color_hex ?? '#888' }}
+                      className="w-6 h-6 rounded-full text-white text-[11px] font-bold flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: fm.color_hex ?? 'var(--color-casa-muted)' }}
                     >
                       {fm.name?.[0]}
                     </span>
-                    <span className="text-body-sm font-medium text-casa-navy">{fm.name}</span>
+                    <span className="text-[14px] font-medium" style={{ color: S.navy }}>{fm.name}</span>
                   </button>
                 ))}
               {allMembers.filter(fm => !assignedIds.has(fm.id)).length === 0 && (
-                <p className="text-caption text-casa-muted px-2 py-1">Everyone's added</p>
+                <p className="text-caption px-2 py-1" style={{ color: S.label }}>Everyone's added</p>
               )}
             </motion.div>
           )}
@@ -358,10 +452,19 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
 
 /* ── Header ─────────────────────────────────────────────────── */
 
-function PanelHeader({ event, onClose }: { event: EventWithDetails; onClose: () => void }) {
-  const urgentAction = event.actions?.find((a) => a.is_urgent && !a.completed)
-  const confidence = event.enrichment?.confidence as keyof typeof CONFIDENCE_CONFIG | undefined
-  const conf = confidence ? CONFIDENCE_CONFIG[confidence] : null
+function PanelHeader({
+  event,
+  verified,
+  modeOverride,
+  onClose,
+  onEdit,
+}: {
+  event: EventWithDetails
+  verified: boolean
+  modeOverride: EventMode | null
+  onClose: () => void
+  onEdit: () => void
+}) {
   const category = event.enrichment?.category
   const accent = eventAccentColor(event)
   const primary = event.members?.find((m) => m.role === 'primary') ?? event.members?.[0]
@@ -369,704 +472,163 @@ function PanelHeader({ event, onClose }: { event: EventWithDetails; onClose: () 
     ? `${primary.family_member.name}${event.members.length > 1 ? ` +${event.members.length - 1}` : ''}`
     : null
   const isRecurring = Boolean(event.rrule || event.recurrence_master_id)
+  const reminder = event.event_type === 'reminder'
+  const mode = modeOverride ?? inferEventMode(event)
+  const hostedAtHome = mode === 'hosted'
+  const displayStartDay = getEventDisplayStartDay(event)
+  const headerWhen = event.all_day
+    ? format(displayStartDay, 'EEE, MMM d')
+    : format(new Date(event.start_time), 'EEE, MMM d · h:mm a')
+  const headerDuration = event.all_day ? 'All day' : formatDuration(new Date(event.start_time), new Date(event.end_time))
 
   return (
-    <div className="border-b border-casa-border">
-      <div className="p-6 pb-4 relative">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-full hover:bg-casa-divider transition-colors"
-        >
-          <X size={18} />
-        </button>
-
-        {/* Type + recurring chips */}
-        <div className="flex items-center flex-wrap gap-2 mb-2">
+    <div className="px-7 pt-6 pb-5" style={{ borderBottom: `1px solid ${S.borderSoft}` }}>
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-2">
           {category && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-caption font-semibold bg-casa-bg border border-casa-border text-casa-muted capitalize">
+            <span
+              className="text-[11px] font-semibold rounded-pill px-2.5 py-1 capitalize"
+              style={{ background: hexToRgba(accent, 0.14), color: S.navy, letterSpacing: '0.04em' }}
+            >
               {CATEGORY_LABEL[category] ?? category}
             </span>
           )}
           {isRecurring && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption font-semibold bg-casa-bg border border-casa-border text-casa-muted">
-              <Clock size={10} /> Recurring
+            <span className="text-[11px] font-semibold rounded-pill px-2.5 py-1" style={{ background: S.hair, color: S.muted }}>
+              ↻ Repeats
             </span>
           )}
         </div>
-
-        {/* Eyebrow — color-dotted uppercase kicker naming whose event it is */}
-        {eyebrow && (
-          <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-casa-muted mb-1.5">
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: accent }} />
-            {eyebrow}
-          </p>
-        )}
-
-        <h2 className="font-display text-display-md text-casa-navy pr-8 mb-1 leading-tight">
-          {event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}
-        </h2>
-        <p className="text-body text-casa-muted">
-          {format(new Date(event.start_time), 'EEEE, MMMM d')}
-          {' · '}
-          {format(new Date(event.start_time), 'h:mm a')} – {format(new Date(event.end_time), 'h:mm a')}
-        </p>
-
-        {conf && (
-          <div className="flex items-center flex-wrap gap-2 mt-3">
-            <span className={cn('inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-caption font-semibold border', conf.bg, conf.text, conf.border)}>
-              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: conf.color }} />
-              {conf.label}
-            </span>
-          </div>
-        )}
-
-        {/* Urgent action banner */}
-        {urgentAction && (
-          <div className="mt-3 flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-card">
-            <AlertTriangle size={15} className="text-casa-warning shrink-0 mt-0.5" />
-            <div>
-              <p className="text-body-sm font-semibold text-casa-text">{urgentAction.title}</p>
-              {urgentAction.description && (
-                <p className="text-caption text-casa-muted mt-0.5">{urgentAction.description}</p>
-              )}
-            </div>
-          </div>
-        )}
+        <button
+          onClick={onClose}
+          className="w-[30px] h-[30px] rounded-full flex items-center justify-center transition-colors hover:bg-casa-bg"
+          style={{ color: S.label }}
+          aria-label="Close"
+        >
+          <X size={18} />
+        </button>
       </div>
+
+      {eyebrow && (
+        <div className="flex items-center gap-2 mt-3.5">
+          <span className="w-[9px] h-[9px] rounded-full" style={{ background: accent }} />
+          <span className="text-[11px] font-bold uppercase" style={{ color: S.eyebrow, letterSpacing: '0.13em' }}>{eyebrow}</span>
+        </div>
+      )}
+
+      <h2 className="event-command-center-title mt-1.5" style={{ ...serif, fontWeight: 600, letterSpacing: '-0.01em', color: S.navy }}>
+        {event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}
+      </h2>
+      <div className="flex items-center gap-2 mt-2 text-[14px]" style={{ color: S.muted }}>
+        <span className="font-semibold" style={{ color: S.navy }}>{headerWhen}</span>
+        <span>·</span>
+        <span>{headerDuration}</span>
+      </div>
+
+      {!reminder && event.members?.length > 0 && (
+        <div className="mt-4">
+          <div className="text-[10px] font-bold uppercase mb-2" style={{ color: S.label, letterSpacing: '0.12em' }}>
+            {hostedAtHome ? 'At home' : 'Going'}
+          </div>
+          <MemberEditor event={event} />
+        </div>
+      )}
+
+      {!reminder && mode !== 'hosted' && (
+        <DestinationHeaderCard
+          locationName={event.location_name}
+          address={event.address}
+          verified={verified}
+          atHome={hostedAtHome}
+          onCheckAddress={onEdit}
+          accent={accent}
+        />
+      )}
     </div>
   )
 }
 
-/* ── Travel Intelligence Banner ─────────────────────────────── */
 
-const TRAVEL_CATEGORIES = ['travel', 'work']
+/* ── Body: block-engine command center ─────────────────────── */
 
-// ── Trip helpers ─────────────────────────────────────────────────────────────
-
-// Trip timestamps are stored as nominal local times (e.g. 07:04:00Z = "7:04 AM").
-// We intentionally parse the digits directly — never apply UTC→local conversion.
-function parseNominalISO(iso: string): { h: number; m: number; date: Date } {
-  // "2026-06-02T07:04:00Z" or "2026-06-02T07:04:00-04:00" → always read the literal digits
-  const [datePart, timePart] = iso.split('T')
-  const [year, month, day] = datePart.split('-').map(Number)
-  const timeDigits = timePart.replace(/[Z+-].*$/, '')  // strip offset suffix
-  const [hour, min] = timeDigits.split(':').map(Number)
-  return { h: hour, m: min, date: new Date(year, month - 1, day) }
-}
-
-function fmtTripTime(iso: string | null): string {
-  if (!iso) return '—'
-  if (!iso.includes('T')) return format(new Date(iso), 'h:mm a')
-  const { h, m } = parseNominalISO(iso)
-  const d = new Date(2000, 0, 1, h, m)
-  return format(d, 'h:mm a')
-}
-
-function fmtDateShort(iso: string | null): string {
-  if (!iso) return '—'
-  // Date-only strings (no T) are fine to parse directly
-  if (!iso.includes('T')) return format(new Date(iso + 'T12:00:00'), 'MMM d')
-  const { date } = parseNominalISO(iso)
-  return format(date, 'MMM d')
-}
-
-function flightDuration(dep: string | null, arr: string | null): string {
-  if (!dep || !arr) return ''
-  const toMins = (iso: string) => {
-    const { h, m } = parseNominalISO(iso)
-    return h * 60 + m
-  }
-  const mins = Math.round(toMins(arr) - toMins(dep))
-  const absMins = Math.abs(mins)
-  const h = Math.floor(absMins / 60); const mm = absMins % 60
-  return h > 0 ? `${h}h ${mm}m` : `${mm}m`
-}
-
-function subtractMinutes(iso: string | null, mins: number): string | null {
-  if (!iso || !iso.includes('T')) return iso
-  const { h, m } = parseNominalISO(iso)
-  const total = h * 60 + m - mins
-  const newH = Math.floor(((total % 1440) + 1440) % 1440 / 60)
-  const newM = ((total % 60) + 60) % 60
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const datePart = iso.split('T')[0]
-  return `${datePart}T${pad(newH)}:${pad(newM)}:00Z`
-}
-
-function tripWeatherIcon(condition: string): React.ReactNode {
-  const c = condition.toLowerCase()
-  if (c.includes('snow')) return <CloudSnow size={16} className="text-blue-300" />
-  if (c.includes('rain') || c.includes('drizzle')) return <CloudRain size={16} className="text-blue-400" />
-  if (c.includes('cloud')) return <Cloud size={16} className="text-gray-400" />
-  if (c.includes('wind')) return <Wind size={16} className="text-teal-400" />
-  return <Sun size={16} className="text-amber-400" />
-}
-
-function TripSectionHead({ label, icon }: { label: string; icon: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-1.5 text-caption font-bold text-casa-muted uppercase tracking-widest mb-3 mt-1">
-      <span className="text-casa-gold">{icon}</span>
-      {label}
-    </div>
-  )
-}
-
-function TripTimelineStep({ icon, title, subtitle, time, timeLabel, detail, accent = false, connector = true }: {
-  icon: React.ReactNode; title: string; subtitle?: string; time?: string
-  timeLabel?: string; detail?: React.ReactNode; accent?: boolean; connector?: boolean
+function PanelBody({
+  event,
+  verified,
+  modeOverride,
+  waitsOverride,
+  driverOverrides,
+  twoDriverConfirmed,
+  onSetWaitsOverride,
+  onSetDriverOverride,
+  onSetModeOverride,
+  onSetTwoDriverConfirmed,
+  onSetVerifiedOverride,
+  onEdit,
+}: {
+  event: EventWithDetails
+  verified: boolean
+  modeOverride: EventMode | null
+  waitsOverride: boolean | null
+  driverOverrides: Record<number, string>
+  twoDriverConfirmed: boolean
+  onSetWaitsOverride: (value: boolean | null) => void
+  onSetDriverOverride: (legIndex: number, driverId: string) => void
+  onSetModeOverride: (mode: EventMode | null) => void
+  onSetTwoDriverConfirmed: (value: boolean) => void
+  onSetVerifiedOverride: (value: boolean | null) => void
+  onEdit: () => void
 }) {
   return (
-    <div className="flex gap-2.5">
-      <div className="flex flex-col items-center">
-        <div className={cn(
-          'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 border-2',
-          accent ? 'bg-casa-navy border-casa-navy text-white' : 'bg-white border-casa-border text-casa-navy'
-        )}>
-          {icon}
-        </div>
-        {connector && <div className="w-px flex-1 min-h-[20px] bg-casa-border mt-1" />}
-      </div>
-      <div className="flex-1 pb-4">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className={cn('font-semibold text-body-sm', accent ? 'text-casa-navy' : 'text-casa-text')}>{title}</p>
-            {subtitle && <p className="text-caption text-casa-muted mt-0.5">{subtitle}</p>}
-          </div>
-          {time && (
-            <div className="text-right flex-shrink-0">
-              <p className="text-body-sm font-semibold text-casa-navy">{time}</p>
-              {timeLabel && <p className="text-caption text-casa-gold font-medium">{timeLabel}</p>}
-            </div>
-          )}
-        </div>
-        {detail && <div className="mt-2">{detail}</div>}
-      </div>
-    </div>
+    <StandardPanelBody
+      event={event}
+      verified={verified}
+      modeOverride={modeOverride}
+      waitsOverride={waitsOverride}
+      driverOverrides={driverOverrides}
+      twoDriverConfirmed={twoDriverConfirmed}
+      onSetWaitsOverride={onSetWaitsOverride}
+      onSetDriverOverride={onSetDriverOverride}
+      onSetModeOverride={onSetModeOverride}
+      onSetTwoDriverConfirmed={onSetTwoDriverConfirmed}
+      onSetVerifiedOverride={onSetVerifiedOverride}
+      onEdit={onEdit}
+    />
   )
 }
 
-function TripFlightCard({ airline, flightNum, seat, terminal, confirmation, departs, arrives, origin, dest }: {
-  airline: string | null; flightNum: string | null; seat: string | null; terminal: string | null
-  confirmation: string | null; departs: string | null; arrives: string | null; origin: string | null; dest: string | null
+
+function StandardPanelBody({
+  event,
+  verified,
+  modeOverride,
+  waitsOverride,
+  driverOverrides,
+  twoDriverConfirmed,
+  onSetWaitsOverride,
+  onSetDriverOverride,
+  onSetModeOverride,
+  onSetTwoDriverConfirmed,
+  onSetVerifiedOverride,
+  onEdit,
+}: {
+  event: EventWithDetails
+  verified: boolean
+  modeOverride: EventMode | null
+  waitsOverride: boolean | null
+  driverOverrides: Record<number, string>
+  twoDriverConfirmed: boolean
+  onSetWaitsOverride: (value: boolean | null) => void
+  onSetDriverOverride: (legIndex: number, driverId: string) => void
+  onSetModeOverride: (mode: EventMode | null) => void
+  onSetTwoDriverConfirmed: (value: boolean) => void
+  onSetVerifiedOverride: (value: boolean | null) => void
+  onEdit: () => void
 }) {
-  return (
-    <div className="bg-casa-navy rounded-xl p-3 text-white">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-1.5">
-          <Plane size={12} className="text-casa-gold" />
-          <span className="text-body-sm font-semibold">{flightNum ?? '—'}</span>
-          <span className="text-caption text-white/60">·</span>
-          <span className="text-caption text-white/70">{airline ?? 'Airline'}</span>
-        </div>
-        <div className="flex items-center gap-1 bg-green-500/20 text-green-400 text-[9px] font-bold px-1.5 py-0.5 rounded-full">
-          <div className="w-1 h-1 rounded-full bg-green-400" />
-          ON TIME
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="text-center">
-          <p className="font-display text-heading font-semibold">{origin ?? '???'}</p>
-          <p className="text-[9px] text-white/50 uppercase">Origin</p>
-        </div>
-        <div className="flex-1 flex flex-col items-center">
-          <div className="text-[9px] text-white/50">{flightDuration(departs, arrives)}</div>
-          <div className="flex items-center gap-1 w-full my-1">
-            <div className="h-px flex-1 bg-white/20" />
-            <Plane size={10} className="text-casa-gold" />
-            <div className="h-px flex-1 bg-white/20" />
-          </div>
-          <div className="text-[9px] text-white/50">{fmtTripTime(departs)} → {fmtTripTime(arrives)}</div>
-        </div>
-        <div className="text-center">
-          <p className="font-display text-heading font-semibold">{dest ?? '???'}</p>
-          <p className="text-[9px] text-white/50 uppercase">Dest</p>
-        </div>
-      </div>
-      {(seat || terminal || confirmation) && (
-        <div className="flex gap-3 mt-2 pt-2 border-t border-white/10">
-          {seat && <span className="flex items-center gap-1 text-caption text-white/60"><Armchair size={10} />Seat {seat}</span>}
-          {terminal && <span className="flex items-center gap-1 text-caption text-white/60"><DoorOpen size={10} />Terminal {terminal}</span>}
-          {confirmation && <span className="flex items-center gap-1 text-caption text-white/60"><Hash size={10} />{confirmation}</span>}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function TripWeatherCard({ day }: { day: { date: string; high: number; low: number; condition: string } }) {
-  const date = new Date(day.date + 'T12:00:00')
-  return (
-    <div className="flex-1 bg-white rounded-xl p-2 text-center border border-casa-border">
-      <p className="text-caption text-casa-muted font-medium">{format(date, 'EEE')}</p>
-      <p className="text-[9px] text-casa-muted/70">{format(date, 'M/d')}</p>
-      <div className="my-1.5 flex justify-center">{tripWeatherIcon(day.condition)}</div>
-      <p className="text-caption font-bold text-casa-navy">{day.high}°</p>
-      <p className="text-caption text-casa-muted">{day.low}°</p>
-    </div>
-  )
-}
-
-function TravelIntelligenceBody({ trip }: { trip: Trip }) {
-  const navigate = useNavigate()
-  const [checkedItems, setCheckedItems] = useState<Set<number>>(new Set())
-  function toggleItem(i: number) {
-    setCheckedItems(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n })
-  }
-  const packing = (trip.packing_suggestions ?? []) as { item: string; reason?: string }[]
-  const weather = (trip.destination_weather ?? []) as { date: string; high: number; low: number; condition: string }[]
-  const homeTasks = trip.home_coverage_notes ? trip.home_coverage_notes.split('\n').filter(Boolean) : []
-
-  // Prefer leg events when available, fall back to legacy trip columns
-  const outboundLeg = trip.legs?.find(l => l.leg_type === 'flight_outbound')
-  const hotelLeg = trip.legs?.find(l => l.leg_type === 'hotel')
-  const returnLeg = trip.legs?.find(l => l.leg_type === 'flight_return')
-
-  // Parse "MemberName | Flight UA1972 ORD→PBI" → { origin, dest }
-  function parseLegRoute(title: string): { origin: string | null; dest: string | null } {
-    const m = title.match(/([A-Z]{3})→([A-Z]{3})/)
-    if (m) return { origin: m[1], dest: m[2] }
-    return { origin: null, dest: null }
-  }
-
-  // Derive outbound flight display values
-  const outFlightNum = outboundLeg?.flight_number ?? trip.outbound_flight_number
-  const outDeparts = outboundLeg?.start_time ?? trip.outbound_departs_at
-  const outArrives = outboundLeg?.end_time ?? trip.outbound_arrives_at
-  const outConfirmation = outboundLeg?.confirmation_number ?? trip.outbound_confirmation
-  const outRoute = outboundLeg ? parseLegRoute(outboundLeg.title) : { origin: null, dest: null }
-  const outOrigin = outRoute.origin ?? trip.outbound_origin_airport
-  const outDest = outRoute.dest ?? trip.outbound_dest_airport
-
-  // Derive hotel display values
-  const hotelName = hotelLeg?.location_name ?? hotelLeg?.title.split(' | ').slice(1).join(' | ') ?? trip.hotel_name
-  const hotelConfirmation = hotelLeg?.confirmation_number ?? trip.hotel_confirmation
-
-  // Derive return flight display values
-  const retFlightNum = returnLeg?.flight_number ?? trip.return_flight_number
-  const retDeparts = returnLeg?.start_time ?? trip.return_departs_at
-  const retArrives = returnLeg?.end_time ?? trip.return_arrives_at
-  const retConfirmation = returnLeg?.confirmation_number ?? trip.return_confirmation
-  const retRoute = returnLeg ? parseLegRoute(returnLeg.title) : { origin: null, dest: null }
-  const retOrigin = retRoute.origin ?? trip.return_origin_airport
-  const retDest = retRoute.dest ?? trip.return_dest_airport
-
-  const hasReturnFlight = !!(retFlightNum || retDeparts)
-
-  return (
-    <div className="space-y-1">
-      <TripSectionHead label="Outbound Journey" icon={<Plane size={11} />} />
-      <TripTimelineStep
-        icon={<Home size={14} />}
-        title="Leave Home"
-        subtitle={`~${trip.drive_to_airport_min ?? 60} min drive to airport`}
-        time={fmtTripTime(trip.leave_home_by)}
-        accent
-      />
-      <TripTimelineStep
-        icon={<Plane size={14} />}
-        title={`${outOrigin ?? 'Airport'} — Departure`}
-        subtitle={`Arrive at security by ${fmtTripTime(subtractMinutes(outDeparts, 90))}`}
-        time={fmtTripTime(outDeparts)}
-        detail={
-          <TripFlightCard
-            airline={trip.outbound_airline} flightNum={outFlightNum}
-            seat={trip.outbound_seat} terminal={trip.outbound_terminal} confirmation={outConfirmation}
-            departs={outDeparts} arrives={outArrives}
-            origin={outOrigin} dest={outDest}
-          />
-        }
-      />
-      <TripTimelineStep
-        icon={<MapPin size={14} />}
-        title={`${outDest ?? 'Destination'} — Arrival`}
-        subtitle={`~${trip.drive_from_airport_min ?? 30} min to hotel`}
-        time={fmtTripTime(outArrives)}
-        connector={!!hotelName}
-      />
-      {hotelName && (
-        <TripTimelineStep
-          icon={<Hotel size={14} />}
-          title={hotelName}
-          subtitle={trip.hotel_address ?? undefined}
-          time={trip.hotel_checkin_time ?? '3:00 PM'}
-          timeLabel="Check-in"
-          connector={false}
-          detail={
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-caption text-casa-muted mt-1">
-              {hotelConfirmation && <span className="flex items-center gap-1"><Hash size={10} />{hotelConfirmation}</span>}
-              {trip.hotel_phone && <span className="flex items-center gap-1"><Phone size={10} />{trip.hotel_phone}</span>}
-              {trip.hotel_checkout_date && <span className="flex items-center gap-1"><DoorOpen size={10} />Checkout {trip.hotel_checkout_time} · {fmtDateShort(trip.hotel_checkout_date)}</span>}
-            </div>
-          }
-        />
-      )}
-
-      {weather.length > 0 && (
-        <div className="pt-2">
-          <TripSectionHead label={`Weather — ${trip.destination_city ?? 'Destination'}`} icon={<Sun size={11} />} />
-          <div className="flex gap-1.5">
-            {weather.slice(0, 5).map((d, i) => <TripWeatherCard key={i} day={d} />)}
-          </div>
-        </div>
-      )}
-
-      {hasReturnFlight && (
-        <div className="pt-2">
-          <TripSectionHead label="Return Journey" icon={<Plane size={11} style={{ transform: 'scaleX(-1)' }} />} />
-          {hotelName && (
-            <TripTimelineStep
-              icon={<Hotel size={14} />}
-              title={`${hotelName} — Checkout`}
-              subtitle={`Leave by ${fmtTripTime(trip.leave_hotel_by)}`}
-              time={trip.hotel_checkout_time ?? '11:00 AM'}
-              timeLabel={fmtDateShort(trip.hotel_checkout_date)}
-              accent
-            />
-          )}
-          <TripTimelineStep
-            icon={<Plane size={14} />}
-            title={`${retOrigin ?? 'Airport'} — Departure`}
-            subtitle={`Security by ${fmtTripTime(subtractMinutes(retDeparts, 90))}`}
-            time={fmtTripTime(retDeparts)}
-            detail={
-              <TripFlightCard
-                airline={trip.return_airline} flightNum={retFlightNum}
-                seat={trip.return_seat} terminal={trip.return_terminal} confirmation={retConfirmation}
-                departs={retDeparts} arrives={retArrives}
-                origin={retOrigin} dest={retDest}
-              />
-            }
-          />
-          <TripTimelineStep
-            icon={<Home size={14} />}
-            title="Arrive Home"
-            time={fmtTripTime(retArrives)}
-            connector={false}
-          />
-        </div>
-      )}
-
-      {packing.length > 0 && (
-        <div className="pt-2">
-          <TripSectionHead label="What to Pack" icon={<Luggage size={11} />} />
-          <div className="bg-white rounded-xl border border-casa-border divide-y divide-casa-divider overflow-hidden">
-            {packing.map((p, i) => (
-              <button key={i} onClick={() => toggleItem(i)} className="w-full flex items-center gap-3 px-3 py-2.5 text-left">
-                {checkedItems.has(i)
-                  ? <CheckSquare size={14} className="text-casa-gold flex-shrink-0" />
-                  : <Square size={14} className="text-casa-muted flex-shrink-0" />
-                }
-                <div className={cn('flex-1', checkedItems.has(i) && 'opacity-50 line-through')}>
-                  <p className="text-caption text-casa-navy font-medium">{p.item}</p>
-                  {p.reason && <p className="text-caption text-casa-muted">{p.reason}</p>}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {homeTasks.length > 0 && (
-        <div className="pt-2">
-          <TripSectionHead label="While You're Away" icon={<Users size={11} />} />
-          <div className="bg-white rounded-xl border border-casa-border px-3 py-2.5 space-y-1.5">
-            {homeTasks.map((t, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <ChevronRight size={12} className="text-casa-gold mt-0.5 flex-shrink-0" />
-                <p className="text-caption text-casa-text">{t}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {trip.ai_notes && (
-        <div className="bg-casa-navy/5 rounded-xl px-3 py-2.5 border border-casa-navy/10 mt-2">
-          <p className="text-caption text-casa-muted font-semibold mb-1">Travel Tips</p>
-          <p className="text-caption text-casa-text leading-relaxed">{trip.ai_notes}</p>
-        </div>
-      )}
-
-      <button
-        onClick={() => navigate(`/trips/${trip.id}`)}
-        className="w-full flex items-center justify-center gap-2 pt-3 pb-1 text-caption text-casa-muted hover:text-casa-navy transition-colors font-medium"
-      >
-        <ExternalLink size={12} />
-        Open full trip view
-      </button>
-    </div>
-  )
-}
-
-/* ── Body ───────────────────────────────────────────────────── */
-
-// Find the best-matching trip for an event. Checks leg trip_id first, then
-// falls back to legacy date/destination matching.
-async function findTrip(memberId: string, eventDate: string, event: EventWithDetails): Promise<Trip | null> {
-  // 0) New model: event is a leg with trip_id
-  if ((event as EventWithDetails & { trip_id?: string | null }).trip_id) {
-    const tripId = (event as EventWithDetails & { trip_id?: string | null }).trip_id!
-    const { data: byTripId } = await supabase
-      .from('trips').select('*, legs:events!trip_id(*)')
-      .eq('id', tripId)
-      .maybeSingle()
-    if (byTripId) return byTripId as Trip
-  }
-
-  // 1) Best: trip directly linked to this event (legacy event_id link)
-  if (event.id) {
-    const { data: byEventId } = await supabase
-      .from('trips').select('*, legs:events!trip_id(*)')
-      .eq('event_id', event.id)
-      .maybeSingle()
-    if (byEventId) return byEventId as Trip
-  }
-
-  // 2) Exact overlap: trip spans the event date
-  const { data: exact } = await supabase
-    .from('trips').select('*, legs:events!trip_id(*)')
-    .eq('family_member_id', memberId)
-    .lte('trip_start_date', eventDate)
-    .gte('trip_end_date', eventDate)
-    .maybeSingle()
-  if (exact) return exact as Trip
-
-  // 3) Fuzzy: trip starts within ±3 days of the event date
-  const d = new Date(eventDate)
-  const lo = new Date(d); lo.setDate(d.getDate() - 1)
-  const hi = new Date(d); hi.setDate(d.getDate() + 3)
-  const { data: nearby } = await supabase
-    .from('trips').select('*, legs:events!trip_id(*)')
-    .eq('family_member_id', memberId)
-    .gte('trip_start_date', lo.toISOString().slice(0, 10))
-    .lte('trip_start_date', hi.toISOString().slice(0, 10))
-    .order('trip_start_date')
-  if (!nearby || nearby.length === 0) return null
-
-  // If only one nearby trip, use it
-  if (nearby.length === 1) return nearby[0] as Trip
-
-  // Multiple — prefer trip linked to this event, then match by destination keyword
-  const haystack = [
-    event.title,
-    event.logistics?.[0]?.location_name,
-    event.enrichment?.route_summary,
-  ].filter(Boolean).join(' ').toLowerCase()
-  const match = (nearby as Trip[]).find(t =>
-    (t.destination_city && haystack.includes(t.destination_city.toLowerCase())) ||
-    (t.destination_state && haystack.includes(t.destination_state.toLowerCase()))
-  )
-  return match ?? nearby[0] as Trip
-}
-
-function PanelBody({ event, onEventUpdated, onEdit }: { event: EventWithDetails; onEventUpdated?: () => void; onEdit?: () => void }) {
   const enr = event.enrichment
-  const category = enr?.category
-  const isTravel = TRAVEL_CATEGORIES.includes(category ?? '')
-
-  const primaryMember = event.members.find(m => m.role === 'primary') ?? event.members[0]
-  const memberId = primaryMember?.family_member?.id
-  const eventDate = event.start_time?.slice(0, 10)
-
-  const [trip, setTrip] = useState<Trip | null | undefined>(undefined)
-  const [scanning, setScanning] = useState(false)
-  const [scanDone, setScanDone] = useState(false)
-  const [pdfError, setPdfError] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (!isTravel || !memberId || !eventDate) { setTrip(null); return }
-    setTrip(undefined)
-    findTrip(memberId, eventDate, event).then(setTrip)
-  }, [isTravel, memberId, eventDate])
-
-  async function reloadTrip() {
-    if (!memberId || !eventDate) return
-    const found = await findTrip(memberId, eventDate, event)
-    setTrip(found)
-    onEventUpdated?.()
-  }
-
-  // ↺ Rescan: re-extracts from stored email body (no Gmail search)
-  async function reprocessTrip() {
-    if (!trip) return
-    setScanning(true)
-    const { data, error } = await supabase.functions.invoke('scan-travel-emails', {
-      body: { reprocess_trip_id: trip.id, event_id: event.id },
-    })
-    if (error) console.error('[TravelRescan] error:', error)
-    else console.log('[TravelRescan] result:', data)
-    await reloadTrip()
-    setScanning(false)
-    setScanDone(true)
-  }
-
-  // Initial Gmail scan (first time, no trip yet)
-  async function scanGmail() {
-    setScanning(true)
-    const { data, error } = await supabase.functions.invoke('scan-travel-emails', {
-      body: {
-        ...(memberId ? { family_member_id: memberId } : {}),
-        event_id: event.id,
-        event_date: eventDate,
-        event_location: event.logistics?.[0]?.location_name ?? event.title,
-      },
-    })
-    if (error) console.error('[TravelScan] error:', error)
-    else console.log('[TravelScan] result:', data)
-    await reloadTrip()
-    setScanning(false)
-    setScanDone(true)
-  }
-
-  // PDF upload: extract text client-side, send to function
-  async function handlePdfFile(file: File) {
-    setPdfError(null)
-    setScanning(true)
-    try {
-      const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist')
-      GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href
-      const arrayBuffer = await file.arrayBuffer()
-      const pdf = await getDocument({ data: arrayBuffer }).promise
-      let text = ''
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i)
-        const content = await page.getTextContent()
-        text += content.items.map((item: { str?: string } & object) => ('str' in item ? (item as { str: string }).str : '')).join(' ') + '\n'
-      }
-      if (text.trim().length < 50) throw new Error('Could not extract text from PDF')
-
-      const { data, error } = await supabase.functions.invoke('scan-travel-emails', {
-        body: {
-          raw_text: text.slice(0, 20000),
-          source_subject: file.name.replace('.pdf', ''),
-          family_member_id: memberId,
-          event_id: event.id,
-          ...(trip ? { existing_trip_id: trip.id } : {}),
-        },
-      })
-      if (error) throw new Error(error.message)
-      console.log('[PDFScan] result:', data)
-      await reloadTrip()
-    } catch (err) {
-      setPdfError(err instanceof Error ? err.message : 'PDF processing failed')
-    }
-    setScanning(false)
-    setScanDone(true)
-  }
-
-  // ── Travel event with trip data: show full inline travel intelligence ──
-  if (isTravel && trip) {
-    return (
-      <BounceScroll className="flex-1" innerClassName="p-6 space-y-4">
-        {/* "Travel Intelligence Ready" badge */}
-        <div className="flex items-center gap-3 px-3 py-2.5 bg-casa-navy rounded-xl">
-          <div className="w-7 h-7 rounded-full bg-casa-gold/20 flex items-center justify-center flex-shrink-0">
-            <Plane size={13} className="text-casa-gold" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-caption font-bold text-white">
-              ✈ Travel Intelligence Ready
-              {trip.source_type === 'pdf' && <span className="ml-1.5 text-caption font-normal text-white/40">PDF</span>}
-            </p>
-            <p className="text-caption text-white/50 truncate">
-              {(trip.legs?.find(l => l.leg_type === 'flight_outbound')?.flight_number ?? trip.outbound_flight_number) && `${trip.legs?.find(l => l.leg_type === 'flight_outbound')?.flight_number ?? trip.outbound_flight_number} · `}
-              {trip.legs?.find(l => l.leg_type === 'hotel')?.location_name ?? trip.hotel_name ?? trip.destination_city ?? 'Gmail-sourced trip details below'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {/* PDF attach */}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={scanning}
-              title="Attach updated PDF itinerary"
-              className="text-white/30 hover:text-white/70 transition-colors disabled:opacity-40"
-            >
-              <Paperclip size={13} />
-            </button>
-            {/* Rescan from stored email */}
-            <button
-              onClick={reprocessTrip}
-              disabled={scanning}
-              title={trip.source_email_body ? 'Re-extract from original email' : 'Re-scan Gmail for this trip'}
-              className="text-white/30 hover:text-white/70 transition-colors disabled:opacity-40"
-            >
-              {scanning ? <Loader2 size={13} className="animate-spin" /> : <span className="text-caption font-medium">↺ rescan</span>}
-            </button>
-          </div>
-        </div>
-        {/* Hidden PDF file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf"
-          className="hidden"
-          onChange={e => { const f = e.target.files?.[0]; if (f) { handlePdfFile(f); e.target.value = '' } }}
-        />
-
-        <TravelIntelligenceBody trip={trip} />
-      </BounceScroll>
-    )
-  }
-
-  // ── Travel event with no trip found: scan prompt ──
-  if (isTravel && trip === null) {
-    const scanPrompt = (
-      <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
-        <div className="flex items-start gap-2">
-          <AlertTriangle size={14} className="text-amber-500 mt-0.5 flex-shrink-0" />
-          <div className="flex-1">
-            <p className="text-caption font-semibold text-amber-800">Flight info not found</p>
-            <p className="text-caption text-amber-700 mt-0.5">
-              {scanDone
-                ? 'No travel emails detected. Try attaching a PDF itinerary below.'
-                : 'Scan Gmail to auto-detect flight and hotel details.'}
-            </p>
-            {pdfError && <p className="text-caption text-red-600 mt-1">PDF error: {pdfError}</p>}
-          </div>
-        </div>
-        <div className="mt-2 flex gap-2">
-          {!scanDone && (
-            <button
-              onClick={scanGmail}
-              disabled={scanning}
-              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-amber-500 text-white text-caption font-bold hover:bg-amber-600 transition-colors disabled:opacity-60"
-            >
-              {scanning ? <Loader2 size={12} className="animate-spin" /> : <Plane size={12} />}
-              {scanning ? 'Scanning Gmail…' : 'Scan Gmail'}
-            </button>
-          )}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={scanning}
-            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-700 text-caption font-bold hover:bg-amber-50 transition-colors disabled:opacity-60"
-          >
-            {scanning ? <Loader2 size={12} className="animate-spin" /> : <Paperclip size={12} />}
-            {scanning ? 'Processing…' : 'Attach PDF'}
-          </button>
-        </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf"
-          className="hidden"
-          onChange={e => { const f = e.target.files?.[0]; if (f) { handlePdfFile(f); e.target.value = '' } }}
-        />
-      </div>
-    )
-    return <StandardPanelBody event={event} topSlot={scanPrompt} onEdit={onEdit} />
-  }
-
-  // ── Non-travel or still loading ──
-  return <StandardPanelBody event={event} onEdit={onEdit} />
-}
-
-function StandardPanelBody({ event, topSlot, onEdit }: { event: EventWithDetails; topSlot?: React.ReactNode; onEdit?: () => void }) {
-  const enr = event.enrichment
-  const weatherAtVenue = enr?.weather_at_event || enr?.weather_summary
   const reminder = event.event_type === 'reminder'
+  const mode = modeOverride ?? inferEventMode(event)
+  const showTravelLocation = mode !== 'hosted'
   const hasChecklist = event.checklist?.length > 0
-  const hasActions = event.actions?.filter((a) => !a.is_urgent).length > 0
   const activeFields = getFieldsForCategory(enr?.category)
   const shows = (field: string) => activeFields.includes(field as ReturnType<typeof getFieldsForCategory>[number])
   const hasText = (value: unknown) => {
@@ -1074,88 +636,213 @@ function StandardPanelBody({ event, topSlot, onEdit }: { event: EventWithDetails
     return value !== null && value !== undefined
   }
   const { data: household = [] } = useFamilyMembers()
+  const queryClient = useQueryClient()
+  const { data: dayEvents = [] } = useTodayEvents(getEventDisplayStartDay(event))
+  const availability = useMemberAvailability(household.map((member) => member.id))
 
   const commuteDestination = event.address ?? event.location_name ?? null
+  const msUntilStart = new Date(event.start_time).getTime() - Date.now()
+  const etaRefetchIntervalMs =
+    !verified
+      ? false
+      : msUntilStart <= 90 * 60_000
+        ? 60_000
+        : msUntilStart <= 6 * 60 * 60_000
+          ? 5 * 60_000
+          : false
   const commuteQuery = useTravelEta({
     destination: commuteDestination,
     eventStartIso: event.start_time,
-    enabled: !reminder && Boolean(commuteDestination),
+    enabled: !reminder && showTravelLocation && verified && Boolean(commuteDestination),
     bufferMins: 10,
+    refetchIntervalMs: etaRefetchIntervalMs,
   })
-
-  // Phase 1 verify heuristic: geocoded coords present → confirmed; else unverified.
-  const verified = Boolean(event.lat != null && event.lng != null)
+  const liveWeatherQuery = useQuery({
+    queryKey: ['event-weather', event.id, verified],
+    enabled: !reminder && showTravelLocation && verified && Boolean(commuteDestination),
+    staleTime: 15 * 60_000,
+    refetchInterval: etaRefetchIntervalMs,
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('fetch-event-weather', {
+        body: { event_id: event.id },
+      })
+      if (error) throw error
+      return data as { ok?: boolean; weather?: string; skipped?: string }
+    },
+  })
+  let weatherAtVenue = enr?.weather_at_event ?? enr?.weather_summary
+  if (liveWeatherQuery.data?.ok && liveWeatherQuery.data.weather) {
+    weatherAtVenue = liveWeatherQuery.data.weather
+  }
   const hasDestination = Boolean(event.location_name || event.address)
 
-  const mode = inferEventMode(event)
   const plan = reminder ? null : derivePlan(event, mode, {
     household,
-    eta: commuteQuery.data,
+    eta: verified ? commuteQuery.data : null,
     verified,
   })
+  const eventStartMs = new Date(event.start_time).getTime()
+  const parsedEventEndMs = new Date(event.end_time).getTime()
+  const eventEndMs = Number.isNaN(parsedEventEndMs) ? eventStartMs + (60 * 60 * 1000) : parsedEventEndMs
+  const driveWindowStartIso = (verified
+    ? (commuteQuery.data?.leave_by ?? enr?.departure_time)
+    : enr?.departure_time) ?? event.start_time
+  const driveWindowStart = new Date(driveWindowStartIso)
+  const driveWindowEnd = new Date(eventEndMs)
+  const rulesByMember = indexAvailabilityRulesByMember(availability.rules)
+  const exceptionsByMember = indexAvailabilityExceptionsByMember(availability.exceptions)
+  const transportAvailabilityByMember = new Map<string, ReturnType<typeof evaluateMemberAvailabilityForWindow>>()
+  const presenceAvailabilityByMember = new Map<string, ReturnType<typeof evaluateMemberAvailabilityForWindow>>()
+  const overlappingByMember = new Map<string, { title: string }>()
+  for (const other of dayEvents) {
+    if (other.id === event.id) continue
+    const otherStart = new Date(other.start_time).getTime()
+    const otherEnd = new Date(other.end_time).getTime()
+    if (!(otherStart < eventEndMs && otherEnd > eventStartMs)) continue
+    for (const membership of other.members) {
+      const memberId = membership.family_member?.id
+      if (!memberId || overlappingByMember.has(memberId)) continue
+      overlappingByMember.set(memberId, { title: other.title })
+    }
+  }
+  const adultCanDrive = (member: { role: string; can_drive?: boolean | null }) => {
+    if (member.role === 'child') return false
+    return member.can_drive ?? (member.role === 'parent' || member.role === 'caregiver')
+  }
+  for (const member of household) {
+    transportAvailabilityByMember.set(
+      member.id,
+      evaluateMemberAvailabilityForWindow(
+        member,
+        driveWindowStart,
+        driveWindowEnd,
+        rulesByMember.get(member.id) ?? [],
+        exceptionsByMember.get(member.id) ?? [],
+      ),
+    )
+    presenceAvailabilityByMember.set(
+      member.id,
+      evaluateMemberAvailabilityForWindow(
+        member,
+        driveWindowStart,
+        driveWindowEnd,
+        rulesByMember.get(member.id) ?? [],
+        exceptionsByMember.get(member.id) ?? [],
+        { requireCanDrive: false },
+      ),
+    )
+  }
+  const attendeePool = eventAttendees(event).filter((person) => {
+    const householdMatch = household.find((member) => member.id === person.id)
+    if (!householdMatch) return true
+    return adultCanDrive(householdMatch)
+  })
+  const householdDriverPool = household
+    .filter((m) => (m.role === 'parent' || m.role === 'caregiver') && adultCanDrive(m))
+    .map((m) => ({
+      id: m.id,
+      name: m.name,
+      initial: m.name?.[0]?.toUpperCase() ?? '?',
+      color: m.color_hex ?? 'var(--color-casa-muted)',
+      conflictWith: overlappingByMember.get(m.id)?.title
+        ?? (transportAvailabilityByMember.get(m.id)?.available ? null : transportAvailabilityByMember.get(m.id)?.reason ?? 'Unavailable'),
+    }))
+  const driverPool = [...attendeePool, ...householdDriverPool].reduce<Array<{ id: string; name: string; initial: string; color: string; conflictWith?: string | null }>>((acc, p) => {
+    if (!acc.some((x) => x.id === p.id)) acc.push(p)
+    return acc
+  }, []).map((driver) => ({
+    ...driver,
+    conflictWith: driver.conflictWith
+      ?? overlappingByMember.get(driver.id)?.title
+      ?? (transportAvailabilityByMember.get(driver.id)?.available ? null : transportAvailabilityByMember.get(driver.id)?.reason ?? 'Unavailable'),
+  }))
+  const attendeeIds = new Set(event.members.map((m) => m.family_member?.id).filter(Boolean))
+  const remainingHousehold = household.filter((m) => !attendeeIds.has(m.id))
+  const availableAdults = remainingHousehold.filter((m) => {
+    if (!(m.role === 'parent' || m.role === 'caregiver') || !adultCanDrive(m)) return false
+    if (overlappingByMember.has(m.id)) return false
+    return transportAvailabilityByMember.get(m.id)?.available ?? true
+  }).length
+  const coverageRows = remainingHousehold
+    .map((m) => {
+      const presence = presenceAvailabilityByMember.get(m.id)
+      const childNeedsCoverage = (
+        m.role === 'child'
+        && !overlappingByMember.has(m.id)
+        && (presence?.available ?? true)
+      )
 
-  const hostedAtHome = mode === 'hosted'
+      return {
+        id: m.id,
+        name: m.name,
+        initial: m.name?.[0]?.toUpperCase() ?? '?',
+        color: m.color_hex ?? 'var(--color-casa-muted)',
+        status: overlappingByMember.get(m.id)?.title
+          ? `At ${overlappingByMember.get(m.id)?.title}`
+          : !(presence?.available ?? true)
+            ? (presence?.reason ?? 'Unavailable')
+            : presence?.softUnavailable
+              ? `${presence?.reason ?? 'Blocked hours'} (flex)`
+              : m.role === 'child'
+                ? (availableAdults > 0 ? 'Home with family' : 'No coverage assigned')
+                : 'Available at home',
+        ok: overlappingByMember.has(m.id) || !childNeedsCoverage || availableAdults > 0,
+      }
+    })
+  const caregiversAway = event.members.some((m) => {
+    const role = m.family_member?.role
+    return role === 'parent' || role === 'caregiver'
+  })
+  const showMeanwhile = mode !== 'hosted' && caregiversAway && coverageRows.length > 0
 
   return (
-    <BounceScroll className="flex-1" innerClassName="p-6 space-y-5">
-      {topSlot}
-
-      {/* ── Going ── */}
-      {!reminder && (
-        <section>
-          <SectionLabel>{hostedAtHome ? 'At home' : 'Going'}</SectionLabel>
-          <MemberEditor event={event} />
-        </section>
-      )}
-
-      {/* ── Destination + verify (at-a-glance) ── */}
-      {!reminder && hasDestination && (
-        <section>
-          <DestinationHeaderCard
-            locationName={event.location_name}
-            address={event.address}
-            verified={verified}
-            atHome={hostedAtHome}
-            onCheckAddress={onEdit}
-          />
-        </section>
-      )}
-
+    <div className="event-command-center-content p-6 space-y-5">
       {/* ── The Plan ── */}
       {plan && (
         <section>
-          <PlanBlock plan={plan} loading={commuteQuery.isLoading && !commuteQuery.data} />
-          {commuteQuery.data?.found && (
-            <div className="mt-3">
-              <DepartureRiskBanner
-                event={event}
-                travelEta={commuteQuery.data}
-                enableSmartAlerts
-              />
-            </div>
-          )}
+          <PlanBlock
+            plan={plan}
+            loading={verified && commuteQuery.isLoading && !commuteQuery.data}
+            driverPool={driverPool}
+            waitsOverride={waitsOverride}
+            driverOverrides={driverOverrides}
+            modeOverride={modeOverride}
+            twoDriverConfirmed={twoDriverConfirmed}
+            onSetWaitsOverride={onSetWaitsOverride}
+            onSetDriverOverride={onSetDriverOverride}
+            onSetModeOverride={onSetModeOverride}
+            onSetTwoDriverConfirmed={onSetTwoDriverConfirmed}
+          />
         </section>
       )}
 
+      {!reminder && hasDestination && mode !== 'hosted' && (
+        <DepartureRiskBanner event={event} travelEta={verified ? commuteQuery.data : null} />
+      )}
+
       {/* ── Where (map + weather + verify state) ── */}
-      {!reminder && hasDestination && (
+      {!reminder && showTravelLocation && (
         <section>
-          <SectionLabel>{mode === 'hosted' ? 'Location' : mode === 'trip' ? 'Destination' : 'Where'}</SectionLabel>
+          <SectionLabel>{mode === 'trip' ? 'Destination' : 'Where'}</SectionLabel>
           <LocationBlock
+            eventId={event.id}
             locationName={event.location_name}
             address={event.address}
+            lat={event.lat}
+            lng={event.lng}
             parkingNotes={shows('parking_notes') || hasText(enr?.parking_notes) ? enr?.parking_notes : null}
-            contactName={shows('contact_name') || hasText(enr?.contact_name) ? enr?.contact_name : null}
             contactPhone={shows('contact_phone') || hasText(enr?.contact_phone) ? enr?.contact_phone : null}
             weatherAtVenue={weatherAtVenue}
+            onEditAddress={() => {
+              onSetVerifiedOverride(false)
+              queryClient.removeQueries({ queryKey: ['travel-eta'] })
+              onEdit()
+            }}
+            onConfirmAddress={() => onSetVerifiedOverride(true)}
+            verified={verified}
+            mode={mode}
+            accent={eventAccentColor(event)}
           />
-          <div className={cn(
-            'mt-2 flex items-center gap-1.5 text-caption font-medium',
-            verified ? 'text-emerald-600' : 'text-amber-600',
-          )}>
-            {verified ? <Check size={12} /> : <AlertTriangle size={12} />}
-            {verified ? 'Address confirmed · drive times are live' : 'Drive times are estimates until you confirm the address'}
-          </div>
         </section>
       )}
 
@@ -1170,33 +857,22 @@ function StandardPanelBody({ event, topSlot, onEdit }: { event: EventWithDetails
       {!hasChecklist && enr?.what_to_bring && enr.what_to_bring.length > 0 && (
         <section>
           <SectionLabel>{mode === 'trip' ? 'Pack' : 'Bring'}</SectionLabel>
-          <div className="space-y-2">
-            {enr.what_to_bring.map((item, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <Square size={16} className="text-casa-border shrink-0" />
-                <span className="text-body-sm text-casa-text">{item}</span>
-              </div>
-            ))}
-          </div>
+          <FallbackBringChecklist eventId={event.id} items={enr.what_to_bring} />
         </section>
       )}
 
-      {/* ── To Do (non-urgent action items) ── */}
-      {hasActions && (
+      {showMeanwhile && (
         <section>
-          <SectionLabel>To Do</SectionLabel>
-          <div className="space-y-2">
-            {event.actions.filter((a) => !a.is_urgent).map((action) => (
-              <div key={action.id} className={cn(
-                'flex items-start gap-3 p-3 rounded-card border',
-                action.completed ? 'border-casa-divider opacity-50' : 'border-casa-border bg-casa-bg',
-              )}>
-                <ChevronRight size={14} className="text-casa-gold mt-0.5 shrink-0" />
-                <div className="min-w-0">
-                  <p className={cn('text-body-sm font-semibold text-casa-navy', action.completed && 'line-through')}>{action.title}</p>
-                  {action.description && <p className="text-caption text-casa-muted mt-0.5">{action.description}</p>}
-                  {action.due_date && <p className="text-caption text-casa-muted mt-0.5">Due {format(new Date(action.due_date), 'MMM d')}</p>}
-                </div>
+          <SectionLabel>Meanwhile, the rest of the family · {format(new Date(event.start_time), 'h:mm a')}–{format(new Date(event.end_time), 'h:mm a')}</SectionLabel>
+          <div className="rounded-[14px] px-4 py-1.5" style={{ background: S.coverFill }}>
+            {coverageRows.map((row, i) => (
+              <div key={row.id} className="flex items-center gap-3 py-2.5" style={i > 0 ? { borderTop: `1px solid ${S.hair}` } : undefined}>
+                <span className="w-[30px] h-[30px] rounded-full text-white text-[12px] font-bold inline-flex items-center justify-center" style={{ background: row.color }}>
+                  {row.initial}
+                </span>
+                <span className="flex-1 text-[14px] font-semibold" style={{ color: S.navy }}>{row.name}</span>
+                <span className="text-[13px]" style={{ color: S.muted }}>{row.status}</span>
+                <span className="text-[13px]" style={{ color: row.ok ? S.green : S.goldText }}>{row.ok ? '✓' : '•'}</span>
               </div>
             ))}
           </div>
@@ -1204,51 +880,59 @@ function StandardPanelBody({ event, topSlot, onEdit }: { event: EventWithDetails
       )}
 
       {/* ── Reference (collapsible: contact, cost, notes, dietary, outfit) ── */}
-      {enr && (
-        <ReferenceBlock enr={enr} hasText={hasText} />
-      )}
+      <ReferenceBlock
+        enr={enr}
+        hasText={hasText}
+        actions={event.actions ?? []}
+        logistics={event.logistics ?? []}
+      />
 
-      {!enr && !reminder && (
-        <div className="flex flex-col items-center gap-2 py-6 text-center">
-          <Sparkles size={22} className="text-casa-muted" />
-          <p className="text-body-sm text-casa-muted">No AI enrichment yet.</p>
-          <p className="text-caption text-casa-muted">Tap Re-enrich above to generate details for this event.</p>
-        </div>
-      )}
-    </BounceScroll>
+    </div>
   )
 }
 
 /* ── Command Center blocks ──────────────────────────────────── */
 
-function DestinationHeaderCard({ locationName, address, verified, atHome, onCheckAddress }: {
+function DestinationHeaderCard({ locationName, address, verified, atHome, onCheckAddress, accent }: {
   locationName: string | null
   address: string | null
   verified: boolean
   atHome: boolean
   onCheckAddress?: () => void
+  accent: string
 }) {
+  const hasDestination = Boolean(locationName || address)
+  const headline = locationName ?? (atHome ? 'Home' : 'Destination needed')
+  const subline = address ?? (!atHome ? 'Add an address to unlock live drive times.' : null)
+  const border = verified ? hexToRgba(S.greenHex, 0.28) : S.amberBorder
+  const bg = verified ? S.greenBg : S.amberBg
   return (
-    <div className="flex items-center gap-3 rounded-card border border-casa-border bg-casa-bg px-3.5 py-3">
-      <MapPin size={16} className="text-casa-error shrink-0" />
+    <div className="mt-4 flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ border: `1px solid ${border}`, background: bg }}>
+      <span
+        className="flex-none w-[26px] h-[26px] rounded-lg flex items-center justify-center bg-white"
+        style={{ border: `1px solid ${S.borderSoft}`, color: accent }}
+      >
+        <MapPin size={14} />
+      </span>
       <div className="min-w-0 flex-1">
-        {locationName && <p className="text-body-sm font-semibold text-casa-navy truncate">{locationName}</p>}
-        {address && <p className="text-caption text-casa-muted truncate">{address}</p>}
+        <div className="text-[14px] font-bold leading-tight truncate" style={{ color: S.navy }}>{headline}</div>
+        {subline && <div className="text-[12px] truncate" style={{ color: S.muted }}>{subline}</div>}
       </div>
       {verified ? (
-        <span className="shrink-0 inline-flex items-center gap-1 rounded-pill bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-caption font-semibold text-emerald-700">
-          <Check size={11} /> Confirmed
+        <span className="flex-none text-[12px] font-bold rounded-pill px-2.5 py-1.5 inline-flex items-center gap-1" style={{ color: S.green, background: 'var(--color-casa-surface)' }}>
+          ✓ Confirmed
         </span>
       ) : atHome ? (
-        <span className="shrink-0 inline-flex items-center gap-1 rounded-pill bg-casa-surface border border-casa-border px-2.5 py-1 text-caption font-semibold text-casa-muted">
-          <Home size={11} /> At home
+        <span className="flex-none text-[12px] font-bold rounded-pill px-2.5 py-1.5" style={{ color: S.muted, background: 'var(--color-casa-surface)' }}>
+          At home
         </span>
       ) : (
         <button
           onClick={onCheckAddress}
-          className="shrink-0 inline-flex items-center gap-1 rounded-pill bg-amber-50 border border-amber-200 px-2.5 py-1 text-caption font-semibold text-amber-700 hover:bg-amber-100 transition-colors"
+          className="flex-none text-[12px] font-bold rounded-pill px-2.5 py-1.5"
+          style={{ color: S.goldText, background: 'var(--color-casa-surface)' }}
         >
-          Check address <ChevronRight size={11} />
+          {hasDestination ? 'Check address ›' : 'Add destination'}
         </button>
       )}
     </div>
@@ -1259,99 +943,344 @@ function TrafficBadge({ deltaMin }: { deltaMin: number | null | undefined }) {
   const pill = trafficPill(deltaMin)
   if (!pill) return null
   const tone =
-    pill.tone === 'clear' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-    : pill.tone === 'light' ? 'bg-amber-50 text-amber-700 border-amber-200'
-    : 'bg-red-50 text-red-700 border-red-200'
+    pill.tone === 'clear' ? { bg: S.greenBg, fg: S.green }
+    : pill.tone === 'light' ? { bg: S.amberBg, fg: S.goldText }
+    : { bg: S.redBg, fg: S.red }
   return (
-    <span className={cn('inline-flex items-center rounded-pill border px-2 py-0.5 text-[11px] font-semibold', tone)}>
+    <span className="inline-flex items-center rounded-pill px-2 py-0.5 text-[11px] font-bold" style={{ background: tone.bg, color: tone.fg }}>
       {pill.label}
     </span>
   )
 }
 
-function DriverChip({ driver }: { driver: { name: string; initial: string; color: string } | null | undefined }) {
+function DriverChip({
+  driver,
+  options,
+  onSelectDriver,
+}: {
+  driver: { id: string; name: string; initial: string; color: string } | null | undefined
+  options: Array<{ id: string; name: string; initial: string; color: string; conflictWith?: string | null }>
+  onSelectDriver?: (driverId: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const pickerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handlePointerDown = (evt: MouseEvent | TouchEvent) => {
+      if (!pickerRef.current || pickerRef.current.contains(evt.target as Node)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('touchstart', handlePointerDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('touchstart', handlePointerDown)
+    }
+  }, [open])
+
   if (!driver) return null
+  const sortedOptions = [...options].sort((a, b) => {
+    const aSelected = a.id === driver.id
+    const bSelected = b.id === driver.id
+    if (aSelected !== bSelected) return aSelected ? -1 : 1
+    const aBusy = Boolean(a.conflictWith && !aSelected)
+    const bBusy = Boolean(b.conflictWith && !bSelected)
+    if (aBusy !== bBusy) return aBusy ? 1 : -1
+    return a.name.localeCompare(b.name)
+  })
   return (
-    <div
-      className="shrink-0 inline-flex items-center gap-1.5 rounded-pill pl-1 pr-2.5 py-1 text-white text-caption font-semibold"
-      style={{ backgroundColor: driver.color }}
-    >
-      <span className="w-4 h-4 rounded-full bg-white/25 flex items-center justify-center text-[9px] font-bold">
-        {driver.initial}
-      </span>
-      {driver.name}
+    <div className={cn('relative shrink-0', open ? 'z-[95]' : 'z-10')} ref={pickerRef}>
+      <button
+        onClick={() => setOpen((prev) => !prev)}
+        type="button"
+        className="min-h-[44px] inline-flex items-center gap-1.5 rounded-pill pl-2 pr-3 py-1 text-[13px] font-semibold"
+        style={{ border: `1px dashed ${S.borderMed}`, color: S.navy }}
+      >
+        <span className="w-6 h-6 rounded-full text-white flex items-center justify-center text-[11px] font-bold" style={{ backgroundColor: driver.color }}>
+          {driver.initial}
+        </span>
+        {driver.name}
+        <ChevronRight size={13} className={cn('ml-0.5 transition-transform', open && 'rotate-90')} />
+      </button>
+      <AnimatePresence>
+        {open && options.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.96 }}
+            transition={{ duration: 0.12 }}
+            className="absolute right-0 top-[calc(100%+6px)] z-[80] min-w-[230px] max-h-[min(50vh,280px)] overflow-y-auto overscroll-contain rounded-xl border bg-white p-1.5 shadow-[0_12px_28px_rgba(6,10,36,0.16)]"
+            style={{ borderColor: S.borderSoft }}
+          >
+            {sortedOptions.map((option) => {
+              const selected = option.id === driver.id
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => {
+                    if (option.conflictWith && option.id !== driver.id) {
+                      const ok = window.confirm(`${option.name} is already assigned to "${option.conflictWith}" during this time. Assign anyway?`)
+                      if (!ok) return
+                    }
+                    onSelectDriver?.(option.id)
+                    setOpen(false)
+                  }}
+                  className="w-full min-h-[44px] rounded-lg px-2.5 py-1.5 flex items-center gap-2 text-left hover:bg-casa-bg"
+                  style={selected ? { background: S.coverFill } : option.conflictWith ? { background: S.amberBg } : undefined}
+                >
+                  <span className="w-6 h-6 rounded-full text-white text-[11px] font-bold inline-flex items-center justify-center" style={{ background: option.color }}>
+                    {option.initial}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-semibold" style={{ color: S.navy }}>{option.name}</span>
+                    {option.conflictWith && !selected && (
+                      <span className="block truncate text-[11px]" style={{ color: S.goldText }}>
+                        Busy: {option.conflictWith}
+                      </span>
+                    )}
+                  </span>
+                  {option.conflictWith && !selected && (
+                    <span className="text-[10px] font-bold uppercase" style={{ color: S.goldText, letterSpacing: '0.06em' }}>Busy</span>
+                  )}
+                  {selected && <Check size={14} style={{ color: S.green }} />}
+                </button>
+              )
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
 
-function PlanBlock({ plan, loading }: { plan: PlanModel; loading?: boolean }) {
-  const legDotColor = (kind: string) =>
-    kind === 'drop' || kind === 'depart' ? 'bg-casa-navy'
-    : kind === 'stay' ? 'bg-casa-gold'
-    : 'bg-emerald-500'
+function PlanBlock({
+  plan,
+  loading,
+  driverPool,
+  waitsOverride,
+  driverOverrides,
+  modeOverride,
+  twoDriverConfirmed,
+  onSetWaitsOverride,
+  onSetDriverOverride,
+  onSetModeOverride,
+  onSetTwoDriverConfirmed,
+}: {
+  plan: PlanModel
+  loading?: boolean
+  driverPool: Array<{ id: string; name: string; initial: string; color: string; conflictWith?: string | null }>
+  waitsOverride: boolean | null
+  driverOverrides: Record<number, string>
+  modeOverride: EventMode | null
+  twoDriverConfirmed: boolean
+  onSetWaitsOverride: (value: boolean | null) => void
+  onSetDriverOverride: (legIndex: number, driverId: string) => void
+  onSetModeOverride: (mode: EventMode | null) => void
+  onSetTwoDriverConfirmed: (value: boolean) => void
+}) {
+  const withDriverOverrides = plan.legs.map((leg, i) => {
+    const overrideDriverId = driverOverrides[i]
+    if (!overrideDriverId || !leg.driver) return leg
+    const overrideDriver = driverPool.find((d) => d.id === overrideDriverId)
+    return overrideDriver ? { ...leg, driver: overrideDriver } : leg
+  })
+
+  const waits = waitsOverride ?? Boolean(withDriverOverrides.find((l) => l.kind === 'stay')?.waits)
+  const effectiveLegs = withDriverOverrides.map((leg) => {
+    if (leg.kind !== 'stay' || plan.mode !== 'appointment') return leg
+    if (!waits) {
+      const fallback = leg.title.includes('waits on site') ? 'At appointment' : leg.title
+      return { ...leg, waits: false, title: fallback }
+    }
+    const driveLeg = withDriverOverrides.find((l) => l.kind === 'drop' || l.kind === 'depart')
+    return { ...leg, waits: true, title: `${driveLeg?.driver?.name ?? 'Driver'} waits on site` }
+  })
+
+  const hostedRecipient = deriveHostedRecipientName(withDriverOverrides)
+  const renderedLegs = applyAssignmentNarrative(plan.mode, effectiveLegs, hostedRecipient)
+  const effective = derivePlanPresentation(plan.mode, renderedLegs, hostedRecipient)
+  useEffect(() => {
+    if (!effective.twoDrivers && twoDriverConfirmed) onSetTwoDriverConfirmed(false)
+  }, [effective.twoDrivers, twoDriverConfirmed, onSetTwoDriverConfirmed])
+
+  const legDot = (kind: string) =>
+    kind === 'drop' || kind === 'depart' ? { color: S.navy, halo: hexToRgba(S.navyHex, 0.12) }
+    : kind === 'stay' || kind === 'host' ? { color: S.gold, halo: hexToRgba(S.goldHex, 0.18) }
+    : { color: S.green, halo: hexToRgba(S.greenHex, 0.15) }
+  const [modeMenuOpen, setModeMenuOpen] = useState(false)
+  const modePickerRef = useRef<HTMLDivElement | null>(null)
+  const selectedMode = modeOverride ?? 'auto'
+
+  useEffect(() => {
+    if (!modeMenuOpen) return
+    const onPointerDown = (event: PointerEvent) => {
+      if (!modePickerRef.current?.contains(event.target as Node)) setModeMenuOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setModeMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [modeMenuOpen])
 
   return (
-    <div className="rounded-card overflow-hidden border border-casa-border">
-      {/* Navy header */}
-      <div className="bg-casa-navy px-4 py-3 flex items-center justify-between gap-2">
+    <div className="relative rounded-2xl overflow-visible" style={{ border: `1px solid ${S.borderMed}` }}>
+      <div className="rounded-t-2xl px-[18px] py-3.5 flex items-center justify-between gap-2" style={{ background: S.navy }}>
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/45">The Plan</p>
-          {plan.headline && <p className="text-body-sm font-semibold text-white truncate">{plan.headline}</p>}
+          <p className="text-[10px] font-bold uppercase" style={{ color: S.planLabel, letterSpacing: '0.12em' }}>The Plan</p>
+          {plan.headline && <p className="truncate mt-0.5" style={{ ...serif, fontSize: 18, fontWeight: 600, color: 'var(--color-casa-surface)' }}>{plan.headline}</p>}
         </div>
-        <span className="shrink-0 inline-flex items-center gap-1.5 rounded-pill bg-white/10 px-2.5 py-1 text-caption font-semibold text-white">
-          {plan.pattern}
-          <span className="text-[9px] font-bold uppercase tracking-wide text-casa-gold">Auto</span>
-        </span>
+        <div ref={modePickerRef} className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setModeMenuOpen((open) => !open)}
+            className="inline-flex items-center gap-1.5 rounded-pill bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white"
+            aria-expanded={modeMenuOpen}
+            aria-haspopup="dialog"
+            aria-label="Open mode options"
+          >
+            {effective.pattern}
+            <span className="text-[9px] font-bold rounded-pill px-1.5 py-px" style={{ color: 'var(--color-casa-text)', background: S.goldBadge }}>
+              {modeOverride ? 'MANUAL' : 'AUTO'}
+            </span>
+            <ChevronRight size={12} className={cn('transition-transform', modeMenuOpen && 'rotate-90')} />
+          </button>
+          {modeMenuOpen && (
+            <div
+              role="dialog"
+              aria-label="Mode options"
+              className="absolute right-0 top-[calc(100%+8px)] z-20 w-[320px] max-w-[calc(100vw-48px)] rounded-xl p-3"
+              style={{ background: 'var(--color-casa-surface)', border: `1px solid ${S.borderMed}`, boxShadow: '0 18px 34px rgba(27,42,74,0.18)' }}
+            >
+              <p className="text-[11px] font-bold uppercase" style={{ color: S.label, letterSpacing: '0.08em' }}>
+                Mode
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {MODE_OVERRIDE_OPTIONS.map((option) => {
+                  const selected = selectedMode === option.value
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className="min-h-[42px] rounded-pill px-3 text-[12px] font-bold inline-flex items-center justify-center gap-1.5 transition-colors"
+                      style={selected
+                        ? { background: S.navy, color: 'var(--color-casa-surface)' }
+                        : { background: S.chipFill, color: S.navy, border: `1px solid ${S.borderSoft}` }}
+                      onClick={() => {
+                        onSetModeOverride(option.value === 'auto' ? null : option.value)
+                        setModeMenuOpen(false)
+                      }}
+                      aria-pressed={selected}
+                    >
+                      {option.label}
+                      {option.helper && (
+                        <span
+                          className="rounded-pill px-1.5 py-px text-[9px] font-bold uppercase"
+                          style={selected
+                            ? { background: 'rgba(255,255,255,0.18)', color: 'var(--color-casa-surface)' }
+                            : { background: S.goldBadge, color: 'var(--color-casa-text)' }}
+                        >
+                          {option.helper}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+              {!modeOverride && (
+                <p className="mt-2 text-[11px]" style={{ color: S.muted }}>
+                  Auto is active and should improve as Casa learns your routines.
+                </p>
+              )}
+              {modeOverride && (
+                <p className="mt-2 text-[11px]" style={{ color: S.goldText }}>
+                  Manual mode override is active.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Legs */}
-      <div className="bg-casa-surface px-4 py-3">
-        <p className="text-[11px] text-casa-muted mb-2.5">Drivers derived from attendees · editing coming soon</p>
-        <ol className="space-y-3">
-          {plan.legs.map((leg, i) => (
-            <li key={i} className="flex items-start gap-3">
-              <div className="flex flex-col items-center pt-1">
-                <span className={cn('w-2.5 h-2.5 rounded-full', legDotColor(leg.kind))} />
-                {i < plan.legs.length - 1 && <div className="w-px flex-1 min-h-[16px] bg-casa-divider mt-1" />}
-              </div>
-              <div className="min-w-0 flex-1 flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-body-sm font-semibold text-casa-navy leading-tight">{leg.title}</p>
-                  {leg.detail && <p className="text-caption text-casa-muted mt-0.5">{leg.detail}</p>}
-                  {leg.trafficDeltaMin != null && (
-                    <div className="mt-1"><TrafficBadge deltaMin={leg.trafficDeltaMin} /></div>
-                  )}
+      <div className="px-[18px] pt-2 text-[11px]" style={{ color: S.label }}>Tap a driver to reassign →</div>
+      <div className="px-[18px] pb-2">
+        <ol>
+          {renderedLegs.map((leg, i) => {
+            const driverId = leg.driver?.id
+            return (
+              <li key={i} className="flex items-center gap-3.5 py-3" style={i > 0 ? { borderTop: `1px solid ${S.hair}` } : undefined}>
+                <span className="flex-none w-3 h-3 rounded-full" style={{ background: legDot(leg.kind).color, boxShadow: `0 0 0 4px ${legDot(leg.kind).halo}` }} />
+                <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-bold leading-tight" style={{ color: S.navy }}>{leg.title}</p>
+                    {leg.detail && <p className="text-[12px] mt-0.5" style={{ color: S.muted }}>{leg.detail}</p>}
+                    {leg.trafficDeltaMin != null && (
+                      <div className="mt-1"><TrafficBadge deltaMin={leg.trafficDeltaMin} /></div>
+                    )}
+                  </div>
+                  <DriverChip
+                    driver={leg.driver}
+                    options={driverPool}
+                    onSelectDriver={driverId ? (nextDriverId) => onSetDriverOverride(i, nextDriverId) : undefined}
+                  />
                 </div>
-                <DriverChip driver={leg.driver} />
-              </div>
-            </li>
-          ))}
+              </li>
+            )
+          })}
         </ol>
 
         {loading && (
-          <p className="text-caption text-casa-muted mt-2 flex items-center gap-1.5">
+          <p className="text-[12px] mt-2 flex items-center gap-1.5" style={{ color: S.label }}>
             <Loader2 size={12} className="animate-spin" /> Calculating drive times…
           </p>
         )}
 
-        {plan.legs.some((l) => l.estimate) && (
-          <div className="mt-3 flex items-start gap-1.5 rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-1.5">
-            <AlertTriangle size={12} className="text-amber-500 mt-0.5 shrink-0" />
-            <p className="text-caption text-amber-700">Drive times are estimates until you confirm the address above.</p>
+        {renderedLegs.some((l) => l.estimate) && (
+          <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px]" style={{ color: S.goldText, background: S.amberBg, border: `1px solid ${S.amberBorder}` }}>
+            ⚠ Drive times are <strong>estimates</strong> until you confirm the address above.
           </div>
         )}
 
-        {plan.twoDrivers && (
-          <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-casa-bg border border-casa-border px-2.5 py-1.5">
-            <Users size={12} className="text-casa-navy shrink-0" />
-            <p className="text-caption text-casa-navy font-medium">Two drivers — both need to be locked in.</p>
+        {plan.mode === 'appointment' && renderedLegs.some((l) => l.kind === 'stay') && (
+          <button
+            type="button"
+            onClick={() => onSetWaitsOverride(!waits)}
+            className="mt-3 min-h-[44px] w-full rounded-[10px] px-3 py-2.5 flex items-center justify-between gap-3 text-[13px] font-semibold"
+            style={{ color: S.navy, border: `1px solid ${S.borderSoft}`, background: S.chipFill }}
+          >
+            <span className="text-left">Someone waits on site</span>
+            <span className="inline-flex w-[40px] h-[22px] rounded-pill p-0.5 shrink-0" style={{ background: waits ? S.green : hexToRgba(S.navyHex, 0.22) }}>
+              <span
+                className="block w-[18px] h-[18px] rounded-full bg-white shadow"
+                style={{ transform: waits ? 'translateX(18px)' : 'translateX(0px)', transition: 'transform 180ms ease' }}
+              />
+            </span>
+          </button>
+        )}
+
+        {effective.twoDrivers && (
+          <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] flex items-center gap-2" style={{ color: S.goldText, background: S.amberBg, border: `1px solid ${S.amberBorder}` }}>
+            <strong>Two drivers</strong> — {twoDriverConfirmed ? 'assignments locked in.' : 'both need to be locked in.'}
+            <button
+              className="ml-auto underline font-bold"
+              onClick={() => onSetTwoDriverConfirmed(true)}
+              type="button"
+            >
+              {twoDriverConfirmed ? 'Locked' : 'Confirm'}
+            </button>
           </div>
         )}
 
-        {plan.yourTime && (
-          <div className="mt-3 rounded-lg bg-casa-bg px-3 py-2">
-            <p className="text-caption text-casa-navy">
-              <span className="font-bold">Your time:</span> {plan.yourTime}
+        {effective.yourTime && (
+          <div className="mt-3 rounded-lg px-3 py-2" style={{ background: S.yourTimeFill }}>
+            <p className="text-[13px]" style={{ color: S.navy }}>
+              <span className="font-bold">Your time:</span> {effective.yourTime}
             </p>
           </div>
         )}
@@ -1360,59 +1289,174 @@ function PlanBlock({ plan, loading }: { plan: PlanModel; loading?: boolean }) {
   )
 }
 
-function ReferenceBlock({ enr, hasText }: { enr: EventEnrichment; hasText: (v: unknown) => boolean }) {
+function deriveHostedRecipientName(legs: PlanModel['legs']): string | null {
+  for (const leg of legs) {
+    if (leg.kind !== 'host' || !leg.title) continue
+    const handoffMatch = leg.title.match(/\bto\s+(.+)$/i)
+    if (handoffMatch?.[1]) return handoffMatch[1].trim().replace(/[.]+$/, '')
+    const coverageMatch = leg.title.match(/\bcovers?\s+(.+)$/i)
+    if (coverageMatch?.[1]) return coverageMatch[1].trim().replace(/[.]+$/, '')
+  }
+  return null
+}
+
+function applyAssignmentNarrative(
+  mode: PlanModel['mode'],
+  legs: PlanModel['legs'],
+  recipientName: string | null,
+): PlanModel['legs'] {
+  if (mode !== 'hosted') return legs
+  return legs.map((leg, index) => {
+    if (leg.kind !== 'host') return leg
+    const assignee = leg.driver?.name ?? 'Caregiver'
+    if (index === 0 || /^hand off/i.test(leg.title)) {
+      return { ...leg, title: recipientName ? `${assignee} hands over ${recipientName}` : `${assignee} handles handoff` }
+    }
+    if (index === 1 || /\bcovers?\b/i.test(leg.title)) {
+      return { ...leg, title: recipientName ? `${assignee} covers ${recipientName}` : `${assignee} covers` }
+    }
+    return leg
+  })
+}
+
+function derivePlanPresentation(mode: PlanModel['mode'], legs: PlanModel['legs'], recipientName?: string | null) {
+  const dropLeg = legs.find((l) => l.kind === 'drop' || l.kind === 'depart')
+  const pickLeg = legs.find((l) => l.kind === 'pickup' || l.kind === 'return')
+  const stayLeg = legs.find((l) => l.kind === 'stay')
+  const waits = stayLeg?.waits ?? false
+
+  const dropDriver = dropLeg?.driver?.name ?? null
+  const pickDriver = pickLeg?.driver?.name ?? null
+  const driver = dropDriver ?? pickDriver ?? 'The driver'
+  const stayWindow = stayLeg?.detail?.match(/(\d{1,2}:\d{2}\s?(?:AM|PM).*?\d{1,2}:\d{2}\s?(?:AM|PM))/i)?.[1] ?? null
+
+  let pattern = 'Plan'
+  let twoDrivers = false
+  if (mode === 'hosted') pattern = 'At home'
+  else if (mode === 'trip') {
+    pattern = 'Day trip'
+    twoDrivers = Boolean(dropDriver && pickDriver && dropDriver !== pickDriver)
+  } else if (dropLeg && pickLeg) {
+    if (waits) pattern = 'Stay & wait'
+    else if (dropDriver && pickDriver && dropDriver === pickDriver) pattern = 'Drop & return'
+    else if (dropDriver && pickDriver) { pattern = 'Drop & pickup'; twoDrivers = true }
+    else pattern = 'Drop & return'
+  } else if (pickLeg) pattern = deriveSingleStopPattern(pickLeg.title)
+  else if (dropLeg) pattern = 'Drop & go'
+
+  const yourTime =
+    pattern === 'Stay & wait' ? `${driver} is committed the full ${stayWindow ?? 'visit'}.`
+    : pattern === 'Drop & return' ? `Same driver both ways — ${driver} is free in between.`
+    : pattern === 'Drop & pickup' ? `Split between ${dropDriver ?? 'one'} & ${pickDriver ?? 'another'} — nobody's stuck the whole time.`
+    : pattern === 'Pickup only' ? `One quick pickup by ${driver}.`
+    : pattern === 'Drop-off only' ? `One quick drop-off by ${driver}.`
+    : pattern === 'Pickup / Drop-off' ? `Quick pickup/drop-off run by ${driver}.`
+    : pattern === 'At home' ? (() => {
+      const hostDrivers = Array.from(new Set(
+        legs
+          .filter((leg) => leg.kind === 'host')
+          .map((leg) => leg.driver?.name)
+          .filter((name): name is string => Boolean(name)),
+      ))
+      if (hostDrivers.length >= 2) {
+        return recipientName
+          ? `${hostDrivers[0]} hands off to ${hostDrivers[1]} for ${recipientName}.`
+          : `${hostDrivers[0]} hands off to ${hostDrivers[1]}.`
+      }
+      if (hostDrivers.length === 1) {
+        return recipientName
+          ? `No driving. ${hostDrivers[0]} is covering ${recipientName}.`
+          : `No driving. ${hostDrivers[0]} is covering at home.`
+      }
+      return 'No driving. Coverage is set at home.'
+    })()
+    : pattern === 'Day trip' ? `${driver} drives both ways — everyone's out for the day.`
+    : null
+
+  return { pattern, twoDrivers, yourTime }
+}
+
+function ReferenceBlock({
+  enr,
+  hasText,
+  actions,
+  logistics,
+}: {
+  enr: EventEnrichment | null
+  hasText: (v: unknown) => boolean
+  actions: EventActionItem[]
+  logistics: EventLogistic[]
+}) {
   const [open, setOpen] = useState(false)
   const rows: React.ReactNode[] = []
+  const source = enr ?? null
 
-  if (hasText(enr.outfit_suggestion)) {
-    rows.push(<div key="outfit"><SectionLabel>What to Wear</SectionLabel><p className="text-body-sm text-casa-text">{enr.outfit_suggestion}</p></div>)
-  }
-  if (hasText(enr.contact_name) || hasText(enr.contact_phone)) {
+  if (hasText(source?.contact_name) || hasText(source?.contact_phone)) {
     rows.push(
       <div key="contact">
-        <SectionLabel>Contact</SectionLabel>
-        <InfoRow icon={<Phone size={16} className="text-casa-muted" />}>
-          {enr.contact_name && <p className="text-body-sm font-semibold text-casa-navy">{enr.contact_name}</p>}
-          {enr.contact_phone && (
-            <a href={`tel:${enr.contact_phone.replace(/\D/g, '')}`} className="text-caption text-casa-gold hover:text-casa-navy transition-colors hover:underline">{enr.contact_phone}</a>
-          )}
-        </InfoRow>
+        <p className="text-[11px] font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Contact</p>
+        <p className="text-[14px] mt-1" style={{ color: S.navy }}>
+          {source?.contact_name}
+          {source?.contact_name && source?.contact_phone && ' · '}
+          {source?.contact_phone && <a href={`tel:${source.contact_phone.replace(/\D/g, '')}`} style={{ color: S.gold, fontWeight: 600 }}>{source.contact_phone}</a>}
+        </p>
       </div>,
     )
   }
-  if (hasText(enr.cost_estimate)) {
+  if (hasText(source?.cost_estimate)) {
     rows.push(
       <div key="cost">
-        <SectionLabel>Cost Estimate</SectionLabel>
-        <InfoRow icon={<DollarSign size={16} className="text-casa-muted" />}><p className="text-body-sm text-casa-navy">{enr.cost_estimate}</p></InfoRow>
+        <p className="text-[11px] font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Cost</p>
+        <p className="text-[14px] mt-1" style={{ color: S.navy }}>{source?.cost_estimate}</p>
       </div>,
     )
   }
-  if (hasText(enr.dietary_notes)) {
-    rows.push(<div key="diet"><SectionLabel>Dietary Notes</SectionLabel><p className="text-body-sm text-casa-text">{enr.dietary_notes}</p></div>)
+  if (hasText(source?.outfit_suggestion)) {
+    rows.push(<div key="outfit"><p className="text-[11px] font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>What to wear</p><p className="text-[14px] mt-1" style={{ color: S.muted }}>{source?.outfit_suggestion}</p></div>)
   }
-  if (hasText(enr.meal_impact)) {
+  if (hasText(source?.dietary_notes)) {
+    rows.push(<div key="diet"><p className="text-[11px] font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Dietary notes</p><p className="text-[14px] mt-1" style={{ color: S.muted }}>{source?.dietary_notes}</p></div>)
+  }
+  if (hasText(source?.meal_impact)) {
     rows.push(
       <div key="meal">
-        <SectionLabel>Meal Impact</SectionLabel>
-        <InfoRow icon={<Utensils size={16} className="text-casa-muted" />}><p className="text-body-sm text-casa-text">{enr.meal_impact}</p></InfoRow>
+        <p className="text-[11px] font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Meal impact</p>
+        <p className="text-[14px] mt-1" style={{ color: S.muted }}>{source?.meal_impact}</p>
       </div>,
     )
   }
-  if (hasText(enr.prep_notes)) {
-    rows.push(<div key="notes"><SectionLabel>Notes</SectionLabel><p className="text-body-sm text-casa-text whitespace-pre-line leading-relaxed">{enr.prep_notes}</p></div>)
+  if (hasText(source?.prep_notes)) {
+    rows.push(<div key="notes"><p className="text-[11px] font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Notes</p><p className="text-[14px] mt-1 whitespace-pre-line leading-relaxed" style={{ color: S.muted }}>{source?.prep_notes}</p></div>)
+  }
+  if (actions.length > 0) {
+    rows.push(
+      <div key="actions">
+        <p className="text-[11px] font-bold uppercase mb-1.5" style={{ color: S.label, letterSpacing: '0.1em' }}>Prep lane</p>
+        <ActionItemsSection items={actions} />
+      </div>,
+    )
+  }
+  if (logistics.length > 0) {
+    rows.push(
+      <div key="logistics">
+        <p className="text-[11px] font-bold uppercase mb-1.5" style={{ color: S.label, letterSpacing: '0.1em' }}>Logistics</p>
+        <LogisticsSection items={logistics} />
+      </div>,
+    )
   }
 
-  if (rows.length === 0) return null
-
   return (
-    <section>
+    <section className="pt-1">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center justify-between w-full text-left"
+        className="flex items-center justify-between w-full text-left py-2.5"
+        style={{ borderTop: `1px solid ${S.borderMed}` }}
       >
-        <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Reference</span>
-        <ChevronRight size={16} className={cn('text-casa-muted transition-transform', open && 'rotate-90')} />
+        <span>
+          <span className="block text-[11px] font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Reference</span>
+          <span className="block text-[12px]" style={{ color: S.muted }}>Contact, cost, notes</span>
+        </span>
+        <ChevronRight size={16} className={cn('transition-transform', open && 'rotate-90')} style={{ color: S.label }} />
       </button>
       <AnimatePresence initial={false}>
         {open && (
@@ -1423,7 +1467,11 @@ function ReferenceBlock({ enr, hasText }: { enr: EventEnrichment; hasText: (v: u
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="pt-4 space-y-4">{rows}</div>
+            <div className="pt-1.5 pb-3 space-y-2.5">
+              {rows.length > 0 ? rows : (
+                <p className="text-[13px]" style={{ color: S.label }}>No reference details yet.</p>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1445,20 +1493,157 @@ function ChecklistSection({ items }: { items: EventChecklistItem[]; eventId: str
   }
 
   return (
-    <div className="space-y-2">
-      {items.map((item) => {
+    <div>
+      {items.map((item, i) => {
         const checked = localChecked[item.id] ?? item.checked
         return (
-          <label key={item.id} className="flex items-start gap-3 cursor-pointer group" onClick={() => toggle(item)}>
-            {checked
-              ? <CheckSquare size={18} className="text-casa-gold shrink-0 mt-0.5" />
-              : <Square size={18} className="text-casa-border group-hover:text-casa-gold transition-colors shrink-0 mt-0.5" />
-            }
-            <div className="min-w-0">
-              <p className={cn('text-body-sm text-casa-text', checked && 'line-through opacity-50')}>{item.label}</p>
-              {item.note && <p className="text-caption text-casa-muted">{item.note}</p>}
+          <div
+            key={item.id}
+            className="flex items-center gap-3 py-2.5 min-h-[44px] cursor-pointer"
+            style={i > 0 ? { borderTop: `1px solid ${S.hair}` } : undefined}
+            onClick={() => toggle(item)}
+          >
+            {checked ? (
+              <span className="flex-none w-[22px] h-[22px] rounded-md flex items-center justify-center text-white" style={{ background: S.navy }}>
+                <Check size={13} />
+              </span>
+            ) : (
+              <span className="flex-none w-[22px] h-[22px] rounded-md" style={{ border: `2px solid ${hexToRgba(S.navyHex, 0.25)}` }} />
+            )}
+            <span className="text-[14px]" style={{ color: checked ? S.label : S.navy, textDecoration: checked ? 'line-through' : 'none' }}>
+              {item.label}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function ActionItemsSection({ items }: { items: EventActionItem[] }) {
+  const [localCompleted, setLocalCompleted] = useState<Record<string, boolean>>({})
+  const qc = useQueryClient()
+
+  const toggle = async (item: EventActionItem) => {
+    const nextCompleted = !(localCompleted[item.id] ?? item.completed)
+    setLocalCompleted((prev) => ({ ...prev, [item.id]: nextCompleted }))
+    const payload = {
+      completed: nextCompleted,
+      completed_at: nextCompleted ? new Date().toISOString() : null,
+    }
+    await supabase.from('event_action_items').update(payload).eq('id', item.id)
+    qc.invalidateQueries({ queryKey: ['events'] })
+  }
+
+  return (
+    <div>
+      {items.map((item, i) => {
+        const completed = localCompleted[item.id] ?? item.completed
+        return (
+          <div
+            key={item.id}
+            className="flex items-center gap-3 py-2.5 min-h-[44px] cursor-pointer"
+            style={i > 0 ? { borderTop: `1px solid ${S.hair}` } : undefined}
+            onClick={() => toggle(item)}
+          >
+            {completed ? (
+              <span className="flex-none w-[22px] h-[22px] rounded-md flex items-center justify-center text-white" style={{ background: S.navy }}>
+                <Check size={13} />
+              </span>
+            ) : (
+              <span className="flex-none w-[22px] h-[22px] rounded-md" style={{ border: `2px solid ${hexToRgba(S.navyHex, 0.25)}` }} />
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px]" style={{ color: completed ? S.label : S.navy, textDecoration: completed ? 'line-through' : 'none' }}>
+                {item.title}
+              </p>
+              {item.description && (
+                <p className="text-[12px]" style={{ color: S.muted }}>
+                  {item.description}
+                </p>
+              )}
             </div>
-          </label>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function LogisticsSection({ items }: { items: EventLogistic[] }) {
+  return (
+    <div className="rounded-[14px] px-4 py-1.5" style={{ background: S.coverFill }}>
+      {items.map((item, i) => (
+        <div key={item.id} className="py-2.5" style={i > 0 ? { borderTop: `1px solid ${S.hair}` } : undefined}>
+          <div className="flex items-start gap-3">
+            <span className="mt-1 w-2.5 h-2.5 rounded-full" style={{ background: hexToRgba(S.navyHex, 0.6) }} />
+            <div className="min-w-0">
+              <p className="text-[14px] font-semibold" style={{ color: S.navy }}>{item.title}</p>
+              {(item.time || item.location_name) && (
+                <p className="text-[12px]" style={{ color: S.muted }}>
+                  {[item.time, item.location_name].filter(Boolean).join(' · ')}
+                </p>
+              )}
+              {item.description && (
+                <p className="text-[12px] mt-0.5" style={{ color: S.muted }}>{item.description}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function FallbackBringChecklist({ items, eventId }: { items: string[]; eventId: string }) {
+  const storageKey = `event-command-center-bring:${eventId}`
+  const [checked, setChecked] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (!raw) return {}
+      const parsed = JSON.parse(raw) as Record<string, boolean>
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch (error) {
+      console.warn('EventDetailPanel: failed to read fallback bring checklist state', error)
+      return {}
+    }
+  })
+
+  const toggle = (index: number) => {
+    const key = `${index}`
+    setChecked((prev) => {
+      const next = { ...prev, [key]: !prev[key] }
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(next))
+      } catch (error) {
+        console.warn('EventDetailPanel: failed to persist fallback bring checklist state', error)
+      }
+      return next
+    })
+  }
+
+  return (
+    <div>
+      {items.map((item, i) => {
+        const isChecked = Boolean(checked[`${i}`])
+        return (
+          <div
+            key={`${item}-${i}`}
+            className="flex items-center gap-3 py-2.5 min-h-[44px] cursor-pointer"
+            style={i > 0 ? { borderTop: `1px solid ${S.hair}` } : undefined}
+            onClick={() => toggle(i)}
+          >
+            {isChecked ? (
+              <span className="flex-none w-[22px] h-[22px] rounded-md flex items-center justify-center text-white" style={{ background: S.navy }}>
+                <Check size={13} />
+              </span>
+            ) : (
+              <span className="flex-none w-[22px] h-[22px] rounded-md" style={{ border: `2px solid ${hexToRgba(S.navyHex, 0.25)}` }} />
+            )}
+            <span className="text-[14px]" style={{ color: isChecked ? S.label : S.navy, textDecoration: isChecked ? 'line-through' : 'none' }}>
+              {item}
+            </span>
+          </div>
         )
       })}
     </div>
@@ -1467,197 +1652,357 @@ function ChecklistSection({ items }: { items: EventChecklistItem[]; eventId: str
 
 /* ── LocationBlock ──────────────────────────────────────────── */
 
-function LocationBlock({ locationName, address, parkingNotes, contactName, contactPhone, weatherAtVenue }: {
+function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes, contactPhone, weatherAtVenue, onEditAddress, onConfirmAddress, verified, mode, accent }: {
+  eventId: string
   locationName: string | null
   address: string | null
+  lat: number | null
+  lng: number | null
   parkingNotes?: string | null
-  contactName?: string | null
   contactPhone?: string | null
   weatherAtVenue?: string | null
+  onEditAddress: () => void
+  onConfirmAddress: () => void
+  verified: boolean
+  mode: EventMode
+  accent: string
 }) {
-  const [copied, setCopied] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [savedLocal, setSavedLocal] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [geocodeState, setGeocodeState] = useState<'idle' | 'loading' | 'error' | 'done'>('idle')
+  const [fallbackCoords, setFallbackCoords] = useState<{ lat: number; lng: number } | null>(null)
   const { data: savedPlaces = [] } = useSavedPlaces()
   const savePlace = useSavePlace()
+  const queryClient = useQueryClient()
+  const { data: homeConfig } = useQuery({
+    queryKey: ['home-config'],
+    staleTime: 10 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('settings').select('value').eq('key', 'home_config').maybeSingle()
+      if (error) throw error
+      return (data?.value ?? null) as { address?: string; city?: string; state?: string; zip?: string } | null
+    },
+  })
 
-  const existingPlace = findSavedPlace(savedPlaces, locationName, address)
-  const isAlreadySaved = !!existingPlace || saved
+  const homeAddress = [homeConfig?.address, homeConfig?.city, homeConfig?.state, homeConfig?.zip].filter(Boolean).join(', ').trim() || null
+  const effectiveLocationName = locationName ?? (mode === 'hosted' && homeAddress ? 'Home' : null)
+  const effectiveAddress = address ?? (mode === 'hosted' ? homeAddress : null)
+  const sourceHasDestination = Boolean(locationName || address)
 
-  const copyText = address ?? locationName ?? ''
-  // Prepend location name to address for a more precise Maps hit (e.g. "St. John's Church, 123 Main St")
-  const mapsQuery = address
-    ? (locationName ? `${locationName}, ${address}` : address)
-    : (locationName ?? '')
+  const existingPlace = findSavedPlace(savedPlaces, effectiveLocationName, effectiveAddress)
+  const isAlreadySaved = Boolean(existingPlace) || savedLocal
+
+  const mapsQuery = effectiveAddress
+    ? (effectiveLocationName ? `${effectiveLocationName}, ${effectiveAddress}` : effectiveAddress)
+    : (effectiveLocationName ?? '')
   const googleMapsUrl = mapsQuery
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
     : null
-  const appleMapsUrl = mapsQuery
-    ? `http://maps.apple.com/?q=${encodeURIComponent(mapsQuery)}`
+  const callUrl = contactPhone ? `tel:${contactPhone.replace(/\D/g, '')}` : null
+  const effectiveLat = lat ?? fallbackCoords?.lat ?? null
+  const effectiveLng = lng ?? fallbackCoords?.lng ?? null
+  const hasCoordinates = effectiveLat != null && effectiveLng != null
+  const hasDestination = Boolean(effectiveLocationName || effectiveAddress)
+  const mapEmbedUrl = hasCoordinates
+    ? `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(`${effectiveLng - 0.01},${effectiveLat - 0.01},${effectiveLng + 0.01},${effectiveLat + 0.01}`)}&layer=mapnik&marker=${encodeURIComponent(`${effectiveLat},${effectiveLng}`)}`
     : null
+  const needsGeocode = hasDestination && !hasCoordinates
 
-  async function handleCopy() {
-    if (!copyText) return
-    try {
-      await navigator.clipboard.writeText(copyText)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch { /* ignore */ }
-  }
+  const resolveCoordsFromPlaceSearch = useCallback(async () => {
+    if (!mapsQuery) return null
+    const { data, error } = await supabase.functions.invoke('place-search', { body: { query: mapsQuery } })
+    if (error) return null
+    const first = (data as { places?: Array<{ lat?: number | null; lng?: number | null }> })?.places?.[0]
+    if (first?.lat == null || first?.lng == null) return null
+    return { lat: first.lat, lng: first.lng }
+  }, [mapsQuery])
+
+  useEffect(() => {
+    setFallbackCoords(null)
+    setGeocodeState('idle')
+  }, [eventId, effectiveLocationName, effectiveAddress])
+
+  useEffect(() => {
+    if (!needsGeocode || geocodeState === 'loading' || geocodeState === 'done') return
+    let cancelled = false
+    const run = async () => {
+      setGeocodeState('loading')
+      if (sourceHasDestination) {
+        try {
+          const { data, error } = await supabase.functions.invoke('geocode-event-location', {
+            body: { event_id: eventId },
+          })
+          if (cancelled) return
+          const geocodeData = data as { ok?: boolean; lat?: number | null; lng?: number | null } | null
+          if (!error && geocodeData?.ok && geocodeData.lat != null && geocodeData.lng != null) {
+            setFallbackCoords({ lat: geocodeData.lat, lng: geocodeData.lng })
+            setGeocodeState('done')
+            queryClient.invalidateQueries({ queryKey: ['events'] })
+            return
+          }
+        } catch {
+          // Falls through to secondary place-search lookup.
+        }
+      }
+
+      const fallback = await resolveCoordsFromPlaceSearch()
+      if (cancelled) return
+      if (fallback) {
+        setFallbackCoords(fallback)
+        setGeocodeState('done')
+        return
+      }
+      setGeocodeState('error')
+    }
+    void run()
+    return () => { cancelled = true }
+  }, [eventId, geocodeState, needsGeocode, queryClient, resolveCoordsFromPlaceSearch, sourceHasDestination])
 
   async function handleSave() {
-    if (isAlreadySaved || saving || (!locationName && !address)) return
+    if (isAlreadySaved || saving || (!effectiveLocationName && !effectiveAddress)) return
     setSaving(true)
     try {
       await savePlace.mutateAsync({
-        name: locationName ?? address ?? 'Unknown Place',
-        address: address ?? null,
+        name: effectiveLocationName ?? effectiveAddress ?? 'Unknown Place',
+        address: effectiveAddress ?? null,
         phone: contactPhone ?? null,
-        notes: contactName ? `Contact: ${contactName}` : null,
+        notes: null,
         category: 'other',
       })
-      setSaved(true)
+      setSavedLocal(true)
     } catch { /* non-fatal */ }
     setSaving(false)
   }
 
-  if (!locationName && !address && !parkingNotes && !contactName && !contactPhone && !weatherAtVenue) return null
+  const verifyBorder = verified ? S.borderMed : S.amberBorder
+  const title = effectiveLocationName ?? effectiveAddress ?? (mode === 'hosted' ? 'Home' : 'Destination needed')
+  const subtitle = hasDestination
+    ? [effectiveAddress, parkingNotes].filter(Boolean).join(' · ')
+    : mode === 'hosted'
+      ? 'Hosted at home — no driving required.'
+      : 'Add an address to unlock live drive times.'
 
   return (
-    <InfoRow icon={<MapPin size={16} className="text-casa-error" />}>
-      <div className="flex items-start justify-between gap-2 min-w-0">
-        <div className="min-w-0 flex-1">
-          {locationName && (
-            <p className="text-body-sm font-semibold text-casa-navy">{locationName}</p>
-          )}
-          {address && (
-            <button
-              onClick={handleCopy}
-              className="flex items-center gap-1.5 mt-0.5 text-caption text-casa-muted hover:text-casa-navy transition-colors group text-left"
-              title="Tap to copy address"
-            >
-              <span className="group-hover:underline">{address}</span>
-              {copied
-                ? <Check size={11} className="text-emerald-500 shrink-0" />
-                : <Copy size={11} className="opacity-0 group-hover:opacity-50 shrink-0 transition-opacity" />
-              }
-            </button>
-          )}
-          {copied && (
-            <p className="text-caption text-emerald-600 mt-0.5">Copied!</p>
-          )}
-          {weatherAtVenue && (
-            <div className="mt-1 inline-flex items-center gap-1.5 bg-casa-bg rounded-button px-2.5 py-1">
-              <Cloud size={12} className="text-casa-gold" />
-              <span className="text-caption text-casa-navy font-medium">{weatherAtVenue}</span>
-            </div>
-          )}
-          {parkingNotes && (
-            <p className="text-caption text-casa-muted mt-0.5">{parkingNotes}</p>
-          )}
-          {/* Phone number from enrichment or saved place */}
-          {(contactPhone || existingPlace?.phone) && (
-            <a
-              href={`tel:${(contactPhone ?? existingPlace?.phone ?? '').replace(/\D/g, '')}`}
-              className="flex items-center gap-1.5 mt-1 text-caption text-casa-gold hover:text-casa-navy transition-colors group"
-            >
-              <Phone size={11} className="shrink-0" />
-              <span className="group-hover:underline">{contactPhone ?? existingPlace?.phone}</span>
-            </a>
-          )}
-          {contactName && !contactPhone && !existingPlace?.phone && (
-            <p className="text-caption text-casa-muted mt-0.5">{contactName}</p>
-          )}
-          {existingPlace?.notes && (
-            <p className="text-caption text-casa-gold/80 mt-1 italic">{existingPlace.notes}</p>
-          )}
-        </div>
-        {(locationName || address) && (
-          <div className="flex items-center gap-1.5 shrink-0">
-          {/* Save to places */}
-          <button
-            onClick={handleSave}
-            disabled={isAlreadySaved || saving}
-            title={isAlreadySaved ? 'Already saved' : 'Save to my places'}
-            className={cn(
-              'p-1 rounded transition-colors',
-              isAlreadySaved
-                ? 'text-casa-gold cursor-default'
-                : 'text-casa-border hover:text-casa-gold'
-            )}
-          >
-            {isAlreadySaved
-              ? <BookmarkCheck size={15} />
-              : saving ? <Loader2 size={15} className="animate-spin" /> : <Bookmark size={15} />
-            }
-          </button>
-          {/* Map links */}
-          {googleMapsUrl && (
-            <a href={googleMapsUrl} target="_blank" rel="noreferrer"
-              title="Open in Google Maps"
-              className="p-1 rounded text-casa-border hover:text-casa-navy transition-colors"
-            >
-              <Map size={15} />
-            </a>
-          )}
-          {appleMapsUrl && (
-            <a href={appleMapsUrl} target="_blank" rel="noreferrer"
-              title="Open in Apple Maps"
-              className="p-1 rounded text-casa-border hover:text-casa-navy transition-colors"
-            >
-              <Navigation size={15} />
-            </a>
-          )}
+    <div className="rounded-[14px] overflow-hidden" style={{ border: `1px solid ${verifyBorder}` }}>
+      <div style={{ height: 104, background: 'linear-gradient(135deg,#DCE6DA,#C9DBD9)' }} className="relative overflow-hidden">
+        {mapEmbedUrl ? (
+          <iframe
+            title="Event location map"
+            src={mapEmbedUrl}
+            className="w-full h-full border-0"
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+          />
+        ) : (
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%,-100%) rotate(-45deg)',
+              width: 22,
+              height: 22,
+              background: accent,
+              borderRadius: '50% 50% 50% 0',
+              boxShadow: '0 3px 6px rgba(0,0,0,0.2)',
+            }}
+          />
+        )}
+        {needsGeocode && geocodeState === 'loading' && (
+          <div className="absolute inset-0 bg-white/55 backdrop-blur-[1px] flex items-center justify-center">
+            <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold rounded-pill px-3 py-1.5" style={{ background: 'var(--color-casa-surface)', color: S.navy }}>
+              <Loader2 size={12} className="animate-spin" /> Resolving map snapshot…
+            </span>
+          </div>
+        )}
+        {weatherAtVenue && (
+          <div className="absolute left-3 top-2.5 text-[11px] rounded-md px-2 py-0.5" style={{ background: 'rgba(255,255,255,.85)', color: S.muted }}>
+            {weatherAtVenue}
           </div>
         )}
       </div>
-    </InfoRow>
+      <div className="p-4">
+        <div className="text-[15px] font-bold" style={{ color: S.navy }}>{title}</div>
+        {subtitle && (
+          <div className="text-[13px] mt-0.5" style={{ color: S.muted }}>
+            {subtitle}
+          </div>
+        )}
+        {needsGeocode && geocodeState === 'error' && (
+          <div className="mt-2 rounded-lg px-3 py-2 text-[12px]" style={{ background: S.amberBg, border: `1px solid ${S.amberBorder}`, color: S.goldText }}>
+            Map snapshot unavailable for this address.
+            <button
+              type="button"
+              className="ml-2 underline font-semibold"
+              onClick={() => setGeocodeState('idle')}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+        {verified && hasDestination ? (
+          <div className="mt-3 text-[12px] font-semibold flex items-center gap-1.5" style={{ color: S.green }}>
+            <Check size={13} /> Address confirmed · drive times are live
+          </div>
+        ) : !hasDestination && mode !== 'hosted' ? (
+          <div className="mt-3 rounded-lg px-3 py-2.5" style={{ background: S.amberBg, border: `1px solid ${S.amberBorder}` }}>
+            <div className="text-[13px] font-bold" style={{ color: S.goldText }}>Missing destination</div>
+            <div className="text-[12px] mt-0.5" style={{ color: S.muted }}>Add an address before we calculate travel and leave times.</div>
+            <div className="flex gap-2 mt-2.5">
+              <button onClick={onEditAddress} className="text-[12px] font-bold rounded-pill px-3.5 py-1.5" style={{ color: S.goldText, border: `1px solid ${S.goldBadge}` }}>
+                Add address
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3 rounded-lg px-3 py-2.5" style={{ background: S.amberBg, border: `1px solid ${S.amberBorder}` }}>
+            <div className="text-[13px] font-bold" style={{ color: S.goldText }}>Is this the right place?</div>
+            <div className="text-[12px] mt-0.5" style={{ color: S.muted }}>Confirm the pin before we trust the drive time.</div>
+            <div className="flex gap-2 mt-2.5">
+              <button onClick={onConfirmAddress} className="text-[12px] font-bold rounded-pill px-3.5 py-1.5 text-white" style={{ background: S.green }}>
+                Yes, confirm
+              </button>
+              <button onClick={onEditAddress} className="text-[12px] font-bold rounded-pill px-3.5 py-1.5" style={{ color: S.goldText, border: `1px solid ${S.goldBadge}` }}>
+                Edit address
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="flex gap-2 mt-3">
+          {googleMapsUrl && (
+            <a
+              href={googleMapsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex-1 text-center py-2.5 rounded-[10px] text-[14px] font-semibold inline-flex items-center justify-center gap-1.5 text-white"
+              style={{ background: S.navy }}
+            >
+              <Navigation size={14} />
+              {mode === 'pickup' ? 'Navigate to car line' : 'Navigate'}
+            </a>
+          )}
+          {callUrl && (
+            <a
+              href={callUrl}
+              className="flex-1 text-center py-2.5 rounded-[10px] text-[14px] font-semibold inline-flex items-center justify-center"
+              style={{ border: `1px solid ${S.borderMed}`, color: S.navy }}
+            >
+              Call
+            </a>
+          )}
+          {!googleMapsUrl && mode !== 'hosted' && (
+            <button
+              onClick={onEditAddress}
+              className="flex-1 text-center py-2.5 rounded-[10px] text-[14px] font-semibold"
+              style={{ border: `1px solid ${S.borderMed}`, color: S.navy }}
+            >
+              Add destination
+            </button>
+          )}
+        </div>
+        {hasDestination && (
+          <div className="mt-2">
+            <button
+              onClick={handleSave}
+              disabled={isAlreadySaved || saving}
+              className="w-full text-center py-2 rounded-[10px] text-[13px] font-semibold"
+              style={{ border: `1px solid ${S.borderMed}`, color: isAlreadySaved ? S.gold : S.navy, opacity: isAlreadySaved ? 0.8 : 1 }}
+            >
+              {isAlreadySaved ? 'Saved place' : saving ? 'Saving…' : 'Save place'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
 /* ── Footer ─────────────────────────────────────────────────── */
 
-function PanelFooter({ event, onEdit, onEditWithAI }: { event: EventWithDetails; onEdit: () => void; onEditWithAI: () => void }) {
+function PanelFooter({ event, modeOverride, onEdit }: { event: EventWithDetails; modeOverride: EventMode | null; onEdit: () => void }) {
+  const mode = modeOverride ?? inferEventMode(event)
+  const contactName = event.enrichment?.contact_name?.trim() || null
+  const contactPhone = event.enrichment?.contact_phone?.replace(/\D/g, '') || null
+  const contactFirst = contactName?.split(' ')[0] || 'contact'
   const mapsQuery = event.address
     ? (event.location_name ? `${event.location_name}, ${event.address}` : event.address)
     : (event.location_name ?? '')
   const mapsUrl = mapsQuery
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
     : null
+  const smsUrl = contactPhone ? `sms:${contactPhone}` : null
+  const callUrl = contactPhone ? `tel:${contactPhone}` : null
+
+  let primaryLabel = mode === 'pickup' ? 'Navigate to car line' : 'Navigate'
+  let primaryHref = mode === 'hosted' ? null : mapsUrl
+  let primaryIcon: React.ReactNode = <Navigation size={16} />
+  if (mode === 'hosted' && smsUrl) {
+    primaryLabel = `Message ${contactFirst}`
+    primaryHref = smsUrl
+    primaryIcon = <MessageSquare size={16} />
+  }
+
+  let secondaryLabel = mode === 'trip' ? 'Share float plan' : 'Share'
+  let secondaryHref: string | null = null
+  let secondaryIcon: React.ReactNode = <Share2 size={15} />
+  if (mode === 'hosted' && callUrl) {
+    secondaryLabel = `Call ${contactFirst}`
+    secondaryHref = callUrl
+    secondaryIcon = <Phone size={15} />
+  }
+
+  const handleShare = async () => {
+    const when = event.all_day
+      ? `${format(getEventDisplayStartDay(event), 'EEE, MMM d')} · All day`
+      : `${format(new Date(event.start_time), 'EEE, MMM d · h:mm a')}–${format(new Date(event.end_time), 'h:mm a')}`
+    const text = `${event.title} — ${when}${event.location_name ? ` @ ${event.location_name}` : ''}`
+    try {
+      if (navigator.share) await navigator.share({ title: event.title, text })
+      else await navigator.clipboard.writeText(text)
+    } catch { /* user cancelled */ }
+  }
 
   return (
-    <div className="p-4 border-t border-casa-border flex gap-2 items-stretch">
-      {/* Icon-only square buttons — aspect-square makes them match the row height */}
+    <div className="flex-none flex items-center gap-2.5 px-5 py-3.5 bg-white" style={{ borderTop: `1px solid ${S.borderMed}` }}>
       <button
         onClick={onEdit}
-        title="Edit Details"
-        className="aspect-square flex items-center justify-center shrink-0 rounded-button border border-casa-border text-casa-navy hover:bg-casa-bg transition-colors"
+        title="Edit details"
+        className="w-11 h-11 rounded-xl flex items-center justify-center transition-colors hover:bg-casa-bg"
+        style={{ border: `1px solid ${S.borderMed}`, color: S.navy }}
       >
-        <Pencil size={18} />
+        <Pencil size={16} />
       </button>
-      <button
-        onClick={onEditWithAI}
-        title="Edit with AI"
-        className="aspect-square flex items-center justify-center shrink-0 rounded-button border border-casa-gold/60 text-casa-gold hover:bg-casa-gold/10 transition-colors"
-      >
-        <Sparkles size={18} />
-      </button>
-      {/* Full-size action buttons */}
-      {mapsUrl && (
+      {primaryHref && (
         <a
-          href={mapsUrl}
+          href={primaryHref}
           target="_blank"
           rel="noreferrer"
-          className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
+          className="flex-1 text-center py-3 rounded-xl text-[15px] font-bold inline-flex items-center justify-center gap-2"
+          style={{ background: S.gold, color: S.navy }}
         >
-          <Navigation size={15} />
-          Directions
+          {primaryIcon}
+          {primaryLabel}
         </a>
       )}
-      <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 transition-all">
-        <Share2 size={15} />
-        Share
-      </button>
+      {secondaryHref ? (
+        <a
+          href={secondaryHref}
+          className="px-4 h-11 rounded-xl text-[14px] font-semibold inline-flex items-center gap-2"
+          style={{ border: `1px solid ${S.borderMed}`, color: S.navy }}
+        >
+          {secondaryIcon}
+          {secondaryLabel}
+        </a>
+      ) : (
+        <button
+          onClick={handleShare}
+          className="px-4 h-11 rounded-xl text-[14px] font-semibold inline-flex items-center gap-2"
+          style={{ border: `1px solid ${S.borderMed}`, color: S.navy }}
+        >
+          {secondaryIcon}
+          {secondaryLabel}
+        </button>
+      )}
     </div>
   )
 }
@@ -1672,11 +2017,10 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-function InfoRow({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div className="flex items-start gap-3">
-      <div className="shrink-0 mt-0.5">{icon}</div>
-      <div className="min-w-0 space-y-0.5">{children}</div>
-    </div>
-  )
+function formatDuration(start: Date, end: Date): string {
+  const mins = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000))
+  if (mins < 60) return `${mins}m`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m === 0 ? `${h}h` : `${h}h ${m}m`
 }

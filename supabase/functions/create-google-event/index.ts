@@ -1,6 +1,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { refreshAccessToken, createGoogleEvent } from '../_shared/google.ts'
 
+const TARGET_SYNC_GOOGLE_EMAIL = (Deno.env.get('GOOGLE_SYNC_TARGET_EMAIL') ?? 'jacobrtabor@gmail.com').toLowerCase()
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -29,25 +31,18 @@ Deno.serve(async (req) => {
   // Reminders stay in Casa only — never push to Google Calendar
   if (event.event_type === 'reminder') return new Response(JSON.stringify({ ok: true, skipped: 'reminder' }), { headers: { ...CORS, 'content-type': 'application/json' } })
 
-  // Find the primary member to use for creating the event
-  const primaryMemberId = event.event_members?.find((m: { role: string }) => m.role === 'primary')?.family_member_id
-    ?? event.event_members?.[0]?.family_member_id
-    ?? event.source_member_id
-
-  if (!primaryMemberId) return new Response(JSON.stringify({ ok: true, skipped: 'no members' }), { headers: { ...CORS, 'content-type': 'application/json' } })
-
-  // Get Google token — fall back to any available token if primary member has none
-  let tok = (await sb.from('google_tokens').select('*').eq('family_member_id', primaryMemberId).maybeSingle()).data
-  let resolvedMemberId = primaryMemberId
+  const { data: tok } = await sb
+    .from('google_tokens')
+    .select('*')
+    .eq('google_email', TARGET_SYNC_GOOGLE_EMAIL)
+    .maybeSingle()
   if (!tok) {
-    // Fall back to the first available Google token in the household
-    const { data: anyTok } = await sb.from('google_tokens').select('*').limit(1).maybeSingle()
-    if (anyTok) {
-      tok = anyTok
-      resolvedMemberId = anyTok.family_member_id
-    }
+    return new Response(JSON.stringify({ error: `no google token for configured sync account: ${TARGET_SYNC_GOOGLE_EMAIL}` }), {
+      status: 500,
+      headers: { ...CORS, 'content-type': 'application/json' },
+    })
   }
-  if (!tok) return new Response(JSON.stringify({ ok: true, skipped: 'no google token available' }), { headers: { ...CORS, 'content-type': 'application/json' } })
+  const resolvedMemberId = tok.family_member_id
 
   // Refresh token if needed
   let accessToken = tok.access_token
@@ -72,12 +67,21 @@ Deno.serve(async (req) => {
   const location = locationParts.length > 0 ? locationParts.join(', ') : undefined
 
   const TZ = 'America/New_York'
+  const toGoogleAllDayDate = (iso: string) => new Date(iso).toISOString().slice(0, 10)
+  const toGoogleAllDayEndDate = (endTime: string) => {
+    const dateOnly = !endTime.includes('T')
+    const midnightBoundary = /T00:00(?::00(?:\.000)?)?(?:Z|[+-]\d{2}:\d{2})?$/.test(endTime)
+    const end = new Date(endTime)
+    if (dateOnly || midnightBoundary) return end.toISOString().slice(0, 10)
+    end.setUTCDate(end.getUTCDate() + 1)
+    return end.toISOString().slice(0, 10)
+  }
   const isAllDay = event.all_day || (!event.start_time?.includes('T') && !event.start_time?.includes(' '))
   const startField = isAllDay
-    ? { date: new Date(event.start_time).toISOString().slice(0, 10) }
+    ? { date: toGoogleAllDayDate(event.start_time as string) }
     : { dateTime: new Date(event.start_time).toISOString(), timeZone: TZ }
   const endField = isAllDay
-    ? { date: new Date(event.end_time).toISOString().slice(0, 10) }
+    ? { date: toGoogleAllDayEndDate(event.end_time as string) }
     : { dateTime: new Date(event.end_time).toISOString(), timeZone: TZ }
 
   // If this is a master recurring event, include the RRULE so Google creates it as a series

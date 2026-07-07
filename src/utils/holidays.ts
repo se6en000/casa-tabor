@@ -25,15 +25,16 @@ export function isReminder(event: Pick<EventWithDetails, 'event_type'>): boolean
   return event.event_type === 'reminder'
 }
 
-export function isAllDayReminder(event: Pick<EventWithDetails, 'event_type' | 'start_time'>): boolean {
+export function isAllDayReminder(event: Pick<EventWithDetails, 'event_type' | 'start_time' | 'all_day'>): boolean {
   if (!isReminder(event)) return false
+  if (event.all_day) return true
   // Use local time — midnight UTC looks like T00:00:00 in the string but is 8 PM EDT,
   // so we must parse and check the browser-local hour, not the raw string.
   const d = new Date(event.start_time)
   return d.getHours() === 0 && d.getMinutes() === 0
 }
 
-export function isTimedReminder(event: Pick<EventWithDetails, 'event_type' | 'start_time'>): boolean {
+export function isTimedReminder(event: Pick<EventWithDetails, 'event_type' | 'start_time' | 'all_day'>): boolean {
   return isReminder(event) && !isAllDayReminder(event)
 }
 

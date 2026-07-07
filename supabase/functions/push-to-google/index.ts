@@ -1,5 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { refreshAccessToken, patchGoogleEvent } from '../_shared/google.ts'
+import { refreshAccessToken, patchGoogleEvent, createGoogleEvent } from '../_shared/google.ts'
+
+const TARGET_SYNC_GOOGLE_EMAIL = (Deno.env.get('GOOGLE_SYNC_TARGET_EMAIL') ?? 'jacobrtabor@gmail.com').toLowerCase()
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -29,20 +31,18 @@ Deno.serve(async (req) => {
   // Reminders stay in Casa only — never push to Google Calendar
   if (event.event_type === 'reminder') return new Response(JSON.stringify({ ok: true, skipped: 'reminder' }), { headers: { ...CORS, 'content-type': 'application/json' } })
 
-  // Get the token for the source member — fall back to any available token if member has none
-  let memberId = event.source_member_id
-  let tok = memberId
-    ? (await sb.from('google_tokens').select('*').eq('family_member_id', memberId).maybeSingle()).data
-    : null
+  const { data: tok } = await sb
+    .from('google_tokens')
+    .select('*')
+    .eq('google_email', TARGET_SYNC_GOOGLE_EMAIL)
+    .maybeSingle()
   if (!tok) {
-    // Fall back to the first available Google token in the household
-    const { data: anyTok } = await sb.from('google_tokens').select('*').limit(1).maybeSingle()
-    if (anyTok) {
-      tok = anyTok
-      memberId = anyTok.family_member_id
-    }
+    return new Response(JSON.stringify({ error: `no google token for configured sync account: ${TARGET_SYNC_GOOGLE_EMAIL}` }), {
+      status: 500,
+      headers: { ...CORS, 'content-type': 'application/json' },
+    })
   }
-  if (!tok) return new Response(JSON.stringify({ ok: true, skipped: 'no google token available' }), { headers: { ...CORS, 'content-type': 'application/json' } })
+  const memberId = tok.family_member_id
 
   // Refresh token if expired
   let accessToken = tok.access_token
@@ -101,6 +101,15 @@ Deno.serve(async (req) => {
 
   const isAllDay = event.all_day || (!event.start_time?.includes('T') && !event.start_time?.includes(' '))
   const toISO = (t: string) => new Date(t).toISOString()
+  const toGoogleAllDayDate = (iso: string) => new Date(iso).toISOString().slice(0, 10)
+  const toGoogleAllDayEndDate = (endTime: string) => {
+    const dateOnly = !endTime.includes('T')
+    const midnightBoundary = /T00:00(?::00(?:\.000)?)?(?:Z|[+-]\d{2}:\d{2})?$/.test(endTime)
+    const end = new Date(endTime)
+    if (dateOnly || midnightBoundary) return end.toISOString().slice(0, 10)
+    end.setUTCDate(end.getUTCDate() + 1)
+    return end.toISOString().slice(0, 10)
+  }
   // Google Calendar requires timeZone when using dateTime (especially when switching from all-day)
   const TZ = 'America/New_York'
 
@@ -109,20 +118,49 @@ Deno.serve(async (req) => {
     ...(location !== undefined ? { location } : {}),
     description,
     start: isAllDay
-      ? { date: new Date(event.start_time).toISOString().slice(0, 10) }
+      ? { date: toGoogleAllDayDate(event.start_time as string) }
       : { dateTime: toISO(event.start_time), timeZone: TZ },
     end: isAllDay
-      ? { date: new Date(event.end_time).toISOString().slice(0, 10) }
+      ? { date: toGoogleAllDayEndDate(event.end_time as string) }
       : { dateTime: toISO(event.end_time), timeZone: TZ },
   }
   console.log('[push-to-google] patch payload:', JSON.stringify(patch))
 
-  await patchGoogleEvent({
-    accessToken,
-    calendarId,
-    eventId: event.google_event_id,
-    patch,
-  })
+  try {
+    await patchGoogleEvent({
+      accessToken,
+      calendarId,
+      eventId: event.google_event_id,
+      patch,
+    })
+    await sb.from('events').update({
+      source_member_id: memberId,
+      google_calendar_id: calendarId,
+      updated_at: new Date().toISOString(),
+    }).eq('id', event_id)
+  } catch (err) {
+    const msg = (err as Error).message ?? String(err)
+    // Legacy events may still point at a different Google account's event ID.
+    // If that ID is missing in the target account, recreate in the configured account and relink.
+    if (!msg.includes('404')) throw err
+    const created = await createGoogleEvent({
+      accessToken,
+      calendarId,
+      event: {
+        summary: summary ?? event.title,
+        ...(location !== undefined ? { location } : {}),
+        description,
+        start: patch.start,
+        end: patch.end,
+      },
+    })
+    await sb.from('events').update({
+      google_event_id: created.id,
+      google_calendar_id: calendarId,
+      source_member_id: memberId,
+      updated_at: new Date().toISOString(),
+    }).eq('id', event_id)
+  }
 
   return new Response(JSON.stringify({ ok: true }), { headers: { ...CORS, 'content-type': 'application/json' } })
   } catch (err) {

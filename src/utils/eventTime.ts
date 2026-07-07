@@ -24,11 +24,11 @@ function looksLikeMidnightTimestamp(value: string): boolean {
   return hh === '00' && mm === '00' && ss === '00'
 }
 
-function getEventStartDate(event: EventTimeLike): Date {
+export function getEventStartDate(event: EventTimeLike): Date {
   return event.all_day ? parseDatePortionAsLocal(event.start_time) : asDate(event.start_time)
 }
 
-function getEventEndDate(event: EventTimeLike): Date {
+export function getEventEndDate(event: EventTimeLike): Date {
   if (!event.all_day) return asDate(event.end_time)
   const endDayStart = parseDatePortionAsLocal(event.end_time)
   if (looksLikeMidnightTimestamp(event.end_time)) {

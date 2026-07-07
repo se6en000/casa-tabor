@@ -3,7 +3,11 @@ import { Plus, Trash2, GripVertical, Crown } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
-import type { FamilyMember } from '../types'
+import type {
+  FamilyMember,
+  MemberAvailabilityException,
+  MemberAvailabilityRule,
+} from '../types'
 
 // Profile color palette (alert-like hues intentionally excluded)
 const PROFILE_COLOR_OPTIONS = [
@@ -49,6 +53,22 @@ const ROLE_OPTIONS = [
   { value: 'caregiver', label: 'Care Giver' },
 ] as const
 
+const AVAILABILITY_MODE_OPTIONS: Array<{ value: 'strict' | 'flexible' | 'open'; label: string; helper: string }> = [
+  { value: 'strict', label: 'Strict', helper: 'Unavailable during blocked hours' },
+  { value: 'flexible', label: 'Flexible', helper: 'Prefer avoiding blocked hours, still considered available' },
+  { value: 'open', label: 'Open', helper: 'Ignores blocked hours' },
+]
+
+const WEEKDAY_ROWS = [
+  { day: 1, label: 'Mon' },
+  { day: 2, label: 'Tue' },
+  { day: 3, label: 'Wed' },
+  { day: 4, label: 'Thu' },
+  { day: 5, label: 'Fri' },
+  { day: 6, label: 'Sat' },
+  { day: 0, label: 'Sun' },
+] as const
+
 type EditableMember = Partial<FamilyMember> & { _tempId?: string; _isNew?: boolean }
 
 function emptyMember(): EditableMember {
@@ -62,9 +82,27 @@ function emptyMember(): EditableMember {
     color_name: '',
     phone: '',
     email: '',
+    can_drive: false,
+    availability_mode: 'strict',
+    show_on_home_sidebar: true,
     is_admin: false,
     sort_order: 999,
   }
+}
+
+function toDayOffWindow(dateValue: string): { start_at: string; end_at: string } {
+  const start = new Date(`${dateValue}T00:00:00`)
+  const end = new Date(`${dateValue}T23:59:59`)
+  return { start_at: start.toISOString(), end_at: end.toISOString() }
+}
+
+function formatExceptionWindow(exception: MemberAvailabilityException): string {
+  const start = new Date(exception.start_at)
+  const end = new Date(exception.end_at)
+  const dateLabel = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const startTime = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const endTime = end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  return `${dateLabel} · ${startTime}–${endTime}`
 }
 
 export default function FamilySettingsPage() {
@@ -77,6 +115,26 @@ export default function FamilySettingsPage() {
       return data
     },
   })
+  const { data: availabilityRules = [] } = useQuery<MemberAvailabilityRule[]>({
+    queryKey: ['member-availability-rules'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('member_availability_rules')
+        .select('*')
+      if (error) throw error
+      return data ?? []
+    },
+  })
+  const { data: availabilityExceptions = [] } = useQuery<MemberAvailabilityException[]>({
+    queryKey: ['member-availability-exceptions'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('member_availability_exceptions')
+        .select('*')
+      if (error) throw error
+      return data ?? []
+    },
+  })
 
   const [edits, setEdits] = useState<Record<string, EditableMember>>({})
   const [newMembers, setNewMembers] = useState<EditableMember[]>([])
@@ -84,6 +142,7 @@ export default function FamilySettingsPage() {
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [dayOffDraftByMember, setDayOffDraftByMember] = useState<Record<string, string>>({})
   const hydratedRef = useRef(false)
   const formatRoleLabel = (role?: string | null) => {
     if (!role) return 'Child'
@@ -111,6 +170,127 @@ export default function FamilySettingsPage() {
     setNewMembers(prev => prev.map(m => m._tempId === tempId ? { ...m, ...changes } : m))
   }
 
+  function rulesForMember(memberId: string): MemberAvailabilityRule[] {
+    return availabilityRules
+      .filter((rule) => rule.member_id === memberId)
+      .sort((a, b) => (a.day_of_week - b.day_of_week) || a.start_local.localeCompare(b.start_local))
+  }
+
+  function exceptionsForMember(memberId: string): MemberAvailabilityException[] {
+    return availabilityExceptions
+      .filter((exception) => exception.member_id === memberId)
+      .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+  }
+
+  async function upsertWorkRule(memberId: string, dayOfWeek: number, enabled: boolean, startLocal: string, endLocal: string) {
+    const existing = rulesForMember(memberId).find((rule) => rule.day_of_week === dayOfWeek && rule.availability_type === 'unavailable')
+    if (!enabled) {
+      if (!existing) return
+      const { error } = await supabase
+        .from('member_availability_rules')
+        .delete()
+        .eq('id', existing.id)
+      if (error) throw error
+      await qc.invalidateQueries({ queryKey: ['member-availability-rules'] })
+      return
+    }
+
+    if (existing) {
+      const { error } = await supabase
+        .from('member_availability_rules')
+        .update({
+          start_local: startLocal,
+          end_local: endLocal,
+          reason: 'Blocked hours',
+          timezone: 'America/New_York',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id)
+      if (error) throw error
+      await qc.invalidateQueries({ queryKey: ['member-availability-rules'] })
+      return
+    }
+
+    const { error } = await supabase
+      .from('member_availability_rules')
+      .insert({
+        member_id: memberId,
+        day_of_week: dayOfWeek,
+        start_local: startLocal,
+        end_local: endLocal,
+        availability_type: 'unavailable',
+        reason: 'Blocked hours',
+        timezone: 'America/New_York',
+      })
+    if (error) throw error
+    await qc.invalidateQueries({ queryKey: ['member-availability-rules'] })
+  }
+
+  async function applyWeekdayWorkTemplate(memberId: string) {
+    const existing = rulesForMember(memberId)
+      .filter((rule) => rule.availability_type === 'unavailable')
+      .map((rule) => rule.id)
+    if (existing.length > 0) {
+      const { error } = await supabase
+        .from('member_availability_rules')
+        .delete()
+        .in('id', existing)
+      if (error) throw error
+    }
+
+    const templateRows = [1, 2, 3, 4, 5].map((day) => ({
+      member_id: memberId,
+      day_of_week: day,
+      start_local: '07:30',
+      end_local: '18:30',
+      availability_type: 'unavailable' as const,
+      reason: 'Blocked hours',
+      timezone: 'America/New_York',
+    }))
+    const { error } = await supabase
+      .from('member_availability_rules')
+      .insert(templateRows)
+    if (error) throw error
+    await qc.invalidateQueries({ queryKey: ['member-availability-rules'] })
+  }
+
+  async function clearAllWorkRules(memberId: string) {
+    const memberRules = rulesForMember(memberId)
+    if (memberRules.length === 0) return
+    const { error } = await supabase
+      .from('member_availability_rules')
+      .delete()
+      .eq('member_id', memberId)
+    if (error) throw error
+    await qc.invalidateQueries({ queryKey: ['member-availability-rules'] })
+  }
+
+  async function addDayOffException(memberId: string, dateValue: string) {
+    if (!dateValue) return
+    const window = toDayOffWindow(dateValue)
+    const { error } = await supabase
+      .from('member_availability_exceptions')
+      .insert({
+        member_id: memberId,
+        start_at: window.start_at,
+        end_at: window.end_at,
+        override_type: 'day_off',
+        note: 'Day off',
+      })
+    if (error) throw error
+    await qc.invalidateQueries({ queryKey: ['member-availability-exceptions'] })
+    setDayOffDraftByMember((prev) => ({ ...prev, [memberId]: '' }))
+  }
+
+  async function removeAvailabilityException(exceptionId: string) {
+    const { error } = await supabase
+      .from('member_availability_exceptions')
+      .delete()
+      .eq('id', exceptionId)
+    if (error) throw error
+    await qc.invalidateQueries({ queryKey: ['member-availability-exceptions'] })
+  }
+
   async function handleSave() {
     if (saving) return
     setSaveError(null)
@@ -124,6 +304,9 @@ export default function FamilySettingsPage() {
           ...changes,
           color_hex: selectedColor,
           color_name: normalizeProfileColorName(selectedColor),
+          can_drive: changes.can_drive ?? base.can_drive,
+          availability_mode: changes.availability_mode ?? base.availability_mode,
+          show_on_home_sidebar: changes.show_on_home_sidebar ?? base.show_on_home_sidebar,
           updated_at: new Date().toISOString(),
         }).eq('id', id)
       })
@@ -141,6 +324,9 @@ export default function FamilySettingsPage() {
             color_name: normalizeProfileColorName(selectedColor),
             phone: m.phone?.trim() || null,
             email: m.email?.trim() || null,
+            can_drive: m.can_drive ?? (m.role === 'parent' || m.role === 'caregiver'),
+            availability_mode: m.availability_mode ?? (m.role === 'parent' ? 'flexible' : m.role === 'caregiver' ? 'strict' : 'strict'),
+            show_on_home_sidebar: m.show_on_home_sidebar ?? true,
             is_admin: m.is_admin ?? false,
             sort_order: members.length + i,
           })
@@ -187,7 +373,7 @@ export default function FamilySettingsPage() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="font-display text-display-md text-casa-navy mb-1">Family</h1>
-          <p className="text-body text-casa-muted">Manage members, colors, and roles.</p>
+          <p className="text-body text-casa-muted">Manage members, colors, roles, driving, and blocked-hour availability.</p>
         </div>
         <div className="text-right">
           {saveError ? (
@@ -208,6 +394,9 @@ export default function FamilySettingsPage() {
           const isNew = !!m._isNew
           const isExpanded = expandedId === id
           const colorHex = getDisplayColor(m.color_hex ?? '#2C3E6B')
+          const memberRules = m.id ? rulesForMember(m.id) : []
+          const memberExceptions = m.id ? exceptionsForMember(m.id) : []
+          const dayOffDraft = dayOffDraftByMember[id] ?? ''
 
           return (
             <div key={id} className="bg-casa-surface rounded-card border border-casa-border shadow-card overflow-hidden">
@@ -227,7 +416,12 @@ export default function FamilySettingsPage() {
                     {m.name || <span className="text-casa-muted italic">New member</span>}
                     {m.is_admin && <Crown size={12} className="inline ml-1.5 text-casa-gold" />}
                   </p>
-                  <p className="text-caption text-casa-muted mt-0.5">{formatRoleLabel(m.role)} · {m.phone || m.email || 'No contact'}</p>
+                  <p className="text-caption text-casa-muted mt-0.5">
+                    {formatRoleLabel(m.role)}
+                    {` · ${m.availability_mode ?? 'strict'} schedule`}
+                    {' · '}
+                    {m.phone || m.email || 'No contact'}
+                  </p>
                 </div>
                 <span className="text-caption text-casa-muted">{isExpanded ? '▲' : '▼'}</span>
               </button>
@@ -266,7 +460,22 @@ export default function FamilySettingsPage() {
                       {ROLE_OPTIONS.map(({ value, label }) => (
                         <button
                           key={value}
-                          onClick={() => isNew ? patchNew(m._tempId!, { role: value }) : patch(m.id!, { role: value })}
+                          onClick={() => {
+                            const nextCanDrive = value === 'parent' || value === 'caregiver'
+                            if (isNew) {
+                              patchNew(m._tempId!, {
+                                role: value,
+                                can_drive: nextCanDrive ? (m.can_drive ?? true) : false,
+                                availability_mode: value === 'parent' ? 'flexible' : value === 'caregiver' ? 'strict' : 'strict',
+                              })
+                            } else {
+                              patch(m.id!, {
+                                role: value,
+                                can_drive: nextCanDrive ? (m.can_drive ?? true) : false,
+                                availability_mode: value === 'parent' ? 'flexible' : value === 'caregiver' ? 'strict' : 'strict',
+                              })
+                            }
+                          }}
                           className={cn(
                             'flex-1 py-2 rounded-button border text-body-sm font-medium transition-all capitalize',
                             (m.role ?? 'child') === value
@@ -324,6 +533,195 @@ export default function FamilySettingsPage() {
                         className="w-full px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-navy bg-white focus:outline-none focus:ring-2 focus:ring-casa-navy/20"
                       />
                     </div>
+                  </div>
+
+                  {/* Driving + availability */}
+                  <div className="rounded-xl border border-casa-border p-3 space-y-3">
+                    <div>
+                      <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Driving</p>
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <div
+                          onClick={() => isNew ? patchNew(m._tempId!, { can_drive: !m.can_drive }) : patch(m.id!, { can_drive: !m.can_drive })}
+                          className={cn(
+                            'relative w-10 h-5 rounded-full transition-colors shrink-0',
+                            m.can_drive ? 'bg-casa-gold' : 'bg-casa-border',
+                          )}
+                        >
+                          <span className={cn(
+                            'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
+                            m.can_drive ? 'translate-x-5' : 'translate-x-0.5',
+                          )} />
+                        </div>
+                        <span className="text-body-sm text-casa-navy">Can drive / cover transport</span>
+                      </label>
+                    </div>
+
+                    <div>
+                      <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Home sidebar visibility</p>
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <div
+                          onClick={() => isNew
+                            ? patchNew(m._tempId!, { show_on_home_sidebar: !(m.show_on_home_sidebar ?? true) })
+                            : patch(m.id!, { show_on_home_sidebar: !(m.show_on_home_sidebar ?? true) })}
+                          className={cn(
+                            'relative w-10 h-5 rounded-full transition-colors shrink-0',
+                            (m.show_on_home_sidebar ?? true) ? 'bg-casa-gold' : 'bg-casa-border',
+                          )}
+                        >
+                          <span className={cn(
+                            'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
+                            (m.show_on_home_sidebar ?? true) ? 'translate-x-5' : 'translate-x-0.5',
+                          )} />
+                        </div>
+                        <span className="text-body-sm text-casa-navy">Show on homepage sidebar</span>
+                      </label>
+                    </div>
+
+                    <>
+                        <div>
+                          <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Availability mode</p>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            {AVAILABILITY_MODE_OPTIONS.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => isNew
+                                  ? patchNew(m._tempId!, { availability_mode: option.value })
+                                  : patch(m.id!, { availability_mode: option.value })}
+                                className={cn(
+                                  'rounded-button border px-2.5 py-2 text-left transition-colors',
+                                  (m.availability_mode ?? 'strict') === option.value
+                                    ? 'bg-casa-navy text-white border-casa-navy'
+                                    : 'bg-white border-casa-border text-casa-navy hover:bg-casa-bg',
+                                )}
+                              >
+                                <p className="text-body-sm font-semibold">{option.label}</p>
+                                <p className={cn(
+                                  'text-caption mt-0.5 leading-snug',
+                                  (m.availability_mode ?? 'strict') === option.value ? 'text-white/80' : 'text-casa-muted',
+                                )}
+                                >
+                                  {option.helper}
+                                </p>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {!isNew && m.id && (
+                          <>
+                            <div>
+                              <div className="flex items-center justify-between gap-2 mb-2">
+                                <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Weekly blocked hours</p>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => { void applyWeekdayWorkTemplate(m.id!) }}
+                                    className="text-caption text-casa-navy px-2 py-1 rounded border border-casa-border hover:bg-casa-bg"
+                                  >
+                                    Apply M–F 7:30–6:30
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => { void clearAllWorkRules(m.id!) }}
+                                    className="text-caption text-casa-error px-2 py-1 rounded border border-casa-border hover:bg-casa-bg"
+                                  >
+                                    Clear
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="space-y-1.5">
+                                {WEEKDAY_ROWS.map(({ day, label }) => {
+                                  const dayRule = memberRules.find((rule) => rule.day_of_week === day && rule.availability_type === 'unavailable')
+                                  const enabled = Boolean(dayRule)
+                                  const startLocal = dayRule?.start_local?.slice(0, 5) ?? '07:30'
+                                  const endLocal = dayRule?.end_local?.slice(0, 5) ?? '18:30'
+                                  return (
+                                    <div key={day} className="grid grid-cols-[56px_1fr_1fr] gap-2 items-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => { void upsertWorkRule(m.id!, day, !enabled, startLocal, endLocal) }}
+                                        className={cn(
+                                          'h-9 rounded-button border text-caption font-semibold',
+                                          enabled ? 'bg-casa-navy text-white border-casa-navy' : 'bg-white text-casa-muted border-casa-border',
+                                        )}
+                                      >
+                                        {label}
+                                      </button>
+                                      <input
+                                        type="time"
+                                        value={startLocal}
+                                        disabled={!enabled}
+                                        onChange={(event) => {
+                                          const nextStart = event.target.value
+                                          void upsertWorkRule(m.id!, day, true, nextStart, endLocal)
+                                        }}
+                                        className="h-9 rounded-button border border-casa-border px-2 text-body-sm text-casa-navy disabled:opacity-50"
+                                      />
+                                      <input
+                                        type="time"
+                                        value={endLocal}
+                                        disabled={!enabled}
+                                        onChange={(event) => {
+                                          const nextEnd = event.target.value
+                                          void upsertWorkRule(m.id!, day, true, startLocal, nextEnd)
+                                        }}
+                                        className="h-9 rounded-button border border-casa-border px-2 text-body-sm text-casa-navy disabled:opacity-50"
+                                      />
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+
+                            <div>
+                              <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Day-off overrides</p>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="date"
+                                  value={dayOffDraft}
+                                  onChange={(event) => setDayOffDraftByMember((prev) => ({ ...prev, [id]: event.target.value }))}
+                                  className="h-9 rounded-button border border-casa-border px-2 text-body-sm text-casa-navy"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => { void addDayOffException(m.id!, dayOffDraft) }}
+                                  disabled={!dayOffDraft}
+                                  className="h-9 px-3 rounded-button border border-casa-border text-body-sm font-medium text-casa-navy disabled:opacity-50"
+                                >
+                                  Add day off
+                                </button>
+                              </div>
+                              <div className="mt-2 space-y-1.5">
+                                {memberExceptions.length === 0 && (
+                                  <p className="text-caption text-casa-muted">No day-off overrides set.</p>
+                                )}
+                                {memberExceptions.map((exception) => (
+                                  <div key={exception.id} className="flex items-center justify-between gap-2 rounded-button border border-casa-border px-2.5 py-2">
+                                    <div>
+                                      <p className="text-body-sm text-casa-navy font-medium">{exception.override_type.replace('_', ' ')}</p>
+                                      <p className="text-caption text-casa-muted">{formatExceptionWindow(exception)}</p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => { void removeAvailabilityException(exception.id) }}
+                                      className="text-caption text-casa-error hover:underline"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        {isNew && (
+                          <p className="text-caption text-casa-muted">
+                            Save this member first to configure recurring blocked hours and day-off overrides.
+                          </p>
+                        )}
+                    </>
                   </div>
 
                   {/* Admin toggle */}

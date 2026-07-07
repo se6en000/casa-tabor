@@ -12,11 +12,37 @@ export interface FamilyMember {
   phone: string | null
   email: string | null
   google_calendar_id: string | null
+  can_drive: boolean
+  availability_mode: 'strict' | 'flexible' | 'open'
+  show_on_home_sidebar: boolean
   is_admin: boolean
   avatar_url: string | null
   sort_order: number
   created_at: string
   updated_at: string
+}
+
+export interface MemberAvailabilityRule {
+  id: string
+  member_id: string
+  day_of_week: number
+  start_local: string
+  end_local: string
+  availability_type: 'unavailable' | 'available'
+  reason: string | null
+  timezone: string
+  created_at: string
+  updated_at: string
+}
+
+export interface MemberAvailabilityException {
+  id: string
+  member_id: string
+  start_at: string
+  end_at: string
+  override_type: 'day_off' | 'manual_block' | 'manual_available'
+  note: string | null
+  created_at: string
 }
 
 // ── Events ──────────────────────────────────────────────────

@@ -275,13 +275,17 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   const [memberRoles, setMemberRoles] = useState<Record<string, 'primary' | 'attendee'>>({})
 
   // Date/time state — stored as local datetime strings for input[type=datetime-local]
-  const toLocalDT = (iso: string) => {
+  const toLocalDT = (iso: string, allDay = false) => {
+    if (allDay) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+      if (m) return `${m[1]}-${m[2]}-${m[3]}T00:00`
+    }
     const d = new Date(iso)
     const pad = (n: number) => String(n).padStart(2, '0')
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
   }
-  const [startDT, setStartDT] = useState(toLocalDT(event.start_time))
-  const [endDT, setEndDT] = useState(toLocalDT(event.end_time))
+  const [startDT, setStartDT] = useState(toLocalDT(event.start_time, event.all_day))
+  const [endDT, setEndDT] = useState(toLocalDT(event.end_time, event.all_day))
   const fields = getFieldsForCategory(category)
 
   function buildForm(enrichment: typeof enr, fieldList: EnrichmentFieldKey[]) {
@@ -321,8 +325,8 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
       roles[m.family_member.id] = m.role === 'primary' ? 'primary' : 'attendee'
     }
     setMemberRoles(roles)
-    setStartDT(toLocalDT(event.start_time))
-    setEndDT(toLocalDT(event.end_time))
+    setStartDT(toLocalDT(event.start_time, event.all_day))
+    setEndDT(toLocalDT(event.end_time, event.all_day))
     // Pre-populate form fields from existing enrichment so editing doesn't wipe them
     if (activeEnr) {
       setForm(buildForm(activeEnr, getFieldsForCategory(cat)))
@@ -529,6 +533,13 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     const masterStart = allDayStart ?? parseDateTime(startDT, event.start_time)
     const masterEnd   = allDayEnd   ?? parseDateTime(endDT, event.end_time)
     const rruleStr = buildRrule()
+    const normalizedLocation = location.trim() || null
+    const normalizedAddress = address.trim() || null
+    const locationChanged =
+      normalizedLocation !== (event.location_name?.trim() || null) ||
+      normalizedAddress !== (event.address?.trim() || null)
+    const latForSave = locationChanged ? null : (event.lat ?? null)
+    const lngForSave = locationChanged ? null : (event.lng ?? null)
 
     // Track new master ID created during 'future' split (used for Google sync below)
     let newFutureMasterId: string | null = null
@@ -537,8 +548,10 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
       // Only update this single instance
       const { error } = await supabase.from('events').update({
         title: titleToSave,
-        location_name: location.trim() || null,
-        address: address.trim() || null,
+        location_name: normalizedLocation,
+        address: normalizedAddress,
+        lat: latForSave,
+        lng: lngForSave,
         start_time: masterStart,
         end_time: masterEnd,
         all_day: isAllDay,
@@ -581,8 +594,10 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
       const { data: newMaster, error: newMasterErr } = await supabase.from('events').insert({
         title: titleToSave,
         description: (masterEvent as any).description ?? null,
-        location_name: location.trim() || null,
-        address: address.trim() || null,
+        location_name: normalizedLocation,
+        address: normalizedAddress,
+        lat: latForSave,
+        lng: lngForSave,
         start_time: masterStart,
         end_time: masterEnd,
         all_day: isAllDay,
@@ -622,10 +637,10 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
               end_time: occ.end,
               all_day: isAllDay,
               event_type: eventType,
-              location_name: location.trim() || null,
-              address: address.trim() || null,
-              lat: event.lat ?? null,
-              lng: event.lng ?? null,
+              location_name: normalizedLocation,
+              address: normalizedAddress,
+              lat: latForSave,
+              lng: lngForSave,
               google_calendar_id: (masterEvent as any).google_calendar_id ?? null,
               source_member_id: (masterEvent as any).source_member_id ?? event.source_member_id ?? null,
               status: 'confirmed' as const,
@@ -650,8 +665,10 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
       const masterIdToUpdate = isInstance ? event.recurrence_master_id! : event.id
       const { error: updateError } = await supabase.from('events').update({
         title: titleToSave,
-        location_name: location.trim() || null,
-        address: address.trim() || null,
+        location_name: normalizedLocation,
+        address: normalizedAddress,
+        lat: latForSave,
+        lng: lngForSave,
         start_time: masterStart,
         end_time: masterEnd,
         all_day: isAllDay,
@@ -683,10 +700,10 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             end_time: occ.end,
             all_day: isAllDay,
             event_type: eventType,
-            location_name: location.trim() || null,
-            address: address.trim() || null,
-            lat: event.lat ?? null,
-            lng: event.lng ?? null,
+            location_name: normalizedLocation,
+            address: normalizedAddress,
+            lat: latForSave,
+            lng: lngForSave,
             google_calendar_id: event.google_calendar_id ?? null,
             source_member_id: event.source_member_id ?? null,
             status: 'confirmed' as const,
@@ -711,16 +728,16 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
 
     // Google Calendar sync — strategy depends on scope
     if (scope === 'this') {
-      // Single instance: push-to-google (patch) or create-google-event (new)
+      // Single instance: use sync-event-to-google for create/push + retry queue fallback
       try {
-        if (event.google_event_id) {
-          const pushRes = await supabase.functions.invoke('push-to-google', { body: { event_id: event.id } })
-          if (pushRes.error) console.warn('[EventEditSheet] push-to-google error:', pushRes.error)
-        } else {
-          supabase.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {})
+        const syncRes = await supabase.functions.invoke('sync-event-to-google', { body: { event_id: event.id } })
+        if (syncRes.error) {
+          console.warn('[EventEditSheet] sync-event-to-google error:', syncRes.error)
+        } else if (syncRes.data?.sync_status === 'failed') {
+          console.warn('[EventEditSheet] sync-event-to-google failed:', syncRes.data)
         }
       } catch (pushErr) {
-        console.warn('[EventEditSheet] push-to-google failed:', pushErr)
+        console.warn('[EventEditSheet] sync-event-to-google invocation failed:', pushErr)
       }
       // Weather fetch for this single instance
       supabase.functions.invoke('fetch-event-weather', { body: { event_id: event.id } })

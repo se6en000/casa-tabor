@@ -21,6 +21,13 @@ import { WeatherIcon } from '../components/shared/WeatherIcon'
 import { LeaveByCard } from '../components/shared/LeaveByCard'
 import { useTravelEta, type TravelEtaResult } from '../hooks/useTravelEta'
 import { DepartureRiskBanner } from '../components/shared/DepartureRiskBanner'
+import { resolveEventMode } from '../lib/eventPlanOverrides'
+import { useMemberAvailability } from '../hooks/useMemberAvailability'
+import {
+  evaluateMemberAvailabilityForWindow,
+  indexAvailabilityExceptionsByMember,
+  indexAvailabilityRulesByMember,
+} from '../lib/memberAvailability'
 
 const SHARED_GOLD = '#C9A96E'
 
@@ -55,9 +62,53 @@ export default function HomePage() {
   const scrollRef = useRef<HTMLElement | null>(null)
   const nowLineRef = useRef<HTMLLIElement | null>(null)
   const homeFamily = useMemo(
-    () => (family ?? []).filter(m => m.role === 'parent' || m.role === 'child'),
+    () => (family ?? []).filter((m) => (
+      (m.role === 'parent' || m.role === 'child' || m.role === 'caregiver')
+      && (m.show_on_home_sidebar ?? true)
+    )),
     [family],
   )
+  const availability = useMemberAvailability(homeFamily.map((member) => member.id))
+  const rulesByMember = useMemo(
+    () => indexAvailabilityRulesByMember(availability.rules),
+    [availability.rules],
+  )
+  const exceptionsByMember = useMemo(
+    () => indexAvailabilityExceptionsByMember(availability.exceptions),
+    [availability.exceptions],
+  )
+  const familyStatusByMember = useMemo(() => {
+    const sourceEvents = allTodayEvents ?? []
+    return new Map(homeFamily.map((member) => {
+      const mine = sourceEvents.filter((event) => event.members?.some((eventMember) => eventMember.family_member.id === member.id))
+      const activeNow = mine.find((event) => isBefore(new Date(event.start_time), now) && isAfter(new Date(event.end_time), now))
+      const nextUp = mine
+        .filter((event) => isAfter(new Date(event.start_time), now))
+        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
+      const nowWindowEnd = new Date(now.getTime() + (30 * 60 * 1000))
+      const availabilityAssessment = evaluateMemberAvailabilityForWindow(
+        member,
+        now,
+        nowWindowEnd,
+        rulesByMember.get(member.id) ?? [],
+        exceptionsByMember.get(member.id) ?? [],
+        { requireCanDrive: false },
+      )
+      const label = activeNow
+        ? activeNow.location_name
+          ? `Out · ${activeNow.location_name.split(' ').slice(0, 3).join(' ')}`
+          : `Busy until ${format(new Date(activeNow.end_time), 'h:mm a')}`
+        : !availabilityAssessment.available
+          ? availabilityAssessment.reason ?? 'Unavailable'
+          : availabilityAssessment.softUnavailable
+            ? `${availabilityAssessment.reason ?? 'Blocked hours'} (flex)`
+            : nextUp
+              ? `Next: ${format(new Date(nextUp.start_time), 'h:mm a')}`
+              : 'Free today'
+      const constrained = !availabilityAssessment.available || availabilityAssessment.softUnavailable
+      return [member.id, { label, busy: Boolean(activeNow), constrained }]
+    }))
+  }, [allTodayEvents, homeFamily, now, rulesByMember, exceptionsByMember])
 
   const events = useMemo<EventWithDetails[]>(() => {
     if (!allTodayEvents) return []
@@ -90,7 +141,10 @@ export default function HomePage() {
     () => events.find((e) => isAfter(new Date(e.start_time), now)) ?? null,
     [events, now],
   )
-  const heroDestination = nextTodayEvent ? (nextTodayEvent.address ?? nextTodayEvent.location_name) : null
+  const nextTodayEventMode = nextTodayEvent ? resolveEventMode(nextTodayEvent) : null
+  const heroDestination = nextTodayEvent && nextTodayEventMode !== 'hosted'
+    ? (nextTodayEvent.address ?? nextTodayEvent.location_name)
+    : null
   const heroTravelEta = useTravelEta({
     destination: heroDestination,
     eventStartIso: nextTodayEvent?.start_time ?? null,
@@ -202,7 +256,7 @@ export default function HomePage() {
 
   return (
     // lg: side-by-side with right panel. Mobile: single column.
-    <div className="flex h-full overflow-hidden" onClick={() => setSelectedEventId(null)}>
+    <div className="flex h-full overflow-hidden bg-casa-bg" onClick={() => setSelectedEventId(null)}>
 
       {/* ── Center content ─────────────────────────────────── */}
       <div
@@ -342,22 +396,32 @@ export default function HomePage() {
           <div className="flex gap-2 flex-wrap">
             {homeFamily.map((m) => {
               const active = visibleMembers.length === 0 || visibleMembers.includes(m.id)
+              const status = familyStatusByMember.get(m.id)
               return (
                 <button
                   key={m.id}
                   onClick={() => toggleMember(m.id)}
                   className={cn(
-                    'flex items-center gap-2 px-3 py-1.5 rounded-pill border text-body-sm font-medium transition-all',
+                    'flex items-center gap-2 px-3 py-1.5 rounded-pill border transition-all min-w-0',
                     active
                       ? 'bg-casa-surface border-casa-border shadow-card'
-                      : 'bg-transparent border-casa-divider text-casa-muted opacity-60',
+                      : 'bg-transparent border-casa-divider hover:bg-casa-surface/50',
                   )}
                 >
                   <span
                     className="w-3 h-3 rounded-full transition-opacity"
                     style={{ backgroundColor: m.color_hex, opacity: active ? 1 : 0.4 }}
                   />
-                  {m.name}
+                  <span className={cn('text-body-sm font-semibold transition-opacity shrink-0', active ? 'text-casa-navy opacity-100' : 'text-casa-navy opacity-45')}>
+                    {m.name}
+                  </span>
+                  <span className={cn('text-[0.68rem] leading-[1.15] font-normal text-casa-text-faint tabular-nums truncate max-w-[11rem]', !active && 'opacity-80')}>
+                    {status?.label ?? 'Free today'}
+                  </span>
+                  <span className={cn(
+                    'w-2 h-2 rounded-full shrink-0',
+                    !active ? 'bg-casa-muted/30' : status?.busy || status?.constrained ? 'bg-amber-400' : 'bg-emerald-400',
+                  )} />
                 </button>
               )
             })}
@@ -401,23 +465,29 @@ function DesktopHeroCard({
   if (!focusEvent) return null
 
   const focusStart = new Date(focusEvent.start_time)
+  const focusMode = resolveEventMode(focusEvent)
+  const isHosted = focusMode === 'hosted'
   const isTodayFocus = !!nextTodayEvent
   const minutesUntil = Math.max(0, Math.round((focusStart.getTime() - now.getTime()) / 60000))
   const countdown = minutesUntil >= 60
     ? `${Math.floor(minutesUntil / 60)}H ${minutesUntil % 60}M`
     : `${minutesUntil}M`
   const leadLabel = isTodayFocus ? `UP NEXT · IN ${countdown}` : `TOMORROW · FIRST UP`
-  const liveLeaveBy = isTodayFocus && travelEta?.found && travelEta.leave_by
+  const liveLeaveBy = !isHosted && isTodayFocus && travelEta?.found && travelEta.leave_by
     ? new Date(travelEta.leave_by)
     : null
-  const leaveAt = liveLeaveBy
-    ?? (focusEvent.enrichment?.departure_time ? new Date(focusEvent.enrichment.departure_time) : new Date(focusEvent.start_time))
-  const leaveLabel = (liveLeaveBy || focusEvent.enrichment?.departure_time) ? 'LEAVE BY' : 'STARTS AT'
+  const leaveAt = isHosted
+    ? focusStart
+    : (liveLeaveBy
+      ?? (focusEvent.enrichment?.departure_time ? new Date(focusEvent.enrichment.departure_time) : focusStart))
+  const leaveLabel = isHosted
+    ? 'STARTS AT'
+    : ((liveLeaveBy || focusEvent.enrichment?.departure_time) ? 'LEAVE BY' : 'STARTS AT')
   const eventLabel = cleanEventTitle(focusEvent.title)
-  const mapsUrl = mapsUrlForEvent(focusEvent)
+  const mapsUrl = isHosted ? null : mapsUrlForEvent(focusEvent)
   const detailText = focusEvent.enrichment?.prep_notes
     ?? focusEvent.description
-    ?? `${eventLabel}${focusEvent.location_name ? ` at ${focusEvent.location_name}` : ''}`
+    ?? `${eventLabel}${!isHosted && focusEvent.location_name ? ` at ${focusEvent.location_name}` : ''}`
 
   return (
     <section className="hidden lg:block mt-2 mb-6" onClick={(e) => e.stopPropagation()}>
@@ -426,15 +496,23 @@ function DesktopHeroCard({
         <div className="relative min-w-0">
           <p className="text-caption font-bold tracking-[0.16em] text-casa-gold">{leadLabel}</p>
           <h1 className="font-display text-display-md leading-[1.02] mt-2 !text-white max-w-none pr-1">
-            {isTodayFocus ? `Leave by ${format(leaveAt, 'h:mm a')}` : `Tomorrow starts at ${format(leaveAt, 'h:mm a')}`}
+            {isTodayFocus
+              ? `${isHosted ? 'Starts at' : 'Leave by'} ${format(leaveAt, 'h:mm a')}`
+              : `Tomorrow starts at ${format(leaveAt, 'h:mm a')}`}
           </h1>
           <p className="text-body mt-3 text-white/86 max-w-[60ch] line-clamp-2">{detailText}</p>
           <div className="mt-4 flex items-center flex-wrap gap-x-3 gap-y-1 text-body-sm text-white/88">
-            {(isTodayFocus && travelEta?.found && typeof travelEta.drive_time_mins === 'number')
-              ? <span>{travelEta.drive_time_mins} min drive</span>
-              : (focusEvent.enrichment?.drive_time_mins ? <span>{focusEvent.enrichment.drive_time_mins} min drive</span> : null)}
-            {focusEvent.location_name && <><span>•</span><span>{focusEvent.location_name}</span></>}
-            {focusEvent.enrichment?.weather_at_event && <><span>•</span><span>{focusEvent.enrichment.weather_at_event}</span></>}
+            {isHosted ? (
+              <span>At home</span>
+            ) : (
+              <>
+                {(isTodayFocus && travelEta?.found && typeof travelEta.drive_time_mins === 'number')
+                  ? <span>{travelEta.drive_time_mins} min drive</span>
+                  : (focusEvent.enrichment?.drive_time_mins ? <span>{focusEvent.enrichment.drive_time_mins} min drive</span> : null)}
+                {focusEvent.location_name && <><span>•</span><span>{focusEvent.location_name}</span></>}
+                {focusEvent.enrichment?.weather_at_event && <><span>•</span><span>{focusEvent.enrichment.weather_at_event}</span></>}
+              </>
+            )}
           </div>
           {isTodayFocus && travelEta?.found && (
             <DepartureRiskBanner
@@ -498,6 +576,8 @@ function TimelineRow({
   const happening = isBefore(start, now) && isAfter(end, now)
   const color = eventColor(event)
   const timed = isTimedReminder(event)
+  const mode = resolveEventMode(event)
+  const isHosted = mode === 'hosted'
 
   const [checking, setChecking] = useState(false)
 
@@ -635,15 +715,22 @@ function TimelineRow({
             )}
           </span>
           {event.location_name && (
-            <span className="flex items-center gap-1 text-caption text-casa-muted truncate max-w-[180px]">
-              <MapPin size={11} className="shrink-0 text-casa-error" />
-              {event.location_name}
-            </span>
+            isHosted ? (
+              <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
+            ) : (
+              <span className="flex items-center gap-1 text-caption text-casa-muted truncate max-w-[180px]">
+                <MapPin size={11} className="shrink-0 text-casa-error" />
+                {event.location_name}
+              </span>
+            )
+          )}
+          {isHosted && !event.location_name && (
+            <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
           )}
         </div>
 
         {/* Row 3: departure alert or prep note */}
-        {!happening && (event.address || event.location_name) && (
+        {!happening && !isHosted && (event.address || event.location_name) && (
           <LeaveByCard
             destination={event.address ?? event.location_name}
             eventStartIso={event.start_time}
@@ -651,14 +738,14 @@ function TimelineRow({
             className="mt-1.5"
           />
         )}
-        {!(event.address || event.location_name) && event.enrichment?.departure_time && !happening && (
+        {!isHosted && !(event.address || event.location_name) && event.enrichment?.departure_time && !happening && (
           <div className="flex items-center gap-1 mt-1.5 text-caption font-semibold text-amber-700">
             <Navigation size={11} className="shrink-0" />
             Leave by {format(new Date(event.enrichment.departure_time), 'h:mm a')}
             {event.enrichment.drive_time_mins && ` · ${event.enrichment.drive_time_mins} min`}
           </div>
         )}
-        {!event.enrichment?.departure_time && event.enrichment?.prep_notes && (
+        {(isHosted || !event.enrichment?.departure_time) && event.enrichment?.prep_notes && (
           <p className="text-caption text-casa-muted mt-1 line-clamp-1">{event.enrichment.prep_notes}</p>
         )}
       </div>

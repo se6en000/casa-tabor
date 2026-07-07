@@ -20,6 +20,7 @@ import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, isAllDayReminder, i
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import BounceScroll from '../shared/BounceScroll'
+import { eventOverlapsDay } from '../../utils/eventTime'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -53,7 +54,7 @@ function DayEventCard({
   const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(event)
   const enr = event.enrichment
   const d = new Date(event.start_time)
-  const isAllDay = holiday || isAllDayReminder(event) || !event.start_time.includes('T') ||
+  const isAllDay = event.all_day || holiday || isAllDayReminder(event) || !event.start_time.includes('T') ||
     (d.getHours() === 0 && d.getMinutes() === 0 && event.end_time && (() => { const e = new Date(event.end_time!); return e.getHours() === 23 && e.getMinutes() === 59 })())
 
   const primary = event.members.find(m => m.role === 'primary')
@@ -407,15 +408,10 @@ export default function DayView() {
 
   // Events for the currently selected day
   const dayEvents = allEvents
-    .filter(e => {
-      const start = parseISO(e.start_time)
-      const end = e.end_time ? parseISO(e.end_time) : start
-      return isSameDay(start, selectedDate) ||
-        (start <= selectedDate && end >= selectedDate)
-    })
+    .filter(e => eventOverlapsDay(e, selectedDate))
     .sort((a, b) => {
-      const aAllDay = a.start_time.endsWith('00:00:00+00:00')
-      const bAllDay = b.start_time.endsWith('00:00:00+00:00')
+      const aAllDay = Boolean(a.all_day)
+      const bAllDay = Boolean(b.all_day)
       if (aAllDay && !bAllDay) return -1
       if (!aAllDay && bAllDay) return 1
       return new Date(a.start_time).getTime() - new Date(b.start_time).getTime()

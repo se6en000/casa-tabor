@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { format, isAfter, isBefore } from 'date-fns'
-import { Home, Calendar, ShoppingCart, Sun, Music, Settings, ChevronDown, Users, ChefHat, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Home, Calendar, ShoppingCart, Sun, Music, Settings, ChevronDown, ChefHat, ChevronLeft, ChevronRight } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '../../utils/cn'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
@@ -8,6 +8,12 @@ import { useLiveClock } from '../../hooks/useLiveClock'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
+import { useMemberAvailability } from '../../hooks/useMemberAvailability'
+import {
+  evaluateMemberAvailabilityForWindow,
+  indexAvailabilityExceptionsByMember,
+  indexAvailabilityRulesByMember,
+} from '../../lib/memberAvailability'
 import NotificationDrawer from '../shared/NotificationDrawer'
 import { useState, useMemo, useEffect } from 'react'
 import BounceScroll from '../shared/BounceScroll'
@@ -43,8 +49,20 @@ export default function TabletSidebar() {
 
   // Infer status per family member
   const homeFamily = useMemo(
-    () => (family ?? []).filter(m => m.role === 'parent' || m.role === 'child'),
+    () => (family ?? []).filter((m) => (
+      (m.role === 'parent' || m.role === 'child' || m.role === 'caregiver')
+      && (m.show_on_home_sidebar ?? true)
+    )),
     [family],
+  )
+  const availability = useMemberAvailability(homeFamily.map((member) => member.id))
+  const rulesByMember = useMemo(
+    () => indexAvailabilityRulesByMember(availability.rules),
+    [availability.rules],
+  )
+  const exceptionsByMember = useMemo(
+    () => indexAvailabilityExceptionsByMember(availability.exceptions),
+    [availability.exceptions],
   )
 
   // Infer status per family member
@@ -58,18 +76,18 @@ export default function TabletSidebar() {
         .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
       return { member: m, activeNow, nextUp }
     })
-  }, [homeFamily, todayEvents, now])
+  }, [homeFamily, todayEvents, now, rulesByMember, exceptionsByMember])
 
   return (
     <>
       <aside className={cn(
-        'hidden lg:flex flex-shrink-0 bg-casa-surface border-r border-casa-border flex-col h-screen sticky top-0 overflow-hidden z-30 transition-all duration-300',
+        'hidden lg:flex flex-shrink-0 bg-casa-bg-2 border-r border-casa-border flex-col h-full min-h-0 overflow-hidden z-30 transition-all duration-300',
         collapsed ? 'w-20' : 'w-72',
       )}>
 
         <BounceScroll
           className="flex-1 min-h-0"
-          innerClassName={cn('py-4 flex flex-col', collapsed ? 'px-2' : 'px-4')}
+          innerClassName={cn('pt-3 pb-4 flex flex-col', collapsed ? 'px-2' : 'px-4')}
         >
           <div className={cn('flex mb-2', collapsed ? 'justify-center' : 'justify-end')}>
             <button
@@ -80,79 +98,6 @@ export default function TabletSidebar() {
               {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
             </button>
           </div>
-
-          {/* Family — collapsible filter + who's home */}
-          {!collapsed && (
-            <div className="mb-4">
-              <button
-                onClick={() => setFamilyOpen(o => !o)}
-                className="w-full flex items-center gap-1.5 px-2 pb-2 text-caption text-casa-muted uppercase tracking-wider hover:text-casa-navy transition-colors"
-              >
-                <Users size={12} className="shrink-0" />
-                Family
-                <ChevronDown
-                  size={13}
-                  className={cn('ml-auto transition-transform duration-200', familyOpen ? 'rotate-0' : '-rotate-90')}
-                />
-              </button>
-
-              <AnimatePresence initial={false}>
-                {familyOpen && (
-                  <motion.div
-                    key="family-list"
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-                    style={{ overflow: 'hidden' }}
-                  >
-                    <div className="flex flex-col gap-0.5">
-                      {homeFamily.map(m => {
-                        const active = visibleMembers.length === 0 || visibleMembers.includes(m.id)
-                        const status = whoStatus.find(s => s.member.id === m.id)
-                        const busy = !!status?.activeNow
-                        const statusLabel = status?.activeNow
-                          ? status.activeNow.location_name
-                            ? `Out · ${status.activeNow.location_name.split(' ').slice(0, 3).join(' ')}`
-                            : `Busy until ${format(new Date(status.activeNow.end_time), 'h:mm a')}`
-                          : status?.nextUp
-                            ? `Next: ${format(new Date(status.nextUp.start_time), 'h:mm a')}`
-                            : 'Free today'
-
-                        return (
-                          <button
-                            key={m.id}
-                            onClick={() => toggleMember(m.id)}
-                            className={cn(
-                              'flex items-center gap-3 px-2 py-2.5 rounded-xl transition-all text-left w-full',
-                              active ? 'bg-casa-bg' : 'opacity-35 hover:opacity-60',
-                            )}
-                          >
-                            <span
-                              className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-caption font-bold text-white"
-                              style={{ backgroundColor: m.color_hex }}
-                            >
-                              {m.name[0]}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <p className={cn('text-body font-medium leading-tight', active ? 'text-casa-navy' : 'text-casa-muted')}>
-                                {m.name}
-                              </p>
-                              <p className="text-caption text-casa-muted truncate mt-0.5">{statusLabel}</p>
-                            </div>
-                            <span className={cn(
-                              'w-2.5 h-2.5 rounded-full flex-shrink-0',
-                              !active ? 'bg-casa-muted/30' : busy ? 'bg-amber-400' : 'bg-emerald-400',
-                            )} />
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          )}
 
           {/* Nav */}
           <div className="flex flex-col gap-0.5">
@@ -182,6 +127,94 @@ export default function TabletSidebar() {
               </NavLink>
             ))}
           </div>
+
+          {/* Family — collapsible filter + who's home */}
+          {!collapsed && (
+            <div className="mt-3">
+              <button
+                onClick={() => setFamilyOpen(o => !o)}
+                className="w-full flex items-center px-1.5 pb-2 text-caption font-semibold text-casa-text-faint uppercase tracking-[0.18em] hover:text-casa-text-secondary transition-colors"
+              >
+                Family
+                <ChevronDown
+                  size={13}
+                  className={cn('ml-auto transition-transform duration-200', familyOpen ? 'rotate-0' : '-rotate-90')}
+                />
+              </button>
+
+              <AnimatePresence initial={false}>
+                {familyOpen && (
+                  <motion.div
+                    key="family-list"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <div className="flex flex-col gap-0.5">
+                      {homeFamily.map(m => {
+                        const active = visibleMembers.length === 0 || visibleMembers.includes(m.id)
+                        const status = whoStatus.find(s => s.member.id === m.id)
+                        const busy = !!status?.activeNow
+                        const nowWindowEnd = new Date(now.getTime() + (30 * 60 * 1000))
+                        const availabilityAssessment = evaluateMemberAvailabilityForWindow(
+                          m,
+                          now,
+                          nowWindowEnd,
+                          rulesByMember.get(m.id) ?? [],
+                          exceptionsByMember.get(m.id) ?? [],
+                          { requireCanDrive: false },
+                        )
+                        const statusLabel = status?.activeNow
+                          ? status.activeNow.location_name
+                            ? `Out · ${status.activeNow.location_name.split(' ').slice(0, 3).join(' ')}`
+                            : `Busy until ${format(new Date(status.activeNow.end_time), 'h:mm a')}`
+                          : !availabilityAssessment.available
+                            ? availabilityAssessment.reason ?? 'Unavailable'
+                            : availabilityAssessment.softUnavailable
+                              ? `${availabilityAssessment.reason ?? 'Blocked hours'} (flex)`
+                            : status?.nextUp
+                              ? `Next: ${format(new Date(status.nextUp.start_time), 'h:mm a')}`
+                              : 'Free today'
+                        const constrained = !availabilityAssessment.available || availabilityAssessment.softUnavailable
+
+                        return (
+                          <button
+                            key={m.id}
+                            onClick={() => toggleMember(m.id)}
+                            className={cn(
+                              'flex items-center gap-2.5 px-1.5 py-1.5 rounded-xl transition-colors text-left w-full',
+                              active ? 'bg-transparent' : 'bg-transparent hover:bg-casa-surface/35',
+                            )}
+                          >
+                            <span
+                              className="relative w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-body font-bold text-white"
+                              style={{ backgroundColor: m.color_hex }}
+                            >
+                              {m.name[0]}
+                              <span className={cn(
+                                'absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-casa-bg-2',
+                                !active ? 'bg-casa-muted/30' : busy || constrained ? 'bg-amber-400' : 'bg-emerald-400',
+                              )} />
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className={cn('text-body font-semibold leading-tight transition-opacity', active ? 'text-casa-navy opacity-100' : 'text-casa-navy opacity-45')}>
+                                {m.name}
+                              </p>
+                              <p className={cn('text-[0.68rem] leading-[1.15] font-normal tabular-nums truncate mt-0.5', active ? 'text-casa-text-faint' : 'text-casa-text-faint/80')}>
+                                {statusLabel}
+                              </p>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
         </BounceScroll>
       </aside>
 

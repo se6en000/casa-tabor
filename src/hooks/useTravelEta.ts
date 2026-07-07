@@ -22,17 +22,20 @@ export function useTravelEta({
   eventStartIso,
   enabled = true,
   bufferMins = 10,
+  refetchIntervalMs = false,
 }: {
   destination: string | null
   eventStartIso?: string | null
   enabled?: boolean
   bufferMins?: number
+  refetchIntervalMs?: number | false
 }) {
   const trimmedDestination = destination?.trim() ?? ''
   return useQuery({
     queryKey: ['travel-eta', trimmedDestination, eventStartIso ?? null, bufferMins],
     enabled: enabled && trimmedDestination.length > 0,
     staleTime: 5 * 60_000,
+    refetchInterval: refetchIntervalMs,
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke('route-eta', {
         body: {

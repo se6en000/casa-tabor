@@ -1,6 +1,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { refreshAccessToken, createGoogleEvent, patchGoogleEvent } from '../_shared/google.ts'
 
+const TARGET_SYNC_GOOGLE_EMAIL = (Deno.env.get('GOOGLE_SYNC_TARGET_EMAIL') ?? 'jacobrtabor@gmail.com').toLowerCase()
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -34,16 +36,12 @@ Deno.serve(async (req) => {
     if (evErr || !master) return err(evErr?.message ?? 'master event not found', 404)
     if (master.event_type === 'reminder') return ok({ skipped: 'reminder' })
 
-    // Get Google token — try source_member_id first, fall back to any
-    const memberId = master.source_member_id
-    let tok = memberId
-      ? (await sb.from('google_tokens').select('*').eq('family_member_id', memberId).maybeSingle()).data
-      : null
-    if (!tok) {
-      const { data: anyTok } = await sb.from('google_tokens').select('*').limit(1).maybeSingle()
-      tok = anyTok ?? null
-    }
-    if (!tok) return ok({ skipped: 'no google token available' })
+    const { data: tok } = await sb
+      .from('google_tokens')
+      .select('*')
+      .eq('google_email', TARGET_SYNC_GOOGLE_EMAIL)
+      .maybeSingle()
+    if (!tok) return err(`no google token for configured sync account: ${TARGET_SYNC_GOOGLE_EMAIL}`)
 
     // Refresh if expiring within 60s
     let accessToken = tok.access_token
@@ -91,14 +89,37 @@ Deno.serve(async (req) => {
 
     if (master.google_event_id) {
       // PATCH existing Google recurring event — updates title, times, location, recurrence rule
-      await patchGoogleEvent({
-        accessToken,
-        calendarId,
-        eventId: master.google_event_id as string,
-        patch: eventBody,
-      })
-      console.log('[update-recurring-google] patched:', master.google_event_id)
-      return ok({ patched: master.google_event_id })
+      try {
+        await patchGoogleEvent({
+          accessToken,
+          calendarId,
+          eventId: master.google_event_id as string,
+          patch: eventBody,
+        })
+        await sb.from('events').update({
+          source_member_id: tok.family_member_id,
+          google_calendar_id: calendarId,
+          updated_at: new Date().toISOString(),
+        }).eq('id', master_event_id)
+        console.log('[update-recurring-google] patched:', master.google_event_id)
+        return ok({ patched: master.google_event_id })
+      } catch (errPatch) {
+        const msg = (errPatch as Error).message ?? String(errPatch)
+        if (!msg.includes('404')) throw errPatch
+        const created = await createGoogleEvent({
+          accessToken,
+          calendarId,
+          event: eventBody,
+        })
+        await sb.from('events').update({
+          google_event_id: created.id,
+          google_calendar_id: calendarId,
+          source_member_id: tok.family_member_id,
+          updated_at: new Date().toISOString(),
+        }).eq('id', master_event_id)
+        console.log('[update-recurring-google] recreated on target account:', created.id)
+        return ok({ recreated: created.id })
+      }
     } else {
       // CREATE new Google recurring event and write ID back to master
       const created = await createGoogleEvent({
@@ -109,6 +130,7 @@ Deno.serve(async (req) => {
       await sb.from('events').update({
         google_event_id: created.id,
         google_calendar_id: calendarId,
+        source_member_id: tok.family_member_id,
         updated_at: new Date().toISOString(),
       }).eq('id', master_event_id)
       console.log('[update-recurring-google] created:', created.id)

@@ -1,0 +1,1034 @@
+import { useState, useEffect, useRef } from 'react'
+import { format } from 'date-fns'
+import { motion, AnimatePresence, useDragControls } from 'framer-motion'
+import {
+  X, MapPin, AlertTriangle, Navigation, ChevronRight, Sparkles,
+  Loader2, Users, Crown, Plus, Check, Pencil, Share2,
+} from 'lucide-react'
+import { supabase } from '../../lib/supabase'
+import { useQueryClient } from '@tanstack/react-query'
+import { cn } from '../../utils/cn'
+import type { EventWithDetails } from '../../hooks/useCalendarEvents'
+import type { EventChecklistItem, EventEnrichment } from '../../types'
+import { getFieldsForCategory, CATEGORY_LABEL } from './categoryFields'
+import EventEditSheet from './EventEditSheet'
+import { useFamilyMembers } from '../../hooks/useFamilyMembers'
+import { useSavedPlaces, useSavePlace } from '../../hooks/useSavedPlaces'
+import { useTravelEta } from '../../hooks/useTravelEta'
+import {
+  inferEventMode, derivePlan, eventAccentColor, trafficPill, eventAttendees,
+  type PlanModel, type EventMode,
+} from '../../lib/eventCommandCenter'
+import BounceScroll from '../shared/BounceScroll'
+
+// ── Exact design tokens from the Event Command Center handoff (SPEC §2) ──────
+const S = {
+  navy: '#1B2A44',
+  muted: '#6B6353',
+  label: '#9A9078',
+  eyebrow: '#8A8368',
+  planLabel: '#A9B2C6',
+  chipFill: '#F7F5EF',
+  yourTimeFill: '#F6F3EC',
+  coverFill: '#F9F7F1',
+  gold: '#C6A15B',
+  goldBadge: '#E0B96A',
+  goldText: '#8A6314',
+  amberBg: '#FCF3E0',
+  amberBorder: '#EAD3A0',
+  green: '#2F8F5B',
+  greenBg: '#E6F4EC',
+  red: '#C0392B',
+  redBg: '#FBEAE7',
+  borderSoft: 'rgba(27,42,68,0.08)',
+  borderMed: 'rgba(27,42,68,0.10)',
+  hair: 'rgba(27,42,68,0.06)',
+}
+const serif = { fontFamily: "'Source Serif 4', Georgia, serif" }
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '')
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
+  const n = parseInt(full, 16)
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
+  return `rgba(${r},${g},${b},${alpha})`
+}
+
+interface EventDetailPanelProps {
+  event: EventWithDetails | null
+  onClose: () => void
+}
+
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.innerWidth < 1024)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)')
+    const handler = (e: MediaQueryListEvent) => setMobile(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+  return mobile
+}
+
+const stopTouch = (e: React.TouchEvent | React.PointerEvent) => e.stopPropagation()
+
+export default function EventDetailPanel({ event, onClose }: EventDetailPanelProps) {
+  const [showEdit, setShowEdit] = useState(false)
+  const isMobile = useIsMobile()
+  const mobileDragControls = useDragControls()
+
+  // Lock body scroll while panel is open so the calendar can't scroll behind it
+  useEffect(() => {
+    if (!event) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [event])
+
+  return (
+    <>
+      <AnimatePresence initial={false}>
+        {event && (
+          <>
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-[54]"
+              style={{ background: 'linear-gradient(90deg,rgba(27,42,68,0.22),rgba(27,42,68,0.04) 40%,transparent)' }}
+              data-panel-overlay
+              onClick={onClose}
+              onTouchStart={stopTouch}
+              onTouchMove={stopTouch}
+              onTouchEnd={stopTouch}
+              onPointerDown={stopTouch}
+            />
+
+            {isMobile ? (
+              /* ── Mobile: bottom sheet with grab handle ── */
+              <motion.div
+                key="mobile-panel-shell"
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '100%', transition: { duration: 0.26, ease: [0.4, 0, 1, 1] } }}
+                transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                drag="y"
+                dragControls={mobileDragControls}
+                dragListener={false}
+                dragConstraints={{ top: 0 }}
+                dragElastic={{ top: 0, bottom: 0.15 }}
+                dragMomentum={false}
+                onDragEnd={(_e, info) => {
+                  if (info.velocity.y > 500 || info.offset.y > 200) onClose()
+                }}
+                style={{ willChange: 'transform', backfaceVisibility: 'hidden' }}
+                className="fixed inset-x-2 bottom-2 top-[5vh] bg-white rounded-3xl shadow-[0_14px_44px_rgba(6,10,36,0.28)] z-[55] flex flex-col overflow-hidden transform-gpu"
+                data-panel-overlay
+                onClick={e => e.stopPropagation()}
+                onPointerDown={stopTouch}
+                onTouchStart={stopTouch}
+                onTouchMove={stopTouch}
+                onTouchEnd={stopTouch}
+              >
+                <div
+                  className="flex-shrink-0 flex items-center justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing"
+                  style={{ touchAction: 'none' }}
+                  onPointerDown={e => mobileDragControls.start(e)}
+                >
+                  <div className="w-10 h-[5px] rounded-full" style={{ background: 'rgba(27,42,68,0.18)' }} />
+                </div>
+                <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
+                  <PanelHeader event={event} onClose={onClose} onEdit={() => setShowEdit(true)} />
+                  <PanelBody event={event} onEdit={() => setShowEdit(true)} />
+                </div>
+                <PanelFooter event={event} onEdit={() => setShowEdit(true)} />
+              </motion.div>
+            ) : (
+              /* ── Desktop: 520px right side-sheet (rounded per Casa) ── */
+              <motion.div
+                key="desktop-panel-shell"
+                initial={{ x: '100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }}
+                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                style={{ willChange: 'transform', backfaceVisibility: 'hidden' }}
+                className="fixed top-4 right-4 bottom-4 h-auto w-[min(520px,calc(100vw-2rem))] bg-white rounded-3xl shadow-[-24px_0_60px_-20px_rgba(6,10,36,0.35)] z-[55] flex flex-col overflow-hidden transform-gpu"
+                data-panel-overlay
+                onClick={e => e.stopPropagation()}
+                onPointerDown={stopTouch}
+                onTouchStart={stopTouch}
+                onTouchMove={stopTouch}
+                onTouchEnd={stopTouch}
+              >
+                <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
+                  <PanelHeader event={event} onClose={onClose} onEdit={() => setShowEdit(true)} />
+                  <PanelBody event={event} onEdit={() => setShowEdit(true)} />
+                </div>
+                <PanelFooter event={event} onEdit={() => setShowEdit(true)} />
+              </motion.div>
+            )}
+          </>
+        )}
+      </AnimatePresence>
+
+      {event && (
+        <EventEditSheet event={event} open={showEdit} onClose={() => setShowEdit(false)} />
+      )}
+    </>
+  )
+}
+
+/* ── Inline Member Editor ───────────────────────────────────── */
+
+function MemberEditor({ event }: { event: EventWithDetails }) {
+  const queryClient = useQueryClient()
+  const { data: allMembers = [] } = useFamilyMembers()
+  const [showPicker, setShowPicker] = useState(false)
+  const [saving, setSaving] = useState<string | null>(null)
+  const pickerRef = useRef<HTMLDivElement>(null)
+
+  // Close picker on outside tap
+  useEffect(() => {
+    if (!showPicker) return
+    const handler = (e: MouseEvent | TouchEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setShowPicker(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    document.addEventListener('touchstart', handler)
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler) }
+  }, [showPicker])
+
+  const sorted = [...event.members].sort((a, b) => (a.role === 'primary' ? -1 : b.role === 'primary' ? 1 : 0))
+  const assignedIds = new Set(event.members.map(m => m.family_member?.id))
+
+  async function makeOwner(memberId: string) {
+    setSaving(memberId)
+    // Demote current primary, promote new one
+    await supabase.from('event_members').update({ role: 'attendee' }).eq('event_id', event.id).eq('role', 'primary')
+    await supabase.from('event_members').update({ role: 'primary' }).eq('event_id', event.id).eq('family_member_id', memberId)
+    queryClient.invalidateQueries({ queryKey: ['events'] })
+    setSaving(null)
+  }
+
+  async function removeMember(eventMemberId: string) {
+    setSaving(eventMemberId)
+    await supabase.from('event_members').delete().eq('id', eventMemberId)
+    queryClient.invalidateQueries({ queryKey: ['events'] })
+    setSaving(null)
+  }
+
+  async function addMember(familyMemberId: string) {
+    setSaving(familyMemberId)
+    await supabase.from('event_members').upsert(
+      { event_id: event.id, family_member_id: familyMemberId, role: 'attendee' },
+      { onConflict: 'event_id,family_member_id', ignoreDuplicates: true }
+    )
+    queryClient.invalidateQueries({ queryKey: ['events'] })
+    setSaving(null)
+    setShowPicker(false)
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 relative">
+      {sorted.map((m) => {
+        const isPrimary = m.role === 'primary'
+        const isLoading = saving === m.id || saving === m.family_member?.id
+        const color = m.family_member?.color_hex ?? '#888'
+        return (
+          <div
+            key={m.id}
+            className="group inline-flex items-center gap-1.5 rounded-pill pl-1 pr-2 py-1 text-[13px] font-semibold transition-opacity"
+            style={{ background: S.chipFill, border: `1px solid ${S.borderSoft}`, color: S.navy, opacity: isLoading ? 0.6 : 1 }}
+          >
+            <span
+              className="w-[22px] h-[22px] rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
+              style={{ backgroundColor: color }}
+            >
+              {m.family_member?.name?.[0]}
+            </span>
+            <span>{m.family_member?.name}</span>
+
+            {/* Promote / remove — subtle, appear on hover */}
+            {!isPrimary && (
+              <button
+                onClick={() => makeOwner(m.family_member!.id)}
+                className="ml-0.5 w-4 h-4 rounded-full flex items-center justify-center text-casa-muted opacity-0 group-hover:opacity-70 hover:!opacity-100 transition-opacity"
+                title="Make primary"
+              >
+                <Crown size={11} />
+              </button>
+            )}
+            {(event.members.length > 1 || !isPrimary) && (
+              <button
+                onClick={() => removeMember(m.id)}
+                className="w-4 h-4 rounded-full flex items-center justify-center text-casa-muted opacity-0 group-hover:opacity-70 hover:!opacity-100 transition-opacity"
+                title="Remove"
+              >
+                <X size={11} />
+              </button>
+            )}
+          </div>
+        )
+      })}
+
+      {/* Add button */}
+      <div className="relative" ref={pickerRef}>
+        <button
+          onClick={() => setShowPicker(p => !p)}
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-pill border border-dashed text-[13px] font-semibold transition-colors"
+          style={{ borderColor: S.borderMed, color: S.label }}
+        >
+          <Plus size={12} /> Add
+        </button>
+
+        <AnimatePresence>
+          {showPicker && (
+            <motion.div
+              initial={{ opacity: 0, y: -4, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4, scale: 0.96 }}
+              transition={{ duration: 0.15 }}
+              className="absolute top-full mt-1.5 left-0 z-20 bg-white border rounded-2xl shadow-[0_12px_32px_rgba(6,10,36,0.16)] p-2 flex flex-col gap-1 min-w-[150px]"
+              style={{ borderColor: S.borderSoft }}
+            >
+              {allMembers
+                .filter(fm => !assignedIds.has(fm.id))
+                .map(fm => (
+                  <button
+                    key={fm.id}
+                    onClick={() => addMember(fm.id)}
+                    disabled={saving === fm.id}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-[#F7F5EF] transition-colors text-left"
+                  >
+                    <span
+                      className="w-6 h-6 rounded-full text-white text-[11px] font-bold flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: fm.color_hex ?? '#888' }}
+                    >
+                      {fm.name?.[0]}
+                    </span>
+                    <span className="text-[14px] font-medium" style={{ color: S.navy }}>{fm.name}</span>
+                  </button>
+                ))}
+              {allMembers.filter(fm => !assignedIds.has(fm.id)).length === 0 && (
+                <p className="text-caption px-2 py-1" style={{ color: S.label }}>Everyone's added</p>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  )
+}
+
+/* ── Header ─────────────────────────────────────────────────── */
+
+function PanelHeader({ event, onClose }: { event: EventWithDetails; onClose: () => void }) {
+  const urgentAction = event.actions?.find((a) => a.is_urgent && !a.completed)
+  const confidence = event.enrichment?.confidence as keyof typeof CONFIDENCE_CONFIG | undefined
+  const conf = confidence ? CONFIDENCE_CONFIG[confidence] : null
+  const category = event.enrichment?.category
+  const accent = eventAccentColor(event)
+  const primary = event.members?.find((m) => m.role === 'primary') ?? event.members?.[0]
+  const eyebrow = primary?.family_member?.name
+    ? `${primary.family_member.name}${event.members.length > 1 ? ` +${event.members.length - 1}` : ''}`
+    : null
+  const isRecurring = Boolean(event.rrule || event.recurrence_master_id)
+
+  return (
+    <div className="border-b border-casa-border">
+      <div className="p-6 pb-4 relative">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-full hover:bg-casa-divider transition-colors"
+        >
+          <X size={18} />
+        </button>
+
+        {/* Type + recurring chips */}
+        <div className="flex items-center flex-wrap gap-2 mb-2">
+          {category && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-caption font-semibold bg-casa-bg border border-casa-border text-casa-muted capitalize">
+              {CATEGORY_LABEL[category] ?? category}
+            </span>
+          )}
+          {isRecurring && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption font-semibold bg-casa-bg border border-casa-border text-casa-muted">
+              <Clock size={10} /> Recurring
+            </span>
+          )}
+        </div>
+
+        {/* Eyebrow — color-dotted uppercase kicker naming whose event it is */}
+        {eyebrow && (
+          <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-casa-muted mb-1.5">
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: accent }} />
+            {eyebrow}
+          </p>
+        )}
+
+        <h2 className="font-display text-display-md text-casa-navy pr-8 mb-1 leading-tight">
+          {event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}
+        </h2>
+        <p className="text-body text-casa-muted">
+          {format(new Date(event.start_time), 'EEEE, MMMM d')}
+          {' · '}
+          {format(new Date(event.start_time), 'h:mm a')} – {format(new Date(event.end_time), 'h:mm a')}
+        </p>
+
+        {conf && (
+          <div className="flex items-center flex-wrap gap-2 mt-3">
+            <span className={cn('inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-caption font-semibold border', conf.bg, conf.text, conf.border)}>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: conf.color }} />
+              {conf.label}
+            </span>
+          </div>
+        )}
+
+        {/* Urgent action banner */}
+        {urgentAction && (
+          <div className="mt-3 flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-card">
+            <AlertTriangle size={15} className="text-casa-warning shrink-0 mt-0.5" />
+            <div>
+              <p className="text-body-sm font-semibold text-casa-text">{urgentAction.title}</p>
+              {urgentAction.description && (
+                <p className="text-caption text-casa-muted mt-0.5">{urgentAction.description}</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
+/* ── Body: block-engine command center ─────────────────────── */
+
+function PanelBody({ event, onEdit }: { event: EventWithDetails; onEdit?: () => void }) {
+  return <StandardPanelBody event={event} onEdit={onEdit} />
+}
+
+
+function StandardPanelBody({ event, topSlot, onEdit }: { event: EventWithDetails; topSlot?: React.ReactNode; onEdit?: () => void }) {
+  const enr = event.enrichment
+  const weatherAtVenue = enr?.weather_at_event || enr?.weather_summary
+  const reminder = event.event_type === 'reminder'
+  const hasChecklist = event.checklist?.length > 0
+  const hasActions = event.actions?.filter((a) => !a.is_urgent).length > 0
+  const activeFields = getFieldsForCategory(enr?.category)
+  const shows = (field: string) => activeFields.includes(field as ReturnType<typeof getFieldsForCategory>[number])
+  const hasText = (value: unknown) => {
+    if (typeof value === 'string') return value.trim() !== ''
+    return value !== null && value !== undefined
+  }
+  const { data: household = [] } = useFamilyMembers()
+
+  const commuteDestination = event.address ?? event.location_name ?? null
+  const commuteQuery = useTravelEta({
+    destination: commuteDestination,
+    eventStartIso: event.start_time,
+    enabled: !reminder && Boolean(commuteDestination),
+    bufferMins: 10,
+  })
+
+  // Phase 1 verify heuristic: geocoded coords present → confirmed; else unverified.
+  const verified = Boolean(event.lat != null && event.lng != null)
+  const hasDestination = Boolean(event.location_name || event.address)
+
+  const mode = inferEventMode(event)
+  const plan = reminder ? null : derivePlan(event, mode, {
+    household,
+    eta: commuteQuery.data,
+    verified,
+  })
+
+  const hostedAtHome = mode === 'hosted'
+
+  return (
+    <BounceScroll className="flex-1" innerClassName="p-6 space-y-5">
+      {topSlot}
+
+      {/* ── Going ── */}
+      {!reminder && (
+        <section>
+          <SectionLabel>{hostedAtHome ? 'At home' : 'Going'}</SectionLabel>
+          <MemberEditor event={event} />
+        </section>
+      )}
+
+      {/* ── Destination + verify (at-a-glance) ── */}
+      {!reminder && hasDestination && (
+        <section>
+          <DestinationHeaderCard
+            locationName={event.location_name}
+            address={event.address}
+            verified={verified}
+            atHome={hostedAtHome}
+            onCheckAddress={onEdit}
+          />
+        </section>
+      )}
+
+      {/* ── The Plan ── */}
+      {plan && (
+        <section>
+          <PlanBlock plan={plan} loading={commuteQuery.isLoading && !commuteQuery.data} />
+          {commuteQuery.data?.found && (
+            <div className="mt-3">
+              <DepartureRiskBanner
+                event={event}
+                travelEta={commuteQuery.data}
+                enableSmartAlerts
+              />
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ── Where (map + weather + verify state) ── */}
+      {!reminder && hasDestination && (
+        <section>
+          <SectionLabel>{mode === 'hosted' ? 'Location' : mode === 'trip' ? 'Destination' : 'Where'}</SectionLabel>
+          <LocationBlock
+            locationName={event.location_name}
+            address={event.address}
+            parkingNotes={shows('parking_notes') || hasText(enr?.parking_notes) ? enr?.parking_notes : null}
+            contactName={shows('contact_name') || hasText(enr?.contact_name) ? enr?.contact_name : null}
+            contactPhone={shows('contact_phone') || hasText(enr?.contact_phone) ? enr?.contact_phone : null}
+            weatherAtVenue={weatherAtVenue}
+          />
+          <div className={cn(
+            'mt-2 flex items-center gap-1.5 text-caption font-medium',
+            verified ? 'text-emerald-600' : 'text-amber-600',
+          )}>
+            {verified ? <Check size={12} /> : <AlertTriangle size={12} />}
+            {verified ? 'Address confirmed · drive times are live' : 'Drive times are estimates until you confirm the address'}
+          </div>
+        </section>
+      )}
+
+      {/* ── Bring / Pack ── */}
+      {hasChecklist && (
+        <section>
+          <SectionLabel>{mode === 'trip' ? 'Pack' : 'Bring'}</SectionLabel>
+          <ChecklistSection items={event.checklist} eventId={event.id} />
+        </section>
+      )}
+
+      {!hasChecklist && enr?.what_to_bring && enr.what_to_bring.length > 0 && (
+        <section>
+          <SectionLabel>{mode === 'trip' ? 'Pack' : 'Bring'}</SectionLabel>
+          <div className="space-y-2">
+            {enr.what_to_bring.map((item, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Square size={16} className="text-casa-border shrink-0" />
+                <span className="text-body-sm text-casa-text">{item}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── To Do (non-urgent action items) ── */}
+      {hasActions && (
+        <section>
+          <SectionLabel>To Do</SectionLabel>
+          <div className="space-y-2">
+            {event.actions.filter((a) => !a.is_urgent).map((action) => (
+              <div key={action.id} className={cn(
+                'flex items-start gap-3 p-3 rounded-card border',
+                action.completed ? 'border-casa-divider opacity-50' : 'border-casa-border bg-casa-bg',
+              )}>
+                <ChevronRight size={14} className="text-casa-gold mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className={cn('text-body-sm font-semibold text-casa-navy', action.completed && 'line-through')}>{action.title}</p>
+                  {action.description && <p className="text-caption text-casa-muted mt-0.5">{action.description}</p>}
+                  {action.due_date && <p className="text-caption text-casa-muted mt-0.5">Due {format(new Date(action.due_date), 'MMM d')}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Reference (collapsible: contact, cost, notes, dietary, outfit) ── */}
+      {enr && (
+        <ReferenceBlock enr={enr} hasText={hasText} />
+      )}
+
+      {!enr && !reminder && (
+        <div className="flex flex-col items-center gap-2 py-6 text-center">
+          <Sparkles size={22} className="text-casa-muted" />
+          <p className="text-body-sm text-casa-muted">No AI enrichment yet.</p>
+          <p className="text-caption text-casa-muted">Tap Re-enrich above to generate details for this event.</p>
+        </div>
+      )}
+    </BounceScroll>
+  )
+}
+
+/* ── Command Center blocks ──────────────────────────────────── */
+
+function DestinationHeaderCard({ locationName, address, verified, atHome, onCheckAddress }: {
+  locationName: string | null
+  address: string | null
+  verified: boolean
+  atHome: boolean
+  onCheckAddress?: () => void
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-card border border-casa-border bg-casa-bg px-3.5 py-3">
+      <MapPin size={16} className="text-casa-error shrink-0" />
+      <div className="min-w-0 flex-1">
+        {locationName && <p className="text-body-sm font-semibold text-casa-navy truncate">{locationName}</p>}
+        {address && <p className="text-caption text-casa-muted truncate">{address}</p>}
+      </div>
+      {verified ? (
+        <span className="shrink-0 inline-flex items-center gap-1 rounded-pill bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-caption font-semibold text-emerald-700">
+          <Check size={11} /> Confirmed
+        </span>
+      ) : atHome ? (
+        <span className="shrink-0 inline-flex items-center gap-1 rounded-pill bg-casa-surface border border-casa-border px-2.5 py-1 text-caption font-semibold text-casa-muted">
+          <Home size={11} /> At home
+        </span>
+      ) : (
+        <button
+          onClick={onCheckAddress}
+          className="shrink-0 inline-flex items-center gap-1 rounded-pill bg-amber-50 border border-amber-200 px-2.5 py-1 text-caption font-semibold text-amber-700 hover:bg-amber-100 transition-colors"
+        >
+          Check address <ChevronRight size={11} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+function TrafficBadge({ deltaMin }: { deltaMin: number | null | undefined }) {
+  const pill = trafficPill(deltaMin)
+  if (!pill) return null
+  const tone =
+    pill.tone === 'clear' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    : pill.tone === 'light' ? 'bg-amber-50 text-amber-700 border-amber-200'
+    : 'bg-red-50 text-red-700 border-red-200'
+  return (
+    <span className={cn('inline-flex items-center rounded-pill border px-2 py-0.5 text-[11px] font-semibold', tone)}>
+      {pill.label}
+    </span>
+  )
+}
+
+function DriverChip({ driver }: { driver: { name: string; initial: string; color: string } | null | undefined }) {
+  if (!driver) return null
+  return (
+    <div
+      className="shrink-0 inline-flex items-center gap-1.5 rounded-pill pl-1 pr-2.5 py-1 text-white text-caption font-semibold"
+      style={{ backgroundColor: driver.color }}
+    >
+      <span className="w-4 h-4 rounded-full bg-white/25 flex items-center justify-center text-[9px] font-bold">
+        {driver.initial}
+      </span>
+      {driver.name}
+    </div>
+  )
+}
+
+function PlanBlock({ plan, loading }: { plan: PlanModel; loading?: boolean }) {
+  const legDotColor = (kind: string) =>
+    kind === 'drop' || kind === 'depart' ? 'bg-casa-navy'
+    : kind === 'stay' ? 'bg-casa-gold'
+    : 'bg-emerald-500'
+
+  return (
+    <div className="rounded-card overflow-hidden border border-casa-border">
+      {/* Navy header */}
+      <div className="bg-casa-navy px-4 py-3 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/45">The Plan</p>
+          {plan.headline && <p className="text-body-sm font-semibold text-white truncate">{plan.headline}</p>}
+        </div>
+        <span className="shrink-0 inline-flex items-center gap-1.5 rounded-pill bg-white/10 px-2.5 py-1 text-caption font-semibold text-white">
+          {plan.pattern}
+          <span className="text-[9px] font-bold uppercase tracking-wide text-casa-gold">Auto</span>
+        </span>
+      </div>
+
+      {/* Legs */}
+      <div className="bg-casa-surface px-4 py-3">
+        <p className="text-[11px] text-casa-muted mb-2.5">Drivers derived from attendees · editing coming soon</p>
+        <ol className="space-y-3">
+          {plan.legs.map((leg, i) => (
+            <li key={i} className="flex items-start gap-3">
+              <div className="flex flex-col items-center pt-1">
+                <span className={cn('w-2.5 h-2.5 rounded-full', legDotColor(leg.kind))} />
+                {i < plan.legs.length - 1 && <div className="w-px flex-1 min-h-[16px] bg-casa-divider mt-1" />}
+              </div>
+              <div className="min-w-0 flex-1 flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-body-sm font-semibold text-casa-navy leading-tight">{leg.title}</p>
+                  {leg.detail && <p className="text-caption text-casa-muted mt-0.5">{leg.detail}</p>}
+                  {leg.trafficDeltaMin != null && (
+                    <div className="mt-1"><TrafficBadge deltaMin={leg.trafficDeltaMin} /></div>
+                  )}
+                </div>
+                <DriverChip driver={leg.driver} />
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        {loading && (
+          <p className="text-caption text-casa-muted mt-2 flex items-center gap-1.5">
+            <Loader2 size={12} className="animate-spin" /> Calculating drive times…
+          </p>
+        )}
+
+        {plan.legs.some((l) => l.estimate) && (
+          <div className="mt-3 flex items-start gap-1.5 rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-1.5">
+            <AlertTriangle size={12} className="text-amber-500 mt-0.5 shrink-0" />
+            <p className="text-caption text-amber-700">Drive times are estimates until you confirm the address above.</p>
+          </div>
+        )}
+
+        {plan.twoDrivers && (
+          <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-casa-bg border border-casa-border px-2.5 py-1.5">
+            <Users size={12} className="text-casa-navy shrink-0" />
+            <p className="text-caption text-casa-navy font-medium">Two drivers — both need to be locked in.</p>
+          </div>
+        )}
+
+        {plan.yourTime && (
+          <div className="mt-3 rounded-lg bg-casa-bg px-3 py-2">
+            <p className="text-caption text-casa-navy">
+              <span className="font-bold">Your time:</span> {plan.yourTime}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ReferenceBlock({ enr, hasText }: { enr: EventEnrichment; hasText: (v: unknown) => boolean }) {
+  const [open, setOpen] = useState(false)
+  const rows: React.ReactNode[] = []
+
+  if (hasText(enr.outfit_suggestion)) {
+    rows.push(<div key="outfit"><SectionLabel>What to Wear</SectionLabel><p className="text-body-sm text-casa-text">{enr.outfit_suggestion}</p></div>)
+  }
+  if (hasText(enr.contact_name) || hasText(enr.contact_phone)) {
+    rows.push(
+      <div key="contact">
+        <SectionLabel>Contact</SectionLabel>
+        <InfoRow icon={<Phone size={16} className="text-casa-muted" />}>
+          {enr.contact_name && <p className="text-body-sm font-semibold text-casa-navy">{enr.contact_name}</p>}
+          {enr.contact_phone && (
+            <a href={`tel:${enr.contact_phone.replace(/\D/g, '')}`} className="text-caption text-casa-gold hover:text-casa-navy transition-colors hover:underline">{enr.contact_phone}</a>
+          )}
+        </InfoRow>
+      </div>,
+    )
+  }
+  if (hasText(enr.cost_estimate)) {
+    rows.push(
+      <div key="cost">
+        <SectionLabel>Cost Estimate</SectionLabel>
+        <InfoRow icon={<DollarSign size={16} className="text-casa-muted" />}><p className="text-body-sm text-casa-navy">{enr.cost_estimate}</p></InfoRow>
+      </div>,
+    )
+  }
+  if (hasText(enr.dietary_notes)) {
+    rows.push(<div key="diet"><SectionLabel>Dietary Notes</SectionLabel><p className="text-body-sm text-casa-text">{enr.dietary_notes}</p></div>)
+  }
+  if (hasText(enr.meal_impact)) {
+    rows.push(
+      <div key="meal">
+        <SectionLabel>Meal Impact</SectionLabel>
+        <InfoRow icon={<Utensils size={16} className="text-casa-muted" />}><p className="text-body-sm text-casa-text">{enr.meal_impact}</p></InfoRow>
+      </div>,
+    )
+  }
+  if (hasText(enr.prep_notes)) {
+    rows.push(<div key="notes"><SectionLabel>Notes</SectionLabel><p className="text-body-sm text-casa-text whitespace-pre-line leading-relaxed">{enr.prep_notes}</p></div>)
+  }
+
+  if (rows.length === 0) return null
+
+  return (
+    <section>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center justify-between w-full text-left"
+      >
+        <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Reference</span>
+        <ChevronRight size={16} className={cn('text-casa-muted transition-transform', open && 'rotate-90')} />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="pt-4 space-y-4">{rows}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
+  )
+}
+
+/* ── Checklist with optimistic toggle ───────────────────────── */
+
+function ChecklistSection({ items }: { items: EventChecklistItem[]; eventId: string }) {
+  const [localChecked, setLocalChecked] = useState<Record<string, boolean>>({})
+  const qc = useQueryClient()
+
+  const toggle = async (item: EventChecklistItem) => {
+    const newVal = !(localChecked[item.id] ?? item.checked)
+    setLocalChecked((prev) => ({ ...prev, [item.id]: newVal }))
+    await supabase.from('event_checklist_items').update({ checked: newVal }).eq('id', item.id)
+    qc.invalidateQueries({ queryKey: ['events'] })
+  }
+
+  return (
+    <div className="space-y-2">
+      {items.map((item) => {
+        const checked = localChecked[item.id] ?? item.checked
+        return (
+          <label key={item.id} className="flex items-start gap-3 cursor-pointer group" onClick={() => toggle(item)}>
+            {checked
+              ? <CheckSquare size={18} className="text-casa-gold shrink-0 mt-0.5" />
+              : <Square size={18} className="text-casa-border group-hover:text-casa-gold transition-colors shrink-0 mt-0.5" />
+            }
+            <div className="min-w-0">
+              <p className={cn('text-body-sm text-casa-text', checked && 'line-through opacity-50')}>{item.label}</p>
+              {item.note && <p className="text-caption text-casa-muted">{item.note}</p>}
+            </div>
+          </label>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ── LocationBlock ──────────────────────────────────────────── */
+
+function LocationBlock({ locationName, address, parkingNotes, contactName, contactPhone, weatherAtVenue }: {
+  locationName: string | null
+  address: string | null
+  parkingNotes?: string | null
+  contactName?: string | null
+  contactPhone?: string | null
+  weatherAtVenue?: string | null
+}) {
+  const [copied, setCopied] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const { data: savedPlaces = [] } = useSavedPlaces()
+  const savePlace = useSavePlace()
+
+  const existingPlace = findSavedPlace(savedPlaces, locationName, address)
+  const isAlreadySaved = !!existingPlace || saved
+
+  const copyText = address ?? locationName ?? ''
+  // Prepend location name to address for a more precise Maps hit (e.g. "St. John's Church, 123 Main St")
+  const mapsQuery = address
+    ? (locationName ? `${locationName}, ${address}` : address)
+    : (locationName ?? '')
+  const googleMapsUrl = mapsQuery
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
+    : null
+  const appleMapsUrl = mapsQuery
+    ? `http://maps.apple.com/?q=${encodeURIComponent(mapsQuery)}`
+    : null
+
+  async function handleCopy() {
+    if (!copyText) return
+    try {
+      await navigator.clipboard.writeText(copyText)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* ignore */ }
+  }
+
+  async function handleSave() {
+    if (isAlreadySaved || saving || (!locationName && !address)) return
+    setSaving(true)
+    try {
+      await savePlace.mutateAsync({
+        name: locationName ?? address ?? 'Unknown Place',
+        address: address ?? null,
+        phone: contactPhone ?? null,
+        notes: contactName ? `Contact: ${contactName}` : null,
+        category: 'other',
+      })
+      setSaved(true)
+    } catch { /* non-fatal */ }
+    setSaving(false)
+  }
+
+  if (!locationName && !address && !parkingNotes && !contactName && !contactPhone && !weatherAtVenue) return null
+
+  return (
+    <InfoRow icon={<MapPin size={16} className="text-casa-error" />}>
+      <div className="flex items-start justify-between gap-2 min-w-0">
+        <div className="min-w-0 flex-1">
+          {locationName && (
+            <p className="text-body-sm font-semibold text-casa-navy">{locationName}</p>
+          )}
+          {address && (
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 mt-0.5 text-caption text-casa-muted hover:text-casa-navy transition-colors group text-left"
+              title="Tap to copy address"
+            >
+              <span className="group-hover:underline">{address}</span>
+              {copied
+                ? <Check size={11} className="text-emerald-500 shrink-0" />
+                : <Copy size={11} className="opacity-0 group-hover:opacity-50 shrink-0 transition-opacity" />
+              }
+            </button>
+          )}
+          {copied && (
+            <p className="text-caption text-emerald-600 mt-0.5">Copied!</p>
+          )}
+          {weatherAtVenue && (
+            <div className="mt-1 inline-flex items-center gap-1.5 bg-casa-bg rounded-button px-2.5 py-1">
+              <Cloud size={12} className="text-casa-gold" />
+              <span className="text-caption text-casa-navy font-medium">{weatherAtVenue}</span>
+            </div>
+          )}
+          {parkingNotes && (
+            <p className="text-caption text-casa-muted mt-0.5">{parkingNotes}</p>
+          )}
+          {/* Phone number from enrichment or saved place */}
+          {(contactPhone || existingPlace?.phone) && (
+            <a
+              href={`tel:${(contactPhone ?? existingPlace?.phone ?? '').replace(/\D/g, '')}`}
+              className="flex items-center gap-1.5 mt-1 text-caption text-casa-gold hover:text-casa-navy transition-colors group"
+            >
+              <Phone size={11} className="shrink-0" />
+              <span className="group-hover:underline">{contactPhone ?? existingPlace?.phone}</span>
+            </a>
+          )}
+          {contactName && !contactPhone && !existingPlace?.phone && (
+            <p className="text-caption text-casa-muted mt-0.5">{contactName}</p>
+          )}
+          {existingPlace?.notes && (
+            <p className="text-caption text-casa-gold/80 mt-1 italic">{existingPlace.notes}</p>
+          )}
+        </div>
+        {(locationName || address) && (
+          <div className="flex items-center gap-1.5 shrink-0">
+          {/* Save to places */}
+          <button
+            onClick={handleSave}
+            disabled={isAlreadySaved || saving}
+            title={isAlreadySaved ? 'Already saved' : 'Save to my places'}
+            className={cn(
+              'p-1 rounded transition-colors',
+              isAlreadySaved
+                ? 'text-casa-gold cursor-default'
+                : 'text-casa-border hover:text-casa-gold'
+            )}
+          >
+            {isAlreadySaved
+              ? <BookmarkCheck size={15} />
+              : saving ? <Loader2 size={15} className="animate-spin" /> : <Bookmark size={15} />
+            }
+          </button>
+          {/* Map links */}
+          {googleMapsUrl && (
+            <a href={googleMapsUrl} target="_blank" rel="noreferrer"
+              title="Open in Google Maps"
+              className="p-1 rounded text-casa-border hover:text-casa-navy transition-colors"
+            >
+              <Map size={15} />
+            </a>
+          )}
+          {appleMapsUrl && (
+            <a href={appleMapsUrl} target="_blank" rel="noreferrer"
+              title="Open in Apple Maps"
+              className="p-1 rounded text-casa-border hover:text-casa-navy transition-colors"
+            >
+              <Navigation size={15} />
+            </a>
+          )}
+          </div>
+        )}
+      </div>
+    </InfoRow>
+  )
+}
+
+/* ── Footer ─────────────────────────────────────────────────── */
+
+function PanelFooter({ event, onEdit, onEditWithAI }: { event: EventWithDetails; onEdit: () => void; onEditWithAI: () => void }) {
+  const mapsQuery = event.address
+    ? (event.location_name ? `${event.location_name}, ${event.address}` : event.address)
+    : (event.location_name ?? '')
+  const mapsUrl = mapsQuery
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
+    : null
+
+  return (
+    <div className="p-4 border-t border-casa-border flex gap-2 items-stretch">
+      {/* Icon-only square buttons — aspect-square makes them match the row height */}
+      <button
+        onClick={onEdit}
+        title="Edit Details"
+        className="aspect-square flex items-center justify-center shrink-0 rounded-button border border-casa-border text-casa-navy hover:bg-casa-bg transition-colors"
+      >
+        <Pencil size={18} />
+      </button>
+      <button
+        onClick={onEditWithAI}
+        title="Edit with AI"
+        className="aspect-square flex items-center justify-center shrink-0 rounded-button border border-casa-gold/60 text-casa-gold hover:bg-casa-gold/10 transition-colors"
+      >
+        <Sparkles size={18} />
+      </button>
+      {/* Full-size action buttons */}
+      {mapsUrl && (
+        <a
+          href={mapsUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-bg transition-colors"
+        >
+          <Navigation size={15} />
+          Directions
+        </a>
+      )}
+      <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 transition-all">
+        <Share2 size={15} />
+        Share
+      </button>
+    </div>
+  )
+}
+
+/* ── Shared sub-components ───────────────────────────────────── */
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">
+      {children}
+    </p>
+  )
+}
+
+function InfoRow({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="shrink-0 mt-0.5">{icon}</div>
+      <div className="min-w-0 space-y-0.5">{children}</div>
+    </div>
+  )
+}

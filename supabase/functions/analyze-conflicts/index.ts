@@ -15,6 +15,76 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+type AvailabilityRule = {
+  member_id: string
+  day_of_week: number
+  start_local: string
+  end_local: string
+  availability_type: 'unavailable' | 'available'
+  timezone: string | null
+  reason: string | null
+}
+
+type AvailabilityException = {
+  member_id: string
+  start_at: string
+  end_at: string
+  override_type: 'day_off' | 'manual_block' | 'manual_available'
+  note: string | null
+}
+
+const WEEKDAY_INDEX: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+}
+
+function toMinutes(timeValue: string): number {
+  const [h, m] = timeValue.split(':').map((value) => Number.parseInt(value, 10))
+  return (h * 60) + m
+}
+
+function zonedParts(dateValue: Date, timezone: string): { weekday: number; minutes: number } {
+  const formatted = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(dateValue)
+  const weekdayName = formatted.find((part) => part.type === 'weekday')?.value ?? 'Sun'
+  const hour = Number.parseInt(formatted.find((part) => part.type === 'hour')?.value ?? '0', 10)
+  const minute = Number.parseInt(formatted.find((part) => part.type === 'minute')?.value ?? '0', 10)
+  return {
+    weekday: WEEKDAY_INDEX[weekdayName] ?? 0,
+    minutes: (hour * 60) + minute,
+  }
+}
+
+function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return aStart < bEnd && bStart < aEnd
+}
+
+function ruleOverlapsWindow(rule: AvailabilityRule, startAt: Date, endAt: Date): boolean {
+  const tz = rule.timezone || 'America/New_York'
+  const start = zonedParts(startAt, tz)
+  const end = zonedParts(endAt, tz)
+  const ruleStart = toMinutes(rule.start_local)
+  const ruleEnd = toMinutes(rule.end_local)
+
+  if (start.weekday === end.weekday) {
+    if (start.weekday !== rule.day_of_week) return false
+    return rangesOverlap(start.minutes, end.minutes, ruleStart, ruleEnd)
+  }
+  if (start.weekday === rule.day_of_week && rangesOverlap(start.minutes, 24 * 60, ruleStart, ruleEnd)) return true
+  if (end.weekday === rule.day_of_week && rangesOverlap(0, end.minutes, ruleStart, ruleEnd)) return true
+  return false
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
@@ -46,12 +116,44 @@ Deno.serve(async (req) => {
   // ── Load all family members ──
   const { data: members, error: memErr } = await sb
     .from('family_members')
-    .select('id, name, role')
+    .select('id, name, role, can_drive, availability_mode')
     .order('sort_order')
   if (memErr || !members) return err('Failed to load family members')
 
-  const parents = members.filter((m: { role: string }) => m.role === 'parent')
+  const drivers = members.filter((m: { role: string; can_drive: boolean | null }) =>
+    (m.role === 'parent' || m.role === 'caregiver') && (m.can_drive ?? true),
+  )
   const children = members.filter((m: { role: string }) => m.role === 'child')
+
+  const driverIds = drivers.map((driver: { id: string }) => driver.id)
+  const [{ data: rulesRaw, error: rulesErr }, { data: exceptionsRaw, error: exceptionsErr }] = await Promise.all([
+    driverIds.length > 0
+      ? sb
+        .from('member_availability_rules')
+        .select('member_id, day_of_week, start_local, end_local, availability_type, timezone, reason')
+        .in('member_id', driverIds)
+      : Promise.resolve({ data: [], error: null }),
+    driverIds.length > 0
+      ? sb
+        .from('member_availability_exceptions')
+        .select('member_id, start_at, end_at, override_type, note')
+        .in('member_id', driverIds)
+      : Promise.resolve({ data: [], error: null }),
+  ])
+  if (rulesErr) return err(`Failed to load availability rules: ${rulesErr.message}`)
+  if (exceptionsErr) return err(`Failed to load availability exceptions: ${exceptionsErr.message}`)
+  const rulesByMember = new Map<string, AvailabilityRule[]>()
+  for (const rule of (rulesRaw ?? []) as AvailabilityRule[]) {
+    const existing = rulesByMember.get(rule.member_id)
+    if (existing) existing.push(rule)
+    else rulesByMember.set(rule.member_id, [rule])
+  }
+  const exceptionsByMember = new Map<string, AvailabilityException[]>()
+  for (const exception of (exceptionsRaw ?? []) as AvailabilityException[]) {
+    const existing = exceptionsByMember.get(exception.member_id)
+    if (existing) existing.push(exception)
+    else exceptionsByMember.set(exception.member_id, [exception])
+  }
 
   // ── Load all events + members in range ──
   const { data: events, error: evErr } = await sb
@@ -67,6 +169,36 @@ Deno.serve(async (req) => {
   type EventRow = {
     id: string; title: string; start_time: string; end_time: string;
     event_members: { family_member_id: string; role: string }[]
+  }
+
+  type DriverRow = {
+    id: string
+    role: string
+    name: string
+    availability_mode: 'strict' | 'flexible' | 'open' | null
+  }
+
+  function driverBlockedByAvailability(driver: DriverRow, startAt: Date, endAt: Date): boolean {
+    const exceptions = exceptionsByMember.get(driver.id) ?? []
+    const overlappingExceptions = exceptions.filter((exception) => {
+      const exStart = new Date(exception.start_at).getTime()
+      const exEnd = new Date(exception.end_at).getTime()
+      return exStart < endAt.getTime() && exEnd > startAt.getTime()
+    })
+
+    if (overlappingExceptions.some((exception) => exception.override_type === 'day_off' || exception.override_type === 'manual_available')) {
+      return false
+    }
+    if (overlappingExceptions.some((exception) => exception.override_type === 'manual_block')) {
+      return true
+    }
+
+    if (driver.availability_mode === 'open' || driver.availability_mode === 'flexible') {
+      return false
+    }
+
+    const rules = (rulesByMember.get(driver.id) ?? []).filter((rule) => rule.availability_type === 'unavailable')
+    return rules.some((rule) => ruleOverlapsWindow(rule, startAt, endAt))
   }
 
   const newConflicts: {
@@ -110,32 +242,33 @@ Deno.serve(async (req) => {
     }
   }
 
-  // ── 2. TRANSPORT GAP: child has event, no free parent at that time ──
+  // ── 2. TRANSPORT GAP: child has event, no free driver at that time ──
   for (const ev of events as EventRow[]) {
     const memberIds = (ev.event_members ?? []).map((m) => m.family_member_id)
     const childrenOnEvent = children.filter((c: { id: string }) => memberIds.includes(c.id))
     if (childrenOnEvent.length === 0) continue
 
-    const startA = new Date(ev.start_time).getTime()
-    const endA = ev.end_time ? new Date(ev.end_time).getTime() : startA + 60 * 60 * 1000
+    const startA = new Date(ev.start_time)
+    const endA = ev.end_time ? new Date(ev.end_time) : new Date(startA.getTime() + 60 * 60 * 1000)
 
-    // Check if ALL parents are busy during this event's time
-    const freeparents = parents.filter((parent: { id: string }) => {
+    // Check if all potential drivers are busy or unavailable during this event's time.
+    const freeDrivers = (drivers as DriverRow[]).filter((driver) => {
       const parentBusy = (events as EventRow[]).some((other) => {
         if (other.id === ev.id) return false
         const startB = new Date(other.start_time).getTime()
         const endB = other.end_time ? new Date(other.end_time).getTime() : startB + 60 * 60 * 1000
-        if (endA <= startB || endB <= startA) return false
-        return (other.event_members ?? []).some((m) => m.family_member_id === parent.id)
+        if (endA.getTime() <= startB || endB <= startA.getTime()) return false
+        return (other.event_members ?? []).some((m) => m.family_member_id === driver.id)
       })
-      return !parentBusy
+      if (parentBusy) return false
+      return !driverBlockedByAvailability(driver, startA, endA)
     })
 
-    if (freeparents.length > 0) continue // at least one parent is free — no issue
+    if (freeDrivers.length > 0) continue // at least one driver is free — no issue
 
-    // No free parents
+    // No free drivers
     const childNames = childrenOnEvent.map((c: { name: string }) => c.name).join(', ')
-    const parentNames = parents.map((p: { name: string }) => p.name).join(' & ')
+    const driverNames = (drivers as DriverRow[]).map((driver) => driver.name).join(' & ')
     const timeStr = new Date(ev.start_time).toLocaleString('en-US', {
       weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
     })
@@ -145,7 +278,7 @@ Deno.serve(async (req) => {
       event_b_id: null,
       conflict_type: 'drive_time',
       severity: 3,
-      description: `${childNames} needs a ride to "${ev.title}" at ${timeStr} but ${parentNames} ${parents.length > 1 ? 'are' : 'is'} both busy`,
+      description: `${childNames} needs a ride to "${ev.title}" at ${timeStr} but ${driverNames || 'all drivers'} ${drivers.length > 1 ? 'are' : 'is'} unavailable`,
       resolved: false,
     })
   }

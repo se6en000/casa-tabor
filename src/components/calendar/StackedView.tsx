@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import { format, addDays, isToday, isSameDay, startOfDay } from 'date-fns'
+import { format, addDays, isToday, startOfDay } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   MapPin, Clock, DollarSign, Phone, AlertTriangle,
@@ -19,6 +19,7 @@ import { WeatherIcon } from '../shared/WeatherIcon'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import BounceScroll from '../shared/BounceScroll'
+import { eventOverlapsDay, getEventDisplayStartDay } from '../../utils/eventTime'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -88,12 +89,12 @@ export default function StackedView() {
         <div key={rowIdx} className="grid grid-cols-4 gap-2 min-h-[160px]">
           {rowDays.map(day => {
             const dayEvents = events
-              .filter(e => isSameDay(new Date(e.start_time), day))
+              .filter(e => eventOverlapsDay(e, day))
               .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
 
-            const dayAllDay = dayEvents.filter(isAllDayReminder)
+            const dayAllDay = dayEvents.filter(e => e.all_day || isAllDayReminder(e))
             const dayTimed  = dayEvents.filter(isTimedReminder)
-            const dayNormal = dayEvents.filter(e => !isReminder(e))
+            const dayNormal = dayEvents.filter(e => !isReminder(e) && !e.all_day)
             const today_ = isToday(day)
 
             return (
@@ -124,15 +125,30 @@ export default function StackedView() {
                 <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
                   {/* All-day reminders */}
                   {dayAllDay.map(r => (
-                    <SwipeableReminderPill
-                      key={r.id}
-                      id={r.id}
-                      title={r.title}
-                      members={r.members}
-                      onClick={() => setSelectedEventId(r.id)}
-                      onComplete={completeReminder}
-                      onDismiss={dismissReminder}
-                    />
+                    isReminder(r) ? (
+                      <SwipeableReminderPill
+                        key={r.id}
+                        id={r.id}
+                        title={r.title}
+                        members={r.members}
+                        onClick={() => setSelectedEventId(r.id)}
+                        onComplete={completeReminder}
+                        onDismiss={dismissReminder}
+                      />
+                    ) : (
+                      <button
+                        key={r.id}
+                        onClick={(e) => { e.stopPropagation(); setSelectedEventId(r.id) }}
+                        className="w-full inline-flex items-center justify-between gap-2 rounded-full border border-casa-gold/35 bg-casa-gold/10 px-3 py-1 text-left hover:bg-casa-gold/15 transition-colors"
+                      >
+                        <span className="truncate text-caption font-semibold text-casa-navy">
+                          {r.title}
+                        </span>
+                        <span className="shrink-0 text-[11px] font-semibold text-casa-gold">
+                          All day
+                        </span>
+                      </button>
+                    )
                   ))}
 
                   {/* Timed reminders + events merged by time */}
@@ -230,6 +246,8 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
 
   const start = new Date(event.start_time)
   const end = new Date(event.end_time)
+  const isAllDayEvent = event.all_day
+  const displayStartDay = isAllDayEvent ? getEventDisplayStartDay(event) : null
 
   // Long-press detection
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -288,7 +306,7 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
         <div className="flex items-center justify-between gap-1 mb-0.5">
           <div className="flex items-center gap-1">
             <p className="text-caption font-semibold text-casa-muted tabular-nums leading-none">
-              {format(start, 'h:mm')}–{format(end, 'h:mma')}
+              {isAllDayEvent ? format(displayStartDay!, 'MMM d') : `${format(start, 'h:mm')}–${format(end, 'h:mma')}`}
             </p>
             {event.location_name && (
               <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />

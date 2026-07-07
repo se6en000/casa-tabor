@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Users, Sun, MessageSquare, Bot, ChevronRight, Music2, Home, Activity, BookmarkCheck, Layers } from 'lucide-react'
+import { Users, Sun, MessageSquare, Bot, ChevronRight, Music2, Home, Activity, BookmarkCheck, Layers, Lock } from 'lucide-react'
 import BounceScroll from '../components/shared/BounceScroll'
 
 const sections = [
@@ -11,6 +11,7 @@ const sections = [
   { to: '/settings/places',  icon: BookmarkCheck, label: 'Saved Places & Contacts', desc: 'Favorite locations and people the AI can look up by nickname' },
   { to: '/settings/sms',     icon: MessageSquare, label: 'Notifications',           desc: 'Twilio SMS, briefing time' },
   { to: '/settings/music',   icon: Music2,        label: 'Spotify / Music',         desc: 'Connect and control music playback' },
+  { to: '/settings/admin-ops', icon: Lock,        label: 'Admin Operations',        desc: 'Mass calendar operations (delete, add, edit) — admin-only' },
   { to: '/settings/status',  icon: Activity,      label: 'Status Dashboard',        desc: 'AI usage, tokens, and cost monitoring' },
 ]
 

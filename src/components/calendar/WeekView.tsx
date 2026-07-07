@@ -11,6 +11,7 @@ import QuickCreateSheet from '../shared/QuickCreateSheet'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, REMINDER_COLOR } from '../../utils/holidays'
+import { getEventDisplayEnd, getEventDisplayStartDay, isEventMultiDay } from '../../utils/eventTime'
 
 const HOUR_HEIGHT = 60
 const START_HOUR = 6
@@ -255,9 +256,7 @@ export default function WeekView() {
     const multi: EventWithDetails[] = []
     const single: EventWithDetails[] = []
     for (const ev of events) {
-      const sDay = format(new Date(ev.start_time), 'yyyy-MM-dd')
-      const eDay = format(new Date(ev.end_time), 'yyyy-MM-dd')
-      if (sDay !== eDay) multi.push(ev)
+      if (ev.all_day || isEventMultiDay(ev)) multi.push(ev)
       else single.push(ev)
     }
     return { multiDayEvents: multi, singleDayEvents: single }
@@ -265,8 +264,8 @@ export default function WeekView() {
 
   // Column span for a multi-day event (0–6, clamped to visible week)
   function getMultiDaySpan(ev: EventWithDetails): { startCol: number; endCol: number } | null {
-    const evStart = startOfDay(new Date(ev.start_time))
-    const evEnd = startOfDay(new Date(ev.end_time))
+    const evStart = getEventDisplayStartDay(ev)
+    const evEnd = startOfDay(getEventDisplayEnd(ev))
     if (evEnd < weekStart || evStart > weekEnd) return null
     const clampStart = evStart < weekStart ? weekStart : evStart
     const clampEnd = evEnd > weekEnd ? weekEnd : evEnd
@@ -279,7 +278,7 @@ export default function WeekView() {
   const eventsByDay = useMemo(() => {
     const grouped: Record<string, EventWithDetails[]> = {}
     for (const event of singleDayEvents) {
-      const dayKey = format(new Date(event.start_time), 'yyyy-MM-dd')
+      const dayKey = format(getEventDisplayStartDay(event), 'yyyy-MM-dd')
       if (!grouped[dayKey]) grouped[dayKey] = []
       grouped[dayKey].push(event)
     }
