@@ -812,7 +812,32 @@ function StandardPanelBody({
             modeOverride={modeOverride}
             twoDriverConfirmed={twoDriverConfirmed}
             onSetWaitsOverride={onSetWaitsOverride}
-            onSetDriverOverride={onSetDriverOverride}
+            onSetDriverOverride={(legIndex, driverId) => {
+              // When reassigning the outbound leg (drop/depart), cascade the
+              // same driver to the stay and return/pickup legs so all three
+              // stay in sync — unless those legs have already been individually
+              // pinned to a different person.
+              const changedLeg = plan.legs[legIndex]
+              const isOutbound = changedLeg?.kind === 'drop' || changedLeg?.kind === 'depart'
+              if (isOutbound) {
+                const cascadeUpdates: Record<number, string> = { [legIndex]: driverId }
+                plan.legs.forEach((leg, i) => {
+                  if (i === legIndex) return
+                  const isDownstream = leg.kind === 'stay' || leg.kind === 'return' || leg.kind === 'pickup'
+                  // Only cascade to legs that have a driver slot and haven't
+                  // been manually overridden to a *different* driver.
+                  if (isDownstream && leg.driver && !driverOverrides[i]) {
+                    cascadeUpdates[i] = driverId
+                  }
+                })
+                // Apply all cascades at once via parent setter (one state update per index).
+                Object.entries(cascadeUpdates).forEach(([idx, id]) =>
+                  onSetDriverOverride(Number(idx), id)
+                )
+              } else {
+                onSetDriverOverride(legIndex, driverId)
+              }
+            }}
             onSetModeOverride={onSetModeOverride}
             onSetTwoDriverConfirmed={onSetTwoDriverConfirmed}
           />
