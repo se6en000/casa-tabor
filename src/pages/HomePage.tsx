@@ -829,7 +829,7 @@ function TimelineRow({
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-body font-semibold text-casa-text truncate">{cleanTitle}</p>
+                <p className="font-body font-semibold text-casa-text truncate md:overflow-visible md:text-clip md:whitespace-normal">{cleanTitle}</p>
                 <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1">
                   <span className="flex items-center gap-1 text-caption text-casa-muted tabular-nums">
                     <Clock size={11} className="shrink-0" />
@@ -842,7 +842,7 @@ function TimelineRow({
                     isHosted ? (
                       <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
                     ) : (
-                      <span className="flex items-center gap-1 text-caption text-casa-muted truncate max-w-[180px]">
+                      <span className="flex items-center gap-1 text-caption text-casa-muted truncate max-w-[180px] md:max-w-none md:overflow-visible md:text-clip md:whitespace-normal">
                         <MapPin size={11} className="shrink-0 text-casa-error" />
                         {event.location_name}
                       </span>
@@ -905,7 +905,7 @@ function TimelineRow({
             </div>
 
             {(isHosted || !event.enrichment?.departure_time) && event.enrichment?.prep_notes && (
-              <p className="text-caption text-casa-muted mt-1 line-clamp-1">{event.enrichment.prep_notes}</p>
+              <p className="text-caption text-casa-muted mt-1 line-clamp-1 md:line-clamp-none">{event.enrichment.prep_notes}</p>
             )}
           </div>
         </div>
