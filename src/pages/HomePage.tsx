@@ -22,7 +22,9 @@ import { LeaveByCard } from '../components/shared/LeaveByCard'
 import { useTravelEta, type TravelEtaResult } from '../hooks/useTravelEta'
 import { DepartureRiskBanner } from '../components/shared/DepartureRiskBanner'
 import { resolveEventMode } from '../lib/eventPlanOverrides'
+import { derivePlan, type DerivedPerson } from '../lib/eventCommandCenter'
 import { useMemberAvailability } from '../hooks/useMemberAvailability'
+import type { FamilyMember } from '../types'
 import {
   evaluateMemberAvailabilityForWindow,
   indexAvailabilityExceptionsByMember,
@@ -49,6 +51,49 @@ function eventColor(ev: EventWithDetails): string {
   if (!ev.members || ev.members.length === 0) return SHARED_GOLD
   if (ev.members.length >= 4) return SHARED_GOLD
   return ev.members[0].family_member?.color_hex ?? SHARED_GOLD
+}
+
+function fallbackResponsiblePerson(event: EventWithDetails): DerivedPerson | null {
+  const fallbackMember = event.members.find((m) => m.role === 'primary')?.family_member
+    ?? event.members[0]?.family_member
+    ?? null
+  if (!fallbackMember) return null
+  return {
+    id: fallbackMember.id,
+    name: fallbackMember.name,
+    initial: fallbackMember.name?.[0]?.toUpperCase() ?? '?',
+    color: fallbackMember.color_hex ?? SHARED_GOLD,
+    role: fallbackMember.role,
+  }
+}
+
+function deriveHomeCardResponsibility(event: EventWithDetails, mode: ReturnType<typeof resolveEventMode>, household: FamilyMember[]) {
+  const plan = derivePlan(event, mode, { household })
+  const firstDriverLeg = plan.legs.find((leg) => leg.driver)
+  const responsible = firstDriverLeg?.driver ?? fallbackResponsiblePerson(event)
+  const attendees = (() => {
+    if (!responsible) return event.members
+    const withoutResponsible = event.members.filter((m) => m.family_member.id !== responsible.id)
+    return withoutResponsible.length > 0 ? withoutResponsible : event.members
+  })()
+  const name = responsible?.name ?? (mode === 'hosted' ? 'Caregiver' : 'Driver')
+  const summary = mode === 'hosted'
+    ? `${name} supervising`
+    : plan.pattern === 'Stay & wait'
+      ? `${name} drives & stays`
+      : plan.pattern === 'Drop-off only'
+        ? `${name} drops off`
+        : plan.pattern === 'Pickup only'
+          ? `${name} picks up`
+          : plan.pattern === 'Pickup / Drop-off'
+            ? `${name} runs pickup / drop-off`
+            : `${name} drives`
+  return {
+    responsible,
+    attendees,
+    summary,
+    roleBadge: mode === 'hosted' ? 'supervise' as const : 'drive' as const,
+  }
 }
 
 export default function HomePage() {
@@ -320,7 +365,7 @@ export default function HomePage() {
             <ol className="space-y-2">
               {/* Past events */}
               {events.filter(e => isBefore(new Date(e.end_time), now)).map((ev, i) => (
-                <TimelineRow key={ev.id} event={ev} now={now} index={i} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
+                <TimelineRow key={ev.id} event={ev} now={now} index={i} household={family ?? []} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
               ))}
 
               {/* ── Now line ── */}
@@ -341,7 +386,7 @@ export default function HomePage() {
 
               {/* Upcoming events */}
               {events.filter(e => isAfter(new Date(e.end_time), now)).map((ev, i) => (
-                <TimelineRow key={ev.id} event={ev} now={now} index={i} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
+                <TimelineRow key={ev.id} event={ev} now={now} index={i} household={family ?? []} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
               ))}
             </ol>
           )}
@@ -365,7 +410,7 @@ export default function HomePage() {
               </div>
               <ol className="space-y-2">
                 {tomorrowEvents.map((ev, i) => (
-                  <TimelineRow key={ev.id} event={ev} now={now} index={i} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
+                  <TimelineRow key={ev.id} event={ev} now={now} index={i} household={family ?? []} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
                 ))}
               </ol>
             </motion.section>
@@ -561,12 +606,14 @@ function TimelineRow({
   event,
   now,
   index,
+  household,
   onClick,
   onComplete,
 }: {
   event: EventWithDetails
   now: Date
   index: number
+  household: FamilyMember[]
   onClick: () => void
   onComplete?: (id: string) => void
 }) {
@@ -580,6 +627,14 @@ function TimelineRow({
   const isHosted = mode === 'hosted'
 
   const [checking, setChecking] = useState(false)
+  const cleanTitle = cleanEventTitle(event.title)
+  const responsibility = useMemo(
+    () => deriveHomeCardResponsibility(event, mode, household),
+    [event, household, mode],
+  )
+  const showLiveLeaveBy = !happening && !isHosted && Boolean(event.address || event.location_name)
+  const showFallbackLeaveBy = !happening && !isHosted && !(event.address || event.location_name) && Boolean(event.enrichment?.departure_time)
+  const fallbackDepartureAt = event.enrichment?.departure_time ? new Date(event.enrichment.departure_time) : null
 
   // Timed reminder — slim amber pill in the timeline with dismiss checkbox
   if (timed) {
@@ -663,92 +718,131 @@ function TimelineRow({
         style={{ backgroundColor: color }}
       />
       <div className="flex-1 min-w-0 bg-casa-surface rounded-card border border-casa-border px-4 py-3 shadow-card">
-        {/* Row 1: title + members */}
-        <div className="flex items-center justify-between gap-3">
-          {(() => {
-            // Strip "OwnerName | " prefix from title if it matches the primary member
-            const primary = event.members?.find(m => m.role === 'primary')
-            const others = event.members?.filter(m => m.role !== 'primary') ?? []
-            const ownerName = primary?.family_member?.name ?? ''
-            const pipeIdx = event.title.indexOf(' | ')
-            const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
-
-            return (
-              <>
-                <p className="font-body font-semibold text-casa-text truncate">{cleanTitle}</p>
-                {event.members && event.members.length > 0 && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    {/* Owner as full pill */}
-                    {primary && (
-                      <span
-                        className="px-2 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
-                        style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
-                        title={ownerName}
-                      >
-                        {ownerName}
-                      </span>
-                    )}
-                    {/* Other attendees as name pills */}
-                    {others.slice(0, 3).map((m) => (
-                      <span
-                        key={m.id}
-                        className="px-2 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
-                        style={{ backgroundColor: m.family_member?.color_hex }}
-                      >
-                        {m.family_member?.name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </>
-            )
-          })()}
-        </div>
-
-        {/* Row 2: time range + location */}
-        <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1">
-          <span className="flex items-center gap-1 text-caption text-casa-muted tabular-nums">
-            <Clock size={11} className="shrink-0" />
-            {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
-            {event.location_name && (
-              <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
-            )}
-          </span>
-          {event.location_name && (
-            isHosted ? (
-              <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
-            ) : (
-              <span className="flex items-center gap-1 text-caption text-casa-muted truncate max-w-[180px]">
-                <MapPin size={11} className="shrink-0 text-casa-error" />
-                {event.location_name}
-              </span>
-            )
-          )}
-          {isHosted && !event.location_name && (
-            <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
-          )}
-        </div>
-
-        {/* Row 3: departure alert or prep note */}
-        {!happening && !isHosted && (event.address || event.location_name) && (
-          <LeaveByCard
-            destination={event.address ?? event.location_name}
-            eventStartIso={event.start_time}
-            compact
-            className="mt-1.5"
-          />
-        )}
-        {!isHosted && !(event.address || event.location_name) && event.enrichment?.departure_time && !happening && (
-          <div className="flex items-center gap-1 mt-1.5 text-caption font-semibold text-amber-700">
-            <Navigation size={11} className="shrink-0" />
-            Leave by {format(new Date(event.enrichment.departure_time), 'h:mm a')}
-            {event.enrichment.drive_time_mins && ` · ${event.enrichment.drive_time_mins} min`}
+        <div className="flex items-start gap-3">
+          <div className="relative shrink-0 pt-0.5">
+            <span
+              className={cn(
+                'w-11 h-11 rounded-full text-white flex items-center justify-center text-[15px] font-bold shadow-card',
+                responsibility.responsible?.role === 'caregiver' && 'ring-2 ring-casa-gold/55 ring-offset-2 ring-offset-casa-surface',
+              )}
+              style={{ backgroundColor: responsibility.responsible?.color ?? 'var(--color-casa-gold)' }}
+              aria-label={responsibility.responsible ? `${responsibility.responsible.name} is responsible` : 'Responsible adult'}
+            >
+              {responsibility.responsible?.initial ?? '?'}
+            </span>
+            <span
+              className={cn(
+                'absolute right-[-2px] bottom-[-2px] w-5 h-5 rounded-full border-2 border-casa-surface flex items-center justify-center',
+                responsibility.roleBadge === 'drive' ? 'bg-casa-navy' : 'bg-casa-success-strong',
+              )}
+              aria-label={responsibility.roleBadge === 'drive' ? 'Driving role' : 'Supervising role'}
+            >
+              {responsibility.roleBadge === 'drive' ? <DrivingBadgeIcon /> : <SupervisingBadgeIcon />}
+            </span>
           </div>
-        )}
-        {(isHosted || !event.enrichment?.departure_time) && event.enrichment?.prep_notes && (
-          <p className="text-caption text-casa-muted mt-1 line-clamp-1">{event.enrichment.prep_notes}</p>
-        )}
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-body font-semibold text-casa-text truncate">{cleanTitle}</p>
+                <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                  <span className="flex items-center gap-1 text-caption text-casa-muted tabular-nums">
+                    <Clock size={11} className="shrink-0" />
+                    {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
+                    {event.location_name && (
+                      <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
+                    )}
+                  </span>
+                  {event.location_name && (
+                    isHosted ? (
+                      <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-caption text-casa-muted truncate max-w-[180px]">
+                        <MapPin size={11} className="shrink-0 text-casa-error" />
+                        {event.location_name}
+                      </span>
+                    )
+                  )}
+                  {isHosted && !event.location_name && (
+                    <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
+                  )}
+                </div>
+              </div>
+
+              {responsibility.attendees.length > 0 && (
+                <div className="flex items-center gap-1 shrink-0">
+                  {responsibility.attendees.slice(0, 3).map((m) => (
+                    <span
+                      key={m.id}
+                      className="px-2 py-0.5 rounded-pill text-white text-caption font-bold leading-none whitespace-nowrap"
+                      style={{ backgroundColor: m.family_member?.color_hex ?? SHARED_GOLD }}
+                    >
+                      {m.family_member?.name}
+                    </span>
+                  ))}
+                  {responsibility.attendees.length > 3 && (
+                    <span className="px-1.5 py-0.5 rounded-pill bg-casa-bg text-casa-muted text-caption font-bold leading-none">
+                      +{responsibility.attendees.length - 3}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className={cn(
+                'text-caption font-semibold',
+                isHosted ? 'text-casa-success-strong' : 'text-casa-gold',
+              )}>
+                {responsibility.summary}
+              </span>
+              {showLiveLeaveBy && (
+                <>
+                  <span className="text-casa-text-faint text-caption">·</span>
+                  <LeaveByCard
+                    destination={event.address ?? event.location_name}
+                    eventStartIso={event.start_time}
+                    compact
+                    className="!text-casa-gold"
+                  />
+                </>
+              )}
+              {showFallbackLeaveBy && (
+                <>
+                  <span className="text-casa-text-faint text-caption">·</span>
+                  <span className="flex items-center gap-1 text-caption font-semibold text-casa-gold">
+                    <Navigation size={11} className="shrink-0" />
+                    {fallbackDepartureAt ? `Leave by ${format(fallbackDepartureAt, 'h:mm a')}` : 'Leave by soon'}
+                    {event.enrichment?.drive_time_mins && ` · ${event.enrichment.drive_time_mins} min`}
+                  </span>
+                </>
+              )}
+            </div>
+
+            {(isHosted || !event.enrichment?.departure_time) && event.enrichment?.prep_notes && (
+              <p className="text-caption text-casa-muted mt-1 line-clamp-1">{event.enrichment.prep_notes}</p>
+            )}
+          </div>
+        </div>
       </div>
     </motion.li>
+  )
+}
+
+function DrivingBadgeIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="8.5" stroke="white" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="12" cy="12" r="2" stroke="white" strokeWidth="2" />
+      <path d="M12 3.5v6M5.8 16.6l4.1-2.7M18.2 16.6l-4.1-2.7" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function SupervisingBadgeIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 3l7 2.6v5.2c0 4.3-3 7.3-7 8.4-4-1.1-7-4.1-7-8.4V5.6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
