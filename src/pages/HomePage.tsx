@@ -20,7 +20,6 @@ import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import { WeatherIcon } from '../components/shared/WeatherIcon'
 import { LeaveByCard } from '../components/shared/LeaveByCard'
 import { useTravelEta, type TravelEtaResult } from '../hooks/useTravelEta'
-import { DepartureRiskBanner } from '../components/shared/DepartureRiskBanner'
 import {
   getPersistedDriverOverrideMemberIds,
   locationSignature,
@@ -573,6 +572,42 @@ export default function HomePage() {
   )
 }
 
+type HeroStatusTone = 'on-track' | 'tight' | 'urgent' | 'late' | 'calm'
+
+function formatHeroCountdown(minutes: number): string {
+  const clamped = Math.max(0, minutes)
+  const hours = Math.floor(clamped / 60)
+  const mins = clamped % 60
+  return `${hours}:${String(mins).padStart(2, '0')}`
+}
+
+function deriveHeroStatus({
+  isTodayFocus,
+  isAllDay,
+  minutesUntilLeave,
+  trafficDelayMins,
+}: {
+  isTodayFocus: boolean
+  isAllDay: boolean
+  minutesUntilLeave: number
+  trafficDelayMins: number | null
+}): { label: string; tone: HeroStatusTone } {
+  if (!isTodayFocus) return { label: 'Tomorrow', tone: 'calm' }
+  if (isAllDay) return { label: 'All day', tone: 'calm' }
+  if (minutesUntilLeave <= 0) return { label: 'Late', tone: 'late' }
+  if (minutesUntilLeave <= 5) return { label: 'Leave now', tone: 'urgent' }
+  if (minutesUntilLeave <= 15 || (trafficDelayMins ?? 0) >= 10) return { label: 'Tight', tone: 'tight' }
+  return { label: 'On track', tone: 'on-track' }
+}
+
+function heroStatusClasses(tone: HeroStatusTone): string {
+  if (tone === 'on-track') return 'border-emerald-300/40 bg-emerald-300/15 text-emerald-100'
+  if (tone === 'tight') return 'border-amber-300/45 bg-amber-300/18 text-amber-100'
+  if (tone === 'urgent') return 'border-orange-300/45 bg-orange-300/18 text-orange-100'
+  if (tone === 'late') return 'border-rose-300/45 bg-rose-300/18 text-rose-100'
+  return 'border-white/25 bg-white/10 text-white/90'
+}
+
 function DesktopHeroCard({
   now,
   nextTodayEvent,
@@ -589,91 +624,134 @@ function DesktopHeroCard({
   const focusEvent = nextTodayEvent ?? fallbackTomorrowEvent
   if (!focusEvent) return null
 
-  const focusStart = new Date(focusEvent.start_time)
+  const focusStart = getEventStartDate(focusEvent)
   const focusMode = resolveEventMode(focusEvent)
   const isHosted = focusMode === 'hosted'
   const isTodayFocus = !!nextTodayEvent
-  const minutesUntil = Math.max(0, Math.round((focusStart.getTime() - now.getTime()) / 60000))
-  const countdown = minutesUntil >= 60
-    ? `${Math.floor(minutesUntil / 60)}H ${minutesUntil % 60}M`
-    : `${minutesUntil}M`
-  const leadLabel = isTodayFocus ? `UP NEXT · IN ${countdown}` : `TOMORROW · FIRST UP`
-  const liveLeaveBy = !isHosted && isTodayFocus && travelEta?.found && travelEta.leave_by
+  const isAllDay = Boolean(focusEvent.all_day)
+  const eventLabel = cleanEventTitle(focusEvent.title)
+  const leadLabel = isTodayFocus ? `UP NEXT · ${eventLabel.toUpperCase()}` : 'TOMORROW · FIRST UP'
+
+  const liveLeaveBy = !isHosted && !isAllDay && isTodayFocus && travelEta?.found && travelEta.leave_by
     ? new Date(travelEta.leave_by)
     : null
-  const leaveAt = isHosted
+  const leaveAt = isHosted || isAllDay
     ? focusStart
     : (liveLeaveBy
       ?? (focusEvent.enrichment?.departure_time ? new Date(focusEvent.enrichment.departure_time) : focusStart))
-  const leaveLabel = isHosted
-    ? 'STARTS AT'
-    : ((liveLeaveBy || focusEvent.enrichment?.departure_time) ? 'LEAVE BY' : 'STARTS AT')
-  const eventLabel = cleanEventTitle(focusEvent.title)
+  const minutesUntilLeave = Math.max(0, Math.round((leaveAt.getTime() - now.getTime()) / 60000))
+  const headlineText = isAllDay
+    ? (isTodayFocus ? 'All day' : 'All day tomorrow')
+    : (isTodayFocus
+      ? `${isHosted ? 'Starts at' : 'Leave by'} ${format(leaveAt, 'h:mm a')}`
+      : `Tomorrow starts at ${format(leaveAt, 'h:mm a')}`)
+
+  const destinationLabel = focusEvent.address ?? focusEvent.location_name ?? 'At home'
+  const driveMins = isTodayFocus && travelEta?.found && typeof travelEta.drive_time_mins === 'number'
+    ? travelEta.drive_time_mins
+    : focusEvent.enrichment?.drive_time_mins
+  const detailParts = isHosted
+    ? ['At home']
+    : [
+      destinationLabel,
+      typeof driveMins === 'number' ? `${driveMins} min drive` : null,
+      focusEvent.enrichment?.weather_at_event ?? null,
+    ].filter((part): part is string => Boolean(part && part.trim()))
+
+  const status = deriveHeroStatus({
+    isTodayFocus,
+    isAllDay,
+    minutesUntilLeave,
+    trafficDelayMins: travelEta?.traffic_delay_mins ?? null,
+  })
+  const ringWindowMins = isTodayFocus ? (isHosted ? 180 : 120) : 24 * 60
+  const ringProgress = isTodayFocus && !isAllDay
+    ? Math.max(0.06, Math.min(1, minutesUntilLeave / ringWindowMins))
+    : 1
+  const ringRadius = 90
+  const ringCircumference = 2 * Math.PI * ringRadius
+  const ringDashOffset = ringCircumference * (1 - ringProgress)
+  const ringValue = isTodayFocus
+    ? (isAllDay ? 'All day' : formatHeroCountdown(minutesUntilLeave))
+    : 'Tomorrow'
+  const ringLabel = isTodayFocus
+    ? (isAllDay ? 'HAPPENING TODAY' : (isHosted ? 'UNTIL IT STARTS' : 'UNTIL YOU LEAVE'))
+    : (isAllDay ? 'STARTS ALL DAY' : `STARTS ${format(leaveAt, 'h:mm a').toUpperCase()}`)
+
   const mapsUrl = isHosted ? null : mapsUrlForEvent(focusEvent)
-  const detailText = focusEvent.enrichment?.prep_notes
-    ?? focusEvent.description
-    ?? `${eventLabel}${!isHosted && focusEvent.location_name ? ` at ${focusEvent.location_name}` : ''}`
 
   return (
     <section className="hidden lg:block mt-2 mb-6" onClick={(e) => e.stopPropagation()}>
-      <div className="relative rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-6 grid grid-cols-[1fr_236px] gap-6 overflow-hidden">
+      <div className="relative rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-7 grid grid-cols-[1fr_320px] gap-8 overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/8 via-transparent to-black/10" />
-        <div className="relative min-w-0">
+        <div className="relative min-w-0 flex flex-col">
           <p className="text-caption font-bold tracking-[0.16em] text-casa-gold">{leadLabel}</p>
           <h1 className="font-display text-display-md leading-[1.02] mt-2 !text-white max-w-none pr-1">
-            {isTodayFocus
-              ? `${isHosted ? 'Starts at' : 'Leave by'} ${format(leaveAt, 'h:mm a')}`
-              : `Tomorrow starts at ${format(leaveAt, 'h:mm a')}`}
+            {headlineText}
           </h1>
-          <p className="text-body mt-3 text-white/86 max-w-[60ch] line-clamp-2">{detailText}</p>
-          <div className="mt-4 flex items-center flex-wrap gap-x-3 gap-y-1 text-body-sm text-white/88">
-            {isHosted ? (
-              <span>At home</span>
-            ) : (
-              <>
-                {(isTodayFocus && travelEta?.found && typeof travelEta.drive_time_mins === 'number')
-                  ? <span>{travelEta.drive_time_mins} min drive</span>
-                  : (focusEvent.enrichment?.drive_time_mins ? <span>{focusEvent.enrichment.drive_time_mins} min drive</span> : null)}
-                {focusEvent.location_name && <><span>•</span><span>{focusEvent.location_name}</span></>}
-                {focusEvent.enrichment?.weather_at_event && <><span>•</span><span>{focusEvent.enrichment.weather_at_event}</span></>}
-              </>
-            )}
+          <div className="mt-4 text-body text-white/86 max-w-[68ch] leading-relaxed">
+            {detailParts.length > 0 ? detailParts.join(' · ') : eventLabel}
           </div>
-          {isTodayFocus && travelEta?.found && (
-            <DepartureRiskBanner
-              event={focusEvent}
-              travelEta={travelEta}
-              className="mt-4"
-              enableSmartAlerts
-            />
-          )}
+          <div className="mt-6 flex items-center gap-3">
+            {mapsUrl ? (
+              <a
+                href={mapsUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="h-12 px-7 rounded-button bg-casa-gold text-casa-navy font-semibold text-[1.08rem] flex items-center justify-center gap-2 whitespace-nowrap hover:brightness-110 transition-all border border-casa-gold/50"
+              >
+                <Navigation size={18} />
+                Get directions
+              </a>
+            ) : (
+              <button disabled className="h-12 px-7 rounded-button border border-white/20 bg-white/5 text-white/60 font-semibold text-[1.08rem] whitespace-nowrap">
+                Get directions
+              </button>
+            )}
+            <button
+              onClick={() => onViewDetails(focusEvent)}
+              className="h-12 px-7 rounded-button border border-white/25 bg-gradient-to-b from-white/6 to-white/[0.03] text-white font-semibold text-[1.08rem] whitespace-nowrap hover:from-white/12 hover:to-white/[0.06] transition-all"
+            >
+              View details
+            </button>
+          </div>
         </div>
 
-        <div className="relative flex flex-col gap-3 min-w-[236px]">
-          <div className="rounded-card border border-white/20 bg-gradient-to-b from-white/10 to-white/5 px-4 py-3 text-right">
-            <p className="text-caption font-semibold tracking-[0.08em] text-white/80">{leaveLabel}</p>
-            <p className="font-display text-display-sm leading-none text-casa-gold mt-1 whitespace-nowrap">{format(leaveAt, 'h:mm a')}</p>
+        <div className="relative min-w-[320px] flex items-center justify-center">
+          <div className="relative h-[228px] w-[228px]">
+            <svg className="h-full w-full -rotate-90" viewBox="0 0 220 220" aria-hidden>
+              <circle
+                cx="110"
+                cy="110"
+                r={ringRadius}
+                fill="none"
+                stroke="rgba(255,255,255,0.16)"
+                strokeWidth="16"
+              />
+              <circle
+                cx="110"
+                cy="110"
+                r={ringRadius}
+                fill="none"
+                stroke="var(--color-casa-gold)"
+                strokeLinecap="round"
+                strokeWidth="16"
+                strokeDasharray={ringCircumference}
+                strokeDashoffset={ringDashOffset}
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-5">
+              <p className="font-display text-display-md leading-none !text-white">{ringValue}</p>
+              <p className="mt-2 text-caption tracking-[0.12em] text-white/72">{ringLabel}</p>
+              <span className={cn(
+                'mt-3 inline-flex items-center gap-2 rounded-pill border px-3 py-1 text-body-sm font-semibold',
+                heroStatusClasses(status.tone),
+              )}>
+                <span className="h-2.5 w-2.5 rounded-full bg-current opacity-85" />
+                {status.label}
+              </span>
+            </div>
           </div>
-          {mapsUrl ? (
-            <a
-              href={mapsUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="h-11 rounded-button bg-casa-gold text-casa-navy font-semibold flex items-center justify-center whitespace-nowrap hover:brightness-110 transition-all border border-casa-gold/50"
-            >
-              Get directions
-            </a>
-          ) : (
-            <button disabled className="h-11 rounded-button border border-white/20 bg-white/5 text-white/60 font-semibold whitespace-nowrap">
-              Get directions
-            </button>
-          )}
-          <button
-            onClick={() => onViewDetails(focusEvent)}
-            className="h-11 rounded-button border border-white/25 bg-gradient-to-b from-white/6 to-white/[0.03] text-white font-semibold whitespace-nowrap hover:from-white/12 hover:to-white/[0.06] transition-all"
-          >
-            View details
-          </button>
         </div>
       </div>
     </section>
