@@ -718,7 +718,7 @@ function DesktopHeroCard({
         </div>
 
         <div className="relative min-h-[280px] min-w-[420px]">
-          <div className="absolute top-[15%] right-[15%] bottom-[15%] aspect-square min-h-[220px]">
+          <div className="absolute top-[6%] right-[6%] bottom-[6%] aspect-square min-h-[220px]">
             <svg className="h-full w-full -rotate-90" viewBox="0 0 220 220" aria-hidden>
               <circle
                 cx="110"
