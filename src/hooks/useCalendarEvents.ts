@@ -16,9 +16,21 @@ export interface EventWithDetails extends Omit<CalendarEvent, 'members' | 'enric
     family_member: FamilyMember
   }[]
   enrichment: EventEnrichment | null
+  plan_override: EventPlanOverride | null
   logistics: EventLogistic[]
   checklist: EventChecklistItem[]
   actions: EventActionItem[]
+}
+
+export interface EventPlanOverride {
+  event_id: string
+  verified: boolean | null
+  waits: boolean | null
+  driver_overrides: Record<string, string> | null
+  mode_override: 'appointment' | 'pickup' | 'hosted' | 'trip' | null
+  two_driver_confirmed: boolean
+  location_signature: string | null
+  updated_at: string
 }
 
 async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDetails[]> {
@@ -55,6 +67,16 @@ async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDet
         role,
         family_member:family_members (*)
       ),
+      event_plan_overrides (
+        event_id,
+        verified,
+        waits,
+        driver_overrides,
+        mode_override,
+        two_driver_confirmed,
+        location_signature,
+        updated_at
+      ),
       event_enrichments (${enrichmentSelect}),
       event_logistics ( * ),
       event_checklist_items ( * ),
@@ -78,6 +100,9 @@ async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDet
       enrichment: Array.isArray(e.event_enrichments)
         ? e.event_enrichments[0] || null
         : e.event_enrichments || null,
+      plan_override: Array.isArray(e.event_plan_overrides)
+        ? e.event_plan_overrides[0] || null
+        : e.event_plan_overrides || null,
       logistics: (e.event_logistics || []).sort((a: EventLogistic, b: EventLogistic) => a.sort_order - b.sort_order),
       checklist: (e.event_checklist_items || []).sort((a: EventChecklistItem, b: EventChecklistItem) => a.sort_order - b.sort_order),
       actions: e.event_action_items || [],
@@ -145,6 +170,7 @@ function useRealtimeEventInvalidation() {
         .channel('events-realtime-singleton')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, _fireInvalidation)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'event_members' }, _fireInvalidation)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'event_plan_overrides' }, _fireInvalidation)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'event_enrichments' }, _fireInvalidation)
         .subscribe()
     }

@@ -21,9 +21,8 @@ import { WeatherIcon } from '../components/shared/WeatherIcon'
 import { LeaveByCard } from '../components/shared/LeaveByCard'
 import { useTravelEta, type TravelEtaResult } from '../hooks/useTravelEta'
 import {
+  getPersistedPlanOverrides,
   getPersistedDriverOverrideMemberIds,
-  locationSignature,
-  overridesStorageKey,
   resolveEventMode,
 } from '../lib/eventPlanOverrides'
 import { derivePlan, type DerivedPerson } from '../lib/eventCommandCenter'
@@ -74,8 +73,8 @@ function fallbackResponsiblePerson(event: EventWithDetails): DerivedPerson | nul
 
 function deriveHomeCardResponsibility(event: EventWithDetails, mode: ReturnType<typeof resolveEventMode>, household: FamilyMember[]) {
   const plan = derivePlan(event, mode, { household })
-  const persisted = readPersistedCardPlanOverrides(event)
-  const effectiveLegs = applyPersistedDriverOverrides(event, plan.legs, household, persisted.driverOverrides, persisted.waits)
+  const persisted = getPersistedPlanOverrides(event)
+  const effectiveLegs = applyPersistedDriverOverrides(event, plan.legs, household, persisted.driverOverrides ?? {}, persisted.waits ?? null)
   const transportLeg = effectiveLegs.find((leg) => leg.kind === 'drop' || leg.kind === 'depart' || leg.kind === 'pickup' || leg.kind === 'return')
   const firstDriverLeg = transportLeg ?? effectiveLegs.find((leg) => leg.driver)
   const responsible = firstDriverLeg?.driver ?? fallbackResponsiblePerson(event)
@@ -115,33 +114,6 @@ function toDerivedPersonFromMember(member: FamilyMember | undefined | null): Der
     initial: member.name?.[0]?.toUpperCase() ?? '?',
     color: member.color_hex ?? SHARED_GOLD,
     role: member.role,
-  }
-}
-
-function readPersistedCardPlanOverrides(event: EventWithDetails): {
-  driverOverrides: Record<number, string>
-  waits: boolean | null
-} {
-  if (typeof window === 'undefined') return { driverOverrides: {}, waits: null }
-  try {
-    const raw = window.localStorage.getItem(overridesStorageKey(event.id))
-    if (!raw) return { driverOverrides: {}, waits: null }
-    const parsed: unknown = JSON.parse(raw)
-    if (!parsed || typeof parsed !== 'object') return { driverOverrides: {}, waits: null }
-    const payload = parsed as {
-      driverOverrides?: Record<number, string>
-      waits?: boolean | null
-      locationSignature?: string
-    }
-    if (payload.locationSignature !== locationSignature(event)) {
-      return { driverOverrides: {}, waits: null }
-    }
-    return {
-      driverOverrides: payload.driverOverrides ?? {},
-      waits: payload.waits ?? null,
-    }
-  } catch {
-    return { driverOverrides: {}, waits: null }
   }
 }
 

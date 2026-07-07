@@ -26,7 +26,7 @@ import {
   indexAvailabilityExceptionsByMember,
   indexAvailabilityRulesByMember,
 } from '../../lib/memberAvailability'
-import { locationSignature, overridesStorageKey } from '../../lib/eventPlanOverrides'
+import { getPersistedPlanOverrides, locationSignature, overridesStorageKey } from '../../lib/eventPlanOverrides'
 import { getEventDisplayStartDay } from '../../utils/eventTime'
 
 // ── Exact design tokens from the Event Command Center handoff (SPEC §2) ──────
@@ -104,6 +104,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
   const [driverOverrides, setDriverOverrides] = useState<Record<number, string>>({})
   const [modeOverride, setModeOverride] = useState<EventMode | null>(null)
   const [twoDriverConfirmed, setTwoDriverConfirmed] = useState(false)
+  const [overridesHydrated, setOverridesHydrated] = useState(false)
   const { data: savedPlaces = [] } = useSavedPlaces()
   const isMobile = useIsMobile()
   const panelDragControls = useDragControls()
@@ -114,76 +115,89 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
 
   useEffect(() => {
     if (!event) return
-    let raw: string | null = null
-    try {
-      raw = localStorage.getItem(overridesStorageKey(event.id))
-    } catch (error) {
-      console.warn('EventDetailPanel: failed to read persisted plan overrides', error)
-    }
-    if (!raw) {
+    setOverridesHydrated(false)
+    const persisted = getPersistedPlanOverrides(event)
+    if (
+      persisted.verified == null
+      && persisted.waits == null
+      && Object.keys(persisted.driverOverrides ?? {}).length === 0
+      && persisted.modeOverride == null
+      && !persisted.twoDriverConfirmed
+    ) {
       setVerifiedOverride(null)
       setWaitsOverride(null)
       setDriverOverrides({})
       setModeOverride(null)
       setTwoDriverConfirmed(false)
+      setOverridesHydrated(true)
       return
     }
-    try {
-      const parsed = JSON.parse(raw) as {
-        verified?: boolean | null
-        waits?: boolean | null
-        driverOverrides?: Record<number, string>
-        modeOverride?: EventMode | 'travel' | null
-        twoDriverConfirmed?: boolean
-        locationSignature?: string
-      }
-      const currentLocationSignature = locationSignature(event)
-      const locationMatches = parsed.locationSignature === currentLocationSignature
-      setVerifiedOverride(locationMatches ? (parsed.verified ?? null) : null)
-      setWaitsOverride(parsed.waits ?? null)
-      setDriverOverrides(parsed.driverOverrides ?? {})
-      const persistedMode = parsed.modeOverride ?? null
-      setModeOverride(persistedMode === 'travel' ? 'appointment' : persistedMode)
-      setTwoDriverConfirmed(Boolean(parsed.twoDriverConfirmed))
-    } catch (error) {
-      console.warn('EventDetailPanel: failed to parse persisted plan overrides', error)
-      setVerifiedOverride(null)
-      setWaitsOverride(null)
-      setDriverOverrides({})
-      setModeOverride(null)
-      setTwoDriverConfirmed(false)
-    }
+    setVerifiedOverride(persisted.verified ?? null)
+    setWaitsOverride(persisted.waits ?? null)
+    setDriverOverrides(persisted.driverOverrides ?? {})
+    const persistedMode = persisted.modeOverride === 'travel' ? 'appointment' : persisted.modeOverride
+    setModeOverride(persistedMode ?? null)
+    setTwoDriverConfirmed(Boolean(persisted.twoDriverConfirmed))
+    setOverridesHydrated(true)
   }, [event?.id])
 
   useEffect(() => {
     if (!event) return
+    if (!overridesHydrated) return
     const hasOverrides = verifiedOverride != null || waitsOverride != null || Object.keys(driverOverrides).length > 0 || modeOverride != null || twoDriverConfirmed
-    if (!hasOverrides) {
-      try {
-        localStorage.removeItem(overridesStorageKey(event.id))
-      } catch (error) {
-        console.warn('EventDetailPanel: failed to clear persisted plan overrides', error)
+    const persist = async () => {
+      if (!hasOverrides) {
+        try {
+          localStorage.removeItem(overridesStorageKey(event.id))
+        } catch (error) {
+          console.warn('EventDetailPanel: failed to clear persisted plan overrides', error)
+        }
+        const { error } = await supabase
+          .from('event_plan_overrides')
+          .delete()
+          .eq('event_id', event.id)
+        if (error) {
+          console.error('EventDetailPanel: failed to clear plan overrides in DB', error)
+        }
+        window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+        return
       }
-      window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
-      return
-    }
-    try {
-      localStorage.setItem(
-        overridesStorageKey(event.id),
-        JSON.stringify({
+
+      const payload = {
+        verified: verifiedOverride,
+        waits: waitsOverride,
+        driverOverrides,
+        modeOverride,
+        twoDriverConfirmed,
+        locationSignature: locationSignature(event),
+      }
+      try {
+        localStorage.setItem(
+          overridesStorageKey(event.id),
+          JSON.stringify(payload),
+        )
+      } catch (error) {
+        console.warn('EventDetailPanel: failed to persist plan overrides locally', error)
+      }
+
+      const { error } = await supabase
+        .from('event_plan_overrides')
+        .upsert({
+          event_id: event.id,
           verified: verifiedOverride,
           waits: waitsOverride,
-          driverOverrides,
-          modeOverride,
-          twoDriverConfirmed,
-          locationSignature: locationSignature(event),
-        }),
-      )
+          driver_overrides: driverOverrides,
+          mode_override: modeOverride,
+          two_driver_confirmed: twoDriverConfirmed,
+          location_signature: locationSignature(event),
+        }, { onConflict: 'event_id' })
+      if (error) {
+        console.error('EventDetailPanel: failed to persist plan overrides in DB', error)
+      }
       window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
-    } catch (error) {
-      console.warn('EventDetailPanel: failed to persist plan overrides', error)
     }
-  }, [event?.id, verifiedOverride, waitsOverride, driverOverrides, modeOverride, twoDriverConfirmed])
+    void persist()
+  }, [event?.id, overridesHydrated, verifiedOverride, waitsOverride, driverOverrides, modeOverride, twoDriverConfirmed])
 
 
   // Lock body scroll while panel is open so the calendar can't scroll behind it
