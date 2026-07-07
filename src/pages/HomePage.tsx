@@ -35,6 +35,7 @@ import {
   indexAvailabilityExceptionsByMember,
   indexAvailabilityRulesByMember,
 } from '../lib/memberAvailability'
+import { getEventEndDate, getEventStartDate } from '../utils/eventTime'
 
 const SHARED_GOLD = '#C9A96E'
 
@@ -207,10 +208,10 @@ export default function HomePage() {
         const isAssignedViaOverride = assignedDriverOverridesByEvent.get(event.id)?.has(member.id) ?? false
         return Boolean(isAttendee || isAssignedViaOverride)
       })
-      const activeNow = mine.find((event) => isBefore(new Date(event.start_time), now) && isAfter(new Date(event.end_time), now))
+      const activeNow = mine.find((event) => isBefore(getEventStartDate(event), now) && isAfter(getEventEndDate(event), now))
       const nextUp = mine
-        .filter((event) => isAfter(new Date(event.start_time), now))
-        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
+        .filter((event) => isAfter(getEventStartDate(event), now))
+        .sort((a, b) => getEventStartDate(a).getTime() - getEventStartDate(b).getTime())[0]
       const nowWindowEnd = new Date(now.getTime() + (30 * 60 * 1000))
       const availabilityAssessment = evaluateMemberAvailabilityForWindow(
         member,
@@ -223,13 +224,13 @@ export default function HomePage() {
       const label = activeNow
         ? activeNow.location_name
           ? `Out · ${activeNow.location_name.split(' ').slice(0, 3).join(' ')}`
-          : `Busy until ${format(new Date(activeNow.end_time), 'h:mm a')}`
+          : `Busy until ${format(getEventEndDate(activeNow), 'h:mm a')}`
         : !availabilityAssessment.available
           ? availabilityAssessment.reason ?? 'Unavailable'
           : availabilityAssessment.softUnavailable
             ? `${availabilityAssessment.reason ?? 'Blocked hours'} (flex)`
             : nextUp
-              ? `Next: ${format(new Date(nextUp.start_time), 'h:mm a')}`
+              ? `Next: ${format(getEventStartDate(nextUp), 'h:mm a')}`
               : 'Free today'
       const constrained = !availabilityAssessment.available || availabilityAssessment.softUnavailable
       return [member.id, { label, busy: Boolean(activeNow), constrained }]
@@ -264,7 +265,7 @@ export default function HomePage() {
     })
   }, [allTomorrowEvents, visibleMembers])
   const nextTodayEvent = useMemo(
-    () => events.find((e) => isAfter(new Date(e.start_time), now)) ?? null,
+    () => events.find((e) => isAfter(getEventStartDate(e), now)) ?? null,
     [events, now],
   )
   const nextTodayEventMode = nextTodayEvent ? resolveEventMode(nextTodayEvent) : null
@@ -445,12 +446,12 @@ export default function HomePage() {
           ) : (
             <ol className="space-y-2">
               {/* Past events */}
-              {events.filter(e => isBefore(new Date(e.end_time), now)).map((ev, i) => (
+              {events.filter(e => isBefore(getEventEndDate(e), now)).map((ev, i) => (
                 <TimelineRow key={ev.id} event={ev} now={now} index={i} household={family ?? []} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
               ))}
 
               {/* ── Now line ── */}
-              {events.some(e => isAfter(new Date(e.end_time), now)) && (
+              {events.some(e => isAfter(getEventEndDate(e), now)) && (
                 <li ref={nowLineRef} className="py-0.5 select-none pointer-events-none" aria-hidden>
                   <div className="w-full flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)] animate-pulse shrink-0" />
@@ -464,7 +465,7 @@ export default function HomePage() {
               )}
 
               {/* Upcoming events */}
-              {events.filter(e => isAfter(new Date(e.end_time), now)).map((ev, i) => (
+              {events.filter(e => isAfter(getEventEndDate(e), now)).map((ev, i) => (
                 <TimelineRow key={ev.id} event={ev} now={now} index={i} household={family ?? []} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
               ))}
             </ol>
@@ -696,8 +697,8 @@ function TimelineRow({
   onClick: () => void
   onComplete?: (id: string) => void
 }) {
-  const start = new Date(event.start_time)
-  const end = new Date(event.end_time)
+  const start = getEventStartDate(event)
+  const end = getEventEndDate(event)
   const past = isBefore(end, now)
   const happening = isBefore(start, now) && isAfter(end, now)
   const color = eventColor(event)
@@ -726,8 +727,8 @@ function TimelineRow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [event, household, mode, overrideVersion],
   )
-  const showLiveLeaveBy = !happening && !isHosted && Boolean(event.address || event.location_name)
-  const showFallbackLeaveBy = !happening && !isHosted && !(event.address || event.location_name) && Boolean(event.enrichment?.departure_time)
+  const showLiveLeaveBy = !event.all_day && !happening && !isHosted && Boolean(event.address || event.location_name)
+  const showFallbackLeaveBy = !event.all_day && !happening && !isHosted && !(event.address || event.location_name) && Boolean(event.enrichment?.departure_time)
   const fallbackDepartureAt = event.enrichment?.departure_time ? new Date(event.enrichment.departure_time) : null
 
   // Timed reminder — slim amber pill in the timeline with dismiss checkbox
@@ -833,7 +834,7 @@ function TimelineRow({
                 <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1">
                   <span className="flex items-center gap-1 text-caption text-casa-muted tabular-nums">
                     <Clock size={11} className="shrink-0" />
-                    {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
+                    {event.all_day ? 'All day' : `${format(start, 'h:mm a')} – ${format(end, 'h:mm a')}`}
                     {event.location_name && (
                       <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
                     )}

@@ -222,7 +222,9 @@ function returnHomeDetail(
   eventEndIso: string | null | undefined,
   eta: TravelEtaResult | null | undefined,
   fallbackLabel: string,
+  allDay?: boolean,
 ): string {
+  if (allDay) return fallbackLabel
   const leaveAt = fmtTime(eventEndIso)
   const driveMins = eta?.found ? eta.drive_time_mins ?? eta.base_drive_time_mins ?? null : null
   const arriveHome = addMinutesToIso(eventEndIso, driveMins)
@@ -248,9 +250,10 @@ export function deriveLegs(event: EventWithDetails, mode: EventMode, opts: Deriv
   const eta = opts.eta
   const estimate = opts.verified === false
   const trafficDelta = eta?.found ? eta.traffic_delay_mins ?? null : null
-  const leaveBy = fmtTime(eta?.leave_by) ?? fmtTime(event.start_time)
-  const startTime = fmtTime(event.start_time)
-  const endTime = fmtTime(event.end_time)
+  const allDay = Boolean(event.all_day)
+  const leaveBy = allDay ? null : (fmtTime(eta?.leave_by) ?? fmtTime(event.start_time))
+  const startTime = allDay ? 'All day' : fmtTime(event.start_time)
+  const endTime = allDay ? null : fmtTime(event.end_time)
 
   switch (mode) {
     case 'hosted': {
@@ -328,7 +331,7 @@ export function deriveLegs(event: EventWithDetails, mode: EventMode, opts: Deriv
         {
           kind: 'return',
           title: 'Head home',
-          detail: returnHomeDetail(event.end_time, eta, endTime ? `Leave at ${endTime}` : 'Return home'),
+          detail: returnHomeDetail(event.end_time, eta, endTime ? `Leave at ${endTime}` : 'Return home', allDay),
           driver,
         },
       ]
@@ -358,7 +361,7 @@ export function deriveLegs(event: EventWithDetails, mode: EventMode, opts: Deriv
         {
           kind: 'pickup',
           title: 'Drive home',
-          detail: returnHomeDetail(event.end_time, eta, endTime ? `Leave at ${endTime}` : 'Return home'),
+          detail: returnHomeDetail(event.end_time, eta, endTime ? `Leave at ${endTime}` : 'Return home', allDay),
           driver,
           estimate,
         },
@@ -404,8 +407,10 @@ export function derivePlan(event: EventWithDetails, mode: EventMode, opts: Deriv
   })
 
   const eta = opts.eta
-  const leaveBy = fmtTime(eta?.leave_by) ?? fmtTime(event.start_time)
-  const returnHomeAt = addMinutesToIso(event.end_time, eta?.found ? eta.drive_time_mins ?? eta.base_drive_time_mins ?? null : null)
+  const leaveBy = event.all_day ? null : (fmtTime(eta?.leave_by) ?? fmtTime(event.start_time))
+  const returnHomeAt = event.all_day
+    ? null
+    : addMinutesToIso(event.end_time, eta?.found ? eta.drive_time_mins ?? eta.base_drive_time_mins ?? null : null)
   const headline = deriveHeadline(mode, legs, { leaveBy, returnHomeAt, isSingleStop: !dropLeg && Boolean(pickLeg) })
 
   return { mode, pattern, twoDrivers, yourTime, legs, headline }

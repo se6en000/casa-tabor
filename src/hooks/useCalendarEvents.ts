@@ -2,7 +2,8 @@
 import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { startOfWeek, endOfWeek, addDays, startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns'
+import { startOfWeek, endOfWeek, addDays, startOfDay, startOfMonth, endOfMonth } from 'date-fns'
+import { eventOverlapsRange } from '../utils/eventTime'
 import type {
   CalendarEvent, FamilyMember, EventEnrichment,
   EventLogistic, EventChecklistItem, EventActionItem,
@@ -59,27 +60,30 @@ async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDet
       event_checklist_items ( * ),
       event_action_items ( * )
     `)
-    .gte('start_time', start.toISOString())
-    .lte('start_time', end.toISOString())
+    .lt('start_time', end.toISOString())
+    .gt('end_time', start.toISOString())
     .neq('status', 'cancelled')
     .order('start_time')
 
   if (error) throw error
 
-  return (events || []).map((e: any) => ({
-    ...e,
-    members: e.event_members?.map((em: any) => ({
-      id: em.id,
-      role: em.role,
-      family_member: em.family_member,
-    })) || [],
-    enrichment: Array.isArray(e.event_enrichments)
-      ? e.event_enrichments[0] || null
-      : e.event_enrichments || null,
-    logistics: (e.event_logistics || []).sort((a: EventLogistic, b: EventLogistic) => a.sort_order - b.sort_order),
-    checklist: (e.event_checklist_items || []).sort((a: EventChecklistItem, b: EventChecklistItem) => a.sort_order - b.sort_order),
-    actions: e.event_action_items || [],
-  }))
+  return (events || [])
+    .map((e: any) => ({
+      ...e,
+      members: e.event_members?.map((em: any) => ({
+        id: em.id,
+        role: em.role,
+        family_member: em.family_member,
+      })) || [],
+      enrichment: Array.isArray(e.event_enrichments)
+        ? e.event_enrichments[0] || null
+        : e.event_enrichments || null,
+      logistics: (e.event_logistics || []).sort((a: EventLogistic, b: EventLogistic) => a.sort_order - b.sort_order),
+      checklist: (e.event_checklist_items || []).sort((a: EventChecklistItem, b: EventChecklistItem) => a.sort_order - b.sort_order),
+      actions: e.event_action_items || [],
+    }))
+    // Keep all-day events anchored to their configured local date portion.
+    .filter((event) => eventOverlapsRange(event, start, end))
 }
 
 export function useWeekEvents(selectedDate: Date) {
@@ -98,7 +102,8 @@ export function useWeekEvents(selectedDate: Date) {
 /** Fetches 14 days starting from `today` for AI context and rolling views. */
 export function useRollingEvents(today: Date) {
   const start = startOfDay(today)
-  const end   = endOfDay(addDays(today, 14))
+  // Preserve existing coverage (today through +14 days) using an exclusive end.
+  const end   = addDays(start, 15)
 
   useRealtimeEventInvalidation()
 
@@ -156,10 +161,8 @@ function useRealtimeEventInvalidation() {
 }
 
 export function useTodayEvents(date: Date) {
-  const dayStart = new Date(date)
-  dayStart.setHours(0, 0, 0, 0)
-  const dayEnd = new Date(date)
-  dayEnd.setHours(23, 59, 59, 999)
+  const dayStart = startOfDay(date)
+  const dayEnd = addDays(dayStart, 1)
 
   return useQuery({
     queryKey: ['events', 'today', dayStart.toISOString()],
@@ -170,7 +173,7 @@ export function useTodayEvents(date: Date) {
 
 export function useMonthEvents(selectedDate: Date) {
   const monthStart = startOfMonth(selectedDate)
-  const monthEnd = endOfMonth(selectedDate)
+  const monthEnd = addDays(endOfMonth(selectedDate), 1)
 
   useRealtimeEventInvalidation()
 
