@@ -15,6 +15,8 @@ import ConflictAlertsSection from '../components/shared/ConflictAlertsSection'
 
 function sourceBadge(item: PrepItem) {
   const source = item.source_type ?? 'calendar_ai'
+  if (source === 'reminder_manual') return { label: 'Reminder', icon: Bell, tone: 'text-amber-700 bg-amber-50 border-amber-200' }
+  if (source === 'reminder_missed') return { label: 'Missed', icon: Bell, tone: 'text-orange-700 bg-orange-50 border-orange-200' }
   if (source === 'gmail') return { label: 'Email', icon: Mail, tone: 'text-purple-700 bg-purple-50 border-purple-200' }
   if (source === 'calendar_ai') return { label: 'Calendar', icon: Bot, tone: 'text-sky-700 bg-sky-50 border-sky-200' }
   return { label: 'System', icon: ClipboardList, tone: 'text-casa-muted bg-casa-bg border-casa-border' }

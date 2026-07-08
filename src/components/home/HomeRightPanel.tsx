@@ -60,6 +60,8 @@ function urgencyLabel(days: number) {
 }
 
 function sourceBadge(item: PrepItem) {
+  if (item.source_type === 'reminder_manual') return { label: 'Reminder', tone: 'text-amber-700 bg-amber-50 border-amber-200' }
+  if (item.source_type === 'reminder_missed') return { label: 'Missed reminder', tone: 'text-orange-700 bg-orange-50 border-orange-200' }
   if (item.source_type === 'gmail') return { label: 'Email', tone: 'text-purple-700 bg-purple-50 border-purple-200' }
   if (item.source_type === 'calendar_ai') return { label: 'Calendar', tone: 'text-sky-700 bg-sky-50 border-sky-200' }
   return { label: 'System', tone: 'text-casa-muted bg-casa-bg border-casa-border' }

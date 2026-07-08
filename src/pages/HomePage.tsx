@@ -20,6 +20,7 @@ import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import { WeatherIcon } from '../components/shared/WeatherIcon'
 import { LeaveByCard } from '../components/shared/LeaveByCard'
 import { useTravelEta, type TravelEtaResult } from '../hooks/useTravelEta'
+import { useReminderNeedsYouActions } from '../hooks/useReminderNeedsYouActions'
 import {
   getPersistedPlanOverrides,
   getPersistedDriverOverrideMemberIds,
@@ -265,6 +266,7 @@ export default function HomePage() {
     ? (events.find(e => e.id === selectedEventId) ?? tomorrowEvents.find(e => e.id === selectedEventId) ?? reminders.find(e => e.id === selectedEventId) ?? null)
     : null
   const qc = useQueryClient()
+  const { snoozeReminderOneHour, moveReminderToNeedsYou, queueMissedReminders } = useReminderNeedsYouActions()
 
   const completeReminder = useCallback(async (id: string) => {
     await supabase.from('events').update({ status: 'cancelled' }).eq('id', id)
@@ -275,6 +277,15 @@ export default function HomePage() {
     await supabase.from('events').update({ status: 'cancelled' }).eq('id', id)
     qc.invalidateQueries({ queryKey: ['today-events'] })
   }, [qc])
+
+  const reminderSweepBucket = Math.floor(now.getTime() / 60_000)
+  useEffect(() => {
+    const timedReminders = events.filter((event) => isTimedReminder(event))
+    if (timedReminders.length === 0) return
+    void queueMissedReminders(timedReminders, new Date()).catch((error) => {
+      console.error('HomePage: failed to queue missed reminders in Needs you', error)
+    })
+  }, [events, queueMissedReminders, reminderSweepBucket])
 
   // ── Scheduled AI analysis: max 5x/day between 6am–10pm, ~3h cooldown ──
   // Uses localStorage to persist across page navigations without hitting Gemini on every load.
@@ -418,7 +429,25 @@ export default function HomePage() {
             <ol className="space-y-2">
               {/* Past events */}
               {events.filter(e => isBefore(getEventEndDate(e), now)).map((ev, i) => (
-                <TimelineRow key={ev.id} event={ev} now={now} index={i} household={family ?? []} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
+                <TimelineRow
+                  key={ev.id}
+                  event={ev}
+                  now={now}
+                  index={i}
+                  household={family ?? []}
+                  onClick={() => setSelectedEventId(ev.id)}
+                  onComplete={completeReminder}
+                  onSnooze={(event) => {
+                    void snoozeReminderOneHour(event).catch((error) => {
+                      console.error('HomePage: failed to snooze reminder by 1 hour', error)
+                    })
+                  }}
+                  onSendToNeedsYou={(event) => {
+                    void moveReminderToNeedsYou(event).catch((error) => {
+                      console.error('HomePage: failed to move reminder to Needs you', error)
+                    })
+                  }}
+                />
               ))}
 
               {/* ── Now line ── */}
@@ -437,7 +466,25 @@ export default function HomePage() {
 
               {/* Upcoming events */}
               {events.filter(e => isAfter(getEventEndDate(e), now)).map((ev, i) => (
-                <TimelineRow key={ev.id} event={ev} now={now} index={i} household={family ?? []} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
+                <TimelineRow
+                  key={ev.id}
+                  event={ev}
+                  now={now}
+                  index={i}
+                  household={family ?? []}
+                  onClick={() => setSelectedEventId(ev.id)}
+                  onComplete={completeReminder}
+                  onSnooze={(event) => {
+                    void snoozeReminderOneHour(event).catch((error) => {
+                      console.error('HomePage: failed to snooze reminder by 1 hour', error)
+                    })
+                  }}
+                  onSendToNeedsYou={(event) => {
+                    void moveReminderToNeedsYou(event).catch((error) => {
+                      console.error('HomePage: failed to move reminder to Needs you', error)
+                    })
+                  }}
+                />
               ))}
             </ol>
           )}
@@ -461,7 +508,25 @@ export default function HomePage() {
               </div>
               <ol className="space-y-2">
                 {tomorrowEvents.map((ev, i) => (
-                  <TimelineRow key={ev.id} event={ev} now={now} index={i} household={family ?? []} onClick={() => setSelectedEventId(ev.id)} onComplete={completeReminder} />
+                  <TimelineRow
+                    key={ev.id}
+                    event={ev}
+                    now={now}
+                    index={i}
+                    household={family ?? []}
+                    onClick={() => setSelectedEventId(ev.id)}
+                    onComplete={completeReminder}
+                    onSnooze={(event) => {
+                      void snoozeReminderOneHour(event).catch((error) => {
+                        console.error('HomePage: failed to snooze reminder by 1 hour', error)
+                      })
+                    }}
+                    onSendToNeedsYou={(event) => {
+                      void moveReminderToNeedsYou(event).catch((error) => {
+                        console.error('HomePage: failed to move reminder to Needs you', error)
+                      })
+                    }}
+                  />
                 ))}
               </ol>
             </motion.section>
@@ -739,6 +804,8 @@ function TimelineRow({
   household,
   onClick,
   onComplete,
+  onSnooze,
+  onSendToNeedsYou,
 }: {
   event: EventWithDetails
   now: Date
@@ -746,6 +813,8 @@ function TimelineRow({
   household: FamilyMember[]
   onClick: () => void
   onComplete?: (id: string) => void
+  onSnooze?: (event: EventWithDetails) => void | Promise<void>
+  onSendToNeedsYou?: (event: EventWithDetails) => void | Promise<void>
 }) {
   const start = getEventStartDate(event)
   const end = getEventEndDate(event)
@@ -757,6 +826,8 @@ function TimelineRow({
   const isHosted = mode === 'hosted'
 
   const [checking, setChecking] = useState(false)
+  const [snoozing, setSnoozing] = useState(false)
+  const [movingToNeedsYou, setMovingToNeedsYou] = useState(false)
   const [overrideVersion, setOverrideVersion] = useState(0)
   const cleanTitle = cleanEventTitle(event.title)
 
@@ -785,10 +856,30 @@ function TimelineRow({
   if (timed) {
     async function handleCheck(e: React.MouseEvent) {
       e.stopPropagation()
-      if (checking || !onComplete) return
+      if (checking || snoozing || movingToNeedsYou || !onComplete) return
       setChecking(true)
       await new Promise(r => setTimeout(r, 320))
       onComplete(event.id)
+    }
+    async function handleSnooze(e: React.MouseEvent) {
+      e.stopPropagation()
+      if (checking || snoozing || movingToNeedsYou || !onSnooze) return
+      setSnoozing(true)
+      try {
+        await onSnooze(event)
+      } finally {
+        setSnoozing(false)
+      }
+    }
+    async function handleMoveToNeedsYou(e: React.MouseEvent) {
+      e.stopPropagation()
+      if (checking || snoozing || movingToNeedsYou || !onSendToNeedsYou) return
+      setMovingToNeedsYou(true)
+      try {
+        await onSendToNeedsYou(event)
+      } finally {
+        setMovingToNeedsYou(false)
+      }
     }
     return (
       <motion.li
@@ -806,6 +897,7 @@ function TimelineRow({
           <div className="flex items-center gap-2 pl-1 text-caption font-semibold text-casa-top-pick-band">
             <button
               onClick={handleCheck}
+              disabled={checking || snoozing || movingToNeedsYou}
               className={`shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
                 checking ? 'bg-green-500 border-green-500' : 'border-casa-accent-soft-border hover:border-casa-success bg-transparent'
               }`}
@@ -816,6 +908,22 @@ function TimelineRow({
                   <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               )}
+            </button>
+            <button
+              onClick={handleSnooze}
+              disabled={checking || snoozing || movingToNeedsYou || !onSnooze}
+              className="shrink-0 w-5 h-5 rounded border border-casa-accent-soft-border bg-white/80 text-casa-muted hover:text-casa-text hover:bg-white transition-colors inline-flex items-center justify-center disabled:opacity-40"
+              title="Snooze 1 hour"
+            >
+              <SnoozeOneHourIcon className={cn('w-3 h-3', snoozing && 'animate-pulse')} />
+            </button>
+            <button
+              onClick={handleMoveToNeedsYou}
+              disabled={checking || snoozing || movingToNeedsYou || !onSendToNeedsYou}
+              className="shrink-0 w-5 h-5 rounded border border-casa-accent-soft-border bg-white/80 text-casa-muted hover:text-casa-text hover:bg-white transition-colors inline-flex items-center justify-center disabled:opacity-40"
+              title="Move to Needs you"
+            >
+              <NeedsYouTransferIcon className={cn('w-3 h-3', movingToNeedsYou && 'animate-pulse')} />
             </button>
             <Bell size={13} className="shrink-0 text-casa-warning" />
             <span className="text-casa-muted tabular-nums">
@@ -979,6 +1087,26 @@ function SupervisingBadgeIcon() {
   return (
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path d="M12 3l7 2.6v5.2c0 4.3-3 7.3-7 8.4-4-1.1-7-4.1-7-8.4V5.6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function SnoozeOneHourIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <circle cx="12" cy="13" r="7" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 9.8v3.4l2.2 1.3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8.2 3.8h7.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M5.7 6.2h2.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function NeedsYouTransferIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <path d="M4.5 6.5h10.5M4.5 11.5h8M4.5 16.5h6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M14.2 9.2l4.3 3.3-4.3 3.3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }

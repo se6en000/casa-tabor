@@ -22,6 +22,7 @@ import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import BounceScroll from '../shared/BounceScroll'
 import { eventOverlapsDay, getEventEndDate, getEventStartDate } from '../../utils/eventTime'
+import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActions'
 import {
   getPersistedPlanOverrides,
   resolveEventMode,
@@ -136,6 +137,8 @@ function DayEventCard({
   household,
   onOpen,
   onComplete,
+  onSnooze,
+  onSendToNeedsYou,
 }: {
   event: EventWithDetails
   now: Date
@@ -143,6 +146,8 @@ function DayEventCard({
   household: FamilyMember[]
   onOpen: () => void
   onComplete?: (id: string) => void
+  onSnooze?: (event: EventWithDetails) => void | Promise<void>
+  onSendToNeedsYou?: (event: EventWithDetails) => void | Promise<void>
 }) {
   const start = getEventStartDate(event)
   const end = getEventEndDate(event)
@@ -154,6 +159,8 @@ function DayEventCard({
   const isHosted = mode === 'hosted'
 
   const [checking, setChecking] = useState(false)
+  const [snoozing, setSnoozing] = useState(false)
+  const [movingToNeedsYou, setMovingToNeedsYou] = useState(false)
   const [overrideVersion, setOverrideVersion] = useState(0)
   const cleanTitle = cleanEventTitle(event.title)
 
@@ -179,10 +186,30 @@ function DayEventCard({
   if (timed) {
     async function handleCheck(e: React.MouseEvent) {
       e.stopPropagation()
-      if (checking || !onComplete) return
+      if (checking || snoozing || movingToNeedsYou || !onComplete) return
       setChecking(true)
       await new Promise((r) => setTimeout(r, 320))
       onComplete(event.id)
+    }
+    async function handleSnooze(e: React.MouseEvent) {
+      e.stopPropagation()
+      if (checking || snoozing || movingToNeedsYou || !onSnooze) return
+      setSnoozing(true)
+      try {
+        await onSnooze(event)
+      } finally {
+        setSnoozing(false)
+      }
+    }
+    async function handleMoveToNeedsYou(e: React.MouseEvent) {
+      e.stopPropagation()
+      if (checking || snoozing || movingToNeedsYou || !onSendToNeedsYou) return
+      setMovingToNeedsYou(true)
+      try {
+        await onSendToNeedsYou(event)
+      } finally {
+        setMovingToNeedsYou(false)
+      }
     }
     return (
       <motion.li
@@ -199,6 +226,7 @@ function DayEventCard({
           <div className="flex items-center gap-2 pl-1 text-caption font-semibold text-casa-top-pick-band">
             <button
               onClick={handleCheck}
+              disabled={checking || snoozing || movingToNeedsYou}
               className={`shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
                 checking ? 'bg-green-500 border-green-500' : 'border-casa-accent-soft-border hover:border-casa-success bg-transparent'
               }`}
@@ -209,6 +237,22 @@ function DayEventCard({
                   <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               )}
+            </button>
+            <button
+              onClick={handleSnooze}
+              disabled={checking || snoozing || movingToNeedsYou || !onSnooze}
+              className="shrink-0 w-5 h-5 rounded border border-casa-accent-soft-border bg-white/80 text-casa-muted hover:text-casa-text hover:bg-white transition-colors inline-flex items-center justify-center disabled:opacity-40"
+              title="Snooze 1 hour"
+            >
+              <SnoozeOneHourIcon className={cn('w-3 h-3', snoozing && 'animate-pulse')} />
+            </button>
+            <button
+              onClick={handleMoveToNeedsYou}
+              disabled={checking || snoozing || movingToNeedsYou || !onSendToNeedsYou}
+              className="shrink-0 w-5 h-5 rounded border border-casa-accent-soft-border bg-white/80 text-casa-muted hover:text-casa-text hover:bg-white transition-colors inline-flex items-center justify-center disabled:opacity-40"
+              title="Move to Needs you"
+            >
+              <NeedsYouTransferIcon className={cn('w-3 h-3', movingToNeedsYou && 'animate-pulse')} />
             </button>
             <Bell size={13} className="shrink-0 text-casa-warning" />
             <span className="text-casa-muted tabular-nums">
@@ -377,6 +421,26 @@ function SupervisingBadgeIcon() {
   )
 }
 
+function SnoozeOneHourIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <circle cx="12" cy="13" r="7" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 9.8v3.4l2.2 1.3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8.2 3.8h7.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M5.7 6.2h2.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function NeedsYouTransferIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <path d="M4.5 6.5h10.5M4.5 11.5h8M4.5 16.5h6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M14.2 9.2l4.3 3.3-4.3 3.3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 // ── Sidecar: Prep items for this day's events ──────────────────────
 
 function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]; selectedDate: Date }) {
@@ -523,6 +587,7 @@ export default function DayView() {
   const { selectedDate, visibleMembers } = useCalendarStore()
   const now = useLiveClock(15_000)
   const { data: family } = useFamilyMembers()
+  const { snoozeReminderOneHour, moveReminderToNeedsYou } = useReminderNeedsYouActions()
 
   // Use the week that contains the selected date to get events
   const { data: weekEvents } = useWeekEvents(selectedDate)
@@ -583,6 +648,16 @@ export default function DayView() {
                     household={family ?? []}
                     onOpen={() => setSelectedEventId(event.id)}
                     onComplete={completeReminder}
+                    onSnooze={(targetEvent) => {
+                      void snoozeReminderOneHour(targetEvent).catch((error) => {
+                        console.error('DayView: failed to snooze reminder by 1 hour', error)
+                      })
+                    }}
+                    onSendToNeedsYou={(targetEvent) => {
+                      void moveReminderToNeedsYou(targetEvent).catch((error) => {
+                        console.error('DayView: failed to move reminder to Needs you', error)
+                      })
+                    }}
                   />
                 ))}
               </ol>
