@@ -98,7 +98,7 @@ export default function CalendarPage() {
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Top toolbar */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-casa-border bg-casa-bg">
+      <div className="flex items-center justify-between px-6 py-3 bg-casa-bg">
         <div className="flex items-center gap-3">
           <button
             onClick={goToToday}
