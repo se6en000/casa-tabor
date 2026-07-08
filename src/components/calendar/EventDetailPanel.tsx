@@ -1840,7 +1840,14 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
 
   return (
     <div className="rounded-[14px] overflow-hidden" style={{ border: `1px solid ${verifyBorder}` }}>
-      <div style={{ height: 104, background: 'linear-gradient(135deg,#DCE6DA,#C9DBD9)' }} className="relative overflow-hidden">
+      <div
+        style={{
+          height: 'clamp(360px, 42vh, 400px)',
+          minHeight: 360,
+          background: 'linear-gradient(135deg,#DCE6DA,#C9DBD9)',
+        }}
+        className="relative overflow-hidden"
+      >
         {mapEmbedUrl ? (
           <iframe
             title="Event location map"
