@@ -3606,7 +3606,7 @@ export default function CookPage() {
                   openRecipeForCookMode(recipe.id)
                 }
               }}
-              className="rounded-2xl border border-casa-border bg-casa-surface overflow-hidden cursor-pointer hover:border-casa-accent-soft-border transition-colors"
+              className="h-full rounded-2xl border border-casa-border bg-casa-surface overflow-hidden cursor-pointer hover:border-casa-accent-soft-border transition-colors flex flex-col"
             >
               {(() => {
                 const focus = parseRecipeImageFocus(recipe.image_url)
@@ -3620,13 +3620,13 @@ export default function CookPage() {
                   />
                 )
               })()}
-              <div className="p-3">
+              <div className="p-3 flex flex-1 flex-col">
                 <p className="text-body font-semibold text-casa-navy line-clamp-2">{recipe.name}</p>
                 <p className="mt-1 text-[11px] text-casa-muted">
                   {recipe.cook_time ? `${recipe.cook_time} · ` : ''}
                   {recipe.servings ?? 'servings n/a'}
                 </p>
-                <div className="mt-3 flex items-center gap-2">
+                <div className="mt-auto pt-3 flex items-center gap-2">
                   <button
                     type="button"
                     onClick={(event) => {

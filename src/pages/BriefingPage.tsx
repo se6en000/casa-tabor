@@ -7,6 +7,7 @@ import { cn } from '../utils/cn'
 import PrepAlertsSection from '../components/shared/PrepAlertsSection'
 import ConflictAlertsSection from '../components/shared/ConflictAlertsSection'
 import BounceScroll from '../components/shared/BounceScroll'
+import MarkdownContent, { formatTextForMarkdown } from '../components/shared/MarkdownContent'
 
 interface MemberEvent {
   title: string
@@ -161,7 +162,10 @@ export default function BriefingPage() {
                   <Bot size={15} className="text-casa-gold" />
                   <span className="text-caption text-casa-muted font-semibold uppercase tracking-wide">Today's Briefing</span>
                 </div>
-                <p className="text-body text-casa-text leading-relaxed">{briefing.summary_text}</p>
+                <MarkdownContent
+                  content={formatTextForMarkdown(briefing.summary_text)}
+                  className="text-body text-casa-text leading-relaxed"
+                />
               </div>
             ) : (
               <div className="bg-casa-surface rounded-card border border-casa-border p-5 shadow-card text-center">

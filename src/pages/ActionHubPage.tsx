@@ -141,7 +141,7 @@ export default function ActionHubPage() {
                 <div
                   key={item.id}
                   className={cn(
-                    'rounded-[1rem] border border-casa-border bg-casa-card px-3.5 py-3',
+                    'rounded-[1rem] border border-casa-gold/35 bg-casa-gold/8 px-3.5 py-3',
                     'hover:shadow-card-hover transition-all',
                     busy && 'opacity-60',
                   )}
@@ -161,14 +161,14 @@ export default function ActionHubPage() {
                       )}
                       <span className="text-body-sm text-casa-muted truncate">{item.event_title || 'Casa Tabor'}</span>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-casa-divider/70 flex items-center gap-1.5 flex-wrap">
+                    <div className="mt-3 flex items-center gap-1.5 flex-wrap">
                       <button onClick={() => run('dismiss', item.id)} className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition" title="Done">
                         Done
                       </button>
-                      <button onClick={() => run('snooze', item.id)} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-casa-card text-casa-muted text-body-sm font-semibold hover:text-casa-text transition-colors" title="Snooze">
+                      <button onClick={() => run('snooze', item.id)} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors" title="Snooze">
                         Snooze
                       </button>
-                      <button onClick={() => run('downvote', item.id)} className="h-9 w-9 rounded-[0.8rem] border border-casa-border bg-casa-card text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center" title="Downvote">
+                      <button onClick={() => run('downvote', item.id)} className="h-9 w-9 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center" title="Downvote">
                         <ThumbsDown size={15} />
                       </button>
                       <button onClick={() => launchCreate(item, 'event')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create event draft">

@@ -1,5 +1,9 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.mjs'
+import {
+  hasScopeFilters,
+  resolveMemberScope,
+} from '../_shared/admin-ops.ts'
 
 interface OperationPlan {
   operation: 'delete' | 'add' | 'edit'
@@ -11,7 +15,7 @@ interface OperationPlan {
     memberFilter?: string[]
   }
   estimatedCount?: number
-  sampleRows?: any[]
+  sampleRows?: unknown[]
 }
 
 interface ExecutionResult {
@@ -35,8 +39,7 @@ function generateJobId(): string {
 
 async function executeOperation(
   sbServiceRole: ReturnType<typeof createClient>,
-  plan: OperationPlan,
-  jobId: string
+  plan: OperationPlan
 ): Promise<{ rowsAffected: number; errors: string[] }> {
   const errors: string[] = []
   let rowsAffected = 0
@@ -45,6 +48,7 @@ async function executeOperation(
     if (plan.operation === 'delete') {
       // Build delete query with scope validation
       let query = sbServiceRole.from('events').select('id')
+      const resolvedMemberScope = await resolveMemberScope(sbServiceRole, plan.scope.memberFilter)
 
       if (plan.scope.dateRangeStart) {
         query = query.gte('start_time', plan.scope.dateRangeStart)
@@ -55,8 +59,14 @@ async function executeOperation(
       if (plan.scope.titleFilter) {
         query = query.ilike('title', `%${plan.scope.titleFilter}%`)
       }
-      if (plan.scope.memberFilter && plan.scope.memberFilter.length > 0) {
-        query = query.in('member_name', plan.scope.memberFilter)
+      if (resolvedMemberScope) {
+        if (resolvedMemberScope.memberIds.length === 0) {
+          return { rowsAffected: 0, errors: ['No matching family members found for the member filter'] }
+        }
+        if (resolvedMemberScope.eventIds.length === 0) {
+          return { rowsAffected: 0, errors: ['No matching rows found'] }
+        }
+        query = query.in('id', resolvedMemberScope.eventIds)
       }
 
       const { data: rowsToDelete, error: fetchError } = await query
@@ -73,12 +83,12 @@ async function executeOperation(
       // Delete in chunks (safety measure)
       const chunkSize = 100
       for (let i = 0; i < rowsToDelete.length; i += chunkSize) {
-        const chunk = rowsToDelete.slice(i, i + chunkSize).map((r: any) => r.id)
+        const chunk = rowsToDelete.slice(i, i + chunkSize).map((row) => row.id)
 
-        // Soft delete (archive) rather than hard delete
+        // Soft delete by marking cancelled rather than hard delete
         const { error: deleteError } = await sbServiceRole
           .from('events')
-          .update({ status: 'archived', updated_at: new Date().toISOString() })
+          .update({ status: 'cancelled', updated_at: new Date().toISOString() })
           .in('id', chunk)
 
         if (deleteError) {
@@ -149,20 +159,26 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Validate scope (must have at least one filter)
-    if (
-      !plan.scope.titleFilter &&
-      !plan.scope.dateRangeStart &&
-      (!plan.scope.memberFilter || plan.scope.memberFilter.length === 0)
-    ) {
+    if (plan.operation === 'delete' && !hasScopeFilters(plan.scope)) {
+      const description = (plan.description ?? '').toLowerCase()
+      const explicitlyGlobal = /\b(all|every)\b/.test(description)
+      if (!explicitlyGlobal) {
+        return new Response(
+          JSON.stringify({ message: 'For unscoped delete operations, include explicit wording like "delete all events".' }),
+          { status: 400, headers: { 'Content-Type': 'application/json', ...CORS } }
+        )
+      }
+    }
+
+    if (plan.operation !== 'delete' && plan.operation !== 'add' && plan.operation !== 'edit') {
       return new Response(
-        JSON.stringify({ message: 'Operation scope must include at least one filter' }),
+        JSON.stringify({ message: `Unsupported operation type: ${String(plan.operation)}` }),
         { status: 400, headers: { 'Content-Type': 'application/json', ...CORS } }
       )
     }
 
     // Execute the operation
-    const result = await executeOperation(sbServiceRole, plan, jobId)
+    const result = await executeOperation(sbServiceRole, plan)
 
     // Log audit trail
     await logAuditTrail(sbServiceRole, jobId, plan, result)

@@ -8,6 +8,7 @@ import {
 import { cn } from '../../utils/cn'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { useRollingEvents } from '../../hooks/useCalendarEvents'
+import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { CATEGORY_LABEL } from './categoryFields'
 import EventDetailPanel from './EventDetailPanel'
@@ -20,6 +21,9 @@ import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import BounceScroll from '../shared/BounceScroll'
 import { eventOverlapsDay, getEventDisplayStartDay } from '../../utils/eventTime'
+import type { FamilyMember } from '../../types'
+import { getPersistedPlanOverrides, resolveEventMode } from '../../lib/eventPlanOverrides'
+import { derivePlan } from '../../lib/eventCommandCenter'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -40,8 +44,80 @@ function getSnippet(event: EventWithDetails): { icon: React.ReactNode; text: str
   return null
 }
 
+function getGoingMembers(event: EventWithDetails): FamilyMember[] {
+  const selected = event.members
+    .filter((member) => {
+      const role = member.role.toLowerCase()
+      return role === 'assignee' || role === 'primary'
+    })
+    .map((member) => member.family_member)
+    .filter((member): member is FamilyMember => Boolean(member))
+
+  const deduped = new Map(selected.map((member) => [member.id, member]))
+  return Array.from(deduped.values()).sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function toDerivedPersonFromMember(member: FamilyMember | undefined | null) {
+  if (!member) return null
+  return {
+    id: member.id,
+    name: member.name,
+    initial: member.name?.[0]?.toUpperCase() ?? '?',
+    color: member.color_hex ?? SHARED_COLOR,
+    role: member.role,
+  }
+}
+
+function applyPersistedDriverOverrides(
+  event: EventWithDetails,
+  legs: ReturnType<typeof derivePlan>['legs'],
+  household: FamilyMember[],
+  driverOverrides: Record<number, string>,
+  waitsOverride: boolean | null,
+) {
+  const attendeeById = new Map(event.members.map((member) => [member.family_member.id, member.family_member]))
+  const householdById = new Map(household.map((member) => [member.id, member]))
+  const withDriverOverrides = legs.map((leg, index) => {
+    const overrideDriverId = driverOverrides[index]
+    if (!overrideDriverId || !leg.driver) return leg
+    const familyMember = attendeeById.get(overrideDriverId) ?? householdById.get(overrideDriverId)
+    const overrideDriver = toDerivedPersonFromMember(familyMember)
+    return overrideDriver ? { ...leg, driver: overrideDriver } : leg
+  })
+  const waits = waitsOverride ?? Boolean(withDriverOverrides.find((leg) => leg.kind === 'stay')?.waits)
+  return withDriverOverrides.map((leg) => {
+    if (leg.kind !== 'stay') return leg
+    if (!waits) return { ...leg, waits: false }
+    const driveLeg = withDriverOverrides.find((item) => item.kind === 'drop' || item.kind === 'depart')
+    return { ...leg, waits: true, title: `${driveLeg?.driver?.name ?? 'Driver'} waits on site` }
+  })
+}
+
+function deriveResponsibilityChip(event: EventWithDetails, household: FamilyMember[]) {
+  const mode = resolveEventMode(event)
+  const plan = derivePlan(event, mode, { household })
+  const persisted = getPersistedPlanOverrides(event)
+  const effectiveLegs = applyPersistedDriverOverrides(
+    event,
+    plan.legs,
+    household,
+    persisted.driverOverrides ?? {},
+    persisted.waits ?? null,
+  )
+  const transportLeg = effectiveLegs.find((leg) =>
+    leg.kind === 'drop' || leg.kind === 'depart' || leg.kind === 'pickup' || leg.kind === 'return',
+  )
+  const firstDriverLeg = transportLeg ?? effectiveLegs.find((leg) => leg.driver)
+  if (!firstDriverLeg?.driver) return null
+  return {
+    label: mode === 'hosted' ? 'SUPERVISOR' : 'DRIVER',
+    person: firstDriverLeg.driver,
+  }
+}
+
 export default function StackedView() {
   const { visibleMembers } = useCalendarStore()
+  const { data: householdData } = useFamilyMembers()
   const today = startOfDay(new Date())
   // 8 days: today → today+7
   const days  = Array.from({ length: 8 }, (_, i) => addDays(today, i))
@@ -49,6 +125,7 @@ export default function StackedView() {
   const row2  = days.slice(4, 8)
 
   const { data: allEvents } = useRollingEvents(today)
+  const household = householdData ?? []
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [editEventId,     setEditEventId]     = useState<string | null>(null)
@@ -100,7 +177,12 @@ export default function StackedView() {
             return (
               <div
                 key={format(day, 'yyyy-MM-dd')}
-                className="flex flex-col bg-casa-surface/40 rounded-xl border border-casa-border overflow-hidden"
+                className={cn(
+                  'flex flex-col rounded-xl border overflow-hidden transition-colors',
+                  today_
+                    ? 'bg-casa-accent-subtle/70 border-casa-accent-subtle-border'
+                    : 'bg-casa-bg-2/65 border-casa-divider',
+                )}
               >
                 {/* Day header — compact inline layout */}
                 <div className={cn(
@@ -177,6 +259,7 @@ export default function StackedView() {
                         <EventCard
                           key={event.id}
                           event={event}
+                          household={household}
                           isSelected={selectedEventId === event.id}
                           onClick={() => setSelectedEventId(event.id)}
                           onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
@@ -224,13 +307,14 @@ export default function StackedView() {
 
 interface EventCardProps {
   event: EventWithDetails
+  household: FamilyMember[]
   isSelected: boolean
   onClick: () => void
   onDoubleClick: () => void
   onLongPress: (event: EventWithDetails, x: number, y: number) => void
 }
 
-function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: EventCardProps) {
+function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLongPress }: EventCardProps) {
   const color = getPrimaryColor(event)
   const enr = event.enrichment
   const snippet = getSnippet(event)
@@ -248,6 +332,10 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
   const end = new Date(event.end_time)
   const isAllDayEvent = event.all_day
   const displayStartDay = isAllDayEvent ? getEventDisplayStartDay(event) : null
+  const goingMembers = getGoingMembers(event)
+  const visibleGoingMembers = goingMembers.slice(0, 2)
+  const goingOverflowCount = Math.max(0, goingMembers.length - visibleGoingMembers.length)
+  const responsibilityChip = deriveResponsibilityChip(event, household)
 
   // Long-press detection
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -317,39 +405,58 @@ function EventCard({ event, isSelected, onClick, onDoubleClick, onLongPress }: E
 
         {/* Title — 1-line clamp, larger + bolder */}
         {(() => {
-          const primary = event.members.find(m => m.role === 'primary')
-          const others = event.members.filter(m => m.role !== 'primary')
           const pipeIdx = event.title.indexOf(' | ')
           const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
+          const showGoingRow = visibleGoingMembers.length > 0
+          const showResponsibilityRow = Boolean(responsibilityChip)
+          const showRoleRows = showGoingRow || showResponsibilityRow
           return (
-            <>
-              <p
-                className="stacked-event-title text-body-sm font-semibold text-casa-text leading-snug line-clamp-1 mb-1"
-                style={{ color: 'var(--color-casa-text)' }}
-              >
-                {cleanTitle}
-              </p>
-              {/* Member pills/dots */}
-              <div className="flex items-center gap-1 flex-wrap">
-                {primary && (
-                  <span
-                    className="px-1.5 py-0.5 rounded-full text-white text-[9px] font-bold leading-none whitespace-nowrap"
-                    style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
-                  >
-                    {primary.family_member?.name ?? '?'}
-                  </span>
-                )}
-                {others.slice(0, 3).map(m => (
-                  <span
-                    key={m.id}
-                    className="px-1.5 py-0.5 rounded-full text-white text-[9px] font-bold leading-none whitespace-nowrap shrink-0"
-                    style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
-                  >
-                    {m.family_member?.name ?? '?'}
-                  </span>
-                ))}
+            <div className="flex items-start justify-between gap-1.5">
+              <div className="min-w-0 flex-1">
+                <p
+                  className="stacked-event-title text-body-sm font-semibold text-casa-text leading-snug line-clamp-1"
+                  style={{ color: 'var(--color-casa-text)' }}
+                >
+                  {cleanTitle}
+                </p>
               </div>
-            </>
+              {showRoleRows && (
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  {showGoingRow && (
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-[8px] font-semibold tracking-[0.12em] text-casa-muted/75 leading-none">GOING</span>
+                      {visibleGoingMembers.map((member) => (
+                        <span
+                          key={member.id}
+                          className="px-1.5 py-0.5 rounded-full text-white text-[9px] font-bold leading-none whitespace-nowrap shrink-0"
+                          style={{ backgroundColor: member.color_hex ?? '#888' }}
+                        >
+                          {member.name}
+                        </span>
+                      ))}
+                      {goingOverflowCount > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-full text-casa-muted text-[9px] font-bold leading-none whitespace-nowrap shrink-0 border border-casa-border bg-casa-bg">
+                          +{goingOverflowCount}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {showResponsibilityRow && responsibilityChip && (
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-[8px] font-semibold tracking-[0.12em] text-casa-muted/75 leading-none">
+                        {responsibilityChip.label}
+                      </span>
+                      <span
+                        className="px-1.5 py-0.5 rounded-full text-white text-[9px] font-bold leading-none whitespace-nowrap shrink-0"
+                        style={{ backgroundColor: responsibilityChip.person.color ?? '#888' }}
+                      >
+                        {responsibilityChip.person.name}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )
         })()}
       </div>

@@ -12,7 +12,7 @@ interface OperationPlan {
     memberFilter?: string[]
   }
   estimatedCount?: number
-  sampleRows?: any[]
+  sampleRows?: SampleRow[]
 }
 
 interface ExecutionResult {
@@ -24,9 +24,39 @@ interface ExecutionResult {
   completedAt?: string
 }
 
+interface SampleRow {
+  id: string
+  title: string
+  start_time: string
+  status: string | null
+  member_name?: string | null
+  member_names?: string[]
+  event_members?: Array<{
+    family_member?: {
+      name?: string | null
+    } | null
+  }>
+}
+
 type AuthPhase = 'pin-entry' | 'authenticated' | 'request' | 'preview' | 'confirm' | 'executing' | 'result'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!
+
+function getSampleRowMembers(row: SampleRow): string {
+  if (typeof row.member_name === 'string' && row.member_name.trim()) return row.member_name.trim()
+  if (Array.isArray(row.member_names) && row.member_names.length > 0) return row.member_names.join(', ')
+  if (Array.isArray(row.event_members)) {
+    const names = Array.from(
+      new Set(
+        row.event_members
+          .map((member) => member.family_member?.name?.trim())
+          .filter((value): value is string => Boolean(value)),
+      ),
+    )
+    if (names.length > 0) return names.join(', ')
+  }
+  return '—'
+}
 
 export default function AdminOpsPage() {
   const [phase, setPhase] = useState<AuthPhase>('pin-entry')
@@ -175,8 +205,8 @@ export default function AdminOpsPage() {
 
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-xs text-blue-700 leading-relaxed">
-                <strong>Scope limits apply:</strong> All operations require date range, title filter, or member filter. 
-                No unrestricted deletes. Soft-deleted events can be recovered for 30 days.
+                <strong>Safety first:</strong> Scoped requests are recommended for precision.
+                Unscoped deletes require explicit wording (for example, "delete all events").
               </p>
             </div>
           </div>
@@ -228,8 +258,8 @@ export default function AdminOpsPage() {
 
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
               <p className="text-xs text-amber-700 leading-relaxed">
-                <strong>Required scope:</strong> Include date range (e.g., "in July", "between Jan 1 and Mar 31"), 
-                title pattern (e.g., "Feed Diana's Cat"), or member filter (e.g., "for Owen") to prevent accidental mass operations.
+                <strong>Recommended scope:</strong> Add a date range, title pattern, or member filter for precision.
+                You can still preview broad requests first before executing.
               </p>
             </div>
 
@@ -343,7 +373,7 @@ export default function AdminOpsPage() {
                       {plan.sampleRows.map((row, i) => (
                         <tr key={i} className="hover:bg-casa-bg transition-colors">
                           <td className="px-4 py-2 text-casa-navy font-medium">{row.title}</td>
-                          <td className="px-4 py-2 text-casa-muted">{row.member_name || '—'}</td>
+                          <td className="px-4 py-2 text-casa-muted">{getSampleRowMembers(row)}</td>
                           <td className="px-4 py-2 text-casa-muted">{new Date(row.start_time).toLocaleDateString()}</td>
                           <td className="px-4 py-2">
                             <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
@@ -363,19 +393,34 @@ export default function AdminOpsPage() {
             )}
 
             {/* Confirmation */}
-            <div className="p-6 bg-amber-50 border border-amber-200 rounded-lg">
-              <h3 className="font-display text-heading text-amber-900 mb-3">Confirm Execution</h3>
-              <p className="text-sm text-amber-800 mb-4">
-                This operation will affect <strong>{plan.estimatedCount} rows</strong>. 
-                {plan.operation === 'delete' && ' Deleted events will be archived and can be recovered for 30 days.'}
-                {plan.operation !== 'delete' && ' Changes will be immediate and reflected in all members\' calendars.'}
-              </p>
-              <p className="text-xs text-amber-700 mb-4">
-                Type <strong>CONFIRM</strong> below to proceed, or go back to edit the request.
-              </p>
+            {plan.operation === 'delete' ? (
+              <div className="p-6 bg-amber-50 border border-amber-200 rounded-lg">
+                <h3 className="font-display text-heading text-amber-900 mb-3">Confirm Execution</h3>
+                <p className="text-sm text-amber-800 mb-4">
+                  This operation will affect <strong>{plan.estimatedCount} rows</strong>. Matching events will be marked
+                  as cancelled.
+                </p>
+                <p className="text-xs text-amber-700 mb-4">
+                  Type <strong>CONFIRM</strong> below to proceed, or go back to edit the request.
+                </p>
 
-              <ConfirmationStep onConfirm={handleConfirm} loading={loading} onCancel={() => setPhase('request')} />
-            </div>
+                <ConfirmationStep onConfirm={handleConfirm} loading={loading} onCancel={() => setPhase('request')} />
+              </div>
+            ) : (
+              <div className="p-6 bg-blue-50 border border-blue-200 rounded-lg">
+                <h3 className="font-display text-heading text-blue-900 mb-3">Preview Ready</h3>
+                <p className="text-sm text-blue-800 mb-4">
+                  Query/add/edit requests are currently preview-only in this screen. Refine the request as needed, or
+                  use a delete/archive request when you want to execute a bulk update.
+                </p>
+                <button
+                  onClick={() => setPhase('request')}
+                  className="px-4 py-2 bg-casa-surface border border-casa-border text-casa-navy font-medium rounded-lg hover:bg-casa-bg transition-colors"
+                >
+                  Back to request
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </BounceScroll>

@@ -1,5 +1,9 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.mjs'
+import {
+  parseAdminOpsRequest,
+  resolveMemberScope,
+} from '../_shared/admin-ops.ts'
 
 interface OperationPlan {
   operation: 'delete' | 'add' | 'edit'
@@ -11,7 +15,7 @@ interface OperationPlan {
     memberFilter?: string[]
   }
   estimatedCount?: number
-  sampleRows?: any[]
+  sampleRows?: unknown[]
 }
 
 const CORS = {
@@ -20,121 +24,118 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Parse natural language request to extract operation details
-function parseRequest(request: string): {
-  operation: 'delete' | 'add' | 'edit'
-  description: string
-  scope: {
-    dateRangeStart?: string
-    dateRangeEnd?: string
-    titleFilter?: string
-    memberFilter?: string[]
-  }
-} {
-  const lower = request.toLowerCase()
-  let operation: 'delete' | 'add' | 'edit' = 'delete'
-  
-  if (lower.includes('delete') || lower.includes('remove')) {
-    operation = 'delete'
-  } else if (lower.includes('add') || lower.includes('create')) {
-    operation = 'add'
-  } else if (lower.includes('change') || lower.includes('update') || lower.includes('move')) {
-    operation = 'edit'
-  }
+interface SampleRow {
+  id: string
+  title: string
+  start_time: string
+  status: string | null
+  event_members?: Array<{
+    family_member?: {
+      name?: string | null
+    } | null
+  }>
+}
 
-  const scope: {
-    dateRangeStart?: string
-    dateRangeEnd?: string
-    titleFilter?: string
-    memberFilter?: string[]
-  } = {}
-
-  // Extract date range
-  const dateMatch = request.match(/(?:in|during)\s+(\w+)\s+(\d{4})?/i)
-  if (dateMatch) {
-    const monthYear = dateMatch[1]
-    const year = dateMatch[2] || new Date().getFullYear().toString()
-    scope.dateRangeStart = `${year}-01-01` // Simplified - would need better parsing
-  }
-
-  const dateRangeMatch = request.match(/(?:between|from)\s+(\w+\s+\d+)\s+(?:and|to)\s+(\w+\s+\d+)/i)
-  if (dateRangeMatch) {
-    // This would need more sophisticated parsing
-    scope.dateRangeStart = dateRangeMatch[1]
-    scope.dateRangeEnd = dateRangeMatch[2]
-  }
-
-  // Extract title filter (common patterns)
-  const titlePatterns = [
-    /['"]([^'"]+)['"]/,
-    /(?:named|titled|called)\s+(['"]?)([^'"]+)\1/i,
-  ]
-  
-  for (const pattern of titlePatterns) {
-    const match = request.match(pattern)
-    if (match) {
-      scope.titleFilter = match[match.length - 1]
-      break
-    }
-  }
-
-  // Extract member filter
-  const memberMatch = request.match(/(?:for|by)\s+(\w+)/i)
-  if (memberMatch) {
-    scope.memberFilter = [memberMatch[1]]
-  }
-
-  return {
-    operation,
-    description: request,
-    scope,
-  }
+function memberNamesFromRow(row: SampleRow): string[] {
+  return Array.from(
+    new Set(
+      (row.event_members ?? [])
+        .map((member) => member.family_member?.name?.trim())
+        .filter((value): value is string => Boolean(value)),
+    ),
+  )
 }
 
 async function generatePlan(sb: ReturnType<typeof createClient>, request: string): Promise<OperationPlan> {
-  // Parse the request
-  const parsed = parseRequest(request)
+  const parsed = parseAdminOpsRequest(request)
+  const resolvedMemberScope = await resolveMemberScope(sb, parsed.scope.memberFilter)
 
-  // Build query to get sample rows
-  let query = sb.from('events').select('id, title, member_name, start_time, status')
-
-  // Apply filters
-  if (parsed.scope.dateRangeStart) {
-    query = query.gte('start_time', parsed.scope.dateRangeStart)
-  }
-  if (parsed.scope.dateRangeEnd) {
-    query = query.lte('start_time', parsed.scope.dateRangeEnd)
-  }
-  if (parsed.scope.titleFilter) {
-    query = query.ilike('title', `%${parsed.scope.titleFilter}%`)
-  }
-  if (parsed.scope.memberFilter && parsed.scope.memberFilter.length > 0) {
-    query = query.in('member_name', parsed.scope.memberFilter)
+  if (resolvedMemberScope && resolvedMemberScope.memberIds.length === 0) {
+    throw new Error(`No family members matched "${(parsed.scope.memberFilter ?? []).join(', ')}"`)
   }
 
-  // Get count and sample rows
-  const countRes = await sb
+  const resolvedScope = {
+    ...parsed.scope,
+    memberFilter:
+      resolvedMemberScope && resolvedMemberScope.memberNames.length > 0
+        ? resolvedMemberScope.memberNames
+        : parsed.scope.memberFilter,
+  }
+
+  let sampleQuery = sb
+    .from('events')
+    .select(`
+      id,
+      title,
+      start_time,
+      status,
+      event_members (
+        family_member:family_members (name)
+      )
+    `)
+
+  if (resolvedScope.dateRangeStart) {
+    sampleQuery = sampleQuery.gte('start_time', resolvedScope.dateRangeStart)
+  }
+  if (resolvedScope.dateRangeEnd) {
+    sampleQuery = sampleQuery.lte('start_time', resolvedScope.dateRangeEnd)
+  }
+  if (resolvedScope.titleFilter) {
+    sampleQuery = sampleQuery.ilike('title', `%${resolvedScope.titleFilter}%`)
+  }
+  if (resolvedMemberScope) {
+    if (resolvedMemberScope.eventIds.length === 0) {
+      return {
+        operation: parsed.operation,
+        description: parsed.description,
+        scope: resolvedScope,
+        estimatedCount: 0,
+        sampleRows: [],
+      }
+    }
+    sampleQuery = sampleQuery.in('id', resolvedMemberScope.eventIds)
+  }
+  sampleQuery = sampleQuery.order('start_time').limit(5)
+
+  let countQuery = sb
     .from('events')
     .select('id', { count: 'exact', head: true })
-    .then((r) => ({ count: r.count || 0 }))
 
-  // Get sample rows (max 5)
-  const { data: sampleRows = [], error: sampleError } = await query.limit(5)
+  if (resolvedScope.dateRangeStart) {
+    countQuery = countQuery.gte('start_time', resolvedScope.dateRangeStart)
+  }
+  if (resolvedScope.dateRangeEnd) {
+    countQuery = countQuery.lte('start_time', resolvedScope.dateRangeEnd)
+  }
+  if (resolvedScope.titleFilter) {
+    countQuery = countQuery.ilike('title', `%${resolvedScope.titleFilter}%`)
+  }
+  if (resolvedMemberScope) {
+    countQuery = countQuery.in('id', resolvedMemberScope.eventIds)
+  }
+
+  const [{ data: rawSampleRows = [], error: sampleError }, { count, error: countError }] = await Promise.all([
+    sampleQuery,
+    countQuery,
+  ])
 
   if (sampleError) {
     throw new Error(`Failed to fetch sample rows: ${sampleError.message}`)
   }
-
-  // Ensure we have at least a title filter or date range
-  if (!parsed.scope.titleFilter && !parsed.scope.dateRangeStart && !parsed.scope.memberFilter) {
-    throw new Error('Request must include at least one scope filter: title pattern, date range, or member name')
+  if (countError) {
+    throw new Error(`Failed to count matching rows: ${countError.message}`)
   }
+
+  const sampleRows = (rawSampleRows as SampleRow[]).map((row) => ({
+    ...row,
+    member_names: memberNamesFromRow(row),
+  }))
 
   return {
     operation: parsed.operation,
     description: parsed.description,
-    scope: parsed.scope,
-    estimatedCount: sampleRows.length > 0 ? Math.max(sampleRows.length * 10, 5) : 0, // Rough estimate
+    scope: resolvedScope,
+    estimatedCount: count ?? sampleRows.length,
     sampleRows,
   }
 }

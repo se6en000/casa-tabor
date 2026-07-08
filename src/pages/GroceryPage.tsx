@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ShoppingCart, Trash2, Check, X, Plus, Minus, RefreshCw, Mic, GripVertical, Link2, Upload, BookOpen, ChefHat, ChevronLeft, ChevronRight, Clock3, ExternalLink, Camera } from 'lucide-react'
+import { ShoppingCart, Trash2, Check, X, Plus, Minus, RefreshCw, Mic, GripVertical, Link2, Upload, BookOpen, ChefHat, ChevronLeft, ChevronRight, Clock3, ExternalLink, Camera, Sparkles, Leaf, Milk, Beef, Croissant, Snowflake, Package, Coffee, Popcorn, Sandwich, House, HeartPulse, Baby as BabyIcon, PawPrint, Circle } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '../utils/cn'
@@ -10,10 +10,8 @@ import { supabase } from '../lib/supabase'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
 import {
   appendPantryInventoryAudit,
-  inferDefaultPackageMeta,
   normalizePackageUnit,
   normalizePantryKey,
-  sanitizePantryInventoryAudit,
   type PantryInventoryAuditEntry,
 } from '../lib/pantryInventoryUtils'
 import recipeFallbackHero from '../assets/hero.png'
@@ -48,37 +46,35 @@ const STORE_SECTION_ORDER: Record<string, number> = {
   'Pet': 130,
   'Other': 140,
 }
-const CATEGORY_ACCENT_BY_KEY: Record<string, string> = {
-  produce: 'var(--color-family-liv)',
-  dairy: 'var(--color-family-emme)',
-  meat: 'var(--color-family-kelly)',
-  bakery: 'var(--color-family-owen)',
-  frozen: 'var(--color-family-jake)',
-  pantry: 'var(--color-family-kelly)',
-  beverages: 'var(--color-family-jake)',
-  snacks: 'var(--color-family-emme)',
-  deli: 'var(--color-family-owen)',
-  household: 'var(--color-family-jake)',
-  'personal-care': 'var(--color-family-emme)',
-  baby: 'var(--color-family-liv)',
-  pet: 'var(--color-family-kelly)',
-  other: 'var(--color-casa-gold)',
+type CategoryVisual = {
+  icon: typeof ShoppingCart
+  iconBg: string
+  iconFg: string
+  subtitle: string
 }
-const CATEGORY_SUBTITLE_BY_KEY: Record<string, string> = {
-  produce: 'Fresh items • entry side',
-  dairy: 'Cold essentials • back wall',
-  meat: 'Protein picks • butcher lane',
-  bakery: 'Bread & baked goods',
-  frozen: 'Frozen staples',
-  pantry: 'Shelf staples • center aisles',
-  beverages: 'Drinks & hydration',
-  snacks: 'Quick bites & treats',
-  deli: 'Prepared foods',
-  household: 'Home & cleaning',
-  'personal-care': 'Health & body',
-  baby: 'Baby essentials',
-  pet: 'Pet supplies',
-  other: 'Everything else',
+
+const DEFAULT_CATEGORY_VISUAL: CategoryVisual = {
+  icon: ShoppingCart,
+  iconBg: '#F5F1E7',
+  iconFg: '#7A7363',
+  subtitle: 'Auto-organized for faster list scanning',
+}
+
+const CATEGORY_VISUAL_BY_KEY: Record<string, CategoryVisual> = {
+  produce: { icon: Leaf, iconBg: '#E4F0E8', iconFg: '#3F7E58', subtitle: 'Fresh items • entry side' },
+  dairy: { icon: Milk, iconBg: '#F6E7EB', iconFg: '#B05468', subtitle: 'Cold essentials • back wall' },
+  meat: { icon: Beef, iconBg: '#F5E3D6', iconFg: '#B4562A', subtitle: 'Protein picks • butcher lane' },
+  bakery: { icon: Croissant, iconBg: '#F6ECD5', iconFg: '#B08A34', subtitle: 'Bread & baked goods' },
+  frozen: { icon: Snowflake, iconBg: '#E1EAF3', iconFg: '#2E6FB0', subtitle: 'Frozen staples' },
+  pantry: { icon: Package, iconBg: '#F5E3D6', iconFg: '#B4562A', subtitle: 'Shelf staples • center aisles' },
+  beverages: { icon: Coffee, iconBg: '#E1EAF3', iconFg: '#2E6FB0', subtitle: 'Drinks & hydration' },
+  snacks: { icon: Popcorn, iconBg: '#F6E7EB', iconFg: '#B05468', subtitle: 'Quick bites & treats' },
+  deli: { icon: Sandwich, iconBg: '#F4E7CB', iconFg: '#8A5A1E', subtitle: 'Prepared foods' },
+  household: { icon: House, iconBg: '#E7F4F4', iconFg: '#0A6266', subtitle: 'Home & cleaning' },
+  'personal-care': { icon: HeartPulse, iconBg: '#EDE9F8', iconFg: '#6C5AA0', subtitle: 'Health & body' },
+  baby: { icon: BabyIcon, iconBg: '#FFF3D9', iconFg: '#A87722', subtitle: 'Baby essentials' },
+  pet: { icon: PawPrint, iconBg: '#E6F3EA', iconFg: '#2E7D5B', subtitle: 'Pet supplies' },
+  other: { icon: ShoppingCart, iconBg: '#F5F1E7', iconFg: '#7A7363', subtitle: 'Everything else' },
 }
 const RECIPE_MEAL_SLOTS: Array<{ slot: RecipeMealPlanSlot; label: string }> = [
   { slot: 'tonight', label: 'Tonight' },
@@ -200,75 +196,10 @@ function pantryInventoryKey(name: string, category: string): string {
   return normalizePantryKey(name, category)
 }
 
-function parseQuantityAsPackages(raw: string | null): number {
-  if (!raw) return 1
-  const value = raw.trim()
-  if (!value) return 1
-  const mixed = value.match(/^(\d+)\s+(\d+)\/(\d+)$/)
-  if (mixed) {
-    const whole = Number(mixed[1] ?? 0)
-    const numerator = Number(mixed[2] ?? 0)
-    const denominator = Number(mixed[3] ?? 1)
-    if (denominator > 0) return Math.max(0, whole + numerator / denominator)
-  }
-  const fraction = value.match(/^(\d+)\/(\d+)$/)
-  if (fraction) {
-    const numerator = Number(fraction[1] ?? 0)
-    const denominator = Number(fraction[2] ?? 1)
-    if (denominator > 0) return Math.max(0, numerator / denominator)
-  }
-  const numeric = Number(value)
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : 1
-}
-
 function defaultLowStockThreshold(category: string): number {
   if (category === 'pantry') return 0.5
   if (category === 'other') return 0.35
   return 0.25
-}
-
-function parsePackageSizeFromNotes(notes: string | null): string | null {
-  if (!notes) return null
-  const match = notes.match(/Buy\s+\d+(?:\.\d+)?\s+\S+\s+\(([^)]+)\)/i)
-  if (!match) return null
-  return String(match[1] ?? '').trim() || null
-}
-
-function sanitizePantryInventory(raw: unknown): Record<string, PantryInventoryEntry> {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
-  const output: Record<string, PantryInventoryEntry> = {}
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) continue
-    const row = value as Record<string, unknown>
-    const onHand = Number(row.on_hand_packages)
-    if (!Number.isFinite(onHand) || onHand < 0) continue
-    const lowThreshold = Number(row.low_stock_threshold)
-    output[key] = {
-      name: String(row.name ?? '').trim(),
-      category: String(row.category ?? 'other').trim().toLowerCase() || 'other',
-      package_unit: typeof row.package_unit === 'string' ? row.package_unit : null,
-      package_size: typeof row.package_size === 'string' ? row.package_size : null,
-      on_hand_packages: Number(onHand.toFixed(2)),
-      low_stock_threshold: Number.isFinite(lowThreshold) && lowThreshold >= 0 ? Number(lowThreshold.toFixed(2)) : 0.5,
-      updated_at: typeof row.updated_at === 'string' ? row.updated_at : new Date().toISOString(),
-    }
-  }
-  return output
-}
-
-function sanitizeReconciledCheckedItems(raw: unknown): ReconciledCheckedItems {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
-  const output: ReconciledCheckedItems = {}
-  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof value !== 'string') continue
-    output[id] = value
-  }
-  return output
-}
-
-function isPlannerGeneratedGrocery(item: GroceryItem): boolean {
-  const notes = (item.notes ?? '').toLowerCase()
-  return notes.includes('meal planner ai')
 }
 
 function chunkArray<T>(items: T[], size: number): T[][] {
@@ -379,11 +310,43 @@ function sortItemsForShopping(items: GroceryItem[]): GroceryItem[] {
   })
 }
 
-function splitCategoryLabel(raw: string): { icon: string; label: string } {
+function splitCategoryLabel(raw: string): string {
   const trimmed = raw.trim()
-  const match = trimmed.match(/^(\S+)\s+(.*)$/)
-  if (!match) return { icon: '🛒', label: trimmed }
-  return { icon: match[1], label: match[2] }
+  const match = trimmed.match(/^(\S+)\s+(.*)$/u)
+  if (!match) return trimmed
+  const firstToken = match[1] ?? ''
+  if (/^[^\p{L}\p{N}]+$/u.test(firstToken)) {
+    return String(match[2] ?? '').trim()
+  }
+  return trimmed
+}
+
+function getDepletionVisual(daysUntil: number): { dueLabel: string; dotColor: string; tagBg: string; tagText: string; meterColor: string } {
+  if (daysUntil <= 0) {
+    return {
+      dueLabel: 'Due now',
+      dotColor: '#D98C2B',
+      tagBg: '#FBEAD2',
+      tagText: '#9A5B12',
+      meterColor: '#D98C2B',
+    }
+  }
+  if (daysUntil <= 3) {
+    return {
+      dueLabel: `In ${daysUntil} day${daysUntil === 1 ? '' : 's'}`,
+      dotColor: '#C9A94E',
+      tagBg: '#F4EEDD',
+      tagText: '#8A7327',
+      meterColor: '#C9A94E',
+    }
+  }
+  return {
+    dueLabel: `In ${daysUntil} day${daysUntil === 1 ? '' : 's'}`,
+    dotColor: '#9BB18A',
+    tagBg: '#EEF1E9',
+    tagText: '#5E6B4E',
+    meterColor: '#9BB18A',
+  }
 }
 
 function getRecipeDraftImage(recipe: { id?: string; name: string; image_url: string | null; image_urls?: string[]; primary_image_index?: number | null }): string {
@@ -471,6 +434,14 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
   onMovePointerCancel?: (e: React.PointerEvent<HTMLButtonElement>) => void
 }) {
   const visualChecked = item.checked || dismissPhase !== 'none'
+  const categoryLabel = splitCategoryLabel(
+    GROCERY_CATEGORIES.find((category) => category.key === item.category)?.label ?? item.category
+  )
+  const metaParts = [
+    item.store_section?.trim() || categoryLabel,
+    item.subcategory?.trim(),
+    item.brand?.trim(),
+  ].filter((value): value is string => Boolean(value))
   const needsConfidenceReview =
     !item.checked &&
     typeof item.enhancement_confidence === 'number' &&
@@ -478,9 +449,9 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
 
   return (
     <div className={cn(
-      'flex items-start gap-3.5 px-4 py-3.5 hover:bg-casa-bg/45 transition-all duration-300 ease-out group will-change-transform',
-      visualChecked && 'opacity-50',
-      dismissPhase === 'queued' && 'bg-casa-gold/5',
+      'flex items-start gap-3.5 px-4 py-3.5 hover:bg-casa-bg/55 transition-all duration-300 ease-out group will-change-transform',
+      visualChecked && 'opacity-55',
+      dismissPhase === 'queued' && 'bg-casa-gold/8',
       dismissPhase === 'exiting' && 'opacity-0 translate-y-1 scale-[0.985] max-h-0 py-0',
       isDragging && 'opacity-30',
       isSpotlighted && 'ring-2 ring-casa-gold/60 bg-casa-gold/10',
@@ -492,7 +463,7 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
           onPointerMove={onMovePointerMove}
           onPointerUp={onMovePointerUp}
           onPointerCancel={onMovePointerCancel}
-          className="flex-shrink-0 text-casa-muted hover:text-casa-navy transition-colors touch-none"
+          className="mt-0.5 flex-shrink-0 text-casa-muted/70 hover:text-casa-navy transition-colors touch-none"
           aria-label={`Move ${item.name}`}
         >
           <GripVertical size={18} />
@@ -502,19 +473,19 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
         type="button"
         onClick={() => onToggle(item.id, !visualChecked)}
         className={cn(
-          'flex h-[42px] w-[42px] flex-shrink-0 items-center justify-center rounded-xl border-2 transition-colors',
+          'mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl border-2 transition-colors',
           visualChecked
             ? 'border-emerald-400 bg-emerald-50 text-emerald-600'
             : 'border-casa-border bg-casa-surface text-casa-navy/60 hover:border-casa-gold/40'
         )}
       >
-        {visualChecked ? <Check size={20} className="text-emerald-600" /> : null}
+        {visualChecked ? <Check size={15} className="text-emerald-600" /> : null}
       </button>
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <span className={cn(
-              'text-body font-medium text-casa-text',
+              'text-body-lg font-semibold text-casa-text leading-tight',
               visualChecked && 'line-through text-casa-muted'
             )}>
               {item.name}
@@ -529,17 +500,17 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
             <button
               type="button"
               onClick={() => onRequestReview?.(item.id)}
-              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 hover:bg-amber-100 transition-colors"
+              title={`Suggested placement (${Math.round((item.enhancement_confidence ?? 0) * 100)}% confidence). Tap to recategorize.`}
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#B8E4E6] bg-[#E7F4F4] px-2.5 py-1 text-[10.5px] font-semibold text-[#0A6266] hover:bg-[#DFF1F1] transition-colors"
             >
-              Review match ({Math.round((item.enhancement_confidence ?? 0) * 100)}%)
+              <Sparkles size={11} />
+              Suggested
             </button>
           )}
         </div>
-        {(item.store_section || item.subcategory || item.brand) && (
-          <p className="text-[11px] text-casa-muted mt-0.5 leading-relaxed">
-            {[item.store_section, item.subcategory, item.brand].filter(Boolean).join(' · ')}
-          </p>
-        )}
+        <p className="mt-0.5 text-body-sm leading-relaxed text-casa-muted">
+          {metaParts.join(' · ')}
+        </p>
         {isReviewing && (
           <div className="mt-2 rounded-xl border border-casa-border bg-casa-bg px-2.5 py-2">
             <p className="text-[11px] text-casa-muted mb-1">Quick recategorize</p>
@@ -556,7 +527,7 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
                       : 'border-casa-border bg-casa-surface text-casa-muted hover:bg-casa-main'
                   )}
                 >
-                  {category.label}
+                  {splitCategoryLabel(category.label)}
                 </button>
               ))}
               <button
@@ -576,7 +547,7 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
       <button
         type="button"
         onClick={() => onDelete(item.id)}
-        className="opacity-70 lg:opacity-0 lg:group-hover:opacity-100 flex-shrink-0 text-casa-muted hover:text-red-500 transition-all"
+        className="opacity-70 lg:opacity-0 lg:group-hover:opacity-100 mt-0.5 flex-shrink-0 text-casa-muted hover:text-red-500 transition-all"
       >
         <X size={15} />
       </button>
@@ -597,7 +568,6 @@ export default function GroceryPage() {
     toggleItem,
     deleteItem,
     updateItemCategory,
-    clearChecked,
   } = useGroceryList()
 
   const { data: historyRows = [] } = useQuery({
@@ -746,6 +716,7 @@ export default function GroceryPage() {
   })
 
   const [inputValue, setInputValue] = useState('')
+  const [groceryViewMode, setGroceryViewMode] = useState<'manage' | 'smart'>('manage')
   const [isAddPanelOpen, setIsAddPanelOpen] = useState(false)
   const [addPanelMode, setAddPanelMode] = useState<'quick' | 'recipe' | 'library'>('quick')
   const [recipeImportStep, setRecipeImportStep] = useState<1 | 2 | 3>(1)
@@ -763,12 +734,10 @@ export default function GroceryPage() {
   const [cookTimer, setCookTimer] = useState<{ totalSeconds: number; remainingSeconds: number; label: string } | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
-  const [preparingPantryReconcileReview, setPreparingPantryReconcileReview] = useState(false)
   const [reconcilingPantry, setReconcilingPantry] = useState(false)
   const [pantryReconcileDraft, setPantryReconcileDraft] = useState<PantryReconcileDraft | null>(null)
   const [pantryReconcileMessage, setPantryReconcileMessage] = useState<string | null>(null)
   const [pantryReconcileError, setPantryReconcileError] = useState<string | null>(null)
-  const [pantryReconcileMode, setPantryReconcileMode] = useState<PantryReconcileMode>('planner-only')
   const [expandedReconcileQtyIds, setExpandedReconcileQtyIds] = useState<Set<string>>(new Set())
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => localStorage.getItem(SYNC_LAST_AT_KEY))
   const [lastSyncSummary, setLastSyncSummary] = useState<string>(() => localStorage.getItem(SYNC_LAST_SUMMARY_KEY) ?? 'Not synced yet')
@@ -797,17 +766,6 @@ export default function GroceryPage() {
   const hasRecipeImportSource = recipeUrlInput.trim().length > 0 || recipeImportFiles.length > 0
 
   const activeItems = items.filter((item) => !item.checked)
-  const checkedItems = useMemo(
-    () => items.filter((item) => item.checked && !item.deleted_at),
-    [items],
-  )
-  const checkedPlannerItems = useMemo(
-    () => checkedItems.filter((item) => isPlannerGeneratedGrocery(item)),
-    [checkedItems],
-  )
-  const reconcileCandidateItems = pantryReconcileMode === 'all-done'
-    ? checkedItems
-    : checkedPlannerItems
   const pantryReconcileRowsByCategory = useMemo(() => {
     if (!pantryReconcileDraft) return [] as Array<{ category: string; rows: PantryReconcileDraftRow[] }>
     const grouped = new Map<string, PantryReconcileDraftRow[]>()
@@ -1734,76 +1692,6 @@ export default function GroceryPage() {
     }
   }, [items])
 
-  const handlePreparePantryReconcileReview = useCallback(async () => {
-    if (reconcileCandidateItems.length === 0 || preparingPantryReconcileReview) return
-    setPreparingPantryReconcileReview(true)
-    setPantryReconcileDraft(null)
-    setExpandedReconcileQtyIds(new Set())
-    setPantryReconcileMessage(null)
-    setPantryReconcileError(null)
-    try {
-      const settingKeys = ['meal_planner_pantry_inventory', 'meal_planner_reconciled_checked_items', 'meal_planner_pantry_audit_log']
-      const { data: settingRows, error: loadError } = await supabase
-        .from('settings')
-        .select('key,value')
-        .in('key', settingKeys)
-      if (loadError) throw loadError
-
-      const rowMap = new Map((settingRows ?? []).map((row) => [row.key, row.value]))
-      const pantryInventory = sanitizePantryInventory(rowMap.get('meal_planner_pantry_inventory'))
-      const reconciledItems = sanitizeReconciledCheckedItems(rowMap.get('meal_planner_reconciled_checked_items'))
-      const auditLog = sanitizePantryInventoryAudit(rowMap.get('meal_planner_pantry_audit_log'))
-
-      let skippedCount = 0
-      const draftRows: PantryReconcileDraftRow[] = []
-
-      for (const item of reconcileCandidateItems) {
-        if (reconciledItems[item.id]) {
-          skippedCount += 1
-          continue
-        }
-        const category = item.category?.trim().toLowerCase() || 'other'
-        const name = item.name.trim()
-        if (!name) continue
-        const key = pantryInventoryKey(name, category)
-        const existing = pantryInventory[key]
-        const packageCount = parseQuantityAsPackages(item.quantity)
-        const packageSizeFromNotes = parsePackageSizeFromNotes(item.notes)
-        const inferred = inferDefaultPackageMeta(name, category)
-        draftRows.push({
-          item_id: item.id,
-          name,
-          category,
-          package_unit: normalizePackageUnit(existing?.package_unit ?? item.unit ?? inferred.unit),
-          package_size: existing?.package_size ?? packageSizeFromNotes ?? inferred.size,
-          package_count: Number(packageCount.toFixed(2)),
-          source: 'checked-item',
-          review_status: 'ok',
-        })
-      }
-
-      if (draftRows.length === 0) {
-        setPantryReconcileMessage(skippedCount > 0
-          ? `Nothing new to restock (${pantryReconcileMode === 'all-done' ? 'all done' : 'planner only'}). ${skippedCount} item${skippedCount === 1 ? '' : 's'} already reconciled.`
-          : 'No done items were eligible for pantry restock.')
-        return
-      }
-
-      setPantryReconcileDraft({
-        mode: pantryReconcileMode,
-        rows: draftRows,
-        skipped_already_reconciled: skippedCount,
-        pantry_inventory: pantryInventory,
-        reconciled_items: reconciledItems,
-        audit_log: auditLog,
-      })
-    } catch (error) {
-      setPantryReconcileError(formatSupabaseError(error, 'Could not restock pantry from done items'))
-    } finally {
-      setPreparingPantryReconcileReview(false)
-    }
-  }, [pantryReconcileMode, preparingPantryReconcileReview, reconcileCandidateItems])
-
   const updatePantryReconcileDraftRow = useCallback((itemId: string, packageCount: number) => {
     setPantryReconcileDraft((current) => {
       if (!current) return current
@@ -2095,105 +1983,98 @@ export default function GroceryPage() {
     ...cat,
     items: sortItemsForShopping(items.filter(i => i.category === cat.key && i.checked && !visibleDismissIds.has(i.id))),
   })).filter(cat => cat.items.length > 0)
+  const hasSmartPicks = (
+    predictiveSuggestions.length > 0
+    || smartRebuySuggestions.length > 0
+    || SMART_BUNDLES.length > 0
+    || weeklyAutoListCandidates.length > 0
+    || pantryDepletionPredictions.length > 0
+  )
+  const totalTrackedItems = checkedCount + uncheckedCount
+  const checkedProgressPercent = totalTrackedItems > 0 ? Math.round((checkedCount / totalTrackedItems) * 100) : 0
+  const lastSyncTimeLabel = lastSyncAt
+    ? new Date(lastSyncAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : null
+  const syncStatusLabel = syncing
+    ? 'Syncing…'
+    : syncError
+      ? 'Sync failed'
+      : lastSyncTimeLabel
+        ? `Synced ${lastSyncTimeLabel}`
+        : 'Not synced yet'
+  const weeklyHeroPreviewItems = weeklyAutoListCandidates.slice(0, 7)
+  const weeklyHeroOverflowCount = Math.max(0, weeklyAutoListCandidates.length - weeklyHeroPreviewItems.length)
 
   return (
     <div className="h-full min-h-0 bg-casa-bg flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-casa-surface border-b border-casa-border px-4 pt-safe-t">
-        <div className="flex items-center justify-between py-4">
+      <div className="sticky top-0 z-10 border-b border-casa-border bg-casa-bg px-4 pt-safe-t">
+        <div className="space-y-3 py-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-casa-gold/10 flex items-center justify-center">
-              <ShoppingCart size={20} className="text-casa-gold" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-casa-border bg-casa-bg-2 text-casa-gold">
+              <ShoppingCart size={20} />
             </div>
-            <div>
-              <h1 className="font-display text-heading text-casa-text">Grocery List</h1>
-              <p className="text-caption text-casa-muted">
-                {uncheckedCount} item{uncheckedCount !== 1 ? 's' : ''} remaining
-                {checkedCount > 0 && ` · ${checkedCount} done`}
+            <div className="min-w-0">
+              <h1 className="truncate font-display text-display-md leading-none text-casa-navy">Grocery List</h1>
+              <p className="mt-1 text-body-sm text-casa-muted">
+                {syncStatusLabel} · sorted by store aisle
               </p>
-              <p className="text-[11px] text-casa-muted">
-                {lastSyncSummary}
-                {lastSyncAt ? ` · ${new Date(lastSyncAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}
-              </p>
+            </div>
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={handleVoiceAdd}
+                className="flex items-center gap-2 min-h-11 px-5 rounded-full bg-casa-gold text-casa-navy text-body-sm font-semibold shadow-[0_4px_12px_rgba(27,42,74,0.12)] hover:brightness-105 transition-all"
+              >
+                <Mic size={16} />
+                Voice add
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSyncNow({ cleanBeforeSync: true })}
+                disabled={syncing}
+                title={`${lastSyncSummary}${lastSyncAt ? ` · ${new Date(lastSyncAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}`}
+                className="hidden md:flex items-center gap-1.5 min-h-11 px-5 rounded-full text-body-sm font-medium text-casa-text-secondary border border-casa-border bg-casa-surface shadow-[0_3px_10px_rgba(27,42,74,0.08)] hover:bg-white transition-colors disabled:opacity-60"
+              >
+                <RefreshCw size={14} className={cn(syncing && 'animate-spin')} />
+                Clean + Sync
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleVoiceAdd}
-              className="flex items-center gap-2 min-h-11 px-4 rounded-full bg-casa-gold text-white text-body-sm font-semibold shadow-sm hover:brightness-110 transition-all"
-            >
-              <Mic size={16} />
-              Voice add
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleSyncNow({ cleanBeforeSync: true })}
-              disabled={syncing}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-button text-caption font-medium text-casa-muted border border-casa-border hover:bg-casa-bg transition-colors disabled:opacity-60"
-            >
-              <RefreshCw size={13} className={cn(syncing && 'animate-spin')} />
-              {syncing ? 'Syncing…' : 'Clean + Sync'}
-            </button>
-            {checkedCount > 0 && (
-              <div className="flex items-center rounded-full border border-casa-border bg-casa-bg p-0.5">
+          <div className="flex items-center gap-3">
+            <div className="cook-v2-topline-toggle inline-flex shrink-0 items-center rounded-pill p-1">
+              {([
+                { id: 'manage', label: 'Manage list' },
+                { id: 'smart', label: 'Smart picks' },
+              ] as const).map((mode) => (
                 <button
+                  key={mode.id}
                   type="button"
-                  onClick={() => setPantryReconcileMode('planner-only')}
+                  onClick={() => setGroceryViewMode(mode.id)}
                   className={cn(
-                    'px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors',
-                    pantryReconcileMode === 'planner-only'
-                      ? 'bg-casa-gold/15 text-casa-navy'
-                      : 'text-casa-muted hover:text-casa-navy',
+                    'cook-v2-topline-toggle-btn inline-flex items-center gap-1.5 rounded-pill px-4 py-2 text-body-sm font-semibold transition-colors',
+                    groceryViewMode === mode.id && 'cook-v2-topline-toggle-btn-active',
                   )}
+                  aria-pressed={groceryViewMode === mode.id}
                 >
-                  Planner only
+                  {mode.id === 'smart' && <Sparkles size={14} className="text-casa-info" />}
+                  {mode.label}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setPantryReconcileMode('all-done')}
-                  className={cn(
-                    'px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors',
-                    pantryReconcileMode === 'all-done'
-                      ? 'bg-casa-gold/15 text-casa-navy'
-                      : 'text-casa-muted hover:text-casa-navy',
-                  )}
-                >
-                  All done
-                </button>
-              </div>
-            )}
-            {checkedCount > 0 && (
-              <details className="relative">
-                <summary className="list-none flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-casa-border bg-casa-bg text-[11px] font-semibold text-casa-muted hover:text-casa-navy">
-                  i
-                </summary>
-                <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border border-casa-border bg-casa-surface p-2 text-[11px] leading-snug text-casa-muted shadow-card">
-                  Planner only = Meal Planner AI items. All done = every checked item.
+              ))}
+            </div>
+            {groceryViewMode === 'manage' && totalTrackedItems > 0 && (
+              <div className="hidden md:block md:min-w-[14rem] md:flex-1 md:max-w-[42rem] px-2">
+                <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold text-casa-muted">
+                  <span><span className="text-casa-navy">{checkedCount}</span> of {totalTrackedItems} checked</span>
+                  <span>{uncheckedCount} remaining</span>
                 </div>
-              </details>
-            )}
-            {checkedCount > 0 && (
-              <button
-                type="button"
-                onClick={() => void handlePreparePantryReconcileReview()}
-                disabled={preparingPantryReconcileReview || reconcilingPantry || reconcileCandidateItems.length === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-button text-caption font-medium text-casa-muted border border-casa-border hover:bg-casa-bg transition-colors disabled:opacity-60"
-              >
-                <Upload size={13} />
-                {preparingPantryReconcileReview ? 'Preparing…' : `Review restock (${reconcileCandidateItems.length})`}
-              </button>
-            )}
-            {checkedCount > 0 && (
-              <button
-                type="button"
-                onClick={() => clearChecked.mutate()}
-                disabled={clearChecked.isPending}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-button text-caption font-medium text-casa-muted border border-casa-border hover:bg-casa-bg hover:text-red-500 hover:border-red-300 transition-colors"
-              >
-                <Trash2 size={13} />
-                Clear done
-              </button>
+                <div className="h-1.5 overflow-hidden rounded-full bg-casa-border/70">
+                  <div
+                    className="h-full rounded-full bg-[#4E9A6B] transition-all duration-300"
+                    style={{ width: `${checkedProgressPercent}%` }}
+                  />
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -2364,13 +2245,15 @@ export default function GroceryPage() {
               </div>
             ))}
           </div>
-        ) : items.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 py-16 text-center px-8">
-            <ShoppingCart size={40} className="text-casa-gold opacity-40" />
-            <p className="text-body font-semibold text-casa-text">Your list is empty</p>
-            <p className="text-body-sm text-casa-muted">Add items below or ask the AI.</p>
-          </div>
         ) : (
+          groceryViewMode === 'manage' ? (
+            items.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-16 text-center px-8">
+                <ShoppingCart size={40} className="text-casa-gold opacity-40" />
+                <p className="text-body font-semibold text-casa-text">Your list is empty</p>
+                <p className="text-body-sm text-casa-muted">Add items below or ask the AI.</p>
+              </div>
+            ) : (
             <div className="pt-3 pb-6">
               {dragState && (
                 <div className="mb-3 rounded-2xl border border-casa-border bg-casa-surface p-3">
@@ -2389,7 +2272,7 @@ export default function GroceryPage() {
                             : 'border-casa-border text-casa-muted bg-casa-bg'
                         )}
                       >
-                        {cat.label}
+                        {splitCategoryLabel(cat.label)}
                       </div>
                     ))}
                   </div>
@@ -2400,85 +2283,88 @@ export default function GroceryPage() {
                   Active list is clear. Completed items are hidden in the archive.
                 </div>
               ) : (
-              <div className="columns-1 lg:columns-2 2xl:columns-3 gap-3">
+              <div className="columns-1 gap-3 lg:columns-2 2xl:columns-3">
                 {activeItemsByCategory.map((cat) => ({
-                    key: cat.key,
-                    label: cat.label,
-                    categoryMeta: splitCategoryLabel(cat.label),
-                    items: cat.items,
-                    dropKey: cat.key,
-                    accentColor: CATEGORY_ACCENT_BY_KEY[cat.key] ?? 'var(--color-casa-gold)',
-                    subtitle: CATEGORY_SUBTITLE_BY_KEY[cat.key] ?? 'Auto-organized for faster list scanning',
-                    reviewCount: cat.items.filter((item) =>
-                      typeof item.enhancement_confidence === 'number' &&
-                      item.enhancement_confidence < LOW_CONFIDENCE_REVIEW_THRESHOLD
-                    ).length,
-                  })).map((section) => (
-                  <div
-                    key={section.key}
-                    data-drop-category={section.dropKey ?? undefined}
-                    className={cn(
-                      'rounded-2xl break-inside-avoid mb-3',
-                      section.dropKey && dragState && dragOverCategory === section.dropKey && 'ring-2 ring-casa-gold/60 bg-casa-gold/5'
-                    )}
-                  >
+                  key: cat.key,
+                  label: splitCategoryLabel(cat.label),
+                  items: cat.items,
+                  dropKey: cat.key,
+                  visual: CATEGORY_VISUAL_BY_KEY[cat.key] ?? DEFAULT_CATEGORY_VISUAL,
+                  reviewCount: cat.items.filter((item) =>
+                    typeof item.enhancement_confidence === 'number' &&
+                    item.enhancement_confidence < LOW_CONFIDENCE_REVIEW_THRESHOLD
+                  ).length,
+                })).map((section) => {
+                  const CategoryIcon = section.visual.icon
+                  return (
                     <div
-                      className="bg-casa-surface rounded-[1.4rem] border border-casa-border overflow-hidden shadow-card"
+                      key={section.key}
+                      data-drop-category={section.dropKey ?? undefined}
+                      className={cn(
+                        'mb-3 break-inside-avoid rounded-2xl',
+                        section.dropKey && dragState && dragOverCategory === section.dropKey && 'bg-casa-gold/5 ring-2 ring-casa-gold/60'
+                      )}
                     >
-                      <div className="h-2" style={{ backgroundColor: section.accentColor }} />
-                      <div className="flex items-start justify-between gap-3 px-4 py-3.5 bg-casa-bg/80 border-b border-casa-divider">
-                        <div className="min-w-0">
-                          <p className="text-heading font-semibold text-casa-navy leading-tight flex items-center gap-2">
-                            <span>{section.categoryMeta.icon}</span>
-                            <span>{section.categoryMeta.label}</span>
-                          </p>
-                          <p className="text-body-sm text-casa-muted mt-0.5">{section.subtitle}</p>
-                        </div>
-                        <div className="flex items-center gap-2 text-caption text-casa-muted shrink-0">
-                          {section.reviewCount > 0 && (
-                            <span className="px-2.5 py-1 rounded-pill border border-casa-gold/35 bg-casa-gold/10 text-[11px] font-semibold text-casa-navy">
-                              {section.reviewCount} review
+                      <div className="overflow-hidden rounded-[1.2rem] border border-casa-border bg-casa-surface shadow-card">
+                        <div className="flex items-start justify-between gap-3 border-b border-[#E7D3A3] bg-[linear-gradient(120deg,#F4E7CB,#EAD7AC)] px-4 py-3.5">
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <div
+                              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-casa-border/70"
+                              style={{ backgroundColor: section.visual.iconBg, color: section.visual.iconFg }}
+                            >
+                              <CategoryIcon size={18} />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate text-heading font-semibold leading-tight text-casa-navy">{section.label}</p>
+                              <p className="mt-0.5 text-body-sm text-[#7A6742]">{section.visual.subtitle}</p>
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2 text-caption text-casa-muted">
+                            {section.reviewCount > 0 && (
+                              <span className="rounded-pill border border-[#B8E4E6] bg-[#E7F4F4] px-2.5 py-1 text-[10.5px] font-semibold text-[#0A6266]">
+                                {section.reviewCount} suggested
+                              </span>
+                            )}
+                            <span className="rounded-pill border border-[#D8C09A] bg-white/70 px-3 py-1 text-body-sm font-semibold text-[#5A4A2A]">
+                              {section.items.length} item{section.items.length === 1 ? '' : 's'}
                             </span>
-                          )}
-                          <span className="px-3 py-1 rounded-pill border border-casa-border bg-casa-surface text-body-sm font-semibold text-casa-navy/85">
-                            {section.items.length} item{section.items.length === 1 ? '' : 's'}
-                          </span>
+                          </div>
                         </div>
-                      </div>
-                      <div className="divide-y divide-casa-divider">
-                      {section.items.map((item) => (
-                        <div key={item.id} id={`grocery-item-${item.id}`}>
-                          <ItemRow
-                            item={item}
-                            dismissPhase={dismissingExitingIds.has(item.id) ? 'exiting' : dismissingIds.has(item.id) ? 'queued' : 'none'}
-                            isDragging={dragState?.itemId === item.id}
-                            isSpotlighted={spotlightedItemId === item.id}
-                            isReviewing={reviewingItemId === item.id}
-                            onRequestReview={setReviewingItemId}
-                            onChooseReviewCategory={(id, category) => {
-                              updateItemCategory.mutate({
-                                id,
-                                category,
-                                fromCategory: item.category,
-                                itemName: item.name,
-                                reviewedByUser: true,
-                              })
-                              setReviewingItemId(null)
-                            }}
-                            onDismissReview={() => setReviewingItemId(null)}
-                            onToggle={handleToggle}
-                            onDelete={(id) => deleteItem.mutate(id)}
-                            onMovePointerDown={(e) => handleMovePointerDown(item, item.category, e)}
-                            onMovePointerMove={handleMovePointerMove}
-                            onMovePointerUp={handleMovePointerUp}
-                            onMovePointerCancel={handleMovePointerCancel}
-                          />
+                        <div className="divide-y divide-casa-divider">
+                          {section.items.map((item) => (
+                            <div key={item.id} id={`grocery-item-${item.id}`}>
+                              <ItemRow
+                                item={item}
+                                dismissPhase={dismissingExitingIds.has(item.id) ? 'exiting' : dismissingIds.has(item.id) ? 'queued' : 'none'}
+                                isDragging={dragState?.itemId === item.id}
+                                isSpotlighted={spotlightedItemId === item.id}
+                                isReviewing={reviewingItemId === item.id}
+                                onRequestReview={setReviewingItemId}
+                                onChooseReviewCategory={(id, category) => {
+                                  updateItemCategory.mutate({
+                                    id,
+                                    category,
+                                    fromCategory: item.category,
+                                    itemName: item.name,
+                                    reviewedByUser: true,
+                                  })
+                                  setReviewingItemId(null)
+                                }}
+                                onDismissReview={() => setReviewingItemId(null)}
+                                onToggle={handleToggle}
+                                onDelete={(id) => deleteItem.mutate(id)}
+                                onMovePointerDown={(e) => handleMovePointerDown(item, item.category, e)}
+                                onMovePointerMove={handleMovePointerMove}
+                                onMovePointerUp={handleMovePointerUp}
+                                onMovePointerCancel={handleMovePointerCancel}
+                              />
+                            </div>
+                          ))}
                         </div>
-                      ))}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
               )}
 
@@ -2497,7 +2383,7 @@ export default function GroceryPage() {
                       <div key={`completed-${cat.key}`}>
                         <div className="px-1 pb-1">
                           <p className="text-body-sm font-semibold text-casa-muted">
-                            {cat.label}
+                            {splitCategoryLabel(cat.label)}
                           </p>
                         </div>
                         <div className="bg-casa-surface rounded-2xl border border-casa-border divide-y divide-casa-divider overflow-hidden">
@@ -2518,119 +2404,173 @@ export default function GroceryPage() {
                   )}
                 </div>
               )}
-
-              {(predictiveSuggestions.length > 0 || smartRebuySuggestions.length > 0 || SMART_BUNDLES.length > 0 || weeklyAutoListCandidates.length > 0 || pantryDepletionPredictions.length > 0) && (
-                <div className="mt-5 rounded-2xl border border-casa-border bg-casa-surface p-3">
-                  <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider mb-2">
-                    Smart picks
-                  </p>
+              <div className="h-24" />
+          </div>
+            )
+          ) : (
+            <div className="pt-3 pb-6">
+              {hasSmartPicks ? (
+                <div className="mt-2 space-y-3">
                   {weeklyAutoListCandidates.length > 0 && (
-                    <div className="mb-2 rounded-xl border border-casa-gold/30 bg-casa-gold/10 px-3 py-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <p className="text-[11px] font-semibold text-casa-navy">Auto weekly list</p>
-                          <p className="text-[11px] text-casa-muted">Based on your last 30 days of repeat buys</p>
+                    <div className="overflow-hidden rounded-[1.15rem] border border-[#E7D3A3] bg-[linear-gradient(120deg,#F4E7CB,#EAD7AC)] px-4 py-4 sm:px-5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="pr-1">
+                          <p className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-[#8A5A1E]">
+                            <Sparkles size={12} />
+                            Auto weekly list
+                          </p>
+                          <h3 className="mt-1 text-xl font-display text-casa-navy">Your usual week, ready to add</h3>
+                          <p className="mt-1 text-[12px] text-[#7A6742]">Built from your last 30 days of repeat buys.</p>
                         </div>
                         <button
                           type="button"
                           onClick={handleGenerateWeeklyList}
-                          className="px-3 py-1.5 rounded-full bg-casa-gold text-white text-[11px] font-semibold hover:brightness-110 transition-all"
+                          className="rounded-full bg-casa-navy px-4 py-2 text-[12px] font-semibold text-white transition-all hover:brightness-110"
                         >
-                          Add {weeklyAutoListCandidates.length}
+                          Add all {weeklyAutoListCandidates.length} →
                         </button>
                       </div>
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {weeklyAutoListCandidates.slice(0, 6).map((item) => (
-                          <span key={`weekly-${item.name}`} className="px-2 py-0.5 rounded-full bg-casa-surface border border-casa-border text-[11px] text-casa-muted">
+                      <div className="mt-3 hidden flex-wrap gap-2 md:flex">
+                        {weeklyHeroPreviewItems.map((item) => (
+                          <span
+                            key={`weekly-${item.name}`}
+                            className="rounded-full border border-[#D8C09A] bg-white/70 px-3 py-1.5 text-[12px] font-medium text-[#5A4A2A]"
+                          >
                             {item.name}
                           </span>
                         ))}
+                        {weeklyHeroOverflowCount > 0 && (
+                          <span className="rounded-full border border-[#D8C09A] bg-white/70 px-3 py-1.5 text-[12px] font-medium text-[#5A4A2A]">
+                            + {weeklyHeroOverflowCount} more
+                          </span>
+                        )}
                       </div>
                     </div>
                   )}
+
                   {pantryDepletionPredictions.length > 0 && (
-                    <div className="mb-2">
-                      <p className="text-[11px] text-casa-muted mb-1">Pantry depletion predictions</p>
+                    <div className="rounded-2xl border border-casa-border bg-casa-surface p-4">
+                      <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-casa-muted">
+                        Pantry depletion predictions
+                      </p>
                       <div className="space-y-1.5">
-                        {pantryDepletionPredictions.slice(0, 4).map((prediction) => (
-                          <div key={`depletion-${prediction.name}`} className="rounded-lg border border-casa-border bg-casa-bg px-2.5 py-2 flex items-center justify-between gap-2">
-                            <div>
-                              <p className="text-[11px] text-casa-navy font-medium">{prediction.name}</p>
-                              <p className="text-[11px] text-casa-muted">
-                                {prediction.daysUntil <= 0
-                                  ? 'Likely due now'
-                                  : `Likely due in ${prediction.daysUntil} day${prediction.daysUntil === 1 ? '' : 's'}`}
-                                {` · cadence ~${prediction.cadenceDays}d`}
-                              </p>
+                        {pantryDepletionPredictions.slice(0, 4).map((prediction) => {
+                          const visual = getDepletionVisual(prediction.daysUntil)
+                          const cadenceMeterPercent = Math.max(
+                            12,
+                            Math.min(
+                              100,
+                              Math.round(((prediction.cadenceDays - Math.max(prediction.daysUntil, 0)) / Math.max(prediction.cadenceDays, 1)) * 100)
+                            )
+                          )
+                          return (
+                            <div key={`depletion-${prediction.name}`} className="flex items-center gap-3 border-t border-casa-divider px-1 py-2 first:border-t-0">
+                              <Circle size={10} fill={visual.dotColor} color={visual.dotColor} className="shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-[14px] font-semibold text-casa-navy">{prediction.name}</p>
+                                <div className="mt-0.5 flex items-center gap-2 text-[11px] text-casa-muted">
+                                  <span>Cadence ~{prediction.cadenceDays}d</span>
+                                  <span className="h-1.5 w-16 overflow-hidden rounded-full bg-casa-border/80">
+                                    <span
+                                      className="block h-full rounded-full"
+                                      style={{ width: `${cadenceMeterPercent}%`, backgroundColor: visual.meterColor }}
+                                    />
+                                  </span>
+                                </div>
+                              </div>
+                              <span
+                                className="rounded-full px-2.5 py-1 text-[10.5px] font-semibold"
+                                style={{ backgroundColor: visual.tagBg, color: visual.tagText }}
+                              >
+                                {visual.dueLabel}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => addItemByName(prediction.name, { spotlightOnDuplicate: true, clearInput: true })}
+                                className="rounded-full border border-casa-border px-3 py-1.5 text-[11px] font-semibold text-casa-navy transition-colors hover:bg-casa-main"
+                              >
+                                Add
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => addItemByName(prediction.name, { spotlightOnDuplicate: true, clearInput: true })}
-                              className="px-2.5 py-1 rounded-full border border-casa-border text-[11px] text-casa-muted hover:bg-casa-main transition-colors"
-                            >
-                              Add
-                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {(predictiveSuggestions.length > 0 || smartRebuySuggestions.length > 0 || SMART_BUNDLES.length > 0) && (
+                    <div className="rounded-2xl border border-casa-border bg-casa-surface p-4">
+                      {predictiveSuggestions.length > 0 && (
+                        <div className="mb-4">
+                          <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-casa-muted">Likely next adds</p>
+                          <div className="flex flex-wrap gap-2">
+                            {predictiveSuggestions.map((item) => (
+                              <button
+                                key={`predictive-${item.name}`}
+                                type="button"
+                                onClick={() => addItemByName(item.name, { spotlightOnDuplicate: true, clearInput: true })}
+                                className="rounded-full border border-casa-border bg-casa-bg px-3 py-1.5 text-[12px] font-medium text-casa-text transition-colors hover:bg-casa-main"
+                              >
+                                <span className="mr-1.5 font-bold text-[#B08A34]">+</span>
+                                {item.name}
+                              </button>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {predictiveSuggestions.length > 0 && (
-                    <div className="mb-2">
-                      <p className="text-[11px] text-casa-muted mb-1">Likely next adds</p>
-                      <div className="flex gap-2 overflow-x-auto pb-1">
-                        {predictiveSuggestions.map((item) => (
-                          <button
-                            key={`predictive-${item.name}`}
-                            type="button"
-                            onClick={() => addItemByName(item.name, { spotlightOnDuplicate: true, clearInput: true })}
-                            className="flex-shrink-0 min-h-8 px-3 rounded-full border border-casa-border bg-casa-bg text-[11px] text-casa-text hover:bg-casa-main transition-colors"
-                          >
-                            + {item.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {smartRebuySuggestions.length > 0 && (
-                    <div className="mb-2">
-                      <p className="text-[11px] text-casa-muted mb-1">Rebuy from your history</p>
-                      <div className="flex gap-2 overflow-x-auto pb-1">
-                        {smartRebuySuggestions.map((item) => (
-                          <button
-                            key={`rebuy-${item.name}`}
-                            type="button"
-                            onClick={() => addItemByName(item.name, { spotlightOnDuplicate: true, clearInput: true })}
-                            className="flex-shrink-0 min-h-8 px-3 rounded-full border border-casa-border bg-casa-bg text-[11px] text-casa-text hover:bg-casa-main transition-colors"
-                          >
-                            + {item.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {SMART_BUNDLES.length > 0 && (
-                    <div>
-                      <p className="text-[11px] text-casa-muted mb-1">1-tap bundles</p>
-                      <div className="flex flex-wrap gap-2">
-                        {SMART_BUNDLES.map((bundle) => (
-                          <button
-                            key={bundle.name}
-                            type="button"
-                            onClick={() => handleAddBundle(bundle.items)}
-                            className="min-h-8 px-3 rounded-full border border-casa-gold/50 bg-casa-gold/10 text-[11px] font-medium text-casa-navy hover:bg-casa-gold/15 transition-colors"
-                          >
-                            + {bundle.name} ({bundle.items.length})
-                          </button>
-                        ))}
-                      </div>
+                        </div>
+                      )}
+
+                      {smartRebuySuggestions.length > 0 && (
+                        <div className="mb-4">
+                          <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-casa-muted">Rebuy from your history</p>
+                          <div className="flex flex-wrap gap-2">
+                            {smartRebuySuggestions.map((item) => (
+                              <button
+                                key={`rebuy-${item.name}`}
+                                type="button"
+                                onClick={() => addItemByName(item.name, { spotlightOnDuplicate: true, clearInput: true })}
+                                className="rounded-full border border-casa-border bg-casa-bg px-3 py-1.5 text-[12px] font-medium text-casa-text transition-colors hover:bg-casa-main"
+                              >
+                                <span className="mr-1.5 font-bold text-[#B08A34]">+</span>
+                                {item.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {SMART_BUNDLES.length > 0 && (
+                        <div>
+                          <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-casa-muted">1-tap bundles</p>
+                          <div className="flex flex-wrap gap-2">
+                            {SMART_BUNDLES.map((bundle) => (
+                              <button
+                                key={bundle.name}
+                                type="button"
+                                onClick={() => handleAddBundle(bundle.items)}
+                                className="rounded-full border border-[#E7D3A3] bg-[#F4E7CB] px-3 py-1.5 text-[12px] font-semibold text-[#5A4A2A] transition-colors hover:bg-[#EFDFC0]"
+                              >
+                                <span className="mr-1.5 font-bold text-[#8A5A1E]">+</span>
+                                {bundle.name}
+                                <span className="ml-1.5 opacity-65">· {bundle.items.length}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
+              ) : (
+                <div className="mt-2 rounded-2xl border border-casa-border bg-casa-surface p-6 text-center">
+                  <p className="text-body font-semibold text-casa-text">No smart picks yet</p>
+                  <p className="mt-1 text-body-sm text-casa-muted">
+                    Keep checking items off and syncing — predictions, rebuys, and bundles will appear here.
+                  </p>
+                </div>
               )}
-
               <div className="h-24" />
-          </div>
+            </div>
+          )
         )}
         </div>
       </div>

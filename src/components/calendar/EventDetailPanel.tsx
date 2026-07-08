@@ -63,6 +63,8 @@ const MODE_OVERRIDE_OPTIONS: Array<{ value: 'auto' | EventMode; label: string; h
   { value: 'hosted', label: 'Hosted' },
   { value: 'trip', label: 'Trip' },
 ]
+const PANEL_ENTER_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1]
+const PANEL_EXIT_EASE: [number, number, number, number] = [0.4, 0, 1, 1]
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '')
@@ -216,9 +218,8 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
             <motion.div
               key="backdrop"
               initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              animate={{ opacity: 1, transition: { duration: 0.26, ease: PANEL_ENTER_EASE } }}
+              exit={{ opacity: 0, transition: { duration: 0.18, ease: PANEL_EXIT_EASE } }}
               className="fixed inset-0 z-[54]"
               style={{ background: 'linear-gradient(180deg,rgba(27,42,68,0.28),rgba(27,42,68,0.12) 45%,rgba(27,42,68,0.06))' }}
               data-panel-overlay
@@ -231,15 +232,28 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
 
             <motion.div
               key="event-panel-shell"
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }}
-              transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.92, bounce: 0.18 }}
+              initial={{ y: '106%', opacity: 0.985 }}
+              animate={{
+                y: 0,
+                opacity: 1,
+                transition: {
+                  y: { duration: 0.34, ease: PANEL_ENTER_EASE },
+                  opacity: { duration: 0.22, ease: 'easeOut' },
+                },
+              }}
+              exit={{
+                y: '104%',
+                opacity: 0.985,
+                transition: {
+                  y: { duration: 0.26, ease: PANEL_EXIT_EASE },
+                  opacity: { duration: 0.16, ease: 'easeIn' },
+                },
+              }}
               drag="y"
               dragControls={panelDragControls}
               dragListener={false}
               dragConstraints={{ top: 0 }}
-              dragElastic={{ top: 0, bottom: 0.22 }}
+              dragElastic={{ top: 0, bottom: 0.18 }}
               dragMomentum={false}
               onDragEnd={(_e, info) => {
                 if (info.velocity.y > dragDismissVelocity || info.offset.y > dragDismissOffset) onClose()
