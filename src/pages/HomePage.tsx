@@ -664,7 +664,10 @@ function DesktopHeroCard({
   const isTodayFocus = !!nextTodayEvent
   const isAllDay = Boolean(focusEvent.all_day)
   const eventLabel = cleanEventTitle(focusEvent.title)
-  const leadLabel = isTodayFocus ? `UP NEXT · ${eventLabel.toUpperCase()}` : 'TOMORROW · FIRST UP'
+  const isBirthday = isBirthdayEvent(focusEvent)
+  const leadLabel = isBirthday
+    ? `${isTodayFocus ? 'TODAY' : 'TOMORROW'} · BIRTHDAY 🎉`
+    : (isTodayFocus ? `UP NEXT · ${eventLabel.toUpperCase()}` : 'TOMORROW · FIRST UP')
 
   const liveLeaveBy = !isHosted && !isAllDay && isTodayFocus && travelEta?.found && travelEta.leave_by
     ? new Date(travelEta.leave_by)
@@ -674,23 +677,31 @@ function DesktopHeroCard({
     : (liveLeaveBy
       ?? (focusEvent.enrichment?.departure_time ? new Date(focusEvent.enrichment.departure_time) : focusStart))
   const minutesUntilLeave = Math.max(0, Math.round((leaveAt.getTime() - now.getTime()) / 60000))
-  const headlineText = isAllDay
-    ? (isTodayFocus ? 'All day' : 'All day tomorrow')
-    : (isTodayFocus
-      ? `${isHosted ? 'Starts at' : 'Leave by'} ${format(leaveAt, 'h:mm a')}`
-      : `Tomorrow starts at ${format(leaveAt, 'h:mm a')}`)
+  const headlineText = isBirthday
+    ? `🎂 ${eventLabel}`
+    : (isAllDay
+      ? (isTodayFocus ? 'All day' : 'All day tomorrow')
+      : (isTodayFocus
+        ? `${isHosted ? 'Starts at' : 'Leave by'} ${format(leaveAt, 'h:mm a')}`
+        : `Tomorrow starts at ${format(leaveAt, 'h:mm a')}`))
 
   const destinationLabel = focusEvent.address ?? focusEvent.location_name ?? 'At home'
   const driveMins = isTodayFocus && travelEta?.found && typeof travelEta.drive_time_mins === 'number'
     ? travelEta.drive_time_mins
     : focusEvent.enrichment?.drive_time_mins
-  const detailParts = isHosted
-    ? ['At home']
-    : [
-      destinationLabel,
-      typeof driveMins === 'number' ? `${driveMins} min drive` : null,
-      focusEvent.enrichment?.weather_at_event ?? null,
-    ].filter((part): part is string => Boolean(part && part.trim()))
+  const birthdayTimeLabel = isAllDay ? 'All day' : `${isTodayFocus ? '' : 'Tomorrow · '}${format(focusStart, 'h:mm a')}`
+  const detailParts = isBirthday
+    ? [
+      birthdayTimeLabel,
+      focusEvent.description?.trim() || null,
+    ].filter((part): part is string => Boolean(part))
+    : (isHosted
+      ? ['At home']
+      : [
+        destinationLabel,
+        typeof driveMins === 'number' ? `${driveMins} min drive` : null,
+        focusEvent.enrichment?.weather_at_event ?? null,
+      ].filter((part): part is string => Boolean(part && part.trim())))
 
   const status = deriveHeroStatus({
     isTodayFocus,
@@ -718,7 +729,8 @@ function DesktopHeroCard({
     <section className="hidden lg:block mt-2 mb-6" onClick={(e) => e.stopPropagation()}>
       <div className="relative rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-7 grid grid-cols-[1fr_420px] gap-8 overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/8 via-transparent to-black/10" />
-        <div className="relative min-w-0 flex flex-col">
+        {isBirthday && <BirthdayCardDecoration className="opacity-60" />}
+        <div className="relative z-10 min-w-0 flex flex-col">
           <p className="text-caption font-bold tracking-[0.16em] text-casa-gold">{leadLabel}</p>
           <h1 className="font-display text-display-md leading-[1.02] mt-2 !text-white max-w-none pr-1">
             {headlineText}
@@ -737,21 +749,22 @@ function DesktopHeroCard({
                 <Navigation size={18} />
                 Get directions
               </a>
-            ) : (
-              <button disabled className="h-12 px-7 rounded-button border border-white/20 bg-white/5 text-white/60 font-semibold text-[1.08rem] whitespace-nowrap">
-                Get directions
-              </button>
-            )}
+            ) : null}
             <button
               onClick={() => onViewDetails(focusEvent)}
-              className="h-12 px-7 rounded-button border border-white/25 bg-gradient-to-b from-white/6 to-white/[0.03] text-white font-semibold text-[1.08rem] whitespace-nowrap hover:from-white/12 hover:to-white/[0.06] transition-all"
+              className={cn(
+                'h-12 px-7 rounded-button font-semibold text-[1.08rem] whitespace-nowrap transition-all',
+                mapsUrl
+                  ? 'border border-white/25 bg-gradient-to-b from-white/6 to-white/[0.03] text-white hover:from-white/12 hover:to-white/[0.06]'
+                  : 'bg-casa-gold text-casa-navy border border-casa-gold/50 hover:brightness-110',
+              )}
             >
               View details
             </button>
           </div>
         </div>
 
-        <div className="relative min-h-[292px] min-w-[432px]">
+        <div className="relative z-10 min-h-[292px] min-w-[432px]">
           <div className="absolute top-[3%] right-[3%] bottom-[3%] aspect-square min-h-[232px]">
             <svg className="h-full w-full -rotate-90" viewBox="0 0 220 220" aria-hidden>
               <circle
