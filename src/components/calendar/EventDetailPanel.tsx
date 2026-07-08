@@ -28,6 +28,8 @@ import {
 } from '../../lib/memberAvailability'
 import { getPersistedPlanOverrides, locationSignature, overridesStorageKey } from '../../lib/eventPlanOverrides'
 import { getEventDisplayStartDay } from '../../utils/eventTime'
+import { isBirthdayEvent } from '../../utils/eventTitle'
+import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 
 // ── Exact design tokens from the Event Command Center handoff (SPEC §2) ──────
 const S = {
@@ -497,6 +499,7 @@ function PanelHeader({
   onEdit: () => void
 }) {
   const category = event.enrichment?.category
+  const isBirthday = isBirthdayEvent(event)
   const accent = eventAccentColor(event)
   const primary = event.members?.find((m) => m.role === 'primary') ?? event.members?.[0]
   const eyebrow = primary?.family_member?.name
@@ -513,8 +516,12 @@ function PanelHeader({
   const headerDuration = event.all_day ? 'All day' : formatDuration(new Date(event.start_time), new Date(event.end_time))
 
   return (
-    <div className="px-7 pt-6 pb-5" style={{ borderBottom: `1px solid ${S.borderSoft}` }}>
-      <div className="flex items-start justify-between">
+    <div
+      className={cn('relative overflow-hidden px-7 pt-6 pb-5', isBirthday && 'bg-gradient-to-br from-[#FDF1F6] via-transparent to-[#FFFBEE]')}
+      style={{ borderBottom: `1px solid ${S.borderSoft}` }}
+    >
+      {isBirthday && <BirthdayCardDecoration className="opacity-70" />}
+      <div className="relative z-10 flex items-start justify-between">
         <div className="flex items-center gap-2">
           {category && (
             <span
@@ -541,16 +548,17 @@ function PanelHeader({
       </div>
 
       {eyebrow && (
-        <div className="flex items-center gap-2 mt-3.5">
+        <div className="relative z-10 flex items-center gap-2 mt-3.5">
           <span className="w-[9px] h-[9px] rounded-full" style={{ background: accent }} />
           <span className="text-[11px] font-bold uppercase" style={{ color: S.eyebrow, letterSpacing: '0.13em' }}>{eyebrow}</span>
         </div>
       )}
 
-      <h2 className="event-command-center-title mt-1.5" style={{ ...serif, fontWeight: 600, letterSpacing: '-0.01em', color: S.navy }}>
+      <h2 className="event-command-center-title relative z-10 mt-1.5" style={{ ...serif, fontWeight: 600, letterSpacing: '-0.01em', color: S.navy }}>
+        {isBirthday && <span className="mr-1.5" aria-hidden="true">🎉</span>}
         {event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}
       </h2>
-      <div className="flex items-center gap-2 mt-2 text-[14px]" style={{ color: S.muted }}>
+      <div className="relative z-10 flex items-center gap-2 mt-2 text-[14px]" style={{ color: S.muted }}>
         <span className="font-semibold" style={{ color: S.navy }}>{headerWhen}</span>
         <span>·</span>
         <span>{headerDuration}</span>

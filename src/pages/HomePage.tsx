@@ -19,6 +19,7 @@ import SwipeableReminderPill from '../components/shared/SwipeableReminderPill'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import { WeatherIcon } from '../components/shared/WeatherIcon'
 import { LeaveByCard } from '../components/shared/LeaveByCard'
+import { BirthdayCardDecoration } from '../components/shared/BirthdayCardDecoration'
 import { useTravelEta, type TravelEtaResult } from '../hooks/useTravelEta'
 import { useReminderNeedsYouActions } from '../hooks/useReminderNeedsYouActions'
 import {
@@ -35,7 +36,7 @@ import {
   indexAvailabilityRulesByMember,
 } from '../lib/memberAvailability'
 import { getEventEndDate, getEventStartDate } from '../utils/eventTime'
-import { cleanEventTitle } from '../utils/eventTitle'
+import { cleanEventTitle, isBirthdayEvent } from '../utils/eventTitle'
 
 const SHARED_GOLD = '#C9A96E'
 
@@ -826,6 +827,7 @@ function TimelineRow({
   const [movingToNeedsYou, setMovingToNeedsYou] = useState(false)
   const [overrideVersion, setOverrideVersion] = useState(0)
   const cleanTitle = cleanEventTitle(event.title)
+  const isBirthday = isBirthdayEvent(event)
 
   // Re-derive responsibility whenever the event panel writes new driver overrides.
   useEffect(() => {
@@ -953,12 +955,16 @@ function TimelineRow({
       className="cursor-pointer"
       onClick={e => { e.stopPropagation(); onClick() }}
     >
-      <div className="relative w-full min-w-0 overflow-hidden bg-casa-surface rounded-card border border-casa-border px-4 py-3 shadow-card">
+      <div className={cn(
+        'relative w-full min-w-0 overflow-hidden rounded-card border border-casa-border px-4 py-3 shadow-card',
+        isBirthday ? 'bg-gradient-to-br from-[#FDF1F6] via-casa-surface to-[#FFFBEE]' : 'bg-casa-surface',
+      )}>
+        {isBirthday && <BirthdayCardDecoration />}
         <span
           className={cn('absolute left-0 top-0 bottom-0 w-[12px] rounded-l-card', happening && 'animate-pulse-gold')}
           style={{ backgroundColor: color }}
         />
-        <div className="flex items-start gap-3">
+        <div className="relative z-10 flex items-start gap-3">
           <div className="relative shrink-0 pl-1 pt-0.5">
             <span
               className={cn(
@@ -984,7 +990,10 @@ function TimelineRow({
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-body font-semibold text-casa-text truncate md:overflow-visible md:text-clip md:whitespace-normal">{cleanTitle}</p>
+                <p className="font-body font-semibold text-casa-text truncate md:overflow-visible md:text-clip md:whitespace-normal">
+                  {isBirthday && <span className="mr-1" aria-hidden="true">🎂</span>}
+                  {cleanTitle}
+                </p>
                 <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1">
                   <span className="flex items-center gap-1 text-caption text-casa-muted tabular-nums">
                     <Clock size={11} className="shrink-0" />
