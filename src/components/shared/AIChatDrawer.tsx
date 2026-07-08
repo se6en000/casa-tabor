@@ -512,10 +512,25 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
         return
       }
     }
-    setInput('')
-    interimRef.current = ''
-    if (textareaRef.current) textareaRef.current.value = ''
-    send(trimmed)
+    if (opts?.fromVoice) {
+      // Show the full captured text in the input box so the user can verify what was heard.
+      // React batches setInput(text)+setInput('') in the same tick → text never renders.
+      // By setting input to trimmed first and deferring the clear, we guarantee at least
+      // one paint with the full transcript visible before it dissolves.
+      setInput(trimmed)
+      if (textareaRef.current) textareaRef.current.value = trimmed
+      send(trimmed)
+      setTimeout(() => {
+        setInput('')
+        interimRef.current = ''
+        if (textareaRef.current) textareaRef.current.value = ''
+      }, 800)
+    } else {
+      setInput('')
+      interimRef.current = ''
+      if (textareaRef.current) textareaRef.current.value = ''
+      send(trimmed)
+    }
   }, [loading, send, appendSyntheticMessage])
 
   const quickSaveRecipeSuggestion = useCallback(async (recipeMessage: string) => {
@@ -549,7 +564,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
           return
         }
         sendCurrentInput(msg, { fromVoice: true, confidence: latestVoiceConfidenceRef.current })
-        interimRef.current = ''
+        // Don't clear interimRef here — sendCurrentInput (voice path) defers the clear
+        // so the full captured text stays visible in the input for ~800ms.
         latestVoiceConfidenceRef.current = null
         // Stop mic after each voice-submitted message — user must tap mic to speak again
         speechStopRef.current()
