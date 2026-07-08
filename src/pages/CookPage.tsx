@@ -2790,6 +2790,16 @@ export default function CookPage() {
     setImportStep(1)
   }
 
+  function openImportDialog() {
+    setImportDialogOpen(true)
+    setImportError(null)
+    setImportDraft(null)
+    setImportExtraImageUrl('')
+    setImportCaptureFiles([])
+    setImportMealPhotoIndex(null)
+    setImportStep(1)
+  }
+
   const cookIngredientRows = cookIngredients.map((ingredient, index) => {
     const normalized = normalizeRecipeIngredientFields({
       rawText: ingredient.raw_text,
@@ -2917,15 +2927,7 @@ export default function CookPage() {
                 <p className="text-body text-casa-text-secondary">Import recipes from Grocery to unlock your mood-based shortlist.</p>
                 <button
                   type="button"
-                  onClick={() => {
-                    setImportDialogOpen(true)
-                    setImportError(null)
-                    setImportDraft(null)
-                    setImportExtraImageUrl('')
-                    setImportCaptureFiles([])
-                    setImportMealPhotoIndex(null)
-                    setImportStep(1)
-                  }}
+                  onClick={openImportDialog}
                   className="mt-3 cook-v2-btn-primary px-4 py-2 rounded-button text-body-sm font-semibold"
                 >
                   Import recipe
@@ -3549,14 +3551,24 @@ export default function CookPage() {
                 Browse all {recipes.length} recipes.
               </p>
             </div>
-            <div className="flex items-center gap-2 rounded-[8px] border border-casa-control-border bg-casa-surface px-3 py-2 min-w-[15rem]">
-              <Search size={14} className="text-casa-text-tertiary" />
-              <input
-                value={recipeSearch}
-                onChange={(event) => setRecipeSearch(event.target.value)}
-                placeholder="Search recipes..."
-                className="w-full bg-transparent text-body-sm text-casa-text placeholder:text-casa-text-faint outline-none"
-              />
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex items-center gap-2 rounded-[8px] border border-casa-control-border bg-casa-surface px-3 py-2 min-w-[15rem]">
+                <Search size={14} className="text-casa-text-tertiary" />
+                <input
+                  value={recipeSearch}
+                  onChange={(event) => setRecipeSearch(event.target.value)}
+                  placeholder="Search recipes..."
+                  className="w-full bg-transparent text-body-sm text-casa-text placeholder:text-casa-text-faint outline-none"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={openImportDialog}
+                className="px-3 py-2 rounded-button border border-casa-accent-soft-border bg-casa-accent-soft text-body-sm font-semibold text-casa-navy hover:bg-casa-accent-subtle transition-colors inline-flex items-center gap-1.5"
+              >
+                <Upload size={14} />
+                Import recipe
+              </button>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
