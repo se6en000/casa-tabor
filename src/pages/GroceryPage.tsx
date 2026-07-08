@@ -2008,7 +2008,7 @@ export default function GroceryPage() {
   return (
     <div className="h-full min-h-0 bg-casa-bg flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="sticky top-0 z-10 border-b border-casa-border bg-casa-bg px-4 pt-safe-t">
+      <div className="sticky top-0 z-10 bg-casa-bg px-4 pt-safe-t">
         <div className="space-y-3 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-casa-border bg-casa-bg-2 text-casa-gold">
