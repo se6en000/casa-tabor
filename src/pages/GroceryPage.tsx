@@ -32,7 +32,7 @@ const GROCERY_PREDICTION_DEFERRALS_SETTING_KEY = 'grocery_prediction_deferrals'
 const AUTO_SYNC_INTERVAL_MS = 45_000
 const CLEAN_SYNC_BATCH_SIZE = 60
 const QUICK_ADD_TOUCH_ITEMS = ['Milk', 'Eggs', 'Bread', 'Bananas', 'Chicken', 'Coffee']
-const CHECKED_ITEM_DISMISS_MS = 1_500
+const CHECKED_ITEM_DISMISS_MS = 1_000
 const CHECKED_ITEM_EXIT_ANIMATION_MS = 320
 const LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.82
 const SMART_BUNDLES: Array<{ name: string; items: string[] }> = [
@@ -791,6 +791,7 @@ export default function GroceryPage() {
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set())
   const [dismissingExitingIds, setDismissingExitingIds] = useState<Set<string>>(new Set())
   const dismissingIdsRef = useRef<Set<string>>(new Set())
+  const dismissingExitingIdsRef = useRef<Set<string>>(new Set())
   const hasRecipeImportSource = recipeUrlInput.trim().length > 0 || recipeImportFiles.length > 0
 
   const activeItems = items.filter((item) => !item.checked)
@@ -1619,6 +1620,10 @@ export default function GroceryPage() {
   }, [dismissingIds])
 
   useEffect(() => {
+    dismissingExitingIdsRef.current = dismissingExitingIds
+  }, [dismissingExitingIds])
+
+  useEffect(() => {
     return () => {
       document.body.style.userSelect = ''
     }
@@ -1659,14 +1664,19 @@ export default function GroceryPage() {
     }
 
     toggleItem.mutate({ id, checked: true })
-    setDismissingIds(prev => new Set(prev).add(id))
-    setDismissingExitingIds((prev) => {
+    setDismissingIds((prev) => {
       const next = new Set(prev)
-      next.delete(id)
+      dismissingExitingIdsRef.current.forEach((exitingId) => next.add(exitingId))
+      next.add(id)
       return next
     })
+    setDismissingExitingIds(new Set())
     if (dismissBatchTimerRef.current) {
       window.clearTimeout(dismissBatchTimerRef.current)
+    }
+    if (dismissExitTimerRef.current) {
+      window.clearTimeout(dismissExitTimerRef.current)
+      dismissExitTimerRef.current = null
     }
     dismissBatchTimerRef.current = window.setTimeout(() => {
       const batchIds = Array.from(dismissingIdsRef.current)
