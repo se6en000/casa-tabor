@@ -4,6 +4,7 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { WeatherIcon } from '../shared/WeatherIcon'
 import { getEventDisplayEnd, getMultiDayBoundaryLabel, isEventMultiDay, withColorAlpha } from '../../utils/eventTime'
+import { cleanEventTitle } from '../../utils/eventTitle'
 
 interface LargeEventCardProps {
   event: EventWithDetails
@@ -12,11 +13,6 @@ interface LargeEventCardProps {
   selected?: boolean
   className?: string
   contextDay?: Date
-}
-
-function cleanEventTitle(title: string): string {
-  const pipeIdx = title.indexOf(' | ')
-  return pipeIdx !== -1 ? title.slice(pipeIdx + 3) : title
 }
 
 export default function LargeEventCard({

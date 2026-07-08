@@ -2,6 +2,7 @@ import { Check, TimerReset } from 'lucide-react'
 import { useState } from 'react'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
+import { cleanEventTitle } from '../../utils/eventTitle'
 
 interface ReminderEventCardProps {
   event: EventWithDetails
@@ -9,11 +10,6 @@ interface ReminderEventCardProps {
   onClick?: () => void
   onComplete?: () => void | Promise<void>
   onSnooze?: () => void | Promise<void>
-}
-
-function cleanEventTitle(title: string): string {
-  const pipeIdx = title.indexOf(' | ')
-  return pipeIdx !== -1 ? title.slice(pipeIdx + 3) : title
 }
 
 export default function ReminderEventCard({

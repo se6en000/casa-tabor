@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { EventWithDetails } from './useCalendarEvents'
 import { getEventEndDate, getEventStartDate } from '../utils/eventTime'
+import { cleanEventTitle } from '../utils/eventTitle'
 
 const ONE_HOUR_MS = 60 * 60 * 1000
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
@@ -11,13 +12,8 @@ const MISSED_GRACE_MS = 10 * 60 * 1000
 const REMINDER_SOURCE_MANUAL = 'reminder_manual'
 const REMINDER_SOURCE_MISSED = 'reminder_missed'
 
-function cleanReminderTitle(title: string): string {
-  const pipeIdx = title.indexOf(' | ')
-  return pipeIdx !== -1 ? title.slice(pipeIdx + 3) : title
-}
-
 function buildReminderPrepDescription(event: EventWithDetails, sourceType: string, now: Date): string {
-  const title = cleanReminderTitle(event.title)
+  const title = cleanEventTitle(event.title)
   if (sourceType === REMINDER_SOURCE_MANUAL) {
     return `Moved from calendar reminder: ${title}`
   }
@@ -66,7 +62,7 @@ export function useReminderNeedsYouActions() {
         type: 'reminder',
         emoji: '🔔',
         description: buildReminderPrepDescription(event, sourceType, now),
-        event_title: cleanReminderTitle(event.title),
+        event_title: cleanEventTitle(event.title),
         event_date: event.start_time,
         due_by: dueBy.toISOString(),
         priority,
@@ -146,7 +142,7 @@ export function useReminderNeedsYouActions() {
         type: 'reminder',
         emoji: '🔔',
         description: buildReminderPrepDescription(event, REMINDER_SOURCE_MISSED, now),
-        event_title: cleanReminderTitle(event.title),
+        event_title: cleanEventTitle(event.title),
         event_date: event.start_time,
         due_by: dueBy,
         priority,

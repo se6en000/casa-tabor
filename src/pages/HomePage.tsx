@@ -35,13 +35,9 @@ import {
   indexAvailabilityRulesByMember,
 } from '../lib/memberAvailability'
 import { getEventEndDate, getEventStartDate } from '../utils/eventTime'
+import { cleanEventTitle } from '../utils/eventTitle'
 
 const SHARED_GOLD = '#C9A96E'
-
-function cleanEventTitle(title: string): string {
-  const pipeIdx = title.indexOf(' | ')
-  return pipeIdx !== -1 ? title.slice(pipeIdx + 3) : title
-}
 
 function mapsUrlForEvent(event: EventWithDetails): string | null {
   const mapsQuery = event.address

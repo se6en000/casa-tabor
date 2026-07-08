@@ -12,6 +12,14 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function normalizePossessiveSuffixCasing(value: string): string {
+  return value.replace(/([a-z])(['’])S\b/g, '$1$2s')
+}
+
+function toTitleCasePreservingPossessives(value: string): string {
+  return normalizePossessiveSuffixCasing(value.replace(/\b\w/g, (c: string) => c.toUpperCase()))
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const sb = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))
@@ -127,15 +135,15 @@ Deno.serve(async (req) => {
     .replace(/\s{2,}/g, ' ')       // collapse whitespace
     .trim()
     .replace(/\b\w/g, (c: string) => c.toUpperCase()) // Title Case
+  const normalizedTitleDescription = normalizePossessiveSuffixCasing(cleanTitleDescription)
 
   // ── Guaranteed owner: server title detection → AI result → default owner ──
   const resolvedPrimary = serverDetectedPrimary
     ?? (aiPrimaryRaw && nameToId[aiPrimaryRaw.toLowerCase()] ? aiPrimaryRaw : defaultOwnerName)
 
   // ── Guaranteed title: AI concise desc → AI title stripped → cleaned-up title (no name prefix) ──
-  const toTitleCase = (s: string) => s.replace(/\b\w/g, (c: string) => c.toUpperCase())
-  const rawConcise = aiConcise?.trim() || aiTitleRaw?.replace(/^[^|]+\|\s*/,'').trim() || cleanTitleDescription
-  const concisePart = toTitleCase(rawConcise)
+  const rawConcise = aiConcise?.trim() || aiTitleRaw?.replace(/^[^|]+\|\s*/,'').trim() || normalizedTitleDescription
+  const concisePart = toTitleCasePreservingPossessives(rawConcise)
   const finalTitle = `${resolvedPrimary} | ${concisePart}`
   const targetedMode = targetFields.length > 0
 

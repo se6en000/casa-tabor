@@ -29,13 +29,9 @@ import {
 } from '../../lib/eventPlanOverrides'
 import { derivePlan, type DerivedPerson } from '../../lib/eventCommandCenter'
 import type { FamilyMember } from '../../types'
+import { cleanEventTitle } from '../../utils/eventTitle'
 
 const SHARED_GOLD = '#C9A96E'
-
-function cleanEventTitle(title: string): string {
-  const pipeIdx = title.indexOf(' | ')
-  return pipeIdx !== -1 ? title.slice(pipeIdx + 3) : title
-}
 
 function eventColor(ev: EventWithDetails): string {
   if (!ev.members || ev.members.length === 0) return SHARED_GOLD

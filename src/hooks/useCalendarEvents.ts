@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { startOfWeek, endOfWeek, addDays, startOfDay, startOfMonth, endOfMonth } from 'date-fns'
 import { eventOverlapsRange } from '../utils/eventTime'
+import { normalizePossessiveSuffixCasing } from '../utils/eventTitle'
 import type {
   CalendarEvent, FamilyMember, EventEnrichment,
   EventLogistic, EventChecklistItem, EventActionItem,
@@ -92,6 +93,7 @@ async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDet
   return (events || [])
     .map((e: any) => ({
       ...e,
+      title: normalizePossessiveSuffixCasing(typeof e.title === 'string' ? e.title : ''),
       members: e.event_members?.map((em: any) => ({
         id: em.id,
         role: em.role,
