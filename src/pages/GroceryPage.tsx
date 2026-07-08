@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ShoppingCart, Trash2, Check, X, Plus, Minus, RefreshCw, Mic, GripVertical, Link2, Upload, BookOpen, ChefHat, ChevronLeft, ChevronRight, Clock3, ExternalLink, Camera, Sparkles, Leaf, Milk, Beef, Croissant, Snowflake, Package, Coffee, Popcorn, Sandwich, House, HeartPulse, Baby as BabyIcon, PawPrint, Circle } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '../utils/cn'
@@ -2411,6 +2412,7 @@ export default function GroceryPage() {
                 </div>
               ) : (
               <div className="columns-1 gap-3 lg:columns-2 2xl:columns-3">
+                <AnimatePresence initial={false}>
                 {activeItemsByCategory.map((cat) => ({
                   key: cat.key,
                   label: splitCategoryLabel(cat.label),
@@ -2424,11 +2426,15 @@ export default function GroceryPage() {
                 })).map((section) => {
                   const CategoryIcon = section.visual.icon
                   return (
-                    <div
+                    <motion.div
                       key={section.key}
+                      layout
+                      initial={false}
+                      exit={{ opacity: 0, scale: 0.96, height: 0, marginBottom: 0, transition: { duration: 0.32, ease: 'easeInOut' } }}
+                      transition={{ layout: { duration: 0.28, ease: 'easeInOut' } }}
                       data-drop-category={section.dropKey ?? undefined}
                       className={cn(
-                        'mb-3 break-inside-avoid rounded-2xl',
+                        'mb-3 overflow-hidden break-inside-avoid rounded-2xl',
                         section.dropKey && dragState && dragOverCategory === section.dropKey && 'bg-casa-gold/5 ring-2 ring-casa-gold/60'
                       )}
                     >
@@ -2489,9 +2495,10 @@ export default function GroceryPage() {
                           ))}
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   )
                 })}
+                </AnimatePresence>
               </div>
               )}
 
