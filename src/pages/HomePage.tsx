@@ -640,7 +640,7 @@ function DesktopHeroCard({
   const ringProgress = isTodayFocus && !isAllDay
     ? Math.max(0.06, Math.min(1, minutesUntilLeave / ringWindowMins))
     : 1
-  const ringRadius = 94
+  const ringRadius = 96
   const ringCircumference = 2 * Math.PI * ringRadius
   const ringDashOffset = ringCircumference * (1 - ringProgress)
   const ringValue = isTodayFocus
@@ -689,8 +689,8 @@ function DesktopHeroCard({
           </div>
         </div>
 
-        <div className="relative min-h-[280px] min-w-[420px]">
-          <div className="absolute top-[3%] right-[3%] bottom-[3%] aspect-square min-h-[220px]">
+        <div className="relative min-h-[292px] min-w-[432px]">
+          <div className="absolute top-[3%] right-[3%] bottom-[3%] aspect-square min-h-[232px]">
             <svg className="h-full w-full -rotate-90" viewBox="0 0 220 220" aria-hidden>
               <circle
                 cx="110"
