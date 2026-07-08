@@ -643,6 +643,33 @@ export default function AISettingsPage() {
             <label className="text-body-sm font-semibold text-casa-navy">Wake Word — "Alexa"</label>
           </div>
 
+          {/* Enable / disable wake word */}
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-body-sm font-medium text-casa-navy">Listen for wake word</p>
+              <p className="text-caption text-casa-muted mt-0.5">
+                {screensaverSettings.wakeWordEnabled
+                  ? 'Say "Alexa" to open the AI assistant'
+                  : 'Wake word disabled — use the ✨ button to open'}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={screensaverSettings.wakeWordEnabled}
+              onClick={() => updateScreensaver({ wakeWordEnabled: !screensaverSettings.wakeWordEnabled })}
+              className={cn(
+                'relative flex-shrink-0 w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-casa-gold',
+                screensaverSettings.wakeWordEnabled ? 'bg-casa-gold' : 'bg-casa-divider',
+              )}
+            >
+              <span className={cn(
+                'absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200',
+                screensaverSettings.wakeWordEnabled ? 'translate-x-7' : 'translate-x-1',
+              )} />
+            </button>
+          </div>
+
           <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3 space-y-3">
             <p className="text-body-sm font-semibold text-casa-navy">Voice Runtime Controls</p>
             <div className="grid gap-2 sm:grid-cols-3">
@@ -852,6 +879,7 @@ export default function AISettingsPage() {
             How confidently the mic must hear "Alexa" before activating.{' '}
             Lower = triggers more easily (more false positives). Higher = requires a clearer utterance.
           </p>
+          {screensaverSettings.wakeWordEnabled && (
           <div className="flex items-center justify-between gap-4 py-1">
             <div>
               <p className="text-body-sm font-medium text-casa-navy">Sensitivity</p>
@@ -884,6 +912,7 @@ export default function AISettingsPage() {
               >+</button>
             </div>
           </div>
+          )}
         </div>
 
         {/* Home Address — managed in Home settings */}

@@ -73,11 +73,11 @@ export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean, ena
             document.dispatchEvent(new CustomEvent('wake-kiosk'))
             // Single wake phrase should both wake screen and start listening.
             setTimeout(() => {
-              document.dispatchEvent(new CustomEvent('open-ai-chat'))
+              document.dispatchEvent(new CustomEvent('open-ai-chat', { detail: { source: 'wake_word' } }))
             }, 120)
             return
           }
-          document.dispatchEvent(new CustomEvent('open-ai-chat'))
+          document.dispatchEvent(new CustomEvent('open-ai-chat', { detail: { source: 'wake_word' } }))
         } catch { /* ignore */ }
       }
 

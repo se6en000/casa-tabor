@@ -86,12 +86,14 @@ function GlobalAIDrawer({
   setOpen,
   safeMode,
   routePath,
+  wakeWordEnabled,
 }: {
   screensaverActive: boolean
   open: boolean
   setOpen: (open: boolean) => void
   safeMode: boolean
   routePath: string
+  wakeWordEnabled: boolean
 }) {
   const [anchor, setAnchor] = useState<{ right: number; top: number } | undefined>()
   const [launchContext, setLaunchContext] = useState<AIDrawerLaunchContext | undefined>()
@@ -99,7 +101,7 @@ function GlobalAIDrawer({
   const { data: events = [] } = useRollingEvents(now)
   const { data: family = [] } = useFamilyMembers()
   const { data: weather } = useHomeWeather()
-  useWakeWord(open, screensaverActive, !safeMode)
+  useWakeWord(open, screensaverActive, !safeMode && wakeWordEnabled)
 
   const routePage = routePath.startsWith('/calendar')
     ? 'calendar'
@@ -231,6 +233,7 @@ function AppShell() {
         setOpen={setAiDrawerOpen}
         safeMode={IS_SAFE_MODE}
         routePath={location.pathname}
+        wakeWordEnabled={settings.wakeWordEnabled}
       />
 
       {/* Art screensaver overlay — always available when triggered manually; idle auto-fire respects settings.enabled */}

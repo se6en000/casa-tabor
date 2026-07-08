@@ -27,7 +27,7 @@ const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 
 type VoicePhase = 'idle' | 'connecting' | 'listening' | 'processing'
 type STTMode = 'unknown' | 'bridge' | 'webspeech'
 
-const SILENCE_MS = 1500
+const SILENCE_MS = 2500
 const CONNECT_TIMEOUT_MS = 5000
 const NO_ACTIVITY_AUTO_CLOSE_MS = 30_000
 
@@ -443,6 +443,9 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
   const pendingConfirmRef = useRef<(() => Promise<boolean>) | null>(null)
   const pendingCancelRef  = useRef<(() => Promise<boolean>) | null>(null)
   const pendingLowConfidenceRef = useRef<{ transcript: string; confidence: number } | null>(null)
+  // Ref to speech.stop — avoids circular dependency when calling stop inside useSpeechInput callbacks
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const speechStopRef = useRef<() => void>(() => {})
   const latestVoiceConfidenceRef = useRef<number | null>(null)
   const appliedLaunchRef = useRef<string | null>(null)
   const firedChefGreetRef = useRef<string | null>(null)
@@ -548,6 +551,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
         sendCurrentInput(msg, { fromVoice: true, confidence: latestVoiceConfidenceRef.current })
         interimRef.current = ''
         latestVoiceConfidenceRef.current = null
+        // Stop mic after each voice-submitted message — user must tap mic to speak again
+        speechStopRef.current()
       } else {
         if (text.trim()) markUserInteraction()
         interimRef.current = text
@@ -597,6 +602,10 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     }
   }, [clearIdleAutoCloseTimer])
 
+  // Keep speechStopRef current so the onFinalTranscript callback can stop the mic
+  // without creating a circular dependency on the speech object.
+  useEffect(() => { speechStopRef.current = speech.stop }, [speech.stop])
+
   useEffect(() => {
     if (open) {
       hadUserInteractionRef.current = false
@@ -608,9 +617,10 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
         }
       }, NO_ACTIVITY_AUTO_CLOSE_MS)
       if (IS_SAFE_MODE) return
-      // Start connecting immediately — don't wait for animation.
-      // Bridge buffers audio from /start so by the time the user speaks it's ready.
-      speech.start()
+      // Only auto-start mic when opened by wake word — otherwise user taps the mic button.
+      if (launchContext?.source === 'wake_word') {
+        speech.start()
+      }
       // Focus textarea slightly after animation settles (UI only, doesn't affect mic)
       setTimeout(() => textareaRef.current?.focus(), 300)
     } else {
