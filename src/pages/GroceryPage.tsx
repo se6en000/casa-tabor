@@ -14,11 +14,21 @@ import {
   normalizePantryKey,
   type PantryInventoryAuditEntry,
 } from '../lib/pantryInventoryUtils'
+import {
+  buildGroceryPredictionDeferredUntil,
+  GROCERY_PREDICTION_DISMISS_DAYS,
+  GROCERY_PREDICTION_PUSH_DAYS,
+  normalizeGroceryNameKey,
+  resolveGroceryPredictionDueAt,
+  sanitizeGroceryPredictionDeferrals,
+  type GroceryPredictionDeferrals,
+} from '../utils/groceryPredictionDeferrals'
 import recipeFallbackHero from '../assets/hero.png'
 
 const SYNC_CURSOR_KEY = 'grocery-sync-cursor-v1'
 const SYNC_LAST_AT_KEY = 'grocery-sync-last-at-v1'
 const SYNC_LAST_SUMMARY_KEY = 'grocery-sync-last-summary-v1'
+const GROCERY_PREDICTION_DEFERRALS_SETTING_KEY = 'grocery_prediction_deferrals'
 const AUTO_SYNC_INTERVAL_MS = 45_000
 const CLEAN_SYNC_BATCH_SIZE = 60
 const QUICK_ADD_TOUCH_ITEMS = ['Milk', 'Eggs', 'Bread', 'Bananas', 'Chicken', 'Coffee']
@@ -189,7 +199,7 @@ function detectCategory(name: string): string {
 }
 
 function normalizeItemName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ')
+  return normalizeGroceryNameKey(name)
 }
 
 function pantryInventoryKey(name: string, category: string): string {
@@ -587,6 +597,21 @@ export default function GroceryPage() {
     refetchInterval: 10 * 60_000,
   })
 
+  const { data: predictionDeferrals = {}, refetch: refetchPredictionDeferrals } = useQuery({
+    queryKey: ['grocery-pantry-prediction-deferrals'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', GROCERY_PREDICTION_DEFERRALS_SETTING_KEY)
+        .maybeSingle()
+      if (error) throw error
+      return sanitizeGroceryPredictionDeferrals(data?.value, Date.now())
+    },
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000,
+  })
+
   const { data: recipeLibrary = [], refetch: refetchRecipeLibrary } = useQuery({
     queryKey: ['recipe-library'],
     queryFn: async () => {
@@ -739,6 +764,8 @@ export default function GroceryPage() {
   const [pantryReconcileDraft, setPantryReconcileDraft] = useState<PantryReconcileDraft | null>(null)
   const [pantryReconcileMessage, setPantryReconcileMessage] = useState<string | null>(null)
   const [pantryReconcileError, setPantryReconcileError] = useState<string | null>(null)
+  const [predictionDeferralMessage, setPredictionDeferralMessage] = useState<string | null>(null)
+  const [predictionDeferralError, setPredictionDeferralError] = useState<string | null>(null)
   const [expandedReconcileQtyIds, setExpandedReconcileQtyIds] = useState<Set<string>>(new Set())
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => localStorage.getItem(SYNC_LAST_AT_KEY))
   const [lastSyncSummary, setLastSyncSummary] = useState<string>(() => localStorage.getItem(SYNC_LAST_SUMMARY_KEY) ?? 'Not synced yet')
@@ -883,7 +910,14 @@ export default function GroceryPage() {
       }
     }
 
-    const results: Array<{ name: string; daysUntil: number; cadenceDays: number; dueAt: number; confidence: 'high' | 'medium' }> = []
+    const results: Array<{
+      name: string
+      daysUntil: number
+      cadenceDays: number
+      dueAt: number
+      confidence: 'high' | 'medium'
+      deferredUntil: string | null
+    }> = []
     byName.forEach((value) => {
       const uniqueTs = Array.from(new Set(value.timestamps.map((ts) => Math.floor(ts / dayMs) * dayMs))).sort((a, b) => a - b)
       if (uniqueTs.length < 2) return
@@ -894,7 +928,13 @@ export default function GroceryPage() {
       if (deltas.length === 0) return
       const cadenceDays = deltas.reduce((sum, d) => sum + d, 0) / deltas.length
       const lastAt = uniqueTs[uniqueTs.length - 1]
-      const dueAt = lastAt + cadenceDays * dayMs
+      const projectedDueAt = lastAt + cadenceDays * dayMs
+      const { dueAt, deferredUntil } = resolveGroceryPredictionDueAt(
+        value.name,
+        projectedDueAt,
+        predictionDeferrals,
+        analysisNow,
+      )
       const daysUntil = Math.round((dueAt - analysisNow) / dayMs)
       if (daysUntil > 7) return
       results.push({
@@ -903,13 +943,18 @@ export default function GroceryPage() {
         cadenceDays: Math.max(1, Math.round(cadenceDays)),
         dueAt,
         confidence: uniqueTs.length >= 4 ? 'high' : 'medium',
+        deferredUntil,
       })
     })
 
     return results
       .sort((a, b) => a.daysUntil - b.daysUntil || b.dueAt - a.dueAt)
       .slice(0, 8)
-  }, [activeNameSet, analysisNow, historyRows])
+  }, [activeNameSet, analysisNow, historyRows, predictionDeferrals])
+
+  const activePredictionDeferralCount = useMemo(() => {
+    return Object.values(predictionDeferrals).filter((entry) => Date.parse(entry.deferred_until) > analysisNow).length
+  }, [analysisNow, predictionDeferrals])
 
   const cookStepTimerOptions = useMemo(() => {
     if (!cookView) return []
@@ -934,6 +979,55 @@ export default function GroceryPage() {
     }
     return byRecipe
   }, [recipeMealPlans])
+
+  const persistPredictionDeferrals = useCallback(async (nextDeferrals: GroceryPredictionDeferrals) => {
+    const nowIso = new Date().toISOString()
+    const sanitized = sanitizeGroceryPredictionDeferrals(nextDeferrals, Date.now())
+    const { error } = await supabase.from('settings').upsert(
+      {
+        key: GROCERY_PREDICTION_DEFERRALS_SETTING_KEY,
+        value: sanitized,
+        updated_at: nowIso,
+      },
+      { onConflict: 'key' },
+    )
+    if (error) throw error
+    await refetchPredictionDeferrals()
+  }, [refetchPredictionDeferrals])
+
+  const deferPantryPrediction = useCallback(async (itemName: string, daysToPush: number, mode: 'push' | 'dismiss') => {
+    const normalizedName = normalizeItemName(itemName)
+    if (!normalizedName) return
+    setPredictionDeferralError(null)
+    try {
+      const currentDeferredUntil = predictionDeferrals[normalizedName]?.deferred_until ?? null
+      const nextDeferredUntil = buildGroceryPredictionDeferredUntil(currentDeferredUntil, Date.now(), daysToPush)
+      const nextDeferrals: GroceryPredictionDeferrals = {
+        ...predictionDeferrals,
+        [normalizedName]: {
+          name: itemName.trim() || predictionDeferrals[normalizedName]?.name || itemName,
+          deferred_until: nextDeferredUntil,
+          updated_at: new Date().toISOString(),
+        },
+      }
+      await persistPredictionDeferrals(nextDeferrals)
+      setPredictionDeferralMessage(
+        `${mode === 'dismiss' ? 'Dismissed' : 'Pushed'} ${itemName} until ${new Date(nextDeferredUntil).toLocaleDateString([], { month: 'short', day: 'numeric' })}.`,
+      )
+    } catch (error) {
+      setPredictionDeferralError(formatSupabaseError(error, 'Could not defer pantry prediction'))
+    }
+  }, [persistPredictionDeferrals, predictionDeferrals])
+
+  const clearPantryPredictionDeferrals = useCallback(async () => {
+    setPredictionDeferralError(null)
+    try {
+      await persistPredictionDeferrals({})
+      setPredictionDeferralMessage('Deferred pantry predictions are visible again.')
+    } catch (error) {
+      setPredictionDeferralError(formatSupabaseError(error, 'Could not reset deferred pantry predictions'))
+    }
+  }, [persistPredictionDeferrals])
 
   const spotlightItem = useCallback((itemId: string) => {
     setSpotlightedItemId(itemId)
@@ -2005,6 +2099,7 @@ export default function GroceryPage() {
     || SMART_BUNDLES.length > 0
     || weeklyAutoListCandidates.length > 0
     || pantryDepletionPredictions.length > 0
+    || activePredictionDeferralCount > 0
   )
   const totalTrackedItems = checkedCount + uncheckedCount
   const checkedProgressPercent = totalTrackedItems > 0 ? Math.round((checkedCount / totalTrackedItems) * 100) : 0
@@ -2102,6 +2197,12 @@ export default function GroceryPage() {
         )}
         {!pantryReconcileError && pantryReconcileMessage && (
           <p className="pb-3 text-[11px] text-casa-muted">{pantryReconcileMessage}</p>
+        )}
+        {predictionDeferralError && (
+          <p className="pb-3 text-[11px] text-red-600">Prediction deferral error: {predictionDeferralError}</p>
+        )}
+        {!predictionDeferralError && predictionDeferralMessage && (
+          <p className="pb-3 text-[11px] text-casa-muted">{predictionDeferralMessage}</p>
         )}
         {pantryReconcileDraft && (
           <div className="pb-3">
@@ -2464,11 +2565,22 @@ export default function GroceryPage() {
                     </div>
                   )}
 
-                  {pantryDepletionPredictions.length > 0 && (
+                  {(pantryDepletionPredictions.length > 0 || activePredictionDeferralCount > 0) && (
                     <div className="rounded-2xl border border-casa-border bg-casa-surface p-4">
-                      <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-casa-muted">
-                        Pantry depletion predictions
-                      </p>
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-casa-muted">
+                          Pantry depletion predictions
+                        </p>
+                        {activePredictionDeferralCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => void clearPantryPredictionDeferrals()}
+                            className="rounded-full border border-casa-border px-2.5 py-1 text-[10px] font-semibold text-casa-muted transition-colors hover:bg-casa-main"
+                          >
+                            Show deferred ({activePredictionDeferralCount})
+                          </button>
+                        )}
+                      </div>
                       <div className="space-y-1.5">
                         {pantryDepletionPredictions.slice(0, 4).map((prediction) => {
                           const visual = getDepletionVisual(prediction.daysUntil)
@@ -2500,17 +2612,44 @@ export default function GroceryPage() {
                               >
                                 {visual.dueLabel}
                               </span>
-                              <button
-                                type="button"
-                                onClick={() => addItemByName(prediction.name, { spotlightOnDuplicate: true, clearInput: true })}
-                                className="rounded-full border border-casa-border px-3 py-1.5 text-[11px] font-semibold text-casa-navy transition-colors hover:bg-casa-main"
-                              >
-                                Add
-                              </button>
+                              <div className="flex shrink-0 items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => void deferPantryPrediction(prediction.name, GROCERY_PREDICTION_PUSH_DAYS, 'push')}
+                                  title={`Push this prediction ${GROCERY_PREDICTION_PUSH_DAYS} days later`}
+                                  className="inline-flex items-center gap-1 rounded-full border border-casa-border px-2.5 py-1.5 text-[10.5px] font-semibold text-casa-muted transition-colors hover:bg-casa-main"
+                                >
+                                  <Clock3 size={11} />
+                                  +{GROCERY_PREDICTION_PUSH_DAYS}d
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void deferPantryPrediction(prediction.name, GROCERY_PREDICTION_DISMISS_DAYS, 'dismiss')}
+                                  title={`Dismiss this prediction for ${GROCERY_PREDICTION_DISMISS_DAYS} days`}
+                                  className="rounded-full border border-casa-border px-2.5 py-1.5 text-[10.5px] font-semibold text-casa-muted transition-colors hover:bg-casa-main"
+                                >
+                                  {Math.round(GROCERY_PREDICTION_DISMISS_DAYS / 7)}w
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => addItemByName(prediction.name, { spotlightOnDuplicate: true, clearInput: true })}
+                                  className="rounded-full border border-casa-border px-3 py-1.5 text-[11px] font-semibold text-casa-navy transition-colors hover:bg-casa-main"
+                                >
+                                  Add
+                                </button>
+                              </div>
                             </div>
                           )
                         })}
+                        {pantryDepletionPredictions.length === 0 && activePredictionDeferralCount > 0 && (
+                          <p className="px-1 py-2 text-[11px] text-casa-muted">
+                            Predictions are currently deferred. Use “Show deferred” to bring them back now.
+                          </p>
+                        )}
                       </div>
+                      <p className="mt-2 text-[10.5px] text-casa-muted">
+                        Push items out a few days or dismiss for two weeks when you still have stock.
+                      </p>
                     </div>
                   )}
 
