@@ -568,6 +568,7 @@ export default function GroceryPage() {
     toggleItem,
     deleteItem,
     updateItemCategory,
+    clearChecked,
   } = useGroceryList()
 
   const { data: historyRows = [] } = useQuery({
@@ -1605,6 +1606,15 @@ export default function GroceryPage() {
     try {
       let cleanSummary = ''
       if (options?.cleanBeforeSync) {
+        const archivedItemCount = items.filter((item) => item.checked && !item.deleted_at).length
+        if (archivedItemCount > 0) {
+          await clearChecked.mutateAsync()
+          setShowCompletedArchive(false)
+          cleanSummary = `Cleared ${archivedItemCount} archived item${archivedItemCount === 1 ? '' : 's'}`
+        } else {
+          cleanSummary = 'Archive already clear'
+        }
+
         const activeItemIds = items
           .filter((item) => !item.checked && !item.deleted_at)
           .map((item) => item.id)
@@ -1633,11 +1643,17 @@ export default function GroceryPage() {
         }
 
         if (totalCorrected === 0) {
-          cleanSummary = totalScanned > 0
+          const cleanupStatus = totalScanned > 0
             ? 'Clean pass: names already looked good (no spelling/case fixes needed)'
             : 'Clean pass: no suspicious names'
+          cleanSummary = cleanSummary
+            ? `${cleanSummary} · ${cleanupStatus}`
+            : cleanupStatus
         } else {
-          cleanSummary = `Cleaned ${totalCorrected} name${totalCorrected === 1 ? '' : 's'} · Enhanced ${totalEnhanced} item${totalEnhanced === 1 ? '' : 's'}`
+          const cleanupStatus = `Cleaned ${totalCorrected} name${totalCorrected === 1 ? '' : 's'} · Enhanced ${totalEnhanced} item${totalEnhanced === 1 ? '' : 's'}`
+          cleanSummary = cleanSummary
+            ? `${cleanSummary} · ${cleanupStatus}`
+            : cleanupStatus
         }
 
         const { data: learningData, error: learningError } = await supabase.functions.invoke('learn-grocery-corrections', {
@@ -1690,7 +1706,7 @@ export default function GroceryPage() {
       syncInFlightRef.current = false
       setSyncing(false)
     }
-  }, [items])
+  }, [clearChecked, items])
 
   const updatePantryReconcileDraftRow = useCallback((itemId: string, packageCount: number) => {
     setPantryReconcileDraft((current) => {
