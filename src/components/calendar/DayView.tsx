@@ -1,251 +1,379 @@
-import { useState, useRef, useCallback } from 'react'
-import { format, isSameDay, parseISO } from 'date-fns'
+import { useState, useCallback, useEffect, useMemo } from 'react'
+import { format, isAfter, isBefore, isSameDay, parseISO } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Clock, MapPin, ChevronRight, Navigation,
+  Clock, MapPin, Navigation,
   Calendar, AlertTriangle, ClipboardList, Bell,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { useWeekEvents } from '../../hooks/useCalendarEvents'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
+import { useLiveClock } from '../../hooks/useLiveClock'
+import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { usePrepItems, useDismissPrepItem, useSnoozePrepItem } from '../../hooks/usePrepItems'
 import { useWeekConflicts, useResolveConflict } from '../../hooks/useConflicts'
 import EventDetailPanel from './EventDetailPanel'
-import EventEditSheet from './EventEditSheet'
-import EventContextMenu from '../shared/EventContextMenu'
 import { WeatherIcon } from '../shared/WeatherIcon'
+import { LeaveByCard } from '../shared/LeaveByCard'
 import { differenceInDays } from 'date-fns'
-import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, isAllDayReminder, isTimedReminder, REMINDER_COLOR } from '../../utils/holidays'
+import { isHoliday, isReminder, isTimedReminder } from '../../utils/holidays'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import BounceScroll from '../shared/BounceScroll'
-import { eventOverlapsDay } from '../../utils/eventTime'
+import { eventOverlapsDay, getEventEndDate, getEventStartDate } from '../../utils/eventTime'
+import {
+  getPersistedPlanOverrides,
+  resolveEventMode,
+} from '../../lib/eventPlanOverrides'
+import { derivePlan, type DerivedPerson } from '../../lib/eventCommandCenter'
+import type { FamilyMember } from '../../types'
 
-const SHARED_COLOR = '#C9A96E'
+const SHARED_GOLD = '#C9A96E'
 
-function getPrimaryColor(event: EventWithDetails): string {
-  if (!event.members?.length || event.members.length >= 5) return SHARED_COLOR
-  const primary = event.members.find(m => m.role === 'primary') ?? event.members[0]
-  return primary.family_member?.color_hex || SHARED_COLOR
+function cleanEventTitle(title: string): string {
+  const pipeIdx = title.indexOf(' | ')
+  return pipeIdx !== -1 ? title.slice(pipeIdx + 3) : title
 }
 
-function formatTime(iso: string) {
-  return format(parseISO(iso), 'h:mm a')
+function eventColor(ev: EventWithDetails): string {
+  if (!ev.members || ev.members.length === 0) return SHARED_GOLD
+  if (ev.members.length >= 4) return SHARED_GOLD
+  return ev.members[0].family_member?.color_hex ?? SHARED_GOLD
 }
 
-// ── Event card (stacked, not time-distributed) ─────────────────────
+function fallbackResponsiblePerson(event: EventWithDetails): DerivedPerson | null {
+  const fallbackMember = event.members.find((m) => m.role === 'primary')?.family_member
+    ?? event.members[0]?.family_member
+    ?? null
+  if (!fallbackMember) return null
+  return {
+    id: fallbackMember.id,
+    name: fallbackMember.name,
+    initial: fallbackMember.name?.[0]?.toUpperCase() ?? '?',
+    color: fallbackMember.color_hex ?? SHARED_GOLD,
+    role: fallbackMember.role,
+  }
+}
+
+function toDerivedPersonFromMember(member: FamilyMember | undefined | null): DerivedPerson | null {
+  if (!member) return null
+  return {
+    id: member.id,
+    name: member.name,
+    initial: member.name?.[0]?.toUpperCase() ?? '?',
+    color: member.color_hex ?? SHARED_GOLD,
+    role: member.role,
+  }
+}
+
+function applyPersistedDriverOverrides(
+  event: EventWithDetails,
+  legs: ReturnType<typeof derivePlan>['legs'],
+  household: FamilyMember[],
+  driverOverrides: Record<number, string>,
+  waitsOverride: boolean | null,
+) {
+  const attendeeById = new Map(event.members.map((m) => [m.family_member.id, m.family_member]))
+  const householdById = new Map(household.map((m) => [m.id, m]))
+  const withDriverOverrides = legs.map((leg, index) => {
+    const overrideDriverId = driverOverrides[index]
+    if (!overrideDriverId || !leg.driver) return leg
+    const familyMember = attendeeById.get(overrideDriverId) ?? householdById.get(overrideDriverId)
+    const overrideDriver = toDerivedPersonFromMember(familyMember)
+    return overrideDriver ? { ...leg, driver: overrideDriver } : leg
+  })
+  const waits = waitsOverride ?? Boolean(withDriverOverrides.find((leg) => leg.kind === 'stay')?.waits)
+  return withDriverOverrides.map((leg) => {
+    if (leg.kind !== 'stay') return leg
+    if (!waits) return { ...leg, waits: false }
+    const driveLeg = withDriverOverrides.find((item) => item.kind === 'drop' || item.kind === 'depart')
+    return { ...leg, waits: true, title: `${driveLeg?.driver?.name ?? 'Driver'} waits on site` }
+  })
+}
+
+function deriveHomeCardResponsibility(event: EventWithDetails, mode: ReturnType<typeof resolveEventMode>, household: FamilyMember[]) {
+  const plan = derivePlan(event, mode, { household })
+  const persisted = getPersistedPlanOverrides(event)
+  const effectiveLegs = applyPersistedDriverOverrides(event, plan.legs, household, persisted.driverOverrides ?? {}, persisted.waits ?? null)
+  const transportLeg = effectiveLegs.find((leg) => leg.kind === 'drop' || leg.kind === 'depart' || leg.kind === 'pickup' || leg.kind === 'return')
+  const firstDriverLeg = transportLeg ?? effectiveLegs.find((leg) => leg.driver)
+  const responsible = firstDriverLeg?.driver ?? fallbackResponsiblePerson(event)
+  const attendees = (() => {
+    if (!responsible) return event.members
+    const withoutResponsible = event.members.filter((m) => m.family_member.id !== responsible.id)
+    return withoutResponsible.length > 0 ? withoutResponsible : event.members
+  })()
+  const name = responsible?.name ?? (mode === 'hosted' ? 'Caregiver' : 'Driver')
+  const stayLeg = effectiveLegs.find((leg) => leg.kind === 'stay')
+  const hasDropOrDepart = effectiveLegs.some((leg) => leg.kind === 'drop' || leg.kind === 'depart')
+  const hasPickupOrReturn = effectiveLegs.some((leg) => leg.kind === 'pickup' || leg.kind === 'return')
+  const summary = mode === 'hosted'
+    ? `${name} supervising`
+    : stayLeg?.waits
+      ? `${name} drives & stays`
+      : hasDropOrDepart && hasPickupOrReturn
+        ? `${name} drives`
+        : hasDropOrDepart
+          ? `${name} drops off`
+          : hasPickupOrReturn
+            ? `${name} picks up`
+            : `${name} drives`
+  return {
+    responsible,
+    attendees,
+    summary,
+    roleBadge: mode === 'hosted' ? 'supervise' as const : 'drive' as const,
+  }
+}
+
+// ── Day event card (matched to Home timeline cards) ─────────────────
 
 function DayEventCard({
   event,
-  selected,
-  onSelect,
-  onEdit,
-  onLongPress,
+  now,
+  index,
+  household,
+  onOpen,
+  onComplete,
 }: {
   event: EventWithDetails
-  selected: boolean
-  onSelect: () => void
-  onEdit: () => void
-  onLongPress: (event: EventWithDetails, x: number, y: number) => void
+  now: Date
+  index: number
+  household: FamilyMember[]
+  onOpen: () => void
+  onComplete?: (id: string) => void
 }) {
-  const holiday = isHoliday(event)
-  const reminder = !holiday && isReminder(event)
-  const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(event)
-  const enr = event.enrichment
-  const d = new Date(event.start_time)
-  const isAllDay = event.all_day || holiday || isAllDayReminder(event) || !event.start_time.includes('T') ||
-    (d.getHours() === 0 && d.getMinutes() === 0 && event.end_time && (() => { const e = new Date(event.end_time!); return e.getHours() === 23 && e.getMinutes() === 59 })())
+  const start = getEventStartDate(event)
+  const end = getEventEndDate(event)
+  const past = isBefore(end, now)
+  const happening = isBefore(start, now) && isAfter(end, now)
+  const color = eventColor(event)
+  const timed = isTimedReminder(event)
+  const mode = resolveEventMode(event)
+  const isHosted = mode === 'hosted'
 
-  const primary = event.members.find(m => m.role === 'primary')
-  const otherMembers = event.members.filter(m => m.role !== 'primary')
-  const pipeIdx = event.title.indexOf(' | ')
-  const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
+  const [checking, setChecking] = useState(false)
+  const [overrideVersion, setOverrideVersion] = useState(0)
+  const cleanTitle = cleanEventTitle(event.title)
 
-  // Long-press detection
-  const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lpOrigin = useRef<{ x: number; y: number } | null>(null)
-  const handleTouchStart = (e: React.TouchEvent) => {
-    const t = e.touches[0]
-    lpOrigin.current = { x: t.clientX, y: t.clientY }
-    lpTimer.current = setTimeout(() => {
-      lpTimer.current = null
-      if (!lpOrigin.current) return
-      navigator.vibrate?.(30)
-      onLongPress(event, lpOrigin.current.x, lpOrigin.current.y)
-      lpOrigin.current = null
-    }, 500)
-  }
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!lpTimer.current || !lpOrigin.current) return
-    const t = e.touches[0]
-    if (Math.hypot(t.clientX - lpOrigin.current.x, t.clientY - lpOrigin.current.y) > 10) {
-      clearTimeout(lpTimer.current); lpTimer.current = null; lpOrigin.current = null
+  useEffect(() => {
+    function handleOverridesUpdated(e: Event) {
+      const detail = (e as CustomEvent<{ eventId?: string }>).detail
+      if (!detail?.eventId || detail.eventId === event.id) {
+        setOverrideVersion((v) => v + 1)
+      }
     }
-  }
-  const handleTouchEnd = () => {
-    if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null }
-    lpOrigin.current = null
-  }
+    window.addEventListener('casa:overrides-updated', handleOverridesUpdated)
+    return () => window.removeEventListener('casa:overrides-updated', handleOverridesUpdated)
+  }, [event.id])
 
-  if (holiday) {
-    return (
-      <motion.div
-        layout
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -4 }}
-        transition={{ duration: 0.18 }}
-        className="flex items-center gap-3 px-4 py-2.5 rounded-card border border-red-200 bg-red-50 text-red-800"
-        style={{ borderLeftColor: HOLIDAY_COLOR, borderLeftWidth: 4 }}
-      >
-        <span className="font-display text-heading leading-none">{holidayLabel(event.title).split(' ')[0]}</span>
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-body-sm text-red-800 leading-snug">{event.title}</p>
-          <p className="text-caption font-semibold text-red-400 uppercase tracking-wide mt-0.5">Federal Holiday</p>
-        </div>
-        <span className="text-caption font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600 shrink-0">
-          All day
-        </span>
-      </motion.div>
-    )
-  }
+  const responsibility = useMemo(
+    () => deriveHomeCardResponsibility(event, mode, household),
+    [event, household, mode, overrideVersion],
+  )
+  const showLiveLeaveBy = !event.all_day && !happening && !isHosted && Boolean(event.address || event.location_name)
+  const showFallbackLeaveBy = !event.all_day && !happening && !isHosted && !(event.address || event.location_name) && Boolean(event.enrichment?.departure_time)
+  const fallbackDepartureAt = event.enrichment?.departure_time ? new Date(event.enrichment.departure_time) : null
 
-  if (reminder) {
-    const timed = isTimedReminder(event)
-    if (timed) {
-      // Slim pill for timed reminders in the timeline
-      return (
-        <motion.div
-          layout
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -4 }}
-          transition={{ duration: 0.18 }}
-          onClick={e => { e.stopPropagation(); onSelect() }}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer hover:opacity-80 transition-opacity"
-          style={{ border: '1.5px solid #C4893A', backgroundColor: '#FDFAF4' }}
-        >
-          <Bell size={13} style={{ color: '#C4893A' }} className="shrink-0" />
-          <span className="text-caption font-semibold" style={{ color: '#7A5520' }}>{event.title}</span>
-          <span className="text-caption ml-1" style={{ color: '#C4893A' }}>
-            {format(new Date(event.start_time), 'h:mm a')}
-          </span>
-        </motion.div>
-      )
+  if (timed) {
+    async function handleCheck(e: React.MouseEvent) {
+      e.stopPropagation()
+      if (checking || !onComplete) return
+      setChecking(true)
+      await new Promise((r) => setTimeout(r, 320))
+      onComplete(event.id)
     }
     return (
-      <motion.div
+      <motion.li
         layout
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -4 }}
-        transition={{ duration: 0.18 }}
-        onClick={e => { e.stopPropagation(); onSelect() }}
-        className="flex items-center gap-3 px-4 py-2.5 rounded-card border border-amber-200 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors"
-        style={{ borderLeftColor: REMINDER_COLOR, borderLeftWidth: 4 }}
+        initial={{ opacity: 0, x: -8 }}
+        animate={{ opacity: past ? 0.4 : 1, x: 0 }}
+        exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
+        transition={{ duration: 0.3, delay: index * 0.04 }}
+        className="cursor-pointer list-none"
+        onClick={(e) => { e.stopPropagation(); onOpen() }}
       >
-        <Bell size={18} className="text-casa-gold shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-body-sm text-amber-800 leading-snug">{cleanTitle}</p>
-          {primary && <p className="text-caption text-amber-600 mt-0.5">{primary.family_member?.name}</p>}
+        <div className="relative w-full overflow-hidden rounded-card border border-casa-accent-soft-border bg-casa-accent-subtle px-4 py-2.5">
+          <span className="absolute left-0 top-0 bottom-0 w-[8px] rounded-l-card bg-casa-warning" />
+          <div className="flex items-center gap-2 pl-1 text-caption font-semibold text-casa-top-pick-band">
+            <button
+              onClick={handleCheck}
+              className={`shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                checking ? 'bg-green-500 border-green-500' : 'border-casa-accent-soft-border hover:border-casa-success bg-transparent'
+              }`}
+              title="Mark done"
+            >
+              {checking && (
+                <svg width="8" height="6" viewBox="0 0 9 7" fill="none">
+                  <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </button>
+            <Bell size={13} className="shrink-0 text-casa-warning" />
+            <span className="text-casa-muted tabular-nums">
+              {format(start, 'h:mm a')}
+            </span>
+            <span className={cn(checking && 'line-through opacity-50')}>{event.title}</span>
+            {event.members.length > 0 && (
+              <div className="flex gap-1 ml-0.5">
+                {event.members.slice(0, 3).map((m) => (
+                  <span
+                    key={m.id}
+                    className="px-1.5 py-0.5 rounded-pill text-white text-[9px] font-bold leading-none whitespace-nowrap"
+                    style={{ backgroundColor: m.family_member?.color_hex ?? SHARED_GOLD }}
+                  >
+                    {m.family_member?.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-        <span className="text-caption font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 shrink-0">
-          Reminder
-        </span>
-      </motion.div>
+      </motion.li>
     )
   }
 
   return (
-    <motion.div
+    <motion.li
       layout
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -4 }}
-      transition={{ duration: 0.18 }}
-      onClick={e => { e.stopPropagation(); onSelect() }}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      className={cn(
-        'group relative flex gap-3 px-4 py-3.5 rounded-card border cursor-pointer transition-all touch-pan-y',
-        'bg-casa-surface border-casa-border hover:shadow-card',
-        selected && 'shadow-card-hover border-l-4',
-      )}
-      style={selected ? { borderLeftColor: color } : {}}
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: past ? 0.45 : 1, x: 0 }}
+      transition={{ duration: 0.3, delay: index * 0.04 }}
+      className="cursor-pointer list-none"
+      onClick={(e) => { e.stopPropagation(); onOpen() }}
     >
-      {/* Color strip */}
-      <div className="w-1 rounded-full shrink-0 self-stretch" style={{ background: color }} />
-
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <p className="font-semibold text-body-sm text-casa-text leading-snug">{cleanTitle}</p>
-          {!isAllDay && (
-            <span className="flex items-center gap-1 text-caption text-casa-muted shrink-0 tabular-nums">
-              {formatTime(event.start_time)}
-              {event.end_time ? ` – ${formatTime(event.end_time)}` : ''}
-              {event.location_name && (
-                <WeatherIcon condition={enr?.weather_at_event} size={12} />
+      <div className="relative w-full min-w-0 overflow-hidden bg-casa-surface rounded-card border border-casa-border px-4 py-3 shadow-card">
+        <span
+          className={cn('absolute left-0 top-0 bottom-0 w-[12px] rounded-l-card', happening && 'animate-pulse-gold')}
+          style={{ backgroundColor: color }}
+        />
+        <div className="flex items-start gap-3">
+          <div className="relative shrink-0 pl-1 pt-0.5">
+            <span
+              className={cn(
+                'w-12 h-12 rounded-full text-white flex items-center justify-center text-[18px] font-bold shadow-card',
+                responsibility.responsible?.role === 'caregiver' && 'ring-2 ring-casa-gold/55 ring-offset-2 ring-offset-casa-surface',
               )}
-            </span>
-          )}
-          {isAllDay && (
-            <span className="text-caption font-semibold px-2 py-0.5 rounded-full bg-casa-divider text-casa-muted shrink-0">
-              All day
-            </span>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-x-2 gap-y-1 mt-1 items-center">
-          {/* Owner as full pill */}
-          {primary && (
-            <span
-              className="px-2 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
-              style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
+              style={{ backgroundColor: responsibility.responsible?.color ?? 'var(--color-casa-gold)' }}
+              aria-label={responsibility.responsible ? `${responsibility.responsible.name} is responsible` : 'Responsible adult'}
             >
-              {primary.family_member?.name}
+              {responsibility.responsible?.initial ?? '?'}
             </span>
-          )}
-          {/* Other attendees as name pills */}
-          {otherMembers.slice(0, 3).map(m => (
             <span
-              key={m.id}
-              className="px-2 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
-              style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
+              className={cn(
+                'absolute right-[-2px] bottom-[-2px] w-5 h-5 rounded-full border-2 border-casa-surface flex items-center justify-center',
+                responsibility.roleBadge === 'drive' ? 'bg-casa-navy' : 'bg-casa-success-strong',
+              )}
+              aria-label={responsibility.roleBadge === 'drive' ? 'Driving role' : 'Supervising role'}
             >
-              {m.family_member?.name ?? '?'}
+              {responsibility.roleBadge === 'drive' ? <DrivingBadgeIcon /> : <SupervisingBadgeIcon />}
             </span>
-          ))}
-          {event.location_name && (
-            <span className="flex items-center gap-1 text-caption text-casa-muted">
-              <MapPin size={11} />
-              {event.location_name}
-            </span>
-          )}
-          {enr?.departure_time && (
-            <span className="flex items-center gap-1 text-caption text-amber-700 font-medium">
-              <Navigation size={11} />
-              Leave by {format(parseISO(enr.departure_time), 'h:mm a')}
-            </span>
-          )}
-        </div>
+          </div>
 
-        {enr?.prep_notes && (
-          <p className="text-caption text-casa-muted mt-1 line-clamp-2">{enr.prep_notes}</p>
-        )}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-body font-semibold text-casa-text truncate md:overflow-visible md:text-clip md:whitespace-normal">{cleanTitle}</p>
+                <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                  <span className="flex items-center gap-1 text-caption text-casa-muted tabular-nums">
+                    <Clock size={11} className="shrink-0" />
+                    {event.all_day ? 'All day' : `${format(start, 'h:mm a')} – ${format(end, 'h:mm a')}`}
+                    {event.location_name && (
+                      <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
+                    )}
+                  </span>
+                  {event.location_name && (
+                    isHosted ? (
+                      <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-caption text-casa-muted truncate max-w-[180px] md:max-w-none md:overflow-visible md:text-clip md:whitespace-normal">
+                        <MapPin size={11} className="shrink-0 text-casa-error" />
+                        {event.location_name}
+                      </span>
+                    )
+                  )}
+                  {isHosted && !event.location_name && (
+                    <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
+                  )}
+                </div>
+              </div>
+
+              {responsibility.attendees.length > 0 && (
+                <div className="flex items-center gap-1 shrink-0">
+                  {responsibility.attendees.slice(0, 3).map((m) => (
+                    <span
+                      key={m.id}
+                      className="px-2 py-0.5 rounded-pill text-white text-caption font-bold leading-none whitespace-nowrap"
+                      style={{ backgroundColor: m.family_member?.color_hex ?? SHARED_GOLD }}
+                    >
+                      {m.family_member?.name}
+                    </span>
+                  ))}
+                  {responsibility.attendees.length > 3 && (
+                    <span className="px-1.5 py-0.5 rounded-pill bg-casa-bg text-casa-muted text-caption font-bold leading-none">
+                      +{responsibility.attendees.length - 3}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className={cn(
+                'text-caption font-semibold',
+                isHosted ? 'text-casa-success-strong' : 'text-casa-gold',
+              )}>
+                {responsibility.summary}
+              </span>
+              {showLiveLeaveBy && (
+                <>
+                  <span className="text-casa-text-faint text-caption">·</span>
+                  <LeaveByCard
+                    destination={event.address ?? event.location_name}
+                    eventStartIso={event.start_time}
+                    compact
+                    className="!text-casa-gold"
+                  />
+                </>
+              )}
+              {showFallbackLeaveBy && (
+                <>
+                  <span className="text-casa-text-faint text-caption">·</span>
+                  <span className="flex items-center gap-1 text-caption font-semibold text-casa-gold">
+                    <Navigation size={11} className="shrink-0" />
+                    {fallbackDepartureAt ? `Leave by ${format(fallbackDepartureAt, 'h:mm a')}` : 'Leave by soon'}
+                    {event.enrichment?.drive_time_mins && ` · ${event.enrichment.drive_time_mins} min`}
+                  </span>
+                </>
+              )}
+            </div>
+
+            {(isHosted || !event.enrichment?.departure_time) && event.enrichment?.prep_notes && (
+              <p className="text-caption text-casa-muted mt-1 line-clamp-1 md:line-clamp-none">{event.enrichment.prep_notes}</p>
+            )}
+          </div>
+        </div>
       </div>
+    </motion.li>
+  )
+}
 
-      {/* Edit on hover */}
-      <button
-        onClick={e => { e.stopPropagation(); onEdit() }}
-        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 self-start mt-0.5 text-casa-muted hover:text-casa-text"
-        title="Edit event"
-      >
-        <ChevronRight size={16} />
-      </button>
-    </motion.div>
+function DrivingBadgeIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="8.5" stroke="white" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="12" cy="12" r="2" stroke="white" strokeWidth="2" />
+      <path d="M12 3.5v6M5.8 16.6l4.1-2.7M18.2 16.6l-4.1-2.7" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function SupervisingBadgeIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 3l7 2.6v5.2c0 4.3-3 7.3-7 8.4-4-1.1-7-4.1-7-8.4V5.6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
 
@@ -393,14 +521,14 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
 
 export default function DayView() {
   const { selectedDate, visibleMembers } = useCalendarStore()
+  const now = useLiveClock(15_000)
+  const { data: family } = useFamilyMembers()
 
   // Use the week that contains the selected date to get events
   const { data: weekEvents } = useWeekEvents(selectedDate)
   const qc = useQueryClient()
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
-  const [editEventId, setEditEventId] = useState<string | null>(null)
-  const [contextMenu, setContextMenu] = useState<{ event: EventWithDetails; x: number; y: number } | null>(null)
 
   const allEvents = (weekEvents ?? []).filter(e =>
     isHoliday(e) || isReminder(e) || visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
@@ -414,20 +542,12 @@ export default function DayView() {
       const bAllDay = Boolean(b.all_day)
       if (aAllDay && !bAllDay) return -1
       if (!aAllDay && bAllDay) return 1
-      return new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+      return getEventStartDate(a).getTime() - getEventStartDate(b).getTime()
     })
 
   const selectedEvent = selectedEventId ? (dayEvents.find(e => e.id === selectedEventId) ?? null) : null
-  const editEvent = editEventId ? (allEvents.find(e => e.id === editEventId) ?? null) : null
-
-  const deleteEvent = useCallback(async (ev: EventWithDetails) => {
-    if (!confirm(`Delete "${ev.title}"?`)) return
-    await supabase.from('events').delete().eq('id', ev.id)
-    qc.invalidateQueries({ queryKey: ['events'] })
-  }, [qc])
-
-  const completeEvent = useCallback(async (ev: EventWithDetails) => {
-    await supabase.from('events').update({ status: 'cancelled' }).eq('id', ev.id)
+  const completeReminder = useCallback(async (id: string) => {
+    await supabase.from('events').update({ status: 'cancelled' }).eq('id', id)
     qc.invalidateQueries({ queryKey: ['events'] })
   }, [qc])
 
@@ -453,39 +573,21 @@ export default function DayView() {
             </div>
           ) : (
             <AnimatePresence initial={false}>
-              <div className="space-y-2.5" onClick={e => e.stopPropagation()}>
-                {dayEvents.map(event => (
+              <ol className="space-y-2" onClick={e => e.stopPropagation()}>
+                {dayEvents.map((event, index) => (
                   <DayEventCard
                     key={event.id}
                     event={event}
-                    selected={selectedEventId === event.id}
-                    onSelect={() => setSelectedEventId(prev => prev === event.id ? null : event.id)}
-                    onEdit={() => setEditEventId(event.id)}
-                    onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
+                    now={now}
+                    index={index}
+                    household={family ?? []}
+                    onOpen={() => setSelectedEventId(event.id)}
+                    onComplete={completeReminder}
                   />
                 ))}
-              </div>
+              </ol>
             </AnimatePresence>
           )}
-
-          {/* Detail panel inline below list */}
-          <AnimatePresence>
-            {selectedEvent && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
-                className="mt-4 overflow-hidden"
-                onClick={e => e.stopPropagation()}
-              >
-                <EventDetailPanel
-                  event={selectedEvent}
-                  onClose={() => setSelectedEventId(null)}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
         </BounceScroll>
       </div>
 
@@ -494,27 +596,12 @@ export default function DayView() {
         <DaySidecar dayEvents={dayEvents} selectedDate={selectedDate} />
       </div>
 
-      {/* Edit sheet */}
-      <AnimatePresence>
-        {editEvent && (
-          <EventEditSheet
-            event={editEvent}
-            open={!!editEventId}
-            onClose={() => setEditEventId(null)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Long-press context menu */}
-      <EventContextMenu
-        event={contextMenu?.event ?? null}
-        x={contextMenu?.x ?? 0}
-        y={contextMenu?.y ?? 0}
-        onClose={() => setContextMenu(null)}
-        onEdit={ev => { setContextMenu(null); setEditEventId(ev.id) }}
-        onDelete={deleteEvent}
-        onComplete={completeEvent}
-      />
+      <div onClick={e => e.stopPropagation()}>
+        <EventDetailPanel
+          event={selectedEvent}
+          onClose={() => setSelectedEventId(null)}
+        />
+      </div>
     </div>
   )
 }
