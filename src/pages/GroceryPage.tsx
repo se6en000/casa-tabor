@@ -31,6 +31,12 @@ const SYNC_LAST_AT_KEY = 'grocery-sync-last-at-v1'
 const SYNC_LAST_SUMMARY_KEY = 'grocery-sync-last-summary-v1'
 const GROCERY_PREDICTION_DEFERRALS_SETTING_KEY = 'grocery_prediction_deferrals'
 const AUTO_SYNC_INTERVAL_MS = 45_000
+// Dedupe is a full-table scan + write. It only needs to catch duplicates
+// introduced by adds/imports/iOS merges, not run on every 45s sync tick.
+// Throttle background dedupe to at most once per this interval; the manual
+// "Clean + Sync" button still forces a dedupe pass regardless.
+const DEDUPE_MIN_INTERVAL_MS = 10 * 60_000
+const SYNC_LAST_DEDUPE_AT_KEY = 'grocery-sync-last-dedupe-at-v1'
 const CLEAN_SYNC_BATCH_SIZE = 60
 const QUICK_ADD_TOUCH_ITEMS = ['Milk', 'Eggs', 'Bread', 'Bananas', 'Chicken', 'Coffee']
 const CHECKED_ITEM_DISMISS_MS = 3_000
@@ -1773,11 +1779,21 @@ export default function GroceryPage() {
         }
       }
 
-      const { data: dedupeData, error: dedupeError } = await supabase.functions.invoke('dedupe-grocery-items', {
-        body: { dry_run: false },
-      })
-      if (dedupeError) throw dedupeError
-      const dedupedRows = Number(dedupeData?.duplicate_rows ?? 0)
+      const lastDedupeAtRaw = Number(localStorage.getItem(SYNC_LAST_DEDUPE_AT_KEY) ?? 0)
+      const shouldDedupe =
+        Boolean(options?.cleanBeforeSync) ||
+        !Number.isFinite(lastDedupeAtRaw) ||
+        Date.now() - lastDedupeAtRaw >= DEDUPE_MIN_INTERVAL_MS
+
+      let dedupedRows = 0
+      if (shouldDedupe) {
+        const { data: dedupeData, error: dedupeError } = await supabase.functions.invoke('dedupe-grocery-items', {
+          body: { dry_run: false },
+        })
+        if (dedupeError) throw dedupeError
+        dedupedRows = Number(dedupeData?.duplicate_rows ?? 0)
+        localStorage.setItem(SYNC_LAST_DEDUPE_AT_KEY, String(Date.now()))
+      }
 
       const since = localStorage.getItem(SYNC_CURSOR_KEY)
       const { data, error } = await supabase.functions.invoke('sync-casa-to-ios', {
