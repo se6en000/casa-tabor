@@ -4326,7 +4326,7 @@ export default function CookPage() {
           onClick={() => setCookRecipeId(null)}
         >
           <div
-            className="w-[min(64rem,calc(100vw-2rem))] my-auto max-h-[calc(100vh-2rem)] rounded-modal border border-casa-border bg-casa-surface shadow-modal flex flex-col overflow-hidden"
+            className="w-[min(64rem,calc(100vw-2rem))] my-auto max-h-[calc(100vh-2rem)] rounded-modal border border-casa-border bg-casa-bg shadow-modal flex flex-col overflow-hidden"
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
