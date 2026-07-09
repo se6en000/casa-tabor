@@ -722,16 +722,22 @@ function HeroCarousel({
 
   // Measure the viewport so the filmstrip track can translate by exact pixels
   // (finger-accurate drag + neighbor peek) and rebuild constraints on resize.
-  const viewportRef = useRef<HTMLDivElement>(null)
+  // MUST use a callback ref, not useEffect([]): HeroCarousel returns null on the
+  // first render(s) while events load async, so a mount-only effect would run
+  // before the node exists and never re-attach — leaving viewportWidth at 0,
+  // which silently disables drag and freezes the track (the "nothing happens" bug).
   const [viewportWidth, setViewportWidth] = useState(0)
-  useEffect(() => {
-    const el = viewportRef.current
+  const roRef = useRef<ResizeObserver | null>(null)
+  const setViewportEl = useCallback((el: HTMLDivElement | null) => {
+    if (roRef.current) {
+      roRef.current.disconnect()
+      roRef.current = null
+    }
     if (!el) return
-    const measure = () => setViewportWidth(el.offsetWidth)
-    measure()
-    const ro = new ResizeObserver(measure)
+    setViewportWidth(el.offsetWidth)
+    const ro = new ResizeObserver(() => setViewportWidth(el.offsetWidth))
     ro.observe(el)
-    return () => ro.disconnect()
+    roRef.current = ro
   }, [])
 
   // Drag and the index-driven slide must share ONE x so they don't fight: framer
@@ -793,7 +799,7 @@ function HeroCarousel({
           flex track's stretch equalizes every card to the tallest → the timeline
           below never jumps). Track translates by the measured viewport width so a
           drag follows the finger and reveals the neighbor card's edge. */}
-      <div ref={viewportRef} className="overflow-hidden">
+      <div ref={setViewportEl} className="overflow-hidden">
         <motion.div
           className="flex items-stretch"
           data-native-drag
