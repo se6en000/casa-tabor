@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '../utils/cn'
 import { useGroceryList, GROCERY_CATEGORIES, type GroceryItem } from '../hooks/useGroceryList'
+import GroceryQuickAddSheet from '../components/shared/GroceryQuickAddSheet'
 import { inferCategoryFromName } from '../utils/groceryCategorization'
 import { normalizeRecipeIngredientFields } from '../utils/recipeIngredientParsing'
 import { supabase } from '../lib/supabase'
@@ -750,6 +751,7 @@ export default function GroceryPage() {
   const [inputValue, setInputValue] = useState('')
   const [groceryViewMode, setGroceryViewMode] = useState<'manage' | 'smart'>('manage')
   const [isAddPanelOpen, setIsAddPanelOpen] = useState(false)
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false)
   const [addPanelMode, setAddPanelMode] = useState<'quick' | 'recipe' | 'library'>('quick')
   const [recipeImportStep, setRecipeImportStep] = useState<1 | 2 | 3>(1)
   const [recipeUrlInput, setRecipeUrlInput] = useState('')
@@ -3395,13 +3397,26 @@ export default function GroceryPage() {
       )}
       <button
         type="button"
-        onClick={() => setIsAddPanelOpen((current) => !current)}
+        onClick={() => setIsQuickAddOpen(true)}
         className="fixed right-5 bottom-[calc(var(--spacing-nav-height)+1rem+var(--vk-height,0px)+var(--vk-gap,0px))] lg:bottom-[calc(1.5rem+var(--vk-height,0px)+var(--vk-gap,0px))] z-[60] w-14 h-14 rounded-full bg-casa-gold text-casa-navy font-semibold border border-casa-gold/50 shadow-[0_1px_0_rgba(255,255,255,0.25)_inset] flex items-center justify-center hover:brightness-110 transition-all"
-        aria-label={isAddPanelOpen ? 'Close add panel' : 'Open add panel'}
-        title={isAddPanelOpen ? 'Close add panel' : 'Add items'}
+        aria-label="Quick add grocery item"
+        title="Quick add"
       >
-        {isAddPanelOpen ? <X size={22} /> : <Plus size={24} />}
+        <Plus size={24} />
       </button>
+      <GroceryQuickAddSheet
+        open={isQuickAddOpen}
+        onClose={() => setIsQuickAddOpen(false)}
+        items={items}
+        defaultListId={defaultListId}
+        addItem={addItem}
+        deleteItem={deleteItem}
+        onOpenMore={() => {
+          setAddPanelMode('recipe')
+          if (!parsedRecipe) setRecipeImportStep(1)
+          setIsAddPanelOpen(true)
+        }}
+      />
       {cookView && (
         <div className="fixed inset-0 z-[70] bg-casa-navy/30">
           <div className="absolute right-4 top-4 bottom-4 w-[min(38rem,calc(100vw-2rem))] rounded-2xl border border-casa-border bg-casa-surface shadow-modal flex flex-col">
