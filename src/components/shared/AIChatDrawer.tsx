@@ -446,6 +446,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     [open, events],
   )
 
+  const dynamicSuggestions = useMemo(
+    () => buildDynamicSuggestions(page, events, new Date()),
+    [page, events],
+  )
+
   const pendingConfirmRef = useRef<(() => Promise<boolean>) | null>(null)
   const pendingCancelRef  = useRef<(() => Promise<boolean>) | null>(null)
   const pendingLowConfidenceRef = useRef<{ transcript: string; confidence: number } | null>(null)
@@ -998,7 +1003,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                     </div>
                   )}
                   <div className="flex flex-wrap justify-center gap-2 mt-1">
-                    {SUGGESTIONS[page]?.map(s => (
+                    {dynamicSuggestions.map(s => (
                       <button
                         key={s}
                         onClick={() => { markUserInteraction(); setInput(s); textareaRef.current?.focus() }}
@@ -1917,4 +1922,34 @@ const SUGGESTIONS: Record<string, string[]> = {
   grocery: ["Add milk and eggs", "What's on the list?", "Clear checked items"],
   cook: ["Plan 4 quick weeknight dinners", "Optimize my meals for budget", "Build grocery list from the plan"],
   app: ["What's next up today?", "Add an event tonight", "What's on the grocery list?"],
+}
+
+/**
+ * Build suggestion chips that reflect the actual current schedule.
+ * Prepends up to one state-derived chip (next event today / tomorrow's load)
+ * to the static per-page list, then caps to keep the empty state tidy.
+ */
+function buildDynamicSuggestions(page: string, events: EventWithDetails[], now: Date): string[] {
+  const base = SUGGESTIONS[page] ?? SUGGESTIONS.app
+  const HOUR = 3600_000
+  const nowMs = now.getTime()
+  const timed = (events ?? [])
+    .filter(e => !e.all_day && e.start_time)
+    .map(e => ({ e, start: new Date(e.start_time).getTime() }))
+    .filter(x => Number.isFinite(x.start) && x.start > nowMs)
+    .sort((a, b) => a.start - b.start)
+
+  if (timed.length === 0) return base
+
+  const next = timed[0]
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).getTime()
+  const dynamic: string[] = []
+  if (next.start <= endOfToday) {
+    dynamic.push(`Prep me for "${next.e.title}"`)
+  } else if (next.start <= nowMs + 36 * HOUR) {
+    dynamic.push(`What's on for "${format(new Date(next.start), 'EEEE')}"?`)
+  }
+
+  const merged = [...dynamic, ...base.filter(s => !dynamic.includes(s))]
+  return merged.slice(0, 4)
 }

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import type { EventWithDetails } from './useCalendarEvents'
 import type { FamilyMember } from '../types'
 import { useAISession, type AIMessage } from './useAISession'
+import { tryLocalScheduleAnswer } from '../lib/scheduleFastPath.mjs'
 
 export type { AIMessage }
 
@@ -155,6 +156,22 @@ export function useAIAssistant(ctx: AssistantContext) {
       // Close the drawer after a brief moment so user sees the farewell message
       setTimeout(() => ctxRef.current.onSessionEnd?.(), 1200)
       return
+    }
+
+    // Deterministic fast-path: answer common read-only schedule questions instantly
+    // from local state, skipping the LLM round-trip. Only fires on unambiguous matches.
+    if (!image) {
+      const fastAnswer = tryLocalScheduleAnswer(text, ctxRef.current.events, new Date())
+      if (fastAnswer) {
+        let fpSession = sessionRef.current
+        if (!fpSession) fpSession = startNewSession()
+        setMessages(prev => {
+          const updated = [...prev, { id: genId(), role: 'user' as const, content: text }, { id: genId(), role: 'assistant' as const, content: fastAnswer }]
+          if (fpSession) saveMessages(fpSession.id, updated)
+          return updated
+        })
+        return
+      }
     }
 
     const userMsg: AIMessage = { id: genId(), role: 'user', content: text, imageDataUrl: image?.dataUrl }
