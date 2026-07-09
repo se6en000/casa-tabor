@@ -794,32 +794,20 @@ function HeroCarousel({
       </AnimatePresence>
 
       {multi && (
-        <>
+        <div className="flex items-center justify-center gap-3 mt-3">
           <button
             type="button"
             onClick={() => goTo(safeIndex - 1)}
             disabled={safeIndex === 0}
             aria-label="Previous event"
             className={cn(
-              'absolute left-2 top-1/2 -translate-y-1/2 z-20 grid place-items-center h-9 w-9 rounded-full bg-casa-navy/70 text-white/90 backdrop-blur transition-opacity hover:bg-casa-navy/90',
-              safeIndex === 0 ? 'opacity-0 pointer-events-none' : 'opacity-100',
+              'grid place-items-center h-8 w-8 rounded-full bg-casa-navy/10 text-casa-navy transition hover:bg-casa-navy/20',
+              safeIndex === 0 ? 'opacity-30 pointer-events-none' : 'opacity-100',
             )}
           >
-            <ChevronLeft size={20} />
+            <ChevronLeft size={18} />
           </button>
-          <button
-            type="button"
-            onClick={() => goTo(safeIndex + 1)}
-            disabled={safeIndex === slides.length - 1}
-            aria-label="Next event"
-            className={cn(
-              'absolute right-2 top-1/2 -translate-y-1/2 z-20 grid place-items-center h-9 w-9 rounded-full bg-casa-navy/70 text-white/90 backdrop-blur transition-opacity hover:bg-casa-navy/90',
-              safeIndex === slides.length - 1 ? 'opacity-0 pointer-events-none' : 'opacity-100',
-            )}
-          >
-            <ChevronRight size={20} />
-          </button>
-          <div className="flex items-center justify-center gap-1.5 mt-3">
+          <div className="flex items-center gap-1.5">
             {slides.map((s, i) => (
               <button
                 key={s.id}
@@ -834,7 +822,19 @@ function HeroCarousel({
               />
             ))}
           </div>
-        </>
+          <button
+            type="button"
+            onClick={() => goTo(safeIndex + 1)}
+            disabled={safeIndex === slides.length - 1}
+            aria-label="Next event"
+            className={cn(
+              'grid place-items-center h-8 w-8 rounded-full bg-casa-navy/10 text-casa-navy transition hover:bg-casa-navy/20',
+              safeIndex === slides.length - 1 ? 'opacity-30 pointer-events-none' : 'opacity-100',
+            )}
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
       )}
     </div>
   )
