@@ -116,7 +116,23 @@
   --animate-breathe:      breathe 3s ease-in-out infinite;
 }
 
-/* ── Keyframes ─────────────────────────────────────────────────── */
+/* ── Shared modal backdrop dim ─────────────────────────────────────
+   Single source of truth for every "background dim" behind modals and
+   sheets. Matches the calendar Event Detail sheet so all overlays are
+   visually identical. Use the .casa-scrim class, or reference
+   var(--casa-scrim) directly for animated (framer-motion) overlays. */
+:root {
+  --casa-scrim: linear-gradient(
+    180deg,
+    rgba(27, 42, 68, 0.28),
+    rgba(27, 42, 68, 0.12) 45%,
+    rgba(27, 42, 68, 0.06)
+  );
+}
+
+.casa-scrim {
+  background: var(--casa-scrim);
+}
 
 @keyframes fade-in {
   from { opacity: 0; }

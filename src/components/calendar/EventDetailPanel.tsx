@@ -223,7 +223,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
               animate={{ opacity: 1, transition: { duration: 0.26, ease: PANEL_ENTER_EASE } }}
               exit={{ opacity: 0, transition: { duration: 0.18, ease: PANEL_EXIT_EASE } }}
               className="fixed inset-0 z-[54]"
-              style={{ background: 'linear-gradient(180deg,rgba(27,42,68,0.28),rgba(27,42,68,0.12) 45%,rgba(27,42,68,0.06))' }}
+              style={{ background: 'var(--casa-scrim)' }}
               data-panel-overlay
               onClick={onClose}
               onTouchStart={stopTouch}

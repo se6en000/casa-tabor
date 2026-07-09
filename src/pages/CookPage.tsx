@@ -4310,7 +4310,7 @@ export default function CookPage() {
 
       {cookRecipe && (
         <div
-          className="fixed inset-0 z-[70] bg-casa-navy/40 flex items-start justify-center overflow-y-auto p-4 sm:p-6"
+          className="fixed inset-0 z-[70] casa-scrim flex items-start justify-center overflow-y-auto p-4 sm:p-6"
           onClick={() => setCookRecipeId(null)}
         >
           <div
@@ -4358,27 +4358,37 @@ export default function CookPage() {
                 </div>
               </div>
             ) : (
-              <div className="relative h-[150px] flex-shrink-0 overflow-hidden">
+              <div className="relative h-[150px] flex-shrink-0 overflow-hidden bg-casa-navy">
                 <RecipeImage
                   src={getRecipeImage(cookRecipe)}
-                  alt={cookRecipe.name}
+                  alt=""
                   focalX={parseRecipeImageFocus(cookRecipe.image_url).focalX}
                   focalY={parseRecipeImageFocus(cookRecipe.image_url).focalY}
                   loading="eager"
-                  className="absolute inset-0 w-full h-full object-cover"
+                  className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-60"
                 />
                 <div
                   className="absolute inset-0"
-                  style={{ background: 'linear-gradient(to top, rgba(11,31,58,0.88) 0%, rgba(11,31,58,0.35) 52%, rgba(11,31,58,0.45) 100%)' }}
+                  style={{ background: 'linear-gradient(to top, rgba(11,31,58,0.92) 0%, rgba(11,31,58,0.62) 55%, rgba(11,31,58,0.55) 100%)' }}
                   aria-hidden
                 />
-                <div className="absolute inset-x-0 bottom-0 p-4">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-casa-info-soft">
-                    Now cooking
-                  </p>
-                  <p className="mt-0.5 text-white font-semibold text-[20px] leading-tight line-clamp-2 drop-shadow">
-                    {cookRecipe.name}
-                  </p>
+                <div className="absolute inset-0 p-4 flex items-end gap-4">
+                  <RecipeImage
+                    src={getRecipeImage(cookRecipe)}
+                    alt={cookRecipe.name}
+                    focalX={parseRecipeImageFocus(cookRecipe.image_url).focalX}
+                    focalY={parseRecipeImageFocus(cookRecipe.image_url).focalY}
+                    loading="eager"
+                    className="w-[104px] h-[104px] rounded-card object-cover border border-white/25 shadow-card flex-shrink-0 bg-casa-navy"
+                  />
+                  <div className="min-w-0 pb-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-casa-info-soft">
+                      Now cooking
+                    </p>
+                    <p className="mt-0.5 text-white font-semibold text-[20px] leading-tight line-clamp-2 drop-shadow">
+                      {cookRecipe.name}
+                    </p>
+                  </div>
                 </div>
                 <div className="absolute top-3 right-3 flex items-center gap-2">
                   {cookRecipe.source_url && (
