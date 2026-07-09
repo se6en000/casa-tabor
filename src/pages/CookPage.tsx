@@ -4714,7 +4714,7 @@ export default function CookPage() {
                           <span className="text-casa-top-pick-band font-semibold leading-none text-[46px] flex-shrink-0 tabular-nums">
                             {String(stepIndex + 1).padStart(2, '0')}
                           </span>
-                          <p className="text-[24px] text-casa-text leading-snug pt-1">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
+                          <p className="text-[28px] text-casa-text leading-snug pt-1">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
                         </div>
                       ) : (
                         <div className="flex flex-col pr-1">
@@ -4738,7 +4738,7 @@ export default function CookPage() {
                               >
                                 <span
                                   className={cn(
-                                    'flex-none grid place-items-center w-[30px] h-[30px] rounded-pill text-[13.5px] font-bold leading-none border transition-colors',
+                                    'flex-none grid place-items-center w-[32px] h-[32px] rounded-pill text-[14px] font-bold leading-none border transition-colors',
                                     isDone
                                       ? 'bg-casa-info border-casa-info text-white'
                                       : isCurrent
@@ -4756,7 +4756,7 @@ export default function CookPage() {
                                   )}
                                   <p
                                     className={cn(
-                                      'text-body leading-relaxed pt-0.5',
+                                      'text-[17px] leading-relaxed pt-0.5',
                                       isDone ? 'text-casa-text-tertiary' : 'text-casa-navy'
                                     )}
                                   >
@@ -4860,7 +4860,7 @@ export default function CookPage() {
                                 </span>
                                 <span
                                   className={cn(
-                                    'flex-1 font-medium transition-colors',
+                                    'flex-1 font-medium text-[16px] transition-colors',
                                     checked ? 'text-casa-muted line-through' : 'text-casa-text'
                                   )}
                                 >
@@ -4869,7 +4869,7 @@ export default function CookPage() {
                                 {row.qty && (
                                   <span
                                     className={cn(
-                                      'whitespace-nowrap rounded-pill border px-2 py-0.5 text-[11px] transition-colors',
+                                      'whitespace-nowrap rounded-pill border px-2 py-0.5 text-[12px] transition-colors',
                                       checked
                                         ? 'border-casa-control-border text-casa-text-faint line-through'
                                         : 'border-casa-control-border bg-casa-surface-subtle text-casa-text-secondary'
