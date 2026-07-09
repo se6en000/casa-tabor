@@ -525,6 +525,8 @@ export default function CookPage() {
   // Session-local mise-en-place check-off (keyed by cookIngredientRows id).
   // Does NOT mutate the recipe or grocery list — cleared when the recipe changes.
   const [checkedCookIngredients, setCheckedCookIngredients] = useState<Set<string>>(new Set())
+  // Auto-scroll target for the currently-active direction step.
+  const currentStepRef = useRef<HTMLElement | null>(null)
   const [photoEditorRecipeId, setPhotoEditorRecipeId] = useState<string | null>(null)
   const [photoEditorName, setPhotoEditorName] = useState('')
   const [photoEditorUrl, setPhotoEditorUrl] = useState('')
@@ -1044,6 +1046,17 @@ export default function CookPage() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [cookRecipeId, isRecipeEditMode, importDialogOpen, photoEditorRecipeId, deleteConfirmRecipe, directionsViewMode, cookSteps.length])
+
+  // Keep the active step in view as it changes (esp. in the all-steps list).
+  useEffect(() => {
+    if (!cookRecipeId || isRecipeEditMode) return
+    const el = currentStepRef.current
+    if (!el) return
+    const id = window.setTimeout(() => {
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }, 0)
+    return () => window.clearTimeout(id)
+  }, [cookRecipeId, isRecipeEditMode, directionsViewMode, stepIndex])
 
   useEffect(() => {
     if (!mealPlannerPlan) {
@@ -4621,8 +4634,8 @@ export default function CookPage() {
                   </div>
                 </>
               ) : (
-                <div className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_17.5rem] gap-3">
-                  <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden order-1 flex-1 min-h-0 flex flex-col">
+                <div className="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_17.5rem] gap-3">
+                  <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden order-1 lg:min-w-0">
                     <div className="px-4 pt-3 pb-2 flex items-start justify-between gap-2">
                       <div>
                         <p className="text-body font-semibold text-casa-navy">Directions</p>
@@ -4704,16 +4717,16 @@ export default function CookPage() {
                         </div>
                       </div>
                     )}
-                    <div className="p-4 flex-1 min-h-0">
+                    <div className="p-4">
                       {directionsViewMode === 'step' ? (
-                        <div className="h-full overflow-y-auto pr-1 flex gap-3">
+                        <div ref={(el) => { currentStepRef.current = el }} className="pr-1 flex gap-3">
                           <span className="text-casa-top-pick-band font-semibold leading-none text-[46px] flex-shrink-0 tabular-nums">
                             {String(stepIndex + 1).padStart(2, '0')}
                           </span>
                           <p className="text-[24px] text-casa-text leading-snug pt-1">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
                         </div>
                       ) : (
-                        <div className="flex flex-col h-full overflow-y-auto pr-1">
+                        <div className="flex flex-col pr-1">
                           {(cookSteps.length > 0 ? cookSteps : [{ step_number: 1, instruction: 'No directions saved for this recipe yet.' }]).map((step, index) => {
                             const isCurrent = cookSteps.length > 0 && index === stepIndex
                             const isDone = cookSteps.length > 0 && index < stepIndex
@@ -4721,11 +4734,12 @@ export default function CookPage() {
                             return (
                               <button
                                 key={`${step.step_number}-${index}`}
+                                ref={isCurrent ? (el) => { currentStepRef.current = el } : undefined}
                                 type="button"
                                 disabled={!canJump}
                                 onClick={() => canJump && setStepIndex(index)}
                                 className={cn(
-                                  'w-full text-left flex gap-3.5 transition-colors',
+                                  'w-full text-left flex gap-3.5 transition-colors scroll-mt-4 scroll-mb-4',
                                   isCurrent
                                     ? 'rounded-card border border-casa-accent-subtle-border bg-casa-accent-subtle p-4 my-1.5'
                                     : 'items-start py-4 px-0.5 border-b border-casa-divider last:border-b-0'
@@ -4779,7 +4793,8 @@ export default function CookPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden order-2 shrink-0 lg:shrink lg:min-h-0 lg:flex lg:flex-col">
+                  <div className="order-2">
+                    <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden lg:sticky lg:top-0">
                     <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-2">
                       <div>
                         <p className="text-body font-semibold text-casa-navy">Ingredients</p>
@@ -4820,11 +4835,11 @@ export default function CookPage() {
                       style={{ backgroundColor: 'var(--color-family-liv)' }}
                       aria-hidden
                     />
-                    <div className="p-4 lg:flex-1 lg:min-h-0">
+                    <div className="p-4">
                       {cookIngredientRows.length === 0 ? (
                         <p className="text-body-sm text-casa-muted">No ingredient breakdown saved for this recipe.</p>
                       ) : (
-                        <div className="space-y-0.5 max-h-28 lg:max-h-none lg:h-full overflow-y-auto pr-1">
+                        <div className="space-y-0.5 max-h-40 lg:max-h-[60vh] overflow-y-auto pr-1">
                           {cookIngredientRows.map((row) => {
                             const checked = checkedCookIngredients.has(row.id)
                             return (
@@ -4877,6 +4892,7 @@ export default function CookPage() {
                           })}
                         </div>
                       )}
+                    </div>
                     </div>
                   </div>
                 </div>
