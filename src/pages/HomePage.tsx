@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { format, isAfter, isBefore, addDays } from 'date-fns'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion'
 import { ChevronLeft, ChevronRight, RefreshCw, MapPin, Clock, Navigation, Bell, Phone } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
@@ -734,6 +734,14 @@ function HeroCarousel({
     return () => ro.disconnect()
   }, [])
 
+  // Drag and the index-driven slide must share ONE x so they don't fight: framer
+  // owns `x` during a drag gesture, and we imperatively spring it to the target
+  // whenever the shown index (or width) changes. Putting x in `animate={{}}` while
+  // also using `drag` re-pins x every render and cancels the gesture — the bug
+  // that made the track feel dead.
+  const x = useMotionValue(0)
+  const hasPositionedRef = useRef(false)
+
   const goTo = useCallback(
     (next: number) => {
       const clamped = Math.max(0, Math.min(slides.length - 1, next))
@@ -745,6 +753,35 @@ function HeroCarousel({
     },
     [slides.length],
   )
+
+  // Spring the shared x to a given slide index. Used both by the index-change
+  // effect and directly on drag end (so a settle back to the SAME index still
+  // animates home instead of freezing where the finger released).
+  const springTo = useCallback(
+    (index: number) => {
+      if (viewportWidth === 0) return
+      const target = -index * viewportWidth
+      if (!hasPositionedRef.current) {
+        hasPositionedRef.current = true
+        x.set(target) // first paint: jump to the resting slide, don't slide in
+        return
+      }
+      return animate(x, target, {
+        type: 'spring',
+        stiffness: 300,
+        damping: 34,
+        mass: 0.9,
+      })
+    },
+    [x, viewportWidth],
+  )
+
+  // Spring to the shown slide whenever the index or width changes (arrow taps,
+  // dot taps, live auto-follow, idle-revert, and resize all route through here).
+  useEffect(() => {
+    const controls = springTo(effectiveIndex)
+    return () => controls?.stop()
+  }, [effectiveIndex, springTo])
 
   if (slides.length === 0) return null
 
@@ -760,23 +797,23 @@ function HeroCarousel({
         <motion.div
           className="flex items-stretch"
           data-native-drag
+          style={{ x }}
           drag={multi && viewportWidth > 0 ? 'x' : false}
           dragConstraints={{ left: -(slides.length - 1) * viewportWidth, right: 0 }}
           dragElastic={0.14}
           dragMomentum={false}
-          animate={{ x: -safeIndex * viewportWidth }}
-          transition={{ type: 'spring', stiffness: 300, damping: 34, mass: 0.9 }}
           onDragEnd={(_e, info) => {
             if (!multi) return
             const threshold = Math.max(60, viewportWidth * 0.18)
             const flung = Math.abs(info.velocity.x) > 520
+            let target = safeIndex
             if ((info.offset.x < -threshold || (flung && info.velocity.x < 0)) && safeIndex < slides.length - 1) {
-              goTo(safeIndex + 1)
+              target = safeIndex + 1
             } else if ((info.offset.x > threshold || (flung && info.velocity.x > 0)) && safeIndex > 0) {
-              goTo(safeIndex - 1)
-            } else {
-              goTo(safeIndex) // settle back to the current slide
+              target = safeIndex - 1
             }
+            springTo(target) // always animate (handles settle back to same index)
+            goTo(target)
           }}
         >
           {slides.map((s) => {
