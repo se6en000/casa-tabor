@@ -187,6 +187,9 @@ Deno.serve(async (req) => {
     { data: groceryLists },
     { data: groceryItems },
     { data: recipes },
+    foodProfileResult,
+    availabilityRulesResult,
+    availabilityExceptionsResult,
   ] = await Promise.all([
     sb.from('settings').select('value').eq('key', 'llm_config').limit(1),
     sb.from('settings').select('value').eq('key', 'home_config').maybeSingle(),
@@ -210,6 +213,9 @@ Deno.serve(async (req) => {
       .order('last_used_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .limit(30),
+    sb.from('settings').select('value').eq('key', 'food_profile').maybeSingle().then(r => r).catch(() => ({ data: null, error: null })),
+    sb.from('member_availability_rules').select('member_id, day_of_week, start_local, end_local, availability_type, reason').then(r => r).catch(() => ({ data: null, error: null })),
+    sb.from('member_availability_exceptions').select('member_id, start_at, end_at, override_type, note').gte('end_at', windowStart.toISOString()).then(r => r).catch(() => ({ data: null, error: null })),
   ])
   const homeConfig = homeConfigResult?.data?.value as { address?: string; city?: string; state?: string; zip?: string } | null
   const homeAddress = [homeConfig?.address, homeConfig?.city, homeConfig?.state, homeConfig?.zip].filter(Boolean).join(', ')
@@ -356,6 +362,53 @@ Deno.serve(async (req) => {
   const recipesText = (recipes ?? []).map((row: { name: string; cook_time?: string | null; servings?: string | null }, idx: number) =>
     `${idx + 1}. ${row.name}${row.cook_time ? ` · ${row.cook_time}` : ''}${row.servings ? ` · serves ${row.servings}` : ''}`
   ).join('\n')
+
+  // ── Food profile (dietary rules, allergies, preferences) ──
+  const foodProfileRaw = (foodProfileResult as { data?: { value?: Record<string, unknown> } } | null)?.data?.value ?? null
+  const foodProfileText = (() => {
+    if (!foodProfileRaw || typeof foodProfileRaw !== 'object') return ''
+    const fp = foodProfileRaw as Record<string, unknown>
+    const lines: string[] = []
+    const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+    if (str(fp.dietaryRules)) lines.push(`- Dietary rules: ${str(fp.dietaryRules)}`)
+    if (str(fp.allergies)) lines.push(`- Allergies (NEVER suggest these): ${str(fp.allergies)}`)
+    if (str(fp.dislikedFoods)) lines.push(`- Disliked foods (avoid): ${str(fp.dislikedFoods)}`)
+    if (str(fp.preferredCuisines)) lines.push(`- Preferred cuisines: ${str(fp.preferredCuisines)}`)
+    if (str(fp.preferredProteins)) lines.push(`- Preferred proteins: ${str(fp.preferredProteins)}`)
+    if (str(fp.pantryStaples)) lines.push(`- Pantry staples on hand: ${str(fp.pantryStaples)}`)
+    if (typeof fp.householdSize === 'number') lines.push(`- Household size: ${fp.householdSize}`)
+    if (typeof fp.weeknightMaxMinutes === 'number') lines.push(`- Weeknight cook-time limit: ${fp.weeknightMaxMinutes} min`)
+    if (typeof fp.weeklyBudgetUsd === 'number') lines.push(`- Weekly grocery budget: $${fp.weeklyBudgetUsd}`)
+    return lines.join('\n')
+  })()
+
+  // ── Member availability (recurring rules + upcoming exceptions) ──
+  const memberNameById = new Map<string, string>()
+  for (const f of (context.family as { id?: string; name: string }[])) {
+    if (f.id) memberNameById.set(f.id, f.name)
+  }
+  const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const availRules = ((availabilityRulesResult as { data?: unknown } | null)?.data as {
+    member_id: string; day_of_week: number; start_local: string; end_local: string; availability_type: string; reason: string | null
+  }[] | null) ?? []
+  const availExceptions = ((availabilityExceptionsResult as { data?: unknown } | null)?.data as {
+    member_id: string; start_at: string; end_at: string; override_type: string; note: string | null
+  }[] | null) ?? []
+  const availabilityText = (() => {
+    const lines: string[] = []
+    for (const r of availRules) {
+      const name = memberNameById.get(r.member_id) ?? 'Someone'
+      const kind = r.availability_type === 'unavailable' ? 'unavailable' : 'available'
+      const day = DOW[r.day_of_week] ?? `day ${r.day_of_week}`
+      lines.push(`- ${name}: ${kind} ${day} ${r.start_local}–${r.end_local}${r.reason ? ` (${r.reason})` : ''}`)
+    }
+    for (const e of availExceptions) {
+      const name = memberNameById.get(e.member_id) ?? 'Someone'
+      const kind = e.override_type === 'manual_available' ? 'available (override)' : e.override_type === 'day_off' ? 'day off' : 'blocked'
+      lines.push(`- ${name}: ${kind} ${toLocal(e.start_at)} → ${toLocal(e.end_at)}${e.note ? ` (${e.note})` : ''}`)
+    }
+    return lines.join('\n')
+  })()
 
   type DbEvent = {
     id: string; title: string; start_time: string; end_time: string; updated_at: string;
@@ -860,6 +913,8 @@ ${defaultListId ? `Default list ID: ${defaultListId}` : ''}
 
 RECIPE LIBRARY SNAPSHOT (recent):
 ${recipesText || 'No recipes saved yet.'}
+${foodProfileText ? `\nFOOD PROFILE (household dietary needs & preferences — honor for all meal/grocery/recipe suggestions):\n${foodProfileText}` : ''}
+${availabilityText ? `\nMEMBER AVAILABILITY (recurring rules + upcoming overrides — use to warn about conflicts and pick times people are free):\n${availabilityText}` : ''}
 
 INSTRUCTIONS:
 - You are allowed to answer general/random questions directly (facts, explanations, ideas, writing help, etc.) when no Casa data/action is needed.
@@ -900,6 +955,8 @@ INSTRUCTIONS:
 - Conflict awareness: warn if a new event overlaps an existing one by >15 min.
 - Prefer edit over create: if a similar event exists at the same time, update it instead of creating a duplicate.
 - Tone: warm, concise (1–3 sentences). Be proactive — flag conflicts, drive-time buffers, busy days.
+- AVAILABILITY AWARENESS: when scheduling or moving events, prefer times when the involved members are available per MEMBER AVAILABILITY, and warn (briefly) if a proposed time lands in someone's unavailable window or an upcoming day-off/block.
+- FOOD PROFILE AWARENESS: for any meal, recipe, or grocery suggestion, respect FOOD PROFILE — never suggest allergens, avoid disliked foods, honor dietary rules, and lean on preferred cuisines/proteins and pantry staples. Do not over-explain; just make good suggestions that fit.
 - For timeless facts and general knowledge (e.g., ages/biographies/math/history), answer directly from model knowledge and simple reasoning. Do not refuse just because live web access is unavailable.
 - For weather questions (including “right now”), call get_weather_forecast first, then answer clearly from tool data.
 - For weather activity decisions ("beach day", "kayaking", "umbrella", "what should I wear"), use get_weather_forecast and give a concrete recommendation.
