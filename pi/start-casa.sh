@@ -59,9 +59,17 @@ xset s off
 xset s noblank
 xset -dpms
 
-# Hide the mouse cursor after 1 second of inactivity (install: sudo apt install unclutter)
-kill $(pgrep -f "unclutter -idle 1 -root" 2>/dev/null) 2>/dev/null
-unclutter -idle 1 -root &
+# Hide the mouse cursor for a tablet-like touch experience.
+# unclutter-xfixes (install: sudo apt install unclutter-xfixes) hides the
+# cursor the instant the touchscreen is touched (--hide-on-touch) and starts
+# hidden, so an arrow only appears if a real USB mouse is moved. Falls back to
+# classic unclutter where xfixes isn't available.
+for pid in $(pgrep -x unclutter 2>/dev/null) $(pgrep -f unclutter-xfixes 2>/dev/null); do kill "$pid" 2>/dev/null || true; done
+if command -v unclutter-xfixes >/dev/null 2>&1; then
+  unclutter-xfixes --timeout 1 --jitter 2 --hide-on-touch --start-hidden --fork >/dev/null 2>&1
+else
+  unclutter -idle 1 -root &
+fi
 
 # Stop external keyboards; Casa now uses an integrated in-app keyboard.
 kill $(pgrep -f "florence" 2>/dev/null) 2>/dev/null

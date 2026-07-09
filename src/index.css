@@ -235,6 +235,18 @@ button, a, [role="button"], label, select {
   }
 }
 
+/* On touch-only panels (the Pi kiosk), never render a cursor at all.        */
+/* `cursor: default` above still paints an arrow; a true touch device should  */
+/* feel like a tablet — no pointer. This is the app-layer safety net that     */
+/* backs up unclutter-xfixes (--hide-on-touch) at the OS layer.               */
+@media (hover: none) and (pointer: coarse) {
+  *,
+  *::before,
+  *::after {
+    cursor: none !important;
+  }
+}
+
 /* ── Active press feedback (replaces hover on touch) ─────────── */
 /* Gives instant visual confirmation when a user taps a button.  */
 button:active, a:active, [role="button"]:active {
