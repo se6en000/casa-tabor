@@ -659,6 +659,11 @@ function heroStatusClasses(tone: HeroStatusTone): string {
 // a slide, short enough that an ignored kiosk always returns to the truth.
 const HERO_IDLE_REVERT_MS = 9000
 
+// Gutter between hero slides. Cards stay full-width/edge-aligned at rest (so they
+// line up with the content below); this gap only reveals as clean page-colored
+// negative space between cards mid-drag, so the seam reads as intentional.
+const HERO_SLIDE_GAP = 20
+
 function HeroCarousel({
   now,
   events,
@@ -766,7 +771,7 @@ function HeroCarousel({
   const springTo = useCallback(
     (index: number) => {
       if (viewportWidth === 0) return
-      const target = -index * viewportWidth
+      const target = -index * (viewportWidth + HERO_SLIDE_GAP)
       if (!hasPositionedRef.current) {
         hasPositionedRef.current = true
         x.set(target) // first paint: jump to the resting slide, don't slide in
@@ -802,10 +807,10 @@ function HeroCarousel({
       <div ref={setViewportEl} className="overflow-hidden">
         <motion.div
           className="flex items-stretch"
+          style={{ x, gap: HERO_SLIDE_GAP }}
           data-native-drag
-          style={{ x }}
           drag={multi && viewportWidth > 0 ? 'x' : false}
-          dragConstraints={{ left: -(slides.length - 1) * viewportWidth, right: 0 }}
+          dragConstraints={{ left: -(slides.length - 1) * (viewportWidth + HERO_SLIDE_GAP), right: 0 }}
           dragElastic={0.14}
           dragMomentum={false}
           onDragEnd={(_e, info) => {
