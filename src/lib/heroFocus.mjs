@@ -18,6 +18,29 @@ export function formatDurationLabel(minutes) {
   return `${hours}h ${rem}m`
 }
 
+/**
+ * The carousel's "live resting index": where the hero snaps back to after the
+ * user swipes away and goes idle. Priority: the event happening right now
+ * (activeId) → the next upcoming event (nextTodayId) → the first slide. Kept
+ * pure so the snap-back target stays correct as time advances.
+ * @param {Array<{id?:string}>} slideEvents ordered slide events
+ * @param {string|null|undefined} activeId id of the in-progress event, if any
+ * @param {string|null|undefined} nextTodayId id of the next upcoming event, if any
+ * @returns {number} 0-based index (0 when nothing matches / list empty)
+ */
+export function resolveRestingIndex(slideEvents, activeId, nextTodayId) {
+  if (!Array.isArray(slideEvents) || slideEvents.length === 0) return 0
+  if (activeId) {
+    const i = slideEvents.findIndex((e) => e && e.id === activeId)
+    if (i >= 0) return i
+  }
+  if (nextTodayId) {
+    const i = slideEvents.findIndex((e) => e && e.id === nextTodayId)
+    if (i >= 0) return i
+  }
+  return 0
+}
+
 function startMs(event) {
   return new Date(event.start_time).getTime()
 }

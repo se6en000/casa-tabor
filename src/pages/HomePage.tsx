@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { format, isAfter, isBefore, addDays } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronRight, RefreshCw, MapPin, Clock, Navigation, Bell, Phone } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RefreshCw, MapPin, Clock, Navigation, Bell, Phone } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
@@ -36,7 +36,7 @@ import {
   indexAvailabilityRulesByMember,
 } from '../lib/memberAvailability'
 import { getEventEndDate, getEventStartDate } from '../utils/eventTime'
-import { formatDurationLabel, pickActiveHeroEvent } from '../lib/heroFocus.mjs'
+import { formatDurationLabel, pickActiveHeroEvent, resolveRestingIndex } from '../lib/heroFocus.mjs'
 import { cleanEventTitle, isBirthdayEvent } from '../utils/eventTitle'
 
 const SHARED_GOLD = '#C9A96E'
@@ -404,11 +404,12 @@ export default function HomePage() {
           )}
         </AnimatePresence>
 
-        <DesktopHeroCard
+        <HeroCarousel
           now={now}
-          nextTodayEvent={nextTodayEvent}
-          activeEvent={activeHeroEvent}
+          events={events}
           fallbackTomorrowEvent={tomorrowEvents[0] ?? null}
+          activeEvent={activeHeroEvent}
+          nextTodayEvent={nextTodayEvent}
           onViewDetails={(event) => setSelectedEventId(event.id)}
           travelEta={heroTravelEta.data}
         />
@@ -653,33 +654,211 @@ function heroStatusClasses(tone: HeroStatusTone): string {
   return 'border-white/25 bg-white/10 text-white/90'
 }
 
-function DesktopHeroCard({
+// How long the hero waits after the user swipes away before snapping back to
+// the "live" resting card (in-progress → next-up → first). Long enough to read
+// a slide, short enough that an ignored kiosk always returns to the truth.
+const HERO_IDLE_REVERT_MS = 9000
+
+function HeroCarousel({
   now,
-  nextTodayEvent,
-  activeEvent,
+  events,
   fallbackTomorrowEvent,
+  activeEvent,
+  nextTodayEvent,
   onViewDetails,
   travelEta,
 }: {
   now: Date
-  nextTodayEvent: EventWithDetails | null
-  activeEvent?: EventWithDetails | null
+  events: EventWithDetails[]
   fallbackTomorrowEvent: EventWithDetails | null
+  activeEvent: EventWithDetails | null
+  nextTodayEvent: EventWithDetails | null
   onViewDetails: (event: EventWithDetails) => void
   travelEta?: TravelEtaResult | null
 }) {
-  const focusEvent = activeEvent ?? nextTodayEvent ?? fallbackTomorrowEvent
-  if (!focusEvent) return null
+  // Slides = today's timed events in chronological order (already member-filtered
+  // upstream). Two edge behaviors preserve the pre-carousel hero:
+  //  • today empty  → single non-swipeable tomorrow-first slide.
+  //  • day is over (nothing live/upcoming) but there are past events → append
+  //    tomorrow's first as a trailing "then tomorrow" slide and rest there, so
+  //    the hero still looks ahead while letting you swipe back through today.
+  const dayIsOver = !activeEvent && !nextTodayEvent
+  const slides = useMemo<EventWithDetails[]>(() => {
+    if (events.length === 0) return fallbackTomorrowEvent ? [fallbackTomorrowEvent] : []
+    if (dayIsOver && fallbackTomorrowEvent) return [...events, fallbackTomorrowEvent]
+    return events
+  }, [events, fallbackTomorrowEvent, dayIsOver])
+  const multi = slides.length > 1
 
-  // "In progress" = the focus event is the one happening right now. Guaranteed
-  // non-all-day / non-reminder by the caller. In this state the hero pivots from
-  // "when does it start" to "how much of your window is left".
-  const isInProgress = !!activeEvent && focusEvent === activeEvent
+  // The "live" index the hero rests on: in-progress → next-up → last slide once
+  // the day is over (the trailing tomorrow peek, or the most recent event).
+  // Recomputed as time advances so the resting position stays truthful.
+  const restingIndex = useMemo(
+    () =>
+      activeEvent || nextTodayEvent
+        ? resolveRestingIndex(slides, activeEvent?.id, nextTodayEvent?.id)
+        : Math.max(0, slides.length - 1),
+    [slides, activeEvent, nextTodayEvent],
+  )
+
+  // `override` holds the user's manually-selected slide (after a swipe/tap/arrow).
+  // While null, the hero simply renders `restingIndex` — so it self-follows the
+  // live position with zero state mirroring. A debounced timer clears the override
+  // to snap back home. This avoids setState-in-effect entirely.
+  const [override, setOverride] = useState<number | null>(null)
+  const [direction, setDirection] = useState(0)
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const effectiveIndex = Math.max(
+    0,
+    Math.min(slides.length - 1, override != null ? override : restingIndex),
+  )
+
+  // Refs mirror the current view so callbacks/timeouts can pick a slide direction
+  // without reading refs during render (React Compiler-safe). Written in effects.
+  const shownIndexRef = useRef(effectiveIndex)
+  const restingIndexRef = useRef(restingIndex)
+  useEffect(() => {
+    shownIndexRef.current = effectiveIndex
+  }, [effectiveIndex])
+  useEffect(() => {
+    restingIndexRef.current = restingIndex
+  }, [restingIndex])
+
+  useEffect(
+    () => () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+    },
+    [],
+  )
+
+  const goTo = useCallback(
+    (next: number) => {
+      const clamped = Math.max(0, Math.min(slides.length - 1, next))
+      setDirection(clamped > shownIndexRef.current ? 1 : clamped < shownIndexRef.current ? -1 : 0)
+      setOverride(clamped)
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+      idleTimerRef.current = setTimeout(() => {
+        const rest = restingIndexRef.current
+        setDirection(rest > shownIndexRef.current ? 1 : rest < shownIndexRef.current ? -1 : 0)
+        setOverride(null)
+      }, HERO_IDLE_REVERT_MS)
+    },
+    [slides.length],
+  )
+
+  if (slides.length === 0) return null
+
+  const safeIndex = effectiveIndex
+  const slide = slides[safeIndex]
+  const slideIsInProgress = !!activeEvent && slide.id === activeEvent.id
+  const slideIsToday = events.some((e) => e.id === slide.id)
+  const slideTravelEta = nextTodayEvent && slide.id === nextTodayEvent.id ? travelEta : null
+
+  const variants = {
+    enter: (dir: number) => ({ x: dir > 0 ? 220 : dir < 0 ? -220 : 0, opacity: 0 }),
+    center: { x: 0, opacity: 1 },
+    exit: (dir: number) => ({ x: dir > 0 ? -220 : dir < 0 ? 220 : 0, opacity: 0 }),
+  }
+
+  return (
+    <div className="hidden lg:block relative mt-2 mb-6">
+      <AnimatePresence initial={false} custom={direction} mode="popLayout">
+        <motion.div
+          key={slide.id}
+          custom={direction}
+          variants={variants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{ x: { type: 'spring', stiffness: 320, damping: 34 }, opacity: { duration: 0.18 } }}
+          drag={multi ? 'x' : false}
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={0.16}
+          onDragEnd={(_e, info) => {
+            if (!multi) return
+            const swipe = Math.abs(info.offset.x) * info.velocity.x
+            if (info.offset.x < -70 || swipe < -600) goTo(safeIndex + 1)
+            else if (info.offset.x > 70 || swipe > 600) goTo(safeIndex - 1)
+          }}
+        >
+          <DesktopHeroCard
+            now={now}
+            focusEvent={slide}
+            isInProgress={slideIsInProgress}
+            isTodayFocus={slideIsToday}
+            onViewDetails={onViewDetails}
+            travelEta={slideTravelEta}
+          />
+        </motion.div>
+      </AnimatePresence>
+
+      {multi && (
+        <>
+          <button
+            type="button"
+            onClick={() => goTo(safeIndex - 1)}
+            disabled={safeIndex === 0}
+            aria-label="Previous event"
+            className={cn(
+              'absolute left-2 top-1/2 -translate-y-1/2 z-20 grid place-items-center h-9 w-9 rounded-full bg-casa-navy/70 text-white/90 backdrop-blur transition-opacity hover:bg-casa-navy/90',
+              safeIndex === 0 ? 'opacity-0 pointer-events-none' : 'opacity-100',
+            )}
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <button
+            type="button"
+            onClick={() => goTo(safeIndex + 1)}
+            disabled={safeIndex === slides.length - 1}
+            aria-label="Next event"
+            className={cn(
+              'absolute right-2 top-1/2 -translate-y-1/2 z-20 grid place-items-center h-9 w-9 rounded-full bg-casa-navy/70 text-white/90 backdrop-blur transition-opacity hover:bg-casa-navy/90',
+              safeIndex === slides.length - 1 ? 'opacity-0 pointer-events-none' : 'opacity-100',
+            )}
+          >
+            <ChevronRight size={20} />
+          </button>
+          <div className="flex items-center justify-center gap-1.5 mt-3">
+            {slides.map((s, i) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => goTo(i)}
+                aria-label={`Go to event ${i + 1} of ${slides.length}`}
+                aria-current={i === safeIndex}
+                className={cn(
+                  'h-1.5 rounded-full transition-all',
+                  i === safeIndex ? 'w-6 bg-casa-gold' : 'w-1.5 bg-casa-navy/25 hover:bg-casa-navy/45',
+                )}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function DesktopHeroCard({
+  now,
+  focusEvent,
+  isInProgress,
+  isTodayFocus,
+  onViewDetails,
+  travelEta,
+}: {
+  now: Date
+  focusEvent: EventWithDetails
+  isInProgress: boolean
+  isTodayFocus: boolean
+  onViewDetails: (event: EventWithDetails) => void
+  travelEta?: TravelEtaResult | null
+}) {
   const focusStart = getEventStartDate(focusEvent)
   const focusEnd = getEventEndDate(focusEvent)
   const focusMode = resolveEventMode(focusEvent)
   const isHosted = focusMode === 'hosted'
-  const isTodayFocus = !!(activeEvent ?? nextTodayEvent)
   const isAllDay = Boolean(focusEvent.all_day)
   const eventLabel = cleanEventTitle(focusEvent.title)
   const isBirthday = isBirthdayEvent(focusEvent)
@@ -784,7 +963,7 @@ function DesktopHeroCard({
   const mapsUrl = isHosted || isInProgress ? null : mapsUrlForEvent(focusEvent)
 
   return (
-    <section className="hidden lg:block mt-2 mb-6" onClick={(e) => e.stopPropagation()}>
+    <section className="relative" onClick={(e) => e.stopPropagation()}>
       <div className="relative rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-7 grid grid-cols-[1fr_420px] gap-8 overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/8 via-transparent to-black/10" />
         {isBirthday && <BirthdayCardDecoration className="opacity-60" />}

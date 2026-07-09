@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { formatDurationLabel, pickActiveHeroEvent } from '../src/lib/heroFocus.mjs'
+import { formatDurationLabel, pickActiveHeroEvent, resolveRestingIndex } from '../src/lib/heroFocus.mjs'
 
 test('formatDurationLabel renders human-friendly windows', () => {
   assert.equal(formatDurationLabel(0), '0 min')
@@ -49,4 +49,20 @@ test('pickActiveHeroEvent returns null when nothing is active', () => {
     { title: 'Later', start_time: iso(2026, 6, 9, 14, 0), end_time: iso(2026, 6, 9, 15, 0) },
   ]
   assert.equal(pickActiveHeroEvent(events, now), null)
+})
+
+test('resolveRestingIndex prefers the in-progress event as the carousel snap-back target', () => {
+  const slides = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
+  assert.equal(resolveRestingIndex(slides, 'b', 'c'), 1)
+})
+
+test('resolveRestingIndex falls back to next-upcoming when nothing is in progress', () => {
+  const slides = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
+  assert.equal(resolveRestingIndex(slides, null, 'c'), 2)
+})
+
+test('resolveRestingIndex returns 0 when neither active nor next match', () => {
+  const slides = [{ id: 'a' }, { id: 'b' }]
+  assert.equal(resolveRestingIndex(slides, 'zzz', 'yyy'), 0)
+  assert.equal(resolveRestingIndex([], 'a', 'b'), 0)
 })

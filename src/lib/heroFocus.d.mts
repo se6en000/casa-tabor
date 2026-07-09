@@ -11,3 +11,9 @@ export function pickActiveHeroEvent<T extends HeroFocusEvent>(
   events: T[],
   now: Date | number,
 ): T | null
+
+export function resolveRestingIndex(
+  slideEvents: Array<{ id?: string | null }>,
+  activeId: string | null | undefined,
+  nextTodayId: string | null | undefined,
+): number
