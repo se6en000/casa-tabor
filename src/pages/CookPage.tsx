@@ -1035,7 +1035,6 @@ export default function CookPage() {
         setCookRecipeId(null)
         return
       }
-      if (directionsViewMode !== 'step') return
       if (event.key === 'ArrowLeft') {
         setStepIndex((current) => Math.max(0, current - 1))
       } else if (event.key === 'ArrowRight') {
@@ -4660,26 +4659,28 @@ export default function CookPage() {
                         </button>
                       </div>
                     </div>
-                    <div className="px-4 pb-2">
-                      <div className="rounded-card border border-casa-accent-subtle-border bg-casa-accent-subtle px-3 py-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-casa-top-pick-band">Needed now</p>
-                        {neededNowIngredientRows.length === 0 ? (
-                          <p className="text-[11px] text-casa-muted mt-1">No ingredient highlights yet.</p>
-                        ) : (
-                          <div className="mt-1.5 flex flex-wrap gap-1.5">
-                            {neededNowIngredientRows.map((row) => (
-                              <span
-                                key={`needed-now-${row.id}`}
-                                className="inline-flex items-center gap-1 rounded-pill border border-casa-accent-soft-border bg-casa-accent-soft px-2.5 py-1 text-[11px] text-casa-top-pick-band"
-                              >
-                                <span className="font-semibold">{row.name}</span>
-                                {row.qty && <span className="opacity-80">{row.qty}</span>}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                    {directionsViewMode === 'step' && (
+                      <div className="px-4 pb-2">
+                        <div className="rounded-card border border-casa-accent-subtle-border bg-casa-accent-subtle px-3 py-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-casa-top-pick-band">Needed now</p>
+                          {neededNowIngredientRows.length === 0 ? (
+                            <p className="text-[11px] text-casa-muted mt-1">No ingredient highlights yet.</p>
+                          ) : (
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {neededNowIngredientRows.map((row) => (
+                                <span
+                                  key={`needed-now-${row.id}`}
+                                  className="inline-flex items-center gap-1 rounded-pill border border-casa-accent-soft-border bg-casa-accent-soft px-2.5 py-1 text-[11px] text-casa-top-pick-band"
+                                >
+                                  <span className="font-semibold">{row.name}</span>
+                                  {row.qty && <span className="opacity-80">{row.qty}</span>}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
                     {directionsViewMode === 'step' && cookSteps.length > 1 && (
                       <div className="px-4 pb-2 flex items-center gap-1" aria-hidden>
                         {cookSteps.map((_, index) => (
@@ -4693,6 +4694,16 @@ export default function CookPage() {
                         ))}
                       </div>
                     )}
+                    {directionsViewMode === 'all' && cookSteps.length > 1 && (
+                      <div className="px-4 pb-2">
+                        <div className="h-[5px] w-full rounded-pill bg-casa-control-border overflow-hidden" aria-hidden>
+                          <div
+                            className="h-full bg-casa-info transition-[width] duration-300"
+                            style={{ width: `${Math.round(((stepIndex + 1) / Math.max(1, cookSteps.length)) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
                     <div className="p-4 flex-1 min-h-0">
                       {directionsViewMode === 'step' ? (
                         <div className="h-full overflow-y-auto pr-1 flex gap-3">
@@ -4702,28 +4713,65 @@ export default function CookPage() {
                           <p className="text-[24px] text-casa-text leading-snug pt-1">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
                         </div>
                       ) : (
-                        <div className="space-y-2 h-full overflow-y-auto pr-1">
+                        <div className="flex flex-col h-full overflow-y-auto pr-1">
                           {(cookSteps.length > 0 ? cookSteps : [{ step_number: 1, instruction: 'No directions saved for this recipe yet.' }]).map((step, index) => {
-                            const headerColors = [
-                              'var(--color-family-liv)',
-                              'var(--color-family-emme)',
-                              'var(--color-family-jake)',
-                              'var(--color-family-kelly)',
-                              'var(--color-family-owen)',
-                              'var(--color-casa-gold)',
-                            ]
+                            const isCurrent = cookSteps.length > 0 && index === stepIndex
+                            const isDone = cookSteps.length > 0 && index < stepIndex
+                            const canJump = cookSteps.length > 0
                             return (
-                              <div key={`${step.step_number}-${index}`} className="rounded-lg border border-casa-border bg-casa-surface overflow-hidden">
-                                <div className="px-3 py-2 flex items-center justify-between" style={{ backgroundColor: `${headerColors[index % headerColors.length]}22` }}>
-                                  <p className="text-[11px] font-semibold text-casa-navy">Step {step.step_number}</p>
+                              <button
+                                key={`${step.step_number}-${index}`}
+                                type="button"
+                                disabled={!canJump}
+                                onClick={() => canJump && setStepIndex(index)}
+                                className={cn(
+                                  'w-full text-left flex gap-3.5 transition-colors',
+                                  isCurrent
+                                    ? 'rounded-card border border-casa-accent-subtle-border bg-casa-accent-subtle p-4 my-1.5'
+                                    : 'items-start py-4 px-0.5 border-b border-casa-divider last:border-b-0'
+                                )}
+                              >
+                                <span
+                                  className={cn(
+                                    'flex-none grid place-items-center w-[30px] h-[30px] rounded-pill text-[13.5px] font-bold leading-none border transition-colors',
+                                    isDone
+                                      ? 'bg-casa-info border-casa-info text-white'
+                                      : isCurrent
+                                        ? 'bg-casa-accent-soft border-casa-accent-soft-border text-casa-navy'
+                                        : 'bg-casa-surface border-casa-control-border text-casa-text-tertiary'
+                                  )}
+                                >
+                                  {isDone ? <Check size={15} strokeWidth={3} /> : step.step_number}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  {isCurrent && (
+                                    <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-casa-info-strong mb-2">
+                                      Current step
+                                    </p>
+                                  )}
+                                  <p
+                                    className={cn(
+                                      'text-body leading-relaxed pt-0.5',
+                                      isDone ? 'text-casa-text-tertiary' : 'text-casa-navy'
+                                    )}
+                                  >
+                                    {step.instruction}
+                                  </p>
+                                  {isCurrent && neededNowIngredientRows.length > 0 && (
+                                    <div className="mt-3 flex flex-wrap gap-1.5">
+                                      {neededNowIngredientRows.map((row) => (
+                                        <span
+                                          key={`mini-needed-${row.id}`}
+                                          className="inline-flex items-center gap-1.5 rounded-pill border border-casa-accent-soft-border bg-casa-surface px-3 py-1.5 text-[12px] font-semibold text-casa-top-pick-band"
+                                        >
+                                          {row.name}
+                                          {row.qty && <b className="font-semibold text-casa-text-secondary">{row.qty}</b>}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
-                                <div
-                                  className="h-1.5 w-full"
-                                  style={{ backgroundColor: headerColors[index % headerColors.length] }}
-                                  aria-hidden
-                                />
-                                <p className="p-3 text-body-sm text-casa-text leading-relaxed">{step.instruction}</p>
-                              </div>
+                              </button>
                             )
                           })}
                         </div>
@@ -4856,41 +4904,29 @@ export default function CookPage() {
                 </>
               ) : (
                 <>
-                  <button type="button" onClick={() => setStepIndex((current) => Math.max(0, current - 1))} disabled={directionsViewMode === 'all' || stepIndex <= 0} className="min-h-[46px] px-4 py-2.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-muted disabled:opacity-50 inline-flex items-center gap-1">
+                  <button type="button" onClick={() => setStepIndex((current) => Math.max(0, current - 1))} disabled={stepIndex <= 0} className="min-h-[46px] px-4 py-2.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-muted disabled:opacity-50 inline-flex items-center gap-1">
                     <ChevronLeft size={14} />
                     Prev
                   </button>
                   <button
                     type="button"
                     onClick={() => setCookRecipeId(null)}
-                    className={cn(
-                      'min-h-[46px] px-4 py-2.5 rounded-button border text-body-sm font-semibold transition-colors',
-                      directionsViewMode === 'all'
-                        ? 'border-casa-navy bg-casa-navy text-white font-semibold hover:bg-casa-navy/90'
-                        : 'border-casa-border text-casa-muted hover:bg-casa-main'
-                    )}
+                    className="min-h-[46px] px-4 py-2.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-muted hover:bg-casa-main transition-colors"
                   >
                     Close
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      if (directionsViewMode !== 'step') return
                       if (stepIndex >= cookSteps.length - 1) {
                         setCookRecipeId(null)
                         return
                       }
                       setStepIndex((current) => Math.min(Math.max(0, cookSteps.length - 1), current + 1))
                     }}
-                    disabled={directionsViewMode === 'all'}
-                    className={cn(
-                      'min-h-[46px] px-4 py-2.5 rounded-button border text-body-sm font-semibold disabled:opacity-50 inline-flex items-center gap-1 transition-colors',
-                      directionsViewMode === 'step'
-                        ? 'border-casa-navy bg-casa-navy text-white font-semibold hover:bg-casa-navy/90'
-                        : 'border-casa-border text-casa-muted'
-                    )}
+                    className="min-h-[46px] px-4 py-2.5 rounded-button border border-casa-navy bg-casa-navy text-white text-body-sm font-semibold hover:bg-casa-navy/90 inline-flex items-center gap-1 transition-colors"
                   >
-                    {directionsViewMode === 'step' && stepIndex >= cookSteps.length - 1 ? 'Finish' : 'Next step'}
+                    {stepIndex >= cookSteps.length - 1 ? 'Finish' : 'Next step'}
                     <ChevronRight size={14} />
                   </button>
                 </>
