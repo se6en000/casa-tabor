@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Camera, ChevronLeft, ChevronRight, CircleHelp, Clock3, ExternalLink, Search, ShoppingCart, Sparkles, Trash2, Upload, Users } from 'lucide-react'
+import { Camera, Check, ChevronLeft, ChevronRight, CircleHelp, Clock3, ExternalLink, Search, ShoppingCart, Sparkles, Trash2, Upload, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
 import { inferCategoryFromName } from '../utils/groceryCategorization'
@@ -522,6 +522,9 @@ export default function CookPage() {
   const [recipeScale, setRecipeScale] = useState(1)
   const [showCupsConversion, setShowCupsConversion] = useState(false)
   const [directionsViewMode, setDirectionsViewMode] = useState<'step' | 'all'>('step')
+  // Session-local mise-en-place check-off (keyed by cookIngredientRows id).
+  // Does NOT mutate the recipe or grocery list — cleared when the recipe changes.
+  const [checkedCookIngredients, setCheckedCookIngredients] = useState<Set<string>>(new Set())
   const [photoEditorRecipeId, setPhotoEditorRecipeId] = useState<string | null>(null)
   const [photoEditorName, setPhotoEditorName] = useState('')
   const [photoEditorUrl, setPhotoEditorUrl] = useState('')
@@ -1016,6 +1019,32 @@ export default function CookPage() {
       return next
     })
   }, [cookRecipeId, cookSteps.length, stepIndex])
+
+  // Clear the session check-off whenever the open recipe changes.
+  useEffect(() => {
+    setCheckedCookIngredients(new Set())
+  }, [cookRecipeId])
+
+  // Keyboard nav for the Cook panel: ← / → move steps, Esc closes.
+  // Only active while cooking (not editing) and no nested dialog is open.
+  useEffect(() => {
+    if (!cookRecipeId || isRecipeEditMode) return
+    if (importDialogOpen || photoEditorRecipeId || deleteConfirmRecipe) return
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setCookRecipeId(null)
+        return
+      }
+      if (directionsViewMode !== 'step') return
+      if (event.key === 'ArrowLeft') {
+        setStepIndex((current) => Math.max(0, current - 1))
+      } else if (event.key === 'ArrowRight') {
+        setStepIndex((current) => Math.min(Math.max(0, cookSteps.length - 1), current + 1))
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [cookRecipeId, isRecipeEditMode, importDialogOpen, photoEditorRecipeId, deleteConfirmRecipe, directionsViewMode, cookSteps.length])
 
   useEffect(() => {
     if (!mealPlannerPlan) {
@@ -4280,67 +4309,109 @@ export default function CookPage() {
       )}
 
       {cookRecipe && (
-        <div className="fixed inset-0 z-[70] bg-casa-navy/30" onClick={() => setCookRecipeId(null)}>
+        <div
+          className="fixed inset-0 z-[70] bg-casa-navy/40 flex items-start justify-center overflow-y-auto p-4 sm:p-6"
+          onClick={() => setCookRecipeId(null)}
+        >
           <div
-            className="absolute right-4 top-4 bottom-4 w-[min(38rem,calc(100vw-2rem))] rounded-2xl border border-casa-border bg-casa-surface shadow-modal flex flex-col"
+            className="w-[min(64rem,calc(100vw-2rem))] my-auto max-h-[calc(100vh-2rem)] rounded-modal border border-casa-border bg-casa-surface shadow-modal flex flex-col overflow-hidden"
             onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={cookRecipe.name}
           >
-            <div className="px-4 py-3 border-b border-casa-divider flex items-center justify-between gap-2">
-              <div className="flex items-center gap-3 min-w-0">
+            {isRecipeEditMode ? (
+              <div className="px-5 py-3.5 border-b border-casa-divider flex items-center justify-between gap-2 flex-shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <RecipeImage
+                    src={getRecipeImage(cookRecipe)}
+                    alt={cookRecipe.name}
+                    focalX={parseRecipeImageFocus(cookRecipe.image_url).focalX}
+                    focalY={parseRecipeImageFocus(cookRecipe.image_url).focalY}
+                    className="w-12 h-12 rounded-card object-cover border border-casa-border bg-casa-bg flex-shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-body font-semibold text-casa-navy truncate">
+                      {recipeEditorDraft?.name ?? cookRecipe.name}
+                    </p>
+                    <p className="text-[11px] text-casa-muted">Editing recipe</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openPhotoEditor(cookRecipe)}
+                    className="px-2.5 py-1.5 rounded-button border border-casa-border text-[11px] text-casa-muted hover:bg-casa-main inline-flex items-center gap-1"
+                  >
+                    <Camera size={12} />
+                    Edit photo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => requestDeleteRecipe(cookRecipe)}
+                    disabled={deletingRecipeId === cookRecipe.id}
+                    className="px-2.5 py-1.5 rounded-button border border-casa-error/40 text-[11px] text-casa-error hover:bg-casa-error/10 inline-flex items-center gap-1 disabled:opacity-60"
+                  >
+                    <Trash2 size={12} />
+                    {deletingRecipeId === cookRecipe.id ? 'Deleting…' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="relative h-[150px] flex-shrink-0 overflow-hidden">
                 <RecipeImage
                   src={getRecipeImage(cookRecipe)}
                   alt={cookRecipe.name}
                   focalX={parseRecipeImageFocus(cookRecipe.image_url).focalX}
                   focalY={parseRecipeImageFocus(cookRecipe.image_url).focalY}
-                  className="w-12 h-12 rounded-lg object-cover border border-casa-border bg-casa-bg flex-shrink-0"
+                  loading="eager"
+                  className="absolute inset-0 w-full h-full object-cover"
                 />
-                <div className="min-w-0">
-                  <p className="text-body font-semibold text-casa-navy truncate">
-                    {isRecipeEditMode ? (recipeEditorDraft?.name ?? cookRecipe.name) : cookRecipe.name}
+                <div
+                  className="absolute inset-0"
+                  style={{ background: 'linear-gradient(to top, rgba(11,31,58,0.88) 0%, rgba(11,31,58,0.35) 52%, rgba(11,31,58,0.45) 100%)' }}
+                  aria-hidden
+                />
+                <div className="absolute inset-x-0 bottom-0 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-casa-info-soft">
+                    Now cooking
                   </p>
-                  <p className="text-[11px] text-casa-muted">
-                    {isRecipeEditMode ? 'Editing recipe' : `Step ${stepIndex + 1} of ${Math.max(1, cookSteps.length)}`}
+                  <p className="mt-0.5 text-white font-semibold text-[20px] leading-tight line-clamp-2 drop-shadow">
+                    {cookRecipe.name}
                   </p>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {cookRecipe.source_url && (
-                  <a href={cookRecipe.source_url} target="_blank" rel="noreferrer" className="px-2 py-1 rounded-button border border-casa-border text-[11px] text-casa-muted hover:bg-casa-main inline-flex items-center gap-1">
-                    <ExternalLink size={12} />
-                    Original
-                  </a>
-                )}
-                {!isRecipeEditMode && (
+                <div className="absolute top-3 right-3 flex items-center gap-2">
+                  {cookRecipe.source_url && (
+                    <a
+                      href={cookRecipe.source_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-2.5 py-1.5 rounded-button bg-casa-surface/85 backdrop-blur border border-casa-border text-[11px] text-casa-navy hover:bg-casa-surface inline-flex items-center gap-1"
+                    >
+                      <ExternalLink size={12} />
+                      Original
+                    </a>
+                  )}
                   <button
                     type="button"
                     onClick={startRecipeEditing}
-                    className="px-2 py-1 rounded-button border border-casa-border text-[11px] text-casa-navy hover:bg-casa-main inline-flex items-center gap-1"
+                    className="px-2.5 py-1.5 rounded-button bg-casa-surface/85 backdrop-blur border border-casa-border text-[11px] text-casa-navy hover:bg-casa-surface inline-flex items-center gap-1"
                   >
                     Edit
                   </button>
-                )}
-                {isRecipeEditMode && (
                   <button
                     type="button"
-                    onClick={() => openPhotoEditor(cookRecipe)}
-                    className="px-2 py-1 rounded-button border border-casa-border text-[11px] text-casa-muted hover:bg-casa-main inline-flex items-center gap-1"
+                    onClick={() => requestDeleteRecipe(cookRecipe)}
+                    disabled={deletingRecipeId === cookRecipe.id}
+                    className="px-2.5 py-1.5 rounded-button bg-casa-surface/85 backdrop-blur border border-casa-error/40 text-[11px] text-casa-error hover:bg-casa-error/10 inline-flex items-center gap-1 disabled:opacity-60"
                   >
-                    <Camera size={12} />
-                    Edit photo
+                    <Trash2 size={12} />
+                    {deletingRecipeId === cookRecipe.id ? 'Deleting…' : 'Delete'}
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => requestDeleteRecipe(cookRecipe)}
-                  disabled={deletingRecipeId === cookRecipe.id || isRecipeEditMode}
-                  className="px-2 py-1 rounded-button border border-red-300 text-[11px] text-red-700 hover:bg-red-50 inline-flex items-center gap-1 disabled:opacity-60"
-                >
-                  <Trash2 size={12} />
-                  {deletingRecipeId === cookRecipe.id ? 'Deleting…' : 'Delete'}
-                </button>
+                </div>
               </div>
-            </div>
-            <div className="flex-1 min-h-0 p-4 flex flex-col gap-3 overflow-hidden">
+            )}
+            <div className="flex-1 min-h-0 p-4 flex flex-col gap-3 overflow-y-auto">
               {isRecipeEditMode && recipeEditorDraft ? (
                 <>
                   <div className="rounded-xl border border-casa-border bg-casa-bg p-3 space-y-2">
@@ -4559,7 +4630,7 @@ export default function CookPage() {
                           className={cn(
                             'px-2 py-1 rounded-pill border text-[10px] transition-colors',
                             directionsViewMode === 'step'
-                              ? 'border-casa-gold/50 bg-casa-gold/10 text-casa-navy'
+                              ? 'border-casa-info/50 bg-casa-info-soft text-casa-info-strong'
                               : 'border-casa-border text-casa-muted hover:bg-casa-surface'
                           )}
                         >
@@ -4571,7 +4642,7 @@ export default function CookPage() {
                           className={cn(
                             'px-2 py-1 rounded-pill border text-[10px] transition-colors',
                             directionsViewMode === 'all'
-                              ? 'border-casa-gold/50 bg-casa-gold/10 text-casa-navy'
+                              ? 'border-casa-info/50 bg-casa-info-soft text-casa-info-strong'
                               : 'border-casa-border text-casa-muted hover:bg-casa-surface'
                           )}
                         >
@@ -4580,32 +4651,45 @@ export default function CookPage() {
                       </div>
                     </div>
                     <div className="px-4 pb-2">
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-casa-muted">Needed now</p>
-                      {neededNowIngredientRows.length === 0 ? (
-                        <p className="text-[11px] text-casa-muted mt-1">No ingredient highlights yet.</p>
-                      ) : (
-                        <div className="mt-1 flex flex-wrap gap-1.5">
-                          {neededNowIngredientRows.map((row) => (
-                            <span
-                              key={`needed-now-${row.id}`}
-                              className="inline-flex items-center gap-1 rounded-pill border border-casa-gold/35 bg-casa-gold/10 px-2.5 py-1 text-[11px] text-casa-navy"
-                            >
-                              <span className="font-semibold">{row.name}</span>
-                              {row.qty && <span className="text-casa-muted">{row.qty}</span>}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      <div className="rounded-card border border-casa-accent-subtle-border bg-casa-accent-subtle px-3 py-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-casa-top-pick-band">Needed now</p>
+                        {neededNowIngredientRows.length === 0 ? (
+                          <p className="text-[11px] text-casa-muted mt-1">No ingredient highlights yet.</p>
+                        ) : (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {neededNowIngredientRows.map((row) => (
+                              <span
+                                key={`needed-now-${row.id}`}
+                                className="inline-flex items-center gap-1 rounded-pill border border-casa-accent-soft-border bg-casa-accent-soft px-2.5 py-1 text-[11px] text-casa-top-pick-band"
+                              >
+                                <span className="font-semibold">{row.name}</span>
+                                {row.qty && <span className="opacity-80">{row.qty}</span>}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div
-                      className="h-2.5 w-full"
-                      style={{ backgroundColor: 'var(--color-casa-gold)' }}
-                      aria-hidden
-                    />
+                    {directionsViewMode === 'step' && cookSteps.length > 1 && (
+                      <div className="px-4 pb-2 flex items-center gap-1" aria-hidden>
+                        {cookSteps.map((_, index) => (
+                          <span
+                            key={`step-seg-${index}`}
+                            className={cn(
+                              'h-1.5 flex-1 rounded-pill transition-colors',
+                              index <= stepIndex ? 'bg-casa-info' : 'bg-casa-control-border'
+                            )}
+                          />
+                        ))}
+                      </div>
+                    )}
                     <div className="p-4 flex-1 min-h-0">
                       {directionsViewMode === 'step' ? (
-                        <div className="h-full overflow-y-auto pr-1">
-                          <p className="text-body text-casa-text leading-relaxed">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
+                        <div className="h-full overflow-y-auto pr-1 flex gap-3">
+                          <span className="text-casa-top-pick-band font-semibold leading-none text-[46px] flex-shrink-0 tabular-nums">
+                            {String(stepIndex + 1).padStart(2, '0')}
+                          </span>
+                          <p className="text-[24px] text-casa-text leading-snug pt-1">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
                         </div>
                       ) : (
                         <div className="space-y-2 h-full overflow-y-auto pr-1">
@@ -4650,7 +4734,7 @@ export default function CookPage() {
                           className={cn(
                             'px-2 py-1 rounded-pill border text-[10px] transition-colors',
                             showCupsConversion
-                              ? 'border-casa-gold/50 bg-casa-gold/10 text-casa-navy'
+                              ? 'border-casa-info/50 bg-casa-info-soft text-casa-info-strong'
                               : 'border-casa-border text-casa-muted hover:bg-casa-surface'
                           )}
                         >
@@ -4664,7 +4748,7 @@ export default function CookPage() {
                             className={cn(
                               'px-2 py-1 rounded-pill border text-[10px] transition-colors',
                               Math.abs(recipeScale - scale) < 0.001
-                                ? 'border-casa-gold/50 bg-casa-gold/10 text-casa-navy'
+                                ? 'border-casa-info/50 bg-casa-info-soft text-casa-info-strong'
                                 : 'border-casa-border text-casa-muted hover:bg-casa-surface'
                             )}
                           >
@@ -4682,13 +4766,57 @@ export default function CookPage() {
                       {cookIngredientRows.length === 0 ? (
                         <p className="text-body-sm text-casa-muted">No ingredient breakdown saved for this recipe.</p>
                       ) : (
-                        <div className="space-y-1 max-h-28 lg:max-h-none lg:h-full overflow-y-auto pr-1">
-                          {cookIngredientRows.map((row) => (
-                            <div key={row.id} className="flex items-center justify-between gap-3 text-body">
-                              <span className="text-casa-text font-medium">{row.name}</span>
-                              <span className="text-casa-muted whitespace-nowrap">{row.qty}</span>
-                            </div>
-                          ))}
+                        <div className="space-y-0.5 max-h-28 lg:max-h-none lg:h-full overflow-y-auto pr-1">
+                          {cookIngredientRows.map((row) => {
+                            const checked = checkedCookIngredients.has(row.id)
+                            return (
+                              <button
+                                key={row.id}
+                                type="button"
+                                onClick={() =>
+                                  setCheckedCookIngredients((current) => {
+                                    const next = new Set(current)
+                                    if (next.has(row.id)) next.delete(row.id)
+                                    else next.add(row.id)
+                                    return next
+                                  })
+                                }
+                                aria-pressed={checked}
+                                className="w-full flex items-center gap-2.5 rounded-button px-1.5 py-1.5 text-body text-left hover:bg-casa-surface transition-colors"
+                              >
+                                <span
+                                  className={cn(
+                                    'flex-shrink-0 grid place-items-center w-5 h-5 rounded-full border transition-colors',
+                                    checked
+                                      ? 'border-casa-info bg-casa-info text-white'
+                                      : 'border-casa-control-border text-transparent'
+                                  )}
+                                >
+                                  <Check size={13} strokeWidth={3} />
+                                </span>
+                                <span
+                                  className={cn(
+                                    'flex-1 font-medium transition-colors',
+                                    checked ? 'text-casa-muted line-through' : 'text-casa-text'
+                                  )}
+                                >
+                                  {row.name}
+                                </span>
+                                {row.qty && (
+                                  <span
+                                    className={cn(
+                                      'whitespace-nowrap rounded-pill border px-2 py-0.5 text-[11px] transition-colors',
+                                      checked
+                                        ? 'border-casa-control-border text-casa-text-faint line-through'
+                                        : 'border-casa-control-border bg-casa-surface-subtle text-casa-text-secondary'
+                                    )}
+                                  >
+                                    {row.qty}
+                                  </span>
+                                )}
+                              </button>
+                            )
+                          })}
                         </div>
                       )}
                     </div>
@@ -4736,8 +4864,15 @@ export default function CookPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setStepIndex((current) => Math.min(Math.max(0, cookSteps.length - 1), current + 1))}
-                    disabled={directionsViewMode === 'all' || stepIndex >= cookSteps.length - 1}
+                    onClick={() => {
+                      if (directionsViewMode !== 'step') return
+                      if (stepIndex >= cookSteps.length - 1) {
+                        setCookRecipeId(null)
+                        return
+                      }
+                      setStepIndex((current) => Math.min(Math.max(0, cookSteps.length - 1), current + 1))
+                    }}
+                    disabled={directionsViewMode === 'all'}
                     className={cn(
                       'min-h-[46px] px-4 py-2.5 rounded-button border text-body-sm font-semibold disabled:opacity-50 inline-flex items-center gap-1 transition-colors',
                       directionsViewMode === 'step'
@@ -4745,7 +4880,7 @@ export default function CookPage() {
                         : 'border-casa-border text-casa-muted'
                     )}
                   >
-                    Next
+                    {directionsViewMode === 'step' && stepIndex >= cookSteps.length - 1 ? 'Finish' : 'Next step'}
                     <ChevronRight size={14} />
                   </button>
                 </>
