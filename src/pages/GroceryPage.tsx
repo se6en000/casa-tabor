@@ -2117,13 +2117,11 @@ export default function GroceryPage() {
   const lastSyncTimeLabel = lastSyncAt
     ? new Date(lastSyncAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     : null
-  const syncStatusLabel = syncing
-    ? 'Syncing…'
-    : syncError
-      ? 'Sync failed'
-      : lastSyncTimeLabel
-        ? `Synced ${lastSyncTimeLabel}`
-        : 'Not synced yet'
+  const syncStatusLabel = syncError
+    ? 'Sync failed'
+    : lastSyncTimeLabel
+      ? `Synced ${lastSyncTimeLabel}`
+      : 'Not synced yet'
   const weeklyHeroPreviewItems = weeklyAutoListCandidates.slice(0, 7)
   const weeklyHeroOverflowCount = Math.max(0, weeklyAutoListCandidates.length - weeklyHeroPreviewItems.length)
 
