@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw } from 'lucide-react'
@@ -422,6 +422,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
   const idleAutoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hadUserInteractionRef = useRef(false)
   const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; mimeType: string } | null>(null)
+  const [nudgeDismissed, setNudgeDismissed] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -439,6 +440,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
   })
 
   const led = useLedStrip()
+
+  const proactiveNudge = useMemo(
+    () => (open ? deriveProactiveNudge(events, new Date()) : null),
+    [open, events],
+  )
 
   const pendingConfirmRef = useRef<(() => Promise<boolean>) | null>(null)
   const pendingCancelRef  = useRef<(() => Promise<boolean>) | null>(null)
@@ -625,6 +631,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
   useEffect(() => {
     if (open) {
       hadUserInteractionRef.current = false
+      setNudgeDismissed(false)
       clearIdleAutoCloseTimer()
       idleAutoCloseTimerRef.current = setTimeout(() => {
         if (!hadUserInteractionRef.current) {
@@ -970,6 +977,26 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                 <div className="flex flex-col items-center gap-3 py-6 text-center">
                   <Sparkles size={28} className="text-casa-gold opacity-60" />
                   <p className="text-body-sm font-semibold text-casa-navy">What can I help with?</p>
+                  {proactiveNudge && !nudgeDismissed && (
+                    <div className="w-full flex items-start gap-2 px-3 py-2.5 rounded-2xl bg-casa-gold/8 border border-casa-gold/25 text-left">
+                      <Sparkles size={13} className="text-casa-gold flex-shrink-0 mt-0.5" />
+                      <button
+                        type="button"
+                        onClick={() => { markUserInteraction(); sendCurrentInput(proactiveNudge.prompt) }}
+                        className="flex-1 text-caption text-casa-navy leading-snug hover:underline"
+                      >
+                        {proactiveNudge.text}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNudgeDismissed(true)}
+                        aria-label="Dismiss"
+                        className="flex-shrink-0 text-casa-muted hover:text-casa-navy"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  )}
                   <div className="flex flex-wrap justify-center gap-2 mt-1">
                     {SUGGESTIONS[page]?.map(s => (
                       <button
@@ -1798,6 +1825,90 @@ function summarizeUpdateArgs(args: Record<string, unknown>): string[] {
 }
 
 /* ── Contextual suggestions ─────────────────────────────────── */
+
+type ProactiveNudge = { text: string; prompt: string }
+
+/**
+ * Derive at most ONE proactive, context-aware nudge from the current events.
+ * Priority: schedule conflict → upcoming event missing location → busy day →
+ * imminent next event. Returns null when nothing is worth surfacing.
+ * Intentionally quiet: one line, dismissible, never chatty.
+ */
+function deriveProactiveNudge(events: EventWithDetails[], now: Date): ProactiveNudge | null {
+  if (!events || events.length === 0) return null
+  const HOUR = 3600_000
+  const nowMs = now.getTime()
+  const dayLabel = (d: Date) => {
+    const diff = Math.floor((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+      - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / (24 * HOUR))
+    if (diff === 0) return 'today'
+    if (diff === 1) return 'tomorrow'
+    return format(d, 'EEEE')
+  }
+
+  const timed = events
+    .filter(e => !e.all_day && e.start_time)
+    .map(e => ({ e, start: new Date(e.start_time).getTime(), end: new Date(e.end_time ?? e.start_time).getTime() }))
+    .filter(x => Number.isFinite(x.start))
+    .sort((a, b) => a.start - b.start)
+
+  // 1) Conflict: two timed events overlapping >15min within the next 3 days
+  const horizon = nowMs + 3 * 24 * HOUR
+  for (let i = 0; i < timed.length; i++) {
+    const a = timed[i]
+    if (a.start > horizon || a.end <= nowMs) continue
+    for (let j = i + 1; j < timed.length; j++) {
+      const b = timed[j]
+      if (b.start >= a.end) break
+      const overlap = Math.min(a.end, b.end) - Math.max(a.start, b.start)
+      if (overlap > 15 * 60_000) {
+        return {
+          text: `Heads up — "${a.e.title}" and "${b.e.title}" overlap ${dayLabel(new Date(a.start))}.`,
+          prompt: 'Do I have any scheduling conflicts coming up?',
+        }
+      }
+    }
+  }
+
+  // 2) Upcoming event within 24h that's missing a location
+  const upcoming = timed.find(x => x.start > nowMs && x.start <= nowMs + 24 * HOUR && !x.e.location_name && !x.e.address)
+  if (upcoming) {
+    return {
+      text: `"${upcoming.e.title}" ${dayLabel(new Date(upcoming.start))} doesn't have a location yet.`,
+      prompt: `Add a location to "${upcoming.e.title}"`,
+    }
+  }
+
+  // 3) Busy day: any of the next 3 days with 4+ events
+  const byDay = new Map<string, number>()
+  for (const x of timed) {
+    if (x.start < nowMs || x.start > horizon) continue
+    const key = format(new Date(x.start), 'yyyy-MM-dd')
+    byDay.set(key, (byDay.get(key) ?? 0) + 1)
+  }
+  for (const [key, count] of byDay) {
+    if (count >= 4) {
+      const d = new Date(key + 'T12:00:00')
+      return {
+        text: `Busy ${dayLabel(d)} — ${count} events lined up.`,
+        prompt: `Give me a rundown of ${dayLabel(d)}`,
+      }
+    }
+  }
+
+  // 4) Next event starting within 3 hours
+  const soon = timed.find(x => x.start > nowMs && x.start <= nowMs + 3 * HOUR)
+  if (soon) {
+    const mins = Math.round((soon.start - nowMs) / 60_000)
+    const rel = mins < 60 ? `in ${mins} min` : `at ${format(new Date(soon.start), 'h:mm a')}`
+    return {
+      text: `"${soon.e.title}" starts ${rel}.`,
+      prompt: `Prep me for "${soon.e.title}"`,
+    }
+  }
+
+  return null
+}
 
 const SUGGESTIONS: Record<string, string[]> = {
   home: ["What's next up today?", "Add an event tonight", "Any conflicts this week?"],
