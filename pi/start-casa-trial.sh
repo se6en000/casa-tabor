@@ -92,6 +92,12 @@ chromium-browser \
   $KIOSK_FLAG \
   --password-store=basic \
   --no-sandbox \
+  --ignore-gpu-blocklist \
+  --enable-gpu-rasterization \
+  --enable-zero-copy \
+  --use-gl=angle \
+  --use-angle=gles \
+  --disable-gpu-sandbox \
   --touch-events=enabled \
   --enable-touch-drag-drop \
   --disable-pinch \
