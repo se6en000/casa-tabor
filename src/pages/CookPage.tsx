@@ -4426,28 +4426,28 @@ export default function CookPage() {
                 <>
                   <div className="rounded-xl border border-casa-border bg-casa-bg p-3 space-y-2">
                     <label className="block">
-                      <span className="text-[11px] text-casa-muted">Recipe name</span>
+                      <span className="text-body-sm text-casa-muted">Recipe name</span>
                       <input
                         type="text"
                         value={recipeEditorDraft.name}
                         onChange={(event) => setRecipeEditorDraft((current) => current ? { ...current, name: event.target.value } : current)}
-                        className="mt-1 w-full rounded-button border border-casa-border bg-casa-surface px-3 py-2 text-body-sm text-casa-text outline-none"
+                        className="mt-1 w-full rounded-button border border-casa-border bg-casa-surface px-3 py-2 text-body-lg text-casa-text outline-none"
                       />
                     </label>
                     <div className="rounded-lg border border-casa-border bg-casa-surface p-2 space-y-2">
-                      <p className="text-[11px] text-casa-muted">Quick actions</p>
+                      <p className="text-body-sm text-casa-muted">Quick actions</p>
                       <div className="flex flex-wrap gap-1.5">
                         <button
                           type="button"
                           onClick={() => applyPipeChoiceToRecipeDraft('left')}
-                          className="px-2 py-1 rounded-pill border border-casa-border text-[10px] text-casa-navy hover:bg-casa-bg"
+                          className="px-2.5 py-1.5 rounded-pill border border-casa-border text-body-sm text-casa-navy hover:bg-casa-bg"
                         >
                           Use left side of |
                         </button>
                         <button
                           type="button"
                           onClick={() => applyPipeChoiceToRecipeDraft('right')}
-                          className="px-2 py-1 rounded-pill border border-casa-border text-[10px] text-casa-navy hover:bg-casa-bg"
+                          className="px-2.5 py-1.5 rounded-pill border border-casa-border text-body-sm text-casa-navy hover:bg-casa-bg"
                         >
                           Use right side of |
                         </button>
@@ -4456,7 +4456,7 @@ export default function CookPage() {
                             key={action.id}
                             type="button"
                             onClick={() => applyRegexQuickAction(action)}
-                            className="px-2 py-1 rounded-pill border border-casa-border text-[10px] text-casa-muted hover:bg-casa-bg"
+                            className="px-2.5 py-1.5 rounded-pill border border-casa-border text-body-sm text-casa-muted hover:bg-casa-bg"
                           >
                             {action.name}
                           </button>
@@ -4468,48 +4468,48 @@ export default function CookPage() {
                           onChange={(event) => setRecipeAiInstruction(event.target.value)}
                           rows={2}
                           placeholder='AI edit instruction (e.g. "split quantities using left side of | for 2 people").'
-                          className="rounded-button border border-casa-border bg-casa-bg px-2.5 py-2 text-[11px] text-casa-text outline-none resize-y"
+                          className="rounded-button border border-casa-border bg-casa-bg px-2.5 py-2 text-body-sm text-casa-text outline-none resize-y"
                         />
                         <button
                           type="button"
                           onClick={() => void applyAiRecipeEdit()}
                           disabled={recipeAiEditing}
-                          className="px-2.5 py-2 rounded-button border border-casa-border text-[11px] text-casa-navy hover:bg-casa-bg disabled:opacity-60"
+                          className="px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-navy hover:bg-casa-bg disabled:opacity-60"
                         >
                           {recipeAiEditing ? 'Applying…' : 'Apply AI edit'}
                         </button>
                       </div>
-                      {recipeAiError && <p className="text-[11px] text-casa-error">{recipeAiError}</p>}
+                      {recipeAiError && <p className="text-body-sm text-casa-error">{recipeAiError}</p>}
                       {recipeSuggestedQuickAction && (
                         <div className="rounded-lg border border-casa-gold/40 bg-casa-gold/10 p-2 flex items-center justify-between gap-2">
                           <div>
-                            <p className="text-[11px] font-semibold text-casa-navy">AI suggested quick action: {recipeSuggestedQuickAction.name}</p>
+                            <p className="text-body-sm font-semibold text-casa-navy">AI suggested quick action: {recipeSuggestedQuickAction.name}</p>
                             {recipeSuggestedQuickAction.description && (
-                              <p className="text-[10px] text-casa-muted">{recipeSuggestedQuickAction.description}</p>
+                              <p className="text-body-sm text-casa-muted">{recipeSuggestedQuickAction.description}</p>
                             )}
                           </div>
                           <button
                             type="button"
                             onClick={saveSuggestedQuickAction}
-                            className="px-2 py-1 rounded-pill border border-casa-border text-[10px] text-casa-navy hover:bg-casa-bg"
+                            className="px-2.5 py-1.5 rounded-pill border border-casa-border text-body-sm text-casa-navy hover:bg-casa-bg"
                           >
                             Save action
                           </button>
                         </div>
                       )}
                     </div>
-                    {recipeEditorError && <p className="text-[11px] text-casa-error">{recipeEditorError}</p>}
-                    {recipeEditorStatus && <p className="text-[11px] text-casa-muted">{recipeEditorStatus}</p>}
+                    {recipeEditorError && <p className="text-body-sm text-casa-error">{recipeEditorError}</p>}
+                    {recipeEditorStatus && <p className="text-body-sm text-casa-muted">{recipeEditorStatus}</p>}
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0">
                     <div className="rounded-xl border border-casa-border bg-casa-bg p-2 flex flex-col min-h-0">
                       <div className="mb-2 flex items-center justify-between">
-                        <p className="text-[11px] text-casa-muted">Ingredients ({recipeEditorDraft.ingredients.length})</p>
+                        <p className="text-body-sm font-semibold text-casa-muted">Ingredients ({recipeEditorDraft.ingredients.length})</p>
                         <button
                           type="button"
                           onClick={addRecipeDraftIngredient}
-                          className="px-2 py-1 rounded-pill border border-casa-border text-[10px] text-casa-navy hover:bg-casa-surface"
+                          className="px-2.5 py-1.5 rounded-pill border border-casa-border text-body-sm text-casa-navy hover:bg-casa-surface"
                         >
                           Add ingredient
                         </button>
@@ -4523,26 +4523,26 @@ export default function CookPage() {
                                 value={ingredient.quantity ?? ''}
                                 onChange={(event) => updateRecipeDraftIngredient(index, { quantity: event.target.value || null })}
                                 placeholder="Qty"
-                                className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-[11px] text-casa-text outline-none"
+                                className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1.5 text-body text-casa-text outline-none"
                               />
                               <input
                                 type="text"
                                 value={ingredient.unit ?? ''}
                                 onChange={(event) => updateRecipeDraftIngredient(index, { unit: event.target.value || null })}
                                 placeholder="Unit"
-                                className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-[11px] text-casa-text outline-none"
+                                className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1.5 text-body text-casa-text outline-none"
                               />
                               <input
                                 type="text"
                                 value={ingredient.name ?? ''}
                                 onChange={(event) => updateRecipeDraftIngredient(index, { name: event.target.value || null })}
                                 placeholder="Ingredient name"
-                                className="flex-1 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-[11px] text-casa-text outline-none"
+                                className="flex-1 rounded-button border border-casa-border bg-casa-bg px-2 py-1.5 text-body text-casa-text outline-none"
                               />
                               <button
                                 type="button"
                                 onClick={() => removeRecipeDraftIngredient(index)}
-                                className="px-1.5 py-1 rounded-pill border border-casa-border text-[10px] text-casa-error hover:bg-casa-bg"
+                                className="px-2 py-1.5 rounded-pill border border-casa-border text-body-sm text-casa-error hover:bg-casa-bg"
                               >
                                 Remove
                               </button>
@@ -4552,7 +4552,7 @@ export default function CookPage() {
                               value={ingredient.raw_text}
                               onChange={(event) => updateRecipeDraftIngredient(index, { raw_text: event.target.value })}
                               placeholder="Raw ingredient text"
-                              className="w-full rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-[10px] text-casa-muted outline-none"
+                              className="w-full rounded-button border border-casa-border bg-casa-bg px-2 py-1.5 text-body-sm text-casa-muted outline-none"
                             />
                           </div>
                         ))}
@@ -4561,11 +4561,11 @@ export default function CookPage() {
 
                     <div className="rounded-xl border border-casa-border bg-casa-bg p-2 flex flex-col min-h-0">
                       <div className="mb-2 flex items-center justify-between">
-                        <p className="text-[11px] text-casa-muted">Directions ({recipeEditorDraft.steps.length})</p>
+                        <p className="text-body-sm font-semibold text-casa-muted">Directions ({recipeEditorDraft.steps.length})</p>
                         <button
                           type="button"
                           onClick={() => addRecipeDraftStepAfter(recipeEditorDraft.steps.length - 1)}
-                          className="px-2 py-1 rounded-pill border border-casa-border text-[10px] text-casa-navy hover:bg-casa-surface"
+                          className="px-2.5 py-1.5 rounded-pill border border-casa-border text-body-sm text-casa-navy hover:bg-casa-surface"
                         >
                           Add step
                         </button>
@@ -4574,13 +4574,13 @@ export default function CookPage() {
                         {recipeEditorDraft.steps.map((step, index) => (
                           <div key={`edit-step-${index}`} className="rounded-lg border border-casa-border bg-casa-surface p-2">
                             <div className="mb-1 flex items-center justify-between gap-1">
-                              <p className="text-[10px] font-semibold text-casa-muted">Step {index + 1}</p>
+                              <p className="text-body-sm font-semibold text-casa-muted">Step {index + 1}</p>
                               <div className="flex items-center gap-1">
                                 <button
                                   type="button"
                                   onClick={() => moveRecipeDraftStep(index, -1)}
                                   disabled={index === 0}
-                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-[10px] text-casa-muted hover:bg-casa-bg disabled:opacity-50"
+                                  className="px-2 py-1 rounded-pill border border-casa-border text-body-sm text-casa-muted hover:bg-casa-bg disabled:opacity-50"
                                 >
                                   Up
                                 </button>
@@ -4588,14 +4588,14 @@ export default function CookPage() {
                                   type="button"
                                   onClick={() => moveRecipeDraftStep(index, 1)}
                                   disabled={index >= recipeEditorDraft.steps.length - 1}
-                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-[10px] text-casa-muted hover:bg-casa-bg disabled:opacity-50"
+                                  className="px-2 py-1 rounded-pill border border-casa-border text-body-sm text-casa-muted hover:bg-casa-bg disabled:opacity-50"
                                 >
                                   Down
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => addRecipeDraftStepAfter(index)}
-                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-[10px] text-casa-navy hover:bg-casa-bg"
+                                  className="px-2 py-1 rounded-pill border border-casa-border text-body-sm text-casa-navy hover:bg-casa-bg"
                                 >
                                   Add
                                 </button>
@@ -4603,7 +4603,7 @@ export default function CookPage() {
                                   type="button"
                                   onClick={() => removeRecipeDraftStep(index)}
                                   disabled={recipeEditorDraft.steps.length <= 1}
-                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-[10px] text-casa-error hover:bg-casa-bg disabled:opacity-50"
+                                  className="px-2 py-1 rounded-pill border border-casa-border text-body-sm text-casa-error hover:bg-casa-bg disabled:opacity-50"
                                 >
                                   Remove
                                 </button>
@@ -4613,7 +4613,7 @@ export default function CookPage() {
                               value={step.instruction}
                               onChange={(event) => updateRecipeDraftStep(index, event.target.value)}
                               rows={3}
-                              className="w-full rounded-button border border-casa-border bg-casa-bg px-2 py-1.5 text-[11px] text-casa-text outline-none resize-y"
+                              className="w-full rounded-button border border-casa-border bg-casa-bg px-2.5 py-2 text-body text-casa-text outline-none resize-y leading-relaxed"
                             />
                           </div>
                         ))}
