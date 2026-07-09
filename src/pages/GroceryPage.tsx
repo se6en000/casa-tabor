@@ -26,13 +26,11 @@ import {
 } from '../utils/groceryPredictionDeferrals'
 import recipeFallbackHero from '../assets/hero.png'
 
-const SYNC_CURSOR_KEY = 'grocery-sync-cursor-v1'
 const SYNC_LAST_AT_KEY = 'grocery-sync-last-at-v1'
 const SYNC_LAST_SUMMARY_KEY = 'grocery-sync-last-summary-v1'
 const GROCERY_PREDICTION_DEFERRALS_SETTING_KEY = 'grocery_prediction_deferrals'
-const AUTO_SYNC_INTERVAL_MS = 45_000
-// Dedupe is a full-table scan + write. It only needs to catch duplicates
-// introduced by adds/imports/iOS merges, not run on every 45s sync tick.
+// Background dedupe is a full-table scan + write. It only needs to catch
+// duplicates introduced by adds/imports/iOS merges, not run on every tick.
 // Throttle background dedupe to at most once per this interval; the manual
 // "Clean + Sync" button still forces a dedupe pass regardless.
 const DEDUPE_MIN_INTERVAL_MS = 10 * 60_000
@@ -581,6 +579,7 @@ export default function GroceryPage() {
     uncheckedCount,
     checkedCount,
     isLoading,
+    dataUpdatedAt,
     addItem,
     toggleItem,
     deleteItem,
@@ -1795,25 +1794,13 @@ export default function GroceryPage() {
         localStorage.setItem(SYNC_LAST_DEDUPE_AT_KEY, String(Date.now()))
       }
 
-      const since = localStorage.getItem(SYNC_CURSOR_KEY)
-      const { data, error } = await supabase.functions.invoke('sync-casa-to-ios', {
-        body: { since, limit: 300 },
-      })
-      if (error) throw error
-
-      const deltas = Array.isArray(data?.deltas) ? data.deltas : []
-      const deleted = deltas.filter((d: { deleted?: boolean }) => d.deleted).length
-      const changed = deltas.length - deleted
-      const syncSummary = deltas.length === 0
-        ? 'No new changes to sync'
-        : `${changed} update${changed === 1 ? '' : 's'} and ${deleted} delete${deleted === 1 ? '' : 's'} ready`
+      // Casa→iOS reconciliation is owned by the Mac launchd job (which applies
+      // deltas to Reminders using its own cursor). The frontend no longer polls
+      // sync-casa-to-ios — it was redundant telemetry that never applied changes.
       const dedupeSummary = dedupedRows > 0
         ? `Deduped ${dedupedRows} duplicate item${dedupedRows === 1 ? '' : 's'}`
         : ''
-      const summary = [cleanSummary, dedupeSummary, syncSummary].filter(Boolean).join(' · ')
-
-      const nextCursor = typeof data?.next_cursor === 'string' ? data.next_cursor : null
-      if (nextCursor) localStorage.setItem(SYNC_CURSOR_KEY, nextCursor)
+      const summary = [cleanSummary, dedupeSummary].filter(Boolean).join(' · ') || 'List is tidy'
 
       const nowIso = new Date().toISOString()
       localStorage.setItem(SYNC_LAST_AT_KEY, nowIso)
@@ -1828,6 +1815,29 @@ export default function GroceryPage() {
       setSyncing(false)
     }
   }, [clearChecked, items])
+
+  // Silent background maintenance: throttled dedupe only. Does NOT touch the
+  // `syncing` UI state (no button spin / no flicker) and never calls
+  // sync-casa-to-ios (Mac owns Casa→iOS). List freshness is handled separately
+  // by react-query realtime + refetch; the "Synced <time>" label reads
+  // dataUpdatedAt. This keeps background edge-function calls to ~1 per 10 min.
+  const runBackgroundDedupe = useCallback(async () => {
+    if (syncInFlightRef.current) return
+    const lastDedupeAtRaw = Number(localStorage.getItem(SYNC_LAST_DEDUPE_AT_KEY) ?? 0)
+    const due = !Number.isFinite(lastDedupeAtRaw) || Date.now() - lastDedupeAtRaw >= DEDUPE_MIN_INTERVAL_MS
+    if (!due) return
+    syncInFlightRef.current = true
+    try {
+      const { error } = await supabase.functions.invoke('dedupe-grocery-items', {
+        body: { dry_run: false },
+      })
+      if (!error) localStorage.setItem(SYNC_LAST_DEDUPE_AT_KEY, String(Date.now()))
+    } catch {
+      // Silent — background maintenance failures self-heal on the next tick.
+    } finally {
+      syncInFlightRef.current = false
+    }
+  }, [])
 
   const updatePantryReconcileDraftRow = useCallback((itemId: string, packageCount: number) => {
     setPantryReconcileDraft((current) => {
@@ -2085,29 +2095,21 @@ export default function GroceryPage() {
 
   useEffect(() => {
     const kickoff = window.setTimeout(() => {
-      void handleSyncNow()
-    }, 1_500)
+      void runBackgroundDedupe()
+    }, 5_000)
 
+    // Background dedupe runs on the throttle cadence, not every 45s. Casa↔iOS
+    // reconciliation is handled by the Mac launchd jobs; list data freshness is
+    // handled by react-query (realtime + refetchInterval + refetchOnWindowFocus).
     const intervalId = window.setInterval(() => {
-      void handleSyncNow()
-    }, AUTO_SYNC_INTERVAL_MS)
-
-    const handleFocus = () => {
-      if (document.visibilityState === 'visible') {
-        void handleSyncNow()
-      }
-    }
-
-    window.addEventListener('focus', handleFocus)
-    document.addEventListener('visibilitychange', handleFocus)
+      void runBackgroundDedupe()
+    }, DEDUPE_MIN_INTERVAL_MS)
 
     return () => {
       window.clearTimeout(kickoff)
       window.clearInterval(intervalId)
-      window.removeEventListener('focus', handleFocus)
-      document.removeEventListener('visibilitychange', handleFocus)
     }
-  }, [handleSyncNow])
+  }, [runBackgroundDedupe])
 
   const visibleDismissIds = new Set([...dismissingIds, ...dismissingExitingIds])
 
@@ -2130,14 +2132,14 @@ export default function GroceryPage() {
   )
   const totalTrackedItems = checkedCount + uncheckedCount
   const checkedProgressPercent = totalTrackedItems > 0 ? Math.round((checkedCount / totalTrackedItems) * 100) : 0
-  const lastSyncTimeLabel = lastSyncAt
-    ? new Date(lastSyncAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const lastSyncTimeLabel = dataUpdatedAt
+    ? new Date(dataUpdatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     : null
   const syncStatusLabel = syncError
     ? 'Sync failed'
     : lastSyncTimeLabel
-      ? `Synced ${lastSyncTimeLabel}`
-      : 'Not synced yet'
+      ? `Updated ${lastSyncTimeLabel}`
+      : 'Loading…'
   const weeklyHeroPreviewItems = weeklyAutoListCandidates.slice(0, 7)
   const weeklyHeroOverflowCount = Math.max(0, weeklyAutoListCandidates.length - weeklyHeroPreviewItems.length)
 

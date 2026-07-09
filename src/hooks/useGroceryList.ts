@@ -174,7 +174,7 @@ export function useGroceryList() {
     }
   }, [])
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, dataUpdatedAt } = useQuery({
     queryKey: ['grocery'],
     queryFn: fetchGroceryData,
     staleTime: 30_000,
@@ -366,6 +366,7 @@ export function useGroceryList() {
     uncheckedCount,
     checkedCount,
     isLoading,
+    dataUpdatedAt,
     addItem,
     toggleItem,
     deleteItem,

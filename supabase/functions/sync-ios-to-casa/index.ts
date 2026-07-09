@@ -228,7 +228,13 @@ Deno.serve(async (req) => {
       const incomingUpdatedAt = getReminderUpdatedAt(reminder) ?? new Date().toISOString()
       const existingUpdatedAt = normalizeIso(existing?.ios_updated_at ?? null)
 
-      if (existingUpdatedAt && incomingUpdatedAt < existingUpdatedAt) {
+      // Idempotency guard: skip re-sent reminders that are not strictly newer
+      // than what we already stored. The Mac poller applies a 120s cursor rewind
+      // (belt-and-suspenders against clock skew), which re-delivers the
+      // last-modified reminder every cycle. Using `<=` here absorbs those
+      // redundant re-sends as cheap no-ops (no write, no realtime churn), while
+      // still processing any genuinely newer change.
+      if (existingUpdatedAt && incomingUpdatedAt <= existingUpdatedAt) {
         skippedStale += 1
         continue
       }
