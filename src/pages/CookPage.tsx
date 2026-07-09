@@ -4636,15 +4636,15 @@ export default function CookPage() {
                             : `${cookSteps.length} steps`}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex bg-casa-bg-2 rounded-pill p-[3px] gap-[2px]">
                         <button
                           type="button"
                           onClick={() => setDirectionsViewMode('step')}
                           className={cn(
-                            'px-2 py-1 rounded-pill border text-[10px] transition-colors',
+                            'px-3 py-1.5 rounded-pill text-[12px] transition-all',
                             directionsViewMode === 'step'
-                              ? 'border-casa-info/50 bg-casa-info-soft text-casa-info-strong'
-                              : 'border-casa-border text-casa-muted hover:bg-casa-surface'
+                              ? 'bg-casa-surface text-casa-navy font-bold shadow-[0_1px_2px_rgba(6,10,36,0.14)]'
+                              : 'text-casa-text-secondary font-semibold'
                           )}
                         >
                           Step-by-step
@@ -4653,35 +4653,31 @@ export default function CookPage() {
                           type="button"
                           onClick={() => setDirectionsViewMode('all')}
                           className={cn(
-                            'px-2 py-1 rounded-pill border text-[10px] transition-colors',
+                            'px-3 py-1.5 rounded-pill text-[12px] transition-all',
                             directionsViewMode === 'all'
-                              ? 'border-casa-info/50 bg-casa-info-soft text-casa-info-strong'
-                              : 'border-casa-border text-casa-muted hover:bg-casa-surface'
+                              ? 'bg-casa-surface text-casa-navy font-bold shadow-[0_1px_2px_rgba(6,10,36,0.14)]'
+                              : 'text-casa-text-secondary font-semibold'
                           )}
                         >
                           All steps
                         </button>
                       </div>
                     </div>
-                    {directionsViewMode === 'step' && (
+                    {directionsViewMode === 'step' && neededNowIngredientRows.length > 0 && (
                       <div className="px-4 pb-2">
                         <div className="rounded-card border border-casa-accent-subtle-border bg-casa-accent-subtle px-3 py-2">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-casa-top-pick-band">Needed now</p>
-                          {neededNowIngredientRows.length === 0 ? (
-                            <p className="text-[12px] text-casa-muted mt-1">No ingredient highlights yet.</p>
-                          ) : (
-                            <div className="mt-1.5 flex flex-wrap gap-1.5">
-                              {neededNowIngredientRows.map((row) => (
-                                <span
-                                  key={`needed-now-${row.id}`}
-                                  className="inline-flex items-center gap-1 rounded-pill border border-casa-accent-soft-border bg-casa-accent-soft px-2.5 py-1 text-[12px] text-casa-top-pick-band"
-                                >
-                                  <span className="font-semibold">{row.name}</span>
-                                  {row.qty && <span className="opacity-80">{row.qty}</span>}
-                                </span>
-                              ))}
-                            </div>
-                          )}
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {neededNowIngredientRows.map((row) => (
+                              <span
+                                key={`needed-now-${row.id}`}
+                                className="inline-flex items-center gap-1 rounded-pill border border-casa-accent-subtle-border bg-casa-surface px-2.5 py-1 text-[12px] font-semibold text-casa-top-pick-band"
+                              >
+                                <span>{row.name}</span>
+                                {row.qty && <span className="font-normal text-casa-text-secondary">{row.qty}</span>}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -4711,7 +4707,7 @@ export default function CookPage() {
                     <div className="p-4">
                       {directionsViewMode === 'step' ? (
                         <div ref={(el) => { currentStepRef.current = el }} className="pr-1 flex gap-3">
-                          <span className="text-casa-top-pick-band font-semibold leading-none text-[46px] flex-shrink-0 tabular-nums">
+                          <span className="text-casa-accent-soft-border font-extrabold leading-none text-[46px] flex-shrink-0 tabular-nums">
                             {String(stepIndex + 1).padStart(2, '0')}
                           </span>
                           <p className="text-[28px] text-casa-text leading-snug pt-1">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
@@ -4786,51 +4782,49 @@ export default function CookPage() {
 
                   <div className="order-2">
                     <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden lg:sticky lg:top-0">
-                    <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-2">
-                      <div>
-                        <p className="text-body font-semibold text-casa-navy">Ingredients</p>
-                        <p className="text-[11px] text-casa-muted">{cookIngredients.length} items · low-touch shelf</p>
-                      </div>
-                      <div className="flex items-center gap-1">
+                    <div className="px-4 pt-3 pb-3 border-b border-casa-divider">
+                      <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                        <p className="text-[17px] font-bold text-casa-navy">Ingredients</p>
                         <button
                           type="button"
                           onClick={() => setShowCupsConversion((current) => !current)}
                           className={cn(
-                            'px-2 py-1 rounded-pill border text-[10px] transition-colors',
+                            'flex-none inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-pill border text-[11px] font-semibold transition-colors',
                             showCupsConversion
                               ? 'border-casa-info/50 bg-casa-info-soft text-casa-info-strong'
-                              : 'border-casa-border text-casa-muted hover:bg-casa-surface'
+                              : 'border-casa-control-border bg-casa-surface-subtle text-casa-text-secondary hover:bg-casa-surface'
                           )}
                         >
-                          {showCupsConversion ? 'Show grams' : 'g → cups'}
+                          {showCupsConversion ? 'Show grams' : (<>g <s className="no-underline text-casa-text-faint">→</s> cups</>)}
                         </button>
-                        {[0.5, 1, 2].map((scale) => (
-                          <button
-                            key={scale}
-                            type="button"
-                            onClick={() => setRecipeScale(scale)}
-                            className={cn(
-                              'px-2 py-1 rounded-pill border text-[10px] transition-colors',
-                              Math.abs(recipeScale - scale) < 0.001
-                                ? 'border-casa-info/50 bg-casa-info-soft text-casa-info-strong'
-                                : 'border-casa-border text-casa-muted hover:bg-casa-surface'
-                            )}
-                          >
-                            {scale}x
-                          </button>
-                        ))}
+                      </div>
+                      <p className="text-[11.5px] text-casa-text-tertiary mb-3">{cookIngredients.length} items · low-touch shelf</p>
+                      <div className="flex w-full bg-casa-bg-2 rounded-pill p-[3px] gap-[2px]">
+                        {[0.5, 1, 2].map((scale) => {
+                          const active = Math.abs(recipeScale - scale) < 0.001
+                          return (
+                            <button
+                              key={scale}
+                              type="button"
+                              onClick={() => setRecipeScale(scale)}
+                              className={cn(
+                                'flex-1 text-center py-1.5 rounded-pill text-[12px] transition-all',
+                                active
+                                  ? 'bg-casa-surface text-casa-navy font-bold shadow-[0_1px_2px_rgba(6,10,36,0.14)]'
+                                  : 'text-casa-text-secondary font-semibold'
+                              )}
+                            >
+                              {scale}×
+                            </button>
+                          )
+                        })}
                       </div>
                     </div>
-                    <div
-                      className="h-2.5 w-full"
-                      style={{ backgroundColor: 'var(--color-family-liv)' }}
-                      aria-hidden
-                    />
                     <div className="p-4">
                       {cookIngredientRows.length === 0 ? (
                         <p className="text-body-sm text-casa-muted">No ingredient breakdown saved for this recipe.</p>
                       ) : (
-                        <div className="space-y-0.5 max-h-40 lg:max-h-[60vh] overflow-y-auto pr-1">
+                        <div className="max-h-40 lg:max-h-[60vh] overflow-y-auto pr-1">
                           {cookIngredientRows.map((row) => {
                             const checked = checkedCookIngredients.has(row.id)
                             return (
@@ -4846,33 +4840,33 @@ export default function CookPage() {
                                   })
                                 }
                                 aria-pressed={checked}
-                                className="w-full flex items-center gap-2.5 rounded-button px-1.5 py-1.5 text-body text-left hover:bg-casa-surface transition-colors"
+                                className="w-full flex items-center justify-between gap-3 py-3 text-left border-b border-casa-divider last:border-b-0"
                               >
-                                <span
-                                  className={cn(
-                                    'flex-shrink-0 grid place-items-center w-5 h-5 rounded-full border transition-colors',
-                                    checked
-                                      ? 'border-casa-info bg-casa-info text-white'
-                                      : 'border-casa-control-border text-transparent'
-                                  )}
-                                >
-                                  <Check size={13} strokeWidth={3} />
-                                </span>
-                                <span
-                                  className={cn(
-                                    'flex-1 font-medium text-[16px] transition-colors',
-                                    checked ? 'text-casa-muted line-through' : 'text-casa-text'
-                                  )}
-                                >
-                                  {row.name}
+                                <span className="flex items-center gap-3 min-w-0">
+                                  <span
+                                    className={cn(
+                                      'flex-none grid place-items-center w-[19px] h-[19px] rounded-full border-2 transition-colors',
+                                      checked
+                                        ? 'border-casa-info bg-casa-info text-white'
+                                        : 'border-casa-control-border text-transparent'
+                                    )}
+                                  >
+                                    <Check size={12} strokeWidth={3} />
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      'text-[15px] leading-snug transition-colors truncate',
+                                      checked ? 'text-casa-text-tertiary line-through' : 'text-casa-navy'
+                                    )}
+                                  >
+                                    {row.name}
+                                  </span>
                                 </span>
                                 {row.qty && (
                                   <span
                                     className={cn(
-                                      'whitespace-nowrap rounded-pill border px-2 py-0.5 text-[12px] transition-colors',
-                                      checked
-                                        ? 'border-casa-control-border text-casa-text-faint line-through'
-                                        : 'border-casa-control-border bg-casa-surface-subtle text-casa-text-secondary'
+                                      'flex-none whitespace-nowrap text-[14px] font-semibold transition-colors',
+                                      checked ? 'text-casa-text-faint line-through' : 'text-casa-text-secondary'
                                     )}
                                   >
                                     {row.qty}
