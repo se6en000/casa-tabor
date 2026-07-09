@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { format, isAfter, isBefore, addDays } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronRight, RefreshCw, MapPin, Clock, Navigation, Bell } from 'lucide-react'
+import { ChevronRight, RefreshCw, MapPin, Clock, Navigation, Bell, Phone } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
@@ -36,6 +36,7 @@ import {
   indexAvailabilityRulesByMember,
 } from '../lib/memberAvailability'
 import { getEventEndDate, getEventStartDate } from '../utils/eventTime'
+import { formatDurationLabel, pickActiveHeroEvent } from '../lib/heroFocus.mjs'
 import { cleanEventTitle, isBirthdayEvent } from '../utils/eventTitle'
 
 const SHARED_GOLD = '#C9A96E'
@@ -237,6 +238,15 @@ export default function HomePage() {
     () => events.find((e) => isAfter(getEventStartDate(e), now)) ?? null,
     [events, now],
   )
+  // An event that is happening right now (started, not yet ended). This lets the
+  // hero stay live *during* a hosted block (e.g. a caregiver session) instead of
+  // vanishing the moment it starts — the point at which "how much of my window
+  // is left?" matters most. All-day events and reminders are excluded so they
+  // don't hijack the live state.
+  const activeHeroEvent = useMemo(
+    () => pickActiveHeroEvent(events, now) ?? null,
+    [events, now],
+  )
   const nextTodayEventMode = nextTodayEvent ? resolveEventMode(nextTodayEvent) : null
   const heroDestination = nextTodayEvent && nextTodayEventMode !== 'hosted'
     ? (nextTodayEvent.address ?? nextTodayEvent.location_name)
@@ -397,6 +407,7 @@ export default function HomePage() {
         <DesktopHeroCard
           now={now}
           nextTodayEvent={nextTodayEvent}
+          activeEvent={activeHeroEvent}
           fallbackTomorrowEvent={tomorrowEvents[0] ?? null}
           onViewDetails={(event) => setSelectedEventId(event.id)}
           travelEta={heroTravelEta.data}
@@ -645,31 +656,56 @@ function heroStatusClasses(tone: HeroStatusTone): string {
 function DesktopHeroCard({
   now,
   nextTodayEvent,
+  activeEvent,
   fallbackTomorrowEvent,
   onViewDetails,
   travelEta,
 }: {
   now: Date
   nextTodayEvent: EventWithDetails | null
+  activeEvent?: EventWithDetails | null
   fallbackTomorrowEvent: EventWithDetails | null
   onViewDetails: (event: EventWithDetails) => void
   travelEta?: TravelEtaResult | null
 }) {
-  const focusEvent = nextTodayEvent ?? fallbackTomorrowEvent
+  const focusEvent = activeEvent ?? nextTodayEvent ?? fallbackTomorrowEvent
   if (!focusEvent) return null
 
+  // "In progress" = the focus event is the one happening right now. Guaranteed
+  // non-all-day / non-reminder by the caller. In this state the hero pivots from
+  // "when does it start" to "how much of your window is left".
+  const isInProgress = !!activeEvent && focusEvent === activeEvent
   const focusStart = getEventStartDate(focusEvent)
+  const focusEnd = getEventEndDate(focusEvent)
   const focusMode = resolveEventMode(focusEvent)
   const isHosted = focusMode === 'hosted'
-  const isTodayFocus = !!nextTodayEvent
+  const isTodayFocus = !!(activeEvent ?? nextTodayEvent)
   const isAllDay = Boolean(focusEvent.all_day)
   const eventLabel = cleanEventTitle(focusEvent.title)
   const isBirthday = isBirthdayEvent(focusEvent)
+  const totalDurationMins = Math.max(0, Math.round((focusEnd.getTime() - focusStart.getTime()) / 60000))
+  const minutesUntilEnd = Math.max(0, Math.round((focusEnd.getTime() - now.getTime()) / 60000))
+  const timeRangeLabel = `${format(focusStart, 'h:mm a')} – ${format(focusEnd, 'h:mm a')}`
+  const contactName = focusEvent.enrichment?.contact_name?.trim() || null
+  const contactPhoneRaw = focusEvent.enrichment?.contact_phone?.trim() || null
+  const telUrl = contactPhoneRaw ? `tel:${contactPhoneRaw.replace(/[^\d+]/g, '')}` : null
+  const readinessItems = isHosted && !isBirthday
+    ? [
+      ...(focusEvent.enrichment?.what_to_bring ?? []),
+      focusEvent.enrichment?.prep_notes ?? null,
+      focusEvent.enrichment?.dietary_notes ?? null,
+    ]
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter((item): item is string => Boolean(item))
+      .slice(0, 3)
+    : []
   const leadLabel = isBirthday
     ? `${isTodayFocus ? 'TODAY' : 'TOMORROW'} · BIRTHDAY 🎉`
-    : (isTodayFocus ? `UP NEXT · ${eventLabel.toUpperCase()}` : 'TOMORROW · FIRST UP')
+    : isInProgress
+      ? `IN PROGRESS · ${eventLabel.toUpperCase()}`
+      : (isTodayFocus ? `UP NEXT · ${eventLabel.toUpperCase()}` : 'TOMORROW · FIRST UP')
 
-  const liveLeaveBy = !isHosted && !isAllDay && isTodayFocus && travelEta?.found && travelEta.leave_by
+  const liveLeaveBy = !isHosted && !isAllDay && isTodayFocus && !isInProgress && travelEta?.found && travelEta.leave_by
     ? new Date(travelEta.leave_by)
     : null
   const leaveAt = isHosted || isAllDay
@@ -679,11 +715,13 @@ function DesktopHeroCard({
   const minutesUntilLeave = Math.max(0, Math.round((leaveAt.getTime() - now.getTime()) / 60000))
   const headlineText = isBirthday
     ? `🎂 ${eventLabel}`
-    : (isAllDay
-      ? (isTodayFocus ? 'All day' : 'All day tomorrow')
-      : (isTodayFocus
-        ? `${isHosted ? 'Starts at' : 'Leave by'} ${format(leaveAt, 'h:mm a')}`
-        : `Tomorrow starts at ${format(leaveAt, 'h:mm a')}`))
+    : isInProgress
+      ? `Ends at ${format(focusEnd, 'h:mm a')}`
+      : (isAllDay
+        ? (isTodayFocus ? 'All day' : 'All day tomorrow')
+        : (isTodayFocus
+          ? `${isHosted ? 'Starts at' : 'Leave by'} ${format(leaveAt, 'h:mm a')}`
+          : `Tomorrow starts at ${format(leaveAt, 'h:mm a')}`))
 
   const destinationLabel = focusEvent.address ?? focusEvent.location_name ?? 'At home'
   const driveMins = isTodayFocus && travelEta?.found && typeof travelEta.drive_time_mins === 'number'
@@ -695,35 +733,55 @@ function DesktopHeroCard({
       birthdayTimeLabel,
       focusEvent.description?.trim() || null,
     ].filter((part): part is string => Boolean(part))
-    : (isHosted
-      ? ['At home']
-      : [
-        destinationLabel,
-        typeof driveMins === 'number' ? `${driveMins} min drive` : null,
-        focusEvent.enrichment?.weather_at_event ?? null,
-      ].filter((part): part is string => Boolean(part && part.trim())))
+    : isInProgress
+      ? [
+        timeRangeLabel,
+        `${formatDurationLabel(minutesUntilEnd)} ${isHosted ? 'of your window left' : 'left'}`,
+      ].filter((part): part is string => Boolean(part))
+      : (isHosted
+        ? [
+          timeRangeLabel,
+          totalDurationMins > 0 ? formatDurationLabel(totalDurationMins) : null,
+        ].filter((part): part is string => Boolean(part))
+        : [
+          destinationLabel,
+          typeof driveMins === 'number' ? `${driveMins} min drive` : null,
+          focusEvent.enrichment?.weather_at_event ?? null,
+        ].filter((part): part is string => Boolean(part && part.trim())))
 
-  const status = deriveHeroStatus({
-    isTodayFocus,
-    isAllDay,
-    minutesUntilLeave,
-    trafficDelayMins: travelEta?.traffic_delay_mins ?? null,
-  })
-  const ringWindowMins = isTodayFocus ? (isHosted ? 180 : 120) : 24 * 60
-  const ringProgress = isTodayFocus && !isAllDay
-    ? Math.max(0.06, Math.min(1, minutesUntilLeave / ringWindowMins))
-    : 1
+  const status = isInProgress
+    ? (minutesUntilEnd <= 10
+      ? { label: 'Wrapping up', tone: 'tight' as const }
+      : { label: 'Underway', tone: 'on-track' as const })
+    : deriveHeroStatus({
+      isTodayFocus,
+      isAllDay,
+      minutesUntilLeave,
+      trafficDelayMins: travelEta?.traffic_delay_mins ?? null,
+    })
+  const ringWindowMins = isInProgress
+    ? Math.max(1, totalDurationMins)
+    : isTodayFocus ? (isHosted ? 180 : 120) : 24 * 60
+  const ringProgress = isInProgress
+    ? Math.max(0.06, Math.min(1, minutesUntilEnd / ringWindowMins))
+    : isTodayFocus && !isAllDay
+      ? Math.max(0.06, Math.min(1, minutesUntilLeave / ringWindowMins))
+      : 1
   const ringRadius = 96
   const ringCircumference = 2 * Math.PI * ringRadius
   const ringDashOffset = ringCircumference * (1 - ringProgress)
-  const ringValue = isTodayFocus
-    ? (isAllDay ? 'All day' : formatHeroCountdown(minutesUntilLeave))
-    : 'Tomorrow'
-  const ringLabel = isTodayFocus
-    ? (isAllDay ? 'HAPPENING TODAY' : (isHosted ? 'UNTIL IT STARTS' : 'UNTIL YOU LEAVE'))
-    : (isAllDay ? 'STARTS ALL DAY' : `STARTS ${format(leaveAt, 'h:mm a').toUpperCase()}`)
+  const ringValue = isInProgress
+    ? formatHeroCountdown(minutesUntilEnd)
+    : isTodayFocus
+      ? (isAllDay ? 'All day' : formatHeroCountdown(minutesUntilLeave))
+      : 'Tomorrow'
+  const ringLabel = isInProgress
+    ? (isHosted ? 'OF COVERAGE LEFT' : 'TIME LEFT')
+    : isTodayFocus
+      ? (isAllDay ? 'HAPPENING TODAY' : (isHosted ? 'UNTIL IT STARTS' : 'UNTIL YOU LEAVE'))
+      : (isAllDay ? 'STARTS ALL DAY' : `STARTS ${format(leaveAt, 'h:mm a').toUpperCase()}`)
 
-  const mapsUrl = isHosted ? null : mapsUrlForEvent(focusEvent)
+  const mapsUrl = isHosted || isInProgress ? null : mapsUrlForEvent(focusEvent)
 
   return (
     <section className="hidden lg:block mt-2 mb-6" onClick={(e) => e.stopPropagation()}>
@@ -738,6 +796,14 @@ function DesktopHeroCard({
           <div className="mt-4 text-body text-white/86 max-w-[68ch] leading-relaxed">
             {detailParts.length > 0 ? detailParts.join(' · ') : eventLabel}
           </div>
+          {readinessItems.length > 0 && (
+            <div className="mt-2 flex items-center gap-2 text-body-sm text-white/64">
+              <span className="text-caption font-bold tracking-[0.12em] text-casa-gold/90 whitespace-nowrap">
+                {isInProgress ? 'ON HAND' : 'BEFORE YOU START'}
+              </span>
+              <span className="min-w-0 truncate">{readinessItems.join(' · ')}</span>
+            </div>
+          )}
           <div className="mt-6 flex items-center gap-3">
             {mapsUrl ? (
               <a
@@ -749,12 +815,20 @@ function DesktopHeroCard({
                 <Navigation size={18} />
                 Get directions
               </a>
+            ) : telUrl ? (
+              <a
+                href={telUrl}
+                className="h-12 px-7 rounded-button bg-casa-gold text-casa-navy font-semibold text-[1.08rem] flex items-center justify-center gap-2 whitespace-nowrap hover:brightness-110 transition-all border border-casa-gold/50"
+              >
+                <Phone size={18} />
+                {contactName ? `Call ${contactName.split(' ')[0]}` : 'Call'}
+              </a>
             ) : null}
             <button
               onClick={() => onViewDetails(focusEvent)}
               className={cn(
                 'h-12 px-7 rounded-button font-semibold text-[1.08rem] whitespace-nowrap transition-all',
-                mapsUrl
+                mapsUrl || telUrl
                   ? 'border border-white/25 bg-gradient-to-b from-white/6 to-white/[0.03] text-white hover:from-white/12 hover:to-white/[0.06]'
                   : 'bg-casa-gold text-casa-navy border border-casa-gold/50 hover:brightness-110',
               )}
