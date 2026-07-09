@@ -4666,15 +4666,15 @@ export default function CookPage() {
                     {directionsViewMode === 'step' && (
                       <div className="px-4 pb-2">
                         <div className="rounded-card border border-casa-accent-subtle-border bg-casa-accent-subtle px-3 py-2">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-casa-top-pick-band">Needed now</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-casa-top-pick-band">Needed now</p>
                           {neededNowIngredientRows.length === 0 ? (
-                            <p className="text-[11px] text-casa-muted mt-1">No ingredient highlights yet.</p>
+                            <p className="text-[12px] text-casa-muted mt-1">No ingredient highlights yet.</p>
                           ) : (
                             <div className="mt-1.5 flex flex-wrap gap-1.5">
                               {neededNowIngredientRows.map((row) => (
                                 <span
                                   key={`needed-now-${row.id}`}
-                                  className="inline-flex items-center gap-1 rounded-pill border border-casa-accent-soft-border bg-casa-accent-soft px-2.5 py-1 text-[11px] text-casa-top-pick-band"
+                                  className="inline-flex items-center gap-1 rounded-pill border border-casa-accent-soft-border bg-casa-accent-soft px-2.5 py-1 text-[12px] text-casa-top-pick-band"
                                 >
                                   <span className="font-semibold">{row.name}</span>
                                   {row.qty && <span className="opacity-80">{row.qty}</span>}
@@ -4750,7 +4750,7 @@ export default function CookPage() {
                                 </span>
                                 <div className="min-w-0 flex-1">
                                   {isCurrent && (
-                                    <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-casa-info-strong mb-2">
+                                    <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-casa-info-strong mb-2">
                                       Current step
                                     </p>
                                   )}
@@ -4767,7 +4767,7 @@ export default function CookPage() {
                                       {neededNowIngredientRows.map((row) => (
                                         <span
                                           key={`mini-needed-${row.id}`}
-                                          className="inline-flex items-center gap-1.5 rounded-pill border border-casa-accent-soft-border bg-casa-surface px-3 py-1.5 text-[12px] font-semibold text-casa-top-pick-band"
+                                          className="inline-flex items-center gap-1.5 rounded-pill border border-casa-accent-soft-border bg-casa-surface px-3 py-1.5 text-[13px] font-semibold text-casa-top-pick-band"
                                         >
                                           {row.name}
                                           {row.qty && <b className="font-semibold text-casa-text-secondary">{row.qty}</b>}
