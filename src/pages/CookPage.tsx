@@ -4756,7 +4756,7 @@ export default function CookPage() {
                                   )}
                                   <p
                                     className={cn(
-                                      'text-[17px] leading-relaxed pt-0.5',
+                                      'text-[28px] leading-snug pt-0.5',
                                       isDone ? 'text-casa-text-tertiary' : 'text-casa-navy'
                                     )}
                                   >
