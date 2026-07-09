@@ -4421,15 +4421,6 @@ export default function CookPage() {
                   >
                     Edit
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => requestDeleteRecipe(cookRecipe)}
-                    disabled={deletingRecipeId === cookRecipe.id}
-                    className="px-2.5 py-1.5 rounded-button bg-casa-surface/85 backdrop-blur border border-casa-error/40 text-[11px] text-casa-error hover:bg-casa-error/10 inline-flex items-center gap-1 disabled:opacity-60"
-                  >
-                    <Trash2 size={12} />
-                    {deletingRecipeId === cookRecipe.id ? 'Deleting…' : 'Delete'}
-                  </button>
                 </div>
               </div>
             )}
