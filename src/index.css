@@ -198,8 +198,12 @@ h1, h2, h3, h4, h5, h6 {
 /* Applied unconditionally — this is a touch-first app           */
 
 html {
-  /* Prevent pull-to-refresh and overscroll bounce on touch */
-  overscroll-behavior: none;
+  /* Rubber-band glow at scroll edges (tablet feel) but NO pull-to-refresh:
+     `contain` keeps the local elastic bounce while blocking scroll chaining /
+     pull-to-refresh navigation. (`none` would suppress the bounce entirely.)
+     The bounce only renders when Chromium's ElasticOverscroll feature is on —
+     enabled in the Pi launcher via --enable-features=ElasticOverscroll. */
+  overscroll-behavior: contain;
   /* Don't block scroll/swipe — let individual elements define touch-action */
   touch-action: auto;
 }

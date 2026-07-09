@@ -110,6 +110,7 @@ chromium-browser \
   --enable-touch-drag-drop \
   --disable-pinch \
   --overscroll-history-navigation=0 \
+  --enable-features=ElasticOverscroll \
   --disable-features=TranslateUI,Translate \
   --noerrdialogs \
   --disable-infobars \
