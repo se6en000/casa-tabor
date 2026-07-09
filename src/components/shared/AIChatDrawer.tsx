@@ -1096,7 +1096,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                 />
               ))}
 
-              {loading && (
+              {loading && !messages.some(m => m.streaming) && (
                 <div className="flex items-center gap-2 text-casa-muted pl-1">
                   <Loader2 size={15} className="animate-spin text-casa-gold" />
                   <span className="text-caption">Thinking…</span>
@@ -1305,6 +1305,12 @@ function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe
           isUser
             ? <p className="whitespace-pre-wrap">{msg.content}</p>
             : <MarkdownMessage content={msg.content} />
+        )}
+        {msg.streaming && (
+          <span className="inline-flex items-center gap-1 align-middle" aria-hidden="true">
+            {!msg.content && <span className="text-caption text-casa-muted">Thinking…</span>}
+            <span className="inline-block w-1.5 h-3.5 bg-casa-gold/80 rounded-sm animate-pulse ml-0.5" />
+          </span>
         )}
         {showQuickSaveRecipe && (
           <div className="mt-2">

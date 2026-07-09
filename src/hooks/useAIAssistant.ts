@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, supabaseUrl, supabaseAnonKey } from '../lib/supabase'
 import type { EventWithDetails } from './useCalendarEvents'
 import type { FamilyMember } from '../types'
 import { useAISession, type AIMessage } from './useAISession'
@@ -187,40 +187,34 @@ export function useAIAssistant(ctx: AssistantContext) {
       ? { mimeType: image.mimeType, data: image.dataUrl.replace(/^data:[^;]+;base64,/, '') }
       : undefined
 
-    try {
-      const currentMessages = [...messagesRef.current, userMsg]
-      const allMsgsForApi = currentMessages.map(m => ({ role: m.role, content: m.content }))
+    const currentMessages = [...messagesRef.current, userMsg]
+    const allMsgsForApi = currentMessages.map(m => ({ role: m.role, content: m.content }))
+    const requestBody = {
+      messages: allMsgsForApi,
+      context: buildContext(ctxRef.current, currentMessages),
+      image: imagePayload,
+      session_id: activeSession.id,
+      correlation_id: buildCorrelationId(userMsg.id, activeSession.id),
+    }
 
-      const invokePromise = supabase.functions.invoke('ai-assistant', {
-        body: {
-          messages: allMsgsForApi,
-          context: buildContext(ctxRef.current, currentMessages),
-          image: imagePayload,
-          session_id: activeSession.id,
-          correlation_id: buildCorrelationId(userMsg.id, activeSession.id),
-        },
-      })
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('AI request timed out')), 30000)
-      )
-      const { data, error } = await Promise.race([invokePromise, timeoutPromise]) as Awaited<typeof invokePromise>
-      if (error) throw error
-
-      let assistantMsg: AIMessage
-
-      if (data.type === 'error') {
+    // Maps a server payload (identical shape for streaming `final` and the
+    // non-streaming JSON body) into an AIMessage. One code path → both flows stay
+    // perfectly consistent.
+    const buildAssistantMsg = (data: any, id: string): AIMessage => {
+      if (data?.type === 'error') {
         const isQuota = data.code === 'quota_exceeded'
-        assistantMsg = {
-          id: genId(),
+        return {
+          id,
           role: 'assistant',
           content: isQuota
             ? '⚠️ AI quota reached for today. Go to Settings → AI to check your billing.'
             : `Sorry, something went wrong: ${data.message ?? 'unknown error'}`,
         }
-      } else if (data.type === 'tool_action') {
+      }
+      if (data?.type === 'tool_action') {
         const displayText = (data.display_text as string) ?? `Action: ${data.tool}`
-        assistantMsg = {
-          id: genId(),
+        return {
+          id,
           role: 'assistant',
           content: displayText,
           toolAction: {
@@ -230,15 +224,127 @@ export function useAIAssistant(ctx: AssistantContext) {
             status: 'pending',
           },
         }
-      } else {
-        assistantMsg = { id: genId(), role: 'assistant', content: (data.text ?? '') as string }
       }
+      return { id, role: 'assistant', content: (data?.text ?? '') as string }
+    }
 
+    const persist = (assistantMsg: AIMessage) => {
       setMessages(prev => {
         const updated = [...prev, assistantMsg]
         if (activeSession) saveMessages(activeSession.id, updated)
         return updated
       })
+    }
+
+    // Non-streaming path (also the fallback when streaming fails). Unchanged behavior.
+    const runNonStreaming = async () => {
+      const invokePromise = supabase.functions.invoke('ai-assistant', { body: requestBody })
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('AI request timed out')), 30000)
+      )
+      const { data, error } = await Promise.race([invokePromise, timeoutPromise]) as Awaited<typeof invokePromise>
+      if (error) throw error
+      persist(buildAssistantMsg(data, genId()))
+    }
+
+    // Streaming path: progressively render tokens, then reconcile with the `final`
+    // payload. Returns true on success; false → caller falls back to non-streaming.
+    const runStreaming = async (): Promise<boolean> => {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 35000)
+      const streamMsgId = genId()
+      let placeholderAdded = false
+      let sawToken = false
+      let finalApplied = false
+      let streamedText = ''
+      const salvagePartial = () => {
+        setMessages(prev => {
+          const updated = prev.map(m => m.id === streamMsgId ? { ...m, content: streamedText, streaming: false } : m)
+          if (activeSession) saveMessages(activeSession.id, updated)
+          return updated
+        })
+      }
+      const removePlaceholder = () => {
+        if (placeholderAdded) setMessages(prev => prev.filter(m => m.id !== streamMsgId))
+      }
+      try {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/ai-assistant`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            apikey: supabaseAnonKey,
+            authorization: `Bearer ${supabaseAnonKey}`,
+          },
+          body: JSON.stringify({ ...requestBody, stream: true }),
+          signal: controller.signal,
+        })
+        if (!resp.ok || !resp.body) return false
+        const reader = resp.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+        const handleEvent = (evt: string, dataStr: string) => {
+          let payload: any
+          try { payload = JSON.parse(dataStr) } catch { return }
+          if (evt === 'token') {
+            if (!placeholderAdded) {
+              placeholderAdded = true
+              setMessages(prev => [...prev, { id: streamMsgId, role: 'assistant', content: '', streaming: true }])
+            }
+            sawToken = true
+            streamedText += payload.delta ?? ''
+            const next = streamedText
+            setMessages(prev => prev.map(m => m.id === streamMsgId ? { ...m, content: next } : m))
+          } else if (evt === 'final') {
+            finalApplied = true
+            const finalMsg = buildAssistantMsg(payload, streamMsgId)
+            setMessages(prev => {
+              const exists = prev.some(m => m.id === streamMsgId)
+              const updated = exists
+                ? prev.map(m => m.id === streamMsgId ? { ...finalMsg, streaming: false } : m)
+                : [...prev, { ...finalMsg, streaming: false }]
+              if (activeSession) saveMessages(activeSession.id, updated)
+              return updated
+            })
+          }
+        }
+        for (;;) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          let sep: number
+          while ((sep = buf.indexOf('\n\n')) !== -1) {
+            const rawEvent = buf.slice(0, sep)
+            buf = buf.slice(sep + 2)
+            let evt = 'message'
+            let dataStr = ''
+            for (const line of rawEvent.split('\n')) {
+              if (line.startsWith('event:')) evt = line.slice(6).trim()
+              else if (line.startsWith('data:')) dataStr += line.slice(5).trim()
+            }
+            if (dataStr) handleEvent(evt, dataStr)
+          }
+        }
+        if (finalApplied) return true
+        // Stream ended without a `final` event but we have streamed text → salvage it
+        // (avoids a duplicate LLM round-trip).
+        if (sawToken && streamedText.trim()) { salvagePartial(); return true }
+        removePlaceholder()
+        return false
+      } catch (err) {
+        if (finalApplied) return true
+        // Mid-stream failure with visible partial text → salvage rather than double-call.
+        if (sawToken && streamedText.trim()) { salvagePartial(); return true }
+        removePlaceholder()
+        console.warn('[useAIAssistant] streaming failed, falling back', err)
+        return false
+      } finally {
+        clearTimeout(timeout)
+      }
+    }
+
+    try {
+      const streamed = await runStreaming()
+      if (!streamed) await runNonStreaming()
     } catch (e) {
       const msg = (e as Error).message ?? 'Something went wrong'
       const isTimeout = msg.includes('timed out')

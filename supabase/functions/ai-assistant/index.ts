@@ -82,7 +82,13 @@ Deno.serve(async (req) => {
     client_trace_source: clientTraceSourceRaw,
     dry_run: dryRunRaw,
     model_override: modelOverrideRaw,
+    stream: streamRaw,
   } = await req.json()
+  const wantStream = streamRaw === true
+  // Assigned by the SSE ReadableStream controller when streaming; no-op otherwise.
+  // Token-producing LLM calls forward text deltas through this so the client can
+  // render the answer progressively. Default no-op = identical non-streaming behavior.
+  let emitToken: (delta: string) => void = () => {}
   const modelOverride = typeof modelOverrideRaw === 'string' && modelOverrideRaw.trim().length > 0
     ? modelOverrideRaw.trim()
     : null
@@ -171,6 +177,7 @@ Deno.serve(async (req) => {
     })
   }
 
+  const run = async (): Promise<{ status: number; payload: Record<string, unknown> }> => {
   // Load config, saved places, contacts, grocery list, events in parallel
   const now = new Date()
   // Start from 24h ago so in-progress events (started earlier today) are visible
@@ -222,9 +229,7 @@ Deno.serve(async (req) => {
 
   if (eventsResult.error) {
     console.error('[ai-assistant] events query error:', JSON.stringify(eventsResult.error))
-    return new Response(JSON.stringify({ type: 'debug', error: eventsResult.error, yearStart: windowStart.toISOString(), yearEnd: yearEnd.toISOString(), correlation_id: cid }), {
-      status: 200, headers: { ...CORS, 'content-type': 'application/json' }
-    })
+    return { status: 200, payload: { type: 'debug', error: eventsResult.error, yearStart: windowStart.toISOString(), yearEnd: yearEnd.toISOString(), correlation_id: cid } }
   }
   const allEvents = eventsResult.data
   console.log('[ai-assistant] events loaded:', allEvents?.length ?? 0)
@@ -273,6 +278,67 @@ Deno.serve(async (req) => {
       llm_calls: llmTelemetry.llm_calls,
     })
   }
+  // Unified Gemini call. When `stream` is true, uses streamGenerateContent (SSE),
+  // forwards text-part deltas through emitToken, and re-assembles chunks into the
+  // exact same shape as generateContent ({candidates:[{content:{parts},finishReason}], usageMetadata})
+  // so ALL downstream logic (functionCall detection, resolveModelParts, telemetry) is unchanged.
+  const callModel = async (
+    reqBody: unknown,
+    opts: { stream: boolean },
+  ): Promise<{ ok: boolean; status: number; data: any; errText: string }> => {
+    const base = `https://generativelanguage.googleapis.com/v1beta/models/${model}`
+    if (!opts.stream) {
+      const res = await fetch(`${base}:generateContent?key=${apiKey}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(reqBody),
+      })
+      if (!res.ok) return { ok: false, status: res.status, data: null, errText: await res.text().catch(() => '') }
+      return { ok: true, status: res.status, data: await res.json(), errText: '' }
+    }
+    const res = await fetch(`${base}:streamGenerateContent?alt=sse&key=${apiKey}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(reqBody),
+    })
+    if (!res.ok || !res.body) {
+      return { ok: res.ok && Boolean(res.body), status: res.status, data: null, errText: await res.text().catch(() => '') }
+    }
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    let textAccum = ''
+    const funcParts: any[] = []
+    let finishReason: string | undefined
+    let usageMetadata: any
+    const handleData = (jsonStr: string) => {
+      let obj: any
+      try { obj = JSON.parse(jsonStr) } catch { return }
+      const cand = obj?.candidates?.[0]
+      if (cand?.finishReason) finishReason = cand.finishReason
+      if (obj?.usageMetadata) usageMetadata = obj.usageMetadata
+      const parts = cand?.content?.parts ?? []
+      for (const p of parts) {
+        if (typeof p?.text === 'string') { textAccum += p.text; emitToken(p.text) }
+        else if (p?.functionCall) funcParts.push(p)
+      }
+    }
+    // SSE frames: each event is `data: {json}` on its own line, separated by \n\n.
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      let nl: number
+      while ((nl = buf.indexOf('\n')) !== -1) {
+        const line = buf.slice(0, nl).trim()
+        buf = buf.slice(nl + 1)
+        if (line.startsWith('data:')) handleData(line.slice(5).trim())
+      }
+    }
+    const tail = buf.trim()
+    if (tail.startsWith('data:')) handleData(tail.slice(5).trim())
+    const parts: any[] = []
+    if (textAccum) parts.push({ text: textAccum })
+    parts.push(...funcParts)
+    const data = { candidates: [{ content: { parts }, finishReason }], usageMetadata }
+    return { ok: true, status: res.status, data, errText: '' }
+  }
   appendServerTrace('server_ai_assistant_context_load', `ms=${contextLoadMs}`, {
     context_load_ms: contextLoadMs,
     events_loaded: allEvents?.length ?? 0,
@@ -294,9 +360,7 @@ Deno.serve(async (req) => {
   }
 
   if (!apiKey) {
-    return new Response(JSON.stringify({ type: 'error', code: 'no_api_key', message: 'No AI API key configured. Go to Settings → AI to add one.', correlation_id: cid }), {
-      status: 200, headers: { ...CORS, 'content-type': 'application/json' }
-    })
+    return { status: 200, payload: { type: 'error', code: 'no_api_key', message: 'No AI API key configured. Go to Settings → AI to add one.', correlation_id: cid } }
   }
 
   const utcOffset = (context.utcOffset as string) ?? '-04:00'
@@ -1480,14 +1544,11 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       tool_config: { function_calling_config: { mode: 'AUTO' } },
     }
 
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
-    )
+    const res = await callModel(body, { stream: wantStream })
     const llmPrimaryMs = Date.now() - llmStartMs
     console.log(`[ai-assistant][${cid}] stage=llm_primary ms=${llmPrimaryMs} status=${res.status}`)
     if (res.ok) {
-      const data = await res.json()
+      const data = res.data
       recordLlmCall('llm_primary', llmPrimaryMs, res.status, data)
       warnIfSlow('llm_primary', llmPrimaryMs, STAGE_SLO.llmPrimaryMs)
 
@@ -1649,17 +1710,14 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           const secondaryPrompt = systemInstruction + secondaryAddendum
           const secondaryBody = { ...body, system_instruction: { parts: [{ text: secondaryPrompt }] }, contents: newContents }
           const secondaryStartMs = Date.now()
-          const res2 = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-            { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(secondaryBody) }
-          )
+          const res2 = await callModel(secondaryBody, { stream: wantStream })
           const secondaryElapsedMs = Date.now() - secondaryStartMs
           console.log(`[ai-assistant][${cid}] stage=llm_secondary ms=${secondaryElapsedMs} status=${res2.status}`)
           if (!res2.ok) {
             recordLlmCall('llm_secondary', secondaryElapsedMs, res2.status)
             return { type: 'error', code: 'llm_error', message: 'Second LLM call failed' }
           }
-          const data2 = await res2.json()
+          const data2 = res2.data
           recordLlmCall('llm_secondary', secondaryElapsedMs, res2.status, data2)
           const secondaryParts = data2.candidates?.[0]?.content?.parts ?? []
           console.log(
@@ -1922,7 +1980,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     warnIfSlow('llm_primary', llmPrimaryMs, STAGE_SLO.llmPrimaryMs)
     recordLlmCall('llm_primary', llmPrimaryMs, res.status)
     if (!res.ok) {
-      const errText = await res.text()
+      const errText = res.errText
       const isQuota = res.status === 429 || errText.includes('RESOURCE_EXHAUSTED')
       return { type: 'error', code: isQuota ? 'quota_exceeded' : 'llm_error', message: errText.slice(0, 200) }
     }
@@ -2037,7 +2095,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       console.log(`[ai-assistant][${cid}] ? UNKNOWN_TYPE: ${String(result?.type ?? 'null')}`)
     }
     
-    return new Response(JSON.stringify({
+    return { status: 200, payload: {
       ...result,
       correlation_id: cid,
       telemetry: {
@@ -2045,16 +2103,52 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         request_total_ms: requestTotalMs,
         context_load_ms: contextLoadMs,
       },
-    }), {
-      headers: { ...CORS, 'content-type': 'application/json' },
-    })
+    } }
   } catch (e) {
     const msg = (e as Error).message ?? 'Unknown error'
     console.error(`[ai-assistant][${cid}] error ${msg}`)
     appendServerTrace('server_ai_assistant_error', msg, { error: msg })
-    return new Response(
-      JSON.stringify({ type: 'error', code: 'llm_error', message: msg, correlation_id: cid }),
-      { status: 200, headers: { ...CORS, 'content-type': 'application/json' } }
-    )
+    return { status: 200, payload: { type: 'error', code: 'llm_error', message: msg, correlation_id: cid } }
   }
+  }
+
+  if (!wantStream) {
+    const { status, payload } = await run()
+    return new Response(JSON.stringify(payload), {
+      status,
+      headers: { ...CORS, 'content-type': 'application/json' },
+    })
+  }
+
+  // Streaming path: open an SSE response immediately, run the same pipeline, and
+  // forward text deltas as `token` events. The complete payload (identical to the
+  // non-streaming JSON body) is always sent as a final `final` event so the client
+  // can authoritatively reconcile tool_action/error/text results.
+  const encoder = new TextEncoder()
+  const sse = (event: string, data: unknown) => encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+  const stream = new ReadableStream({
+    async start(controller) {
+      emitToken = (delta: string) => {
+        if (!delta) return
+        try { controller.enqueue(sse('token', { delta })) } catch { /* stream closed */ }
+      }
+      try {
+        const { payload } = await run()
+        controller.enqueue(sse('final', payload))
+      } catch (e) {
+        controller.enqueue(sse('final', {
+          type: 'error',
+          code: 'llm_error',
+          message: (e as Error)?.message ?? 'stream error',
+          correlation_id: cid,
+        }))
+      } finally {
+        emitToken = () => {}
+        try { controller.close() } catch { /* already closed */ }
+      }
+    },
+  })
+  return new Response(stream, {
+    headers: { ...CORS, 'content-type': 'text/event-stream', 'cache-control': 'no-cache', 'connection': 'keep-alive' },
+  })
 })

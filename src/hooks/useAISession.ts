@@ -5,6 +5,7 @@ export interface AIMessage {
   role: 'user' | 'assistant'
   content: string
   imageDataUrl?: string
+  streaming?: boolean
   toolAction?: {
     tool: string
     args: Record<string, unknown>
