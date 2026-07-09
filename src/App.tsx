@@ -171,7 +171,8 @@ function AppShell() {
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
   const location = useLocation()
-  const hideFab = location.pathname.startsWith('/settings') || screensaverActive
+  // Grocery page has its own dedicated FAB for adding items.
+  const hideFab = location.pathname.startsWith('/settings') || location.pathname.startsWith('/grocery') || screensaverActive
 
   useEffect(() => {
     setRoomToneZone(currentZone)
