@@ -4626,16 +4626,13 @@ export default function CookPage() {
                 </>
               ) : (
                 <div className="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_17.5rem] gap-3">
-                  <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden order-1 lg:min-w-0">
-                    <div className="px-4 pt-3 pb-2 flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-body font-semibold text-casa-navy">Directions</p>
-                        <p className="text-[11px] text-casa-muted">
-                          {directionsViewMode === 'step'
-                            ? `Step ${stepIndex + 1} of ${Math.max(1, cookSteps.length)}`
-                            : `${cookSteps.length} steps`}
-                        </p>
-                      </div>
+                  <div className="order-1 lg:min-w-0">
+                    <div className="pb-2 flex items-center justify-between gap-2">
+                      <p className="text-[12px] font-bold text-casa-navy">
+                        {directionsViewMode === 'step'
+                          ? `Step ${stepIndex + 1} of ${Math.max(1, cookSteps.length)}`
+                          : `${cookSteps.length} steps`}
+                      </p>
                       <div className="flex bg-casa-bg-2 rounded-pill p-[3px] gap-[2px]">
                         <button
                           type="button"
@@ -4664,7 +4661,7 @@ export default function CookPage() {
                       </div>
                     </div>
                     {directionsViewMode === 'step' && neededNowIngredientRows.length > 0 && (
-                      <div className="px-4 pb-2">
+                      <div className="pb-3">
                         <div className="rounded-card border border-casa-accent-subtle-border bg-casa-accent-subtle px-3 py-2">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-casa-top-pick-band">Needed now</p>
                           <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -4682,7 +4679,7 @@ export default function CookPage() {
                       </div>
                     )}
                     {directionsViewMode === 'step' && cookSteps.length > 1 && (
-                      <div className="px-4 pb-2 flex items-center gap-1" aria-hidden>
+                      <div className="pb-3 flex items-center gap-1" aria-hidden>
                         {cookSteps.map((_, index) => (
                           <span
                             key={`step-seg-${index}`}
@@ -4695,7 +4692,7 @@ export default function CookPage() {
                       </div>
                     )}
                     {directionsViewMode === 'all' && cookSteps.length > 1 && (
-                      <div className="px-4 pb-2">
+                      <div className="pb-3">
                         <div className="h-[5px] w-full rounded-pill bg-casa-control-border overflow-hidden" aria-hidden>
                           <div
                             className="h-full bg-casa-info transition-[width] duration-300"
@@ -4704,7 +4701,7 @@ export default function CookPage() {
                         </div>
                       </div>
                     )}
-                    <div className="p-4">
+                    <div className="pt-2">
                       {directionsViewMode === 'step' ? (
                         <div ref={(el) => { currentStepRef.current = el }} className="pr-1 flex gap-3">
                           <span className="text-casa-accent-soft-border font-extrabold leading-none text-[46px] flex-shrink-0 tabular-nums">
@@ -4781,7 +4778,7 @@ export default function CookPage() {
                   </div>
 
                   <div className="order-2">
-                    <div className="rounded-xl border border-casa-border bg-casa-bg overflow-hidden lg:sticky lg:top-0">
+                    <div className="rounded-xl border border-casa-border bg-casa-surface overflow-hidden lg:sticky lg:top-0 shadow-[0_1px_2px_1px_rgba(6,10,36,0.05)]">
                     <div className="px-4 pt-3 pb-3 border-b border-casa-divider">
                       <div className="flex items-baseline justify-between gap-2 mb-1.5">
                         <p className="text-[17px] font-bold text-casa-navy">Ingredients</p>
