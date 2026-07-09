@@ -4394,10 +4394,10 @@ export default function CookPage() {
                     className="w-[104px] h-[104px] rounded-card object-cover border border-white/25 shadow-card flex-shrink-0 bg-casa-navy"
                   />
                   <div className="min-w-0 pb-1">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-casa-info-soft">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-casa-info">
                       Now cooking
                     </p>
-                    <p className="mt-0.5 text-white font-semibold text-[20px] leading-tight line-clamp-2 drop-shadow">
+                    <p className="mt-0.5 text-white font-semibold text-[28px] leading-tight line-clamp-2 drop-shadow">
                       {cookRecipe.name}
                     </p>
                   </div>
