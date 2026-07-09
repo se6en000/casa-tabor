@@ -772,7 +772,12 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     if (!el) return
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 120) + 'px'
-  }, [input])
+    // When STT is actively streaming interim text, always scroll to the
+    // bottom of the textarea so the latest captured words are visible.
+    if (speech.listening || speech.connecting) {
+      el.scrollTop = el.scrollHeight
+    }
+  }, [input, speech.listening, speech.connecting])
 
   const readImageFile = useCallback((file: File | Blob): Promise<{ dataUrl: string; mimeType: string }> => {
     return new Promise((resolve, reject) => {
