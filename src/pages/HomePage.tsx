@@ -706,24 +706,12 @@ function HeroCarousel({
   // live position with zero state mirroring. A debounced timer clears the override
   // to snap back home. This avoids setState-in-effect entirely.
   const [override, setOverride] = useState<number | null>(null)
-  const [direction, setDirection] = useState(0)
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const effectiveIndex = Math.max(
     0,
     Math.min(slides.length - 1, override != null ? override : restingIndex),
   )
-
-  // Refs mirror the current view so callbacks/timeouts can pick a slide direction
-  // without reading refs during render (React Compiler-safe). Written in effects.
-  const shownIndexRef = useRef(effectiveIndex)
-  const restingIndexRef = useRef(restingIndex)
-  useEffect(() => {
-    shownIndexRef.current = effectiveIndex
-  }, [effectiveIndex])
-  useEffect(() => {
-    restingIndexRef.current = restingIndex
-  }, [restingIndex])
 
   useEffect(
     () => () => {
@@ -732,15 +720,26 @@ function HeroCarousel({
     [],
   )
 
+  // Measure the viewport so the filmstrip track can translate by exact pixels
+  // (finger-accurate drag + neighbor peek) and rebuild constraints on resize.
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const [viewportWidth, setViewportWidth] = useState(0)
+  useEffect(() => {
+    const el = viewportRef.current
+    if (!el) return
+    const measure = () => setViewportWidth(el.offsetWidth)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   const goTo = useCallback(
     (next: number) => {
       const clamped = Math.max(0, Math.min(slides.length - 1, next))
-      setDirection(clamped > shownIndexRef.current ? 1 : clamped < shownIndexRef.current ? -1 : 0)
       setOverride(clamped)
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
       idleTimerRef.current = setTimeout(() => {
-        const rest = restingIndexRef.current
-        setDirection(rest > shownIndexRef.current ? 1 : rest < shownIndexRef.current ? -1 : 0)
         setOverride(null)
       }, HERO_IDLE_REVERT_MS)
     },
@@ -750,48 +749,55 @@ function HeroCarousel({
   if (slides.length === 0) return null
 
   const safeIndex = effectiveIndex
-  const slide = slides[safeIndex]
-  const slideIsInProgress = !!activeEvent && slide.id === activeEvent.id
-  const slideIsToday = events.some((e) => e.id === slide.id)
-  const slideTravelEta = nextTodayEvent && slide.id === nextTodayEvent.id ? travelEta : null
-
-  const variants = {
-    enter: (dir: number) => ({ x: dir > 0 ? 220 : dir < 0 ? -220 : 0, opacity: 0 }),
-    center: { x: 0, opacity: 1 },
-    exit: (dir: number) => ({ x: dir > 0 ? -220 : dir < 0 ? 220 : 0, opacity: 0 }),
-  }
 
   return (
     <div className="hidden lg:block relative mt-2 mb-6">
-      <AnimatePresence initial={false} custom={direction} mode="popLayout">
+      {/* Filmstrip viewport: fixed-height (all slides rendered side-by-side, so the
+          flex track's stretch equalizes every card to the tallest → the timeline
+          below never jumps). Track translates by the measured viewport width so a
+          drag follows the finger and reveals the neighbor card's edge. */}
+      <div ref={viewportRef} className="overflow-hidden">
         <motion.div
-          key={slide.id}
-          custom={direction}
-          variants={variants}
-          initial="enter"
-          animate="center"
-          exit="exit"
-          transition={{ x: { type: 'spring', stiffness: 320, damping: 34 }, opacity: { duration: 0.18 } }}
-          drag={multi ? 'x' : false}
-          dragConstraints={{ left: 0, right: 0 }}
-          dragElastic={0.16}
+          className="flex items-stretch"
+          data-native-drag
+          drag={multi && viewportWidth > 0 ? 'x' : false}
+          dragConstraints={{ left: -(slides.length - 1) * viewportWidth, right: 0 }}
+          dragElastic={0.14}
+          dragMomentum={false}
+          animate={{ x: -safeIndex * viewportWidth }}
+          transition={{ type: 'spring', stiffness: 300, damping: 34, mass: 0.9 }}
           onDragEnd={(_e, info) => {
             if (!multi) return
-            const swipe = Math.abs(info.offset.x) * info.velocity.x
-            if (info.offset.x < -70 || swipe < -600) goTo(safeIndex + 1)
-            else if (info.offset.x > 70 || swipe > 600) goTo(safeIndex - 1)
+            const threshold = Math.max(60, viewportWidth * 0.18)
+            const flung = Math.abs(info.velocity.x) > 520
+            if ((info.offset.x < -threshold || (flung && info.velocity.x < 0)) && safeIndex < slides.length - 1) {
+              goTo(safeIndex + 1)
+            } else if ((info.offset.x > threshold || (flung && info.velocity.x > 0)) && safeIndex > 0) {
+              goTo(safeIndex - 1)
+            } else {
+              goTo(safeIndex) // settle back to the current slide
+            }
           }}
         >
-          <DesktopHeroCard
-            now={now}
-            focusEvent={slide}
-            isInProgress={slideIsInProgress}
-            isTodayFocus={slideIsToday}
-            onViewDetails={onViewDetails}
-            travelEta={slideTravelEta}
-          />
+          {slides.map((s) => {
+            const sIsInProgress = !!activeEvent && s.id === activeEvent.id
+            const sIsToday = events.some((e) => e.id === s.id)
+            const sTravelEta = nextTodayEvent && s.id === nextTodayEvent.id ? travelEta : null
+            return (
+              <div key={s.id} className="shrink-0 grow-0 basis-full">
+                <DesktopHeroCard
+                  now={now}
+                  focusEvent={s}
+                  isInProgress={sIsInProgress}
+                  isTodayFocus={sIsToday}
+                  onViewDetails={onViewDetails}
+                  travelEta={sTravelEta}
+                />
+              </div>
+            )
+          })}
         </motion.div>
-      </AnimatePresence>
+      </div>
 
       {multi && (
         <div className="flex items-center justify-center gap-3 mt-3">
@@ -963,8 +969,8 @@ function DesktopHeroCard({
   const mapsUrl = isHosted || isInProgress ? null : mapsUrlForEvent(focusEvent)
 
   return (
-    <section className="relative" onClick={(e) => e.stopPropagation()}>
-      <div className="relative rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-7 grid grid-cols-[1fr_420px] gap-8 overflow-hidden">
+    <section className="relative h-full" onClick={(e) => e.stopPropagation()}>
+      <div className="relative h-full rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-7 grid grid-cols-[1fr_420px] gap-8 overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/8 via-transparent to-black/10" />
         {isBirthday && <BirthdayCardDecoration className="opacity-60" />}
         <div className="relative z-10 min-w-0 flex flex-col">
