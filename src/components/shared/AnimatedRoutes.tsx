@@ -62,10 +62,15 @@ export default function AnimatedRoutes() {
           <Route path="theme"      element={<Navigate to="/settings/display" replace />} />
           <Route path="status"     element={<StatusDashboardPage />} />
           <Route path="analytics"  element={<DataAnalyticsPage />} />
-          <Route path="groceries-intelligence" element={<GroceryIntelligenceSettingsPage />} />
+          <Route path="grocery-intelligence" element={<GroceryIntelligenceSettingsPage />} />
+          {/* Back-compat: old plural path still resolves */}
+          <Route path="groceries-intelligence" element={<Navigate to="/settings/grocery-intelligence" replace />} />
           <Route path="food-profile" element={<FoodProfileSettingsPage />} />
           <Route path="pantry-inventory" element={<PantryInventorySettingsPage />} />
           <Route path="admin-ops" element={<AdminOpsPage />} />
+          {/* Any unknown settings sub-path falls back to a valid page instead
+              of rendering a blank Outlet (guards against link/route drift). */}
+          <Route path="*" element={<Navigate to="/settings/display" replace />} />
         </Route>
       </Routes>
     </AnimatePresence>
