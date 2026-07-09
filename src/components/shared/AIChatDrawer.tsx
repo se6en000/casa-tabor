@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { useAIAssistant, type AIMessage } from '../../hooks/useAIAssistant'
+import { useSpeechInput, IS_SAFE_MODE } from '../../hooks/useSpeechInput'
 import { useLedStrip } from '../../hooks/useLedStrip'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
@@ -12,385 +13,12 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
 
-const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s all|all done|never mind|nevermind|stop)\b/i
-const CONFIRM_PHRASES = /\b(yes|yeah|yep|confirm|ok|okay|go ahead|do it|sounds good|correct|right|affirmative|absolutely|sure|proceed)\b/i
-const CANCEL_PHRASES  = /\b(no|nope|cancel|don't|do not|stop|abort|never mind|nevermind|undo)\b/i
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
 const LOW_CONFIDENCE_REJECT_PHRASES = /\b(no|nope|try again|wrong|not that|cancel)\b/i
 
-/** DeepGram STT bridge — HTTP for probe/display, WS for streaming */
-const BRIDGE    = 'http://127.0.0.1:8766'
-const BRIDGE_WS = 'ws://127.0.0.1:8767'
-const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
-const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
-
-type VoicePhase = 'idle' | 'connecting' | 'listening' | 'processing'
-type STTMode = 'unknown' | 'bridge' | 'webspeech'
-
-const SILENCE_MS = 2500
-const CONNECT_TIMEOUT_MS = 5000
 const NO_ACTIVITY_AUTO_CLOSE_MS = 30_000
+const CONVERSATION_MODE_KEY = 'casa_ai_conversation_mode'
 
-/** Quick probe — resolves true if bridge is reachable within 800ms */
-async function probeBridge(): Promise<boolean> {
-  try {
-    const ctrl = new AbortController()
-    const tid = setTimeout(() => ctrl.abort(), 800)
-    const res = await fetch(`${BRIDGE}/status`, { signal: ctrl.signal })
-    clearTimeout(tid)
-    return res.ok
-  } catch {
-    return false
-  }
-}
-
-function useSpeechInput({
-  onInterim,
-  onFinalTranscript,
-  onDismiss,
-  onConfirm,
-  onCancel,
-  hasPendingAction,
-}: {
-  onInterim: (text: string) => void
-  onFinalTranscript: (text: string, meta?: { confidence?: number | null }) => void
-  onDismiss: () => void
-  onConfirm: () => void
-  onCancel: () => void
-  hasPendingAction: boolean
-}) {
-  const wsRef              = useRef<WebSocket | null>(null)
-  const activeRef          = useRef(false)
-  const suppressRef        = useRef(false)
-  const modeRef            = useRef<STTMode>('unknown')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef     = useRef<any>(null)
-  const silenceTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastInterimRef     = useRef('')
-  const lastInterimTimeRef = useRef(0)
-  const lastConfidenceRef  = useRef<number | null>(null)
-  const connectStartRef    = useRef(0)
-  const [phase, setPhase]  = useState<VoicePhase>('idle')
-  const phaseRef           = useRef<VoicePhase>('idle')
-  const setPhaseSync = (p: VoicePhase) => { phaseRef.current = p; setPhase(p) }
-  const [volume, setVolume] = useState(0)
-  const [bridgeDown, setBridgeDown] = useState(false)
-  const supported = !IS_SAFE_MODE
-
-  // ── Stable callback refs — always current, never stale inside setInterval ──
-  // This is the core pattern for voice agents: the polling loop runs continuously
-  // but React re-creates callbacks whenever state changes (e.g. hasPendingAction).
-  // Using refs ensures the poll always calls the latest version.
-  const onInterimRef       = useRef(onInterim)
-  const onFinalRef         = useRef(onFinalTranscript)
-  const onDismissRef       = useRef(onDismiss)
-  const onConfirmRef       = useRef(onConfirm)
-  const onCancelRef        = useRef(onCancel)
-  const hasPendingRef      = useRef(hasPendingAction)
-  useEffect(() => { onInterimRef.current  = onInterim },        [onInterim])
-  useEffect(() => { onFinalRef.current    = onFinalTranscript }, [onFinalTranscript])
-  useEffect(() => { onDismissRef.current  = onDismiss },         [onDismiss])
-  useEffect(() => { onConfirmRef.current  = onConfirm },         [onConfirm])
-  useEffect(() => { onCancelRef.current   = onCancel },          [onCancel])
-  useEffect(() => { hasPendingRef.current = hasPendingAction },  [hasPendingAction])
-
-  const normalizeConfidence = useCallback((raw: unknown): number | null => {
-    if (typeof raw !== 'number' || !Number.isFinite(raw)) return null
-    if (raw > 1 && raw <= 100) return Math.max(0, Math.min(1, raw / 100))
-    return Math.max(0, Math.min(1, raw))
-  }, [])
-
-  // Stable ref — avoids recreating startWebSpeech on every render
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const WebSpeech = useRef<any>(
-    typeof window !== 'undefined'
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ? ((window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition ?? null)
-      : null
-  ).current
-
-  const stopWS = () => {
-    if (wsRef.current) {
-      try { wsRef.current.close() } catch { /* ignore */ }
-      wsRef.current = null
-    }
-  }
-  const stopSilenceTimer = () => { if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
-
-  // No deps — uses only refs, so triggerFinal/startBridge are created once and never stale
-  const handleFinalTranscript = useCallback((transcript: string) => {
-    if (!transcript.trim()) return
-    if (suppressRef.current) return
-    if (DISMISS_PHRASES.test(transcript)) {
-      activeRef.current = false  // prevent poll-scheduled restart from re-firing
-      onDismissRef.current()
-      return
-    }
-    const isShort = transcript.trim().split(/\s+/).length <= 5
-    if (isShort && hasPendingRef.current && CONFIRM_PHRASES.test(transcript)) {
-      onConfirmRef.current(); onInterimRef.current('')
-      return
-    }
-    if (isShort && hasPendingRef.current && CANCEL_PHRASES.test(transcript)) {
-      onCancelRef.current(); onInterimRef.current('')
-      return
-    }
-    onFinalRef.current(transcript.trim(), { confidence: lastConfidenceRef.current })
-    onFinalRef.current('__SEND__', { confidence: lastConfidenceRef.current })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const triggerFinal = useCallback((text: string) => {
-    stopWS()
-    stopSilenceTimer()
-    setPhaseSync('processing')
-    const finalText = text.trim() || lastInterimRef.current.trim()
-    lastInterimRef.current = ''
-    lastInterimTimeRef.current = 0
-    handleFinalTranscript(finalText)
-  }, [handleFinalTranscript])
-
-  // ── Web Speech API path (Safari / iOS) ──────────────────────────────────
-  const startWebSpeech = useCallback(() => {
-    if (!WebSpeech || !activeRef.current) return
-    // Kill any lingering instance to prevent duplicate ghost listeners
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop() } catch { /* ignore */ }
-      recognitionRef.current = null
-    }
-    setPhaseSync('listening')
-
-    const recognition = new WebSpeech()
-    recognitionRef.current = recognition
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.lang = 'en-US'
-
-    recognition.onresult = (event: any) => {
-      let interim = ''
-      let finalAccum = ''
-      let finalConfidence: number | null = null
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const t = event.results[i][0].transcript
-        if (event.results[i].isFinal) {
-          finalAccum += t
-          finalConfidence = normalizeConfidence(event.results[i][0].confidence)
-        }
-        else interim += t
-      }
-
-      // Use final result immediately (authoritative — no silence timer needed)
-      if (finalAccum.trim()) {
-        lastConfidenceRef.current = finalConfidence
-        stopSilenceTimer()
-        lastInterimRef.current = ''
-        onInterimRef.current(finalAccum.trim())
-        try { recognition.stop() } catch { /* ignore */ }
-        triggerFinal(finalAccum.trim())
-        if (activeRef.current) setTimeout(() => startWebSpeech(), 300)
-        return
-      }
-
-      const display = interim.trim()
-      if (!display) return
-
-      onInterimRef.current(display)
-      lastInterimRef.current = display
-
-      // Silence timer fallback for browsers that don't emit isFinal promptly
-      stopSilenceTimer()
-      silenceTimerRef.current = setTimeout(() => {
-        if (lastInterimRef.current && activeRef.current) {
-          const toSend = lastInterimRef.current
-          lastInterimRef.current = ''
-          try { recognition.stop() } catch { /* ignore */ }
-          triggerFinal(toSend)
-          if (activeRef.current) setTimeout(() => startWebSpeech(), 300)
-        }
-      }, SILENCE_MS)
-    }
-
-    recognition.onerror = (e: any) => {
-      // 'no-speech' and 'aborted' are expected — no-speech = silence, aborted = we called stop()
-      if (e.error === 'no-speech' || e.error === 'aborted') return
-      console.warn('[WebSpeech] error', e.error)
-      if (activeRef.current) setTimeout(() => startWebSpeech(), 500)
-    }
-
-    recognition.onend = () => {
-      // continuous=true can still stop on silence — restart transparently
-      // Use phaseRef (not phase) to avoid stale closure
-      if (activeRef.current && phaseRef.current !== 'processing') {
-        setTimeout(() => startWebSpeech(), 150)
-      }
-    }
-
-    recognition.start()
-  }, [WebSpeech, triggerFinal, normalizeConfidence]) // all state accessed via refs
-
-  const stopWebSpeech = useCallback(() => {
-    stopSilenceTimer()
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop() } catch { /* ignore */ }
-      recognitionRef.current = null
-    }
-  }, [])
-
-  // ── Bridge path (Pi / Chromium) ─────────────────────────────────────────
-  const startBridge = useCallback(() => {
-    if (!activeRef.current) return
-    stopWS()
-    lastInterimRef.current = ''
-    lastInterimTimeRef.current = 0
-    connectStartRef.current = Date.now()
-    setPhaseSync('connecting')
-
-    const ws = new WebSocket(BRIDGE_WS)
-    wsRef.current = ws
-
-    ws.onopen = () => {
-      setBridgeDown(false)
-      ws.send(JSON.stringify({ type: 'start' }))
-    }
-
-    ws.onmessage = (evt) => {
-      if (!activeRef.current) return
-      try {
-        const msg = JSON.parse(evt.data as string)
-        switch (msg.type) {
-          case 'ready':
-            setPhaseSync('listening')
-            connectStartRef.current = 0
-            setBridgeDown(false)
-            break
-          case 'volume':
-            setVolume(msg.level ?? 0)
-            break
-          case 'interim':
-            if (msg.text !== lastInterimRef.current) {
-              lastInterimRef.current = msg.text
-              lastInterimTimeRef.current = Date.now()
-              lastConfidenceRef.current = normalizeConfidence(msg.confidence)
-              onInterimRef.current(msg.text)
-            }
-            break
-          case 'final':
-            if (phaseRef.current !== 'processing') {
-              lastConfidenceRef.current = normalizeConfidence(msg.confidence)
-              triggerFinal(msg.text)
-              if (activeRef.current) setTimeout(() => startBridge(), 300)
-            }
-            break
-          case 'error':
-            console.warn('[STT] bridge error', msg.msg)
-            if (activeRef.current) setTimeout(() => startBridge(), 500)
-            break
-        }
-      } catch { /* ignore */ }
-    }
-
-    ws.onerror = () => {
-      console.warn('[STT] WS connection error')
-    }
-
-    ws.onclose = () => {
-      wsRef.current = null
-      setVolume(0)
-      if (connectStartRef.current > 0 && Date.now() - connectStartRef.current > CONNECT_TIMEOUT_MS) {
-        console.warn('[STT] connect timeout, retrying')
-        setBridgeDown(true)
-      }
-      if (activeRef.current && phaseRef.current !== 'processing') {
-        setTimeout(() => startBridge(), 500)
-      }
-    }
-  }, [triggerFinal, normalizeConfidence]) // onInterim/phase via refs
-
-  const stopBridge = useCallback(() => {
-    if (wsRef.current) {
-      try { wsRef.current.send(JSON.stringify({ type: 'stop' })) } catch { /* ignore */ }
-    }
-    stopWS()
-  }, [])
-
-  // ── Unified start / stop ─────────────────────────────────────────────────
-  const stop = useCallback(async () => {
-    activeRef.current = false
-    lastInterimRef.current = ''
-    lastInterimTimeRef.current = 0
-    lastConfidenceRef.current = null
-    connectStartRef.current = 0
-    setPhaseSync('idle')
-    setVolume(0)
-    onInterimRef.current('')
-    if (modeRef.current === 'webspeech') stopWebSpeech()
-    else stopBridge()
-  }, [stopWebSpeech, stopBridge])
-
-  const start = useCallback(async () => {
-    if (activeRef.current) return
-    if (IS_SAFE_MODE) return
-    activeRef.current = true
-    setPhaseSync('connecting')
-
-    // Auto-detect once per component lifetime — don't re-probe on every open
-    if (modeRef.current === 'unknown') {
-      const hasBridge = await probeBridge()
-      modeRef.current = hasBridge ? 'bridge' : (WebSpeech ? 'webspeech' : 'bridge')
-      console.log(`[STT] mode: ${modeRef.current}`)
-    }
-
-    if (modeRef.current === 'webspeech') startWebSpeech()
-    else startBridge()
-  }, [startWebSpeech, startBridge, WebSpeech])
-
-  const toggle = useCallback(() => {
-    if (activeRef.current) stop()
-    else start()
-  }, [start, stop])
-
-  // Suppress/unsuppress without stopping the mic — used during AI loading
-  const suppress  = useCallback(() => { suppressRef.current = true  }, [])
-  const unsuppress = useCallback(() => { suppressRef.current = false }, [])
-
-  // Ensure mic is running — restarts WebSpeech if it naturally ended while suppressed.
-  // Reads phaseRef (not state) to avoid stale closure — ensureRunning is created once.
-  const ensureRunning = useCallback(() => {
-    if (!activeRef.current) return  // fully stopped (drawer closed), don't restart
-    if (
-      modeRef.current === 'webspeech' &&
-      phaseRef.current !== 'listening' &&
-      phaseRef.current !== 'connecting'
-    ) {
-      startWebSpeech()
-    }
-    // Bridge stays running continuously — no action needed
-  }, [startWebSpeech]) // phase read via phaseRef, no stale closure
-
-  // Ensure bridge/webspeech resources are always torn down on component unmount.
-  useEffect(() => {
-    return () => {
-      activeRef.current = false
-      stopSilenceTimer()
-      stopWebSpeech()
-      stopBridge()
-    }
-  }, [stopWebSpeech, stopBridge])
-
-  return {
-    phase,
-    volume,
-    supported,
-    bridgeDown,
-    start,
-    stop,
-    toggle,
-    suppress,
-    unsuppress,
-    ensureRunning,
-    listening: phase === 'listening',
-    connecting: phase === 'connecting',
-  }
-}
 
 
 
@@ -423,6 +51,14 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
   const hadUserInteractionRef = useRef(false)
   const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; mimeType: string } | null>(null)
   const [nudgeDismissed, setNudgeDismissed] = useState(false)
+  const [conversationMode, setConversationMode] = useState<boolean>(() => {
+    try { return localStorage.getItem(CONVERSATION_MODE_KEY) === '1' } catch { return false }
+  })
+  const conversationModeRef = useRef(conversationMode)
+  useEffect(() => {
+    conversationModeRef.current = conversationMode
+    try { localStorage.setItem(CONVERSATION_MODE_KEY, conversationMode ? '1' : '0') } catch { /* ignore */ }
+  }, [conversationMode])
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -578,8 +214,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
         // Don't clear interimRef here — sendCurrentInput (voice path) defers the clear
         // so the full captured text stays visible in the input for ~800ms.
         latestVoiceConfidenceRef.current = null
-        // Stop mic after each voice-submitted message — user must tap mic to speak again
-        speechStopRef.current()
+        // Press-to-talk (default): stop the mic after each voice message so the user
+        // must tap again to speak. Conversation mode: keep the mic armed so the
+        // assistant loop continues hands-free (input is auto-suppressed while the
+        // AI is thinking, then re-armed when it finishes).
+        if (!conversationModeRef.current) speechStopRef.current()
       } else {
         if (text.trim()) markUserInteraction()
         interimRef.current = text
@@ -645,8 +284,9 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
         }
       }, NO_ACTIVITY_AUTO_CLOSE_MS)
       if (IS_SAFE_MODE) return
-      // Only auto-start mic when opened by wake word — otherwise user taps the mic button.
-      if (launchContext?.source === 'wake_word') {
+      // Auto-start mic when opened by wake word, or when hands-free conversation
+      // mode is enabled — otherwise the user taps the mic button (press-to-talk).
+      if (launchContext?.source === 'wake_word' || conversationModeRef.current) {
         speech.start()
       }
       // Focus textarea slightly after animation settles (UI only, doesn't affect mic)
@@ -860,6 +500,21 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     }))
   }, [markUserInteraction])
 
+  // Conversation mode: hands-free loop that keeps the mic armed between turns.
+  // Enabling it immediately starts listening; disabling stops the mic.
+  const handleConversationToggle = useCallback(() => {
+    markUserInteraction()
+    setConversationMode(prev => {
+      const next = !prev
+      if (next) {
+        if (speech.supported && !speech.listening && !speech.connecting) speech.start()
+      } else {
+        speech.stop()
+      }
+      return next
+    })
+  }, [markUserInteraction, speech])
+
   const hasSession = !sessionLoading && !!session && session.messages.length > 0
   const voiceLevel = Math.max(0, Math.min(1, speech.volume / 100))
   const isVoiceActive = speech.listening && voiceLevel > 0.12
@@ -941,6 +596,25 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                 </p>
               </div>
               <div className="flex items-center gap-1">
+                {speech.supported && (
+                  <button
+                    type="button"
+                    onClick={handleConversationToggle}
+                    aria-pressed={conversationMode}
+                    title={conversationMode
+                      ? 'Conversation mode ON — mic stays on for hands-free back-and-forth. Tap to turn off.'
+                      : 'Conversation mode OFF — tap to talk hands-free (mic re-arms after each reply).'}
+                    className={cn(
+                      'h-7 px-2 flex items-center gap-1 rounded-full text-caption font-medium transition-colors',
+                      conversationMode
+                        ? 'bg-casa-gold text-white'
+                        : 'text-casa-muted hover:text-casa-navy hover:bg-casa-divider',
+                    )}
+                  >
+                    <MessagesSquare size={13} />
+                    {conversationMode && <span>Convo</span>}
+                  </button>
+                )}
                 {hasSession && (
                   <button
                     type="button"
@@ -1093,6 +767,21 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   }}
                   registerPendingConfirm={(fn) => { pendingConfirmRef.current = fn }}
                   registerPendingCancel={(fn)  => { pendingCancelRef.current  = fn }}
+                  onEditMessage={(content) => {
+                    markUserInteraction()
+                    if (speech.listening || speech.connecting) speech.stop()
+                    setInput(content)
+                    interimRef.current = content
+                    if (textareaRef.current) {
+                      textareaRef.current.value = content
+                      setTimeout(() => {
+                        const el = textareaRef.current
+                        if (!el) return
+                        el.focus()
+                        el.setSelectionRange(el.value.length, el.value.length)
+                      }, 0)
+                    }
+                  }}
                 />
               ))}
 
@@ -1232,10 +921,14 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   ? speech.connecting
                     ? 'Connecting to mic…'
                     : speech.listening
-                      ? 'Listening — pause to send · say "goodbye" to close'
+                      ? conversationMode
+                        ? 'Conversation mode — listening · pause to send · say "goodbye" to close'
+                        : 'Listening — pause to send · say "goodbye" to close'
                       : hasTypedInput
                         ? 'Typing mode active — voice paused'
-                      : 'Tap 🎙 to start voice · pause to send'
+                      : conversationMode
+                        ? 'Conversation mode on — mic re-arms after each reply'
+                        : 'Tap 🎙 to start voice · pause to send'
                   : 'Tap ➤ to send · 📎 gallery · 📷 camera'}
               </p>
 
@@ -1250,7 +943,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
 
 /* ── Message Bubble ─────────────────────────────────────────── */
 
-function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingConfirm, registerPendingCancel }: {
+function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingConfirm, registerPendingCancel, onEditMessage }: {
   msg: AIMessage
   isLatest: boolean
   enableQuickSaveRecipe?: boolean
@@ -1261,12 +954,15 @@ function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe
   onRefreshToolAction: () => void
   registerPendingConfirm: (fn: () => Promise<boolean>) => void
   registerPendingCancel:  (fn: () => Promise<boolean>) => void
+  onEditMessage?: (content: string) => void
 }) {
   const isUser = msg.role === 'user'
   const ta = msg.toolAction
   const [quickSaving, setQuickSaving] = useState(false)
   const hasPendingAction = !!ta && ta.status === 'pending'
   const showQuickSaveRecipe = !isUser && !ta && Boolean(onQuickSaveRecipe) && Boolean(enableQuickSaveRecipe) && looksLikeRecipeSuggestion(msg.content)
+  // A plain user text message can be tapped to edit + resend (no images / tool actions).
+  const canEdit = isUser && !ta && !msg.imageDataUrl && Boolean(onEditMessage) && msg.content !== '(see attached image)' && Boolean(msg.content?.trim())
   const isStaleError = !!ta?.errorMsg && ta.errorMsg.toLowerCase().includes('changed since')
   const isDestructiveAction =
     ta?.tool === 'delete_event' ||
@@ -1292,12 +988,17 @@ function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe
 
   return (
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
-      <div className={cn(
-        'max-w-[85%] rounded-2xl px-4 py-2.5 text-body-sm leading-relaxed',
-        isUser
-          ? 'bg-casa-navy text-white rounded-br-sm'
-          : 'bg-casa-bg border border-casa-border text-casa-navy rounded-bl-sm'
-      )}>
+      <div
+        className={cn(
+          'max-w-[85%] rounded-2xl px-4 py-2.5 text-body-sm leading-relaxed',
+          isUser
+            ? 'bg-casa-navy text-white rounded-br-sm'
+            : 'bg-casa-bg border border-casa-border text-casa-navy rounded-bl-sm',
+          canEdit && 'cursor-pointer hover:brightness-110 transition',
+        )}
+        onClick={canEdit ? () => onEditMessage?.(msg.content) : undefined}
+        title={canEdit ? 'Tap to edit and resend' : undefined}
+      >
         {msg.imageDataUrl && (
           <img src={msg.imageDataUrl} alt="Attached" className="max-h-40 w-auto rounded-lg mb-2 object-cover" />
         )}
