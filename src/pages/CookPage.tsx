@@ -4705,9 +4705,9 @@ export default function CookPage() {
                       {directionsViewMode === 'step' ? (
                         <div ref={(el) => { currentStepRef.current = el }} className="pr-1 flex gap-3">
                           <span className="text-casa-accent-soft-border font-extrabold leading-none text-[46px] flex-shrink-0 tabular-nums">
-                            {String(stepIndex + 1).padStart(2, '0')}
+                            {stepIndex + 1}
                           </span>
-                          <p className="text-[28px] text-casa-text leading-snug pt-1">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
+                          <p className="text-[28px] text-casa-navy leading-snug pt-1">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
                         </div>
                       ) : (
                         <div className="flex flex-col pr-1">
@@ -4778,7 +4778,7 @@ export default function CookPage() {
                   </div>
 
                   <div className="order-2">
-                    <div className="rounded-xl border border-casa-border bg-casa-surface overflow-hidden lg:sticky lg:top-0 shadow-[0_1px_2px_1px_rgba(6,10,36,0.05)]">
+                    <div className="rounded-card border border-casa-border bg-casa-surface overflow-hidden lg:sticky lg:top-0 shadow-[0_1px_2px_1px_rgba(6,10,36,0.05)]">
                     <div className="px-4 pt-3 pb-3 border-b border-casa-divider">
                       <div className="flex items-baseline justify-between gap-2 mb-1.5">
                         <p className="text-[17px] font-bold text-casa-navy">Ingredients</p>
