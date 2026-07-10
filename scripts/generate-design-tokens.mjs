@@ -34,6 +34,7 @@ function renderTheme() {
   }
 
   lines.push(
+    '  --ds-font-scale: 1;',
     ...declarations(DESIGN_TOKENS.radius, 'radius'),
     ...declarations(DESIGN_TOKENS.shadow, 'shadow'),
     ...declarations(DESIGN_TOKENS.spacing, 'spacing'),
@@ -54,7 +55,7 @@ function renderTheme() {
   )
 
   for (const [key, token] of Object.entries(DESIGN_TOKENS.type)) {
-    lines.push(`  --ds-type-${key}: ${token.touch};`)
+    lines.push(`  --ds-type-${key}: calc(${token.touch} * var(--ds-font-scale));`)
   }
   for (const [key, value] of Object.entries(DESIGN_TOKENS.controls.touch)) {
     lines.push(`  --ds-control-${key}: ${value};`)
@@ -62,7 +63,7 @@ function renderTheme() {
 
   lines.push('}', '', 'html[data-density="compact"] {')
   for (const [key, token] of Object.entries(DESIGN_TOKENS.type)) {
-    lines.push(`  --ds-type-${key}: ${token.compact};`)
+    lines.push(`  --ds-type-${key}: calc(${token.compact} * var(--ds-font-scale));`)
   }
   for (const [key, value] of Object.entries(DESIGN_TOKENS.controls.compact)) {
     lines.push(`  --ds-control-${key}: ${value};`)
@@ -70,7 +71,7 @@ function renderTheme() {
 
   lines.push('}', '', 'html[data-density="kiosk"] {')
   for (const [key, token] of Object.entries(DESIGN_TOKENS.type)) {
-    lines.push(`  --ds-type-${key}: ${token.kiosk};`)
+    lines.push(`  --ds-type-${key}: calc(${token.kiosk} * var(--ds-font-scale));`)
   }
   for (const [key, value] of Object.entries(DESIGN_TOKENS.controls.kiosk)) {
     lines.push(`  --ds-control-${key}: ${value};`)

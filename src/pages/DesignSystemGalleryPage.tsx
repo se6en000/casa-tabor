@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Type, Palette, Ruler, Layers, Smartphone, Tablet, Monitor, CheckCircle2, Inbox, WifiOff } from 'lucide-react'
+import { Type, Palette, Ruler, Layers, Smartphone, Tablet, Monitor, CheckCircle2, Inbox, WifiOff, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { DEVICE_MATRIX, closestDeviceProfile } from '../lib/deviceMatrix.mjs'
+import {
+  DEFAULTS,
+  MIDNIGHT_GALLERY_DEFAULTS,
+  useTheme,
+  type ThemeColors,
+} from '../contexts/ThemeContext'
+import { DEFAULT_FONT_SCALE, MAX_FONT_SCALE, MIN_FONT_SCALE } from '../design-system/tokens.mjs'
 import {
   Button,
   Checkbox,
@@ -86,6 +93,20 @@ const CORE_COLORS: { className: string; label: string; token: string }[] = [
   { className: 'bg-casa-border', label: 'Border', token: '--color-casa-border' },
 ]
 
+const EDITABLE_COLORS: { key: keyof ThemeColors; label: string }[] = [
+  { key: 'casa-bg', label: 'Background' },
+  { key: 'casa-surface', label: 'Surface' },
+  { key: 'casa-navy', label: 'Primary' },
+  { key: 'casa-gold', label: 'Accent' },
+  { key: 'casa-text', label: 'Body text' },
+  { key: 'casa-text-secondary', label: 'Secondary text' },
+  { key: 'casa-border', label: 'Border' },
+  { key: 'casa-info', label: 'Info' },
+  { key: 'casa-success', label: 'Success' },
+  { key: 'casa-warning', label: 'Warning' },
+  { key: 'casa-error', label: 'Error' },
+]
+
 const SEMANTIC_COLORS: { className: string; label: string; token: string }[] = [
   { className: 'bg-casa-error', label: 'Error', token: '--color-casa-error' },
   { className: 'bg-casa-success', label: 'Success', token: '--color-casa-success' },
@@ -134,6 +155,16 @@ function useViewport() {
 }
 
 export default function DesignSystemGalleryPage() {
+  const {
+    activeTarget,
+    colors,
+    fontScale,
+    forceMidnight,
+    setActiveTarget,
+    setColor,
+    setFontScale,
+    setForceMidnight,
+  } = useTheme()
   const { width, height, isFinePointer } = useViewport()
   const [modalOpen, setModalOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -167,6 +198,114 @@ export default function DesignSystemGalleryPage() {
           <span className="font-semibold text-casa-navy">{closest.label}</span>
         </div>
       </div>
+
+      {/* ── Live theme lab ── */}
+      <Card className="space-y-5" padding="sm">
+        <SectionHeader
+          icon={SlidersHorizontal}
+          title="Live Theme Lab"
+          desc="Tune global type and color tokens. Changes apply across the app immediately and stay on this device."
+        />
+
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
+          <div className="rounded-card border border-casa-border bg-casa-bg p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <Heading role="heading">Global font scale</Heading>
+                <Text role="body-sm" muted>Scales every semantic type role while preserving its hierarchy.</Text>
+              </div>
+              <Text role="body" className="font-bold tabular-nums">{Math.round(fontScale * 100)}%</Text>
+            </div>
+            <input
+              type="range"
+              min={MIN_FONT_SCALE}
+              max={MAX_FONT_SCALE}
+              step={0.01}
+              value={fontScale}
+              aria-label="Global font scale"
+              onChange={(event) => setFontScale(Number(event.target.value))}
+              className="mt-4 w-full accent-casa-gold"
+            />
+            <div className="mt-1 flex justify-between text-caption text-casa-muted">
+              <span>{Math.round(MIN_FONT_SCALE * 100)}%</span>
+              <span>Default 100%</span>
+              <span>{Math.round(MAX_FONT_SCALE * 100)}%</span>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {[0.9, DEFAULT_FONT_SCALE, 1.15, 1.25].map((scale) => (
+                <Button
+                  key={scale}
+                  size="sm"
+                  variant={Math.abs(fontScale - scale) < 0.005 ? 'strong' : 'secondary'}
+                  aria-pressed={Math.abs(fontScale - scale) < 0.005}
+                  onClick={() => setFontScale(scale)}
+                >
+                  {Math.round(scale * 100)}%
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-card border border-casa-border bg-casa-bg p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <Heading role="heading">Global colors</Heading>
+                <Text role="body-sm" muted>Tap a swatch to edit its semantic token live.</Text>
+              </div>
+              <SegmentedControl
+                aria-label="Palette to edit"
+                value={activeTarget}
+                onChange={setActiveTarget}
+                options={[
+                  { value: 'day', label: 'Day' },
+                  { value: 'midnight', label: 'Midnight' },
+                ]}
+              />
+            </div>
+            {activeTarget === 'midnight' && (
+              <Switch
+                className="mt-3 border-t border-casa-divider pt-3"
+                label="Preview Midnight palette"
+                description="Apply this palette across the app while you edit it."
+                checked={forceMidnight}
+                onCheckedChange={setForceMidnight}
+              />
+            )}
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {EDITABLE_COLORS.map(({ key, label }) => (
+                <label key={key} className="flex min-h-control cursor-pointer items-center gap-2 rounded-button border border-casa-border bg-casa-surface px-3 py-2">
+                  <span className="relative size-control-sm shrink-0 overflow-hidden rounded-button border-2 border-casa-border shadow-card">
+                    <span className="absolute inset-0" style={{ backgroundColor: colors[key] }} />
+                    <input
+                      type="color"
+                      value={colors[key]}
+                      aria-label={`Change ${label} color`}
+                      onChange={(event) => setColor(key, event.target.value)}
+                      className="absolute inset-0 size-full cursor-pointer opacity-0"
+                    />
+                  </span>
+                  <span className="min-w-0">
+                    <Text role="caption" className="block truncate font-bold">{label}</Text>
+                    <Text role="caption" muted className="block font-mono">{colors[key].toUpperCase()}</Text>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <Button
+              className="mt-4"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                const defaults = activeTarget === 'midnight' ? MIDNIGHT_GALLERY_DEFAULTS : DEFAULTS
+                EDITABLE_COLORS.forEach(({ key }) => setColor(key, defaults[key]))
+              }}
+            >
+              <RotateCcw size={16} />
+              Reset visible colors
+            </Button>
+          </div>
+        </div>
+      </Card>
 
       {/* ── Typography ── */}
       <div className="rounded-card border border-casa-border bg-casa-surface p-4 space-y-4">

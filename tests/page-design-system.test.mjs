@@ -167,3 +167,29 @@ test('Cook preserves its landing hierarchy through shared design-system roles', 
   assert.doesNotMatch(cook, /text-\[\d+(?:\.\d+)?(?:px|rem|em)\]/)
   assert.doesNotMatch(styles, /\.cook-v2-/)
 })
+
+test('Design System settings expose persistent live font and color controls', () => {
+  const gallery = readFileSync(resolve('src/pages/DesignSystemGalleryPage.tsx'), 'utf8')
+  const theme = readFileSync(resolve('src/contexts/ThemeContext.tsx'), 'utf8')
+  const generatedTokens = readFileSync(resolve('src/generated/design-tokens.css'), 'utf8')
+
+  assert.match(gallery, /Live Theme Lab/)
+  assert.match(gallery, /aria-label="Global font scale"/)
+  assert.match(gallery, /type="color"/)
+  assert.match(gallery, /<SegmentedControl[\s\S]*aria-label="Palette to edit"/)
+  assert.match(gallery, /<Switch[\s\S]*label="Preview Midnight palette"/)
+  assert.match(theme, /casa-design-font-scale/)
+  assert.match(theme, /localStorage\.setItem\(STORAGE_FONT_SCALE/)
+  assert.match(theme, /--ds-font-scale: \$\{fontScale\}/)
+  assert.match(generatedTokens, /calc\(76px \* var\(--ds-font-scale\)\)/)
+  assert.match(generatedTokens, /calc\(18px \* var\(--ds-font-scale\)\)/)
+})
+
+test('Cook mode, unit, and quantity selectors use shared toggle controls', () => {
+  const cook = readFileSync(resolve('src/pages/CookPage.tsx'), 'utf8')
+
+  assert.match(cook, /aria-label="Directions view"/)
+  assert.match(cook, /aria-label="Ingredient units"/)
+  assert.match(cook, /aria-label="Recipe quantity scale"/)
+  assert.match(cook, /type RecipeScale = '0\.5' \| '1' \| '2'/)
+})

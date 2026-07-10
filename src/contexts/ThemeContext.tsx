@@ -8,7 +8,10 @@ import { createContext, useContext, useEffect, useMemo, useState, useCallback, t
 import type { RoomToneZone } from '../hooks/useRoomTone'
 import {
   DEFAULT_THEME_COLORS,
+  DEFAULT_FONT_SCALE,
+  MAX_FONT_SCALE,
   MIDNIGHT_THEME_COLORS,
+  MIN_FONT_SCALE,
   THEME_COLOR_KEYS,
   type ThemeColorPalette,
 } from '../design-system/tokens.mjs'
@@ -257,6 +260,14 @@ const STORAGE_DAY = 'casa-theme-day-colors'
 const STORAGE_MIDNIGHT = 'casa-theme-midnight-colors'
 const STORAGE_AUTO_MIDNIGHT = 'casa-theme-auto-midnight'
 const STORAGE_FORCE_MIDNIGHT = 'casa-theme-force-midnight'
+const STORAGE_FONT_SCALE = 'casa-design-font-scale'
+
+function loadFontScale(): number {
+  const stored = Number(localStorage.getItem(STORAGE_FONT_SCALE))
+  return Number.isFinite(stored)
+    ? Math.min(MAX_FONT_SCALE, Math.max(MIN_FONT_SCALE, stored))
+    : DEFAULT_FONT_SCALE
+}
 
 function loadColors(storageKey: string, fallback: ThemeColors): ThemeColors {
   try {
@@ -283,8 +294,9 @@ function styleVars(colors: ThemeColors): string {
   return `\n${variables.join('\n')}`
 }
 
-function buildStyleContent(dayColors: ThemeColors, midnightColors: ThemeColors): string {
+function buildStyleContent(dayColors: ThemeColors, midnightColors: ThemeColors, fontScale: number): string {
   return `:root {${styleVars(dayColors)}
+  --ds-font-scale: ${fontScale};
 }
 html.midnight-gallery {${styleVars(midnightColors)}
 }`
@@ -292,13 +304,13 @@ html.midnight-gallery {${styleVars(midnightColors)}
 
 let styleTag: HTMLStyleElement | null = null
 
-function applyToDOM(dayColors: ThemeColors, midnightColors: ThemeColors) {
+function applyToDOM(dayColors: ThemeColors, midnightColors: ThemeColors, fontScale: number) {
   if (!styleTag) {
     styleTag = document.createElement('style')
     styleTag.id = 'casa-theme-override'
     document.head.appendChild(styleTag)
   }
-  styleTag.textContent = buildStyleContent(dayColors, midnightColors)
+  styleTag.textContent = buildStyleContent(dayColors, midnightColors, fontScale)
 }
 
 function shouldEnableMidnight(forceMidnight: boolean, autoMidnight: boolean, roomToneZone: RoomToneZone): boolean {
@@ -315,8 +327,10 @@ interface ThemeContextValue {
   isMidnightActive: boolean
   autoMidnight: boolean
   forceMidnight: boolean
+  fontScale: number
   setAutoMidnight: (enabled: boolean) => void
   setForceMidnight: (enabled: boolean) => void
+  setFontScale: (scale: number) => void
   setActiveTarget: (target: ThemeTarget) => void
   setColor: (key: keyof ThemeColors, value: string) => void
   applyPreset: (preset: ThemePreset) => void
@@ -333,6 +347,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [activeTarget, setActiveTarget] = useState<ThemeTarget>('day')
   const [autoMidnight, setAutoMidnightState] = useState<boolean>(() => loadBool(STORAGE_AUTO_MIDNIGHT, false))
   const [forceMidnight, setForceMidnightState] = useState<boolean>(() => loadBool(STORAGE_FORCE_MIDNIGHT, false))
+  const [fontScale, setFontScaleState] = useState(loadFontScale)
   const [roomToneZone, setRoomToneZone] = useState<RoomToneZone>('day')
 
   const isMidnightActive = shouldEnableMidnight(forceMidnight, autoMidnight, roomToneZone)
@@ -343,8 +358,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const persistPalettes = useCallback((nextDay: ThemeColors, nextMidnight: ThemeColors) => {
     localStorage.setItem(STORAGE_DAY, JSON.stringify(nextDay))
     localStorage.setItem(STORAGE_MIDNIGHT, JSON.stringify(nextMidnight))
-    applyToDOM(nextDay, nextMidnight)
-  }, [])
+    applyToDOM(nextDay, nextMidnight, fontScale)
+  }, [fontScale])
+
+  const setFontScale = useCallback((scale: number) => {
+    const nextScale = Math.min(MAX_FONT_SCALE, Math.max(MIN_FONT_SCALE, scale))
+    setFontScaleState(nextScale)
+    localStorage.setItem(STORAGE_FONT_SCALE, String(nextScale))
+    applyToDOM(dayColors, midnightColors, nextScale)
+  }, [dayColors, midnightColors])
 
   const setAutoMidnight = useCallback((enabled: boolean) => {
     setAutoMidnightState(enabled)
@@ -400,8 +422,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [activeTarget, dayColors, midnightColors, persistPalettes])
 
   useEffect(() => {
-    applyToDOM(dayColors, midnightColors)
-  }, [dayColors, midnightColors])
+    applyToDOM(dayColors, midnightColors, fontScale)
+  }, [dayColors, midnightColors, fontScale])
 
   useEffect(() => {
     document.documentElement.classList.toggle('midnight-gallery', isMidnightActive)
@@ -415,8 +437,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     isMidnightActive,
     autoMidnight,
     forceMidnight,
+    fontScale,
     setAutoMidnight,
     setForceMidnight,
+    setFontScale,
     setActiveTarget,
     setColor,
     applyPreset,
@@ -431,8 +455,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     isMidnightActive,
     autoMidnight,
     forceMidnight,
+    fontScale,
     setAutoMidnight,
     setForceMidnight,
+    setFontScale,
     setColor,
     applyPreset,
     resetToDefaults,

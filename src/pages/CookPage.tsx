@@ -12,6 +12,8 @@ import { cn } from '../utils/cn'
 import recipeFallbackHero from '../assets/hero.png'
 import { Button, Card, Chip, Heading, SegmentedControl, Text, Textarea } from '../components/ui'
 
+type RecipeScale = '0.5' | '1' | '2'
+
 type Recipe = {
   id: string
   name: string
@@ -520,7 +522,7 @@ export default function CookPage() {
   })
   const [recipeBrowseFilter, setRecipeBrowseFilter] = useState<RecipeBrowseFilter>('all')
   const [stepIndex, setStepIndex] = useState(0)
-  const [recipeScale, setRecipeScale] = useState(1)
+  const [recipeScale, setRecipeScale] = useState<RecipeScale>('1')
   const [showCupsConversion, setShowCupsConversion] = useState(false)
   const [directionsViewMode, setDirectionsViewMode] = useState<'step' | 'all'>('step')
   // Session-local mise-en-place check-off (keyed by cookIngredientRows id).
@@ -1249,7 +1251,7 @@ export default function CookPage() {
   function openRecipeForCookMode(recipeId: string) {
     setCookRecipeId(recipeId)
     setStepIndex(0)
-    setRecipeScale(1)
+    setRecipeScale('1')
     setDirectionsViewMode('step')
     setLibraryActionError(null)
   }
@@ -1495,7 +1497,7 @@ export default function CookPage() {
       quantity: ingredient.quantity,
       unit: ingredient.unit,
     })
-    const scaledQuantity = scaleQuantityValue(normalized.quantity, recipeScale)
+    const scaledQuantity = scaleQuantityValue(normalized.quantity, Number(recipeScale))
     const unit = (normalized.unit ?? '').toLowerCase().trim()
     if (!scaledQuantity) return normalized.unit ?? ''
     if (!showCupsConversion) {
@@ -2808,7 +2810,7 @@ export default function CookPage() {
       if (options?.openCookMode) {
         setCookRecipeId(recipeId)
         setStepIndex(0)
-        setRecipeScale(1)
+        setRecipeScale('1')
         setDirectionsViewMode('step')
       }
     } catch (error) {
@@ -3506,7 +3508,7 @@ export default function CookPage() {
                     onClick={() => {
                       setCookRecipeId(recipe.id)
                       setStepIndex(0)
-                      setRecipeScale(1)
+                      setRecipeScale('1')
                       setDirectionsViewMode('step')
                     }}
                     className="text-left min-w-0 flex-1 hover:opacity-90 transition-opacity"
@@ -4617,32 +4619,15 @@ export default function CookPage() {
                           ? `Step ${stepIndex + 1} of ${Math.max(1, cookSteps.length)}`
                           : `${cookSteps.length} steps`}
                       </p>
-                      <div className="flex bg-casa-bg-2 rounded-pill p-[3px] gap-[2px]">
-                        <button
-                          type="button"
-                          onClick={() => setDirectionsViewMode('step')}
-                          className={cn(
-                            'px-3 py-1.5 rounded-pill text-body-sm transition-all',
-                            directionsViewMode === 'step'
-                              ? 'bg-casa-surface text-casa-navy font-bold shadow-[0_1px_2px_rgba(6,10,36,0.14)]'
-                              : 'text-casa-text-secondary font-semibold'
-                          )}
-                        >
-                          Step-by-step
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDirectionsViewMode('all')}
-                          className={cn(
-                            'px-3 py-1.5 rounded-pill text-body-sm transition-all',
-                            directionsViewMode === 'all'
-                              ? 'bg-casa-surface text-casa-navy font-bold shadow-[0_1px_2px_rgba(6,10,36,0.14)]'
-                              : 'text-casa-text-secondary font-semibold'
-                          )}
-                        >
-                          All steps
-                        </button>
-                      </div>
+                      <SegmentedControl
+                        aria-label="Directions view"
+                        value={directionsViewMode}
+                        onChange={setDirectionsViewMode}
+                        options={[
+                          { value: 'step', label: 'Step-by-step' },
+                          { value: 'all', label: 'All steps' },
+                        ]}
+                      />
                     </div>
                     {directionsViewMode === 'step' && neededNowIngredientRows.length > 0 && (
                       <div className="pb-3">
@@ -4766,40 +4751,28 @@ export default function CookPage() {
                     <div className="px-4 pt-3 pb-3 border-b border-casa-divider">
                       <div className="flex items-baseline justify-between gap-2 mb-1.5">
                         <p className="text-body font-bold text-casa-navy">Ingredients</p>
-                        <button
-                          type="button"
-                          onClick={() => setShowCupsConversion((current) => !current)}
-                          className={cn(
-                            'flex-none inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-pill border text-caption font-semibold transition-colors',
-                            showCupsConversion
-                              ? 'border-casa-info/50 bg-casa-info-soft text-casa-info-strong'
-                              : 'border-casa-control-border bg-casa-surface-subtle text-casa-text-secondary hover:bg-casa-surface'
-                          )}
-                        >
-                          {showCupsConversion ? 'Show grams' : (<>g <s className="no-underline text-casa-text-faint">→</s> cups</>)}
-                        </button>
+                        <SegmentedControl
+                          aria-label="Ingredient units"
+                          value={showCupsConversion ? 'cups' : 'grams'}
+                          onChange={(value) => setShowCupsConversion(value === 'cups')}
+                          options={[
+                            { value: 'grams', label: 'Grams' },
+                            { value: 'cups', label: 'Cups' },
+                          ]}
+                        />
                       </div>
                       <p className="text-caption text-casa-text-tertiary mb-3">{cookIngredients.length} items · low-touch shelf</p>
-                      <div className="flex w-full bg-casa-bg-2 rounded-pill p-[3px] gap-[2px]">
-                        {[0.5, 1, 2].map((scale) => {
-                          const active = Math.abs(recipeScale - scale) < 0.001
-                          return (
-                            <button
-                              key={scale}
-                              type="button"
-                              onClick={() => setRecipeScale(scale)}
-                              className={cn(
-                                'flex-1 text-center py-1.5 rounded-pill text-body-sm transition-all',
-                                active
-                                  ? 'bg-casa-surface text-casa-navy font-bold shadow-[0_1px_2px_rgba(6,10,36,0.14)]'
-                                  : 'text-casa-text-secondary font-semibold'
-                              )}
-                            >
-                              {scale}×
-                            </button>
-                          )
-                        })}
-                      </div>
+                      <SegmentedControl
+                        aria-label="Recipe quantity scale"
+                        value={recipeScale}
+                        onChange={setRecipeScale}
+                        fullWidth
+                        options={[
+                          { value: '0.5', label: '0.5×' },
+                          { value: '1', label: '1×' },
+                          { value: '2', label: '2×' },
+                        ]}
+                      />
                     </div>
                     <div className="p-4">
                       {cookIngredientRows.length === 0 ? (

@@ -29,6 +29,10 @@ export const THEME_COLOR_KEYS = [
   'casa-top-pick-band',
 ]
 
+export const DEFAULT_FONT_SCALE = 1
+export const MIN_FONT_SCALE = 0.85
+export const MAX_FONT_SCALE = 1.3
+
 export const DEFAULT_THEME_COLORS = {
   'casa-gold': '#C9A96E',
   'casa-navy': '#1B2A4A',

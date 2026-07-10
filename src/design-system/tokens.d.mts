@@ -33,6 +33,9 @@ export type ThemeColorPalette = Record<ThemeColorKey, string>
 export const THEME_COLOR_KEYS: ThemeColorKey[]
 export const DEFAULT_THEME_COLORS: ThemeColorPalette
 export const MIDNIGHT_THEME_COLORS: ThemeColorPalette
+export const DEFAULT_FONT_SCALE: number
+export const MIN_FONT_SCALE: number
+export const MAX_FONT_SCALE: number
 
 export const DESIGN_TOKENS: {
   staticColor: Record<string, string>

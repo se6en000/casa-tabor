@@ -64,6 +64,7 @@
   --text-body-sm--line-height: 1.45;
   --text-caption: var(--ds-type-caption);
   --text-caption--line-height: 1.4;
+  --ds-font-scale: 1;
   --radius-button: 0.5rem;
   --radius-card: 0.75rem;
   --radius-modal: 1rem;
@@ -104,15 +105,15 @@
 
 :root,
 html[data-density="touch"] {
-  --ds-type-display-xl: clamp(52px, calc(46px + 1.45vw), 72px);
-  --ds-type-display-lg: clamp(40px, calc(36px + 1.1vw), 58px);
-  --ds-type-display-md: clamp(32px, calc(28px + 0.82vw), 44px);
-  --ds-type-display-sm: clamp(26px, calc(23px + 0.65vw), 36px);
-  --ds-type-heading: clamp(23px, calc(21px + 0.5vw), 30px);
-  --ds-type-body-lg: clamp(19px, calc(18px + 0.4vw), 24px);
-  --ds-type-body: clamp(17px, calc(16px + 0.34vw), 21px);
-  --ds-type-body-sm: clamp(15px, calc(14px + 0.3vw), 19px);
-  --ds-type-caption: clamp(14px, calc(13px + 0.24vw), 17px);
+  --ds-type-display-xl: calc(clamp(52px, calc(46px + 1.45vw), 72px) * var(--ds-font-scale));
+  --ds-type-display-lg: calc(clamp(40px, calc(36px + 1.1vw), 58px) * var(--ds-font-scale));
+  --ds-type-display-md: calc(clamp(32px, calc(28px + 0.82vw), 44px) * var(--ds-font-scale));
+  --ds-type-display-sm: calc(clamp(26px, calc(23px + 0.65vw), 36px) * var(--ds-font-scale));
+  --ds-type-heading: calc(clamp(23px, calc(21px + 0.5vw), 30px) * var(--ds-font-scale));
+  --ds-type-body-lg: calc(clamp(19px, calc(18px + 0.4vw), 24px) * var(--ds-font-scale));
+  --ds-type-body: calc(clamp(17px, calc(16px + 0.34vw), 21px) * var(--ds-font-scale));
+  --ds-type-body-sm: calc(clamp(15px, calc(14px + 0.3vw), 19px) * var(--ds-font-scale));
+  --ds-type-caption: calc(clamp(14px, calc(13px + 0.24vw), 17px) * var(--ds-font-scale));
   --ds-control-target: 44px;
   --ds-control-sm: 40px;
   --ds-control-md: 44px;
@@ -120,15 +121,15 @@ html[data-density="touch"] {
 }
 
 html[data-density="compact"] {
-  --ds-type-display-xl: 52px;
-  --ds-type-display-lg: 40px;
-  --ds-type-display-md: 32px;
-  --ds-type-display-sm: 26px;
-  --ds-type-heading: 23px;
-  --ds-type-body-lg: 19px;
-  --ds-type-body: 17px;
-  --ds-type-body-sm: 15px;
-  --ds-type-caption: 14px;
+  --ds-type-display-xl: calc(52px * var(--ds-font-scale));
+  --ds-type-display-lg: calc(40px * var(--ds-font-scale));
+  --ds-type-display-md: calc(32px * var(--ds-font-scale));
+  --ds-type-display-sm: calc(26px * var(--ds-font-scale));
+  --ds-type-heading: calc(23px * var(--ds-font-scale));
+  --ds-type-body-lg: calc(19px * var(--ds-font-scale));
+  --ds-type-body: calc(17px * var(--ds-font-scale));
+  --ds-type-body-sm: calc(15px * var(--ds-font-scale));
+  --ds-type-caption: calc(14px * var(--ds-font-scale));
   --ds-control-target: 44px;
   --ds-control-sm: 36px;
   --ds-control-md: 40px;
@@ -136,15 +137,15 @@ html[data-density="compact"] {
 }
 
 html[data-density="kiosk"] {
-  --ds-type-display-xl: 76px;
-  --ds-type-display-lg: 60px;
-  --ds-type-display-md: 46px;
-  --ds-type-display-sm: 38px;
-  --ds-type-heading: 32px;
-  --ds-type-body-lg: 26px;
-  --ds-type-body: 23px;
-  --ds-type-body-sm: 21px;
-  --ds-type-caption: 18px;
+  --ds-type-display-xl: calc(76px * var(--ds-font-scale));
+  --ds-type-display-lg: calc(60px * var(--ds-font-scale));
+  --ds-type-display-md: calc(46px * var(--ds-font-scale));
+  --ds-type-display-sm: calc(38px * var(--ds-font-scale));
+  --ds-type-heading: calc(32px * var(--ds-font-scale));
+  --ds-type-body-lg: calc(26px * var(--ds-font-scale));
+  --ds-type-body: calc(23px * var(--ds-font-scale));
+  --ds-type-body-sm: calc(21px * var(--ds-font-scale));
+  --ds-type-caption: calc(18px * var(--ds-font-scale));
   --ds-control-target: 48px;
   --ds-control-sm: 44px;
   --ds-control-md: 48px;
