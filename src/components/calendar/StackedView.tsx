@@ -24,6 +24,7 @@ import { eventOverlapsDay, getEventDisplayStartDay } from '../../utils/eventTime
 import type { FamilyMember } from '../../types'
 import { getPersistedPlanOverrides, resolveEventMode } from '../../lib/eventPlanOverrides'
 import { derivePlan } from '../../lib/eventCommandCenter'
+import { Button, Chip } from '../ui'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -218,18 +219,20 @@ export default function StackedView() {
                         onDismiss={dismissReminder}
                       />
                     ) : (
-                      <button
+                      <Chip
                         key={r.id}
                         onClick={(e) => { e.stopPropagation(); setSelectedEventId(r.id) }}
-                        className="w-full inline-flex items-center justify-between gap-2 rounded-full border border-casa-gold/35 bg-casa-gold/10 px-3 py-1 text-left hover:bg-casa-gold/15 transition-colors"
+                        tone="accent"
+                        size="sm"
+                        className="w-full justify-between"
                       >
                         <span className="truncate text-caption font-semibold text-casa-navy">
                           {r.title}
                         </span>
-                        <span className="shrink-0 text-[11px] font-semibold text-casa-gold">
+                        <span className="shrink-0 text-caption font-semibold text-casa-gold">
                           All day
                         </span>
-                      </button>
+                      </Chip>
                     )
                   ))}
 
@@ -373,9 +376,16 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
       transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
       onClick={(e) => { e.stopPropagation(); onClick() }}
       onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick() }}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return
+        e.preventDefault()
+        onClick()
+      }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      role="button"
+      tabIndex={0}
       className={cn(
         'relative rounded-lg border bg-casa-surface cursor-pointer touch-pan-y',
         'hover:shadow-card-hover transition-all duration-200',
@@ -424,34 +434,36 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
                 <div className="flex flex-col items-end gap-1 shrink-0">
                   {showGoingRow && (
                     <div className="flex items-center justify-end gap-1">
-                      <span className="text-[8px] font-semibold tracking-[0.12em] text-casa-muted/75 leading-none">GOING</span>
+                      <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted/75 leading-none">Going</span>
                       {visibleGoingMembers.map((member) => (
-                        <span
+                        <Chip
                           key={member.id}
-                          className="px-1.5 py-0.5 rounded-full text-white text-[9px] font-bold leading-none whitespace-nowrap shrink-0"
+                          size="sm"
+                          className="shrink-0 border-transparent text-white"
                           style={{ backgroundColor: member.color_hex ?? '#888' }}
                         >
                           {member.name}
-                        </span>
+                        </Chip>
                       ))}
                       {goingOverflowCount > 0 && (
-                        <span className="px-1.5 py-0.5 rounded-full text-casa-muted text-[9px] font-bold leading-none whitespace-nowrap shrink-0 border border-casa-border bg-casa-bg">
+                        <Chip size="sm" className="shrink-0">
                           +{goingOverflowCount}
-                        </span>
+                        </Chip>
                       )}
                     </div>
                   )}
                   {showResponsibilityRow && responsibilityChip && (
                     <div className="flex items-center justify-end gap-1">
-                      <span className="text-[8px] font-semibold tracking-[0.12em] text-casa-muted/75 leading-none">
+                      <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted/75 leading-none">
                         {responsibilityChip.label}
                       </span>
-                      <span
-                        className="px-1.5 py-0.5 rounded-full text-white text-[9px] font-bold leading-none whitespace-nowrap shrink-0"
+                      <Chip
+                        size="sm"
+                        className="shrink-0 border-transparent text-white"
                         style={{ backgroundColor: responsibilityChip.person.color ?? '#888' }}
                       >
                         {responsibilityChip.person.name}
-                      </span>
+                      </Chip>
                     </div>
                   )}
                 </div>
@@ -479,9 +491,9 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
                 </span>
               )}
               {category && (
-                <span className="text-caption text-casa-muted px-1.5 py-0.5 bg-casa-bg rounded-full border border-casa-border">
+                <Chip size="sm">
                   {category}
-                </span>
+                </Chip>
               )}
               {snippet && (
                 <div className="flex items-center gap-1 text-caption text-casa-muted">
@@ -490,29 +502,29 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
                 </div>
               )}
               <div className="flex gap-1.5 pt-1">
-                <button
+                <Button
                   onClick={(e) => { e.stopPropagation(); onDoubleClick() }}
-                  className="flex items-center gap-1 px-2 py-1 rounded border border-casa-border text-caption font-semibold text-casa-text hover:bg-casa-bg transition-colors"
+                  variant="secondary"
+                  size="sm"
+                  leadingIcon={<Pencil size={14} />}
                 >
-                  <Pencil size={10} />
                   Edit
-                </button>
+                </Button>
                 {mapsUrl && (
                   <a
                     href={mapsUrl}
                     target="_blank"
                     rel="noreferrer"
                     onClick={e => e.stopPropagation()}
-                    className="flex items-center gap-1 px-2 py-1 rounded border border-casa-border text-caption font-semibold text-casa-text hover:bg-casa-bg transition-colors"
+                    className="inline-flex min-h-control items-center gap-2 rounded-button border border-casa-border bg-casa-surface px-3 text-body-sm font-medium text-casa-navy transition-colors hover:bg-casa-bg"
                   >
-                    <Navigation size={10} />
+                    <Navigation size={14} />
                     Directions
                   </a>
                 )}
-                <button className="flex items-center gap-1 px-2 py-1 rounded bg-casa-gold text-white text-caption font-semibold hover:brightness-110 transition-all ml-auto">
-                  <Share2 size={10} />
+                <Button className="ml-auto" size="sm" leadingIcon={<Share2 size={14} />}>
                   Share
-                </button>
+                </Button>
               </div>
             </div>
           </motion.div>

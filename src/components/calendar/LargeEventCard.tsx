@@ -5,6 +5,7 @@ import { cn } from '../../utils/cn'
 import { WeatherIcon } from '../shared/WeatherIcon'
 import { getEventDisplayEnd, getMultiDayBoundaryLabel, isEventMultiDay, withColorAlpha } from '../../utils/eventTime'
 import { cleanEventTitle } from '../../utils/eventTitle'
+import { Chip } from '../ui'
 
 interface LargeEventCardProps {
   event: EventWithDetails
@@ -84,30 +85,32 @@ export default function LargeEventCard({
             <div className="min-w-0 flex-1">
               <p className="font-body font-semibold text-casa-text text-heading leading-snug truncate">{cleanTitle}</p>
               {multiDay && (
-                <span className="inline-flex mt-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-casa-navy/10 text-casa-navy">
+                <Chip size="sm" className="mt-1">
                   Multi-day
-                </span>
+                </Chip>
               )}
             </div>
             {members.length > 0 && (
               <div className="flex items-center gap-1 shrink-0 pt-0.5">
                 {primary && (
-                  <span
-                    className="px-2 py-0.5 rounded-full text-caption font-bold leading-none whitespace-nowrap text-white"
+                  <Chip
+                    size="sm"
+                    className="border-transparent text-white"
                     style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
                     title={ownerName}
                   >
                     {ownerName}
-                  </span>
+                  </Chip>
                 )}
                 {others.slice(0, 3).map((m) => (
-                  <span
+                  <Chip
                     key={m.id}
-                    className="px-2 py-0.5 rounded-full text-caption font-bold leading-none whitespace-nowrap text-white"
+                    size="sm"
+                    className="border-transparent text-white"
                     style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
                   >
                     {m.family_member?.name}
-                  </span>
+                  </Chip>
                 ))}
               </div>
             )}

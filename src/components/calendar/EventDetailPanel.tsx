@@ -30,6 +30,7 @@ import { getPersistedPlanOverrides, locationSignature, overridesStorageKey } fro
 import { getEventDisplayStartDay } from '../../utils/eventTime'
 import { isBirthdayEvent } from '../../utils/eventTitle'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
+import { Button, Card, Chip, IconButton } from '../ui'
 
 // ── Exact design tokens from the Event Command Center handoff (SPEC §2) ──────
 const S = {
@@ -222,7 +223,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
               initial={{ opacity: 0 }}
               animate={{ opacity: 1, transition: { duration: 0.26, ease: PANEL_ENTER_EASE } }}
               exit={{ opacity: 0, transition: { duration: 0.18, ease: PANEL_EXIT_EASE } }}
-              className="fixed inset-0 z-[54]"
+              className="fixed inset-0 z-scrim"
               style={{ background: 'var(--casa-scrim)' }}
               data-panel-overlay
               onClick={onClose}
@@ -261,10 +262,13 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 if (info.velocity.y > dragDismissVelocity || info.offset.y > dragDismissOffset) onClose()
               }}
               style={{ willChange: 'transform', backfaceVisibility: 'hidden' }}
-              className="event-command-center fixed inset-x-2 bottom-2 top-[5vh] lg:top-[6vh] lg:bottom-4 lg:left-auto lg:right-4 lg:w-[40vw] bg-white rounded-3xl shadow-[0_14px_44px_rgba(6,10,36,0.28)] z-[55] flex flex-col overflow-hidden transform-gpu"
+              className="event-command-center fixed inset-x-2 bottom-2 top-[5vh] z-modal flex flex-col overflow-hidden rounded-modal bg-casa-surface shadow-modal transform-gpu lg:bottom-4 lg:left-auto lg:right-4 lg:top-[6vh] lg:w-[40vw]"
               data-panel-overlay
               data-native-drag
               data-ptr-ignore
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Event details: ${event.title}`}
               onClick={e => e.stopPropagation()}
               onPointerDown={stopTouch}
               onTouchStart={stopTouch}
@@ -387,11 +391,11 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
         return (
           <div
             key={m.id}
-            className="group inline-flex items-center gap-1.5 rounded-pill pl-1 pr-2 py-1 text-[13px] font-semibold transition-opacity"
+            className="group inline-flex min-h-control-sm items-center gap-1.5 rounded-pill py-1 pl-1 pr-2 text-body-sm font-semibold transition-opacity"
             style={{ background: S.chipFill, border: `1px solid ${S.borderSoft}`, color: S.navy, opacity: isLoading ? 0.6 : 1 }}
           >
             <span
-              className="w-[22px] h-[22px] rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
+              className="flex size-control-sm shrink-0 items-center justify-center rounded-pill text-caption font-bold text-white"
               style={{ backgroundColor: color }}
             >
               {m.family_member?.name?.[0]}
@@ -400,15 +404,15 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
 
             {/* Promote primary directly from the attendee pill (touch + desktop). */}
             {!isPrimary ? (
-              <button
+              <IconButton
                 onClick={() => makeOwner(m.family_member!.id)}
-                className="ml-0.5 w-5 h-5 rounded-full flex items-center justify-center transition-colors"
-                style={{ color: S.label, background: 'transparent' }}
+                icon={<Crown size={14} />}
+                variant="ghost"
+                size="sm"
+                className="ml-0.5"
                 title={`Make ${m.family_member?.name ?? 'member'} primary`}
                 aria-label={`Make ${m.family_member?.name ?? 'member'} primary`}
-              >
-                <Crown size={12} />
-              </button>
+              />
             ) : (
               <span
                 className="ml-0.5 w-5 h-5 rounded-full flex items-center justify-center"
@@ -420,15 +424,15 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
               </span>
             )}
             {(event.members.length > 1 || !isPrimary) && (
-              <button
+              <IconButton
                 onClick={() => removeMember(m.id)}
-                className="ml-0.5 w-5 h-5 rounded-full flex items-center justify-center transition-colors hover:bg-casa-bg"
-                style={{ color: S.label, background: 'transparent' }}
+                icon={<X size={14} />}
+                variant="ghost"
+                size="sm"
+                className="ml-0.5"
                 title="Remove"
                 aria-label={`Remove ${m.family_member?.name ?? 'member'}`}
-              >
-                <X size={12} />
-              </button>
+              />
             )}
           </div>
         )
@@ -436,13 +440,14 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
 
       {/* Add button */}
       <div className="relative" ref={pickerRef}>
-        <button
+        <Button
           onClick={() => setShowPicker(p => !p)}
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-pill border border-dashed text-[13px] font-semibold transition-colors"
-          style={{ borderColor: S.borderMed, color: S.label }}
+          variant="secondary"
+          size="sm"
+          leadingIcon={<Plus size={14} />}
         >
-          <Plus size={12} /> Add
-        </button>
+          Add
+        </Button>
 
         <AnimatePresence>
           {showPicker && (
@@ -451,17 +456,20 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -4, scale: 0.96 }}
               transition={{ duration: 0.15 }}
-              className="absolute top-full mt-1.5 left-0 z-20 bg-white border rounded-2xl shadow-[0_12px_32px_rgba(6,10,36,0.16)] p-2 flex flex-col gap-1 min-w-[150px]"
+              className="absolute left-0 top-full z-popover mt-1.5 flex min-w-[180px] flex-col gap-1 rounded-card border bg-casa-surface p-2 shadow-modal"
               style={{ borderColor: S.borderSoft }}
             >
               {allMembers
                 .filter(fm => !assignedIds.has(fm.id))
                 .map(fm => (
-                  <button
+                  <Button
                     key={fm.id}
                     onClick={() => addMember(fm.id)}
                     disabled={saving === fm.id}
-                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-casa-bg transition-colors text-left"
+                    variant="ghost"
+                    size="sm"
+                    fullWidth
+                    className="justify-start"
                   >
                     <span
                       className="w-6 h-6 rounded-full text-white text-[11px] font-bold flex items-center justify-center shrink-0"
@@ -469,8 +477,8 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
                     >
                       {fm.name?.[0]}
                     </span>
-                    <span className="text-[14px] font-medium" style={{ color: S.navy }}>{fm.name}</span>
-                  </button>
+                    <span className="text-body-sm font-medium" style={{ color: S.navy }}>{fm.name}</span>
+                  </Button>
                 ))}
               {allMembers.filter(fm => !assignedIds.has(fm.id)).length === 0 && (
                 <p className="text-caption px-2 py-1" style={{ color: S.label }}>Everyone's added</p>
@@ -524,41 +532,42 @@ function PanelHeader({
       <div className="relative z-10 flex items-start justify-between">
         <div className="flex items-center gap-2">
           {category && (
-            <span
-              className="text-[11px] font-semibold rounded-pill px-2.5 py-1 capitalize"
+            <Chip
+              size="sm"
+              tone="accent"
+              className="capitalize"
               style={{ background: hexToRgba(accent, 0.14), color: S.navy, letterSpacing: '0.04em' }}
             >
               {CATEGORY_LABEL[category] ?? category}
-            </span>
+            </Chip>
           )}
           {isRecurring && (
-            <span className="text-[11px] font-semibold rounded-pill px-2.5 py-1" style={{ background: S.hair, color: S.muted }}>
+            <Chip size="sm">
               ↻ Repeats
-            </span>
+            </Chip>
           )}
         </div>
-        <button
+        <IconButton
           onClick={onClose}
-          className="w-[30px] h-[30px] rounded-full flex items-center justify-center transition-colors hover:bg-casa-bg"
-          style={{ color: S.label }}
-          aria-label="Close"
-        >
-          <X size={18} />
-        </button>
+          icon={<X size={18} />}
+          aria-label="Close event details"
+          variant="ghost"
+          size="sm"
+        />
       </div>
 
       {eyebrow && (
         <div className="relative z-10 flex items-center gap-2 mt-3.5">
           <span className="w-[9px] h-[9px] rounded-full" style={{ background: accent }} />
-          <span className="text-[11px] font-bold uppercase" style={{ color: S.eyebrow, letterSpacing: '0.13em' }}>{eyebrow}</span>
+          <span className="text-caption font-bold uppercase tracking-wide" style={{ color: S.eyebrow }}>{eyebrow}</span>
         </div>
       )}
 
-      <h2 className="event-command-center-title relative z-10 mt-1.5" style={{ ...serif, fontWeight: 600, letterSpacing: '-0.01em', color: S.navy }}>
+      <h2 className="relative z-10 mt-1.5 font-display text-display-sm font-semibold text-casa-navy">
         {isBirthday && <span className="mr-1.5" aria-hidden="true">🎉</span>}
         {event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}
       </h2>
-      <div className="relative z-10 flex items-center gap-2 mt-2 text-[14px]" style={{ color: S.muted }}>
+      <div className="relative z-10 mt-2 flex items-center gap-2 text-body-sm" style={{ color: S.muted }}>
         <span className="font-semibold" style={{ color: S.navy }}>{headerWhen}</span>
         <span>·</span>
         <span>{headerDuration}</span>
@@ -566,7 +575,7 @@ function PanelHeader({
 
       {!reminder && event.members?.length > 0 && (
         <div className="mt-4">
-          <div className="text-[10px] font-bold uppercase mb-2" style={{ color: S.label, letterSpacing: '0.12em' }}>
+          <div className="mb-2 text-caption font-bold uppercase tracking-wide" style={{ color: S.label }}>
             {hostedAtHome ? 'At home' : 'Going'}
           </div>
           <MemberEditor event={event} />
@@ -971,35 +980,36 @@ function DestinationHeaderCard({ locationName, address, verified, atHome, onChec
   const border = verified ? hexToRgba(S.greenHex, 0.28) : S.amberBorder
   const bg = verified ? S.greenBg : S.amberBg
   return (
-    <div className="mt-4 flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ border: `1px solid ${border}`, background: bg }}>
+    <Card padding="sm" className="mt-4 flex items-center gap-3" style={{ border: `1px solid ${border}`, background: bg }}>
       <span
-        className="flex-none w-[26px] h-[26px] rounded-lg flex items-center justify-center bg-white"
+        className="flex size-control-sm flex-none items-center justify-center rounded-button bg-casa-surface"
         style={{ border: `1px solid ${S.borderSoft}`, color: accent }}
       >
         <MapPin size={14} />
       </span>
       <div className="min-w-0 flex-1">
-        <div className="text-[14px] font-bold leading-tight truncate" style={{ color: S.navy }}>{headline}</div>
-        {subline && <div className="text-[12px] truncate" style={{ color: S.muted }}>{subline}</div>}
+        <div className="truncate text-body-sm font-bold leading-tight" style={{ color: S.navy }}>{headline}</div>
+        {subline && <div className="truncate text-caption" style={{ color: S.muted }}>{subline}</div>}
       </div>
       {verified ? (
-        <span className="flex-none text-[12px] font-bold rounded-pill px-2.5 py-1.5 inline-flex items-center gap-1" style={{ color: S.green, background: 'var(--color-casa-surface)' }}>
+        <Chip tone="success" size="sm" className="flex-none">
           ✓ Confirmed
-        </span>
+        </Chip>
       ) : atHome ? (
-        <span className="flex-none text-[12px] font-bold rounded-pill px-2.5 py-1.5" style={{ color: S.muted, background: 'var(--color-casa-surface)' }}>
+        <Chip size="sm" className="flex-none">
           At home
-        </span>
+        </Chip>
       ) : (
-        <button
+        <Button
           onClick={onCheckAddress}
-          className="flex-none text-[12px] font-bold rounded-pill px-2.5 py-1.5"
-          style={{ color: S.goldText, background: 'var(--color-casa-surface)' }}
+          variant="secondary"
+          size="sm"
+          className="flex-none"
         >
           {hasDestination ? 'Check address ›' : 'Add destination'}
-        </button>
+        </Button>
       )}
-    </div>
+    </Card>
   )
 }
 
@@ -1054,7 +1064,7 @@ function DriverChip({
     return a.name.localeCompare(b.name)
   })
   return (
-    <div className={cn('relative shrink-0', open ? 'z-[95]' : 'z-10')} ref={pickerRef}>
+    <div className={cn('relative shrink-0', open ? 'z-popover' : 'z-10')} ref={pickerRef}>
       <button
         onClick={() => setOpen((prev) => !prev)}
         type="button"
@@ -1074,7 +1084,7 @@ function DriverChip({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.96 }}
             transition={{ duration: 0.12 }}
-            className="absolute right-0 top-[calc(100%+6px)] z-[80] min-w-[230px] max-h-[min(50vh,280px)] overflow-y-auto overscroll-contain rounded-xl border bg-white p-1.5 shadow-[0_12px_28px_rgba(6,10,36,0.16)]"
+            className="absolute right-0 top-[calc(100%+6px)] z-popover max-h-[min(50vh,280px)] min-w-[230px] overflow-y-auto overscroll-contain rounded-card border bg-casa-surface p-1.5 shadow-modal"
             style={{ borderColor: S.borderSoft }}
           >
             {sortedOptions.map((option) => {
@@ -2034,21 +2044,20 @@ function PanelFooter({ event, modeOverride, onEdit }: { event: EventWithDetails;
   }
 
   return (
-    <div className="flex-none flex items-center gap-2.5 px-5 py-3.5 bg-white" style={{ borderTop: `1px solid ${S.borderMed}` }}>
-      <button
+    <div className="flex flex-none items-center gap-2.5 bg-casa-surface px-5 py-3.5" style={{ borderTop: `1px solid ${S.borderMed}` }}>
+      <IconButton
         onClick={onEdit}
         title="Edit details"
-        className="w-11 h-11 rounded-xl flex items-center justify-center transition-colors hover:bg-casa-bg"
-        style={{ border: `1px solid ${S.borderMed}`, color: S.navy }}
-      >
-        <Pencil size={16} />
-      </button>
+        icon={<Pencil size={16} />}
+        aria-label="Edit event details"
+        variant="secondary"
+      />
       {primaryHref && (
         <a
           href={primaryHref}
           target="_blank"
           rel="noreferrer"
-          className="flex-1 text-center py-3 rounded-xl text-[15px] font-bold inline-flex items-center justify-center gap-2"
+          className="casa-action-primary inline-flex min-h-control flex-1 items-center justify-center gap-2 rounded-button bg-casa-gold px-4 text-center text-body-sm font-bold shadow-card transition-colors hover:brightness-110"
           style={{ background: S.gold, color: S.navy }}
         >
           {primaryIcon}
@@ -2058,21 +2067,20 @@ function PanelFooter({ event, modeOverride, onEdit }: { event: EventWithDetails;
       {secondaryHref ? (
         <a
           href={secondaryHref}
-          className="px-4 h-11 rounded-xl text-[14px] font-semibold inline-flex items-center gap-2"
+          className="inline-flex min-h-control items-center gap-2 rounded-button border border-casa-border bg-casa-surface px-4 text-body-sm font-medium text-casa-navy transition-colors hover:bg-casa-bg"
           style={{ border: `1px solid ${S.borderMed}`, color: S.navy }}
         >
           {secondaryIcon}
           {secondaryLabel}
         </a>
       ) : (
-        <button
+        <Button
           onClick={handleShare}
-          className="px-4 h-11 rounded-xl text-[14px] font-semibold inline-flex items-center gap-2"
-          style={{ border: `1px solid ${S.borderMed}`, color: S.navy }}
+          variant="secondary"
+          leadingIcon={secondaryIcon}
         >
-          {secondaryIcon}
           {secondaryLabel}
-        </button>
+        </Button>
       )}
     </div>
   )

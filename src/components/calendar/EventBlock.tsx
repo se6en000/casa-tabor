@@ -152,27 +152,17 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
         </p>
       )}
 
-      {/* Member pills — all members as name pills */}
+      {/* Compact member metadata avoids oversized controls inside the time grid. */}
       {!isCompact && event.members && event.members.length > 0 && (() => {
         const primary = event.members.find(m => m.role === 'primary') ?? event.members[0]
         const others = event.members.filter(m => m !== primary)
         return (
-          <div className="flex items-center gap-1 flex-wrap mt-1">
+          <div className="mt-1 truncate text-caption font-semibold text-white/90">
             <span
-              className="px-1.5 py-0.5 rounded-full text-[9px] font-bold leading-none whitespace-nowrap bg-white/90"
-              style={{ color: primary.family_member?.color_hex ?? '#444' }}
             >
               {primary.family_member?.name ?? '?'}
             </span>
-            {others.slice(0, 3).map(m => (
-              <span
-                key={m.id}
-                className="px-1.5 py-0.5 rounded-full text-[9px] font-bold leading-none whitespace-nowrap bg-white/80"
-                style={{ color: m.family_member?.color_hex ?? '#444' }}
-              >
-                {m.family_member?.name ?? '?'}
-              </span>
-            ))}
+            {others.length > 0 && <span> +{others.length}</span>}
           </div>
         )
       })()}

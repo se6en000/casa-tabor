@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { cleanEventTitle } from '../../utils/eventTitle'
+import { Button, Chip } from '../ui'
 
 interface ReminderEventCardProps {
   event: EventWithDetails
@@ -47,6 +48,13 @@ export default function ReminderEventCard({
         e.stopPropagation()
         onClick?.()
       }}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return
+        e.preventDefault()
+        onClick?.()
+      }}
+      role="button"
+      tabIndex={0}
       className={cn(
         'min-w-0 bg-amber-50/60 rounded-card border border-amber-200',
         'flex items-center gap-3 px-3 py-2.5 transition-all duration-300',
@@ -66,22 +74,24 @@ export default function ReminderEventCard({
       {/* Action buttons (next to title) */}
       <div className="flex items-center gap-1 shrink-0">
         {onComplete && (
-          <button
+          <Button
            onClick={handleComplete}
-           className="h-6 px-2 rounded-button border border-casa-border bg-casa-surface text-body-sm font-semibold text-casa-text hover:bg-casa-bg transition-colors inline-flex items-center gap-1"
+           variant="secondary"
+           size="sm"
+           leadingIcon={<Check size={14} />}
           >
-           <Check size={11} />
            Done
-          </button>
+          </Button>
         )}
         {onSnooze && (
-          <button
+          <Button
            onClick={handleSnooze}
-           className="h-6 px-2 rounded-button border border-casa-border bg-casa-surface text-body-sm font-semibold text-casa-text hover:bg-casa-bg transition-colors inline-flex items-center gap-1"
+           variant="secondary"
+           size="sm"
+           leadingIcon={<TimerReset size={14} />}
           >
-           <TimerReset size={11} />
            Snooze
-          </button>
+          </Button>
         )}
       </div>
 
@@ -92,22 +102,24 @@ export default function ReminderEventCard({
       {members.length > 0 && (
         <div className="flex items-center gap-1 shrink-0">
           {primary && (
-           <span
-             className="px-1.5 py-0.5 rounded-full text-caption font-bold leading-none whitespace-nowrap text-white"
+           <Chip
+             size="sm"
+             className="border-transparent text-white"
              style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
              title={primary.family_member?.name ?? ''}
            >
              {primary.family_member?.name}
-           </span>
+           </Chip>
           )}
           {others.slice(0, 1).map((m) => (
-           <span
+           <Chip
              key={m.id}
-             className="px-1.5 py-0.5 rounded-full text-caption font-bold leading-none whitespace-nowrap text-white"
+             size="sm"
+             className="border-transparent text-white"
              style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
            >
              {m.family_member?.name}
-           </span>
+           </Chip>
           ))}
         </div>
       )}
