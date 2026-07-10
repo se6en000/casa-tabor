@@ -21,6 +21,7 @@ import {
   sheetPanelClassName,
   segmentedControlClassName,
   segmentedControlItemClassName,
+  segmentedControlThumbClassName,
 } from '../src/design-system/variants.mjs'
 import { DEFAULT_THEME_COLORS, DESIGN_TOKENS, MIDNIGHT_THEME_COLORS } from '../src/design-system/tokens.mjs'
 
@@ -149,16 +150,23 @@ test('interactive chips use the density-aware minimum target while static badges
   assert.match(chipClassName({ interactive: true }), /min-h-control/)
 })
 
-test('segmented control presents one track with a distinct selected segment', () => {
+test('segmented control presents one track with a sliding selection thumb', () => {
   const root = segmentedControlClassName()
   const inactive = segmentedControlItemClassName()
   const selected = segmentedControlItemClassName({ selected: true })
+  const thumb = segmentedControlThumbClassName()
+  const draggedThumb = segmentedControlThumbClassName({ dragging: true })
   assert.match(root, /bg-casa-toggle-track/)
   assert.match(root, /rounded-pill/)
-  assert.match(inactive, /bg-transparent/)
-  assert.match(selected, /bg-casa-surface/)
+  assert.match(root, /relative/)
+  assert.match(root, /touch-pan-y/)
+  assert.match(thumb, /bg-casa-surface/)
+  assert.match(thumb, /shadow-card/)
+  assert.match(thumb, /transition-transform/)
+  assert.doesNotMatch(draggedThumb, /transition-transform/)
   assert.match(selected, /text-casa-text/)
-  assert.match(selected, /shadow-card/)
+  assert.doesNotMatch(selected, /bg-casa-surface/)
+  assert.doesNotMatch(inactive, /bg-casa-surface/)
   assert.match(selected, /min-h-control/)
   for (const palette of [DEFAULT_THEME_COLORS, MIDNIGHT_THEME_COLORS]) {
     assert.ok(

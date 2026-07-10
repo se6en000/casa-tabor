@@ -1,6 +1,10 @@
-import type { KeyboardEvent, ReactNode } from 'react'
+import { useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { cn } from '../../utils/cn'
-import { segmentedControlClassName, segmentedControlItemClassName } from '../../design-system/variants.mjs'
+import {
+  segmentedControlClassName,
+  segmentedControlItemClassName,
+  segmentedControlThumbClassName,
+} from '../../design-system/variants.mjs'
 
 export interface SegmentedControlOption<T extends string> {
   value: T
@@ -11,11 +15,16 @@ export interface SegmentedControlOption<T extends string> {
 
 export interface SegmentedControlProps<T extends string> {
   value: T
-  options: readonly SegmentedControlOption<T>[]
+  options: readonly [SegmentedControlOption<T>, SegmentedControlOption<T>, ...SegmentedControlOption<T>[]]
   onChange: (value: T) => void
   'aria-label': string
   fullWidth?: boolean
   className?: string
+}
+
+type SegmentedControlStyle = CSSProperties & {
+  '--segment-count': number
+  '--segment-position': number
 }
 
 export function SegmentedControl<T extends string>({
@@ -26,7 +35,59 @@ export function SegmentedControl<T extends string>({
   fullWidth = false,
   className,
 }: SegmentedControlProps<T>) {
+  const [dragPosition, setDragPosition] = useState<number | null>(null)
+  const pointerInteraction = useRef<{ pointerId: number; startX: number; dragging: boolean } | null>(null)
   const enabledOptions = options.filter((option) => !option.disabled)
+  const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value))
+
+  const pointerPosition = (event: PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    return Math.min(
+      options.length - 1,
+      Math.max(0, ((event.clientX - rect.left) / rect.width) * options.length - 0.5),
+    )
+  }
+
+  const selectNearestEnabled = (position: number) => {
+    const nearestEnabled = enabledOptions.reduce((nearest, option) => {
+      const optionIndex = options.indexOf(option)
+      const nearestIndex = options.indexOf(nearest)
+      return Math.abs(optionIndex - position) < Math.abs(nearestIndex - position) ? option : nearest
+    })
+    if (nearestEnabled.value !== value) onChange(nearestEnabled.value)
+  }
+
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || enabledOptions.length === 0) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    pointerInteraction.current = { pointerId: event.pointerId, startX: event.clientX, dragging: false }
+  }
+
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const interaction = pointerInteraction.current
+    if (!interaction || interaction.pointerId !== event.pointerId) return
+    if (!interaction.dragging && Math.abs(event.clientX - interaction.startX) < 6) return
+    interaction.dragging = true
+    const position = pointerPosition(event)
+    setDragPosition(position)
+    selectNearestEnabled(position)
+  }
+
+  const releasePointer = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    pointerInteraction.current = null
+    setDragPosition(null)
+  }
+
+  const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    const interaction = pointerInteraction.current
+    if (interaction?.pointerId === event.pointerId) {
+      selectNearestEnabled(pointerPosition(event))
+    }
+    releasePointer(event)
+  }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, currentValue: T) => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key) || enabledOptions.length < 2) return
@@ -49,7 +110,19 @@ export function SegmentedControl<T extends string>({
       role="radiogroup"
       aria-label={ariaLabel}
       className={cn(segmentedControlClassName({ fullWidth }), className)}
+      style={{
+        '--segment-count': options.length,
+        '--segment-position': dragPosition ?? selectedIndex,
+      } as SegmentedControlStyle}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={releasePointer}
     >
+      <span
+        aria-hidden="true"
+        className={segmentedControlThumbClassName({ dragging: dragPosition !== null })}
+      />
       {options.map((option) => {
         const selected = option.value === value
         return (
@@ -61,7 +134,9 @@ export function SegmentedControl<T extends string>({
             disabled={option.disabled}
             tabIndex={selected ? 0 : -1}
             data-segment-value={option.value}
-            onClick={() => onChange(option.value)}
+            onClick={(event) => {
+              if (event.detail === 0) onChange(option.value)
+            }}
             onKeyDown={(event) => handleKeyDown(event, option.value)}
             className={segmentedControlItemClassName({ selected })}
           >

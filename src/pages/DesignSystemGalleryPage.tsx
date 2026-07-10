@@ -123,7 +123,7 @@ export default function DesignSystemGalleryPage() {
   const { width, height, isFinePointer } = useViewport()
   const [modalOpen, setModalOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
-  const [segment, setSegment] = useState<'first' | 'second'>('first')
+  const [segment, setSegment] = useState<'first' | 'second' | 'third'>('first')
   const density = document.documentElement.dataset.density ?? 'touch'
   const closest = useMemo(
     () => closestDeviceProfile(width, height, isFinePointer ? 'fine-pointer' : 'touch'),
@@ -241,7 +241,7 @@ export default function DesignSystemGalleryPage() {
             <IconButton icon={<CheckCircle2 size={18} />} aria-label="Confirm example" variant="secondary" />
           </div>
           <div>
-            <Text role="caption" muted className="font-bold uppercase tracking-widest mb-2">Segmented control</Text>
+            <Text role="caption" muted className="font-bold uppercase tracking-widest mb-2">Sliding segmented control</Text>
             <SegmentedControl
               aria-label="Gallery view"
               value={segment}
@@ -249,8 +249,10 @@ export default function DesignSystemGalleryPage() {
               options={[
                 { value: 'first', label: 'First view' },
                 { value: 'second', label: 'Second view', icon: <CheckCircle2 size={15} /> },
+                { value: 'third', label: 'Third view' },
               ]}
             />
+            <Text role="caption" muted className="mt-2">Tap an option or drag the thumb across two or more choices.</Text>
           </div>
         </div>
         <div>

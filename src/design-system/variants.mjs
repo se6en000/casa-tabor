@@ -120,18 +120,25 @@ export function chipClassName(options = {}) {
 
 export function segmentedControlClassName(options = {}) {
   return [
-    'inline-flex items-stretch gap-1 rounded-pill border border-casa-control-border bg-casa-toggle-track p-1',
-    options.fullWidth ? 'flex w-full' : '',
+    'casa-segmented-control relative inline-grid items-stretch overflow-hidden rounded-pill border border-casa-control-border bg-casa-toggle-track p-1 touch-pan-y',
+    options.fullWidth ? 'w-full' : '',
+  ].filter(Boolean).join(' ')
+}
+
+export function segmentedControlThumbClassName(options = {}) {
+  return [
+    'casa-segmented-control-thumb pointer-events-none absolute bottom-1 top-1 rounded-pill bg-casa-surface shadow-card ring-1 ring-casa-control-border',
+    options.dragging ? '' : 'transition-transform duration-200 ease-out motion-reduce:transition-none',
   ].filter(Boolean).join(' ')
 }
 
 export function segmentedControlItemClassName(options = {}) {
   return [
     CONTROL_BASE,
-    'relative min-h-control flex-1 rounded-pill px-4 text-body-sm font-semibold',
+    'relative z-10 min-h-control min-w-0 rounded-pill px-4 text-body-sm font-semibold',
     options.selected
-      ? 'bg-casa-surface text-casa-text shadow-card ring-1 ring-casa-control-border'
-      : 'bg-transparent text-casa-text-secondary hover:bg-casa-surface/55 hover:text-casa-text',
+      ? 'text-casa-text'
+      : 'text-casa-text-secondary hover:text-casa-text',
   ].filter(Boolean).join(' ')
 }
 

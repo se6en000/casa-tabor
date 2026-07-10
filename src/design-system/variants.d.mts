@@ -36,6 +36,7 @@ export function chipClassName(options?: {
 }): string
 
 export function segmentedControlClassName(options?: { fullWidth?: boolean }): string
+export function segmentedControlThumbClassName(options?: { dragging?: boolean }): string
 export function segmentedControlItemClassName(options?: { selected?: boolean }): string
 
 export type CardPadding = 'none' | 'sm' | 'md' | 'lg'

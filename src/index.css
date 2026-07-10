@@ -537,3 +537,13 @@ html.midnight-gallery .stacked-event-title {
 .cook-v2-plan-eyebrow {
   color: var(--color-casa-info-strong);
 }
+/* Shared sliding geometry for two-or-more-option segmented controls. */
+.casa-segmented-control {
+  grid-template-columns: repeat(var(--segment-count), minmax(0, 1fr));
+}
+
+.casa-segmented-control-thumb {
+  left: 0.25rem;
+  width: calc((100% - 0.5rem) / var(--segment-count));
+  transform: translateX(calc(var(--segment-position) * 100%));
+}
