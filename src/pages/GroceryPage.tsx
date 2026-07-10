@@ -2112,7 +2112,7 @@ export default function GroceryPage() {
   const weeklyHeroOverflowCount = Math.max(0, weeklyAutoListCandidates.length - weeklyHeroPreviewItems.length)
 
   return (
-    <div className="h-full min-h-0 bg-casa-bg flex flex-col overflow-hidden">
+    <div className="casa-distance-readable h-full min-h-0 bg-casa-bg flex flex-col overflow-hidden">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-casa-bg px-4 pt-safe-t">
         <div className="space-y-3 py-4">

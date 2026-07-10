@@ -29,6 +29,17 @@ test('semantic type roles define compact, touch, kiosk, and line-height values',
   }
 })
 
+test('distance-readable type roles enlarge the kiosk baseline for every semantic role', () => {
+  for (const [role, token] of Object.entries(DESIGN_TOKENS.type)) {
+    const kioskSize = Number.parseFloat(token.kiosk)
+    const distanceSize = Number.parseFloat(DESIGN_TOKENS.distanceType[role])
+    assert.ok(
+      distanceSize > kioskSize,
+      `${role} distance size (${distanceSize}px) must exceed kiosk size (${kioskSize}px)`,
+    )
+  }
+})
+
 test('control targets meet 44px handheld and 48px kiosk minimums', () => {
   assert.equal(DESIGN_TOKENS.controls.compact.target, '44px')
   assert.equal(DESIGN_TOKENS.controls.touch.target, '44px')

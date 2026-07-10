@@ -76,6 +76,11 @@ function renderTheme() {
     lines.push(`  --ds-control-${key}: ${value};`)
   }
 
+  lines.push('}', '', '.casa-distance-readable {')
+  for (const [key, value] of Object.entries(DESIGN_TOKENS.distanceType)) {
+    lines.push(`  --ds-type-${key}: ${value};`)
+  }
+
   lines.push('}', '', 'html.midnight-gallery {')
   for (const key of THEME_COLOR_KEYS) {
     lines.push(`  --color-${key}: ${MIDNIGHT_THEME_COLORS[key]};`)

@@ -151,6 +151,18 @@ html[data-density="kiosk"] {
   --ds-control-lg: 56px;
 }
 
+.casa-distance-readable {
+  --ds-type-display-xl: 76px;
+  --ds-type-display-lg: 60px;
+  --ds-type-display-md: 46px;
+  --ds-type-display-sm: 38px;
+  --ds-type-heading: 32px;
+  --ds-type-body-lg: 26px;
+  --ds-type-body: 23px;
+  --ds-type-body-sm: 21px;
+  --ds-type-caption: 18px;
+}
+
 html.midnight-gallery {
   --color-casa-gold: #9F8658;
   --color-casa-navy: #0E1218;

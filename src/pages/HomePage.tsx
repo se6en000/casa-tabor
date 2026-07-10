@@ -372,7 +372,7 @@ export default function HomePage() {
 
   return (
     // lg: side-by-side with right panel. Mobile: single column.
-    <div className="flex h-full overflow-hidden bg-casa-bg" onClick={() => setSelectedEventId(null)}>
+    <div className="casa-distance-readable flex h-full overflow-hidden bg-casa-bg" onClick={() => setSelectedEventId(null)}>
 
       {/* ── Center content ─────────────────────────────────── */}
       <div

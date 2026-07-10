@@ -38,6 +38,7 @@ export const DESIGN_TOKENS: {
   staticColor: Record<string, string>
   fontFamily: Record<string, string>
   type: Record<string, { touch: string; compact: string; kiosk: string; lineHeight: string }>
+  distanceType: Record<string, string>
   spacing: Record<string, string>
   controls: Record<'compact' | 'touch' | 'kiosk', Record<'target' | 'sm' | 'md' | 'lg', string>>
   radius: Record<string, string>

@@ -122,6 +122,17 @@ export const DESIGN_TOKENS = {
     'body-sm': { touch: 'clamp(13px, calc(12px + 0.28vw), 18px)', compact: '13px', kiosk: '18px', lineHeight: '1.5' },
     caption: { touch: 'clamp(12px, calc(11px + 0.22vw), 16px)', compact: '12px', kiosk: '16px', lineHeight: '1.4' },
   },
+  distanceType: {
+    'display-xl': '76px',
+    'display-lg': '60px',
+    'display-md': '46px',
+    'display-sm': '38px',
+    heading: '32px',
+    'body-lg': '26px',
+    body: '23px',
+    'body-sm': '21px',
+    caption: '18px',
+  },
   spacing: {
     'nav-height': '4.5rem',
     'page-gutter': 'clamp(1rem, 2.5vw, 2rem)',
