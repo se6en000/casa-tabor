@@ -17,6 +17,7 @@ import {
   ChevronLeft, RefreshCw, LogOut
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Heading } from '../components/ui'
 import { useSpotify } from '../hooks/useSpotify'
 import {
   getClientId, setClientId, startAuthFlow, handleOAuthCallback,
@@ -104,7 +105,7 @@ function SetupScreen() {
           <Music size={24} className="text-white" />
         </div>
         <div>
-          <h1 className="font-display text-display-md text-casa-navy leading-none">Spotify</h1>
+          <Heading role="display-md" className="leading-none">Spotify</Heading>
           <p className="text-caption text-casa-muted mt-0.5">Connect to control music</p>
         </div>
       </div>
@@ -201,7 +202,7 @@ function PlayerScreen({ onBack }: { onBack: () => void }) {
           <ChevronLeft size={20} />
           <span className="text-body-sm">Back</span>
         </button>
-        <h1 className="font-display text-heading text-casa-navy">Music</h1>
+        <Heading role="heading">Music</Heading>
         <button type="button" onClick={disconnect} className="text-casa-muted hover:text-red-500 transition-colors" title="Disconnect Spotify">
           <LogOut size={18} />
         </button>

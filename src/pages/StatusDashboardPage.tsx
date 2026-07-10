@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { Activity, Zap, DollarSign, BarChart3, RefreshCw, Bot, TrendingUp } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
+import { IconButton, SkeletonRow } from '../components/ui'
+import { SettingsPageHeader } from '../components/settings'
 
 interface UsageRow {
   function_name: string
@@ -131,24 +133,20 @@ export default function StatusDashboardPage() {
   }
   const maxCalls = Math.max(...last7.map(d => d.calls), 1)
 
-  if (loading) return <div className="p-6 text-casa-muted animate-breathe">Loading…</div>
+  if (loading) return <div className="space-y-4"><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>
 
   return (
     <>
       {/* Header */}
       <div>
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-display text-display-md text-casa-navy mb-1">Status Dashboard</h1>
-            <p className="text-body text-casa-muted">AI usage, tokens, and cost estimates</p>
-          </div>
-          <button
+          <SettingsPageHeader title="Status Dashboard" description="AI usage, tokens, and cost estimates" />
+          <IconButton
+            icon={<RefreshCw size={18} />}
+            aria-label="Refresh status dashboard"
             onClick={load}
-            className="p-2 rounded-button text-casa-muted hover:text-casa-navy hover:bg-casa-bg transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw size={16} />
-          </button>
+            variant="ghost"
+          />
         </div>
       </div>
 

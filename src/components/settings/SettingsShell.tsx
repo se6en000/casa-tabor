@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import BounceScroll from '../shared/BounceScroll'
+import { Heading, Text } from '../ui'
 
 // ── Nav structure ──────────────────────────────────────────────────────────
 
@@ -124,7 +125,7 @@ export default function SettingsShell() {
       )}>
         {/* Sidebar header */}
         <div className="px-5 py-5 border-b border-casa-border flex-shrink-0">
-          <h1 className="font-display text-display-sm text-casa-navy">Settings</h1>
+          <Heading role="display-sm">Settings</Heading>
         </div>
 
         {/* Nav groups */}
@@ -151,8 +152,8 @@ export default function SettingsShell() {
                           <>
                             <item.icon size={16} className={cn('flex-shrink-0', isActive ? 'text-casa-gold' : 'text-casa-muted group-hover:text-casa-navy')} />
                             <div className="flex-1 min-w-0">
-                              <p className="text-body-sm font-medium leading-none">{item.label}</p>
-                              <p className="text-caption text-casa-muted mt-0.5 md:block truncate hidden">{item.desc}</p>
+                              <Text role="body-sm" className="font-medium leading-none">{item.label}</Text>
+                              <Text role="caption" muted className="mt-0.5 md:block truncate hidden">{item.desc}</Text>
                             </div>
                             <ChevronRight size={14} className="md:hidden text-casa-muted flex-shrink-0" />
                           </>
@@ -182,7 +183,7 @@ export default function SettingsShell() {
           {/* Scrollable tabs */}
           <div
             ref={tabsRef}
-            className="overflow-x-auto scrollbar-hide flex"
+            className="overflow-x-auto scrollbar-hide flex settings-tabs"
             style={{ scrollBehavior: 'smooth' }}
           >
             {ALL_ITEMS.map((item) => (
@@ -191,7 +192,7 @@ export default function SettingsShell() {
                 data-path={item.to}
                 onClick={() => navigate(item.to)}
                 className={cn(
-                  'px-4 py-3 text-body-sm font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-all',
+                  'min-h-control px-4 py-3 text-body-sm font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-all outline-none focus-visible:ring-2 focus-visible:ring-casa-gold',
                   activeItem?.to === item.to
                     ? 'border-casa-gold text-casa-gold'
                     : 'border-transparent text-casa-muted hover:text-casa-navy'
@@ -210,7 +211,7 @@ export default function SettingsShell() {
 
         {/* Page content */}
         <BounceScroll className="flex-1">
-          <div className="max-w-3xl mx-auto px-6 py-8">
+          <div className="settings-surface max-w-3xl mx-auto px-6 py-8">
             <Outlet />
           </div>
         </BounceScroll>

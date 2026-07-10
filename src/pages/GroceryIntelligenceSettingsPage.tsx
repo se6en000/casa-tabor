@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Brain, Layers3, RefreshCw, ScanSearch, ShieldCheck, Sparkles, Store } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
+import { Alert, IconButton, SkeletonRow } from '../components/ui'
+import { SettingsPageHeader } from '../components/settings'
 
 type GroceryItemLite = {
   id: string
@@ -234,29 +236,23 @@ export default function GroceryIntelligenceSettingsPage() {
     ]
   }, [dryRunDedupe.duplicate_groups, metrics.avgConfidence, metrics.canonical, metrics.duplicateGroupsDetected, metrics.otherRate, metrics.totalItems])
 
-  if (loading) return <div className="text-casa-muted animate-breathe">Loading grocery intelligence…</div>
+  if (loading) return <div className="space-y-4"><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-display-md text-casa-navy mb-1">Grocery Intelligence</h1>
-          <p className="text-body text-casa-muted">Learning quality, cleanup health, and automation signals</p>
-        </div>
-        <button
+        <SettingsPageHeader title="Grocery Intelligence" description="Learning quality, cleanup health, and automation signals" />
+        <IconButton
+          icon={<RefreshCw size={18} className={cn(refreshing && 'animate-spin')} />}
+          aria-label="Refresh grocery intelligence"
           onClick={load}
           disabled={refreshing}
-          className="p-2 rounded-button text-casa-muted hover:text-casa-navy hover:bg-casa-bg transition-colors disabled:opacity-60"
-          title="Refresh grocery metrics"
-        >
-          <RefreshCw size={16} className={cn(refreshing && 'animate-spin')} />
-        </button>
+          variant="ghost"
+        />
       </div>
 
       {error && (
-        <div className="rounded-card border border-rose-200 bg-rose-50 px-4 py-3 text-body-sm text-rose-700">
-          {error}
-        </div>
+        <Alert tone="danger" title="Could not load grocery intelligence">{error}</Alert>
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

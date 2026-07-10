@@ -3,6 +3,7 @@ import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Image,
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
+import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
 import { useTheme, PRESETS, DEFAULTS, MIDNIGHT_GALLERY_DEFAULTS, type ThemeColors } from '../contexts/ThemeContext'
 import {
   useRoomTone,
@@ -48,32 +49,6 @@ const COLOR_FIELDS: { key: keyof ThemeColors; label: string; desc: string }[] = 
   { key: 'casa-top-pick-band', label: 'Top-Pick Band Text', desc: 'Text color used on featured/top-pick band labels' },
 ]
 
-function Toggle({ checked, onChange, label, desc, disabled }: {
-  checked: boolean; onChange: (v: boolean) => void; label: string; desc?: string; disabled?: boolean
-}) {
-  return (
-    <div className={cn('flex items-start justify-between gap-4 py-3', disabled && 'opacity-40 pointer-events-none')}>
-      <div>
-        <p className="text-body-sm font-medium text-casa-navy">{label}</p>
-        {desc && <p className="text-caption text-casa-muted mt-0.5">{desc}</p>}
-      </div>
-      <button
-        type="button"
-        onClick={() => onChange(!checked)}
-        className={cn(
-          'relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 focus:outline-none',
-          checked ? 'bg-casa-navy' : 'bg-casa-border'
-        )}
-      >
-        <span className={cn(
-          'inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200 mt-0.5',
-          checked ? 'translate-x-5 ml-0.5' : 'translate-x-0.5'
-        )} />
-      </button>
-    </div>
-  )
-}
-
 function SectionHeader({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
   return (
     <div className="flex items-center gap-2 mb-2">
@@ -106,11 +81,11 @@ function WarmthPreview({ filter }: { filter: string }) {
       <div className="bg-[#FAF8F5] p-4">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <div className="font-display text-[#1B2A4A] text-heading font-semibold">Thursday</div>
-            <div className="text-[#8C8C8C] text-caption mt-0.5">May 28 · 7:00 PM</div>
+            <div className="font-display text-casa-navy text-heading font-semibold">Thursday</div>
+            <div className="text-casa-muted text-caption mt-0.5">May 28 · 7:00 PM</div>
           </div>
           <div className="text-right">
-            <div className="text-[#8C8C8C] text-caption">72°F · Partly Cloudy</div>
+            <div className="text-casa-muted text-caption">72°F · Partly Cloudy</div>
           </div>
         </div>
         <div className="space-y-1.5">
@@ -121,8 +96,8 @@ function WarmthPreview({ filter }: { filter: string }) {
           ].map(e => (
             <div key={e.label} className="flex items-center gap-2 py-1 px-2.5 rounded-lg bg-white border border-[#E8E2D9]">
               <div className="w-2 h-2 rounded-full shrink-0" style={{ background: e.color }} />
-              <span className="text-[#2D2D2D] text-caption flex-1 truncate">{e.label}</span>
-              <span className="text-[#8C8C8C] text-caption">{e.time}</span>
+              <span className="text-casa-text text-caption flex-1 truncate">{e.label}</span>
+              <span className="text-casa-muted text-caption">{e.time}</span>
             </div>
           ))}
         </div>
@@ -323,14 +298,8 @@ export default function DisplaySettingsPage() {
   return (
     <>
       {/* Page header */}
-      <div className="flex items-center gap-3 mb-6">
-        <span className="w-10 h-10 rounded-full bg-casa-bg border border-casa-border flex items-center justify-center text-casa-gold">
-          <Monitor size={18} />
-        </span>
-        <div>
-          <h1 className="font-display text-display-sm text-casa-navy">Display Settings</h1>
-          <p className="text-caption text-casa-muted">Customize colors, room tone, sensors, and art mode</p>
-        </div>
+      <div className="mb-6">
+        <SettingsPageHeader icon={Monitor} title="Display Settings" description="Customize colors, room tone, sensors, and art mode" />
       </div>
 
       <div className="space-y-4">

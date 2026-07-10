@@ -212,3 +212,57 @@ test('Home and its right rail use shared touch-first design contracts', () => {
   assert.doesNotMatch(home, /const SHARED_GOLD = '#/)
   assert.doesNotMatch(rightRail, /text-\[\d+(?:\.\d+)?(?:px|rem|em)\]/)
 })
+
+test('every Settings route is covered by the shared Settings surface contract', () => {
+  const shell = readFileSync(resolve('src/components/settings/SettingsShell.tsx'), 'utf8')
+  const styles = readFileSync(resolve('src/index.css'), 'utf8')
+  const routePages = [
+    'GoogleServicesPage.tsx',
+    'AISettingsPage.tsx',
+    'FamilySettingsPage.tsx',
+    'DisplaySettingsPage.tsx',
+    'ArtModeSettingsPage.tsx',
+    'SmsSettingsPage.tsx',
+    'MusicPage.tsx',
+    'HomeSettingsPage.tsx',
+    'StatusDashboardPage.tsx',
+    'DataAnalyticsPage.tsx',
+    'GroceryIntelligenceSettingsPage.tsx',
+    'SavedPlacesSettingsPage.tsx',
+    'FoodProfileSettingsPage.tsx',
+    'PantryInventorySettingsPage.tsx',
+    'AdminOpsPage.tsx',
+    'DesignSystemGalleryPage.tsx',
+  ]
+
+  assert.match(shell, /className="settings-surface/)
+  assert.match(shell, /min-h-control/)
+  assert.match(styles, /\.settings-surface :is\(input, select, textarea\)/)
+  assert.match(styles, /min-height: var\(--ds-control-target\)/)
+
+  for (const file of routePages) {
+    const source = readFileSync(resolve('src/pages', file), 'utf8')
+    assert.match(source, /from '\.\.\/components\/(?:ui|settings)'/, `${file} must use shared design-system components`)
+    assert.doesNotMatch(source, /\btext-\[(?:\d|\.)+(?:px|rem|em)\]/, `${file} must use semantic typography`)
+  }
+})
+
+test('Settings toggles and key forms use shared accessible primitives', () => {
+  const sharedToggle = readFileSync(resolve('src/components/settings/SettingsToggle.tsx'), 'utf8')
+  const display = readFileSync(resolve('src/pages/DisplaySettingsPage.tsx'), 'utf8')
+  const art = readFileSync(resolve('src/pages/ArtModeSettingsPage.tsx'), 'utf8')
+  const sms = readFileSync(resolve('src/pages/SmsSettingsPage.tsx'), 'utf8')
+  const home = readFileSync(resolve('src/pages/HomeSettingsPage.tsx'), 'utf8')
+  const food = readFileSync(resolve('src/pages/FoodProfileSettingsPage.tsx'), 'utf8')
+  const pantry = readFileSync(resolve('src/pages/PantryInventorySettingsPage.tsx'), 'utf8')
+
+  assert.match(sharedToggle, /<Switch/)
+  assert.doesNotMatch(display, /function Toggle/)
+  assert.doesNotMatch(art, /function Toggle/)
+  assert.doesNotMatch(sms, /function Toggle/)
+  assert.match(home, /<SettingsToggle/)
+  assert.match(home, /<Field label="Street address"/)
+  assert.match(food, /<Textarea/)
+  assert.match(pantry, /<Select/)
+  assert.match(pantry, /<EmptyState/)
+})

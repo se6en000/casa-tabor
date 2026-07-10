@@ -9,6 +9,30 @@
 @import "tailwindcss";
 @import "./generated/design-tokens.css";
 
+@layer components {
+  .settings-surface {
+    color: var(--color-casa-text);
+  }
+
+  .settings-surface > :is(div, section, form) {
+    width: 100%;
+  }
+
+  .settings-surface :is(input, select, textarea) {
+    min-height: var(--ds-control-target);
+    border-radius: var(--radius-button);
+  }
+
+  .settings-surface button,
+  .settings-surface a {
+    outline: none;
+  }
+
+  .settings-surface :is(button, a):focus-visible {
+    box-shadow: 0 0 0 2px var(--color-casa-gold);
+  }
+}
+
 /* ── Touch-first: hover only on devices that support it ───────── */
 /* Redefines hover: variant so it NEVER fires on touchscreens.    */
 /* On mouse devices it works normally. Zero component changes.    */

@@ -3,6 +3,8 @@ import { Image, Clock, Sun, Palette, Monitor, Plus, X, ChevronDown, ChevronUp } 
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import { useArtFeedPrefs, MEDIA_OPTIONS } from '../hooks/useArtFeedPrefs'
 import { cn } from '../utils/cn'
+import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
+import { Checkbox } from '../components/ui'
 
 const COASTAL_STARTER_ARTISTS = [
   'Winslow Homer',
@@ -29,32 +31,6 @@ const COASTAL_STARTER_KEYWORDS = [
 
 function uniqueTrimmed(values: string[]): string[] {
   return Array.from(new Set(values.map(value => value.trim()).filter(Boolean)))
-}
-
-function Toggle({ checked, onChange, label, desc, disabled }: {
-  checked: boolean; onChange: (v: boolean) => void; label: string; desc?: string; disabled?: boolean
-}) {
-  return (
-    <div className={cn('flex items-start justify-between gap-4 py-3', disabled && 'opacity-40 pointer-events-none')}>
-      <div>
-        <p className="text-body-sm font-medium text-casa-navy">{label}</p>
-        {desc && <p className="text-caption text-casa-muted mt-0.5">{desc}</p>}
-      </div>
-      <button
-        type="button"
-        onClick={() => onChange(!checked)}
-        className={cn(
-          'relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 focus:outline-none',
-          checked ? 'bg-casa-navy' : 'bg-casa-border'
-        )}
-      >
-        <span className={cn(
-          'inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200 mt-0.5',
-          checked ? 'translate-x-5 ml-0.5' : 'translate-x-0.5'
-        )} />
-      </button>
-    </div>
-  )
 }
 
 function SectionHeader({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
@@ -228,14 +204,8 @@ export default function ArtModeSettingsPage() {
 
   return (
     <>
-      <div className="flex items-center gap-3 mb-6">
-        <span className="w-10 h-10 rounded-full bg-casa-bg border border-casa-border flex items-center justify-center text-casa-gold">
-          <Image size={18} />
-        </span>
-        <div>
-          <h1 className="font-display text-display-sm text-casa-navy">Art Mode</h1>
-          <p className="text-caption text-casa-muted">Simple gallery controls first, curation when you want it</p>
-        </div>
+      <div className="mb-6">
+        <SettingsPageHeader icon={Image} title="Art Mode" description="Simple gallery controls first, curation when you want it" />
       </div>
 
       <div className="space-y-4">
@@ -399,25 +369,13 @@ export default function ArtModeSettingsPage() {
                       {MEDIA_OPTIONS.map(opt => {
                         const checked = prefs.mediaTypes.includes(opt.id)
                         return (
-                          <button
+                          <Checkbox
                             key={opt.id}
-                            type="button"
-                            onClick={() => toggleMediaType(opt.id)}
-                            className={cn(
-                              'flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-colors',
-                              checked
-                                ? 'bg-casa-navy/5 border-casa-navy text-casa-navy'
-                                : 'bg-casa-bg border-casa-border text-casa-muted hover:border-casa-navy/30 hover:text-casa-navy'
-                            )}
-                          >
-                            <div className={cn(
-                              'w-4 h-4 rounded flex items-center justify-center shrink-0 border',
-                              checked ? 'bg-casa-navy border-casa-navy' : 'border-casa-border'
-                            )}>
-                              {checked && <span className="text-white text-[9px] font-bold">✓</span>}
-                            </div>
-                            <span className="text-body-sm font-medium leading-tight">{opt.label}</span>
-                          </button>
+                            checked={checked}
+                            onChange={() => toggleMediaType(opt.id)}
+                            label={opt.label}
+                            className="rounded-button border border-casa-border bg-casa-bg px-3"
+                          />
                         )
                       })}
                     </div>

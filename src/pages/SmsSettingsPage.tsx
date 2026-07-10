@@ -3,6 +3,8 @@ import { CheckCircle, MessageSquare, Bell, Clock, Send, ExternalLink, Copy } fro
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
+import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
+import { Field as FormField, Input } from '../components/ui'
 
 interface SmsConfig {
   enabled: boolean
@@ -38,46 +40,19 @@ const DEFAULTS: SmsConfig = {
   notify_members: [],
 }
 
-function Toggle({ checked, onChange, label, desc, disabled }: {
-  checked: boolean; onChange: (v: boolean) => void; label: string; desc?: string; disabled?: boolean
-}) {
-  return (
-    <div className={cn('flex items-start justify-between gap-4 py-3', disabled && 'opacity-40 pointer-events-none')}>
-      <div>
-        <p className="text-body-sm font-medium text-casa-navy">{label}</p>
-        {desc && <p className="text-caption text-casa-muted mt-0.5">{desc}</p>}
-      </div>
-      <button
-        type="button"
-        onClick={() => onChange(!checked)}
-        className={cn(
-          'relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 focus:outline-none',
-          checked ? 'bg-casa-navy' : 'bg-casa-border'
-        )}
-      >
-        <span className={cn(
-          'inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200 mt-0.5',
-          checked ? 'translate-x-5 ml-0.5' : 'translate-x-0.5'
-        )} />
-      </button>
-    </div>
-  )
-}
-
 function Field({ label, value, onChange, type = 'text', placeholder, disabled }: {
   label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string; disabled?: boolean
 }) {
   return (
-    <div className={cn(disabled && 'opacity-40 pointer-events-none')}>
-      <label className="block text-caption font-medium text-casa-muted mb-1">{label}</label>
-      <input
+    <FormField label={label} className={cn(disabled && 'opacity-40 pointer-events-none')}>
+      <Input
         type={type}
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full border border-casa-border rounded-lg px-3 py-2 text-body-sm text-casa-navy bg-white focus:outline-none focus:ring-2 focus:ring-casa-navy/20 placeholder:text-casa-muted/50"
+        disabled={disabled}
       />
-    </div>
+    </FormField>
   )
 }
 
@@ -165,14 +140,8 @@ export default function SmsSettingsPage() {
 
   return (
     <>
-      <div className="flex items-center gap-3 mb-6">
-        <span className="w-10 h-10 rounded-full bg-casa-bg border border-casa-border flex items-center justify-center text-casa-gold">
-          <MessageSquare size={18} />
-        </span>
-        <div>
-          <h1 className="font-display text-display-sm text-casa-navy">Notifications</h1>
-          <p className="text-caption text-casa-muted">SMS alerts via Twilio</p>
-        </div>
+      <div className="mb-6">
+        <SettingsPageHeader icon={MessageSquare} title="Notifications" description="SMS alerts via Twilio" />
       </div>
 
       <div className="space-y-4">

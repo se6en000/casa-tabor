@@ -12,6 +12,8 @@ import {
   type VoiceRuntimeConfig,
 } from '../lib/voiceRuntimeConfig'
 import { VOICE_AUDIT_LOG_KEY } from '../lib/voiceAudit'
+import { SkeletonRow } from '../components/ui'
+import { SettingsPageHeader } from '../components/settings'
 
 interface LLMConfig {
   provider: string
@@ -544,16 +546,13 @@ export default function AISettingsPage() {
   }
 
 
-  if (isLoading) return <div className="p-6 text-casa-muted animate-breathe">Loading…</div>
+  if (isLoading) return <div className="space-y-4"><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>
 
   return (
     <>
-      <h1 className="font-display text-display-md text-casa-navy mb-1">AI Settings</h1>
-      <p className="text-body text-casa-muted mb-6">
-        Choose your AI vendor and model. A fast, low-cost model is recommended — briefings don't need heavy reasoning.
-      </p>
+      <SettingsPageHeader title="AI Settings" description="Choose the provider, model, and voice runtime. Fast, low-cost models work best for briefings." />
 
-      <div className="space-y-4">
+      <div className="mt-6 space-y-4">
         {/* Vendor */}
         <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-3">
           <label className="block text-body-sm font-semibold text-casa-navy">AI Provider</label>

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { RefreshCw, Activity, AlertTriangle, CheckCircle2, Network, ListChecks } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
+import { IconButton, SkeletonRow } from '../components/ui'
+import { SettingsPageHeader } from '../components/settings'
 
 type RunStatus = {
   ok: boolean
@@ -118,24 +120,20 @@ export default function DataAnalyticsPage() {
   }, [result, error])
 
   if (loading) {
-    return <div className="text-casa-muted animate-breathe">Loading analytics…</div>
+    return <div className="space-y-4"><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>
   }
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-display-md text-casa-navy mb-1">Data & Analytics</h1>
-          <p className="text-body text-casa-muted">Household orchestration and graph health</p>
-        </div>
-        <button
+        <SettingsPageHeader title="Data & Analytics" description="Household orchestration and graph health" />
+        <IconButton
+          icon={<RefreshCw size={18} className={cn(refreshing && 'animate-spin')} />}
+          aria-label="Refresh analytics"
           onClick={load}
           disabled={refreshing}
-          className="p-2 rounded-button text-casa-muted hover:text-casa-navy hover:bg-casa-bg transition-colors disabled:opacity-60"
-          title="Refresh analytics"
-        >
-          <RefreshCw size={16} className={cn(refreshing && 'animate-spin')} />
-        </button>
+          variant="ghost"
+        />
       </div>
 
       <div className="bg-casa-bg/60 rounded-card border border-casa-border/50 p-4 space-y-3">

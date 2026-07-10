@@ -8,6 +8,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import type { SavedPlace, SavedPlaceCategory } from '../types'
+import { Button } from '../components/ui'
+import { SettingsPageHeader } from '../components/settings'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -392,20 +394,14 @@ export default function SavedPlacesSettingsPage() {
     <>
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
-          <div className="flex-1 min-w-0">
-            <h1 className="font-display text-display-md text-casa-navy">Saved Places & Contacts</h1>
-            <p className="text-caption text-casa-muted mt-0.5">
-              The AI uses this to resolve nicknames and look up addresses when you mention a place or person.
-            </p>
-          </div>
+          <SettingsPageHeader title="Saved Places & Contacts" description="The AI uses these to resolve nicknames and look up addresses." />
           {!isAdding && (
-            <button
+            <Button
               onClick={() => tab === 'places' ? setPlaceMode({ type: 'add' }) : setContactMode({ type: 'add' })}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-casa-gold text-white text-body font-semibold hover:bg-casa-gold/90 transition-colors shrink-0"
+              leadingIcon={<Plus size={16} />}
             >
-              <Plus size={15} />
               {tab === 'places' ? 'Add Place' : 'Add Person'}
-            </button>
+            </Button>
           )}
         </div>
 

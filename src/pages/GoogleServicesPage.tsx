@@ -9,10 +9,12 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  Calendar, Mail, Check, AlertCircle,
-  RefreshCw, Unlink, Sparkles,
+  Calendar, Mail, Check,
+  RefreshCw, Unlink,
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Alert } from '../components/ui'
+import { SettingsPageHeader } from '../components/settings'
 import { formatDistanceToNow, format } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
@@ -185,27 +187,17 @@ export default function GoogleServicesPage() {
 
   return (
     <>
-        <h1 className="font-display text-display-md text-casa-navy mb-1">Google Services</h1>
-        <p className="text-body text-casa-muted mb-6">
-          Connect each family member's Google account to enable calendar sync and Gmail inbox scanning.
-        </p>
+        <SettingsPageHeader title="Google Services" description="Connect each family member's account for calendar sync and Gmail scanning." />
 
         {/* Status banners */}
         {connectedParam && (
-          <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-green-50 border border-green-200 text-green-800 text-body-sm mb-4">
-            <Check size={16} />
-            {gmailParam ? 'Connected — Calendar sync and Gmail scan are now active.' : 'Connected — Calendar sync is now active.'}
-          </div>
+          <Alert className="mt-6" tone="success" title={gmailParam ? 'Calendar sync and Gmail scan are active' : 'Calendar sync is active'} />
         )}
         {errorParam && (
-          <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-body-sm mb-4">
-            <AlertCircle size={16} /> {errorParam.replace(/_/g, ' ')}
-          </div>
+          <Alert className="mt-6" tone="danger" title="Google connection failed">{errorParam.replace(/_/g, ' ')}</Alert>
         )}
         {scanResult && (
-          <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-casa-gold/10 border border-casa-gold/30 text-casa-navy text-body-sm mb-4">
-            <Sparkles size={16} className="text-casa-gold" /> {scanResult}
-          </div>
+          <Alert className="mt-6" title="Gmail scan complete">{scanResult}</Alert>
         )}
 
         {/* Member cards */}

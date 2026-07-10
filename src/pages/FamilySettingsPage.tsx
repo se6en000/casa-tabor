@@ -8,6 +8,8 @@ import type {
   MemberAvailabilityException,
   MemberAvailabilityRule,
 } from '../types'
+import { SkeletonRow } from '../components/ui'
+import { SettingsPageHeader } from '../components/settings'
 
 // Profile color palette (alert-like hues intentionally excluded)
 const PROFILE_COLOR_OPTIONS = [
@@ -362,7 +364,7 @@ export default function FamilySettingsPage() {
 
   const hasChanges = Object.keys(edits).length > 0 || newMembers.length > 0
 
-  if (isLoading) return <div className="p-6 text-casa-muted animate-breathe">Loading…</div>
+  if (isLoading) return <div className="space-y-4"><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>
 
   const allRows: EditableMember[] = [
     ...members.map(m => getMember(m)),
@@ -373,8 +375,7 @@ export default function FamilySettingsPage() {
     <>
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="font-display text-display-md text-casa-navy mb-1">Family</h1>
-          <p className="text-body text-casa-muted">Manage members, colors, roles, driving, and blocked-hour availability.</p>
+          <SettingsPageHeader title="Family" description="Manage members, colors, roles, driving, and blocked-hour availability." />
         </div>
         <div className="text-right">
           {saveError ? (

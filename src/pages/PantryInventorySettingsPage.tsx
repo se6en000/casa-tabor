@@ -9,6 +9,8 @@ import {
   sanitizePantryInventoryAudit,
   type PantryInventoryAuditEntry,
 } from '../lib/pantryInventoryUtils'
+import { Alert, Button, Card, EmptyState, Field, Heading, Input, Select, SkeletonRow, Text } from '../components/ui'
+import { SettingsPageHeader } from '../components/settings'
 
 type PantryInventoryRow = {
   id: string
@@ -209,41 +211,30 @@ export default function PantryInventorySettingsPage() {
     }
   }
 
-  if (loading) return <p className="text-casa-muted animate-breathe">Loading pantry inventory…</p>
+  if (loading) return <div className="space-y-4"><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>
 
   return (
     <div className="space-y-5">
-      <div className="rounded-card border border-casa-border bg-casa-surface p-4">
-        <h2 className="font-display text-heading text-casa-navy">Pantry Inventory</h2>
-        <p className="text-body-sm text-casa-muted mt-1">
-          Track on-hand package counts and low-stock thresholds used by Meal Planner AI.
-        </p>
-        <p className="text-[11px] text-casa-muted mt-2">
-          {rows.length} tracked item{rows.length === 1 ? '' : 's'} · {lowStockCount} currently low
-        </p>
-        <p className="text-[11px] text-casa-muted mt-1">
-          Audit trail: {auditLog.length} recent inventory change{auditLog.length === 1 ? '' : 's'}
-        </p>
-      </div>
+      <SettingsPageHeader title="Pantry Inventory" description="Track package counts and low-stock thresholds used by Meal Planner AI." />
+      <Card>
+        <Text role="caption" muted>{rows.length} tracked item{rows.length === 1 ? '' : 's'} · {lowStockCount} currently low</Text>
+        <Text role="caption" muted>Audit trail: {auditLog.length} recent inventory change{auditLog.length === 1 ? '' : 's'}</Text>
+      </Card>
 
       <div className="space-y-2">
         {rows.map((row) => (
-          <div key={row.id} className="rounded-card border border-casa-border bg-casa-surface p-3">
+          <Card key={row.id}>
             <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
-              <label className="md:col-span-3">
-                <p className="text-caption text-casa-muted mb-1">Item</p>
-                <input
+              <Field label="Item" className="md:col-span-3">
+                <Input
                   value={row.name}
                   onChange={(event) => updateRow(row.id, { name: event.target.value })}
-                  className="w-full rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm"
                 />
-              </label>
-              <label className="md:col-span-2">
-                <p className="text-caption text-casa-muted mb-1">Category</p>
-                <select
+              </Field>
+              <Field label="Category" className="md:col-span-2">
+                <Select
                   value={row.category}
                   onChange={(event) => updateRow(row.id, { category: event.target.value })}
-                  className="w-full rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm"
                 >
                   <option value="pantry">pantry</option>
                   <option value="produce">produce</option>
@@ -251,102 +242,92 @@ export default function PantryInventorySettingsPage() {
                   <option value="meat">meat</option>
                   <option value="bakery">bakery</option>
                   <option value="other">other</option>
-                </select>
-              </label>
-              <label className="md:col-span-2">
-                <p className="text-caption text-casa-muted mb-1">Pack unit</p>
-                <input
+                </Select>
+              </Field>
+              <Field label="Pack unit" className="md:col-span-2">
+                <Input
                   value={row.package_unit}
                   onChange={(event) => updateRow(row.id, { package_unit: event.target.value })}
                   placeholder="bottle"
-                  className="w-full rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm"
                 />
-              </label>
-              <label className="md:col-span-2">
-                <p className="text-caption text-casa-muted mb-1">Pack size</p>
-                <input
+              </Field>
+              <Field label="Pack size" className="md:col-span-2">
+                <Input
                   value={row.package_size}
                   onChange={(event) => updateRow(row.id, { package_size: event.target.value })}
                   placeholder="16 fl oz"
-                  className="w-full rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm"
                 />
-              </label>
-              <label className="md:col-span-2">
-                <p className="text-caption text-casa-muted mb-1">On hand</p>
-                <input
+              </Field>
+              <Field label="On hand" className="md:col-span-2">
+                <Input
                   type="number"
                   min={0}
                   step={0.25}
                   value={row.on_hand_packages}
                   onChange={(event) => updateRow(row.id, { on_hand_packages: Number(event.target.value) })}
-                  className="w-full rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm"
                 />
-              </label>
-              <label className="md:col-span-2">
-                <p className="text-caption text-casa-muted mb-1">Low at</p>
-                <input
+              </Field>
+              <Field label="Low at" className="md:col-span-2">
+                <Input
                   type="number"
                   min={0}
                   step={0.25}
                   value={row.low_stock_threshold}
                   onChange={(event) => updateRow(row.id, { low_stock_threshold: Number(event.target.value) })}
-                  className="w-full rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm"
                 />
-              </label>
+              </Field>
               <div className="md:col-span-12 flex justify-end">
-                <button
-                  type="button"
+                <Button
+                  variant="danger"
+                  size="sm"
                   onClick={() => deleteRow(row.id)}
-                  className="inline-flex items-center gap-1.5 text-[12px] text-casa-error hover:opacity-80"
+                  leadingIcon={<Trash2 size={16} />}
                 >
-                  <Trash2 size={13} />
                   Remove
-                </button>
+                </Button>
               </div>
 
               {auditLog.length > 0 && (
-                <div className="rounded-card border border-casa-border bg-casa-surface p-3">
-                  <p className="text-body-sm font-semibold text-casa-navy">Recent inventory activity</p>
+                <Card className="md:col-span-12">
+                  <Heading role="heading">Recent inventory activity</Heading>
                   <div className="mt-2 max-h-52 space-y-1.5 overflow-y-auto pr-1">
                     {auditLog.slice(0, 20).map((entry) => (
                       <div key={entry.id} className="rounded-lg border border-casa-border bg-casa-bg px-2.5 py-2">
-                        <p className="text-[11px] text-casa-navy">
+                        <Text role="caption">
                           {entry.name} · {entry.delta_packages >= 0 ? '+' : ''}{entry.delta_packages} ({entry.source})
-                        </p>
-                        <p className="text-[10px] text-casa-muted">
+                        </Text>
+                        <Text role="caption" muted>
                           {entry.reason} · {new Date(entry.created_at).toLocaleString()}
-                        </p>
+                        </Text>
                       </div>
                     ))}
                   </div>
-                </div>
+                </Card>
               )}
             </div>
-          </div>
+          </Card>
         ))}
       </div>
 
-      {error && <p className="text-body-sm text-casa-error">{error}</p>}
-      {!error && status && <p className="text-body-sm text-casa-muted">{status}</p>}
+      {rows.length === 0 && <EmptyState title="No pantry items yet" description="Add the staples you want Meal Planner AI to track." />}
+      {error && <Alert tone="danger" title="Could not save pantry inventory">{error}</Alert>}
+      {!error && status && <Alert tone="success" title={status} />}
 
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={addRow}
-          className="px-3 py-2 rounded-button border border-casa-border bg-casa-bg text-body-sm text-casa-navy inline-flex items-center gap-1.5"
+          leadingIcon={<Plus size={16} />}
         >
-          <Plus size={14} />
           Add pantry item
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
           onClick={() => void saveInventory()}
-          disabled={saving}
-          className="px-4 py-2 rounded-button border border-casa-gold/40 bg-casa-gold/10 text-casa-navy text-body-sm font-semibold inline-flex items-center gap-2 disabled:opacity-60"
+          loading={saving}
+          leadingIcon={<Save size={16} />}
         >
-          <Save size={14} />
-          {saving ? 'Saving…' : 'Save pantry inventory'}
-        </button>
+          Save pantry inventory
+        </Button>
       </div>
     </div>
   )

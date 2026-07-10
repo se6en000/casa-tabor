@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { AlertCircle, CheckCircle, Lock, LogOut, RefreshCw, Trash2, Calendar } from 'lucide-react'
 import BounceScroll from '../components/shared/BounceScroll'
+import { Heading } from '../components/ui'
 
 interface OperationPlan {
   operation: 'delete' | 'add' | 'edit'
@@ -174,7 +175,7 @@ export default function AdminOpsPage() {
             <div className="w-16 h-16 rounded-full bg-casa-gold/10 flex items-center justify-center mx-auto mb-4">
               <Lock size={32} className="text-casa-gold" />
             </div>
-            <h1 className="font-display text-display-sm text-casa-navy mb-2">Admin Operations</h1>
+            <Heading role="display-sm" className="mb-2">Admin Operations</Heading>
             <p className="text-body text-casa-muted">Mass calendar operations (delete, add, edit)</p>
           </div>
 
@@ -221,7 +222,7 @@ export default function AdminOpsPage() {
       <BounceScroll className="flex-1">
         <div className="max-w-4xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between mb-8">
-            <h1 className="font-display text-display-sm text-casa-navy">Bulk Calendar Operations</h1>
+            <Heading role="display-sm">Bulk Calendar Operations</Heading>
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 px-3 py-2 text-casa-muted hover:text-casa-navy transition-colors"
@@ -283,7 +284,7 @@ export default function AdminOpsPage() {
       <BounceScroll className="flex-1">
         <div className="max-w-4xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between mb-8">
-            <h1 className="font-display text-display-sm text-casa-navy">Preview Operation</h1>
+            <Heading role="display-sm">Preview Operation</Heading>
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 px-3 py-2 text-casa-muted hover:text-casa-navy transition-colors"
@@ -303,7 +304,7 @@ export default function AdminOpsPage() {
 
             {/* Operation Summary */}
             <div className="p-6 bg-casa-surface rounded-lg border border-casa-border">
-              <h2 className="font-display text-heading text-casa-navy mb-4">Operation Summary</h2>
+              <Heading role="heading" className="mb-4">Operation Summary</Heading>
 
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div>
@@ -358,7 +359,7 @@ export default function AdminOpsPage() {
             {/* Sample Rows */}
             {plan.sampleRows && plan.sampleRows.length > 0 && (
               <div className="p-6 bg-casa-surface rounded-lg border border-casa-border">
-                <h2 className="font-display text-heading text-casa-navy mb-4">Sample Rows ({plan.sampleRows.length} of {plan.estimatedCount})</h2>
+                <Heading role="heading" className="mb-4">Sample Rows ({plan.sampleRows.length} of {plan.estimatedCount})</Heading>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -435,7 +436,7 @@ export default function AdminOpsPage() {
           <div className="w-16 h-16 rounded-full bg-casa-gold/10 flex items-center justify-center mx-auto mb-4">
             <RefreshCw size={32} className="text-casa-gold animate-spin" />
           </div>
-          <h2 className="font-display text-display-sm text-casa-navy mb-2">Executing Operation</h2>
+          <Heading role="display-sm" className="mb-2">Executing Operation</Heading>
           <p className="text-body text-casa-muted">This may take a minute depending on the number of rows...</p>
         </div>
       </BounceScroll>
@@ -458,9 +459,9 @@ export default function AdminOpsPage() {
                 <AlertCircle size={32} className="text-red-600" />
               )}
             </div>
-            <h1 className="font-display text-display-sm text-casa-navy mb-2">
+            <Heading role="display-sm" className="mb-2">
               {success ? 'Operation Completed' : 'Operation Failed'}
-            </h1>
+            </Heading>
           </div>
 
           <div className="space-y-6">
@@ -481,7 +482,7 @@ export default function AdminOpsPage() {
 
             {result.errors.length > 0 && (
               <div className="p-6 bg-red-50 border border-red-200 rounded-lg">
-                <h2 className="font-display text-heading text-red-900 mb-4">Errors</h2>
+                <Heading role="heading" className="mb-4 text-casa-error">Errors</Heading>
                 <ul className="space-y-2">
                   {result.errors.map((err, i) => (
                     <li key={i} className="text-sm text-red-700">• {err}</li>
@@ -491,7 +492,7 @@ export default function AdminOpsPage() {
             )}
 
             <div className="p-6 bg-casa-surface rounded-lg border border-casa-border">
-              <h2 className="font-display text-heading text-casa-navy mb-4">Audit Trail</h2>
+              <Heading role="heading" className="mb-4">Audit Trail</Heading>
               <dl className="space-y-3 text-sm">
                 <div>
                   <dt className="text-xs font-medium text-casa-muted uppercase mb-1">Job ID</dt>
