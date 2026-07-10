@@ -5,6 +5,7 @@ import { cn } from '../../utils/cn'
 import { GROCERY_CATEGORIES, type GroceryItem } from '../../hooks/useGroceryList'
 import { inferCategoryFromName } from '../../utils/groceryCategorization'
 import { normalizeGroceryNameKey } from '../../utils/groceryPredictionDeferrals'
+import { useFieldDictation } from '../../hooks/useFieldDictation'
 
 interface NewGroceryItemInput {
   list_id: string
@@ -70,6 +71,10 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
   const [viewportHeight, setViewportHeight] = useState<number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // In-field dictation: fills the same input you type into, keeping the sheet open.
+  const { supported: dictationSupported, listening, toggle: toggleDictation, stop: stopDictation } =
+    useFieldDictation({ onText: setValue })
+
   const findDuplicate = useCallback((name: string) => findDuplicateItem(items, name), [items])
 
   const trimmed = value.trim()
@@ -129,10 +134,11 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
         { key: `${name}-${Date.now()}`, name, category },
         ...prev.filter((s) => normalizeGroceryNameKey(s.name) !== normalizeGroceryNameKey(name)),
       ])
+      stopDictation() // dictation resets to the freshly-cleared field for the next item
       setValue('')
       inputRef.current?.focus()
     },
-    [addItem, defaultListId, findDuplicate],
+    [addItem, defaultListId, findDuplicate, stopDictation],
   )
 
   const undoAdd = useCallback(
@@ -145,18 +151,10 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
     [items, deleteItem],
   )
 
-  const handleVoiceAdd = () => {
-    document.dispatchEvent(
-      new CustomEvent('open-ai-chat', {
-        detail: {
-          prompt: trimmed ? `Add these grocery items to the shopping list: ${trimmed}` : 'Add items to the grocery list.',
-          autoSend: false,
-          source: 'grocery-voice-add',
-        },
-      }),
-    )
+  const handleClose = useCallback(() => {
+    stopDictation()
     onClose()
-  }
+  }, [stopDictation, onClose])
 
   return (
     <AnimatePresence>
@@ -168,7 +166,7 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[65] casa-scrim"
-            onClick={onClose}
+            onClick={handleClose}
           />
 
           <motion.div
@@ -200,7 +198,7 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
                 )}
               </div>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="h-9 w-9 rounded-full border border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main transition-colors flex items-center justify-center"
                 aria-label="Close quick add"
               >
@@ -226,13 +224,29 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
                   enterKeyHint="done"
                   autoComplete="off"
                   autoCorrect="off"
-                  placeholder="Add an item…"
+                  placeholder={listening ? 'Listening…' : 'Add an item…'}
                   className="flex-1 min-w-0 bg-transparent text-body text-casa-text placeholder:text-casa-muted outline-none"
                 />
-                {previewCategory && !duplicate && (
+                {previewCategory && !duplicate && !listening && (
                   <span className="shrink-0 rounded-pill bg-casa-surface border border-casa-border px-2.5 py-1 text-caption font-semibold text-casa-navy whitespace-nowrap">
                     {CATEGORY_LABEL.get(previewCategory) ?? 'Other'}
                   </span>
+                )}
+                {dictationSupported && (
+                  <button
+                    type="button"
+                    onClick={() => toggleDictation(value)}
+                    aria-label={listening ? 'Stop dictation' : 'Dictate item'}
+                    aria-pressed={listening}
+                    className={cn(
+                      'shrink-0 h-10 w-10 rounded-full flex items-center justify-center transition-colors',
+                      listening
+                        ? 'bg-casa-gold text-casa-navy animate-pulse'
+                        : 'text-casa-muted hover:bg-casa-main',
+                    )}
+                  >
+                    <Mic size={18} />
+                  </button>
                 )}
                 <button
                   type="button"
@@ -343,19 +357,11 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
             {/* Footer secondary actions */}
             <div className="px-5 py-3 border-t border-casa-divider shrink-0 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
-                <button
-                  type="button"
-                  onClick={handleVoiceAdd}
-                  className="inline-flex items-center gap-2 h-10 px-4 rounded-button border border-casa-border bg-casa-bg text-body-sm font-medium text-casa-navy hover:bg-casa-main transition-colors"
-                >
-                  <Mic size={16} />
-                  Voice add
-                </button>
                 {onOpenMore && (
                   <button
                     type="button"
                     onClick={() => {
-                      onClose()
+                      handleClose()
                       onOpenMore()
                     }}
                     className="inline-flex items-center gap-1.5 h-10 px-3 rounded-button text-body-sm font-medium text-casa-text-secondary hover:text-casa-navy transition-colors"
@@ -367,7 +373,7 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
               </div>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 className="h-10 px-5 rounded-button bg-casa-navy text-white text-body-sm font-semibold hover:bg-casa-navy/90 transition-colors shrink-0"
               >
                 Done

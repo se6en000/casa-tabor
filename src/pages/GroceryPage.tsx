@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ShoppingCart, Trash2, Check, X, Plus, Minus, RefreshCw, Mic, GripVertical, Link2, Upload, BookOpen, ChefHat, ChevronLeft, ChevronRight, Clock3, ExternalLink, Camera, Sparkles, Leaf, Milk, Beef, Croissant, Snowflake, Package, Coffee, Popcorn, Sandwich, House, HeartPulse, Baby as BabyIcon, PawPrint, Circle } from 'lucide-react'
+import { ShoppingCart, Trash2, Check, X, Plus, Minus, RefreshCw, GripVertical, Link2, Upload, BookOpen, ChefHat, ChevronLeft, ChevronRight, Clock3, ExternalLink, Camera, Sparkles, Leaf, Milk, Beef, Croissant, Snowflake, Package, Coffee, Popcorn, Sandwich, House, HeartPulse, Baby as BabyIcon, PawPrint, Circle } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -1095,19 +1095,6 @@ export default function GroceryPage() {
     }
   }, [addItemByName, weeklyAutoListCandidates])
 
-  const handleVoiceAdd = () => {
-    const prompt = inputValue.trim()
-      ? `Add these grocery items to the shopping list: ${inputValue.trim()}`
-      : 'Add items to the grocery list.'
-    document.dispatchEvent(new CustomEvent('open-ai-chat', {
-      detail: {
-        prompt,
-        autoSend: false,
-        source: 'grocery-voice-add',
-      },
-    }))
-  }
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault()
@@ -2163,14 +2150,6 @@ export default function GroceryPage() {
             <div className="ml-auto flex shrink-0 items-center gap-2">
               <button
                 type="button"
-                onClick={handleVoiceAdd}
-                className="flex items-center gap-2 min-h-11 px-5 rounded-full bg-casa-gold text-casa-navy text-body-sm font-semibold shadow-[0_4px_12px_rgba(27,42,74,0.12)] hover:brightness-105 transition-all"
-              >
-                <Mic size={16} />
-                Voice add
-              </button>
-              <button
-                type="button"
                 onClick={() => void handleSyncNow({ cleanBeforeSync: true })}
                 disabled={syncing}
                 title={`${lastSyncSummary}${lastSyncAt ? ` · ${new Date(lastSyncAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}`}
@@ -2891,7 +2870,7 @@ export default function GroceryPage() {
             ))}
           </div>
           <p className="mt-1 text-[11px] text-casa-muted">
-            Tip: use the Voice add button at the top, then say “add milk, eggs, and bananas.”
+            Tip: tap the sparkle in the top bar to ask Casa AI, then say “add milk, eggs, and bananas.”
           </p>
             </>
           )}
