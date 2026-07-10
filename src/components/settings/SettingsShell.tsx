@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 import {
   Users, Sun, MessageSquare, Bot, Home, Activity,
   BookmarkCheck, Layers, ChevronRight, Music2, LineChart,
-  Palette, ShoppingCart, ChefHat, Lock,
+  Palette, ShoppingCart, ChefHat, Lock, LayoutGrid,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import BounceScroll from '../shared/BounceScroll'
@@ -49,6 +49,13 @@ const NAV_GROUPS = [
       { to: '/settings/analytics', icon: LineChart,     label: 'Data & Analytics',    desc: 'Orchestration and graph health' },
       { to: '/settings/status',  icon: Activity,      label: 'Status Dashboard',    desc: 'AI usage and cost' },
       { to: '/settings/admin-ops', icon: Lock,        label: 'Admin Operations',    desc: 'Mass calendar operations (PIN required)' },
+      // Phase 0 internal design-system gallery — dev-only nav entry so it never
+      // shows up as clutter in the production kiosk/settings UI. The route
+      // itself is still always registered (AnimatedRoutes.tsx) so QA can reach
+      // /settings/design-system directly on any build.
+      ...(import.meta.env.DEV
+        ? [{ to: '/settings/design-system', icon: LayoutGrid, label: 'Design System', desc: 'Tokens, states & validation matrix (dev only)' }]
+        : []),
     ],
   },
 ]
