@@ -24,17 +24,10 @@ import { useTravelEta, type TravelEtaResult } from '../hooks/useTravelEta'
 import { useReminderNeedsYouActions } from '../hooks/useReminderNeedsYouActions'
 import {
   getPersistedPlanOverrides,
-  getPersistedDriverOverrideMemberIds,
   resolveEventMode,
 } from '../lib/eventPlanOverrides'
 import { derivePlan, type DerivedPerson } from '../lib/eventCommandCenter'
-import { useMemberAvailability } from '../hooks/useMemberAvailability'
 import type { FamilyMember } from '../types'
-import {
-  evaluateMemberAvailabilityForWindow,
-  indexAvailabilityExceptionsByMember,
-  indexAvailabilityRulesByMember,
-} from '../lib/memberAvailability'
 import { getEventEndDate, getEventStartDate } from '../utils/eventTime'
 import { formatDurationLabel, pickActiveHeroEvent, resolveRestingIndex } from '../lib/heroFocus.mjs'
 import { cleanEventTitle, isBirthdayEvent } from '../utils/eventTitle'
@@ -153,66 +146,10 @@ export default function HomePage() {
     [currentDateKey],
   )
   const { data: allTomorrowEvents } = useTodayEvents(tomorrow)
-  const { visibleMembers, toggleMember } = useCalendarStore()
+  const { visibleMembers } = useCalendarStore()
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLElement | null>(null)
   const nowLineRef = useRef<HTMLLIElement | null>(null)
-  const homeFamily = useMemo(
-    () => (family ?? []).filter((m) => (
-      (m.role === 'parent' || m.role === 'child' || m.role === 'caregiver')
-      && (m.show_on_home_sidebar ?? true)
-    )),
-    [family],
-  )
-  const availability = useMemberAvailability(homeFamily.map((member) => member.id))
-  const rulesByMember = useMemo(
-    () => indexAvailabilityRulesByMember(availability.rules),
-    [availability.rules],
-  )
-  const exceptionsByMember = useMemo(
-    () => indexAvailabilityExceptionsByMember(availability.exceptions),
-    [availability.exceptions],
-  )
-  const familyStatusByMember = useMemo(() => {
-    const sourceEvents = allTodayEvents ?? []
-    const assignedDriverOverridesByEvent = new Map(
-      sourceEvents.map((event) => [event.id, getPersistedDriverOverrideMemberIds(event)]),
-    )
-    return new Map(homeFamily.map((member) => {
-      const mine = sourceEvents.filter((event) => {
-        const isAttendee = event.members?.some((eventMember) => eventMember.family_member.id === member.id)
-        const isAssignedViaOverride = assignedDriverOverridesByEvent.get(event.id)?.has(member.id) ?? false
-        return Boolean(isAttendee || isAssignedViaOverride)
-      })
-      const activeNow = mine.find((event) => isBefore(getEventStartDate(event), now) && isAfter(getEventEndDate(event), now))
-      const nextUp = mine
-        .filter((event) => isAfter(getEventStartDate(event), now))
-        .sort((a, b) => getEventStartDate(a).getTime() - getEventStartDate(b).getTime())[0]
-      const nowWindowEnd = new Date(now.getTime() + (30 * 60 * 1000))
-      const availabilityAssessment = evaluateMemberAvailabilityForWindow(
-        member,
-        now,
-        nowWindowEnd,
-        rulesByMember.get(member.id) ?? [],
-        exceptionsByMember.get(member.id) ?? [],
-        { requireCanDrive: false },
-      )
-      const label = activeNow
-        ? activeNow.location_name
-          ? `Out · ${activeNow.location_name.split(' ').slice(0, 3).join(' ')}`
-          : `Busy until ${format(getEventEndDate(activeNow), 'h:mm a')}`
-        : !availabilityAssessment.available
-          ? availabilityAssessment.reason ?? 'Unavailable'
-          : availabilityAssessment.softUnavailable
-            ? `${availabilityAssessment.reason ?? 'Blocked hours'} (flex)`
-            : nextUp
-              ? `Next: ${format(getEventStartDate(nextUp), 'h:mm a')}`
-              : 'Free today'
-      const constrained = !availabilityAssessment.available || availabilityAssessment.softUnavailable
-      return [member.id, { label, busy: Boolean(activeNow), constrained }]
-    }))
-  }, [allTodayEvents, homeFamily, now, rulesByMember, exceptionsByMember])
-
   const events = useMemo<EventWithDetails[]>(() => {
     if (!allTodayEvents) return []
     const memberOk = (ev: EventWithDetails) =>
@@ -571,40 +508,9 @@ export default function HomePage() {
           </section>
         )}
 
-        {/* ── Family filter + music player ─────────────────── */}
-        <div className="mt-6 space-y-4">
-          <div className="flex gap-2 flex-wrap">
-            {homeFamily.map((m) => {
-              const active = visibleMembers.length === 0 || visibleMembers.includes(m.id)
-              const status = familyStatusByMember.get(m.id)
-              return (
-                <Chip
-                  key={m.id}
-                  onClick={() => toggleMember(m.id)}
-                  selected={active}
-                  className={cn('min-w-0', !active && 'opacity-65')}
-                >
-                  <span
-                    className="w-3 h-3 rounded-full transition-opacity"
-                    style={{ backgroundColor: m.color_hex, opacity: active ? 1 : 0.4 }}
-                  />
-                  <span className={cn('text-body-sm font-semibold transition-opacity shrink-0', active ? 'text-casa-navy opacity-100' : 'text-casa-navy opacity-45')}>
-                    {m.name}
-                  </span>
-                  <span className={cn('text-caption font-normal text-casa-text-faint tabular-nums truncate max-w-[11rem]', !active && 'opacity-80')}>
-                    {status?.label ?? 'Free today'}
-                  </span>
-                  <span className={cn(
-                    'w-2 h-2 rounded-full shrink-0',
-                    !active ? 'bg-casa-muted/30' : status?.busy || status?.constrained ? 'bg-amber-400' : 'bg-emerald-400',
-                  )} />
-                </Chip>
-              )
-            })}
-          </div>
-          <div onClick={e => e.stopPropagation()}>
-            <MiniPlayer />
-          </div>
+        {/* ── Music player ─────────────────────────────────── */}
+        <div className="mt-6" onClick={e => e.stopPropagation()}>
+          <MiniPlayer />
         </div>
 
 

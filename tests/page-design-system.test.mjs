@@ -213,6 +213,14 @@ test('Home and its right rail use shared touch-first design contracts', () => {
   assert.doesNotMatch(rightRail, /text-\[\d+(?:\.\d+)?(?:px|rem|em)\]/)
 })
 
+test('Home middle rail omits household availability pills', () => {
+  const home = readFileSync(resolve('src/pages/HomePage.tsx'), 'utf8')
+
+  assert.doesNotMatch(home, /familyStatusByMember/)
+  assert.doesNotMatch(home, /status\?\.label \?\? 'Free today'/)
+  assert.match(home, /<MiniPlayer \/>/)
+})
+
 test('every Settings route is covered by the shared Settings surface contract', () => {
   const shell = readFileSync(resolve('src/components/settings/SettingsShell.tsx'), 'utf8')
   const styles = readFileSync(resolve('src/index.css'), 'utf8')
