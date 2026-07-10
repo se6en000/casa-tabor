@@ -147,7 +147,7 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
             {members.map(m => (
               <span
                 key={m.id}
-                className="px-1.5 py-0.5 rounded-full text-white text-[9px] font-bold leading-none whitespace-nowrap"
+                className="px-1.5 py-0.5 rounded-full text-white text-caption font-bold leading-none whitespace-nowrap"
                 style={{ backgroundColor: m.family_member?.color_hex ?? undefined }}
               >
                 {m.family_member?.name}

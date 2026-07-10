@@ -6,101 +6,19 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, type ReactNode } from 'react'
 import type { RoomToneZone } from '../hooks/useRoomTone'
+import {
+  DEFAULT_THEME_COLORS,
+  MIDNIGHT_THEME_COLORS,
+  THEME_COLOR_KEYS,
+  type ThemeColorPalette,
+} from '../design-system/tokens.mjs'
 
-export interface ThemeColors {
-  'casa-gold':    string
-  'casa-navy':    string
-  'casa-bg':      string
-  'casa-bg-2':    string
-  'casa-surface': string
-  'casa-text':    string
-  'casa-border':  string
-  'casa-error':   string
-  'casa-success': string
-  'casa-warning': string
-  'casa-surface-subtle': string
-  'casa-control-border': string
-  'casa-divider-strong': string
-  'casa-text-secondary': string
-  'casa-text-tertiary': string
-  'casa-text-faint': string
-  'casa-accent-soft': string
-  'casa-accent-soft-border': string
-  'casa-accent-soft-hover': string
-  'casa-accent-subtle': string
-  'casa-accent-subtle-border': string
-  'casa-info': string
-  'casa-info-strong': string
-  'casa-info-soft': string
-  'casa-success-strong': string
-  'casa-success-soft': string
-  'casa-toggle-track': string
-  'casa-top-pick-band': string
-}
+export type ThemeColors = ThemeColorPalette
 
 export type ThemeTarget = 'day' | 'midnight'
 
-export const DEFAULTS: ThemeColors = {
-  'casa-gold':    '#C9A96E',
-  'casa-navy':    '#1B2A4A',
-  'casa-bg':      '#FAF8F5',
-  'casa-bg-2':    '#F2EEE7',
-  'casa-surface': '#FFFFFF',
-  'casa-text':    '#2D2D2D',
-  'casa-border':  '#E8E2D9',
-  'casa-error':   '#C0392B',
-  'casa-success': '#27AE60',
-  'casa-warning': '#E67E22',
-  'casa-surface-subtle': '#FAF6EE',
-  'casa-control-border': '#E3DACB',
-  'casa-divider-strong': '#E4DBCB',
-  'casa-text-secondary': '#5C5D66',
-  'casa-text-tertiary': '#8D8E99',
-  'casa-text-faint': '#A9A398',
-  'casa-accent-soft': '#F4E2CD',
-  'casa-accent-soft-border': '#E9CBA6',
-  'casa-accent-soft-hover': '#EFD6BB',
-  'casa-accent-subtle': '#FAF0E2',
-  'casa-accent-subtle-border': '#EBD9BF',
-  'casa-info': '#10A5AC',
-  'casa-info-strong': '#0A6266',
-  'casa-info-soft': '#E7F4F4',
-  'casa-success-strong': '#2A6A34',
-  'casa-success-soft': '#DBF0DC',
-  'casa-toggle-track': '#EDE7DA',
-  'casa-top-pick-band': '#8A5A1E',
-}
-
-export const MIDNIGHT_GALLERY_DEFAULTS: ThemeColors = {
-  'casa-gold':    '#9F8658',
-  'casa-navy':    '#0E1218',
-  'casa-bg':      '#090C11',
-  'casa-bg-2':    '#070A0F',
-  'casa-surface': '#121923',
-  'casa-text':    '#E3DDD1',
-  'casa-border':  '#263244',
-  'casa-error':   '#C96A5E',
-  'casa-success': '#4AA56A',
-  'casa-warning': '#D2A465',
-  'casa-surface-subtle': '#171F2C',
-  'casa-control-border': '#324157',
-  'casa-divider-strong': '#2B374C',
-  'casa-text-secondary': '#BCC7D8',
-  'casa-text-tertiary': '#93A4BC',
-  'casa-text-faint': '#7D8EA7',
-  'casa-accent-soft': '#5A4A33',
-  'casa-accent-soft-border': '#7A6242',
-  'casa-accent-soft-hover': '#6A563C',
-  'casa-accent-subtle': '#342C23',
-  'casa-accent-subtle-border': '#4A3C2E',
-  'casa-info': '#57C9C9',
-  'casa-info-strong': '#8EE3E3',
-  'casa-info-soft': '#1B3A40',
-  'casa-success-strong': '#7BD58B',
-  'casa-success-soft': '#1E3D28',
-  'casa-toggle-track': '#303B4E',
-  'casa-top-pick-band': '#F0C98F',
-}
+export const DEFAULTS: ThemeColors = DEFAULT_THEME_COLORS
+export const MIDNIGHT_GALLERY_DEFAULTS: ThemeColors = MIDNIGHT_THEME_COLORS
 
 export interface ThemePreset {
   id: string
@@ -357,47 +275,18 @@ function loadBool(storageKey: string, fallback: boolean): boolean {
 }
 
 function styleVars(colors: ThemeColors): string {
-  return `
-  --color-casa-gold: ${colors['casa-gold']};
-  --color-casa-navy: ${colors['casa-navy']};
-  --color-casa-bg: ${colors['casa-bg']};
-  --color-casa-bg-2: ${colors['casa-bg-2']};
-  --color-casa-surface: ${colors['casa-surface']};
-  --color-casa-text: ${colors['casa-text']};
-  --color-casa-border: ${colors['casa-border']};
-  --color-casa-error: ${colors['casa-error']};
-  --color-casa-success: ${colors['casa-success']};
-  --color-casa-warning: ${colors['casa-warning']};
-  --color-casa-surface-subtle: ${colors['casa-surface-subtle']};
-  --color-casa-control-border: ${colors['casa-control-border']};
-  --color-casa-divider-strong: ${colors['casa-divider-strong']};
-  --color-casa-text-secondary: ${colors['casa-text-secondary']};
-  --color-casa-text-tertiary: ${colors['casa-text-tertiary']};
-  --color-casa-text-faint: ${colors['casa-text-faint']};
-  --color-casa-accent-soft: ${colors['casa-accent-soft']};
-  --color-casa-accent-soft-border: ${colors['casa-accent-soft-border']};
-  --color-casa-accent-soft-hover: ${colors['casa-accent-soft-hover']};
-  --color-casa-accent-subtle: ${colors['casa-accent-subtle']};
-  --color-casa-accent-subtle-border: ${colors['casa-accent-subtle-border']};
-  --color-casa-info: ${colors['casa-info']};
-  --color-casa-info-strong: ${colors['casa-info-strong']};
-  --color-casa-info-soft: ${colors['casa-info-soft']};
-  --color-casa-success-strong: ${colors['casa-success-strong']};
-  --color-casa-success-soft: ${colors['casa-success-soft']};
-  --color-casa-toggle-track: ${colors['casa-toggle-track']};
-  --color-casa-top-pick-band: ${colors['casa-top-pick-band']};
-  --color-casa-muted: ${colors['casa-text-tertiary']};
-  --color-casa-divider: ${colors['casa-divider-strong']};`
+  const variables = THEME_COLOR_KEYS.map(key => `  --color-${key}: ${colors[key]};`)
+  variables.push(
+    `  --color-casa-muted: ${colors['casa-text-tertiary']};`,
+    `  --color-casa-divider: ${colors['casa-divider-strong']};`,
+  )
+  return `\n${variables.join('\n')}`
 }
 
 function buildStyleContent(dayColors: ThemeColors, midnightColors: ThemeColors): string {
   return `:root {${styleVars(dayColors)}
 }
 html.midnight-gallery {${styleVars(midnightColors)}
-  --shadow-card: 0 1px 3px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.35);
-  --shadow-card-hover: 0 6px 18px rgba(0,0,0,0.55);
-  --shadow-modal: 0 12px 36px rgba(0,0,0,0.65);
-  --shadow-fab: 0 6px 18px rgba(159,134,88,0.40);
 }`
 }
 

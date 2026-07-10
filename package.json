@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run style:check && tsc -b && vite build",
+    "build": "npm run tokens:check && npm run style:check && tsc -b && vite build",
     "test": "node --test tests/*.test.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
+    "tokens:generate": "node scripts/generate-design-tokens.mjs",
+    "tokens:check": "node scripts/generate-design-tokens.mjs --check",
     "style:audit": "node scripts/style-audit.mjs",
     "style:check": "node scripts/style-audit.mjs --check"
   },

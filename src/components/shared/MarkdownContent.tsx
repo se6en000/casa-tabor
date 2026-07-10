@@ -39,7 +39,7 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
       nodes.push(<strong key={`${keyPrefix}-b-${tokenIndex}`}>{token.slice(2, -2)}</strong>)
     } else if (token.startsWith('`') && token.endsWith('`')) {
       nodes.push(
-        <code key={`${keyPrefix}-c-${tokenIndex}`} className="px-1 py-0.5 rounded bg-casa-surface border border-casa-border text-[0.85em]">
+        <code key={`${keyPrefix}-c-${tokenIndex}`} className="px-1 py-0.5 rounded bg-casa-surface border border-casa-border text-caption">
           {token.slice(1, -1)}
         </code>,
       )
@@ -118,7 +118,7 @@ export default function MarkdownContent({ content, className }: { content: strin
       }
       if (index < lines.length) index += 1
       blocks.push(
-        <pre key={`code-${blocks.length}`} className="rounded-lg border border-casa-border bg-casa-surface px-3 py-2 overflow-x-auto text-[12px] leading-relaxed">
+        <pre key={`code-${blocks.length}`} className="rounded-lg border border-casa-border bg-casa-surface px-3 py-2 overflow-x-auto text-body-sm leading-relaxed">
           <code>{codeLines.join('\n')}</code>
         </pre>,
       )

@@ -533,7 +533,7 @@ export default function TouchKeyboard() {
           <div className="h-full px-3 pt-2 pb-3 flex flex-col gap-2 select-none">
             {/* Slim header: field label · field nav · settings · close */}
             <div className="flex items-center gap-1.5">
-              <p className="flex-1 text-[12px] font-semibold text-casa-muted truncate">
+              <p className="flex-1 text-body-sm font-semibold text-casa-muted truncate">
                 {getFieldLabel(target)}
               </p>
               <button onClick={() => moveFocusBy(-1)} aria-label="Previous field" className="h-8 w-8 rounded-full bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center">
@@ -566,16 +566,16 @@ export default function TouchKeyboard() {
                   className="overflow-hidden"
                 >
                   <div className="flex flex-wrap items-center gap-1.5 pb-0.5">
-                    <button onClick={() => setSize(nextSize(size))} className="rounded-pill bg-casa-bg border border-casa-border px-3 py-1.5 text-[11px] font-semibold text-casa-muted capitalize">
+                    <button onClick={() => setSize(nextSize(size))} className="rounded-pill bg-casa-bg border border-casa-border px-3 py-1.5 text-caption font-semibold text-casa-muted capitalize">
                       Size · {size}
                     </button>
-                    <button onClick={() => setHandedness(v => (v === 'left' ? 'right' : 'left'))} className="rounded-pill bg-casa-bg border border-casa-border px-3 py-1.5 text-[11px] font-semibold text-casa-muted">
+                    <button onClick={() => setHandedness(v => (v === 'left' ? 'right' : 'left'))} className="rounded-pill bg-casa-bg border border-casa-border px-3 py-1.5 text-caption font-semibold text-casa-muted">
                       {handedness === 'left' ? 'Left hand' : 'Right hand'}
                     </button>
-                    <button onClick={() => setHaptics(v => !v)} className="rounded-pill bg-casa-bg border border-casa-border px-3 py-1.5 text-[11px] font-semibold text-casa-muted">
+                    <button onClick={() => setHaptics(v => !v)} className="rounded-pill bg-casa-bg border border-casa-border px-3 py-1.5 text-caption font-semibold text-casa-muted">
                       Haptic {haptics ? 'On' : 'Off'}
                     </button>
-                    <button onClick={() => setSound(v => !v)} className="rounded-pill bg-casa-bg border border-casa-border px-3 py-1.5 text-[11px] font-semibold text-casa-muted">
+                    <button onClick={() => setSound(v => !v)} className="rounded-pill bg-casa-bg border border-casa-border px-3 py-1.5 text-caption font-semibold text-casa-muted">
                       Sound {sound ? 'On' : 'Off'}
                     </button>
                   </div>

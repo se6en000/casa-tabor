@@ -54,7 +54,7 @@ export default function NavBar() {
         >
           <MoreHorizontal size={22} strokeWidth={1.8} />
           {unreadCount > 0 && !moreOpen && (
-            <span className="absolute top-1 right-2 min-w-[14px] h-3.5 px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[9px] font-bold leading-none">
+            <span className="absolute top-1 right-2 min-w-[14px] h-3.5 px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-caption font-bold leading-none">
               {unreadCount > 9 ? '9+' : unreadCount}
             </span>
           )}
@@ -133,7 +133,7 @@ export default function NavBar() {
                   <div className="w-9 h-9 rounded-xl bg-red-500/10 flex items-center justify-center flex-shrink-0 relative">
                     <Bell size={18} strokeWidth={1.8} className="text-red-500" />
                     {unreadCount > 0 && (
-                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[9px] font-bold leading-none">
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-caption font-bold leading-none">
                         {unreadCount > 9 ? '9+' : unreadCount}
                       </span>
                     )}

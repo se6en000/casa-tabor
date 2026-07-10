@@ -133,4 +133,4 @@ chromium-browser \
   --check-for-update-interval=31536000 \
   --start-maximized \
   --window-position=0,0 \
-  https://casa-tabor.vercel.app
+  'https://casa-tabor.vercel.app?density=kiosk'

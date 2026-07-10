@@ -53,7 +53,7 @@ export function DepartureRiskBanner({
         <div className="min-w-0">
           <p className="text-caption font-semibold">{risk.title}</p>
           {risk.reasons.length > 0 && (
-            <p className="text-[11px] mt-0.5 leading-snug">{risk.reasons.join(' · ')}</p>
+            <p className="text-caption mt-0.5 leading-snug">{risk.reasons.join(' · ')}</p>
           )}
         </div>
       </div>

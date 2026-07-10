@@ -827,7 +827,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                       </button>
                       <div className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/50 rounded px-1 py-0.5">
                         <ImageIcon size={9} className="text-white" />
-                        <span className="text-[9px] text-white font-medium">Image attached</span>
+                        <span className="text-caption text-white font-medium">Image attached</span>
                       </div>
                     </div>
                   </motion.div>
@@ -1175,7 +1175,7 @@ function renderInlineMarkdown(text: string, keyPrefix: string): React.ReactNode[
       nodes.push(<strong key={`${keyPrefix}-b-${tokenIndex}`}>{token.slice(2, -2)}</strong>)
     } else if (token.startsWith('`') && token.endsWith('`')) {
       nodes.push(
-        <code key={`${keyPrefix}-c-${tokenIndex}`} className="px-1 py-0.5 rounded bg-casa-surface border border-casa-border text-[0.85em]">
+        <code key={`${keyPrefix}-c-${tokenIndex}`} className="px-1 py-0.5 rounded bg-casa-surface border border-casa-border text-caption">
           {token.slice(1, -1)}
         </code>,
       )
@@ -1264,7 +1264,7 @@ function MarkdownMessage({ content }: { content: string }) {
       }
       if (i < lines.length) i += 1
       blocks.push(
-        <pre key={`code-${blocks.length}`} className="rounded-lg border border-casa-border bg-casa-surface px-3 py-2 overflow-x-auto text-[12px] leading-relaxed">
+        <pre key={`code-${blocks.length}`} className="rounded-lg border border-casa-border bg-casa-surface px-3 py-2 overflow-x-auto text-body-sm leading-relaxed">
           <code>{codeLines.join('\n')}</code>
         </pre>,
       )
@@ -1397,7 +1397,7 @@ function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, 
           {visibleChanges.map((change) => (
             <span
               key={change}
-              className="inline-flex items-center rounded-full bg-casa-surface border border-casa-border px-2 py-0.5 text-[11px] text-casa-muted"
+              className="inline-flex items-center rounded-full bg-casa-surface border border-casa-border px-2 py-0.5 text-caption text-casa-muted"
             >
               {change}
             </span>
@@ -1407,7 +1407,7 @@ function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, 
           <button
             type="button"
             onClick={() => setExpanded((value) => !value)}
-            className="text-[11px] font-semibold text-casa-gold hover:underline"
+            className="text-caption font-semibold text-casa-gold hover:underline"
           >
             {expanded ? 'Show less' : `Show ${changes.length - MAX_VISIBLE} more`}
           </button>
@@ -1431,7 +1431,7 @@ function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, 
             {changes.slice(0, 8).map((change) => (
               <span
                 key={change}
-                className="inline-flex items-center rounded-full bg-casa-surface border border-casa-border px-2 py-0.5 text-[11px] text-casa-muted"
+                className="inline-flex items-center rounded-full bg-casa-surface border border-casa-border px-2 py-0.5 text-caption text-casa-muted"
               >
                 {change}
               </span>
@@ -1512,7 +1512,7 @@ function SyncStatusPill({ status }: { status: 'synced' | 'queued' | 'failed' }) 
       : 'Sync failed'
 
   return (
-    <span className={cn('inline-flex mt-1 items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold', tone)}>
+    <span className={cn('inline-flex mt-1 items-center rounded-full border px-2 py-0.5 text-caption font-semibold', tone)}>
       {label}
     </span>
   )

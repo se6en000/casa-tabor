@@ -95,7 +95,7 @@ export const DEVICE_MATRIX = [
     context: 'Raspberry Pi 5 touchscreen kiosk — the primary always-on production surface.',
     acceptance: [
       'Fluid type scale (html font-size clamp) renders legibly at arm\'s-length viewing distance',
-      'All interactive controls meet the 44px touch-target minimum (kiosk fingers, no mouse precision)',
+      'All interactive controls meet the 48px kiosk touch-target minimum (kiosk fingers, no mouse precision)',
       'No hover-only affordances are required to operate any control (hover is touch-disabled by design)',
       'Ambient/idle states (screensaver, art mode) do not visually conflict with active-state UI',
     ],
@@ -109,7 +109,7 @@ export const DEVICE_MATRIX = [
     context: 'Mac desktop/laptop with mouse/trackpad — the only profile where hover states apply.',
     acceptance: [
       'Hover states are present and legible (only fires on hover:hover per index.css custom-variant)',
-      'Density-tuned type scale (html.mac-desktop) does not undersize touch-adjacent controls below 44px',
+      'Compact density (html[data-density="compact"]) keeps touch-adjacent controls at least 44px',
       'Layout uses available width without stretching content unreadably wide',
     ],
   },

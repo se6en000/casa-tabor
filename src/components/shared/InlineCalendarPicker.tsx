@@ -83,7 +83,7 @@ export default function InlineCalendarPicker({ value, onChange, className }: Pro
           </div>
           <div className="grid grid-cols-7 gap-1 mb-1">
             {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => (
-              <p key={d} className="text-[10px] font-semibold text-casa-muted text-center uppercase">{d}</p>
+              <p key={d} className="text-caption font-semibold text-casa-muted text-center uppercase">{d}</p>
             ))}
           </div>
           <div className="grid grid-cols-7 gap-1">

@@ -305,7 +305,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
         )}
 
         {artwork && loaded && (
-          <div className="absolute left-1/2 -translate-x-1/2 bottom-3 text-[0.55rem] pointer-events-none" style={{ color: darkThemeActive ? '#A59C8F' : '#8f8678' }}>
+          <div className="absolute left-1/2 -translate-x-1/2 bottom-3 text-caption pointer-events-none" style={{ color: darkThemeActive ? '#A59C8F' : '#8f8678' }}>
             swipe left for next piece
           </div>
         )}

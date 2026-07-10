@@ -3,17 +3,10 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
 import { initPointerGestures } from './lib/pointerGestures'
+import { initDensityProfile } from './lib/densityProfile.mjs'
 
 initPointerGestures()
-
-const isMacDesktop =
-  typeof navigator !== 'undefined' &&
-  /Mac/.test(navigator.platform) &&
-  navigator.maxTouchPoints === 0
-
-if (isMacDesktop) {
-  document.documentElement.classList.add('mac-desktop')
-}
+initDensityProfile()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

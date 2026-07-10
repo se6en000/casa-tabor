@@ -3,8 +3,8 @@ import { Type, Palette, Ruler, Layers, Smartphone, Tablet, Monitor, CheckCircle2
 import { cn } from '../utils/cn'
 import { DEVICE_MATRIX, closestDeviceProfile } from '../lib/deviceMatrix.mjs'
 
-// ── Internal-only Design System Gallery (Phase 0) ───────────────────────────
-// Renders the EXISTING canonical Casa Tabor tokens (typography, color,
+// ── Internal-only Design System Gallery ─────────────────────────────────────
+// Renders the canonical Casa Tabor tokens (typography, color,
 // radius/shadow, spacing/touch-target guidance) plus a few representative
 // component states, purely by referencing current theme classes/vars from
 // src/index.css. This intentionally does NOT introduce new shared primitives
@@ -31,15 +31,15 @@ function SectionHeader({ icon: Icon, title, desc }: { icon: React.ElementType; t
 }
 
 const TYPE_ROLES: { className: string; role: string; token: string }[] = [
-  { className: 'text-display-xl font-display', role: 'Display XL', token: '--text-display-xl (3rem / 1.1)' },
-  { className: 'text-display-lg font-display', role: 'Display Large', token: '--text-display-lg (2.25rem / 1.15)' },
-  { className: 'text-display-md font-display', role: 'Display Medium', token: '--text-display-md (1.75rem / 1.2)' },
-  { className: 'text-display-sm font-display', role: 'Display Small', token: '--text-display-sm (1.375rem / 1.25)' },
-  { className: 'text-heading font-display', role: 'Heading', token: '--text-heading (1.25rem / 1.3)' },
-  { className: 'text-body-lg', role: 'Body Large', token: '--text-body-lg (1.0625rem / 1.6)' },
-  { className: 'text-body', role: 'Body', token: '--text-body (0.9375rem / 1.6)' },
-  { className: 'text-body-sm', role: 'Body Small', token: '--text-body-sm (0.8125rem / 1.5)' },
-  { className: 'text-caption', role: 'Caption', token: '--text-caption (0.75rem / 1.4)' },
+  { className: 'text-display-xl font-display', role: 'Display XL', token: '--text-display-xl' },
+  { className: 'text-display-lg font-display', role: 'Display Large', token: '--text-display-lg' },
+  { className: 'text-display-md font-display', role: 'Display Medium', token: '--text-display-md' },
+  { className: 'text-display-sm font-display', role: 'Display Small', token: '--text-display-sm' },
+  { className: 'text-heading font-display', role: 'Heading', token: '--text-heading' },
+  { className: 'text-body-lg', role: 'Body Large', token: '--text-body-lg' },
+  { className: 'text-body', role: 'Body', token: '--text-body' },
+  { className: 'text-body-sm', role: 'Body Small', token: '--text-body-sm' },
+  { className: 'text-caption', role: 'Caption', token: '--text-caption' },
 ]
 
 const FONT_FAMILIES: { className: string; label: string; token: string; sample: string }[] = [
@@ -108,6 +108,7 @@ function useViewport() {
 
 export default function DesignSystemGalleryPage() {
   const { width, height, isFinePointer } = useViewport()
+  const density = document.documentElement.dataset.density ?? 'touch'
   const closest = useMemo(
     () => closestDeviceProfile(width, height, isFinePointer ? 'fine-pointer' : 'touch'),
     [width, height, isFinePointer],
@@ -119,19 +120,20 @@ export default function DesignSystemGalleryPage() {
       <div className="rounded-card border border-casa-border bg-casa-surface p-4">
         <SectionHeader
           icon={Palette}
-          title="Design System Gallery (Phase 0 — internal)"
-          desc="Renders the current live Casa Tabor tokens. Dev/QA only — not linked from production navigation."
+          title="Design System Gallery (Phase 1 — internal)"
+          desc="Renders the generated Casa token contract and live capability-based density. Dev/QA only."
         />
         <div className="mt-3 rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm text-casa-text-secondary">
           Live viewport: <span className="font-semibold text-casa-navy">{width}×{height}</span>{' '}
-          ({isFinePointer ? 'fine-pointer' : 'touch'}) — nearest validation-matrix profile:{' '}
+          ({isFinePointer ? 'fine-pointer' : 'touch'}, <span className="font-semibold text-casa-navy">{density}</span> density)
+          {' '}— nearest validation-matrix profile:{' '}
           <span className="font-semibold text-casa-navy">{closest.label}</span>
         </div>
       </div>
 
       {/* ── Typography ── */}
       <div className="rounded-card border border-casa-border bg-casa-surface p-4 space-y-4">
-        <SectionHeader icon={Type} title="Typography" desc="Type roles and font families from the @theme block in src/index.css." />
+        <SectionHeader icon={Type} title="Typography" desc="Fluid semantic roles generated from src/design-system/tokens.mjs." />
         <div className="space-y-2">
           {TYPE_ROLES.map((t) => (
             <div key={t.role} className="flex items-baseline justify-between gap-4 border-b border-casa-border/60 pb-2 last:border-0">
@@ -187,22 +189,22 @@ export default function DesignSystemGalleryPage() {
         <SectionHeader icon={Ruler} title="Spacing & touch targets" desc="Minimum recommended control size for a touch-first kiosk/phone/tablet UI." />
         <div className="flex flex-wrap items-end gap-6">
           <div className="text-center">
-            <div className="w-8 h-8 rounded-full bg-casa-error/15 border-2 border-casa-error flex items-center justify-center text-caption font-semibold text-casa-error mx-auto">32</div>
-            <p className="text-caption text-casa-muted mt-1.5">32px — below minimum</p>
+            <div className="size-control-sm rounded-full bg-casa-accent-subtle border-2 border-casa-gold flex items-center justify-center text-caption font-semibold text-casa-navy mx-auto">S</div>
+            <p className="text-caption text-casa-muted mt-1.5">Control small · density-aware</p>
           </div>
           <div className="text-center">
-            <div className="w-10 h-10 rounded-full bg-casa-warning/15 border-2 border-casa-warning flex items-center justify-center text-caption font-semibold text-casa-warning mx-auto">40</div>
-            <p className="text-caption text-casa-muted mt-1.5">40px — below minimum</p>
+            <div className="size-control-md rounded-full bg-casa-info-soft border-2 border-casa-info flex items-center justify-center text-caption font-semibold text-casa-info-strong mx-auto">M</div>
+            <p className="text-caption text-casa-muted mt-1.5">Control medium · density-aware</p>
           </div>
           <div className="text-center">
-            <div className="w-11 h-11 rounded-full bg-casa-success/15 border-2 border-casa-success flex items-center justify-center text-caption font-semibold text-casa-success mx-auto">44</div>
-            <p className="text-caption text-casa-muted mt-1.5">44px — recommended minimum</p>
+            <div className="size-control rounded-full bg-casa-success-soft border-2 border-casa-success flex items-center justify-center text-caption font-semibold text-casa-success-strong mx-auto">Min</div>
+            <p className="text-caption text-casa-muted mt-1.5">Minimum target · 44px / 48px kiosk</p>
           </div>
         </div>
         <p className="text-body-sm text-casa-text-secondary">
-          Use <code className="text-caption bg-casa-bg px-1.5 py-0.5 rounded">min-h-[44px]</code>/<code className="text-caption bg-casa-bg px-1.5 py-0.5 rounded">min-w-[44px]</code> (or an
-          equivalent w-11 h-11 / size-11+) on any tappable control. This mirrors existing usage in
-          CalendarPage.tsx and EventDetailPanel.tsx — the audit script (<code className="text-caption bg-casa-bg px-1.5 py-0.5 rounded">npm run style:audit</code>) flags
+          Use <code className="text-caption bg-casa-bg px-1.5 py-0.5 rounded">min-h-control</code>/<code className="text-caption bg-casa-bg px-1.5 py-0.5 rounded">min-w-control</code> or
+          <code className="text-caption bg-casa-bg px-1.5 py-0.5 rounded ml-1">size-control</code> on tappable controls. The token resolves to 44px on handheld/desktop
+          and 48px on the Pi kiosk. The audit script (<code className="text-caption bg-casa-bg px-1.5 py-0.5 rounded">npm run style:audit</code>) flags
           new square controls below this size as a heuristic (not a hard guarantee — see its printed caveats).
         </p>
       </div>
@@ -211,15 +213,15 @@ export default function DesignSystemGalleryPage() {
       <div className="rounded-card border border-casa-border bg-casa-surface p-4 space-y-4">
         <SectionHeader icon={CheckCircle2} title="Representative states" desc="Existing utility classes only — no new shared primitives (Phase 2 scope)." />
         <div className="flex flex-wrap gap-3">
-          <button className="min-h-[44px] px-4 rounded-button bg-casa-gold text-white text-body-sm font-medium">Primary</button>
-          <button className="min-h-[44px] px-4 rounded-button border border-casa-border bg-casa-surface text-casa-navy text-body-sm font-medium">Secondary</button>
-          <button disabled className="min-h-[44px] px-4 rounded-button bg-casa-gold text-white text-body-sm font-medium opacity-40 cursor-not-allowed">Disabled</button>
+          <button className="min-h-control px-4 rounded-button bg-casa-gold text-white text-body-sm font-medium">Primary</button>
+          <button className="min-h-control px-4 rounded-button border border-casa-border bg-casa-surface text-casa-navy text-body-sm font-medium">Secondary</button>
+          <button disabled className="min-h-control px-4 rounded-button bg-casa-gold text-white text-body-sm font-medium opacity-40 cursor-not-allowed">Disabled</button>
           <span className="min-h-[28px] px-3 inline-flex items-center rounded-pill bg-casa-success-soft text-casa-success-strong text-caption font-semibold">Success badge</span>
           <span className="min-h-[28px] px-3 inline-flex items-center rounded-pill bg-casa-info-soft text-casa-info-strong text-caption font-semibold">Info badge</span>
         </div>
         <input
           placeholder="Text input (rounded-button, casa-border)"
-          className="w-full max-w-sm rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm min-h-[44px]"
+          className="w-full max-w-sm rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm min-h-control"
           readOnly
         />
         <div className="rounded-card border border-casa-border bg-casa-surface shadow-card p-3 max-w-sm">

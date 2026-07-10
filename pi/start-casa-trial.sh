@@ -123,4 +123,4 @@ chromium-browser \
   --enable-raw-touch-events \
   --disable-gpu-vsync \
   --disable-renderer-backgrounding \
-  https://casa-tabor.vercel.app
+  'https://casa-tabor.vercel.app?density=kiosk'

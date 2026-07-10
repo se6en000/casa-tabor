@@ -7,114 +7,13 @@
 /* ── Google Fonts ─────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
+@import "./generated/design-tokens.css";
 
 /* ── Touch-first: hover only on devices that support it ───────── */
 /* Redefines hover: variant so it NEVER fires on touchscreens.    */
 /* On mouse devices it works normally. Zero component changes.    */
 @custom-variant hover (@media (hover: hover) { &:hover });
-/* ================================================================
-   DESIGN TOKENS — Casa Tabor Theme
-   ================================================================ */
-
-@theme {
-
-  /* ── Core Palette ──────────────────────────────────────────── */
-  --color-casa-bg:        #FAF8F5;
-  --color-casa-bg-2:      #F2EEE7;
-  --color-casa-surface:   #FFFFFF;
-  --color-casa-navy:      #1B2A4A;
-  --color-casa-gold:      #C9A96E;
-  --color-casa-text:      #2D2D2D;
-  --color-casa-muted:     #8D8E99;
-  --color-casa-border:    #E8E2D9;
-  --color-casa-divider:   #E4DBCB;
-  --color-casa-error:     #C0392B;
-  --color-casa-success:   #27AE60;
-  --color-casa-warning:   #E67E22;
-  --color-casa-surface-subtle: #FAF6EE;
-  --color-casa-control-border: #E3DACB;
-  --color-casa-divider-strong: #E4DBCB;
-  --color-casa-text-secondary: #5C5D66;
-  --color-casa-text-tertiary: #8D8E99;
-  --color-casa-text-faint: #A9A398;
-  --color-casa-accent-soft: #F4E2CD;
-  --color-casa-accent-soft-border: #E9CBA6;
-  --color-casa-accent-soft-hover: #EFD6BB;
-  --color-casa-accent-subtle: #FAF0E2;
-  --color-casa-accent-subtle-border: #EBD9BF;
-  --color-casa-info: #10A5AC;
-  --color-casa-info-strong: #0A6266;
-  --color-casa-info-soft: #E7F4F4;
-  --color-casa-success-strong: #2A6A34;
-  --color-casa-success-soft: #DBF0DC;
-  --color-casa-toggle-track: #EDE7DA;
-  --color-casa-top-pick-band: #8A5A1E;
-
-  /* ── Family Member Colors ──────────────────────────────────── */
-  --color-family-jake:    #1B2A4A;
-  --color-family-kelly:   #C4693A;
-  --color-family-liv:     #6A9E7F;
-  --color-family-emme:    #C47A8A;
-  --color-family-owen:    #D4A44C;
-
-  /* ── Night Mode Palette ────────────────────────────────────── */
-  --color-night-bg:       #1A1A2E;
-  --color-night-surface:  #16213E;
-  --color-night-text:     #E0D8CC;
-  --color-night-muted:    #6B6B7B;
-  --color-night-border:   #2A2A3E;
-  --color-night-gold:     #A08050;
-
-  /* ── Typography ────────────────────────────────────────────── */
-  --font-display:         'Cormorant Garamond', Georgia, serif;
-  --font-body:            'DM Sans', system-ui, sans-serif;
-  --font-mono:            'JetBrains Mono', monospace;
-
-  /* ── Font Sizes ────────────────────────────────────────────── */
-  --text-display-xl:      3rem;
-  --text-display-xl--line-height: 1.1;
-  --text-display-lg:      2.25rem;
-  --text-display-lg--line-height: 1.15;
-  --text-display-md:      1.75rem;
-  --text-display-md--line-height: 1.2;
-  --text-display-sm:      1.375rem;
-  --text-display-sm--line-height: 1.25;
-  --text-heading:         1.25rem;
-  --text-heading--line-height: 1.3;
-  --text-body-lg:         1.0625rem;
-  --text-body-lg--line-height: 1.6;
-  --text-body:            0.9375rem;
-  --text-body--line-height: 1.6;
-  --text-body-sm:         0.8125rem;
-  --text-body-sm--line-height: 1.5;
-  --text-caption:         0.75rem;
-  --text-caption--line-height: 1.4;
-
-  /* ── Border Radius ─────────────────────────────────────────── */
-  --radius-card:          0.75rem;
-  --radius-button:        0.5rem;
-  --radius-pill:          9999px;
-  --radius-modal:         1rem;
-
-  /* ── Shadows ───────────────────────────────────────────────── */
-  --shadow-card:          0 1px 3px rgba(27,42,74,0.06), 0 1px 2px rgba(27,42,74,0.04);
-  --shadow-card-hover:    0 4px 12px rgba(27,42,74,0.08);
-  --shadow-modal:         0 8px 30px rgba(27,42,74,0.12);
-  --shadow-fab:           0 4px 14px rgba(201,169,110,0.3);
-
-  /* ── Spacing ───────────────────────────────────────────────── */
-  --spacing-nav-height:   4.5rem;
-
-  /* ── Transitions ───────────────────────────────────────────── */
-  --transition-room-tone: 2000ms;
-  --transition-ambient:   5000ms;
-
-  /* ── Animations ────────────────────────────────────────────── */
-  --animate-fade-in:      fade-in 0.3s ease-out;
-  --animate-slide-up:     slide-up 0.35s ease-out;
-  --animate-pulse-gold:   pulse-gold 2s ease-in-out infinite;
-  --animate-breathe:      breathe 3s ease-in-out infinite;
-}
+/* Canonical design tokens are generated from src/design-system/tokens.mjs. */
 
 /* ── Shared modal backdrop dim ─────────────────────────────────────
    Single source of truth for every "background dim" behind modals and
@@ -183,11 +82,10 @@ html {
   font-size: clamp(1rem, calc(0.818rem + 0.777vw), 1.75rem);
 }
 
-/* Desktop density tuning:
-   only apply on true desktop profiles we explicitly mark in main.tsx.
-   This keeps Pi/touch kiosk sizing unchanged. */
+/* Fine-pointer density is capability-driven; touch and kiosk keep the
+   established spatial scaling while typography scales independently. */
 @media (hover: hover) and (pointer: fine) {
-  html.mac-desktop {
+  html[data-density="compact"] {
     font-size: clamp(0.95rem, calc(0.80rem + 0.42vw), 1.3rem);
   }
 }
