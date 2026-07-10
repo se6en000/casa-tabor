@@ -6,6 +6,7 @@ import { GROCERY_CATEGORIES, type GroceryItem } from '../../hooks/useGroceryList
 import { inferCategoryFromName } from '../../utils/groceryCategorization'
 import { normalizeGroceryNameKey } from '../../utils/groceryPredictionDeferrals'
 import { useFieldDictation } from '../../hooks/useFieldDictation'
+import { Button, Chip, Heading, IconButton, Sheet, Text } from '../ui'
 
 interface NewGroceryItemInput {
   list_id: string
@@ -57,7 +58,7 @@ function findDuplicateItem(items: GroceryItem[], name: string): GroceryItem | nu
 
 /**
  * Mobile-first quick-add for the grocery list. A keyboard-docked bottom sheet
- * built for speed: autofocus so the keyboard pops on open, Enter adds the item
+ * built for speed: autofocus keeps the field ready, Enter adds the item
  * and keeps focus so you can rip through "milk ↵ eggs ↵ bread ↵", a live aisle
  * chip that previews where the item lands, inline duplicate awareness, one-tap
  * common chips, and a satisfying "just added" stack with per-item undo.
@@ -184,53 +185,37 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
   }, [stopDictation, onClose])
 
   return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            key="qa-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[65] casa-scrim"
-            onClick={handleClose}
-          />
-
-          <motion.div
-            key="qa-sheet"
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 32, stiffness: 260 }}
-            className="fixed left-0 right-0 z-[70] bg-casa-surface rounded-t-modal shadow-modal sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-lg sm:rounded-modal flex flex-col overflow-hidden"
-            style={{
-              bottom: 'max(0px, env(safe-area-inset-bottom))',
-              maxHeight: viewportHeight ? `${Math.max(320, viewportHeight - 8)}px` : 'calc(100dvh - 8px)',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Drag handle */}
-            <div className="flex justify-center pt-3 pb-1 shrink-0">
-              <div className="w-10 h-1 rounded-full bg-casa-border" />
-            </div>
-
+    <Sheet
+      open={open}
+      onClose={handleClose}
+      title="Quick add groceries"
+      showHeader={false}
+      showHandle
+      transition={{ type: 'spring', damping: 32, stiffness: 260 }}
+      panelClassName="overflow-hidden sm:left-[calc(50%-16rem)] sm:right-[calc(50%-16rem)] sm:rounded-modal"
+      contentClassName="flex flex-col overflow-hidden p-0"
+      panelStyle={{
+        bottom: 'max(0px, env(safe-area-inset-bottom))',
+        maxHeight: viewportHeight ? `${Math.max(320, viewportHeight - 8)}px` : 'calc(100dvh - 8px)',
+      }}
+    >
             {/* Header */}
             <div className="flex items-center justify-between px-5 pb-3 pt-1 shrink-0">
               <div className="flex items-baseline gap-2">
-                <h3 className="font-display text-display-sm text-casa-navy">Quick add</h3>
+                <Heading role="display-sm" as="h2">Quick add</Heading>
                 {sessionAdds.length > 0 && (
-                  <span className="text-body-sm font-semibold text-casa-info">
+                  <Text as="span" role="body-sm" className="font-semibold text-casa-info">
                     {sessionAdds.length} added
-                  </span>
+                  </Text>
                 )}
               </div>
-              <button
+              <IconButton
+                icon={<X size={18} />}
+                variant="secondary"
+                size="sm"
                 onClick={handleClose}
-                className="h-9 w-9 rounded-full border border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main transition-colors flex items-center justify-center"
                 aria-label="Close quick add"
-              >
-                <X size={18} />
-              </button>
+              />
             </div>
 
             {/* Input row */}
@@ -255,47 +240,39 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
                   className="flex-1 min-w-0 bg-transparent text-body text-casa-text placeholder:text-casa-muted outline-none"
                 />
                 {previewCategory && !duplicate && !listening && (
-                  <span className="shrink-0 rounded-pill bg-casa-surface border border-casa-border px-2.5 py-1 text-caption font-semibold text-casa-navy whitespace-nowrap">
+                  <Chip tone="neutral" size="sm" className="shrink-0">
                     {CATEGORY_LABEL.get(previewCategory) ?? 'Other'}
-                  </span>
+                  </Chip>
                 )}
                 {usesCustomKeyboard && (
-                  <button
-                    type="button"
+                  <IconButton
+                    icon={<Keyboard size={18} />}
+                    variant="ghost"
+                    size="sm"
                     onClick={toggleCustomKeyboard}
                     aria-label="Show keyboard"
-                    className="shrink-0 h-10 w-10 rounded-full flex items-center justify-center text-casa-muted hover:bg-casa-main transition-colors"
-                  >
-                    <Keyboard size={18} />
-                  </button>
+                    className="shrink-0"
+                  />
                 )}
                 {dictationSupported && (
-                  <button
-                    type="button"
+                  <IconButton
+                    icon={<Mic size={18} />}
+                    variant={listening ? 'primary' : 'ghost'}
+                    size="sm"
                     onClick={() => toggleDictation(value)}
                     aria-label={listening ? 'Stop dictation' : 'Dictate item'}
                     aria-pressed={listening}
-                    className={cn(
-                      'shrink-0 h-10 w-10 rounded-full flex items-center justify-center transition-colors',
-                      listening
-                        ? 'bg-casa-gold text-casa-navy animate-pulse'
-                        : 'text-casa-muted hover:bg-casa-main',
-                    )}
-                  >
-                    <Mic size={18} />
-                  </button>
+                    className={cn('shrink-0', listening && 'animate-pulse text-casa-navy')}
+                  />
                 )}
-                <button
-                  type="button"
+                <Button
+                  size="sm"
                   onClick={() => submit(value)}
                   disabled={!trimmed || !defaultListId || Boolean(duplicate)}
-                  className={cn(
-                    'shrink-0 h-10 px-4 rounded-button text-body-sm font-semibold transition-all',
-                    trimmed && !duplicate ? 'bg-casa-gold text-casa-navy hover:brightness-110' : 'text-casa-muted',
-                  )}
+                  className="shrink-0"
                 >
                   Add
-                </button>
+                </Button>
               </div>
 
               {/* Duplicate awareness */}
@@ -311,13 +288,14 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
                       <p className="text-caption text-casa-navy min-w-0 truncate">
                         <span className="font-semibold">{duplicate.name}</span> is already on your list
                       </p>
-                      <button
-                        type="button"
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={() => submit(value, { force: true })}
-                        className="shrink-0 px-2.5 py-1 rounded-full border border-casa-border bg-casa-surface text-caption font-medium text-casa-navy hover:bg-casa-bg transition-colors"
+                        className="shrink-0"
                       >
                         Add anyway
-                      </button>
+                      </Button>
                     </div>
                   </motion.div>
                 )}
@@ -330,21 +308,17 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
                 {QUICK_CHIPS.map((chip) => {
                   const already = Boolean(findDuplicate(chip))
                   return (
-                    <button
+                    <Chip
                       key={chip}
-                      type="button"
+                      tone="neutral"
+                      size="md"
                       onClick={() => submit(chip, { force: false })}
                       disabled={already}
-                      className={cn(
-                        'shrink-0 h-9 px-3.5 rounded-full border text-body-sm transition-colors',
-                        already
-                          ? 'border-casa-border bg-casa-bg text-casa-muted/60'
-                          : 'border-casa-border bg-casa-bg text-casa-text hover:bg-casa-main',
-                      )}
+                      className="shrink-0"
                     >
                       {already ? <Check size={13} className="inline mr-1 -mt-0.5" /> : '+ '}
                       {chip}
-                    </button>
+                    </Chip>
                   )
                 })}
               </div>
@@ -372,14 +346,15 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
                         {CATEGORY_LABEL.get(entry.category) ?? 'Other'}
                       </p>
                     </div>
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leadingIcon={<Undo2 size={13} />}
                       onClick={() => undoAdd(entry)}
-                      className="shrink-0 inline-flex items-center gap-1 h-8 px-3 rounded-full border border-casa-border bg-casa-bg text-caption font-medium text-casa-muted hover:bg-casa-main transition-colors"
+                      className="shrink-0"
                     >
-                      <Undo2 size={13} />
                       Undo
-                    </button>
+                    </Button>
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -395,30 +370,27 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
             <div className="px-5 py-3 border-t border-casa-divider shrink-0 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 {onOpenMore && (
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    leadingIcon={<BookOpen size={15} />}
                     onClick={() => {
                       handleClose()
                       onOpenMore()
                     }}
-                    className="inline-flex items-center gap-1.5 h-10 px-3 rounded-button text-body-sm font-medium text-casa-text-secondary hover:text-casa-navy transition-colors"
                   >
-                    <BookOpen size={15} />
                     Recipes &amp; import
-                  </button>
+                  </Button>
                 )}
               </div>
-              <button
-                type="button"
+              <Button
+                size="sm"
                 onClick={handleClose}
-                className="h-10 px-5 rounded-button bg-casa-navy text-white text-body-sm font-semibold hover:bg-casa-navy/90 transition-colors shrink-0"
+                className="shrink-0 bg-casa-navy hover:bg-casa-navy/90"
               >
                 Done
-              </button>
+              </Button>
             </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+    </Sheet>
   )
 }

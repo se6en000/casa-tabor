@@ -1,7 +1,7 @@
 import { useId, useRef } from 'react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { TargetAndTransition } from 'framer-motion'
+import type { TargetAndTransition, Transition } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '../../utils/cn'
@@ -20,6 +20,10 @@ export interface SheetProps {
   closeOnEscape?: boolean
   className?: string
   panelClassName?: string
+  contentClassName?: string
+  panelStyle?: CSSProperties
+  transition?: Transition
+  showHandle?: boolean
 }
 
 const SLIDE_TRANSFORM: Record<SheetSide, { initial: TargetAndTransition; animate: TargetAndTransition; exit: TargetAndTransition }> = {
@@ -44,6 +48,10 @@ export function Sheet({
   closeOnEscape = true,
   className,
   panelClassName,
+  contentClassName,
+  panelStyle,
+  transition,
+  showHandle = false,
 }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
@@ -74,16 +82,22 @@ export function Sheet({
             initial={transform.initial}
             animate={transform.animate}
             exit={transform.exit}
-            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            transition={transition ?? { duration: 0.25, ease: 'easeInOut' }}
             className={cn(sheetPanelClassName({ side }), 'flex flex-col', panelClassName)}
+            style={panelStyle}
           >
+            {showHandle && side === 'bottom' && (
+              <div className="flex shrink-0 justify-center pb-1 pt-3" aria-hidden="true">
+                <div className="h-1 w-10 rounded-pill bg-casa-border" />
+              </div>
+            )}
             {showHeader && (
               <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3 border-b border-casa-border flex-shrink-0">
                 <h3 id={titleId} className="font-display text-heading text-casa-navy">{title}</h3>
                 <IconButton icon={<X size={20} />} aria-label="Close" size="sm" variant="ghost" onClick={onClose} />
               </div>
             )}
-            <div className="flex-1 min-h-0 overflow-y-auto p-5">{children}</div>
+            <div className={cn('flex-1 min-h-0 overflow-y-auto p-5', contentClassName)}>{children}</div>
           </motion.div>
         </div>
       )}

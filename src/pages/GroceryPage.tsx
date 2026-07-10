@@ -7,9 +7,18 @@ import { cn } from '../utils/cn'
 import { useGroceryList, GROCERY_CATEGORIES, type GroceryItem } from '../hooks/useGroceryList'
 import GroceryQuickAddSheet from '../components/shared/GroceryQuickAddSheet'
 import { inferCategoryFromName } from '../utils/groceryCategorization'
+import {
+  categoryIconBadgeClassName,
+  getCategoryTone,
+  getDepletionVisual,
+  urgencyDotClassName,
+  urgencyMeterClassName,
+  urgencyTagClassName,
+} from '../utils/groceryVisuals'
 import { normalizeRecipeIngredientFields } from '../utils/recipeIngredientParsing'
 import { supabase } from '../lib/supabase'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
+import { Button, IconButton, Card, Chip, Input, Heading, Sheet, Text } from '../components/ui'
 import {
   appendPantryInventoryAudit,
   normalizePackageUnit,
@@ -64,33 +73,32 @@ const STORE_SECTION_ORDER: Record<string, number> = {
 }
 type CategoryVisual = {
   icon: typeof ShoppingCart
-  iconBg: string
-  iconFg: string
   subtitle: string
 }
 
 const DEFAULT_CATEGORY_VISUAL: CategoryVisual = {
   icon: ShoppingCart,
-  iconBg: '#F5F1E7',
-  iconFg: '#7A7363',
   subtitle: 'Auto-organized for faster list scanning',
 }
 
+// Icon + subtitle only — bg/fg colors come from categoryIconBadgeClassName()
+// (src/utils/groceryVisuals.ts), a typed semantic tone map backed entirely by
+// canonical casa-* tokens so category badges stay correct in both themes.
 const CATEGORY_VISUAL_BY_KEY: Record<string, CategoryVisual> = {
-  produce: { icon: Leaf, iconBg: '#E4F0E8', iconFg: '#3F7E58', subtitle: 'Fresh items • entry side' },
-  dairy: { icon: Milk, iconBg: '#F6E7EB', iconFg: '#B05468', subtitle: 'Cold essentials • back wall' },
-  meat: { icon: Beef, iconBg: '#F5E3D6', iconFg: '#B4562A', subtitle: 'Protein picks • butcher lane' },
-  bakery: { icon: Croissant, iconBg: '#F6ECD5', iconFg: '#B08A34', subtitle: 'Bread & baked goods' },
-  frozen: { icon: Snowflake, iconBg: '#E1EAF3', iconFg: '#2E6FB0', subtitle: 'Frozen staples' },
-  pantry: { icon: Package, iconBg: '#F5E3D6', iconFg: '#B4562A', subtitle: 'Shelf staples • center aisles' },
-  beverages: { icon: Coffee, iconBg: '#E1EAF3', iconFg: '#2E6FB0', subtitle: 'Drinks & hydration' },
-  snacks: { icon: Popcorn, iconBg: '#F6E7EB', iconFg: '#B05468', subtitle: 'Quick bites & treats' },
-  deli: { icon: Sandwich, iconBg: '#F4E7CB', iconFg: '#8A5A1E', subtitle: 'Prepared foods' },
-  household: { icon: House, iconBg: '#E7F4F4', iconFg: '#0A6266', subtitle: 'Home & cleaning' },
-  'personal-care': { icon: HeartPulse, iconBg: '#EDE9F8', iconFg: '#6C5AA0', subtitle: 'Health & body' },
-  baby: { icon: BabyIcon, iconBg: '#FFF3D9', iconFg: '#A87722', subtitle: 'Baby essentials' },
-  pet: { icon: PawPrint, iconBg: '#E6F3EA', iconFg: '#2E7D5B', subtitle: 'Pet supplies' },
-  other: { icon: ShoppingCart, iconBg: '#F5F1E7', iconFg: '#7A7363', subtitle: 'Everything else' },
+  produce: { icon: Leaf, subtitle: 'Fresh items • entry side' },
+  dairy: { icon: Milk, subtitle: 'Cold essentials • back wall' },
+  meat: { icon: Beef, subtitle: 'Protein picks • butcher lane' },
+  bakery: { icon: Croissant, subtitle: 'Bread & baked goods' },
+  frozen: { icon: Snowflake, subtitle: 'Frozen staples' },
+  pantry: { icon: Package, subtitle: 'Shelf staples • center aisles' },
+  beverages: { icon: Coffee, subtitle: 'Drinks & hydration' },
+  snacks: { icon: Popcorn, subtitle: 'Quick bites & treats' },
+  deli: { icon: Sandwich, subtitle: 'Prepared foods' },
+  household: { icon: House, subtitle: 'Home & cleaning' },
+  'personal-care': { icon: HeartPulse, subtitle: 'Health & body' },
+  baby: { icon: BabyIcon, subtitle: 'Baby essentials' },
+  pet: { icon: PawPrint, subtitle: 'Pet supplies' },
+  other: { icon: ShoppingCart, subtitle: 'Everything else' },
 }
 const RECIPE_MEAL_SLOTS: Array<{ slot: RecipeMealPlanSlot; label: string }> = [
   { slot: 'tonight', label: 'Tonight' },
@@ -337,33 +345,7 @@ function splitCategoryLabel(raw: string): string {
   return trimmed
 }
 
-function getDepletionVisual(daysUntil: number): { dueLabel: string; dotColor: string; tagBg: string; tagText: string; meterColor: string } {
-  if (daysUntil <= 0) {
-    return {
-      dueLabel: 'Due now',
-      dotColor: '#D98C2B',
-      tagBg: '#FBEAD2',
-      tagText: '#9A5B12',
-      meterColor: '#D98C2B',
-    }
-  }
-  if (daysUntil <= 3) {
-    return {
-      dueLabel: `In ${daysUntil} day${daysUntil === 1 ? '' : 's'}`,
-      dotColor: '#C9A94E',
-      tagBg: '#F4EEDD',
-      tagText: '#8A7327',
-      meterColor: '#C9A94E',
-    }
-  }
-  return {
-    dueLabel: `In ${daysUntil} day${daysUntil === 1 ? '' : 's'}`,
-    dotColor: '#9BB18A',
-    tagBg: '#EEF1E9',
-    tagText: '#5E6B4E',
-    meterColor: '#9BB18A',
-  }
-}
+// getDepletionVisual now lives in src/utils/groceryVisuals.ts (pure, token-backed, unit-tested).
 
 function getRecipeDraftImage(recipe: { id?: string; name: string; image_url: string | null; image_urls?: string[]; primary_image_index?: number | null }): string {
   const gallery = Array.isArray(recipe.image_urls) ? recipe.image_urls : []
@@ -473,31 +455,34 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
       isSpotlighted && 'ring-2 ring-casa-gold/60 bg-casa-gold/10',
     )}>
       {onMovePointerDown && (
-        <button
-          type="button"
+        <IconButton
+          icon={<GripVertical size={18} />}
+          variant="ghost"
+          size="sm"
           onPointerDown={onMovePointerDown}
           onPointerMove={onMovePointerMove}
           onPointerUp={onMovePointerUp}
           onPointerCancel={onMovePointerCancel}
-          className="mt-0.5 flex-shrink-0 text-casa-muted/70 hover:text-casa-navy transition-colors touch-none"
+          className="-ml-2 flex-shrink-0 text-casa-muted/70 hover:text-casa-navy touch-none"
           aria-label={`Move ${item.name}`}
-        >
-          <GripVertical size={18} />
-        </button>
+        />
       )}
       <button
         type="button"
         onClick={() => onToggle(item.id, !visualChecked)}
+        aria-pressed={visualChecked}
+        aria-label={visualChecked ? `Mark ${item.name} as not done` : `Mark ${item.name} as done`}
         className={cn(
-          'mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl border-2 transition-colors',
+          'size-control flex flex-shrink-0 items-center justify-center rounded-xl border-2 transition-colors outline-none',
+          'focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-2 focus-visible:ring-offset-casa-bg',
           visualChecked
-            ? 'border-emerald-400 bg-emerald-50 text-emerald-600'
+            ? 'border-casa-success bg-casa-success-soft text-casa-success-strong'
             : 'border-casa-border bg-casa-surface text-casa-navy/60 hover:border-casa-gold/40'
         )}
       >
-        {visualChecked ? <Check size={15} className="text-emerald-600" /> : null}
+        {visualChecked ? <Check size={15} className="text-casa-success-strong" /> : null}
       </button>
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1 pt-1.5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <span className={cn(
@@ -513,15 +498,16 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
             )}
           </div>
           {needsConfidenceReview && (
-            <button
-              type="button"
+            <Chip
+              tone="info"
+              size="sm"
+              icon={<Sparkles size={11} />}
               onClick={() => onRequestReview?.(item.id)}
               title={`Suggested placement (${Math.round((item.enhancement_confidence ?? 0) * 100)}% confidence). Tap to recategorize.`}
-              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#B8E4E6] bg-[#E7F4F4] px-2.5 py-1 text-[10.5px] font-semibold text-[#0A6266] hover:bg-[#DFF1F1] transition-colors"
+              className="shrink-0"
             >
-              <Sparkles size={11} />
               Suggested
-            </button>
+            </Chip>
           )}
         </div>
         <p className="mt-0.5 text-body-sm leading-relaxed text-casa-muted">
@@ -529,30 +515,22 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
         </p>
         {isReviewing && (
           <div className="mt-2 rounded-xl border border-casa-border bg-casa-bg px-2.5 py-2">
-            <p className="text-[11px] text-casa-muted mb-1">Quick recategorize</p>
+            <Text role="caption" muted className="mb-1.5">Quick recategorize</Text>
             <div className="flex flex-wrap gap-1.5">
               {GROCERY_CATEGORIES.map((category) => (
-                <button
+                <Chip
                   key={`${item.id}-${category.key}`}
-                  type="button"
+                  tone="neutral"
+                  size="sm"
+                  selected={item.category === category.key}
                   onClick={() => onChooseReviewCategory?.(item.id, category.key)}
-                  className={cn(
-                    'px-2 py-1 rounded-full border text-[11px] transition-colors',
-                    item.category === category.key
-                      ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
-                      : 'border-casa-border bg-casa-surface text-casa-muted hover:bg-casa-main'
-                  )}
                 >
                   {splitCategoryLabel(category.label)}
-                </button>
+                </Chip>
               ))}
-              <button
-                type="button"
-                onClick={onDismissReview}
-                className="px-2 py-1 rounded-full border border-casa-border text-[11px] text-casa-muted hover:bg-casa-main transition-colors"
-              >
+              <Chip tone="neutral" size="sm" onClick={onDismissReview}>
                 Looks right
-              </button>
+              </Chip>
             </div>
           </div>
         )}
@@ -560,13 +538,14 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
           <p className="text-caption text-casa-muted truncate mt-0.5">{item.notes}</p>
         )}
       </div>
-      <button
-        type="button"
+      <IconButton
+        icon={<X size={15} />}
+        variant="danger"
+        size="sm"
         onClick={() => onDelete(item.id)}
-        className="opacity-70 lg:opacity-0 lg:group-hover:opacity-100 mt-0.5 flex-shrink-0 text-casa-muted hover:text-red-500 transition-all"
-      >
-        <X size={15} />
-      </button>
+        aria-label={`Delete ${item.name}`}
+        className="-mr-2 flex-shrink-0"
+      />
     </div>
   )
 }
@@ -2142,54 +2121,52 @@ export default function GroceryPage() {
               <ShoppingCart size={20} />
             </div>
             <div className="min-w-0">
-              <h1 className="truncate font-display text-display-md leading-none text-casa-navy">Grocery List</h1>
+              <Heading role="display-md" className="truncate leading-none">Grocery List</Heading>
               <p className="mt-1 text-body-sm text-casa-muted">
                 {syncStatusLabel} · sorted by store aisle
               </p>
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-2">
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
+                leadingIcon={<RefreshCw size={14} className={cn(syncing && 'animate-spin')} />}
                 onClick={() => void handleSyncNow({ cleanBeforeSync: true })}
                 disabled={syncing}
                 title={`${lastSyncSummary}${lastSyncAt ? ` · ${new Date(lastSyncAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}`}
-                className="hidden md:flex items-center gap-1.5 min-h-11 px-5 rounded-full text-body-sm font-medium text-casa-text-secondary border border-casa-border bg-casa-surface shadow-[0_3px_10px_rgba(27,42,74,0.08)] hover:bg-white transition-colors disabled:opacity-60"
+                className="hidden md:inline-flex"
               >
-                <RefreshCw size={14} className={cn(syncing && 'animate-spin')} />
                 Clean + Sync
-              </button>
+              </Button>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="cook-v2-topline-toggle inline-flex shrink-0 items-center rounded-pill p-1">
+            <div className="inline-flex shrink-0 items-center gap-1 rounded-pill border border-casa-border bg-casa-bg p-1">
               {([
                 { id: 'manage', label: 'Manage list' },
                 { id: 'smart', label: 'Smart picks' },
               ] as const).map((mode) => (
-                <button
+                <Chip
                   key={mode.id}
-                  type="button"
+                  tone={groceryViewMode === mode.id ? 'accent' : 'neutral'}
+                  selected={groceryViewMode === mode.id}
+                  icon={mode.id === 'smart' ? <Sparkles size={14} className="text-casa-info" /> : undefined}
                   onClick={() => setGroceryViewMode(mode.id)}
-                  className={cn(
-                    'cook-v2-topline-toggle-btn inline-flex items-center gap-1.5 rounded-pill px-4 py-2 text-body-sm font-semibold transition-colors',
-                    groceryViewMode === mode.id && 'cook-v2-topline-toggle-btn-active',
-                  )}
                   aria-pressed={groceryViewMode === mode.id}
                 >
-                  {mode.id === 'smart' && <Sparkles size={14} className="text-casa-info" />}
                   {mode.label}
-                </button>
+                </Chip>
               ))}
             </div>
             {groceryViewMode === 'manage' && totalTrackedItems > 0 && (
               <div className="hidden md:block md:min-w-[14rem] md:flex-1 md:max-w-[42rem] px-2">
-                <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold text-casa-muted">
+                <div className="mb-1.5 flex items-center justify-between text-caption font-semibold text-casa-muted">
                   <span><span className="text-casa-navy">{checkedCount}</span> of {totalTrackedItems} checked</span>
                   <span>{uncheckedCount} remaining</span>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-casa-border/70">
                   <div
-                    className="h-full rounded-full bg-[#4E9A6B] transition-all duration-300"
+                    className="h-full rounded-full bg-casa-success transition-all duration-300"
                     style={{ width: `${checkedProgressPercent}%` }}
                   />
                 </div>
@@ -2198,128 +2175,111 @@ export default function GroceryPage() {
           </div>
         </div>
         {syncError && (
-          <p className="pb-3 text-[11px] text-red-600">Sync error: {syncError}</p>
+          <Text role="caption" className="pb-3 text-casa-error">Sync error: {syncError}</Text>
         )}
         {pantryReconcileError && (
-          <p className="pb-3 text-[11px] text-red-600">Pantry restock error: {pantryReconcileError}</p>
+          <Text role="caption" className="pb-3 text-casa-error">Pantry restock error: {pantryReconcileError}</Text>
         )}
         {!pantryReconcileError && pantryReconcileMessage && (
-          <p className="pb-3 text-[11px] text-casa-muted">{pantryReconcileMessage}</p>
+          <Text role="caption" muted className="pb-3">{pantryReconcileMessage}</Text>
         )}
         {predictionDeferralError && (
-          <p className="pb-3 text-[11px] text-red-600">Prediction deferral error: {predictionDeferralError}</p>
+          <Text role="caption" className="pb-3 text-casa-error">Prediction deferral error: {predictionDeferralError}</Text>
         )}
         {!predictionDeferralError && predictionDeferralMessage && (
-          <p className="pb-3 text-[11px] text-casa-muted">{predictionDeferralMessage}</p>
+          <Text role="caption" muted className="pb-3">{predictionDeferralMessage}</Text>
         )}
         {pantryReconcileDraft && (
           <div className="pb-3">
-            <div className="rounded-2xl border border-casa-border bg-casa-bg p-3">
-              <p className="text-[11px] font-semibold text-casa-navy">
+            <Card padding="sm" tone="subtle">
+              <Text role="caption" className="font-semibold text-casa-navy">
                 Review pantry restock ({pantryReconcileDraft.rows.length})
-              </p>
-              <p className="mt-0.5 text-[11px] text-casa-muted">
+              </Text>
+              <Text role="caption" muted className="mt-0.5">
                 Adjust package counts before saving to pantry inventory.
-              </p>
+              </Text>
               <div className="mt-2 max-h-52 space-y-2 overflow-y-auto pr-1">
                 {pantryReconcileRowsByCategory.map((group) => (
                   <div key={`reconcile-group-${group.category}`} className="rounded-xl border border-casa-border bg-casa-surface p-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-casa-muted">
+                    <Text role="caption" muted className="font-semibold uppercase tracking-wide">
                       {GROCERY_CATEGORIES.find((category) => category.key === group.category)?.label ?? group.category}
-                    </p>
+                    </Text>
                     <div className="mt-1.5 grid grid-cols-1 gap-1.5 lg:grid-cols-4">
                       {group.rows.map((row) => (
                         <div key={`reconcile-draft-${row.item_id}`} className="rounded-lg border border-casa-border bg-casa-bg px-2 py-2">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <p className="truncate text-[11px] font-semibold text-casa-text">{row.name}</p>
-                              <p className="text-[10px] text-casa-muted">
+                              <Text role="caption" className="truncate font-semibold">{row.name}</Text>
+                              <Text role="caption" muted>
                                 {row.package_unit || 'pack'}{row.package_size ? ` · ${row.package_size}` : ''}
-                              </p>
+                              </Text>
                             </div>
-                            <button
-                              type="button"
+                            <IconButton
+                              icon={<Trash2 size={14} />}
+                              variant="danger"
+                              size="sm"
                               onClick={() => removePantryReconcileDraftRow(row.item_id)}
-                              className="rounded-md border border-casa-border p-1 text-casa-muted hover:text-casa-error"
                               aria-label={`Remove ${row.name} from pantry restock review`}
                               title="Remove from review"
-                            >
-                              <Trash2 size={12} />
-                            </button>
+                            />
                           </div>
                           <div className="mt-2 grid grid-cols-3 gap-1">
-                            <button
-                              type="button"
+                            <Chip
+                              tone={row.review_status === 'out' ? 'danger' : 'neutral'}
+                              selected={row.review_status === 'out'}
                               onClick={() => updatePantryReconcileRowStatus(row.item_id, 'out')}
-                              className={cn(
-                                'rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors',
-                                row.review_status === 'out'
-                                  ? 'border-red-300 bg-red-50 text-red-700'
-                                  : 'border-casa-border bg-casa-surface text-casa-muted hover:bg-red-50/70'
-                              )}
                             >
                               Out
-                            </button>
-                            <button
-                              type="button"
+                            </Chip>
+                            <Chip
+                              tone={row.review_status === 'low' ? 'warning' : 'neutral'}
+                              selected={row.review_status === 'low'}
                               onClick={() => updatePantryReconcileRowStatus(row.item_id, 'low')}
-                              className={cn(
-                                'rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors',
-                                row.review_status === 'low'
-                                  ? 'border-amber-300 bg-amber-50 text-amber-700'
-                                  : 'border-casa-border bg-casa-surface text-casa-muted hover:bg-amber-50/70'
-                              )}
                             >
                               Low
-                            </button>
-                            <button
-                              type="button"
+                            </Chip>
+                            <Chip
+                              tone={row.review_status === 'ok' ? 'success' : 'neutral'}
+                              selected={row.review_status === 'ok'}
                               onClick={() => updatePantryReconcileRowStatus(row.item_id, 'ok')}
-                              className={cn(
-                                'rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors',
-                                row.review_status === 'ok'
-                                  ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-                                  : 'border-casa-border bg-casa-surface text-casa-muted hover:bg-emerald-50/70'
-                              )}
                             >
                               OK
-                            </button>
+                            </Chip>
                           </div>
                           {row.review_status === 'ok' && (
                             <div className="mt-1.5">
-                              <button
-                                type="button"
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => toggleReconcileQtyEditor(row.item_id)}
-                                className="text-[10px] font-semibold text-casa-muted hover:text-casa-navy"
                               >
                                 Qty: {row.package_count} {expandedReconcileQtyIds.has(row.item_id) ? '▲' : '▼'}
-                              </button>
+                              </Button>
                               {expandedReconcileQtyIds.has(row.item_id) && (
                                 <div className="mt-1 flex items-center gap-1">
-                                  <button
-                                    type="button"
+                                  <IconButton
+                                    icon={<Minus size={14} />}
+                                    variant="secondary"
+                                    size="sm"
                                     onClick={() => updatePantryReconcileDraftRow(row.item_id, Math.max(0, row.package_count - 0.25))}
-                                    className="rounded-md border border-casa-border bg-casa-surface p-1 text-casa-muted"
                                     aria-label={`Decrease ${row.name} restock quantity`}
-                                  >
-                                    <Minus size={11} />
-                                  </button>
-                                  <input
+                                  />
+                                  <Input
                                     type="number"
                                     min={0}
                                     step={0.25}
                                     value={row.package_count}
                                     onChange={(event) => updatePantryReconcileDraftRow(row.item_id, Number(event.target.value))}
-                                    className="w-16 rounded-md border border-casa-border bg-casa-surface px-1 py-1 text-center text-[11px] text-casa-navy"
+                                    className="w-20 text-center"
+                                    aria-label={`${row.name} restock quantity`}
                                   />
-                                  <button
-                                    type="button"
+                                  <IconButton
+                                    icon={<Plus size={14} />}
+                                    variant="secondary"
+                                    size="sm"
                                     onClick={() => updatePantryReconcileDraftRow(row.item_id, row.package_count + 0.25)}
-                                    className="rounded-md border border-casa-border bg-casa-surface p-1 text-casa-muted"
                                     aria-label={`Increase ${row.name} restock quantity`}
-                                  >
-                                    <Plus size={11} />
-                                  </button>
+                                  />
                                 </div>
                               )}
                             </div>
@@ -2331,27 +2291,27 @@ export default function GroceryPage() {
                 ))}
               </div>
               <div className="mt-2 flex items-center gap-2">
-                <button
-                  type="button"
+                <Button
+                  size="sm"
                   onClick={() => void handleReconcilePantryFromDone()}
                   disabled={reconcilingPantry}
-                  className="px-3 py-1.5 rounded-button border border-casa-gold/40 bg-casa-gold/10 text-[11px] font-semibold text-casa-navy disabled:opacity-60"
+                  loading={reconcilingPantry}
                 >
-                  {reconcilingPantry ? 'Saving…' : 'Confirm restock'}
-                </button>
-                <button
-                  type="button"
+                  Confirm restock
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => {
                     setPantryReconcileDraft(null)
                     setExpandedReconcileQtyIds(new Set())
                   }}
                   disabled={reconcilingPantry}
-                  className="px-3 py-1.5 rounded-button border border-casa-border text-[11px] text-casa-muted disabled:opacity-60"
                 >
                   Cancel
-                </button>
+                </Button>
               </div>
-            </div>
+            </Card>
           </div>
         )}
       </div>
@@ -2382,7 +2342,7 @@ export default function GroceryPage() {
             <div className="pt-3 pb-6">
               {dragState && (
                 <div className="mb-3 rounded-2xl border border-casa-border bg-casa-surface p-3">
-                  <p className="text-[11px] font-semibold text-casa-muted uppercase tracking-wider mb-2">
+                  <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider mb-2">
                     Drop into category
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -2436,28 +2396,28 @@ export default function GroceryPage() {
                       )}
                     >
                       <div className="overflow-hidden rounded-[1.2rem] border border-casa-border bg-casa-surface shadow-card">
-                        <div className="flex items-start justify-between gap-3 border-b border-[#E7D3A3] bg-[linear-gradient(120deg,#F4E7CB,#EAD7AC)] px-4 py-3.5">
+                        <div className="flex items-start justify-between gap-3 border-b border-casa-accent-soft-border bg-[linear-gradient(120deg,var(--color-casa-accent-soft),var(--color-casa-accent-soft-hover))] px-4 py-3.5">
                           <div className="flex min-w-0 items-center gap-2.5">
                             <div
-                              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-casa-border/70"
-                              style={{ backgroundColor: section.visual.iconBg, color: section.visual.iconFg }}
+                              className={cn(
+                                'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-casa-border/70',
+                                categoryIconBadgeClassName(getCategoryTone(section.key)),
+                              )}
                             >
                               <CategoryIcon size={18} />
                             </div>
                             <div className="min-w-0">
                               <p className="truncate text-heading font-semibold leading-tight text-casa-navy">{section.label}</p>
-                              <p className="mt-0.5 text-body-sm text-[#7A6742]">{section.visual.subtitle}</p>
+                              <p className="mt-0.5 text-body-sm text-casa-top-pick-band/80">{section.visual.subtitle}</p>
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-2 text-caption text-casa-muted">
                             {section.reviewCount > 0 && (
-                              <span className="rounded-pill border border-[#B8E4E6] bg-[#E7F4F4] px-2.5 py-1 text-[10.5px] font-semibold text-[#0A6266]">
-                                {section.reviewCount} suggested
-                              </span>
+                              <Chip tone="info" size="sm">{section.reviewCount} suggested</Chip>
                             )}
-                            <span className="rounded-pill border border-[#D8C09A] bg-white/70 px-3 py-1 text-body-sm font-semibold text-[#5A4A2A]">
+                            <Chip tone="accent" size="sm">
                               {section.items.length} item{section.items.length === 1 ? '' : 's'}
-                            </span>
+                            </Chip>
                           </div>
                         </div>
                         <div className="divide-y divide-casa-divider">
@@ -2543,56 +2503,54 @@ export default function GroceryPage() {
               {hasSmartPicks ? (
                 <div className="mt-2 space-y-3">
                   {weeklyAutoListCandidates.length > 0 && (
-                    <div className="overflow-hidden rounded-[1.15rem] border border-[#E7D3A3] bg-[linear-gradient(120deg,#F4E7CB,#EAD7AC)] px-4 py-4 sm:px-5">
+                    <Card padding="md" tone="accent" className="overflow-hidden sm:px-5">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="pr-1">
-                          <p className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-[#8A5A1E]">
+                          <Text role="caption" className="inline-flex items-center gap-1.5 font-bold uppercase tracking-[0.14em] text-casa-top-pick-band">
                             <Sparkles size={12} />
                             Auto weekly list
-                          </p>
-                          <h3 className="mt-1 text-xl font-display text-casa-navy">Your usual week, ready to add</h3>
-                          <p className="mt-1 text-[12px] text-[#7A6742]">Built from your last 30 days of repeat buys.</p>
+                          </Text>
+                          <Heading role="display-sm" className="mt-1">Your usual week, ready to add</Heading>
+                          <Text role="body-sm" muted className="mt-1">Built from your last 30 days of repeat buys.</Text>
                         </div>
-                        <button
-                          type="button"
+                        <Button
+                          size="sm"
                           onClick={handleGenerateWeeklyList}
-                          className="rounded-full bg-casa-navy px-4 py-2 text-[12px] font-semibold text-white transition-all hover:brightness-110"
+                          className="bg-casa-navy hover:bg-casa-navy/90"
                         >
                           Add all {weeklyAutoListCandidates.length} →
-                        </button>
+                        </Button>
                       </div>
                       <div className="mt-3 hidden flex-wrap gap-2 md:flex">
                         {weeklyHeroPreviewItems.map((item) => (
-                          <span
-                            key={`weekly-${item.name}`}
-                            className="rounded-full border border-[#D8C09A] bg-white/70 px-3 py-1.5 text-[12px] font-medium text-[#5A4A2A]"
-                          >
+                          <Chip key={`weekly-${item.name}`} tone="accent">
                             {item.name}
-                          </span>
+                          </Chip>
                         ))}
                         {weeklyHeroOverflowCount > 0 && (
-                          <span className="rounded-full border border-[#D8C09A] bg-white/70 px-3 py-1.5 text-[12px] font-medium text-[#5A4A2A]">
+                          <Chip tone="accent">
                             + {weeklyHeroOverflowCount} more
-                          </span>
+                          </Chip>
                         )}
                       </div>
-                    </div>
+                    </Card>
                   )}
 
                   {(pantryDepletionPredictions.length > 0 || activePredictionDeferralCount > 0) && (
-                    <div className="rounded-2xl border border-casa-border bg-casa-surface p-4">
+                    <Card padding="md" tone="surface">
                       <div className="mb-2 flex items-center justify-between gap-2">
-                        <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-casa-muted">
+                        <Text role="caption" muted className="font-bold uppercase tracking-[0.14em]">
                           Pantry depletion predictions
-                        </p>
+                        </Text>
                         {activePredictionDeferralCount > 0 && (
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
+                            size="sm"
                             onClick={() => void clearPantryPredictionDeferrals()}
-                            className="rounded-full border border-casa-border px-2.5 py-1 text-[10px] font-semibold text-casa-muted transition-colors hover:bg-casa-main"
                           >
                             Show deferred ({activePredictionDeferralCount})
-                          </button>
+                          </Button>
                         )}
                       </div>
                       <div className="space-y-1.5">
@@ -2606,83 +2564,82 @@ export default function GroceryPage() {
                             )
                           )
                           return (
-                            <div key={`depletion-${prediction.name}`} className="flex items-center gap-3 border-t border-casa-divider px-1 py-2 first:border-t-0">
-                              <Circle size={10} fill={visual.dotColor} color={visual.dotColor} className="shrink-0" />
+                            <div key={`depletion-${prediction.name}`} className="flex flex-wrap items-center gap-3 border-t border-casa-divider px-1 py-2 first:border-t-0">
+                              <Circle size={10} fill="currentColor" className={cn('shrink-0', urgencyDotClassName(visual.tone))} />
                               <div className="min-w-0 flex-1">
-                                <p className="truncate text-[14px] font-semibold text-casa-navy">{prediction.name}</p>
-                                <div className="mt-0.5 flex items-center gap-2 text-[11px] text-casa-muted">
+                                <p className="truncate text-body-sm font-semibold text-casa-navy">{prediction.name}</p>
+                                <div className="mt-0.5 flex items-center gap-2 text-caption text-casa-muted">
                                   <span>Cadence ~{prediction.cadenceDays}d</span>
                                   <span className="h-1.5 w-16 overflow-hidden rounded-full bg-casa-border/80">
                                     <span
-                                      className="block h-full rounded-full"
-                                      style={{ width: `${cadenceMeterPercent}%`, backgroundColor: visual.meterColor }}
+                                      className={cn('block h-full rounded-full', urgencyMeterClassName(visual.tone))}
+                                      style={{ width: `${cadenceMeterPercent}%` }}
                                     />
                                   </span>
                                 </div>
                               </div>
-                              <span
-                                className="rounded-full px-2.5 py-1 text-[10.5px] font-semibold"
-                                style={{ backgroundColor: visual.tagBg, color: visual.tagText }}
-                              >
+                              <span className={cn('rounded-full px-2.5 py-1 text-caption font-semibold', urgencyTagClassName(visual.tone))}>
                                 {visual.dueLabel}
                               </span>
                               <div className="flex shrink-0 items-center gap-1.5">
-                                <button
+                                <Button
                                   type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  leadingIcon={<Clock3 size={11} />}
                                   onClick={() => void deferPantryPrediction(prediction.name, GROCERY_PREDICTION_PUSH_DAYS, 'push')}
                                   title={`Push this prediction ${GROCERY_PREDICTION_PUSH_DAYS} days later`}
-                                  className="inline-flex items-center gap-1 rounded-full border border-casa-border px-2.5 py-1.5 text-[10.5px] font-semibold text-casa-muted transition-colors hover:bg-casa-main"
                                 >
-                                  <Clock3 size={11} />
                                   +{GROCERY_PREDICTION_PUSH_DAYS}d
-                                </button>
-                                <button
+                                </Button>
+                                <Button
                                   type="button"
+                                  variant="secondary"
+                                  size="sm"
                                   onClick={() => void deferPantryPrediction(prediction.name, GROCERY_PREDICTION_DISMISS_DAYS, 'dismiss')}
                                   title={`Dismiss this prediction for ${GROCERY_PREDICTION_DISMISS_DAYS} days`}
-                                  className="rounded-full border border-casa-border px-2.5 py-1.5 text-[10.5px] font-semibold text-casa-muted transition-colors hover:bg-casa-main"
                                 >
                                   {Math.round(GROCERY_PREDICTION_DISMISS_DAYS / 7)}w
-                                </button>
-                                <button
+                                </Button>
+                                <Button
                                   type="button"
+                                  variant="secondary"
+                                  size="sm"
                                   onClick={() => addItemByName(prediction.name, { spotlightOnDuplicate: true, clearInput: true })}
-                                  className="rounded-full border border-casa-border px-3 py-1.5 text-[11px] font-semibold text-casa-navy transition-colors hover:bg-casa-main"
                                 >
                                   Add
-                                </button>
+                                </Button>
                               </div>
                             </div>
                           )
                         })}
                         {pantryDepletionPredictions.length === 0 && activePredictionDeferralCount > 0 && (
-                          <p className="px-1 py-2 text-[11px] text-casa-muted">
+                          <p className="px-1 py-2 text-caption text-casa-muted">
                             Predictions are currently deferred. Use “Show deferred” to bring them back now.
                           </p>
                         )}
                       </div>
-                      <p className="mt-2 text-[10.5px] text-casa-muted">
+                      <p className="mt-2 text-caption text-casa-muted">
                         Push items out a few days or dismiss for two weeks when you still have stock.
                       </p>
-                    </div>
+                    </Card>
                   )}
 
                   {(predictiveSuggestions.length > 0 || smartRebuySuggestions.length > 0 || SMART_BUNDLES.length > 0) && (
-                    <div className="rounded-2xl border border-casa-border bg-casa-surface p-4">
+                    <Card padding="md" tone="surface">
                       {predictiveSuggestions.length > 0 && (
                         <div className="mb-4">
-                          <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-casa-muted">Likely next adds</p>
+                          <Text role="caption" muted className="mb-2 font-bold uppercase tracking-[0.14em]">Likely next adds</Text>
                           <div className="flex flex-wrap gap-2">
                             {predictiveSuggestions.map((item) => (
-                              <button
+                              <Chip
                                 key={`predictive-${item.name}`}
-                                type="button"
+                                tone="neutral"
                                 onClick={() => addItemByName(item.name, { spotlightOnDuplicate: true, clearInput: true })}
-                                className="rounded-full border border-casa-border bg-casa-bg px-3 py-1.5 text-[12px] font-medium text-casa-text transition-colors hover:bg-casa-main"
+                                icon={<Plus size={13} className="text-casa-gold" />}
                               >
-                                <span className="mr-1.5 font-bold text-[#B08A34]">+</span>
                                 {item.name}
-                              </button>
+                              </Chip>
                             ))}
                           </div>
                         </div>
@@ -2690,18 +2647,17 @@ export default function GroceryPage() {
 
                       {smartRebuySuggestions.length > 0 && (
                         <div className="mb-4">
-                          <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-casa-muted">Rebuy from your history</p>
+                          <Text role="caption" muted className="mb-2 font-bold uppercase tracking-[0.14em]">Rebuy from your history</Text>
                           <div className="flex flex-wrap gap-2">
                             {smartRebuySuggestions.map((item) => (
-                              <button
+                              <Chip
                                 key={`rebuy-${item.name}`}
-                                type="button"
+                                tone="neutral"
                                 onClick={() => addItemByName(item.name, { spotlightOnDuplicate: true, clearInput: true })}
-                                className="rounded-full border border-casa-border bg-casa-bg px-3 py-1.5 text-[12px] font-medium text-casa-text transition-colors hover:bg-casa-main"
+                                icon={<Plus size={13} className="text-casa-gold" />}
                               >
-                                <span className="mr-1.5 font-bold text-[#B08A34]">+</span>
                                 {item.name}
-                              </button>
+                              </Chip>
                             ))}
                           </div>
                         </div>
@@ -2709,24 +2665,23 @@ export default function GroceryPage() {
 
                       {SMART_BUNDLES.length > 0 && (
                         <div>
-                          <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-casa-muted">1-tap bundles</p>
+                          <Text role="caption" muted className="mb-2 font-bold uppercase tracking-[0.14em]">1-tap bundles</Text>
                           <div className="flex flex-wrap gap-2">
                             {SMART_BUNDLES.map((bundle) => (
-                              <button
+                              <Chip
                                 key={bundle.name}
-                                type="button"
+                                tone="accent"
                                 onClick={() => handleAddBundle(bundle.items)}
-                                className="rounded-full border border-[#E7D3A3] bg-[#F4E7CB] px-3 py-1.5 text-[12px] font-semibold text-[#5A4A2A] transition-colors hover:bg-[#EFDFC0]"
+                                icon={<Plus size={13} />}
                               >
-                                <span className="mr-1.5 font-bold text-[#8A5A1E]">+</span>
                                 {bundle.name}
                                 <span className="ml-1.5 opacity-65">· {bundle.items.length}</span>
-                              </button>
+                              </Chip>
                             ))}
                           </div>
                         </div>
                       )}
-                    </div>
+                    </Card>
                   )}
                 </div>
               ) : (
@@ -2744,24 +2699,20 @@ export default function GroceryPage() {
         </div>
       </div>
       {isAddPanelOpen && (
-        <div className="fixed right-24 bottom-[calc(var(--spacing-nav-height)+1rem+var(--vk-height,0px)+var(--vk-gap,0px))] lg:bottom-[calc(1.5rem+var(--vk-height,0px)+var(--vk-gap,0px))] z-[55] w-[min(42rem,calc(100vw-7rem))] max-h-[min(36rem,74vh)] overflow-y-auto rounded-2xl border border-casa-border bg-casa-surface shadow-modal p-3">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <p className="text-body-sm font-semibold text-casa-navy">Add grocery items</p>
-            <button
-              type="button"
-              onClick={() => setIsAddPanelOpen(false)}
-              className="h-8 w-8 rounded-full border border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main transition-colors flex items-center justify-center"
-              aria-label="Close add panel"
-            >
-              <X size={14} />
-            </button>
-          </div>
+        <Sheet
+          open
+          onClose={() => setIsAddPanelOpen(false)}
+          title="Add grocery items"
+          showHandle
+          panelClassName="max-h-[74vh]"
+          contentClassName="p-3"
+        >
           <div className="mb-3 flex flex-wrap items-center gap-1.5">
             <button
               type="button"
               onClick={() => setAddPanelMode('quick')}
               className={cn(
-                'px-2.5 py-1 rounded-pill border text-[11px] transition-colors',
+                'px-2.5 py-1 rounded-pill border text-caption transition-colors',
                 addPanelMode === 'quick'
                   ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
                   : 'border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main',
@@ -2776,7 +2727,7 @@ export default function GroceryPage() {
                 if (!parsedRecipe) setRecipeImportStep(1)
               }}
               className={cn(
-                'px-2.5 py-1 rounded-pill border text-[11px] transition-colors inline-flex items-center gap-1',
+                'px-2.5 py-1 rounded-pill border text-caption transition-colors inline-flex items-center gap-1',
                 addPanelMode === 'recipe'
                   ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
                   : 'border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main',
@@ -2789,7 +2740,7 @@ export default function GroceryPage() {
               type="button"
               onClick={() => setAddPanelMode('library')}
               className={cn(
-                'px-2.5 py-1 rounded-pill border text-[11px] transition-colors inline-flex items-center gap-1',
+                'px-2.5 py-1 rounded-pill border text-caption transition-colors inline-flex items-center gap-1',
                 addPanelMode === 'library'
                   ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
                   : 'border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main',
@@ -2829,14 +2780,17 @@ export default function GroceryPage() {
           </div>
           {mergeSuggestion && (
             <div className="mt-2 rounded-2xl border border-casa-gold/40 bg-casa-gold/10 px-3 py-2">
-              <p className="text-[11px] text-casa-navy">
+              <p className="text-caption text-casa-navy">
                 Similar item already on your list: <span className="font-semibold">{mergeSuggestion.name}</span>
               </p>
               <div className="mt-1.5 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => spotlightItem(mergeSuggestion.id)}
-                  className="px-2.5 py-1 rounded-full border border-casa-gold/60 bg-casa-surface text-[11px] font-medium text-casa-navy hover:bg-casa-bg transition-colors"
+                  onClick={() => {
+                    setIsAddPanelOpen(false)
+                    window.setTimeout(() => spotlightItem(mergeSuggestion.id), 280)
+                  }}
+                  className="px-2.5 py-1 rounded-full border border-casa-gold/60 bg-casa-surface text-caption font-medium text-casa-navy hover:bg-casa-bg transition-colors"
                 >
                   Use existing
                 </button>
@@ -2850,7 +2804,7 @@ export default function GroceryPage() {
                     setInputValue('')
                     inputRef.current?.focus()
                   }}
-                  className="px-2.5 py-1 rounded-full border border-casa-border text-[11px] text-casa-muted hover:bg-casa-bg transition-colors"
+                  className="px-2.5 py-1 rounded-full border border-casa-border text-caption text-casa-muted hover:bg-casa-bg transition-colors"
                 >
                   Add anyway
                 </button>
@@ -2869,7 +2823,7 @@ export default function GroceryPage() {
               </button>
             ))}
           </div>
-          <p className="mt-1 text-[11px] text-casa-muted">
+          <p className="mt-1 text-caption text-casa-muted">
             Tip: tap the sparkle in the top bar to ask Casa AI, then say “add milk, eggs, and bananas.”
           </p>
             </>
@@ -2878,10 +2832,10 @@ export default function GroceryPage() {
           {addPanelMode === 'recipe' && (
             <div>
               <div className="rounded-2xl border border-casa-border bg-casa-bg p-3">
-                <p className="text-[11px] text-casa-muted mb-2">
+                <p className="text-caption text-casa-muted mb-2">
                   {recipeImportStep === 1 ? 'Step 1 of 3 · Add sources' : recipeImportStep === 2 ? 'Step 2 of 3 · Confirm sources' : 'Step 3 of 3 · Review + save'}
                 </p>
-                <p className="text-[11px] text-casa-muted mb-1">Paste a public recipe URL</p>
+                <p className="text-caption text-casa-muted mb-1">Paste a public recipe URL</p>
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-2 flex-1 bg-casa-surface rounded-button border border-casa-border px-3 py-2">
                     <Link2 size={14} className="text-casa-muted" />
@@ -2899,7 +2853,7 @@ export default function GroceryPage() {
                     type="button"
                     onClick={() => triggerFileInput(recipeFileInputRef)}
                     className={cn(
-                      'px-3 py-1.5 rounded-pill border border-casa-border text-[11px] text-casa-muted hover:bg-casa-surface transition-colors inline-flex items-center gap-1 cursor-pointer',
+                      'px-3 py-1.5 rounded-pill border border-casa-border text-caption text-casa-muted hover:bg-casa-surface transition-colors inline-flex items-center gap-1 cursor-pointer',
                       recipeImporting && 'opacity-60 pointer-events-none',
                     )}
                   >
@@ -2910,7 +2864,7 @@ export default function GroceryPage() {
                     type="button"
                     onClick={() => triggerFileInput(recipeCameraInputRef)}
                     className={cn(
-                      'px-3 py-1.5 rounded-pill border border-casa-border text-[11px] text-casa-muted hover:bg-casa-surface transition-colors inline-flex items-center gap-1 cursor-pointer',
+                      'px-3 py-1.5 rounded-pill border border-casa-border text-caption text-casa-muted hover:bg-casa-surface transition-colors inline-flex items-center gap-1 cursor-pointer',
                       recipeImporting && 'opacity-60 pointer-events-none',
                     )}
                   >
@@ -2956,14 +2910,14 @@ export default function GroceryPage() {
                             className="block w-full"
                           >
                             <img src={file.previewUrl} alt={file.name} className="h-16 w-full object-cover bg-casa-surface" loading="lazy" />
-                            <span className={cn('block px-1 py-1 text-[10px] truncate text-left', selected ? 'text-casa-navy font-semibold' : 'text-casa-muted')}>
+                            <span className={cn('block px-1 py-1 text-caption truncate text-left', selected ? 'text-casa-navy font-semibold' : 'text-casa-muted')}>
                               {selected ? 'Meal photo' : 'Mark meal'}
                             </span>
                           </button>
                           <button
                             type="button"
                             onClick={() => removeRecipeImportFile(file.id)}
-                            className="w-full border-t border-casa-divider px-1 py-1 text-[10px] text-casa-muted hover:bg-casa-bg"
+                            className="w-full border-t border-casa-divider px-1 py-1 text-caption text-casa-muted hover:bg-casa-bg"
                           >
                             Remove
                           </button>
@@ -2977,7 +2931,7 @@ export default function GroceryPage() {
                     type="button"
                     onClick={() => setRecipeMealPhotoIndex(null)}
                     className={cn(
-                      'mt-2 px-2.5 py-1.5 rounded-button border text-[11px] transition-colors',
+                      'mt-2 px-2.5 py-1.5 rounded-button border text-caption transition-colors',
                       recipeMealPhotoIndex === null
                         ? 'border-casa-gold bg-casa-gold/10 text-casa-navy font-semibold'
                         : 'border-casa-border text-casa-muted hover:bg-casa-surface',
@@ -2991,7 +2945,7 @@ export default function GroceryPage() {
                     <button
                       type="button"
                       onClick={() => setRecipeImportStep((current) => (current === 3 ? 2 : 1))}
-                      className="px-3 py-1.5 rounded-pill border border-casa-border text-[11px] text-casa-muted hover:bg-casa-surface"
+                      className="px-3 py-1.5 rounded-pill border border-casa-border text-caption text-casa-muted hover:bg-casa-surface"
                     >
                       Back
                     </button>
@@ -3001,7 +2955,7 @@ export default function GroceryPage() {
                       type="button"
                       disabled={!hasRecipeImportSource}
                       onClick={() => setRecipeImportStep(2)}
-                      className="px-3 py-1.5 rounded-pill bg-casa-navy text-white text-[11px] font-semibold hover:bg-casa-navy/90 disabled:opacity-60"
+                      className="px-3 py-1.5 rounded-pill bg-casa-navy text-white text-caption font-semibold hover:bg-casa-navy/90 disabled:opacity-60"
                     >
                       Next
                     </button>
@@ -3011,7 +2965,7 @@ export default function GroceryPage() {
                       type="button"
                       disabled={recipeImporting || !hasRecipeImportSource}
                       onClick={() => void runRecipeImportFromCurrentSources()}
-                      className="px-3 py-1.5 rounded-pill bg-casa-navy text-white text-[11px] font-semibold hover:bg-casa-navy/90 disabled:opacity-60"
+                      className="px-3 py-1.5 rounded-pill bg-casa-navy text-white text-caption font-semibold hover:bg-casa-navy/90 disabled:opacity-60"
                     >
                       {recipeImporting ? 'Importing…' : 'Import'}
                     </button>
@@ -3020,10 +2974,10 @@ export default function GroceryPage() {
               </div>
 
               {recipeImporting && (
-                <p className="mt-2 text-[11px] text-casa-muted animate-breathe">Extracting recipe…</p>
+                <p className="mt-2 text-caption text-casa-muted animate-breathe">Extracting recipe…</p>
               )}
               {recipeImportError && (
-                <p className="mt-2 text-[11px] text-casa-error">{recipeImportError}</p>
+                <p className="mt-2 text-caption text-casa-error">{recipeImportError}</p>
               )}
 
               {recipeImportStep === 3 && parsedRecipe && (
@@ -3045,7 +2999,7 @@ export default function GroceryPage() {
                       />
                       <div className="min-w-0">
                       <p className="text-body-sm font-semibold text-casa-navy">{parsedRecipe.name}</p>
-                      <p className="text-[11px] text-casa-muted">
+                      <p className="text-caption text-casa-muted">
                         {parsedRecipe.ingredients.length} ingredients · {parsedRecipe.steps.length} steps · {Math.round(parsedRecipe.confidence * 100)}% confidence
                         {parsedRecipe.servings ? ` · ${parsedRecipe.servings}` : ''}
                         {parsedRecipe.cook_time ? ` · ${parsedRecipe.cook_time}` : ''}
@@ -3055,25 +3009,25 @@ export default function GroceryPage() {
                   </div>
 
                   <div className="rounded-xl border border-casa-border bg-casa-bg p-2">
-                    <p className="text-[11px] text-casa-muted mb-2">Recipe photos (cover image optional)</p>
+                    <p className="text-caption text-casa-muted mb-2">Recipe photos (cover image optional)</p>
                     <div className="flex items-center gap-2 mb-2">
                       <input
                         type="url"
                         value={recipeExtraImageUrl}
                         onChange={(event) => setRecipeExtraImageUrl(event.target.value)}
                         placeholder="https://.../another-photo.jpg"
-                        className="flex-1 rounded-button border border-casa-border bg-casa-surface px-2.5 py-1.5 text-[11px] text-casa-text outline-none"
+                        className="flex-1 rounded-button border border-casa-border bg-casa-surface px-2.5 py-1.5 text-caption text-casa-text outline-none"
                       />
                       <button
                         type="button"
                         onClick={addRecipeImageUrl}
-                        className="px-2.5 py-1.5 rounded-button border border-casa-border text-[11px] text-casa-navy hover:bg-casa-surface transition-colors"
+                        className="px-2.5 py-1.5 rounded-button border border-casa-border text-caption text-casa-navy hover:bg-casa-surface transition-colors"
                       >
                         Add image
                       </button>
                     </div>
                     {parsedRecipe.image_urls.length === 0 ? (
-                      <p className="text-[11px] text-casa-muted">No images yet. Add one above.</p>
+                      <p className="text-caption text-casa-muted">No images yet. Add one above.</p>
                     ) : (
                       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                         {parsedRecipe.image_urls.map((imageUrl, imageIndex) => {
@@ -3099,7 +3053,7 @@ export default function GroceryPage() {
                                   if (target.src !== recipeFallbackHero) target.src = recipeFallbackHero
                                 }}
                               />
-                              <span className="block px-1.5 py-1 text-[10px] text-casa-muted">
+                              <span className="block px-1.5 py-1 text-caption text-casa-muted">
                                 {selected ? 'Meal cover' : 'Set as cover'}
                               </span>
                             </button>
@@ -3113,7 +3067,7 @@ export default function GroceryPage() {
                         setParsedRecipe((current) => current ? { ...current, primary_image_index: null, image_url: null } : current)
                       }}
                       className={cn(
-                        'mt-2 px-2.5 py-1.5 rounded-button border text-[11px] transition-colors',
+                        'mt-2 px-2.5 py-1.5 rounded-button border text-caption transition-colors',
                         parsedRecipe.primary_image_index === null
                           ? 'border-casa-gold bg-casa-gold/10 text-casa-navy font-semibold'
                           : 'border-casa-border text-casa-muted hover:bg-casa-surface',
@@ -3126,7 +3080,7 @@ export default function GroceryPage() {
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
                     <div className="rounded-xl border border-casa-border bg-casa-bg p-2">
                       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-[11px] text-casa-muted">Ingredients (auto-hides likely pantry staples)</p>
+                        <p className="text-caption text-casa-muted">Ingredients (auto-hides likely pantry staples)</p>
                         <div className="flex items-center gap-1">
                           {[0.5, 1, 2].map((scale) => (
                             <button
@@ -3134,7 +3088,7 @@ export default function GroceryPage() {
                               type="button"
                               onClick={() => setRecipeScale(scale)}
                               className={cn(
-                                'px-2 py-1 rounded-pill border text-[10px] transition-colors',
+                                'px-2 py-1 rounded-pill border text-caption transition-colors',
                                 Math.abs(recipeScale - scale) < 0.001
                                   ? 'border-casa-gold/50 bg-casa-gold/10 text-casa-navy'
                                   : 'border-casa-border text-casa-muted hover:bg-casa-surface'
@@ -3167,7 +3121,7 @@ export default function GroceryPage() {
                               />
                                 <span>{displayName}</span>
                                 {(scaledQuantity || ingredient.unit) && (
-                                  <span className="text-[10px] text-casa-muted">
+                                  <span className="text-caption text-casa-muted">
                                     {scaledQuantity ? `${scaledQuantity} ` : ''}{ingredient.unit ?? ''}
                                   </span>
                                 )}
@@ -3178,21 +3132,21 @@ export default function GroceryPage() {
                                   value={ingredient.quantity ?? ''}
                                   onChange={(event) => updateParsedIngredient(index, { quantity: event.target.value || null })}
                                   placeholder="Qty"
-                                  className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-[11px] text-casa-text outline-none"
+                                  className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-caption text-casa-text outline-none"
                                 />
                                 <input
                                   type="text"
                                   value={ingredient.unit ?? ''}
                                   onChange={(event) => updateParsedIngredient(index, { unit: event.target.value || null })}
                                   placeholder="Unit"
-                                  className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-[11px] text-casa-text outline-none"
+                                  className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-caption text-casa-text outline-none"
                                 />
                                 <input
                                   type="text"
                                   value={ingredient.name ?? ingredient.raw_text}
                                   onChange={(event) => updateParsedIngredient(index, { name: event.target.value || null })}
                                   placeholder="Ingredient"
-                                  className="flex-1 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-[11px] text-casa-text outline-none"
+                                  className="flex-1 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-caption text-casa-text outline-none"
                                 />
                               </div>
                             </div>
@@ -3203,12 +3157,12 @@ export default function GroceryPage() {
 
                     <div className="rounded-xl border border-casa-border bg-casa-bg p-2">
                       <div className="mb-2 flex items-center justify-between gap-2">
-                        <p className="text-[11px] text-casa-muted">Directions (literal text, ordered)</p>
+                        <p className="text-caption text-casa-muted">Directions (literal text, ordered)</p>
                         <button
                           type="button"
                           onClick={() => void runRecipeImportFromCurrentSources()}
                           disabled={recipeImporting}
-                          className="px-2 py-1 rounded-pill border border-casa-border text-[10px] text-casa-navy hover:bg-casa-surface disabled:opacity-60"
+                          className="px-2 py-1 rounded-pill border border-casa-border text-caption text-casa-navy hover:bg-casa-surface disabled:opacity-60"
                         >
                           {recipeImporting ? 'Re-extracting…' : 'Re-extract'}
                         </button>
@@ -3217,13 +3171,13 @@ export default function GroceryPage() {
                         {parsedRecipe.steps.map((step, stepIndex) => (
                           <div key={`${step.step_number}-${stepIndex}`} className="rounded-lg border border-casa-border bg-casa-surface px-2 py-1.5">
                             <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
-                              <p className="text-[10px] font-semibold text-casa-muted">Step {stepIndex + 1}</p>
+                              <p className="text-caption font-semibold text-casa-muted">Step {stepIndex + 1}</p>
                               <div className="flex items-center gap-1">
                                 <button
                                   type="button"
                                   onClick={() => moveParsedStep(stepIndex, -1)}
                                   disabled={stepIndex === 0}
-                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-[10px] text-casa-muted hover:bg-casa-bg disabled:opacity-50"
+                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-caption text-casa-muted hover:bg-casa-bg disabled:opacity-50"
                                 >
                                   Up
                                 </button>
@@ -3231,14 +3185,14 @@ export default function GroceryPage() {
                                   type="button"
                                   onClick={() => moveParsedStep(stepIndex, 1)}
                                   disabled={stepIndex >= parsedRecipe.steps.length - 1}
-                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-[10px] text-casa-muted hover:bg-casa-bg disabled:opacity-50"
+                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-caption text-casa-muted hover:bg-casa-bg disabled:opacity-50"
                                 >
                                   Down
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => addParsedStepAfter(stepIndex)}
-                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-[10px] text-casa-navy hover:bg-casa-bg"
+                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-caption text-casa-navy hover:bg-casa-bg"
                                 >
                                   Add
                                 </button>
@@ -3246,7 +3200,7 @@ export default function GroceryPage() {
                                   type="button"
                                   onClick={() => removeParsedStep(stepIndex)}
                                   disabled={parsedRecipe.steps.length <= 1}
-                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-[10px] text-casa-error hover:bg-casa-bg disabled:opacity-50"
+                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-caption text-casa-error hover:bg-casa-bg disabled:opacity-50"
                                 >
                                   Remove
                                 </button>
@@ -3256,7 +3210,7 @@ export default function GroceryPage() {
                               value={step.instruction}
                               onChange={(event) => updateParsedStep(stepIndex, event.target.value)}
                               rows={3}
-                              className="w-full rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-[11px] text-casa-text outline-none resize-y"
+                              className="w-full rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-caption text-casa-text outline-none resize-y"
                             />
                           </div>
                         ))}
@@ -3264,7 +3218,7 @@ export default function GroceryPage() {
                           <button
                             type="button"
                             onClick={() => addParsedStepAfter(-1)}
-                            className="w-full px-2 py-1.5 rounded-button border border-casa-border text-[11px] text-casa-navy hover:bg-casa-surface"
+                            className="w-full px-2 py-1.5 rounded-button border border-casa-border text-caption text-casa-navy hover:bg-casa-surface"
                           >
                             Add first step
                           </button>
@@ -3307,8 +3261,8 @@ export default function GroceryPage() {
             <div className="space-y-2">
               {recipeMealPlans.length > 0 && (
                 <div className="rounded-xl border border-casa-border bg-casa-surface px-3 py-2">
-                  <p className="text-[11px] font-semibold text-casa-navy">Planned meals</p>
-                  <p className="text-[11px] text-casa-muted mt-1">
+                  <p className="text-caption font-semibold text-casa-navy">Planned meals</p>
+                  <p className="text-caption text-casa-muted mt-1">
                     {recipeMealPlans.slice(0, 3).map((plan) => {
                       const recipe = recipeLibrary.find((row) => row.id === plan.recipe_id)
                       const slotLabel = RECIPE_MEAL_SLOTS.find((entry) => entry.slot === plan.slot)?.label ?? plan.slot
@@ -3318,14 +3272,14 @@ export default function GroceryPage() {
                 </div>
               )}
               {recipeLibrary.length === 0 ? (
-                <p className="text-[11px] text-casa-muted">No saved recipes yet. Import one from URL, photo, or PDF.</p>
+                <p className="text-caption text-casa-muted">No saved recipes yet. Import one from URL, photo, or PDF.</p>
               ) : (
                 recipeLibrary.slice(0, 24).map((recipe) => (
                   <div key={recipe.id} className="rounded-2xl border border-casa-border bg-casa-bg px-3 py-2">
                     <div className="flex items-center justify-between gap-2">
                       <div>
                         <p className="text-body-sm font-semibold text-casa-navy">{recipe.name}</p>
-                        <p className="text-[11px] text-casa-muted">
+                        <p className="text-caption text-casa-muted">
                           {recipe.ingredients.length} ingredients · {recipe.steps.length} steps
                           {recipe.cook_time ? ` · ${recipe.cook_time}` : ''}
                           {recipe.last_used_at ? ` · used ${new Date(recipe.last_used_at).toLocaleDateString()}` : ''}
@@ -3340,7 +3294,7 @@ export default function GroceryPage() {
                               type="button"
                               onClick={() => void planRecipeForSlot(recipe.id, slot)}
                               className={cn(
-                                'px-2.5 py-1 rounded-pill border text-[11px] transition-colors',
+                                'px-2.5 py-1 rounded-pill border text-caption transition-colors',
                                 planned
                                   ? 'border-casa-gold/40 bg-casa-gold/10 text-casa-navy'
                                   : 'border-casa-border text-casa-muted hover:bg-casa-surface'
@@ -3353,14 +3307,14 @@ export default function GroceryPage() {
                         <button
                           type="button"
                           onClick={() => loadRecipeIntoChecklist(recipe)}
-                          className="px-2.5 py-1 rounded-pill border border-casa-border text-[11px] text-casa-muted hover:bg-casa-surface transition-colors"
+                          className="px-2.5 py-1 rounded-pill border border-casa-border text-caption text-casa-muted hover:bg-casa-surface transition-colors"
                         >
                           Add again
                         </button>
                         <button
                           type="button"
                           onClick={() => void openRecipeForCookMode(recipe)}
-                          className="px-2.5 py-1 rounded-pill border border-casa-gold/40 bg-casa-gold/10 text-[11px] font-medium text-casa-navy hover:bg-casa-gold/15 transition-colors inline-flex items-center gap-1"
+                          className="px-2.5 py-1 rounded-pill border border-casa-gold/40 bg-casa-gold/10 text-caption font-medium text-casa-navy hover:bg-casa-gold/15 transition-colors inline-flex items-center gap-1"
                         >
                           <ChefHat size={12} />
                           Cook mode
@@ -3372,7 +3326,7 @@ export default function GroceryPage() {
               )}
             </div>
           )}
-        </div>
+        </Sheet>
       )}
       <AnimatePresence>
         {!isQuickAddOpen && (
@@ -3387,7 +3341,7 @@ export default function GroceryPage() {
               default: { duration: 0.22, ease: 'easeOut' },
             }}
             whileTap={{ scale: 0.92, y: 0 }}
-            className="fixed right-5 bottom-[calc(var(--spacing-nav-height)+1rem+var(--vk-height,0px)+var(--vk-gap,0px))] lg:bottom-[calc(1.5rem+var(--vk-height,0px)+var(--vk-gap,0px))] z-[60] w-14 h-14 rounded-full bg-casa-gold text-casa-navy font-semibold border border-casa-gold/50 shadow-[0_10px_28px_-4px_rgba(27,42,74,0.45),0_4px_10px_-2px_rgba(27,42,74,0.30),0_1px_0_rgba(255,255,255,0.25)_inset] flex items-center justify-center hover:brightness-110 hover:shadow-[0_16px_36px_-4px_rgba(27,42,74,0.5),0_6px_14px_-2px_rgba(27,42,74,0.35),0_1px_0_rgba(255,255,255,0.3)_inset] transition-[filter,box-shadow]"
+            className="fixed right-5 bottom-[calc(var(--spacing-nav-height)+1rem+var(--vk-height,0px)+var(--vk-gap,0px))] lg:bottom-[calc(1.5rem+var(--vk-height,0px)+var(--vk-gap,0px))] z-popover size-14 rounded-full bg-casa-gold text-casa-navy font-semibold border border-casa-gold/50 shadow-fab flex items-center justify-center hover:brightness-110 hover:shadow-modal transition-[filter,box-shadow]"
             aria-label="Quick add grocery item"
             title="Quick add"
           >
@@ -3409,12 +3363,24 @@ export default function GroceryPage() {
         }}
       />
       {cookView && (
-        <div className="fixed inset-0 z-[70] bg-casa-navy/30">
-          <div className="absolute right-4 top-4 bottom-4 w-[min(38rem,calc(100vw-2rem))] rounded-2xl border border-casa-border bg-casa-surface shadow-modal flex flex-col">
+        <Sheet
+          open
+          side="right"
+          title={`Cook ${cookView.recipe.name}`}
+          showHeader={false}
+          onClose={() => {
+            setCookView(null)
+            setCookTimer(null)
+          }}
+          closeOnBackdrop={false}
+          closeOnEscape={false}
+          panelClassName="w-[min(38rem,calc(100vw-2rem))]"
+          contentClassName="flex flex-col overflow-hidden p-0"
+        >
             <div className="px-4 py-3 border-b border-casa-divider flex items-center justify-between gap-2">
               <div>
                 <p className="text-body font-semibold text-casa-navy">{cookView.recipe.name}</p>
-                <p className="text-[11px] text-casa-muted">
+                <p className="text-caption text-casa-muted">
                   Step {cookView.stepIndex + 1} of {Math.max(1, cookView.recipe.steps.length)}
                   {cookView.recipe.cook_time ? ` · ${cookView.recipe.cook_time}` : ''}
                   {cookView.recipe.servings ? ` · ${cookView.recipe.servings}` : ''}
@@ -3426,22 +3392,22 @@ export default function GroceryPage() {
                     href={cookView.recipe.source_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="px-2.5 py-1.5 rounded-button border border-casa-border bg-casa-bg text-[11px] text-casa-muted hover:bg-casa-main transition-colors inline-flex items-center gap-1"
+                    className="px-2.5 py-1.5 rounded-button border border-casa-border bg-casa-bg text-caption text-casa-muted hover:bg-casa-main transition-colors inline-flex items-center gap-1"
                   >
                     <ExternalLink size={12} />
                     Original
                   </a>
                 )}
-                <button
-                  type="button"
+                <IconButton
+                  icon={<X size={16} />}
+                  variant="secondary"
+                  size="sm"
                   onClick={() => {
                     setCookView(null)
                     setCookTimer(null)
                   }}
-                  className="h-9 w-9 rounded-full border border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main transition-colors flex items-center justify-center"
-                >
-                  <X size={16} />
-                </button>
+                  aria-label="Close cook mode"
+                />
               </div>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
@@ -3460,7 +3426,7 @@ export default function GroceryPage() {
                           remainingSeconds: timer.seconds,
                           label: timer.label,
                         })}
-                        className="px-2 py-1 rounded-pill border border-casa-border bg-casa-surface text-[11px] text-casa-muted hover:bg-casa-main transition-colors inline-flex items-center gap-1"
+                        className="px-2 py-1 rounded-pill border border-casa-border bg-casa-surface text-caption text-casa-muted hover:bg-casa-main transition-colors inline-flex items-center gap-1"
                       >
                         <Clock3 size={11} />
                         {timer.label}
@@ -3470,13 +3436,13 @@ export default function GroceryPage() {
                 )}
                 {cookTimer && (
                   <div className="mt-2 rounded-xl border border-casa-gold/40 bg-casa-gold/10 px-2.5 py-1.5 flex items-center justify-between gap-2">
-                    <p className="text-[11px] text-casa-navy">
+                    <p className="text-caption text-casa-navy">
                       Timer ({cookTimer.label}): <span className="font-semibold">{formatTimer(cookTimer.remainingSeconds)}</span>
                     </p>
                     <button
                       type="button"
                       onClick={() => setCookTimer(null)}
-                      className="text-[11px] text-casa-muted hover:text-casa-text"
+                      className="text-caption text-casa-muted hover:text-casa-text"
                     >
                       Clear
                     </button>
@@ -3493,7 +3459,7 @@ export default function GroceryPage() {
                   })
                   return (
                     <div key={`${cookView.recipe.id}-${index}`} className="rounded-xl border border-casa-border bg-casa-bg px-2 py-1.5">
-                      <p className="text-[11px] text-casa-text">
+                      <p className="text-caption text-casa-text">
                         {[normalized.quantity, normalized.unit].filter(Boolean).join(' ')} {(normalized.name || ingredient.raw_text).trim()}
                       </p>
                     </div>
@@ -3531,12 +3497,11 @@ export default function GroceryPage() {
                 <ChevronRight size={14} />
               </button>
             </div>
-          </div>
-        </div>
+        </Sheet>
       )}
       {dragState && (
         <div
-          className="fixed z-[90] pointer-events-none px-3 py-2 rounded-xl bg-casa-navy text-white text-body-sm shadow-modal"
+          className="fixed z-debug pointer-events-none px-3 py-2 rounded-xl bg-casa-navy text-white text-body-sm shadow-modal"
           style={{ left: dragState.x + 14, top: dragState.y + 14 }}
         >
           Move “{dragState.itemName}”
