@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { format, isAfter, isBefore, addDays } from 'date-fns'
 import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion'
-import { Check, ChevronLeft, ChevronRight, RefreshCw, MapPin, Clock, Navigation, Bell, Phone } from 'lucide-react'
+import { Check, CheckCircle2, ChevronLeft, ChevronRight, RefreshCw, MapPin, Clock, Navigation, Bell, Phone } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
@@ -32,7 +32,7 @@ import { getEventEndDate, getEventStartDate } from '../utils/eventTime'
 import { formatDurationLabel, pickActiveHeroEvent, resolveRestingIndex } from '../lib/heroFocus.mjs'
 import { cleanEventTitle, isBirthdayEvent } from '../utils/eventTitle'
 import { buttonClassName } from '../design-system/variants.mjs'
-import { Button, CalendarPill, Card, Chip, EmptyState, Heading, IconButton, Text } from '../components/ui'
+import { Button, CalendarPill, Card, Chip, EmptyState, Heading, IconButton, Sheet, Text } from '../components/ui'
 
 const SHARED_GOLD = 'var(--color-casa-gold)'
 
@@ -148,6 +148,7 @@ export default function HomePage() {
   const { data: allTomorrowEvents } = useTodayEvents(tomorrow)
   const { visibleMembers } = useCalendarStore()
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [pastItemsOpen, setPastItemsOpen] = useState(false)
   const scrollRef = useRef<HTMLElement | null>(null)
   const nowLineRef = useRef<HTMLLIElement | null>(null)
   const events = useMemo<EventWithDetails[]>(() => {
@@ -179,6 +180,16 @@ export default function HomePage() {
   }, [allTomorrowEvents, visibleMembers])
   const nextTodayEvent = useMemo(
     () => events.find((e) => isAfter(getEventStartDate(e), now)) ?? null,
+    [events, now],
+  )
+  const pastEvents = useMemo(
+    () => events
+      .filter((event) => isBefore(getEventEndDate(event), now))
+      .sort((first, second) => getEventEndDate(second).getTime() - getEventEndDate(first).getTime()),
+    [events, now],
+  )
+  const currentAndUpcomingEvents = useMemo(
+    () => events.filter((event) => isAfter(getEventEndDate(event), now)),
     [events, now],
   )
   // An event that is happening right now (started, not yet ended). This lets the
@@ -383,31 +394,35 @@ export default function HomePage() {
             <EmptyState title="Nothing scheduled" description="Enjoy the quiet." />
           ) : (
             <ol className="space-y-2">
-              {/* Past events */}
-              {events.filter(e => isBefore(getEventEndDate(e), now)).map((ev, i) => (
-                <TimelineRow
-                  key={ev.id}
-                  event={ev}
-                  now={now}
-                  index={i}
-                  household={family ?? []}
-                  onClick={() => setSelectedEventId(ev.id)}
-                  onComplete={completeReminder}
-                  onSnooze={(event) => {
-                    void snoozeReminderOneHour(event).catch((error) => {
-                      console.error('HomePage: failed to snooze reminder by 1 hour', error)
-                    })
-                  }}
-                  onSendToNeedsYou={(event) => {
-                    void moveReminderToNeedsYou(event).catch((error) => {
-                      console.error('HomePage: failed to move reminder to Needs you', error)
-                    })
-                  }}
-                />
-              ))}
+              {pastEvents.length > 0 && (
+                <li className="list-none pb-1">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <Text role="body" as="h4" className="font-semibold text-casa-navy">Earlier today</Text>
+                      <Text role="caption" muted>
+                        {pastEvents.length} {pastEvents.length === 1 ? 'item' : 'items'}
+                      </Text>
+                    </div>
+                    {pastEvents.length > 3 && (
+                      <Button variant="ghost" size="sm" onClick={() => setPastItemsOpen(true)}>
+                        View all {pastEvents.length}
+                      </Button>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    {pastEvents.slice(0, 3).map((event) => (
+                      <PastTimelineCard
+                        key={event.id}
+                        event={event}
+                        onClick={() => setSelectedEventId(event.id)}
+                      />
+                    ))}
+                  </div>
+                </li>
+              )}
 
               {/* ── Now line ── */}
-              {events.some(e => isAfter(getEventEndDate(e), now)) && (
+              {currentAndUpcomingEvents.length > 0 && (
                 <li ref={nowLineRef} className="py-0.5 select-none pointer-events-none" aria-hidden>
                   <div className="w-full flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)] animate-pulse shrink-0" />
@@ -421,7 +436,7 @@ export default function HomePage() {
               )}
 
               {/* Upcoming events */}
-              {events.filter(e => isAfter(getEventEndDate(e), now)).map((ev, i) => (
+              {currentAndUpcomingEvents.map((ev, i) => (
                 <TimelineRow
                   key={ev.id}
                   event={ev}
@@ -521,12 +536,69 @@ export default function HomePage() {
           />
         </div>
 
+        <Sheet
+          open={pastItemsOpen}
+          onClose={() => setPastItemsOpen(false)}
+          title={`Earlier today · ${pastEvents.length} ${pastEvents.length === 1 ? 'item' : 'items'}`}
+          showHandle
+          panelClassName="max-h-[85dvh]"
+        >
+          <div className="space-y-2">
+            {pastEvents.map((event) => (
+              <PastTimelineCard
+                key={event.id}
+                event={event}
+                onClick={() => {
+                  setPastItemsOpen(false)
+                  setSelectedEventId(event.id)
+                }}
+              />
+            ))}
+          </div>
+        </Sheet>
+
 
       </div>
 
       {/* ── Right panel (tablet only) ──────────────────────── */}
       <HomeRightPanel now={now} allTodayEvents={allTodayEvents ?? []} />
     </div>
+  )
+}
+
+function PastTimelineCard({ event, onClick }: { event: EventWithDetails; onClick: () => void }) {
+  const start = getEventStartDate(event)
+  const end = getEventEndDate(event)
+  const reminder = isTimedReminder(event)
+  const member = event.members[0]?.family_member
+
+  return (
+    <Card
+      interactive
+      padding="sm"
+      onClick={(clickEvent) => {
+        clickEvent.stopPropagation()
+        onClick()
+      }}
+      aria-label={`View ${cleanEventTitle(event.title)} details`}
+      className="flex min-h-control items-center gap-3 opacity-75"
+    >
+      <span className="flex size-control-sm shrink-0 items-center justify-center rounded-button bg-casa-bg text-casa-muted">
+        {reminder ? <Bell size={16} /> : <CheckCircle2 size={18} />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-body-sm font-semibold text-casa-text">
+          {cleanEventTitle(event.title)}
+        </span>
+        <span className="block truncate text-caption text-casa-muted">
+          {event.all_day ? 'All day' : `${format(start, 'h:mm a')} – ${format(end, 'h:mm a')}`}
+          {member?.name ? ` · ${member.name}` : ''}
+        </span>
+      </span>
+      <Text role="caption" muted className="shrink-0">
+        {reminder ? 'Reminder' : 'Ended'}
+      </Text>
+    </Card>
   )
 }
 

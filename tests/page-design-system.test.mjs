@@ -221,6 +221,17 @@ test('Home middle rail omits household availability pills', () => {
   assert.match(home, /<MiniPlayer \/>/)
 })
 
+test('Home condenses earlier appointments and reminders into three cards plus a full-history sheet', () => {
+  const home = readFileSync(resolve('src/pages/HomePage.tsx'), 'utf8')
+
+  assert.match(home, /pastEvents\.slice\(0, 3\)/)
+  assert.match(home, /View all \{pastEvents\.length\}/)
+  assert.match(home, /title=\{`Earlier today · \$\{pastEvents\.length\}/)
+  assert.match(home, /pastEvents\.map\(\(event\) =>/)
+  assert.match(home, /function PastTimelineCard/)
+  assert.doesNotMatch(home, /events\.filter\(e => isBefore\(getEventEndDate\(e\), now\)\)\.map/)
+})
+
 test('every Settings route is covered by the shared Settings surface contract', () => {
   const shell = readFileSync(resolve('src/components/settings/SettingsShell.tsx'), 'utf8')
   const styles = readFileSync(resolve('src/index.css'), 'utf8')
