@@ -20,3 +20,13 @@ for (const pagePath of PAGE_PATHS) {
     assert.doesNotMatch(source, /\brounded-pill\b/)
   })
 }
+
+test('Design System gallery documents both static and interactive pill contracts', () => {
+  const source = readFileSync(resolve('src/pages/DesignSystemGalleryPage.tsx'), 'utf8')
+  assert.match(source, />Static badges</)
+  assert.match(source, />Interactive action pills</)
+  assert.match(source, /<Chip>Suggested<\/Chip>/)
+  assert.match(source, /<Chip onClick=\{\.\.\.\}>Add item<\/Chip>/)
+  assert.match(source, /selected onClick=/)
+  assert.match(source, /onClick=\{\(\) => undefined\} disabled/)
+})

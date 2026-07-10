@@ -255,21 +255,42 @@ export default function DesignSystemGalleryPage() {
             <Text role="caption" muted className="mt-2">Tap an option or drag the thumb across two or more choices.</Text>
           </div>
         </div>
-        <div>
-          <Text role="caption" muted className="font-bold uppercase tracking-widest mb-2">Chips</Text>
-          <div className="flex flex-wrap gap-2">
-            <Chip>Static medium</Chip>
-            <Chip tone="accent" onClick={() => undefined}>Interactive medium</Chip>
-            <Chip tone="success">Success</Chip>
-            <Chip tone="info">Info</Chip>
-            <Chip tone="warning">Warning</Chip>
-            <Chip tone="danger">Danger</Chip>
-            <Chip tone="accent" selected onClick={() => undefined}>Selected filter</Chip>
+        <div className="space-y-3">
+          <div>
+            <Text role="caption" muted className="font-bold uppercase tracking-widest">Pills / Chips</Text>
+            <Text role="body-sm" muted className="mt-1">
+              One Chip component, with semantics determined by behavior. Matching sizes always share the same geometry.
+            </Text>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Chip size="sm">Static small</Chip>
-            <Chip size="sm" onClick={() => undefined}>Interactive small</Chip>
-            <Text role="caption" muted>Static and interactive chips share geometry at each size.</Text>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <Card tone="subtle" padding="sm">
+              <Heading role="heading">Static badges</Heading>
+              <Text role="body-sm" muted className="mt-1">
+                Read-only labels for status, counts, categories, or metadata. They render as text, not buttons.
+              </Text>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Chip size="sm">Small badge</Chip>
+                <Chip>Medium badge</Chip>
+                <Chip tone="success">Complete</Chip>
+                <Chip tone="info">Suggested</Chip>
+                <Chip tone="warning">Due soon</Chip>
+                <Chip tone="danger">Blocked</Chip>
+              </div>
+              <Text role="caption" muted className="mt-3 font-mono">{'<Chip>Suggested</Chip>'}</Text>
+            </Card>
+            <Card tone="surface" padding="sm">
+              <Heading role="heading">Interactive action pills</Heading>
+              <Text role="body-sm" muted className="mt-1">
+                Tappable filters or compact actions. They render as buttons and include pressed, focus, and disabled states.
+              </Text>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Chip size="sm" onClick={() => undefined}>Small action</Chip>
+                <Chip onClick={() => undefined}>Add item</Chip>
+                <Chip tone="accent" selected onClick={() => undefined}>Selected filter</Chip>
+                <Chip onClick={() => undefined} disabled>Disabled</Chip>
+              </div>
+              <Text role="caption" muted className="mt-3 font-mono">{'<Chip onClick={...}>Add item</Chip>'}</Text>
+            </Card>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
