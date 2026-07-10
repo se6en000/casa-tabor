@@ -24,7 +24,7 @@ import { eventOverlapsDay, getEventDisplayStartDay } from '../../utils/eventTime
 import type { FamilyMember } from '../../types'
 import { getPersistedPlanOverrides, resolveEventMode } from '../../lib/eventPlanOverrides'
 import { derivePlan } from '../../lib/eventCommandCenter'
-import { Button, Chip } from '../ui'
+import { Button, CalendarPill, Chip } from '../ui'
 
 const SHARED_COLOR = '#C9A96E'
 
@@ -436,19 +436,18 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
                     <div className="flex items-center justify-end gap-1">
                       <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted/75 leading-none">Going</span>
                       {visibleGoingMembers.map((member) => (
-                        <Chip
+                        <CalendarPill
                           key={member.id}
-                          size="sm"
-                          className="shrink-0 border-transparent text-white"
-                          style={{ backgroundColor: member.color_hex ?? '#888' }}
+                          color={member.color_hex ?? '#888'}
+                          className="shrink-0"
                         >
                           {member.name}
-                        </Chip>
+                        </CalendarPill>
                       ))}
                       {goingOverflowCount > 0 && (
-                        <Chip size="sm" className="shrink-0">
+                        <CalendarPill className="shrink-0">
                           +{goingOverflowCount}
-                        </Chip>
+                        </CalendarPill>
                       )}
                     </div>
                   )}
@@ -457,13 +456,12 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
                       <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted/75 leading-none">
                         {responsibilityChip.label}
                       </span>
-                      <Chip
-                        size="sm"
-                        className="shrink-0 border-transparent text-white"
-                        style={{ backgroundColor: responsibilityChip.person.color ?? '#888' }}
+                      <CalendarPill
+                        color={responsibilityChip.person.color ?? '#888'}
+                        className="shrink-0"
                       >
                         {responsibilityChip.person.name}
-                      </Chip>
+                      </CalendarPill>
                     </div>
                   )}
                 </div>
@@ -491,9 +489,9 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
                 </span>
               )}
               {category && (
-                <Chip size="sm">
+                <CalendarPill>
                   {category}
-                </Chip>
+                </CalendarPill>
               )}
               {snippet && (
                 <div className="flex items-center gap-1 text-caption text-casa-muted">

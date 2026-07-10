@@ -3,7 +3,7 @@ import { useState } from 'react'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { cleanEventTitle } from '../../utils/eventTitle'
-import { Button, Chip } from '../ui'
+import { Button, CalendarPill } from '../ui'
 
 interface ReminderEventCardProps {
   event: EventWithDetails
@@ -102,24 +102,20 @@ export default function ReminderEventCard({
       {members.length > 0 && (
         <div className="flex items-center gap-1 shrink-0">
           {primary && (
-           <Chip
-             size="sm"
-             className="border-transparent text-white"
-             style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
+           <CalendarPill
+             color={primary.family_member?.color_hex ?? '#888'}
              title={primary.family_member?.name ?? ''}
            >
              {primary.family_member?.name}
-           </Chip>
+           </CalendarPill>
           )}
           {others.slice(0, 1).map((m) => (
-           <Chip
+           <CalendarPill
              key={m.id}
-             size="sm"
-             className="border-transparent text-white"
-             style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
+             color={m.family_member?.color_hex ?? '#888'}
            >
              {m.family_member?.name}
-           </Chip>
+           </CalendarPill>
           ))}
         </div>
       )}

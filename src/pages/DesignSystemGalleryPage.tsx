@@ -7,6 +7,7 @@ import {
   Checkbox,
   Combobox,
   Card,
+  CalendarPill,
   Chip,
   DateTimeDial,
   DisclosureSection,
@@ -294,7 +295,7 @@ export default function DesignSystemGalleryPage() {
           <div>
             <Text role="caption" muted className="font-bold uppercase tracking-widest">Pills / Chips</Text>
             <Text role="body-sm" muted className="mt-1">
-              One Chip component, with semantics determined by behavior. Matching sizes always share the same geometry.
+              Chip covers touch-sized badges and actions. CalendarPill is the compact, read-only exception for dense schedules.
             </Text>
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -312,6 +313,14 @@ export default function DesignSystemGalleryPage() {
                 <Chip tone="danger">Blocked</Chip>
               </div>
               <Text role="caption" muted className="mt-3 font-mono">{'<Chip>Suggested</Chip>'}</Text>
+              <div className="mt-4 border-t border-casa-divider pt-3">
+                <Text role="caption" muted className="font-bold uppercase tracking-wide">Dense calendar metadata</Text>
+                <Text role="body-sm" muted className="mt-1">CalendarPill matches Day view labels and is read-only. Never use it for a tappable action.</Text>
+                <div className="mt-2 flex gap-2">
+                  <CalendarPill color="var(--color-casa-navy)">Jake</CalendarPill>
+                  <CalendarPill>+2</CalendarPill>
+                </div>
+              </div>
             </Card>
             <Card tone="surface" padding="sm">
               <Heading role="heading">Interactive action pills</Heading>

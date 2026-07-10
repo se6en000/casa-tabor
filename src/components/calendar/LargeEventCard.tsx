@@ -5,7 +5,7 @@ import { cn } from '../../utils/cn'
 import { WeatherIcon } from '../shared/WeatherIcon'
 import { getEventDisplayEnd, getMultiDayBoundaryLabel, isEventMultiDay, withColorAlpha } from '../../utils/eventTime'
 import { cleanEventTitle } from '../../utils/eventTitle'
-import { Chip } from '../ui'
+import { CalendarPill } from '../ui'
 
 interface LargeEventCardProps {
   event: EventWithDetails
@@ -85,32 +85,28 @@ export default function LargeEventCard({
             <div className="min-w-0 flex-1">
               <p className="font-body font-semibold text-casa-text text-heading leading-snug truncate">{cleanTitle}</p>
               {multiDay && (
-                <Chip size="sm" className="mt-1">
+                <CalendarPill className="mt-1">
                   Multi-day
-                </Chip>
+                </CalendarPill>
               )}
             </div>
             {members.length > 0 && (
               <div className="flex items-center gap-1 shrink-0 pt-0.5">
                 {primary && (
-                  <Chip
-                    size="sm"
-                    className="border-transparent text-white"
-                    style={{ backgroundColor: primary.family_member?.color_hex ?? '#888' }}
+                  <CalendarPill
+                    color={primary.family_member?.color_hex ?? '#888'}
                     title={ownerName}
                   >
                     {ownerName}
-                  </Chip>
+                  </CalendarPill>
                 )}
                 {others.slice(0, 3).map((m) => (
-                  <Chip
+                  <CalendarPill
                     key={m.id}
-                    size="sm"
-                    className="border-transparent text-white"
-                    style={{ backgroundColor: m.family_member?.color_hex ?? '#888' }}
+                    color={m.family_member?.color_hex ?? '#888'}
                   >
                     {m.family_member?.name}
-                  </Chip>
+                  </CalendarPill>
                 ))}
               </div>
             )}

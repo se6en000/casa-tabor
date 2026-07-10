@@ -17,6 +17,7 @@ import EventDetailPanel from './EventDetailPanel'
 import { WeatherIcon } from '../shared/WeatherIcon'
 import { LeaveByCard } from '../shared/LeaveByCard'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
+import { CalendarPill } from '../ui'
 import { differenceInDays } from 'date-fns'
 import { isHoliday, isReminder, isTimedReminder } from '../../utils/holidays'
 import { supabase } from '../../lib/supabase'
@@ -260,13 +261,12 @@ function DayEventCard({
             {event.members.length > 0 && (
               <div className="flex gap-1 ml-0.5">
                 {event.members.slice(0, 3).map((m) => (
-                  <span
+                  <CalendarPill
                     key={m.id}
-                    className="px-1.5 py-0.5 rounded-pill text-white text-[9px] font-bold leading-none whitespace-nowrap"
-                    style={{ backgroundColor: m.family_member?.color_hex ?? SHARED_GOLD }}
+                    color={m.family_member?.color_hex ?? SHARED_GOLD}
                   >
                     {m.family_member?.name}
-                  </span>
+                  </CalendarPill>
                 ))}
               </div>
             )}
@@ -351,18 +351,17 @@ function DayEventCard({
               {responsibility.attendees.length > 0 && (
                 <div className="flex items-center gap-1 shrink-0">
                   {responsibility.attendees.slice(0, 3).map((m) => (
-                    <span
+                    <CalendarPill
                       key={m.id}
-                      className="px-2 py-0.5 rounded-pill text-white text-caption font-bold leading-none whitespace-nowrap"
-                      style={{ backgroundColor: m.family_member?.color_hex ?? SHARED_GOLD }}
+                      color={m.family_member?.color_hex ?? SHARED_GOLD}
                     >
                       {m.family_member?.name}
-                    </span>
+                    </CalendarPill>
                   ))}
                   {responsibility.attendees.length > 3 && (
-                    <span className="px-1.5 py-0.5 rounded-pill bg-casa-bg text-casa-muted text-caption font-bold leading-none">
+                    <CalendarPill>
                       +{responsibility.attendees.length - 3}
-                    </span>
+                    </CalendarPill>
                   )}
                 </div>
               )}
