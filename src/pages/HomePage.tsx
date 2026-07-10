@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { format, isAfter, isBefore, addDays } from 'date-fns'
 import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion'
-import { ChevronLeft, ChevronRight, RefreshCw, MapPin, Clock, Navigation, Bell, Phone } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, RefreshCw, MapPin, Clock, Navigation, Bell, Phone } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
@@ -38,9 +38,10 @@ import {
 import { getEventEndDate, getEventStartDate } from '../utils/eventTime'
 import { formatDurationLabel, pickActiveHeroEvent, resolveRestingIndex } from '../lib/heroFocus.mjs'
 import { cleanEventTitle, isBirthdayEvent } from '../utils/eventTitle'
-import { chipClassName } from '../design-system/variants.mjs'
+import { buttonClassName } from '../design-system/variants.mjs'
+import { Button, CalendarPill, Card, Chip, EmptyState, Heading, IconButton, Text } from '../components/ui'
 
-const SHARED_GOLD = '#C9A96E'
+const SHARED_GOLD = 'var(--color-casa-gold)'
 
 function mapsUrlForEvent(event: EventWithDetails): string | null {
   const mapsQuery = event.address
@@ -146,7 +147,11 @@ export default function HomePage() {
   const now = useLiveClock(15_000)
   const { data: family } = useFamilyMembers()
   const { data: allTodayEvents, isLoading } = useTodayEvents(now)
-  const tomorrow = useMemo(() => addDays(now, 1), [now.toDateString()])
+  const currentDateKey = format(now, 'yyyy-MM-dd')
+  const tomorrow = useMemo(
+    () => addDays(new Date(`${currentDateKey}T12:00:00`), 1),
+    [currentDateKey],
+  )
   const { data: allTomorrowEvents } = useTodayEvents(tomorrow)
   const { visibleMembers, toggleMember } = useCalendarStore()
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
@@ -349,7 +354,11 @@ export default function HomePage() {
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
-    try { navigator.vibrate?.(15) } catch (_) {}
+    try {
+      navigator.vibrate?.(15)
+    } catch {
+      // Vibration is optional and may be blocked by the browser.
+    }
     // Pull-to-refresh always runs AI (manual user action) and resets cooldown
     markAIRan()
     await supabase.functions.invoke('orchestrate-household', {}).catch(() => {})
@@ -361,7 +370,11 @@ export default function HomePage() {
     ])
     await new Promise(r => setTimeout(r, 600))
     setRefreshing(false)
-    try { navigator.vibrate?.(10) } catch (_) {}
+    try {
+      navigator.vibrate?.(10)
+    } catch {
+      // Vibration is optional and may be blocked by the browser.
+    }
   }, [qc])
 
   const ptrRef = usePullToRefresh({
@@ -418,7 +431,7 @@ export default function HomePage() {
         {/* ── Today's timeline — first, front and center ──── */}
         <section className="mt-2">
           <div className="flex items-baseline justify-between mb-3">
-            <h2 className="font-display text-heading text-casa-navy">Today</h2>
+            <Heading role="heading">Today</Heading>
             <Link
               to="/calendar"
               className="text-body-sm text-casa-muted hover:text-casa-navy flex items-center gap-0.5"
@@ -428,13 +441,9 @@ export default function HomePage() {
           </div>
 
           {isLoading ? (
-            <div className="text-casa-muted text-body animate-breathe py-8 text-center">
-              Loading…
-            </div>
+            <Text role="body" muted className="animate-breathe py-8 text-center">Loading…</Text>
           ) : events.length === 0 ? (
-            <div className="bg-casa-surface rounded-card border border-casa-border p-8 text-center text-casa-muted text-body">
-              Nothing scheduled. Enjoy the quiet.
-            </div>
+            <EmptyState title="Nothing scheduled" description="Enjoy the quiet." />
           ) : (
             <ol className="space-y-2">
               {/* Past events */}
@@ -512,9 +521,9 @@ export default function HomePage() {
               transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
             >
               <div className="flex items-baseline justify-between mb-3">
-                <h2 className="font-display text-heading text-casa-navy">
+                <Heading role="heading">
                   Tomorrow · {format(tomorrow, 'EEEE, MMM d')}
-                </h2>
+                </Heading>
               </div>
               <ol className="space-y-2">
                 {tomorrowEvents.map((ev, i) => (
@@ -569,16 +578,11 @@ export default function HomePage() {
               const active = visibleMembers.length === 0 || visibleMembers.includes(m.id)
               const status = familyStatusByMember.get(m.id)
               return (
-                <button
+                <Chip
                   key={m.id}
                   onClick={() => toggleMember(m.id)}
-                  className={cn(
-                    chipClassName({ tone: 'neutral', interactive: true, selected: active }),
-                    'min-w-0',
-                    active
-                      ? 'bg-casa-surface border-casa-border shadow-card'
-                      : 'bg-transparent border-casa-divider hover:bg-casa-surface/50',
-                  )}
+                  selected={active}
+                  className={cn('min-w-0', !active && 'opacity-65')}
                 >
                   <span
                     className="w-3 h-3 rounded-full transition-opacity"
@@ -594,7 +598,7 @@ export default function HomePage() {
                     'w-2 h-2 rounded-full shrink-0',
                     !active ? 'bg-casa-muted/30' : status?.busy || status?.constrained ? 'bg-amber-400' : 'bg-emerald-400',
                   )} />
-                </button>
+                </Chip>
               )
             })}
           </div>
@@ -851,18 +855,13 @@ function HeroCarousel({
 
       {multi && (
         <div className="flex items-center justify-center gap-3 mt-3">
-          <button
-            type="button"
+          <IconButton
             onClick={() => goTo(safeIndex - 1)}
             disabled={safeIndex === 0}
             aria-label="Previous event"
-            className={cn(
-              'grid place-items-center h-8 w-8 rounded-full bg-casa-navy/10 text-casa-navy transition hover:bg-casa-navy/20',
-              safeIndex === 0 ? 'opacity-30 pointer-events-none' : 'opacity-100',
-            )}
-          >
-            <ChevronLeft size={18} />
-          </button>
+            variant="secondary"
+            icon={<ChevronLeft size={18} />}
+          />
           <div className="flex items-center gap-1.5">
             {slides.map((s, i) => (
               <button
@@ -871,25 +870,22 @@ function HeroCarousel({
                 onClick={() => goTo(i)}
                 aria-label={`Go to event ${i + 1} of ${slides.length}`}
                 aria-current={i === safeIndex}
-                className={cn(
-                  'h-1.5 rounded-full transition-all',
-                  i === safeIndex ? 'w-6 bg-casa-gold' : 'w-1.5 bg-casa-navy/25 hover:bg-casa-navy/45',
-                )}
-              />
+                className="size-control-sm rounded-full outline-none focus-visible:ring-2 focus-visible:ring-casa-gold"
+              >
+                <span className={cn(
+                  'mx-auto block h-1.5 rounded-full transition-all',
+                  i === safeIndex ? 'w-6 bg-casa-gold' : 'w-1.5 bg-casa-navy/25',
+                )} />
+              </button>
             ))}
           </div>
-          <button
-            type="button"
+          <IconButton
             onClick={() => goTo(safeIndex + 1)}
             disabled={safeIndex === slides.length - 1}
             aria-label="Next event"
-            className={cn(
-              'grid place-items-center h-8 w-8 rounded-full bg-casa-navy/10 text-casa-navy transition hover:bg-casa-navy/20',
-              safeIndex === slides.length - 1 ? 'opacity-30 pointer-events-none' : 'opacity-100',
-            )}
-          >
-            <ChevronRight size={18} />
-          </button>
+            variant="secondary"
+            icon={<ChevronRight size={18} />}
+          />
         </div>
       )}
     </div>
@@ -1020,7 +1016,7 @@ function DesktopHeroCard({
 
   return (
     <section className="relative h-full" onClick={(e) => e.stopPropagation()}>
-      <div className="relative h-full rounded-[22px] border border-casa-navy/30 bg-casa-navy text-white shadow-card p-7 grid grid-cols-[1fr_420px] gap-8 overflow-hidden">
+      <div className="relative h-full rounded-modal border border-casa-navy/30 bg-casa-navy text-white shadow-card p-7 grid grid-cols-[1fr_420px] gap-8 overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/8 via-transparent to-black/10" />
         {isBirthday && <BirthdayCardDecoration className="opacity-60" />}
         <div className="relative z-10 min-w-0 flex flex-col">
@@ -1045,7 +1041,7 @@ function DesktopHeroCard({
                 href={mapsUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="h-12 px-7 rounded-button bg-casa-gold text-casa-navy font-semibold text-body flex items-center justify-center gap-2 whitespace-nowrap hover:brightness-110 transition-all border border-casa-gold/50"
+                className={buttonClassName({ size: 'lg' })}
               >
                 <Navigation size={18} />
                 Get directions
@@ -1053,23 +1049,22 @@ function DesktopHeroCard({
             ) : telUrl ? (
               <a
                 href={telUrl}
-                className="h-12 px-7 rounded-button bg-casa-gold text-casa-navy font-semibold text-body flex items-center justify-center gap-2 whitespace-nowrap hover:brightness-110 transition-all border border-casa-gold/50"
+                className={buttonClassName({ size: 'lg' })}
               >
                 <Phone size={18} />
                 {contactName ? `Call ${contactName.split(' ')[0]}` : 'Call'}
               </a>
             ) : null}
-            <button
+            <Button
               onClick={() => onViewDetails(focusEvent)}
+              size="lg"
+              variant={mapsUrl || telUrl ? 'secondary' : 'primary'}
               className={cn(
-                'h-12 px-7 rounded-button font-semibold text-body whitespace-nowrap transition-all',
-                mapsUrl || telUrl
-                  ? 'border border-white/25 bg-gradient-to-b from-white/6 to-white/[0.03] text-white hover:from-white/12 hover:to-white/[0.06]'
-                  : 'bg-casa-gold text-casa-navy border border-casa-gold/50 hover:brightness-110',
+                mapsUrl || telUrl ? 'border-white/25 bg-white/10 text-white hover:bg-white/15' : '',
               )}
             >
               View details
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -1099,14 +1094,10 @@ function DesktopHeroCard({
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-5">
               <p className="font-display text-display-md leading-none !text-white">{ringValue}</p>
               <p className="mt-2 text-caption tracking-[0.12em] text-white/72">{ringLabel}</p>
-              <span className={cn(
-                chipClassName({ size: 'sm' }),
-                'mt-2.5',
-                heroStatusClasses(status.tone),
-              )}>
+              <Chip size="sm" className={cn('mt-2.5', heroStatusClasses(status.tone))}>
                 <span className="h-2 w-2 rounded-full bg-current opacity-85" />
                 {status.label}
-              </span>
+              </Chip>
             </div>
           </div>
         </div>
@@ -1211,41 +1202,36 @@ function TimelineRow({
         className="cursor-pointer"
         onClick={e => { e.stopPropagation(); onClick() }}
       >
-        <div
-          className="relative w-full overflow-hidden rounded-card border border-casa-accent-soft-border bg-casa-accent-subtle px-4 py-2.5"
-        >
+        <Card tone="accent" padding="sm" className="relative w-full overflow-hidden pl-5">
           <span className="absolute left-0 top-0 bottom-0 w-[8px] rounded-l-card bg-casa-warning" />
           <div className="flex items-center gap-2 pl-1 text-caption font-semibold text-casa-top-pick-band">
-            <button
+            <IconButton
               onClick={handleCheck}
               disabled={checking || snoozing || movingToNeedsYou}
-              className={`shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
-                checking ? 'bg-green-500 border-green-500' : 'border-casa-accent-soft-border hover:border-casa-success bg-transparent'
-              }`}
+              variant={checking ? 'primary' : 'secondary'}
+              size="sm"
+              icon={<Check size={16} />}
+              aria-label="Mark reminder done"
               title="Mark done"
-            >
-              {checking && (
-                <svg width="8" height="6" viewBox="0 0 9 7" fill="none">
-                  <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              )}
-            </button>
-            <button
+            />
+            <IconButton
               onClick={handleSnooze}
               disabled={checking || snoozing || movingToNeedsYou || !onSnooze}
-              className="shrink-0 w-5 h-5 rounded border border-casa-accent-soft-border bg-white/80 text-casa-muted hover:text-casa-text hover:bg-white transition-colors inline-flex items-center justify-center disabled:opacity-40"
+              variant="secondary"
+              size="sm"
+              icon={<SnoozeOneHourIcon className={cn('size-4', snoozing && 'animate-pulse')} />}
+              aria-label="Snooze reminder one hour"
               title="Snooze 1 hour"
-            >
-              <SnoozeOneHourIcon className={cn('w-3 h-3', snoozing && 'animate-pulse')} />
-            </button>
-            <button
+            />
+            <IconButton
               onClick={handleMoveToNeedsYou}
               disabled={checking || snoozing || movingToNeedsYou || !onSendToNeedsYou}
-              className="shrink-0 w-5 h-5 rounded border border-casa-accent-soft-border bg-white/80 text-casa-muted hover:text-casa-text hover:bg-white transition-colors inline-flex items-center justify-center disabled:opacity-40"
+              variant="secondary"
+              size="sm"
+              icon={<NeedsYouTransferIcon className={cn('size-4', movingToNeedsYou && 'animate-pulse')} />}
+              aria-label="Move reminder to Needs you"
               title="Move to Needs you"
-            >
-              <NeedsYouTransferIcon className={cn('w-3 h-3', movingToNeedsYou && 'animate-pulse')} />
-            </button>
+            />
             <Bell size={13} className="shrink-0 text-casa-warning" />
             <span className="text-casa-muted tabular-nums">
               {format(start, 'h:mm a')}
@@ -1254,18 +1240,17 @@ function TimelineRow({
             {event.members.length > 0 && (
               <div className="flex gap-1 ml-0.5">
                 {event.members.slice(0, 3).map((m) => (
-                  <span
+                  <CalendarPill
                     key={m.id}
-                    className={cn(chipClassName({ size: 'sm' }), 'border-transparent text-white')}
-                    style={{ backgroundColor: m.family_member?.color_hex ?? SHARED_GOLD }}
+                    color={m.family_member?.color_hex ?? SHARED_GOLD}
                   >
                     {m.family_member?.name}
-                  </span>
+                  </CalendarPill>
                 ))}
               </div>
             )}
           </div>
-        </div>
+        </Card>
       </motion.li>
     )
   }
@@ -1276,12 +1261,23 @@ function TimelineRow({
       animate={{ opacity: past ? 0.45 : 1, x: 0 }}
       transition={{ duration: 0.3, delay: index * 0.04 }}
       className="cursor-pointer"
+      role="button"
+      tabIndex={0}
       onClick={e => { e.stopPropagation(); onClick() }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick()
+        }
+      }}
     >
-      <div className={cn(
-        'relative w-full min-w-0 overflow-hidden rounded-card border border-casa-border px-4 py-3 shadow-card',
-        isBirthday ? 'bg-gradient-to-br from-[#FDF1F6] via-casa-surface to-[#FFFBEE]' : 'bg-casa-surface',
-      )}>
+      <Card
+        padding="sm"
+        className={cn(
+          'relative w-full min-w-0 overflow-hidden pl-5',
+          isBirthday && 'bg-gradient-to-br from-casa-accent-subtle via-casa-surface to-casa-bg',
+        )}
+      >
         {isBirthday && <BirthdayCardDecoration />}
         <span
           className={cn('absolute left-0 top-0 bottom-0 w-[12px] rounded-l-card', happening && 'animate-pulse-gold')}
@@ -1344,18 +1340,17 @@ function TimelineRow({
               {responsibility.attendees.length > 0 && (
                 <div className="flex items-center gap-1 shrink-0">
                   {responsibility.attendees.slice(0, 3).map((m) => (
-                    <span
+                    <CalendarPill
                       key={m.id}
-                      className={cn(chipClassName({ size: 'sm' }), 'border-transparent text-white')}
-                      style={{ backgroundColor: m.family_member?.color_hex ?? SHARED_GOLD }}
+                      color={m.family_member?.color_hex ?? SHARED_GOLD}
                     >
                       {m.family_member?.name}
-                    </span>
+                    </CalendarPill>
                   ))}
                   {responsibility.attendees.length > 3 && (
-                    <span className={chipClassName({ size: 'sm' })}>
+                    <CalendarPill>
                       +{responsibility.attendees.length - 3}
-                    </span>
+                    </CalendarPill>
                   )}
                 </div>
               )}
@@ -1396,7 +1391,7 @@ function TimelineRow({
             )}
           </div>
         </div>
-      </div>
+      </Card>
     </motion.li>
   )
 }

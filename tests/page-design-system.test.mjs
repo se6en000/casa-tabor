@@ -194,3 +194,21 @@ test('Cook mode, unit, and quantity selectors use shared toggle controls', () =>
   assert.match(cook, /aria-label="Recipe quantity scale"/)
   assert.match(cook, /type RecipeScale = '0\.5' \| '1' \| '2'/)
 })
+
+test('Home and its right rail use shared touch-first design contracts', () => {
+  const home = readFileSync(resolve('src/pages/HomePage.tsx'), 'utf8')
+  const rightRail = readFileSync(resolve('src/components/home/HomeRightPanel.tsx'), 'utf8')
+
+  for (const component of ['Button', 'CalendarPill', 'Card', 'Chip', 'EmptyState', 'Heading', 'IconButton', 'Text']) {
+    assert.match(home, new RegExp(`<${component}`))
+  }
+  for (const component of ['Button', 'Card', 'Chip', 'EmptyState', 'Heading', 'IconButton', 'Text']) {
+    assert.match(rightRail, new RegExp(`<${component}`))
+  }
+  assert.match(home, /aria-label="Previous event"/)
+  assert.match(home, /aria-label="Snooze reminder one hour"/)
+  assert.match(home, /size-control-sm rounded-full/)
+  assert.match(rightRail, /min-h-control rounded-button/)
+  assert.doesNotMatch(home, /const SHARED_GOLD = '#/)
+  assert.doesNotMatch(rightRail, /text-\[\d+(?:\.\d+)?(?:px|rem|em)\]/)
+})
