@@ -52,7 +52,13 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
   const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; mimeType: string } | null>(null)
   const [nudgeDismissed, setNudgeDismissed] = useState(false)
   const [conversationMode, setConversationMode] = useState<boolean>(() => {
-    try { return localStorage.getItem(CONVERSATION_MODE_KEY) === '1' } catch { return false }
+    // Conversational by default: opening the assistant starts listening and
+    // re-arms between turns until dismissed. Users can opt into press-to-talk
+    // via the Convo toggle (persisted).
+    try {
+      const stored = localStorage.getItem(CONVERSATION_MODE_KEY)
+      return stored === null ? true : stored === '1'
+    } catch { return true }
   })
   const conversationModeRef = useRef(conversationMode)
   useEffect(() => {
@@ -285,8 +291,10 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
       }, NO_ACTIVITY_AUTO_CLOSE_MS)
       if (IS_SAFE_MODE) return
       // Auto-start mic when opened by wake word, or when hands-free conversation
-      // mode is enabled — otherwise the user taps the mic button (press-to-talk).
-      if (launchContext?.source === 'wake_word' || conversationModeRef.current) {
+      // mode is enabled (the default) — otherwise the user taps the mic button
+      // (press-to-talk). Skip auto-start for text-first opens that pre-fill a
+      // prompt for the user to review, so the mic doesn't fight the typed text.
+      if ((launchContext?.source === 'wake_word' || conversationModeRef.current) && !launchContext?.prompt) {
         speech.start()
       }
       // Focus textarea slightly after animation settles (UI only, doesn't affect mic)

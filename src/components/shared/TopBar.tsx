@@ -1,6 +1,6 @@
 import { useMemo, useRef } from 'react'
 import { format, isAfter, isBefore } from 'date-fns'
-import { Cloud, Sparkles, ImageIcon } from 'lucide-react'
+import { Cloud, Sparkles, ImageIcon, Mic } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useLiveClock, greetingFor } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
@@ -134,19 +134,23 @@ export function TopBarC() {
               }}
               animate={{
                 boxShadow: [
-                  '0 0 0 0px rgba(201,169,110,0.5), 0 0 6px rgba(201,169,110,0.3)',
-                  '0 0 0 4px rgba(201,169,110,0.0), 0 0 8px rgba(201,169,110,0.4)',
-                  '0 0 0 0px rgba(201,169,110,0.5), 0 0 6px rgba(201,169,110,0.3)',
+                  '0 0 5px rgba(201,169,110,0.18)',
+                  '0 0 9px rgba(201,169,110,0.32)',
+                  '0 0 5px rgba(201,169,110,0.18)',
                 ],
               }}
-              transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+              transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
               className={cn(
-                'w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
-                'bg-casa-gold/20 hover:bg-casa-gold/40 text-casa-gold',
+                'relative w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
+                'bg-casa-gold/15 hover:bg-casa-gold/30 text-casa-gold',
               )}
-              title="Ask AI"
+              title="Talk to Casa AI"
+              aria-label="Talk to Casa AI"
             >
               <Sparkles size={15} strokeWidth={1.8} />
+              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-casa-gold text-casa-navy flex items-center justify-center ring-2 ring-casa-navy">
+                <Mic size={7} strokeWidth={2.5} />
+              </span>
             </motion.button>
           )
         })()}
