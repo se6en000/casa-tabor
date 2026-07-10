@@ -1,0 +1,12 @@
+// Phase 2 shared UI primitives — see src/pages/DesignSystemGalleryPage.tsx
+// for a live rendering of every state, and src/design-system/variants.mjs
+// for the pure (framework-free) class-name logic behind each variant.
+export { Button, type ButtonProps } from './Button'
+export { IconButton, type IconButtonProps } from './IconButton'
+export { Card, type CardProps } from './Card'
+export { Chip, type ChipProps } from './Chip'
+export { Field, Input, Select, Textarea, type FieldProps, type InputProps, type SelectProps, type TextareaProps } from './Field'
+export { Modal, type ModalProps } from './Modal'
+export { Sheet, type SheetProps } from './Sheet'
+export { PageShell, type PageShellProps } from './PageShell'
+export { Heading, Text, type HeadingProps, type TextProps, type HeadingRole, type TextRole } from './Typography'

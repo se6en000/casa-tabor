@@ -2,6 +2,20 @@ import { useEffect, useMemo, useState } from 'react'
 import { Type, Palette, Ruler, Layers, Smartphone, Tablet, Monitor, CheckCircle2 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { DEVICE_MATRIX, closestDeviceProfile } from '../lib/deviceMatrix.mjs'
+import {
+  Button,
+  Card,
+  Chip,
+  Field,
+  Heading,
+  IconButton,
+  Input,
+  Modal,
+  PageShell,
+  Sheet,
+  Text,
+  Textarea,
+} from '../components/ui'
 
 // ── Internal-only Design System Gallery ─────────────────────────────────────
 // Renders the canonical Casa Tabor tokens (typography, color,
@@ -108,6 +122,8 @@ function useViewport() {
 
 export default function DesignSystemGalleryPage() {
   const { width, height, isFinePointer } = useViewport()
+  const [modalOpen, setModalOpen] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
   const density = document.documentElement.dataset.density ?? 'touch'
   const closest = useMemo(
     () => closestDeviceProfile(width, height, isFinePointer ? 'fine-pointer' : 'touch'),
@@ -209,26 +225,79 @@ export default function DesignSystemGalleryPage() {
         </p>
       </div>
 
-      {/* ── Representative states (existing classes only) ── */}
+      {/* ── Shared primitives ── */}
       <div className="rounded-card border border-casa-border bg-casa-surface p-4 space-y-4">
-        <SectionHeader icon={CheckCircle2} title="Representative states" desc="Existing utility classes only — no new shared primitives (Phase 2 scope)." />
+        <SectionHeader icon={CheckCircle2} title="Shared primitives" desc="Production components from src/components/ui with density-aware sizing and accessible states." />
+        <div>
+          <Text role="caption" muted className="font-bold uppercase tracking-widest mb-2">Buttons</Text>
+          <div className="flex flex-wrap gap-3">
+            <Button>Primary</Button>
+            <Button variant="secondary">Secondary</Button>
+            <Button variant="ghost">Ghost</Button>
+            <Button variant="danger">Danger</Button>
+            <Button loading>Loading</Button>
+            <Button disabled>Disabled</Button>
+            <IconButton icon={<CheckCircle2 size={18} />} aria-label="Confirm example" variant="secondary" />
+          </div>
+        </div>
+        <div>
+          <Text role="caption" muted className="font-bold uppercase tracking-widest mb-2">Chips</Text>
+          <div className="flex flex-wrap gap-2">
+            <Chip>Neutral</Chip>
+            <Chip tone="accent">Accent</Chip>
+            <Chip tone="success">Success</Chip>
+            <Chip tone="info">Info</Chip>
+            <Chip tone="warning">Warning</Chip>
+            <Chip tone="danger">Danger</Chip>
+            <Chip tone="accent" selected onClick={() => undefined}>Selected filter</Chip>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Card>
+            <Heading role="heading">Surface card</Heading>
+            <Text role="body-sm" muted>Default elevation and border.</Text>
+          </Card>
+          <Card tone="subtle">
+            <Heading role="heading">Subtle card</Heading>
+            <Text role="body-sm" muted>Low-emphasis grouping.</Text>
+          </Card>
+          <Card tone="accent" interactive onClick={() => undefined}>
+            <Heading role="heading">Interactive card</Heading>
+            <Text role="body-sm" muted>Keyboard and pointer activation.</Text>
+          </Card>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+          <Field label="Household item" hint="Hint and label wiring are automatic.">
+            <Input placeholder="Type an item" />
+          </Field>
+          <Field label="Invalid example" error="This field needs a value.">
+            <Input placeholder="Required value" />
+          </Field>
+          <Field label="Notes" className="md:col-span-2">
+            <Textarea rows={2} placeholder="Add helpful context" />
+          </Field>
+        </div>
         <div className="flex flex-wrap gap-3">
-          <button className="min-h-control px-4 rounded-button bg-casa-gold text-white text-body-sm font-medium">Primary</button>
-          <button className="min-h-control px-4 rounded-button border border-casa-border bg-casa-surface text-casa-navy text-body-sm font-medium">Secondary</button>
-          <button disabled className="min-h-control px-4 rounded-button bg-casa-gold text-white text-body-sm font-medium opacity-40 cursor-not-allowed">Disabled</button>
-          <span className="min-h-[28px] px-3 inline-flex items-center rounded-pill bg-casa-success-soft text-casa-success-strong text-caption font-semibold">Success badge</span>
-          <span className="min-h-[28px] px-3 inline-flex items-center rounded-pill bg-casa-info-soft text-casa-info-strong text-caption font-semibold">Info badge</span>
+          <Button variant="secondary" onClick={() => setModalOpen(true)}>Open modal</Button>
+          <Button variant="secondary" onClick={() => setSheetOpen(true)}>Open sheet</Button>
         </div>
-        <input
-          placeholder="Text input (rounded-button, casa-border)"
-          className="w-full max-w-sm rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm min-h-control"
-          readOnly
-        />
-        <div className="rounded-card border border-casa-border bg-casa-surface shadow-card p-3 max-w-sm">
-          <p className="text-body-sm font-medium text-casa-navy">Card (shadow-card, rounded-card)</p>
-          <p className="text-caption text-casa-muted">Matches conventions used across Settings and Home.</p>
-        </div>
+        <PageShell
+          title="Page shell example"
+          subtitle="Consistent page gutters and section rhythm."
+          className="max-w-none rounded-card border border-dashed border-casa-border bg-casa-bg"
+        >
+          <Text role="body-sm">Page content aligns to the shared responsive grid.</Text>
+        </PageShell>
       </div>
+
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Accessible modal">
+        <Text role="body-sm" muted>Focus is trapped, Escape closes, and focus returns to the trigger.</Text>
+        <Button className="mt-4" fullWidth onClick={() => setModalOpen(false)}>Done</Button>
+      </Modal>
+      <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Accessible sheet">
+        <Text role="body-sm" muted>The sheet shares the same focus, dismissal, and layering contract.</Text>
+        <Button className="mt-4" fullWidth onClick={() => setSheetOpen(false)}>Done</Button>
+      </Sheet>
 
       {/* ── Validation matrix ── */}
       <div className="rounded-card border border-casa-border bg-casa-surface p-4 space-y-4">
