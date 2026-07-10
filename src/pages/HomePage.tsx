@@ -409,7 +409,7 @@ export default function HomePage() {
                       </Button>
                     )}
                   </div>
-                  <div className="space-y-2">
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                     {pastEvents.slice(0, 3).map((event) => (
                       <PastTimelineCard
                         key={event.id}

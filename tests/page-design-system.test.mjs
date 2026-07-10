@@ -225,6 +225,7 @@ test('Home condenses earlier appointments and reminders into three cards plus a 
   const home = readFileSync(resolve('src/pages/HomePage.tsx'), 'utf8')
 
   assert.match(home, /pastEvents\.slice\(0, 3\)/)
+  assert.match(home, /grid grid-cols-1 gap-2 md:grid-cols-3/)
   assert.match(home, /View all \{pastEvents\.length\}/)
   assert.match(home, /title=\{`Earlier today · \$\{pastEvents\.length\}/)
   assert.match(home, /pastEvents\.map\(\(event\) =>/)
