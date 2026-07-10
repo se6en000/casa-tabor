@@ -8,6 +8,8 @@ import {
   Combobox,
   Card,
   Chip,
+  DateTimeDial,
+  DisclosureSection,
   EmptyState,
   Field,
   Heading,
@@ -140,6 +142,8 @@ export default function DesignSystemGalleryPage() {
   const [radio, setRadio] = useState('first')
   const [comboValue, setComboValue] = useState('produce')
   const [toastOpen, setToastOpen] = useState(false)
+  const [dialStart, setDialStart] = useState('2026-07-10T15:00')
+  const [dialEnd, setDialEnd] = useState('2026-07-10T16:00')
   const density = document.documentElement.dataset.density ?? 'touch'
   const closest = useMemo(
     () => closestDeviceProfile(width, height, isFinePointer ? 'fine-pointer' : 'touch'),
@@ -256,6 +260,21 @@ export default function DesignSystemGalleryPage() {
             <Button disabled>Disabled</Button>
             <IconButton icon={<CheckCircle2 size={18} />} aria-label="Confirm example" variant="secondary" />
           </div>
+          <Card padding="sm">
+            <Heading role="heading">Progressive event editing</Heading>
+            <Text role="body-sm" muted className="mb-3">Use compact summaries for scanning, then reveal touch dials or optional fields only when needed.</Text>
+            <DateTimeDial
+              startValue={dialStart}
+              endValue={dialEnd}
+              onStartChange={setDialStart}
+              onEndChange={setDialEnd}
+            />
+            <DisclosureSection title="Additional details" summary="Pickup · 2 completed" className="mt-3 rounded-card border border-casa-border">
+              <Field label="Notes">
+                <Textarea rows={2} placeholder="Optional details" />
+              </Field>
+            </DisclosureSection>
+          </Card>
           <div>
             <Text role="caption" muted className="font-bold uppercase tracking-widest mb-2">Sliding segmented control</Text>
             <SegmentedControl

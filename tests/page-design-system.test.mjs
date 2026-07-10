@@ -107,3 +107,17 @@ test('inline calendar uses density-aware controls and semantic layering', () => 
   assert.doesNotMatch(source, /\bh-8\b/)
   assert.doesNotMatch(source, /z-\[\d+\]/)
 })
+
+test('event editor uses shared progressive disclosure and date-time dials', () => {
+  const editor = readFileSync(resolve('src/components/calendar/EventEditSheet.tsx'), 'utf8')
+  const quickCreate = readFileSync(resolve('src/components/shared/QuickCreateSheet.tsx'), 'utf8')
+  const exports = readFileSync(resolve('src/components/ui/index.ts'), 'utf8')
+  assert.match(editor, /<DateTimeDial/)
+  assert.match(editor, /<DisclosureSection/)
+  assert.match(editor, /<FormSummaryCard/)
+  assert.doesNotMatch(editor, /type="datetime-local"/)
+  assert.match(quickCreate, /<DateTimeDial/)
+  assert.match(exports, /export \{ DateTimeDial/)
+  assert.match(exports, /export \{ DisclosureSection/)
+  assert.match(exports, /export \{ FormSummaryCard/)
+})

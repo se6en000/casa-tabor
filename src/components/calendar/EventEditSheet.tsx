@@ -20,6 +20,9 @@ import {
   Alert,
   Button,
   Chip,
+  DateTimeDial,
+  DisclosureSection,
+  FormSummaryCard,
   IconButton,
   Input,
   Modal,
@@ -193,7 +196,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   const locationRef = useRef<HTMLDivElement>(null)
   const { data: savedPlaces = [] } = useSavedPlaces()
   const [displayTitle, setDisplayTitle] = useState(event.title)
-  const titleRef = useRef<HTMLTextAreaElement>(null)
+  const titleRef = useRef<HTMLInputElement>(null)
   const [extraContext, setExtraContext] = useState('')
   const [enrichStatus, setEnrichStatus] = useState<EnrichStatus>('idle')
   const [enrichMessage, setEnrichMessage] = useState('')
@@ -286,7 +289,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   // memberRoles: id → 'primary' | 'attendee' | undefined (undefined = not tagged)
   const [memberRoles, setMemberRoles] = useState<Record<string, 'primary' | 'attendee'>>({})
 
-  // Date/time state — stored as local datetime strings for input[type=datetime-local]
+  // Date/time state uses local datetime strings shared by the touch dial.
   const toLocalDT = (iso: string, allDay = false) => {
     if (allDay) {
       const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
@@ -299,6 +302,15 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   const [startDT, setStartDT] = useState(toLocalDT(event.start_time, event.all_day))
   const [endDT, setEndDT] = useState(toLocalDT(event.end_time, event.all_day))
   const fields = getFieldsForCategory(category)
+  const scheduleSummary = (() => {
+    const start = new Date(startDT)
+    const end = new Date(endDT)
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 'Choose a date and time'
+    const day = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).format(start)
+    if (isAllDay) return `${day} · All day`
+    const time = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' })
+    return `${day} · ${time.format(start)}–${time.format(end)}`
+  })()
 
   function buildForm(enrichment: typeof enr, fieldList: EnrichmentFieldKey[]) {
     const out: Record<string, string> = {}
@@ -851,15 +863,17 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                 </div>
               </div>
               {/* Full-width touch-friendly title input */}
-              <Textarea
+              <Input
                 ref={titleRef}
                 value={displayTitle}
                 onChange={e => { setDisplayTitle(e.target.value); markDirty() }}
-                rows={2}
-                className="font-display text-heading leading-snug"
+                className="font-display text-heading"
                 placeholder="Event title…"
                 style={{ touchAction: 'manipulation' }}
               />
+              <p className="mt-2 truncate text-body-sm text-casa-muted">
+                {scheduleSummary}{location ? ` · ${location}` : ''}
+              </p>
             </div>
 
             {/* Form */}
@@ -896,11 +910,12 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                 )}
               </div>
 
-              {/* ── AI Re-enrich (always first) ── */}
-              <div className="px-6 pt-5 pb-4 border-b border-casa-divider bg-casa-bg/40">
-                <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">
-                  AI Re-enrich
-                </label>
+              <DisclosureSection
+                title="AI tools"
+                summary={extraContext ? 'Context ready to apply' : 'Optional re-enrichment context'}
+                icon={<Sparkles size={18} />}
+                className="bg-casa-bg/40"
+              >
                 {/* Textarea + mic + enrich button inline */}
                 <div className="flex items-start gap-2">
                   <Textarea
@@ -946,7 +961,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </div>
+              </DisclosureSection>
 
               {/* ── Family members ── */}
               {allMembers.length > 0 && (
@@ -1014,7 +1029,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                   />
                 </div>
 
-                {/* Date/time pickers — collapse time when all-day */}
+                {/* Date/time dials — collapse time when all-day */}
                 {isAllDay ? (
                   <div>
                     <p className="text-caption text-casa-muted mb-1">Date</p>
@@ -1025,27 +1040,23 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     />
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-caption text-casa-muted mb-1">Start</p>
-                      <Input
-                        type="datetime-local"
-                        value={startDT}
-                        onChange={e => { setStartDT(e.target.value); markDirty() }}
-                      />
-                    </div>
-                    <div>
-                      <p className="text-caption text-casa-muted mb-1">End</p>
-                      <Input
-                        type="datetime-local"
-                        value={endDT}
-                        onChange={e => { setEndDT(e.target.value); markDirty() }}
-                      />
-                    </div>
-                  </div>
+                  <DateTimeDial
+                    startValue={startDT}
+                    endValue={endDT}
+                    onStartChange={setStartDT}
+                    onEndChange={setEndDT}
+                    onInteraction={markDirty}
+                  />
                 )}
 
                 {/* Recurrence */}
+                <DisclosureSection
+                  title="Repeat"
+                  summary={recur.freq === 'none' ? 'Does not repeat' : `Repeats ${recur.freq}`}
+                  icon={<Repeat size={18} />}
+                  defaultOpen={recur.freq !== 'none'}
+                  className="-mx-6 -mb-4 border-b-0"
+                >
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
                     <label className="text-caption text-casa-muted font-medium shrink-0">Repeat</label>
@@ -1138,6 +1149,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     </div>
                   )}
                 </div>
+                </DisclosureSection>
               </div>
 
               {/* ── Category picker ── */}
@@ -1172,7 +1184,21 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
               </div>
 
               {/* ── Location ── */}
-              <div className="px-6 pt-5 pb-5 border-b border-casa-divider space-y-4">
+              <DisclosureSection
+                title="Location"
+                summary={location || address || 'No location'}
+                icon={<MapPin size={18} />}
+                defaultOpen={!location && !address}
+              >
+                {(location || address) && (
+                  <FormSummaryCard
+                    icon={<MapPin size={18} />}
+                    title={location || 'Location'}
+                    detail={address || 'No address'}
+                    className="mb-4"
+                  />
+                )}
+                <div className="space-y-4">
                 <div ref={locationRef} className="relative">
                   <label className="flex items-center gap-1.5 text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">
                     <MapPin size={12} />
@@ -1222,7 +1248,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                       </ul>
                     )
                   })()}
-                </div>
+                  </div>
                 <div>
                   <label className="flex items-center gap-1.5 text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">
                     <MapPin size={12} />
@@ -1235,10 +1261,16 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     placeholder="e.g. 3209 Washington Rd., West Palm Beach, FL"
                   />
                 </div>
-              </div>
+                </div>
+              </DisclosureSection>
 
               {/* ── Category-specific enrichment fields ── */}
-              <div className="px-6 py-5 space-y-5">
+              <DisclosureSection
+                title="Additional details"
+                summary={`${CATEGORY_LABEL[category] ?? category} · ${fields.filter(field => form[field]?.trim()).length} completed`}
+                defaultOpen={false}
+              >
+                <div className="space-y-5">
                 {fields.map((field) => {
                   const config = FIELD_CONFIG[field]
                   return (
@@ -1265,8 +1297,8 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                   )
                 })}
 
-                {/* ── Delete (moved to Type row header) ── */}
-              </div>
+                </div>
+              </DisclosureSection>
             </BounceScroll>
 
             {/* Footer removed — Save and Close are in the top bar */}
