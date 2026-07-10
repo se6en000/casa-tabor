@@ -541,7 +541,8 @@ export default function HomePage() {
           onClose={() => setPastItemsOpen(false)}
           title={`Earlier today · ${pastEvents.length} ${pastEvents.length === 1 ? 'item' : 'items'}`}
           showHandle
-          panelClassName="max-h-[85dvh]"
+          panelClassName="max-h-[85dvh] bg-casa-bg"
+          contentClassName="bg-casa-bg"
         >
           <div className="space-y-2">
             {pastEvents.map((event) => (
@@ -576,6 +577,7 @@ function PastTimelineCard({ event, onClick }: { event: EventWithDetails; onClick
     <Card
       interactive
       padding="sm"
+      tone="surface"
       onClick={(clickEvent) => {
         clickEvent.stopPropagation()
         onClick()
