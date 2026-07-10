@@ -188,6 +188,45 @@ button:active, a:active, [role="button"]:active {
   color: var(--color-casa-on-dark) !important;
 }
 
+.casa-progress {
+  appearance: none;
+  border: 0;
+  background: var(--color-casa-border);
+}
+
+.casa-progress::-webkit-progress-bar {
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-casa-border) 70%, transparent);
+}
+
+.casa-progress::-webkit-progress-value {
+  border-radius: var(--radius-pill);
+  background: var(--color-casa-success);
+  transition: width var(--transition-normal) var(--transition-ease-standard);
+}
+
+.casa-progress::-moz-progress-bar {
+  border-radius: var(--radius-pill);
+  background: var(--color-casa-success);
+}
+
+.casa-progress:indeterminate {
+  animation: breathe var(--transition-room-tone) ease-in-out infinite;
+}
+
+.casa-switch-track {
+  width: calc(var(--ds-control-sm) * 1.75);
+}
+
+.casa-switch-thumb.is-checked {
+  transform: translateX(calc(var(--ds-control-sm) * 0.75));
+}
+
+.casa-radio-dot {
+  width: 1rem;
+  height: 1rem;
+}
+
 @media (display-mode: standalone), (display-mode: fullscreen) {
   /* Hide scrollbars in kiosk */
   ::-webkit-scrollbar {

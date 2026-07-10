@@ -30,3 +30,52 @@ test('Design System gallery documents both static and interactive pill contracts
   assert.match(source, /selected onClick=/)
   assert.match(source, /onClick=\{\(\) => undefined\} disabled/)
 })
+
+test('Grocery suggestion review uses an overlay instead of expanding its item row', () => {
+  const source = readFileSync(resolve('src/pages/GroceryPage.tsx'), 'utf8')
+  assert.match(source, /open=\{reviewingItem !== null\}/)
+  assert.match(source, /The grocery list stays fixed behind this overlay/)
+  assert.doesNotMatch(source, /isReviewing &&/)
+  assert.doesNotMatch(source, />Quick recategorize</)
+})
+
+test('Design System gallery covers every P0 touch contract', () => {
+  const source = readFileSync(resolve('src/pages/DesignSystemGalleryPage.tsx'), 'utf8')
+  for (const contract of [
+    'Selection controls',
+    'Select and combobox',
+    'Alerts and banners',
+    'Progress',
+    'Toast / action confirmation',
+    'Skeleton loading',
+    'Nothing here yet',
+    'Could not load',
+  ]) {
+    assert.match(source, new RegExp(contract))
+  }
+})
+
+test('P0 primitives are exported from the shared UI entrypoint', () => {
+  const source = readFileSync(resolve('src/components/ui/index.ts'), 'utf8')
+  for (const component of ['Switch', 'Checkbox', 'Radio', 'Combobox', 'Alert', 'Toast', 'Progress', 'Skeleton', 'EmptyState']) {
+    assert.match(source, new RegExp(`export \\{[^\\n]*\\b${component}\\b`))
+  }
+})
+
+test('P0 controls preserve native and ARIA semantics', () => {
+  const selectionSource = readFileSync(resolve('src/components/ui/SelectionControls.tsx'), 'utf8')
+  const comboboxSource = readFileSync(resolve('src/components/ui/Combobox.tsx'), 'utf8')
+  const feedbackSource = readFileSync(resolve('src/components/ui/Toast.tsx'), 'utf8')
+  assert.match(selectionSource, /role="switch"/)
+  assert.match(selectionSource, /type="checkbox"/)
+  assert.match(selectionSource, /type="radio"/)
+  assert.match(comboboxSource, /role="listbox"/)
+  assert.match(comboboxSource, /role="option"/)
+  assert.match(feedbackSource, /role=\{tone === 'danger' \? 'alert' : 'status'\}/)
+})
+
+test('Progress uses native progress semantics without layout-fragile inline widths', () => {
+  const source = readFileSync(resolve('src/components/ui/Progress.tsx'), 'utf8')
+  assert.match(source, /<progress/)
+  assert.doesNotMatch(source, /style=\{\{/)
+})

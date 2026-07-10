@@ -1,21 +1,32 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Type, Palette, Ruler, Layers, Smartphone, Tablet, Monitor, CheckCircle2 } from 'lucide-react'
+import { Type, Palette, Ruler, Layers, Smartphone, Tablet, Monitor, CheckCircle2, Inbox, WifiOff } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { DEVICE_MATRIX, closestDeviceProfile } from '../lib/deviceMatrix.mjs'
 import {
   Button,
+  Checkbox,
+  Combobox,
   Card,
   Chip,
+  EmptyState,
   Field,
   Heading,
   IconButton,
   Input,
   Modal,
   PageShell,
+  Progress,
+  Radio,
+  Select,
   Sheet,
   SegmentedControl,
+  Skeleton,
+  SkeletonRow,
+  Switch,
   Text,
   Textarea,
+  Toast,
+  Alert,
 } from '../components/ui'
 
 // ── Design System Gallery ───────────────────────────────────────────────────
@@ -124,6 +135,11 @@ export default function DesignSystemGalleryPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [segment, setSegment] = useState<'first' | 'second' | 'third'>('first')
+  const [switchOn, setSwitchOn] = useState(true)
+  const [checked, setChecked] = useState(true)
+  const [radio, setRadio] = useState('first')
+  const [comboValue, setComboValue] = useState('produce')
+  const [toastOpen, setToastOpen] = useState(false)
   const density = document.documentElement.dataset.density ?? 'touch'
   const closest = useMemo(
     () => closestDeviceProfile(width, height, isFinePointer ? 'fine-pointer' : 'touch'),
@@ -329,6 +345,95 @@ export default function DesignSystemGalleryPage() {
         >
           <Text role="body-sm">Page content aligns to the shared responsive grid.</Text>
         </PageShell>
+        <div className="space-y-4 border-t border-casa-divider pt-4">
+          <div>
+            <Heading role="display-sm">P0 touch contracts</Heading>
+            <Text role="body-sm" muted>Shared controls and feedback patterns that prevent screens from inventing incompatible states.</Text>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Card padding="sm">
+              <Heading role="heading">Selection controls</Heading>
+              <div className="mt-2 divide-y divide-casa-divider">
+                <Switch label="Conversation mode" description="Binary on/off state." checked={switchOn} onCheckedChange={setSwitchOn} />
+                <Checkbox label="Include pantry staples" description="Checkbox supports checked and indeterminate states." checked={checked} onChange={(event) => setChecked(event.target.checked)} />
+                <Checkbox label="Some items selected" indeterminate />
+                <Radio label="First option" name="gallery-radio" value="first" checked={radio === 'first'} onChange={() => setRadio('first')} />
+                <Radio label="Second option" name="gallery-radio" value="second" checked={radio === 'second'} onChange={() => setRadio('second')} />
+              </div>
+            </Card>
+            <Card padding="sm">
+              <Heading role="heading">Select and combobox</Heading>
+              <div className="mt-3 space-y-4">
+                <Field label="Native select" hint="Use for short, stable option lists.">
+                  <Select defaultValue="today">
+                    <option value="today">Today</option>
+                    <option value="tomorrow">Tomorrow</option>
+                  </Select>
+                </Field>
+                <Combobox
+                  label="Searchable combobox"
+                  value={comboValue}
+                  onChange={setComboValue}
+                  options={[
+                    { value: 'produce', label: 'Produce' },
+                    { value: 'dairy', label: 'Dairy' },
+                    { value: 'bakery', label: 'Bakery' },
+                    { value: 'pantry', label: 'Pantry' },
+                  ]}
+                />
+              </div>
+            </Card>
+          </div>
+
+          <Card padding="sm">
+            <Heading role="heading">Alerts and banners</Heading>
+            <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-2">
+              <Alert tone="info" title="Sync in progress">Changes are safely stored locally.</Alert>
+              <Alert tone="success" title="Saved">The grocery list is up to date.</Alert>
+              <Alert tone="warning" title="Leaving soon">Allow extra travel time.</Alert>
+              <Alert tone="danger" title="Could not sync" onDismiss={() => undefined}>Check the connection and retry.</Alert>
+            </div>
+          </Card>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Card padding="sm">
+              <Heading role="heading">Progress</Heading>
+              <div className="mt-3 space-y-4">
+                <Progress label="Grocery list" value={7} max={10} showValue />
+                <Progress label="Syncing" />
+              </div>
+            </Card>
+            <Card padding="sm">
+              <Heading role="heading">Toast / action confirmation</Heading>
+              <Text role="body-sm" muted className="mt-1">Use for brief outcomes without moving page content; optional action supports Undo.</Text>
+              <Button className="mt-3" variant="secondary" onClick={() => setToastOpen(true)}>Show confirmation</Button>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <Card padding="sm">
+              <Heading role="heading">Skeleton loading</Heading>
+              <div className="mt-3 space-y-3">
+                <SkeletonRow />
+                <Skeleton className="h-20 w-full" />
+              </div>
+            </Card>
+            <EmptyState
+              icon={<Inbox size={36} />}
+              title="Nothing here yet"
+              description="Explain what belongs here and offer one useful next action."
+              action={<Button size="sm">Add item</Button>}
+            />
+            <EmptyState
+              tone="error"
+              icon={<WifiOff size={36} />}
+              title="Could not load"
+              description="Name the failed operation and provide a truthful recovery action."
+              action={<Button size="sm" variant="secondary">Retry</Button>}
+            />
+          </div>
+        </div>
       </div>
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Accessible modal">
@@ -339,6 +444,14 @@ export default function DesignSystemGalleryPage() {
         <Text role="body-sm" muted>The sheet shares the same focus, dismissal, and layering contract.</Text>
         <Button className="mt-4" fullWidth onClick={() => setSheetOpen(false)}>Done</Button>
       </Sheet>
+      <Toast
+        open={toastOpen}
+        tone="success"
+        message="Item removed"
+        actionLabel="Undo"
+        onAction={() => setToastOpen(false)}
+        onClose={() => setToastOpen(false)}
+      />
 
       {/* ── Validation matrix ── */}
       <div className="rounded-card border border-casa-border bg-casa-surface p-4 space-y-4">

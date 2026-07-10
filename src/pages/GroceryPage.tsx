@@ -18,7 +18,7 @@ import {
 import { normalizeRecipeIngredientFields } from '../utils/recipeIngredientParsing'
 import { supabase } from '../lib/supabase'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
-import { Button, IconButton, Card, Chip, Input, Heading, SegmentedControl, Sheet, Text } from '../components/ui'
+import { Button, IconButton, Card, Chip, Input, Heading, Modal, SegmentedControl, Sheet, Text } from '../components/ui'
 import { chipClassName } from '../design-system/variants.mjs'
 import {
   appendPantryInventoryAudit,
@@ -416,17 +416,14 @@ function renumberDraftSteps(steps: RecipeDraftStep[]): RecipeDraftStep[] {
   }))
 }
 
-function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging = false, isSpotlighted = false, isReviewing = false, onRequestReview, onChooseReviewCategory, onDismissReview, onMovePointerDown, onMovePointerMove, onMovePointerUp, onMovePointerCancel }: {
+function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging = false, isSpotlighted = false, onRequestReview, onMovePointerDown, onMovePointerMove, onMovePointerUp, onMovePointerCancel }: {
   item: GroceryItem
   onToggle: (id: string, checked: boolean) => void
   onDelete: (id: string) => void
   dismissPhase?: 'none' | 'queued' | 'exiting'
   isDragging?: boolean
   isSpotlighted?: boolean
-  isReviewing?: boolean
   onRequestReview?: (id: string) => void
-  onChooseReviewCategory?: (id: string, category: string) => void
-  onDismissReview?: () => void
   onMovePointerDown?: (e: React.PointerEvent<HTMLButtonElement>) => void
   onMovePointerMove?: (e: React.PointerEvent<HTMLButtonElement>) => void
   onMovePointerUp?: (e: React.PointerEvent<HTMLButtonElement>) => void
@@ -514,27 +511,6 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
         <p className="mt-0.5 text-body-sm leading-relaxed text-casa-muted">
           {metaParts.join(' · ')}
         </p>
-        {isReviewing && (
-          <div className="mt-2 rounded-xl border border-casa-border bg-casa-bg px-2.5 py-2">
-            <Text role="caption" muted className="mb-1.5">Quick recategorize</Text>
-            <div className="flex flex-wrap gap-1.5">
-              {GROCERY_CATEGORIES.map((category) => (
-                <Chip
-                  key={`${item.id}-${category.key}`}
-                  tone="neutral"
-                  size="sm"
-                  selected={item.category === category.key}
-                  onClick={() => onChooseReviewCategory?.(item.id, category.key)}
-                >
-                  {splitCategoryLabel(category.label)}
-                </Chip>
-              ))}
-              <Chip tone="neutral" size="sm" onClick={onDismissReview}>
-                Looks right
-              </Chip>
-            </div>
-          </div>
-        )}
         {item.notes && (
           <p className="text-caption text-casa-muted truncate mt-0.5">{item.notes}</p>
         )}
@@ -2111,6 +2087,9 @@ export default function GroceryPage() {
       : 'Loading…'
   const weeklyHeroPreviewItems = weeklyAutoListCandidates.slice(0, 7)
   const weeklyHeroOverflowCount = Math.max(0, weeklyAutoListCandidates.length - weeklyHeroPreviewItems.length)
+  const reviewingItem = reviewingItemId
+    ? items.find((item) => item.id === reviewingItemId) ?? null
+    : null
 
   return (
     <div className="h-full min-h-0 bg-casa-bg flex flex-col overflow-hidden">
@@ -2422,19 +2401,7 @@ export default function GroceryPage() {
                                 dismissPhase={dismissingExitingIds.has(item.id) ? 'exiting' : dismissingIds.has(item.id) ? 'queued' : 'none'}
                                 isDragging={dragState?.itemId === item.id}
                                 isSpotlighted={spotlightedItemId === item.id}
-                                isReviewing={reviewingItemId === item.id}
                                 onRequestReview={setReviewingItemId}
-                                onChooseReviewCategory={(id, category) => {
-                                  updateItemCategory.mutate({
-                                    id,
-                                    category,
-                                    fromCategory: item.category,
-                                    itemName: item.name,
-                                    reviewedByUser: true,
-                                  })
-                                  setReviewingItemId(null)
-                                }}
-                                onDismissReview={() => setReviewingItemId(null)}
                                 onToggle={handleToggle}
                                 onDelete={(id) => deleteItem.mutate(id)}
                                 onMovePointerDown={(e) => handleMovePointerDown(item, item.category, e)}
@@ -2692,6 +2659,46 @@ export default function GroceryPage() {
         )}
         </div>
       </div>
+      <Modal
+        open={reviewingItem !== null}
+        onClose={() => setReviewingItemId(null)}
+        title={reviewingItem ? `Recategorize ${reviewingItem.name}` : 'Recategorize item'}
+        size="lg"
+        panelClassName="max-w-2xl"
+      >
+        {reviewingItem && (
+          <>
+            <Text role="body-sm" muted>
+              Choose the store section. The grocery list stays fixed behind this overlay.
+            </Text>
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {GROCERY_CATEGORIES.map((category) => (
+                <Chip
+                  key={`${reviewingItem.id}-${category.key}`}
+                  tone="neutral"
+                  selected={reviewingItem.category === category.key}
+                  onClick={() => {
+                    updateItemCategory.mutate({
+                      id: reviewingItem.id,
+                      category: category.key,
+                      fromCategory: reviewingItem.category,
+                      itemName: reviewingItem.name,
+                      reviewedByUser: true,
+                    })
+                    setReviewingItemId(null)
+                  }}
+                  className="w-full"
+                >
+                  {splitCategoryLabel(category.label)}
+                </Chip>
+              ))}
+            </div>
+            <Button variant="secondary" className="mt-4" onClick={() => setReviewingItemId(null)}>
+              Looks right
+            </Button>
+          </>
+        )}
+      </Modal>
       {isAddPanelOpen && (
         <Sheet
           open
