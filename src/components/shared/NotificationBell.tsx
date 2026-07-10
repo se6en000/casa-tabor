@@ -13,7 +13,7 @@ export default function NotificationBell() {
       <button
         onClick={() => setOpen(o => !o)}
         className={cn(
-          'relative flex items-center justify-center w-10 h-10 rounded-full transition-colors',
+          'relative flex size-control items-center justify-center rounded-button outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold',
           open ? 'text-casa-gold' : 'text-casa-muted hover:text-casa-navy',
         )}
         aria-label="Notifications"

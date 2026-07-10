@@ -169,7 +169,7 @@ function PlaceRow({ place, onEdit, onDelete }: { place: SavedPlace; onEdit: () =
           <button onClick={handleCopyAddress} className="flex items-center gap-1 text-caption text-casa-muted mt-1 hover:text-casa-navy transition-colors group text-left" title="Tap to copy address">
             <MapPin size={11} className="shrink-0" />
             <span className="group-hover:underline">{fullAddress}</span>
-            {copied ? <Check size={11} className="text-emerald-500 shrink-0" /> : <Copy size={11} className="opacity-0 group-hover:opacity-50 shrink-0 transition-opacity" />}
+            {copied ? <Check size={11} className="text-emerald-500 shrink-0" /> : <Copy size={11} className="opacity-60 group-hover:opacity-100 shrink-0 transition-opacity" />}
           </button>
         )}
         {place.phone && <p className="flex items-center gap-1 text-caption text-casa-muted mt-0.5"><Phone size={11} />{place.phone}</p>}
@@ -286,7 +286,7 @@ function ContactRow({ contact, onEdit, onDelete }: { contact: SavedContact; onEd
           <button onClick={handleCopyAddress} className="flex items-center gap-1 text-caption text-casa-muted mt-0.5 hover:text-casa-navy transition-colors group text-left" title="Tap to copy address">
             <MapPin size={11} className="shrink-0" />
             <span className="group-hover:underline">{contact.address}</span>
-            {copied ? <Check size={11} className="text-emerald-500 shrink-0" /> : <Copy size={11} className="opacity-0 group-hover:opacity-50 shrink-0 transition-opacity" />}
+            {copied ? <Check size={11} className="text-emerald-500 shrink-0" /> : <Copy size={11} className="opacity-60 group-hover:opacity-100 shrink-0 transition-opacity" />}
           </button>
         )}
         {contact.notes && <p className="text-caption text-casa-muted mt-1 italic line-clamp-2">{contact.notes}</p>}

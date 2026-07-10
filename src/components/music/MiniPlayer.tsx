@@ -59,7 +59,7 @@ export default function MiniPlayer() {
           <button
             type="button"
             onClick={() => isPlaying ? pause() : play()}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-casa-navy hover:bg-casa-bg transition-colors"
+            className="size-control rounded-button flex items-center justify-center text-casa-navy hover:bg-casa-bg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
             {isPlaying
@@ -70,7 +70,7 @@ export default function MiniPlayer() {
           <button
             type="button"
             onClick={() => next()}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-casa-muted hover:text-casa-navy hover:bg-casa-bg transition-colors"
+            className="size-control rounded-button flex items-center justify-center text-casa-muted hover:text-casa-navy hover:bg-casa-bg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
             aria-label="Next"
           >
             <SkipForward size={16} />

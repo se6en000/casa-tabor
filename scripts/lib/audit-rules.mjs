@@ -76,33 +76,107 @@ function findInlineStyleBlocks(content) {
 }
 
 /**
- * Square width/height utility pairs below the 44px (11 * 4px) touch-target
- * minimum, in either class order, plus the Tailwind v4 `size-N` shorthand.
- * Undersized here means N <= 10 (<=40px).
+ * Collect JSX opening tags without being confused by `>` inside quoted strings
+ * or JSX expression braces. This intentionally stops at opening tags; these
+ * audits only inspect attributes and class contracts.
+ * @param {string} content
+ * @param {Set<string>} tagNames
+ * @returns {{ name: string, offset: number, source: string }[]}
  */
-function findUndersizedSquareControls(content) {
+function collectJsxOpeningTags(content, tagNames) {
   const out = []
-  const reW = /\bw-(\d{1,2})\s+h-(\d{1,2})\b/g
-  const reH = /\bh-(\d{1,2})\s+w-(\d{1,2})\b/g
-  const reSize = /\bsize-(\d{1,2})\b/g
-  const fileLines = lines(content)
-  const offsets = lineStarts(content)
-
-  function scan(re, sameOrderCheck) {
-    let m
-    while ((m = re.exec(content)) !== null) {
-      const a = Number(m[1])
-      const b = m[2] !== undefined ? Number(m[2]) : a
-      if (sameOrderCheck && a !== b) continue
-      if (a <= 10 && b <= 10) {
-        const idx = lineIndexAt(offsets, m.index)
-        out.push({ line: idx + 1, snippet: (fileLines[idx] ?? '').trim().slice(0, 160) })
+  const re = /<([A-Za-z][\w.]*)\b/g
+  let match
+  while ((match = re.exec(content)) !== null) {
+    if (!tagNames.has(match[1])) continue
+    let braceDepth = 0
+    let quote = null
+    for (let index = re.lastIndex; index < content.length; index += 1) {
+      const char = content[index]
+      const previous = content[index - 1]
+      if (quote) {
+        if (char === quote && previous !== '\\') quote = null
+        continue
+      }
+      if (char === '"' || char === "'" || char === '`') {
+        quote = char
+        continue
+      }
+      if (char === '{') braceDepth += 1
+      else if (char === '}') braceDepth -= 1
+      else if (char === '>' && braceDepth === 0) {
+        out.push({ name: match[1], offset: match.index, source: content.slice(match.index, index + 1) })
+        re.lastIndex = index + 1
+        break
       }
     }
   }
-  scan(reW, true)
-  scan(reH, true)
-  scan(reSize, false)
+  return out
+}
+
+/**
+ * Interactive JSX elements with square width/height classes below the shared
+ * density-aware touch target. Decorative icon geometry is deliberately ignored.
+ */
+function findUndersizedSquareControls(content) {
+  const out = []
+  const fileLines = lines(content)
+  const offsets = lineStarts(content)
+  const interactiveTags = collectJsxOpeningTags(content, new Set(['button', 'a']))
+  for (const tag of interactiveTags) {
+    if (tag.name === 'a' && !/\bonClick=|\bhref=/.test(tag.source)) continue
+    if (/\b(?:size-control|min-[wh]-control)\b/.test(tag.source)) continue
+    const patterns = [
+      /\bw-(\d{1,2})\s+h-(\d{1,2})\b/g,
+      /\bh-(\d{1,2})\s+w-(\d{1,2})\b/g,
+      /\bsize-(\d{1,2})\b/g,
+    ]
+    let undersized = false
+    for (const pattern of patterns) {
+      let match
+      while ((match = pattern.exec(tag.source)) !== null) {
+        const first = Number(match[1])
+        const second = match[2] === undefined ? first : Number(match[2])
+        if (first === second && first <= 10) undersized = true
+      }
+    }
+    if (undersized) {
+      const idx = lineIndexAt(offsets, tag.offset)
+      out.push({ line: idx + 1, snippet: (fileLines[idx] ?? '').trim().slice(0, 160) })
+    }
+  }
+  return out
+}
+
+/** UI hidden until hover is unavailable to touch and keyboard users. */
+function findHoverOnlyReveals(content) {
+  return findMatches(content, /\bopacity-0\b[^\n"']*\bgroup-hover:opacity-\d+\b/g)
+}
+
+/**
+ * Native buttons outside shared UI primitives. Existing debt is baselined, but
+ * every new recreation fails style:check and must use Button/IconButton/Chip.
+ */
+function findNativeControlRecreations(content, filePath = '') {
+  if (filePath.startsWith('src/components/ui/')) return []
+  const fileLines = lines(content)
+  const offsets = lineStarts(content)
+  return collectJsxOpeningTags(content, new Set(['button'])).map((tag) => {
+    const idx = lineIndexAt(offsets, tag.offset)
+    return { line: idx + 1, snippet: (fileLines[idx] ?? '').trim().slice(0, 160) }
+  })
+}
+
+/** Buttons using title as their only explicit label must add aria-label. */
+function findTitleOnlyButtonLabels(content) {
+  const out = []
+  const fileLines = lines(content)
+  const offsets = lineStarts(content)
+  for (const tag of collectJsxOpeningTags(content, new Set(['button']))) {
+    if (!/\btitle=/.test(tag.source) || /\baria-label=/.test(tag.source)) continue
+    const idx = lineIndexAt(offsets, tag.offset)
+    out.push({ line: idx + 1, snippet: (fileLines[idx] ?? '').trim().slice(0, 160) })
+  }
   return out
 }
 
@@ -144,14 +218,47 @@ export const CATEGORIES = [
   },
   {
     id: 'undersizedSquareControls',
-    label: 'Undersized square controls (<44px)',
+    label: 'Undersized interactive controls (<44px)',
     run: findUndersizedSquareControls,
     heuristicLimits:
-      'Matches paired w-N/h-N or size-N utilities with N<=10 (<=40px). Cannot ' +
-      'confirm the element is actually interactive/tappable (vs. a decorative ' +
-      'icon wrapper), and cannot account for padding/hit-area extensions that ' +
-      'may already satisfy the 44px touch target in practice.',
+      'Inspects button and interactive anchor opening tags for paired w-N/h-N or ' +
+      'size-N utilities with N<=10, excluding controls that use semantic control targets.',
+  },
+  {
+    id: 'hoverOnlyReveals',
+    label: 'Hover-only revealed UI',
+    run: findHoverOnlyReveals,
+    heuristicLimits:
+      'Matches same-line opacity-0 plus group-hover:opacity-N class contracts. ' +
+      'It does not infer visibility controlled by component state or external CSS.',
+  },
+  {
+    id: 'titleOnlyButtonLabels',
+    label: 'Buttons relying on title instead of aria-label',
+    run: findTitleOnlyButtonLabels,
+    heuristicLimits:
+      'Matches button opening tags containing title without aria-label. It may ' +
+      'include text buttons whose visible children already provide an accessible name.',
+  },
+  {
+    id: 'nativeControlRecreations',
+    label: 'Native button recreations outside shared UI',
+    run: findNativeControlRecreations,
+    heuristicLimits:
+      'Counts native JSX button opening tags outside src/components/ui. Existing ' +
+      'debt is budgeted; new controls must use shared Button, IconButton, or Chip.',
   },
 ]
 
-export { findMatches, findArbitraryFontSizes, findRawHexColors, findArbitraryZIndex, findInlineStyleBlocks, findUndersizedSquareControls }
+export {
+  collectJsxOpeningTags,
+  findMatches,
+  findArbitraryFontSizes,
+  findRawHexColors,
+  findArbitraryZIndex,
+  findInlineStyleBlocks,
+  findUndersizedSquareControls,
+  findHoverOnlyReveals,
+  findNativeControlRecreations,
+  findTitleOnlyButtonLabels,
+}

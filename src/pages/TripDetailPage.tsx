@@ -131,7 +131,7 @@ function TimelineStep({
             {subtitle && (subtitleCopyable ? (
               <button onClick={handleCopy} className="flex items-center gap-1.5 mt-0.5 text-caption text-casa-muted hover:text-casa-navy transition-colors group text-left" title="Tap to copy address">
                 <span className="group-hover:underline">{subtitle}</span>
-                {copied ? <Check size={11} className="text-emerald-500 shrink-0" /> : <Copy size={11} className="opacity-0 group-hover:opacity-50 shrink-0 transition-opacity" />}
+                {copied ? <Check size={11} className="text-emerald-500 shrink-0" /> : <Copy size={11} className="opacity-60 group-hover:opacity-100 shrink-0 transition-opacity" />}
               </button>
             ) : (
               <p className="text-caption text-casa-muted mt-0.5">{subtitle}</p>

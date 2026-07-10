@@ -50,7 +50,8 @@ function StepPicker({ value, onChange, min, max, step = 1, unit }: {
     <div className="flex items-center gap-3">
       <button
         onClick={() => onChange(Math.max(min, value - step))}
-        className="w-9 h-9 rounded-full bg-casa-bg border border-casa-border text-casa-navy font-semibold font-display text-heading flex items-center justify-center active:scale-95 transition-transform"
+        className="size-control rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold font-display text-heading flex items-center justify-center active:scale-95 outline-none transition-transform focus-visible:ring-2 focus-visible:ring-casa-gold"
+        aria-label={`Decrease ${unit}`}
       >−</button>
       <div className="min-w-[5rem] text-center">
         <span className="font-display text-display-sm text-casa-navy">{value}</span>
@@ -58,7 +59,8 @@ function StepPicker({ value, onChange, min, max, step = 1, unit }: {
       </div>
       <button
         onClick={() => onChange(Math.min(max, value + step))}
-        className="w-9 h-9 rounded-full bg-casa-bg border border-casa-border text-casa-navy font-semibold font-display text-heading flex items-center justify-center active:scale-95 transition-transform"
+        className="size-control rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold font-display text-heading flex items-center justify-center active:scale-95 outline-none transition-transform focus-visible:ring-2 focus-visible:ring-casa-gold"
+        aria-label={`Increase ${unit}`}
       >+</button>
     </div>
   )

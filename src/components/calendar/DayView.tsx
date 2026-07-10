@@ -226,10 +226,11 @@ function DayEventCard({
             <button
               onClick={handleCheck}
               disabled={checking || snoozing || movingToNeedsYou}
-              className={`shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+              className={`shrink-0 size-control rounded-button border-2 flex items-center justify-center outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold ${
                 checking ? 'bg-green-500 border-green-500' : 'border-casa-accent-soft-border hover:border-casa-success bg-transparent'
               }`}
               title="Mark done"
+              aria-label="Mark done"
             >
               {checking && (
                 <svg width="8" height="6" viewBox="0 0 9 7" fill="none">
@@ -240,16 +241,18 @@ function DayEventCard({
             <button
               onClick={handleSnooze}
               disabled={checking || snoozing || movingToNeedsYou || !onSnooze}
-              className="shrink-0 w-5 h-5 rounded border border-casa-accent-soft-border bg-white/80 text-casa-muted hover:text-casa-text hover:bg-white transition-colors inline-flex items-center justify-center disabled:opacity-40"
+              className="shrink-0 size-control rounded-button border border-casa-accent-soft-border bg-white/80 text-casa-muted hover:text-casa-text hover:bg-white transition-colors inline-flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold disabled:opacity-40"
               title="Snooze 1 hour"
+              aria-label="Snooze 1 hour"
             >
               <SnoozeOneHourIcon className={cn('w-3 h-3', snoozing && 'animate-pulse')} />
             </button>
             <button
               onClick={handleMoveToNeedsYou}
               disabled={checking || snoozing || movingToNeedsYou || !onSendToNeedsYou}
-              className="shrink-0 w-5 h-5 rounded border border-casa-accent-soft-border bg-white/80 text-casa-muted hover:text-casa-text hover:bg-white transition-colors inline-flex items-center justify-center disabled:opacity-40"
+              className="shrink-0 size-control rounded-button border border-casa-accent-soft-border bg-white/80 text-casa-muted hover:text-casa-text hover:bg-white transition-colors inline-flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold disabled:opacity-40"
               title="Move to Needs you"
+              aria-label="Move to Needs you"
             >
               <NeedsYouTransferIcon className={cn('w-3 h-3', movingToNeedsYou && 'animate-pulse')} />
             </button>

@@ -897,7 +897,8 @@ export default function AISettingsPage() {
                   const next = Math.max(0.10, Math.round((screensaverSettings.wakeWordSensitivity - 0.05) * 100) / 100)
                   setWakeWordSensitivity(next)
                 }}
-                className="w-8 h-8 rounded-button border border-casa-border bg-white text-casa-navy font-semibold text-lg flex items-center justify-center hover:bg-casa-bg active:scale-95 transition-all"
+                className="size-control rounded-button border border-casa-border bg-white text-casa-navy font-semibold text-heading flex items-center justify-center hover:bg-casa-bg active:scale-95 outline-none transition-all focus-visible:ring-2 focus-visible:ring-casa-gold"
+                aria-label="Decrease wake word sensitivity"
               >−</button>
               <span className="w-14 text-center text-body-sm font-semibold text-casa-navy tabular-nums">
                 {Math.round(screensaverSettings.wakeWordSensitivity * 100)}%
@@ -907,7 +908,8 @@ export default function AISettingsPage() {
                   const next = Math.min(0.90, Math.round((screensaverSettings.wakeWordSensitivity + 0.05) * 100) / 100)
                   setWakeWordSensitivity(next)
                 }}
-                className="w-8 h-8 rounded-button border border-casa-border bg-white text-casa-navy font-semibold text-lg flex items-center justify-center hover:bg-casa-bg active:scale-95 transition-all"
+                className="size-control rounded-button border border-casa-border bg-white text-casa-navy font-semibold text-heading flex items-center justify-center hover:bg-casa-bg active:scale-95 outline-none transition-all focus-visible:ring-2 focus-visible:ring-casa-gold"
+                aria-label="Increase wake word sensitivity"
               >+</button>
             </div>
           </div>

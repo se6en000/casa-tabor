@@ -500,11 +500,12 @@ export default function FamilySettingsPage() {
                           key={c.hex}
                           onClick={() => isNew ? patchNew(m._tempId!, { color_hex: c.hex, color_name: c.name }) : patch(m.id!, { color_hex: c.hex, color_name: c.name })}
                           className={cn(
-                            'w-8 h-8 rounded-full border-2 transition-all',
+                            'size-control rounded-button border-2 outline-none transition-all focus-visible:ring-2 focus-visible:ring-casa-gold',
                             colorHex === c.hex ? 'border-casa-navy scale-110 shadow-md' : 'border-transparent hover:scale-105',
                           )}
                           style={{ backgroundColor: c.hex }}
                           title={c.name}
+                          aria-label={`Use ${c.name} color`}
                         />
                       ))}
                     </div>

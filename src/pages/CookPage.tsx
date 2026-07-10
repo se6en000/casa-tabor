@@ -3261,17 +3261,24 @@ export default function CookPage() {
                           type="button"
                           onClick={() => toggleConfiguredMeal(meal.key)}
                           aria-label={meal.enabled ? 'Disable meal' : 'Enable meal'}
+                          aria-pressed={meal.enabled}
                           className={cn(
-                            'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-                            meal.enabled ? 'bg-casa-gold/70' : 'bg-casa-border',
+                            'inline-flex min-h-control min-w-control items-center justify-center rounded-button outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold',
                           )}
                         >
                           <span
                             className={cn(
-                              'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                              meal.enabled ? 'translate-x-4' : 'translate-x-0.5',
+                              'relative inline-flex h-5 w-9 items-center rounded-pill transition-colors',
+                              meal.enabled ? 'bg-casa-gold/70' : 'bg-casa-border',
                             )}
-                          />
+                          >
+                            <span
+                              className={cn(
+                                'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                                meal.enabled ? 'translate-x-4' : 'translate-x-0.5',
+                              )}
+                            />
+                          </span>
                         </button>
                         <button
                           type="button"

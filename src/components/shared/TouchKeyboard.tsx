@@ -536,21 +536,21 @@ export default function TouchKeyboard() {
               <p className="flex-1 text-body-sm font-semibold text-casa-muted truncate">
                 {getFieldLabel(target)}
               </p>
-              <button onClick={() => moveFocusBy(-1)} aria-label="Previous field" className="h-8 w-8 rounded-full bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center">
+              <button onClick={() => moveFocusBy(-1)} aria-label="Previous field" className="size-control rounded-button bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold">
                 <ChevronLeft size={16} />
               </button>
-              <button onClick={() => moveFocusBy(1)} aria-label="Next field" className="h-8 w-8 rounded-full bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center">
+              <button onClick={() => moveFocusBy(1)} aria-label="Next field" className="size-control rounded-button bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold">
                 <ChevronRight size={16} />
               </button>
               <button
                 onClick={() => setShowPrefs(v => !v)}
                 aria-label="Keyboard settings"
                 aria-pressed={showPrefs}
-                className={`h-8 w-8 rounded-full border flex items-center justify-center ${showPrefs ? 'bg-casa-gold/20 border-casa-gold text-casa-navy' : 'bg-casa-bg border-casa-border text-casa-muted'}`}
+                className={`size-control rounded-button border flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold ${showPrefs ? 'bg-casa-gold/20 border-casa-gold text-casa-navy' : 'bg-casa-bg border-casa-border text-casa-muted'}`}
               >
                 <Settings2 size={15} />
               </button>
-              <button onClick={hideKeyboard} aria-label="Hide keyboard" className="h-8 w-8 rounded-full bg-casa-bg border border-casa-border text-casa-muted flex items-center justify-center">
+              <button onClick={hideKeyboard} aria-label="Hide keyboard" className="size-control rounded-button bg-casa-bg border border-casa-border text-casa-muted flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold">
                 <X size={14} />
               </button>
             </div>

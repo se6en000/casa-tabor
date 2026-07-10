@@ -185,12 +185,13 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
                       handleCheck(item.id)
                     }}
                     className={cn(
-                      'w-8 h-8 rounded-full flex items-center justify-center border bg-white transition-colors',
+                      'size-control rounded-button flex items-center justify-center border bg-white outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold',
                       isDone
                         ? 'border-green-500 text-green-600'
                         : 'border-casa-border text-casa-muted hover:text-casa-navy hover:bg-casa-bg',
                     )}
                     title="Mark done"
+                    aria-label="Mark done"
                   >
                     <Check size={15} strokeWidth={2.2} />
                   </button>
@@ -199,8 +200,9 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
                       e.stopPropagation()
                       handleSnooze(item.id)
                     }}
-                    className="w-8 h-8 rounded-full flex items-center justify-center border border-casa-border bg-white text-casa-muted hover:text-casa-text hover:bg-casa-bg transition-colors"
+                    className="size-control rounded-button flex items-center justify-center border border-casa-border bg-white text-casa-muted hover:text-casa-text hover:bg-casa-bg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
                     title="Snooze until tomorrow"
+                    aria-label="Snooze until tomorrow"
                   >
                     <Moon size={15} strokeWidth={2.1} />
                   </button>
@@ -210,12 +212,13 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
                       handleDownvote(item.id)
                     }}
                     className={cn(
-                      'w-8 h-8 rounded-full flex items-center justify-center border bg-white transition-colors',
+                      'size-control rounded-button flex items-center justify-center border bg-white outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold',
                       isDownvoting
                         ? 'border-red-300 text-red-500'
                         : 'border-casa-border text-casa-muted hover:text-red-500 hover:bg-red-50',
                     )}
                     title="Not relevant — teach AI"
+                    aria-label="Not relevant — teach AI"
                   >
                     <ThumbsDown size={15} strokeWidth={2.1} />
                   </button>

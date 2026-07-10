@@ -628,7 +628,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                     type="button"
                     onClick={startFresh}
                     title="New conversation"
-                    className="w-7 h-7 flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-full hover:bg-casa-divider transition-colors"
+                    className="size-control flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-button hover:bg-casa-divider outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
+                    aria-label="New conversation"
                   >
                     <RotateCcw size={14} />
                   </button>
@@ -636,7 +637,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                 <button
                   type="button"
                   onClick={onClose}
-                  className="w-8 h-8 flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-full hover:bg-casa-divider transition-colors"
+                  className="size-control flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-button hover:bg-casa-divider outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
+                  aria-label="Close assistant"
                 >
                   <X size={18} />
                 </button>
@@ -821,7 +823,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                       <button
                         type="button"
                         onClick={() => setAttachedImage(null)}
-                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-casa-error text-white flex items-center justify-center shadow"
+                        className="absolute -top-3 -right-3 size-control rounded-button bg-casa-error text-white flex items-center justify-center shadow outline-none focus-visible:ring-2 focus-visible:ring-casa-gold"
+                        aria-label="Remove attached image"
                       >
                         <X size={10} />
                       </button>
@@ -852,7 +855,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   title="Attach image from library"
-                  className="text-casa-muted hover:text-casa-gold transition-colors shrink-0 pb-1"
+                  className="size-control rounded-button text-casa-muted hover:text-casa-gold outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold"
+                  aria-label="Attach image from library"
                 >
                   <Paperclip size={16} />
                 </button>
@@ -861,7 +865,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   type="button"
                   onClick={() => cameraInputRef.current?.click()}
                   title="Take a photo"
-                  className="text-casa-muted hover:text-casa-gold transition-colors shrink-0 pb-1"
+                  className="size-control rounded-button text-casa-muted hover:text-casa-gold outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold"
+                  aria-label="Take a photo"
                 >
                   <Camera size={16} />
                 </button>
@@ -883,13 +888,14 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                     onClick={() => { markUserInteraction(); speech.toggle() }}
                     title={speech.listening ? 'Stop listening' : speech.connecting ? 'Connecting…' : 'Start voice input'}
                     className={cn(
-                      'w-8 h-8 rounded-full flex items-center justify-center transition-all shrink-0 mb-0.5',
+                      'size-control rounded-button flex items-center justify-center outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold',
                       speech.listening
                         ? 'bg-casa-navy text-casa-gold animate-pulse'
                         : speech.connecting
                           ? 'bg-casa-navy/60 text-casa-gold/60'
                           : 'bg-casa-divider text-casa-muted hover:text-casa-gold'
                     )}
+                    aria-label={speech.listening ? 'Stop listening' : speech.connecting ? 'Connecting' : 'Start voice input'}
                   >
                     {speech.connecting
                       ? <Loader2 size={14} className="animate-spin" />
@@ -901,7 +907,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   type="button"
                   onClick={handleKeyboardToggle}
                   title="Toggle on-screen keyboard"
-                  className="w-8 h-8 rounded-full flex items-center justify-center transition-all shrink-0 mb-0.5 bg-casa-divider text-casa-muted hover:text-casa-gold"
+                  className="size-control rounded-button flex items-center justify-center outline-none transition-all shrink-0 bg-casa-divider text-casa-muted hover:text-casa-gold focus-visible:ring-2 focus-visible:ring-casa-gold"
+                  aria-label="Toggle on-screen keyboard"
                 >
                   <Keyboard size={14} />
                 </button>
@@ -911,11 +918,12 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   onClick={handleSend}
                   disabled={(!input.trim() && !attachedImage) || loading}
                   className={cn(
-                    'w-8 h-8 rounded-full flex items-center justify-center transition-all shrink-0 mb-0.5',
+                    'size-control rounded-button flex items-center justify-center outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold',
                     (input.trim() || attachedImage) && !loading
                       ? 'bg-casa-gold text-white hover:brightness-110'
                       : 'bg-casa-divider text-casa-muted'
                   )}
+                  aria-label="Send message"
                 >
                   <Send size={14} />
                 </button>

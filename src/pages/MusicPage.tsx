@@ -254,7 +254,7 @@ function PlayerScreen({ onBack }: { onBack: () => void }) {
               className="h-full bg-casa-navy rounded-full transition-all duration-1000 ease-linear relative"
               style={{ width: `${progressPct}%` }}
             >
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-casa-navy rounded-full opacity-0 group-hover:opacity-100 transition-opacity translate-x-1/2" />
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-casa-navy rounded-full opacity-60 group-hover:opacity-100 transition-opacity translate-x-1/2" />
             </div>
           </div>
           <div className="flex justify-between mt-1.5">

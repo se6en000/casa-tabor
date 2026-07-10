@@ -7,6 +7,9 @@ import {
   findRawHexColors,
   findArbitraryZIndex,
   findInlineStyleBlocks,
+  findHoverOnlyReveals,
+  findNativeControlRecreations,
+  findTitleOnlyButtonLabels,
   findUndersizedSquareControls,
 } from '../scripts/lib/audit-rules.mjs'
 
@@ -49,11 +52,13 @@ test('findInlineStyleBlocks counts every style={{ occurrence, including multiple
 
 test('findUndersizedSquareControls flags sub-44px square utility pairs and size-N', () => {
   const content = [
-    "className=\"w-8 h-8 rounded-full\"",   // undersized (32px)
-    "className=\"h-6 w-6\"",                 // undersized, reversed order (24px)
-    "className=\"size-9\"",                  // undersized shorthand (36px)
-    "className=\"w-12 h-12 rounded-full\"",  // fine (48px, >= 44px min)
-    "className=\"w-8 h-10\"",                // not square — should not match
+    '<button className="w-8 h-8 rounded-full" />',   // undersized (32px)
+    '<a href="/" className="h-6 w-6" />',            // undersized, reversed order (24px)
+    '<button className="size-9" />',                  // undersized shorthand (36px)
+    '<button className="w-12 h-12 rounded-full" />',  // fine (48px, >= 44px min)
+    '<button className="w-8 h-10" />',                // not square — should not match
+    '<span className="w-4 h-4" />',                   // decorative geometry is ignored
+    '<button className="w-8 h-8 min-h-control" />',   // semantic target override
   ].join('\n')
   const matches = findUndersizedSquareControls(content)
   assert.equal(matches.length, 3)
@@ -63,8 +68,24 @@ test('findUndersizedSquareControls flags sub-44px square utility pairs and size-
 })
 
 test('findUndersizedSquareControls treats w-11/h-11 (44px) as meeting the minimum', () => {
-  const content = "className=\"w-11 h-11 rounded-full\""
+  const content = '<button className="w-11 h-11 rounded-full" />'
   assert.equal(findUndersizedSquareControls(content).length, 0)
+})
+
+test('hover-only reveal audit catches touch-inaccessible visibility contracts', () => {
+  assert.equal(findHoverOnlyReveals('<Copy className="opacity-0 group-hover:opacity-50" />').length, 1)
+  assert.equal(findHoverOnlyReveals('<Copy className="opacity-60 group-hover:opacity-100" />').length, 0)
+})
+
+test('title-only button labels require an explicit aria-label', () => {
+  assert.equal(findTitleOnlyButtonLabels('<button title="Delete"><Trash /></button>').length, 1)
+  assert.equal(findTitleOnlyButtonLabels('<button title="Delete" aria-label="Delete"><Trash /></button>').length, 0)
+})
+
+test('native control recreation audit exempts shared UI primitives', () => {
+  const content = '<button type="button">Save</button>'
+  assert.equal(findNativeControlRecreations(content, 'src/pages/TestPage.tsx').length, 1)
+  assert.equal(findNativeControlRecreations(content, 'src/components/ui/Button.tsx').length, 0)
 })
 
 test('every CATEGORIES entry documents its heuristic limits (no silent overclaiming)', () => {

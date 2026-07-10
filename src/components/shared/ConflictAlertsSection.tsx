@@ -162,7 +162,7 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
         )}
       </div>
 
-      <ExternalLink size={12} className="shrink-0 text-casa-muted opacity-0 group-hover:opacity-60 transition-opacity" />
+      <ExternalLink size={12} className="shrink-0 text-casa-muted opacity-60 group-hover:opacity-100 transition-opacity" />
 
       <div className="shrink-0 flex items-center gap-1" onClick={e => e.stopPropagation()}>
         <button

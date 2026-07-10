@@ -149,7 +149,8 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
             <div className="px-6 py-5 border-b border-casa-border relative">
               <button
                 onClick={onClose}
-                className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-full hover:bg-casa-divider transition-colors"
+                className="absolute top-3 right-3 size-control flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-button hover:bg-casa-divider outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
+                aria-label="Close prep item details"
               >
                 <X size={18} />
               </button>

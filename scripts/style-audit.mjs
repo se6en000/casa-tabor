@@ -75,7 +75,7 @@ function runAudit() {
     const content = readFileSync(file, 'utf8')
     const relPath = relative(REPO_ROOT, file)
     for (const cat of CATEGORIES) {
-      const matches = cat.run(content)
+      const matches = cat.run(content, relPath)
       if (matches.length === 0) continue
       results[cat.id].count += matches.length
       results[cat.id].byFile[relPath] = matches
