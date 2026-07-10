@@ -72,7 +72,7 @@ const AMPM_ITEMS: { value: string; label: string }[] = [
   { value: 'PM', label: 'PM' },
 ]
 
-const ITEM_H = 38
+const ITEM_H = 46
 const VISIBLE = 5
 const PAD = ((VISIBLE - 1) / 2) * ITEM_H
 
@@ -140,8 +140,8 @@ function WheelColumn({
                 height: ITEM_H,
                 opacity,
                 fontWeight: dist === 0 ? 700 : 500,
-                fontSize: emphasize ? 17 : 16,
-                transform: dist === 0 ? 'scale(1)' : 'scale(0.92)',
+                fontSize: emphasize ? 21 : 22,
+                transform: dist === 0 ? 'scale(1)' : 'scale(0.9)',
                 transition: 'opacity 120ms ease, transform 120ms ease',
               }}
             >
