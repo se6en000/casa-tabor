@@ -263,7 +263,9 @@ const STORAGE_FORCE_MIDNIGHT = 'casa-theme-force-midnight'
 const STORAGE_FONT_SCALE = 'casa-design-font-scale'
 
 function loadFontScale(): number {
-  const stored = Number(localStorage.getItem(STORAGE_FONT_SCALE))
+  const raw = localStorage.getItem(STORAGE_FONT_SCALE)
+  if (raw == null) return DEFAULT_FONT_SCALE
+  const stored = Number(raw)
   return Number.isFinite(stored)
     ? Math.min(MAX_FONT_SCALE, Math.max(MIN_FONT_SCALE, stored))
     : DEFAULT_FONT_SCALE
