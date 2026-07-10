@@ -153,3 +153,17 @@ test('dense calendar metadata uses the Day-view-sized read-only pill', () => {
   assert.match(stacked, /<CalendarPill/)
   assert.match(large, /<CalendarPill/)
 })
+
+test('Cook preserves its landing hierarchy through shared design-system roles', () => {
+  const cook = readFileSync(resolve('src/pages/CookPage.tsx'), 'utf8')
+  const styles = readFileSync(resolve('src/index.css'), 'utf8')
+  assert.match(cook, /<Heading role="display-sm"/)
+  assert.match(cook, /<SegmentedControl/)
+  assert.match(cook, /<Card/)
+  assert.match(cook, /<Chip/)
+  assert.match(cook, /<Button/)
+  assert.match(cook, /<Textarea/)
+  assert.doesNotMatch(cook, /cook-v2-/)
+  assert.doesNotMatch(cook, /text-\[\d+(?:\.\d+)?(?:px|rem|em)\]/)
+  assert.doesNotMatch(styles, /\.cook-v2-/)
+})

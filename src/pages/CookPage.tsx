@@ -10,7 +10,7 @@ import { DEFAULT_FOOD_PROFILE, normalizeFoodProfile, type FoodProfile } from '..
 import { appendPantryInventoryAudit, normalizePackageUnit, normalizePantryKey, sanitizePantryInventoryAudit, type PantryInventoryAuditEntry } from '../lib/pantryInventoryUtils'
 import { cn } from '../utils/cn'
 import recipeFallbackHero from '../assets/hero.png'
-import { SegmentedControl } from '../components/ui'
+import { Button, Card, Chip, Heading, SegmentedControl, Text, Textarea } from '../components/ui'
 
 type Recipe = {
   id: string
@@ -458,7 +458,7 @@ function InfoHint({ label, text }: { label: string; text: string }) {
         <CircleHelp size={13} />
       </button>
       {open && (
-        <span className="absolute z-20 top-full mt-1 right-0 w-56 rounded-lg border border-casa-border bg-casa-surface px-2.5 py-2 text-[11px] text-casa-navy shadow-card">
+        <span className="absolute z-20 top-full mt-1 right-0 w-56 rounded-lg border border-casa-border bg-casa-surface px-2.5 py-2 text-caption text-casa-navy shadow-card">
           {text}
         </span>
       )}
@@ -2904,8 +2904,8 @@ export default function CookPage() {
   }
 
   return (
-    <div className="cook-v2-shell h-full overflow-y-auto p-4 lg:p-6 space-y-4">
-      <section className="rounded-[14px] border border-casa-border bg-casa-surface p-4 lg:p-6 shadow-card">
+    <div className="h-full space-y-4 overflow-y-auto bg-casa-bg p-4 lg:p-6">
+      <Card padding="lg">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <SegmentedControl
             aria-label="Cook view"
@@ -2916,54 +2916,49 @@ export default function CookPage() {
               { value: 'plan-week', label: 'Plan the week', icon: <Sparkles size={14} className="text-casa-info" /> },
             ]}
           />
-          <p className="text-body-sm text-casa-text-tertiary">{landingMetaLabel}</p>
+          <Text role="body-sm" muted>{landingMetaLabel}</Text>
         </div>
 
         {cookLandingMode === 'cook-now' ? (
           <div className="mt-4">
-            <h2 className="font-body text-[2rem] leading-[1.15] tracking-[-0.01em] font-bold text-casa-navy">What are we feeling tonight?</h2>
+            <Heading role="display-sm" className="font-body font-bold">What are we feeling tonight?</Heading>
             <div className="mt-3 flex flex-wrap gap-2.5">
               {COOK_MOOD_OPTIONS.map((mood) => (
-                <button
+                <Chip
                   key={mood.id}
-                  type="button"
                   onClick={() => {
                     setCookMood(mood.id)
                     setShortlistOffsets((current) => ({ ...current, [mood.id]: 0 }))
                   }}
-                  className={cn(
-                    'cook-v2-mood-chip px-4 py-2 rounded-pill border text-body font-semibold transition-colors',
-                    cookMood === mood.id && 'cook-v2-mood-chip-active',
-                  )}
-                  aria-pressed={cookMood === mood.id}
+                  selected={cookMood === mood.id}
+                  tone={cookMood === mood.id ? 'accent' : 'neutral'}
                 >
                   {mood.label}
-                </button>
+                </Chip>
               ))}
             </div>
 
             <div className="mt-4 flex items-center justify-between gap-3">
-              <p className="text-body-sm font-semibold text-casa-navy">3 {shortlistHeadingLabel} picks for tonight</p>
-              <button
-                type="button"
+              <Text role="body-sm" className="font-semibold text-casa-navy">3 {shortlistHeadingLabel} picks for tonight</Text>
+              <Button
                 onClick={() => setShortlistOffsets((current) => ({ ...current, [cookMood]: current[cookMood] + 1 }))}
-                className="text-body-sm font-semibold text-casa-text-secondary hover:text-casa-navy"
+                variant="ghost"
+                size="sm"
               >
                 Shuffle →
-              </button>
+              </Button>
             </div>
 
             {moodShortlistRecipes.length === 0 ? (
-              <div className="mt-3 rounded-[12px] border border-casa-border bg-casa-surface-subtle px-4 py-4">
-                <p className="text-body text-casa-text-secondary">Import recipes from Grocery to unlock your mood-based shortlist.</p>
-                <button
-                  type="button"
+              <Card tone="subtle" className="mt-3">
+                <Text>Import recipes from Grocery to unlock your mood-based shortlist.</Text>
+                <Button
                   onClick={openImportDialog}
-                  className="mt-3 cook-v2-btn-primary px-4 py-2 rounded-button text-body-sm font-semibold"
+                  className="mt-3"
                 >
                   Import recipe
-                </button>
-              </div>
+                </Button>
+              </Card>
             ) : (
               <div className="mt-3 grid grid-cols-1 xl:grid-cols-[1.25fr_1fr_1fr] gap-4">
                 {moodShortlistRecipes.map((insight, index) => {
@@ -2972,15 +2967,17 @@ export default function CookPage() {
                   const minutesLabel = insight.minutes ? `${insight.minutes} min` : (insight.recipe.cook_time ?? 'Quick cook')
                   const approvalLabel = isTop ? buildTopPickApproval(insight) : null
                   return (
-                    <article
+                    <Card
                       key={`${insight.recipe.id}-${index}`}
+                      padding="none"
+                      tone={isTop ? 'accent' : 'surface'}
                       className={cn(
-                        'cook-v2-shortlist-card rounded-[14px] border overflow-hidden flex flex-col',
-                        isTop ? 'cook-v2-shortlist-card-top border-2' : 'border',
+                        'flex flex-col overflow-hidden',
+                        isTop && 'border-2 border-casa-accent-soft-border',
                       )}
                     >
                       {isTop && (
-                        <div className="cook-v2-shortlist-band px-4 py-2 text-[11px] font-bold uppercase tracking-[0.12em]">
+                        <div className="bg-casa-accent-soft px-4 py-2 text-caption font-bold uppercase tracking-wide text-casa-top-pick-band">
                           Top pick for tonight
                         </div>
                       )}
@@ -2992,17 +2989,19 @@ export default function CookPage() {
                         className={cn('w-full object-cover', isTop ? 'h-44' : 'h-36')}
                       />
                       <div className={cn('p-4 flex flex-col flex-1', !isTop && 'p-3.5')}>
-                        <p className={cn('font-semibold text-casa-navy leading-tight', isTop ? 'text-heading' : 'text-body')}>{insight.recipe.name}</p>
+                        {isTop ? (
+                          <Heading role="heading" className="font-semibold leading-tight">{insight.recipe.name}</Heading>
+                        ) : (
+                          <Text as="h3" className="font-semibold leading-tight text-casa-navy">{insight.recipe.name}</Text>
+                        )}
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <span className="cook-v2-chip-time inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-body-sm font-semibold">
-                            <Clock3 size={12} />
+                          <Chip tone="info" size="sm" icon={<Clock3 size={14} />}>
                             {minutesLabel}
-                          </span>
+                          </Chip>
                           {approvalLabel && (
-                            <span className="cook-v2-chip-positive inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-body-sm font-semibold">
-                              <Users size={12} />
+                            <Chip tone="success" size="sm" icon={<Users size={14} />}>
                               {approvalLabel}
-                            </span>
+                            </Chip>
                           )}
                         </div>
                         {isTop && (
@@ -3010,31 +3009,29 @@ export default function CookPage() {
                             {buildMoodReason(insight)}
                           </p>
                         )}
-                        <button
-                          type="button"
+                        <Button
                           onClick={() => openRecipeForCookMode(insight.recipe.id)}
-                          className={cn(
-                            'mt-auto pt-3 px-3 py-2 rounded-button text-body-sm font-semibold transition-colors',
-                            isTop ? 'cook-v2-btn-primary' : 'cook-v2-btn-secondary',
-                          )}
+                          variant={isTop ? 'primary' : 'secondary'}
+                          className="mt-auto pt-3"
                         >
                           Start cooking
-                        </button>
+                        </Button>
                       </div>
-                    </article>
+                    </Card>
                   )
                 })}
               </div>
             )}
 
             {resumeRecipe && (
-              <button
-                type="button"
+              <Button
                 onClick={() => {
                   openRecipeForCookMode(resumeRecipe.recipe.id)
                   setStepIndex(Math.max(0, Math.min(resumeRecipe.progress.stepIndex, Math.max(0, resumeRecipe.progress.totalSteps - 1))))
                 }}
-                className="mt-4 cook-v2-resume w-full rounded-[11px] border px-4 py-3 text-left"
+                variant="secondary"
+                fullWidth
+                className="mt-4 h-auto flex-col items-stretch text-left"
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-body-sm font-semibold text-casa-navy">Jump back in</span>
@@ -3046,96 +3043,92 @@ export default function CookPage() {
                     <span className="text-body-sm text-casa-text-faint">Also recent: {resumeRecentLabel}</span>
                   )}
                 </div>
-                <div className="cook-v2-progress-track mt-2 h-1 rounded-pill overflow-hidden">
+                <div className="mt-2 h-1 overflow-hidden rounded-pill bg-casa-toggle-track">
                   <span
-                    className="cook-v2-progress-bar block h-full rounded-pill"
+                    className="block h-full rounded-pill bg-casa-info"
                     style={{ width: `${Math.round(((resumeRecipe.progress.stepIndex + 1) / Math.max(1, resumeRecipe.progress.totalSteps)) * 100)}%` }}
                   />
                 </div>
-              </button>
+              </Button>
             )}
 
-            <div className="mt-4 cook-v2-planner-hint rounded-[11px] border border-dashed px-4 py-3 flex items-start gap-2.5">
+            <Card tone="accent" className="mt-4 flex items-start gap-2.5 border-dashed">
               <Sparkles size={16} className="text-casa-info shrink-0 mt-0.5" />
               <p className="text-body-sm text-casa-text-secondary">
                 Thinking ahead? The <span className="font-semibold text-casa-navy">Plan the week</span> tab opens Meal Planner AI — build a weekly plan, optimize budget, and push groceries to shopping.
               </p>
-            </div>
+            </Card>
           </div>
         ) : (
-          <div className="mt-4 rounded-[14px] border cook-v2-plan-box p-4">
-            <p className="cook-v2-plan-eyebrow text-[11px] font-semibold uppercase tracking-[0.14em]">Meal Planner AI</p>
-            <h2 className="mt-1 font-body text-[1.25rem] leading-[1.2] font-bold text-casa-navy">Build an overlap-optimized weekly plan</h2>
+          <Card className="mt-4">
+            <Text role="caption" className="font-semibold uppercase tracking-wide text-casa-info-strong">Meal Planner AI</Text>
+            <Heading role="heading" className="mt-1 font-body font-bold">Build an overlap-optimized weekly plan</Heading>
             <p className="mt-1 text-body-sm text-casa-text-tertiary">
               Profile: {foodProfile.householdSize} people · ${foodProfile.weeklyBudgetUsd}/week · {foodProfile.defaultMealsPerWeek} meals · {foodProfile.weeknightMaxMinutes} min weeknights
             </p>
             <p className="mt-2 text-body-sm text-casa-text-secondary">
               Use the planner workspace below to generate, optimize, and apply your weekly meal + grocery plan.
             </p>
-          </div>
+          </Card>
         )}
-      </section>
+      </Card>
 
       {cookLandingMode === 'plan-week' && (
       <>
-      <section className="cook-v2-plan-shell rounded-2xl border border-casa-border bg-casa-surface p-4 space-y-3">
+      <Card className="space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="cook-v2-plan-eyebrow text-[11px] font-semibold uppercase tracking-[0.14em]">Meal Planner AI</p>
-            <p className="text-[11px] text-casa-muted mt-1">
+            <Text role="caption" className="font-semibold uppercase tracking-wide text-casa-info-strong">Meal Planner AI</Text>
+            <Text role="caption" muted className="mt-1">
               Build an overlap-optimized weekly plan, then confirm groceries + queue actions.
-            </p>
+            </Text>
           </div>
-          <button
-            type="button"
+          <Button
             onClick={() => navigate('/settings/food-profile')}
-            className="px-2.5 py-1 rounded-button border border-casa-border text-[11px] text-casa-muted hover:bg-casa-bg"
+            variant="secondary"
+            size="sm"
           >
             Food profile
-          </button>
+          </Button>
         </div>
-        <div className="cook-v2-plan-box rounded-xl border border-casa-border bg-casa-bg p-3">
-          <p className="text-[11px] text-casa-muted">
+        <Card tone="subtle" padding="sm">
+          <Text role="caption" muted>
             Profile: {foodProfile.householdSize} people · ${foodProfile.weeklyBudgetUsd}/week · {foodProfile.defaultMealsPerWeek} meals · {foodProfile.weeknightMaxMinutes} min weeknights
-          </p>
-          <textarea
+          </Text>
+          <Textarea
             value={mealPlannerPrompt}
             onChange={(event) => setMealPlannerPrompt(event.target.value)}
             rows={2}
             placeholder="Plan 5 dinners this week under $140 with overlapping ingredients and one fish meal."
-            className="mt-2 w-full rounded-button border border-casa-control-border bg-casa-surface-subtle px-3 py-2 text-body-sm text-casa-text placeholder:text-casa-text-faint outline-none"
+            className="mt-2"
           />
           <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <button
-              type="button"
+            <Button
               onClick={() => void generateMealPlan()}
               disabled={mealPlannerLoading}
-              className="cook-v2-btn-primary px-3 py-2 rounded-button text-body-sm font-semibold disabled:opacity-60"
+              loading={mealPlannerLoading}
             >
               {mealPlannerLoading ? 'Planning…' : 'Generate plan'}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
               onClick={() => void optimizeCurrentPlanForBudget()}
               disabled={mealPlannerLoading || !mealPlannerPlan}
-              className="cook-v2-btn-secondary px-3 py-2 rounded-button text-body-sm font-semibold disabled:opacity-60"
+              variant="secondary"
             >
               Optimize budget
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
               onClick={() => void applyPlannerGroceries()}
               disabled={mealPlannerAddingGroceries || pendingPlannerGroceries.length === 0}
-              className="cook-v2-btn-primary px-3 py-2 rounded-button text-body-sm font-semibold disabled:opacity-60"
+              loading={mealPlannerAddingGroceries}
             >
               {mealPlannerAddingGroceries
                 ? `Adding groceries... (${pendingPlannerGroceries.length})`
                 : `Apply to shopping (${pendingPlannerGroceries.length})`}
-            </button>
+            </Button>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
+            <Button
               onClick={() => {
                 const prompt = mealPlannerPrompt.trim() || 'Plan 4 quick weeknight dinners under budget.'
                 document.dispatchEvent(new CustomEvent('open-ai-chat', {
@@ -3148,19 +3141,20 @@ export default function CookPage() {
                   },
                 }))
               }}
-              className="cook-v2-btn-secondary px-2.5 py-1.5 rounded-pill text-[11px] text-casa-text-secondary"
+              variant="secondary"
+              size="sm"
             >
               Talk to Chef
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
               onClick={() => setPlannerAdvancedOpen((value) => !value)}
-              className="cook-v2-btn-secondary px-2.5 py-1.5 rounded-pill text-[11px] text-casa-text-secondary"
+              variant="secondary"
+              size="sm"
             >
               {plannerAdvancedOpen ? 'Hide advanced' : 'Show advanced'}
-            </button>
+            </Button>
             {!plannerAdvancedOpen && typeof mealPlannerDebug?.elapsed_ms === 'number' && (
-              <span className="text-[11px] text-casa-muted">
+              <span className="text-caption text-casa-muted">
                 trace {mealPlannerLastTraceId ? mealPlannerLastTraceId.slice(0, 8) : 'n/a'} · {mealPlannerDebug.elapsed_ms}ms
               </span>
             )}
@@ -3178,7 +3172,7 @@ export default function CookPage() {
                     type="button"
                     onClick={() => setMealPlannerStrategy(strategy.key)}
                     className={cn(
-                      'px-2 py-1 rounded-pill border text-[11px] transition-colors',
+                      'px-2 py-1 rounded-pill border text-caption transition-colors',
                       mealPlannerStrategy === strategy.key
                         ? 'border-casa-gold/50 bg-casa-gold/10 text-casa-navy'
                         : 'border-casa-border bg-casa-bg text-casa-muted hover:text-casa-navy',
@@ -3193,19 +3187,19 @@ export default function CookPage() {
                   value={mealPlannerTemplateName}
                   onChange={(event) => setMealPlannerTemplateName(event.target.value)}
                   placeholder="Template name (optional)"
-                  className="rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-[12px] text-casa-text placeholder:text-casa-muted outline-none"
+                  className="rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm text-casa-text placeholder:text-casa-muted outline-none"
                 />
                 <button
                   type="button"
                   onClick={() => void saveCurrentPromptTemplate()}
-                  className="px-3 py-2 rounded-button border border-casa-border text-[12px] text-casa-navy hover:bg-casa-bg"
+                  className="px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-navy hover:bg-casa-bg"
                 >
                   Save template
                 </button>
                 <button
                   type="button"
                   onClick={() => void runWeeklyAutoDraft()}
-                  className="px-3 py-2 rounded-button border border-casa-gold/40 bg-casa-gold/10 text-[12px] text-casa-navy hover:bg-casa-gold/15"
+                  className="px-3 py-2 rounded-button border border-casa-gold/40 bg-casa-gold/10 text-body-sm text-casa-navy hover:bg-casa-gold/15"
                 >
                   Auto weekly draft
                 </button>
@@ -3217,7 +3211,7 @@ export default function CookPage() {
                       key={template.id}
                       type="button"
                       onClick={() => setMealPlannerPrompt(template.prompt)}
-                      className="px-2 py-1 rounded-pill border border-casa-border bg-casa-bg text-[11px] text-casa-muted hover:text-casa-navy hover:bg-casa-main"
+                      className="px-2 py-1 rounded-pill border border-casa-border bg-casa-bg text-caption text-casa-muted hover:text-casa-navy hover:bg-casa-main"
                       title={template.prompt}
                     >
                       {template.name}
@@ -3226,16 +3220,16 @@ export default function CookPage() {
                 </div>
               )}
               {typeof mealPlannerDebug?.elapsed_ms === 'number' && (
-                <p className="text-[11px] text-casa-muted">
+                <p className="text-caption text-casa-muted">
                   Debug latency {mealPlannerDebug.elapsed_ms}ms
                   {mealPlannerLastTraceId ? ` · trace ${mealPlannerLastTraceId}` : ''}
                 </p>
               )}
             </div>
           )}
-        </div>
-        {mealPlannerError && <p className="text-[11px] text-casa-error">{mealPlannerError}</p>}
-        {!mealPlannerError && mealPlannerStatus && <p className="text-[11px] text-casa-muted">{mealPlannerStatus}</p>}
+        </Card>
+        {mealPlannerError && <p className="text-caption text-casa-error">{mealPlannerError}</p>}
+        {!mealPlannerError && mealPlannerStatus && <p className="text-caption text-casa-muted">{mealPlannerStatus}</p>}
         {mealPlannerPlan && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <div className="rounded-xl border border-casa-border bg-casa-bg p-3">
@@ -3243,12 +3237,12 @@ export default function CookPage() {
                 Weekly meal queue preview
                 <InfoHint label="Meal selection reasoning" text={mealPlannerPlan.explainability?.meal_selection ?? 'Ranked recipes by overlap, time fit, and learned preferences.'} />
               </p>
-              <p className="text-[11px] text-casa-muted mt-1">{mealPlannerPlan.summary}</p>
-              <p className="text-[11px] text-casa-muted mt-1 inline-flex items-center gap-1.5">
+              <p className="text-caption text-casa-muted mt-1">{mealPlannerPlan.summary}</p>
+              <p className="text-caption text-casa-muted mt-1 inline-flex items-center gap-1.5">
                 Overlap strategy
                 <InfoHint label="Overlap strategy reasoning" text={mealPlannerPlan.explainability?.overlap_strategy ?? 'Balanced ingredient overlap against variety preference.'} />
               </p>
-              <p className="text-[11px] text-casa-muted mt-1">
+              <p className="text-caption text-casa-muted mt-1">
                 Active meals: {configuredPlannerMeals.filter((meal) => meal.enabled).length} / {configuredPlannerMeals.length}
               </p>
               <div className="mt-2 space-y-2">
@@ -3256,9 +3250,9 @@ export default function CookPage() {
                   <div key={meal.key} className={cn('rounded-lg border border-casa-border bg-casa-surface px-2.5 py-2', !meal.enabled && 'opacity-55')}>
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <p className="text-[11px] text-casa-muted">{SLOT_LABELS[meal.slot]}{meal.planned_for ? ` · ${meal.planned_for}` : ''}</p>
+                        <p className="text-caption text-casa-muted">{SLOT_LABELS[meal.slot]}{meal.planned_for ? ` · ${meal.planned_for}` : ''}</p>
                         <p className="text-body-sm font-semibold text-casa-navy">{meal.recipe_name}</p>
-                        <p className="text-[11px] text-casa-muted">Overlap {(meal.overlap_score * 100).toFixed(0)}% · {meal.reason}</p>
+                        <p className="text-caption text-casa-muted">Overlap {(meal.overlap_score * 100).toFixed(0)}% · {meal.reason}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
@@ -3290,7 +3284,7 @@ export default function CookPage() {
                   </div>
                 ))}
                 {configuredPlannerMeals.length === 0 && (
-                  <p className="text-[11px] text-casa-muted">No meals left in the queue. Generate a new plan.</p>
+                  <p className="text-caption text-casa-muted">No meals left in the queue. Generate a new plan.</p>
                 )}
               </div>
               <button
@@ -3303,7 +3297,7 @@ export default function CookPage() {
               <button
                 type="button"
                 onClick={() => void reinforceCurrentPlanPreferences()}
-                className="mt-2 ml-2 px-3 py-2 rounded-button border border-casa-border text-[12px] text-casa-muted hover:bg-casa-surface"
+                className="mt-2 ml-2 px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-muted hover:bg-casa-surface"
               >
                 Love this pattern (learn)
               </button>
@@ -3321,7 +3315,7 @@ export default function CookPage() {
                     }
                   })()
                 }}
-                className="mt-2 px-3 py-2 rounded-button border border-casa-border text-[12px] text-casa-muted hover:bg-casa-surface"
+                className="mt-2 px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-muted hover:bg-casa-surface"
               >
                 This plan missed (learn + regenerate)
               </button>
@@ -3331,10 +3325,10 @@ export default function CookPage() {
                 Consolidated grocery preview
                 <InfoHint label="Budget reasoning" text={mealPlannerPlan.explainability?.budget_strategy ?? 'Estimated basket cost vs weekly budget target.'} />
               </p>
-              <p className="text-[11px] text-casa-muted mt-1">
+              <p className="text-caption text-casa-muted mt-1">
                 Est. ${configuredPlannerMetrics.estimatedLow}-{configuredPlannerMetrics.estimatedHigh} {mealPlannerPlan.estimated_cost_range.currency}
               </p>
-              <p className="text-[11px] text-casa-muted mt-1">
+              <p className="text-caption text-casa-muted mt-1">
                 Budget fit {(configuredPlannerMetrics.budgetFit * 100).toFixed(0)}% · Waste score {(configuredPlannerMetrics.wasteScore * 100).toFixed(0)}% · Est. waste ${configuredPlannerMetrics.wasteValue.toFixed(2)}
                 <span className="ml-1.5 inline-flex items-center gap-1">
                   <InfoHint label="Waste reasoning" text={mealPlannerPlan.explainability?.waste_strategy ?? 'Pack-size rounding is used to estimate waste risk.'} />
@@ -3342,18 +3336,18 @@ export default function CookPage() {
               </p>
               {configuredPlannerMetrics.budgetFit < 0.8 && (
                 <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2">
-                  <p className="text-[11px] font-semibold text-amber-800">
+                  <p className="text-caption font-semibold text-amber-800">
                     Over budget risk detected
                   </p>
                   {overBudgetSwapHints.length > 0 && (
-                    <ul className="mt-1 list-disc pl-4 text-[11px] text-amber-800 space-y-0.5">
+                    <ul className="mt-1 list-disc pl-4 text-caption text-amber-800 space-y-0.5">
                       {overBudgetSwapHints.map((hint) => <li key={hint}>{hint}</li>)}
                     </ul>
                   )}
                   <button
                     type="button"
                     onClick={() => void optimizeCurrentPlanForBudget()}
-                    className="mt-2 px-2.5 py-1.5 rounded-button border border-amber-300 bg-amber-100 text-[11px] text-amber-900"
+                    className="mt-2 px-2.5 py-1.5 rounded-button border border-amber-300 bg-amber-100 text-caption text-amber-900"
                   >
                     Auto optimize for budget
                   </button>
@@ -3361,11 +3355,11 @@ export default function CookPage() {
               )}
               {mealPlannerPlan.pantry_deductions.length > 0 && (
                 <div className="mt-2 rounded-lg border border-casa-border bg-casa-surface px-2.5 py-2">
-                  <p className="text-[11px] text-casa-muted inline-flex items-center gap-1.5">
+                  <p className="text-caption text-casa-muted inline-flex items-center gap-1.5">
                     Pantry deductions ({mealPlannerPlan.pantry_deductions.length})
                     <InfoHint label="Pantry deduction reasoning" text={mealPlannerPlan.explainability?.pantry_strategy ?? 'Pantry staples are removed from grocery adds.'} />
                   </p>
-                  <p className="text-[11px] text-casa-navy mt-1 line-clamp-2">
+                  <p className="text-caption text-casa-navy mt-1 line-clamp-2">
                     {mealPlannerPlan.pantry_deductions.slice(0, 6).map((row) => row.name).join(', ')}
                   </p>
                 </div>
@@ -3375,7 +3369,7 @@ export default function CookPage() {
                   const checked = Boolean(mealPlannerPantryConfig[plannerGroceryKey(item)])
                   const tracker = projectedPantryForItem(item)
                   return (
-                    <label key={`${item.name}-${item.category}`} className="flex items-start gap-2 text-[12px] text-casa-navy">
+                    <label key={`${item.name}-${item.category}`} className="flex items-start gap-2 text-body-sm text-casa-navy">
                       <input
                         type="checkbox"
                         checked={checked}
@@ -3401,21 +3395,21 @@ export default function CookPage() {
                   )
                 })}
                 {configuredPlannerGroceries.length === 0 && (
-                  <p className="text-[11px] text-casa-muted">No grocery items for the current meal selection.</p>
+                  <p className="text-caption text-casa-muted">No grocery items for the current meal selection.</p>
                 )}
               </div>
               {configuredPlannerGroceries.length > 0 && (
-                <p className="mt-2 text-[11px] text-casa-muted">
+                <p className="mt-2 text-caption text-casa-muted">
                   {configuredPlannerGroceries.length - pendingPlannerGroceries.length} marked as already in pantry · {pendingPlannerGroceries.length} heading to shopping list
                 </p>
               )}
               {lowStockPlannerItems.length > 0 && (
-                <p className="mt-1 text-[11px] text-casa-muted">
+                <p className="mt-1 text-caption text-casa-muted">
                   {lowStockPlannerItems.length} item{lowStockPlannerItems.length === 1 ? '' : 's'} are projected low after this plan — review pantry before checkout.
                 </p>
               )}
               {configuredPlannerGroceries.length > 0 && (
-                <p className="mt-1 text-[11px] text-casa-muted">
+                <p className="mt-1 text-caption text-casa-muted">
                   Pantry tracker persists leftovers after apply and projects low-stock from your inventory balance.
                   <button
                     type="button"
@@ -3428,16 +3422,16 @@ export default function CookPage() {
               )}
               {mealPlannerPlan.suggested_recipe && (
                 <div className="mt-2 rounded-lg border border-casa-border bg-casa-surface px-2.5 py-2">
-                  <p className="text-[11px] text-casa-muted">Suggested extra recipe</p>
+                  <p className="text-caption text-casa-muted">Suggested extra recipe</p>
                   <p className="text-body-sm font-semibold text-casa-navy">{mealPlannerPlan.suggested_recipe.name}</p>
-                  <p className="text-[11px] text-casa-muted">{mealPlannerPlan.suggested_recipe.reason}</p>
+                  <p className="text-caption text-casa-muted">{mealPlannerPlan.suggested_recipe.reason}</p>
                 </div>
               )}
-              <p className="mt-3 text-[11px] text-casa-muted">
+              <p className="mt-3 text-caption text-casa-muted">
                 Use “Apply to shopping” above to send this list.
               </p>
               {mealPlannerAddResult && (
-                <div className="mt-2 rounded-lg border border-green-300 bg-green-50 px-2.5 py-2 text-[11px] text-green-800">
+                <div className="mt-2 rounded-lg border border-green-300 bg-green-50 px-2.5 py-2 text-caption text-green-800">
                   Sent {mealPlannerAddResult.attempted} planner items to Shopping.
                   {' '}
                   Added {mealPlannerAddResult.inserted} new item{mealPlannerAddResult.inserted === 1 ? '' : 's'}
@@ -3458,11 +3452,11 @@ export default function CookPage() {
         {mealPlannerActionLog.length > 0 && (
           <div className="mt-3 rounded-xl border border-casa-border bg-casa-bg p-2.5">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] font-semibold text-casa-navy">Planner action log</p>
+              <p className="text-caption font-semibold text-casa-navy">Planner action log</p>
               <button
                 type="button"
                 onClick={() => setPlannerLogOpen((value) => !value)}
-                className="px-2 py-1 rounded-pill border border-casa-border text-[10px] text-casa-muted hover:text-casa-navy"
+                className="px-2 py-1 rounded-pill border border-casa-border text-caption text-casa-muted hover:text-casa-navy"
               >
                 {plannerLogOpen ? 'Hide' : 'Show'}
               </button>
@@ -3471,10 +3465,10 @@ export default function CookPage() {
               <div className="mt-1.5 max-h-36 overflow-y-auto space-y-1 pr-1">
                 {mealPlannerActionLog.slice(0, 12).map((entry) => (
                   <div key={entry.id} className="rounded-lg border border-casa-border bg-casa-surface px-2 py-1.5">
-                    <p className="text-[11px] text-casa-navy">
+                    <p className="text-caption text-casa-navy">
                       {entry.action.replace(/_/g, ' ')} · {entry.status}
                     </p>
-                    <p className="text-[10px] text-casa-muted">
+                    <p className="text-caption text-casa-muted">
                       {entry.detail}
                       {entry.trace_id ? ` · trace ${entry.trace_id.slice(0, 8)}` : ''}
                     </p>
@@ -3484,18 +3478,18 @@ export default function CookPage() {
             )}
           </div>
         )}
-      </section>
+      </Card>
 
-      <section className="cook-v2-plan-shell rounded-2xl border border-casa-border bg-casa-surface p-4">
+      <Card>
         <div className="flex items-center justify-between gap-2 mb-3">
-          <p className="text-body-sm font-semibold text-casa-navy">Planned meals</p>
-          <p className="text-[11px] text-casa-muted">Drag planning happens in Grocery</p>
+          <Heading role="heading">Planned meals</Heading>
+          <Text role="caption" muted>Drag planning happens in Grocery</Text>
         </div>
         {plannedMealError && (
-          <p className="mb-2 text-[11px] text-casa-error">{plannedMealError}</p>
+          <p className="mb-2 text-caption text-casa-error">{plannedMealError}</p>
         )}
         {!plannedMealError && plannedMealStatus && (
-          <p className="mb-2 text-[11px] text-casa-muted">{plannedMealStatus}</p>
+          <p className="mb-2 text-caption text-casa-muted">{plannedMealStatus}</p>
         )}
         {plannedRecipes.length === 0 ? (
           <p className="text-body-sm text-casa-muted">No meal slots yet. Plan recipes from Grocery → Saved recipes.</p>
@@ -3517,7 +3511,7 @@ export default function CookPage() {
                     }}
                     className="text-left min-w-0 flex-1 hover:opacity-90 transition-opacity"
                   >
-                    <p className="text-[11px] text-casa-muted">{SLOT_LABELS[plan.slot]}</p>
+                    <p className="text-caption text-casa-muted">{SLOT_LABELS[plan.slot]}</p>
                     <p className="text-body-sm font-semibold text-casa-navy truncate">{recipe.name}</p>
                   </button>
                   <div className="flex items-center gap-1">
@@ -3542,7 +3536,7 @@ export default function CookPage() {
                     <button
                       type="button"
                       onClick={() => openRecipeForCookMode(recipe.id)}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-button border border-casa-border text-[11px] text-casa-muted hover:text-casa-navy"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-button border border-casa-border text-caption text-casa-muted hover:text-casa-navy"
                     >
                       Cook now
                     </button>
@@ -3550,7 +3544,7 @@ export default function CookPage() {
                       type="button"
                       onClick={() => void markPlannedMealCooked(plan, recipe)}
                       disabled={plannedMealActionId !== null}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-button border border-green-300 text-[11px] text-green-700 hover:bg-green-50 disabled:opacity-60"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-button border border-green-300 text-caption text-green-700 hover:bg-green-50 disabled:opacity-60"
                     >
                       Done
                     </button>
@@ -3558,7 +3552,7 @@ export default function CookPage() {
                       type="button"
                       onClick={() => void removePlannedMeal(plan, recipe)}
                       disabled={plannedMealActionId === `${plan.slot}:${recipe.id}` || plannedMealActionId !== null}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-button border border-casa-border text-[11px] text-casa-muted hover:text-casa-error hover:border-casa-error/40 disabled:opacity-60"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-button border border-casa-border text-caption text-casa-muted hover:text-casa-error hover:border-casa-error/40 disabled:opacity-60"
                     >
                       <Trash2 size={12} />
                       {plannedMealActionId === `${plan.slot}:${recipe.id}` ? 'Removing…' : 'Remove'}
@@ -3569,7 +3563,7 @@ export default function CookPage() {
             ))}
           </div>
         )}
-      </section>
+      </Card>
       </>
       )}
 
@@ -3626,13 +3620,13 @@ export default function CookPage() {
           </div>
         </div>
         {libraryActionError && (
-          <p className="mb-2 text-[11px] text-casa-error">{libraryActionError}</p>
+          <p className="mb-2 text-caption text-casa-error">{libraryActionError}</p>
         )}
         {!libraryActionError && libraryActionStatus && (
-          <p className="mb-2 text-[11px] text-casa-muted">{libraryActionStatus}</p>
+          <p className="mb-2 text-caption text-casa-muted">{libraryActionStatus}</p>
         )}
         {filteredRecipes.length === 0 && (
-          <p className="mb-2 text-[11px] text-casa-muted">
+          <p className="mb-2 text-caption text-casa-muted">
             No recipes match this filter yet. Try switching filters or importing a recipe.
           </p>
         )}
@@ -3665,7 +3659,7 @@ export default function CookPage() {
               })()}
               <div className="p-3 flex flex-1 flex-col">
                 <p className="text-body font-semibold text-casa-navy line-clamp-2">{recipe.name}</p>
-                <p className="mt-1 text-[11px] text-casa-muted">
+                <p className="mt-1 text-caption text-casa-muted">
                   {recipe.cook_time ? `${recipe.cook_time} · ` : ''}
                   {recipe.servings ?? 'servings n/a'}
                 </p>
@@ -3696,12 +3690,12 @@ export default function CookPage() {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="px-4 py-3 border-b border-casa-divider">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-casa-muted font-semibold">Recipe photo editor</p>
+              <p className="text-caption uppercase tracking-[0.14em] text-casa-muted font-semibold">Recipe photo editor</p>
               <p className="text-body font-semibold text-casa-navy mt-1">{photoEditorName}</p>
             </div>
             <div className="p-4 space-y-3 overflow-y-auto flex-1 min-h-0">
               <div className="rounded-xl border border-casa-border bg-casa-bg p-3">
-                <p className="text-[11px] text-casa-muted mb-2">Search recipe images (Pexels + Unsplash)</p>
+                <p className="text-caption text-casa-muted mb-2">Search recipe images (Pexels + Unsplash)</p>
                 <div className="flex items-center gap-2">
                   <input
                     value={photoSearchQuery}
@@ -3738,7 +3732,7 @@ export default function CookPage() {
                     Take photo
                   </button>
                   {photoEditorUploading && (
-                    <span className="text-[11px] text-casa-muted animate-breathe">Uploading…</span>
+                    <span className="text-caption text-casa-muted animate-breathe">Uploading…</span>
                   )}
                 </div>
                 <input
@@ -3764,7 +3758,7 @@ export default function CookPage() {
                     void handlePhotoEditorFileSelection(files, 'camera')
                   }}
                 />
-                {photoSearchError && <p className="mt-2 text-[11px] text-casa-error">{photoSearchError}</p>}
+                {photoSearchError && <p className="mt-2 text-caption text-casa-error">{photoSearchError}</p>}
                 {photoSearchResults.length > 0 && (
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     {photoSearchResults.map((option) => (
@@ -3789,7 +3783,7 @@ export default function CookPage() {
                           referrerPolicy="no-referrer"
                         />
                         {option.source && (
-                          <span className="block px-2 py-1 text-[10px] text-casa-muted truncate border-t border-casa-divider/60">
+                          <span className="block px-2 py-1 text-caption text-casa-muted truncate border-t border-casa-divider/60">
                             {option.source}
                           </span>
                         )}
@@ -3800,7 +3794,7 @@ export default function CookPage() {
               </div>
 
               <label className="block">
-                <span className="text-[11px] text-casa-muted">Image URL</span>
+                <span className="text-caption text-casa-muted">Image URL</span>
                 <input
                   value={photoEditorUrl}
                   onChange={(event) => setPhotoEditorUrl(event.target.value)}
@@ -3824,11 +3818,11 @@ export default function CookPage() {
                 </div>
                 <div className="space-y-2">
                   <div>
-                    <p className="text-[11px] text-casa-muted mb-1">Horizontal crop focus</p>
+                    <p className="text-caption text-casa-muted mb-1">Horizontal crop focus</p>
                     <input type="range" min={0} max={100} value={photoEditorFocalX} onChange={(event) => setPhotoEditorFocalX(Number(event.target.value))} />
                   </div>
                   <div>
-                    <p className="text-[11px] text-casa-muted mb-1">Vertical crop focus</p>
+                    <p className="text-caption text-casa-muted mb-1">Vertical crop focus</p>
                     <input type="range" min={0} max={100} value={photoEditorFocalY} onChange={(event) => setPhotoEditorFocalY(Number(event.target.value))} />
                   </div>
                   <button
@@ -3837,13 +3831,13 @@ export default function CookPage() {
                       setPhotoEditorFocalX(50)
                       setPhotoEditorFocalY(42)
                     }}
-                    className="px-3 py-1.5 rounded-pill border border-casa-gold/40 bg-casa-gold/10 text-[11px] text-casa-navy hover:bg-casa-gold/15"
+                    className="px-3 py-1.5 rounded-pill border border-casa-gold/40 bg-casa-gold/10 text-caption text-casa-navy hover:bg-casa-gold/15"
                   >
                     Auto-crop
                   </button>
                 </div>
               </div>
-              {photoEditorError && <p className="text-[11px] text-casa-error">{photoEditorError}</p>}
+              {photoEditorError && <p className="text-caption text-casa-error">{photoEditorError}</p>}
             </div>
             <div
               className="px-4 pt-3 border-t border-casa-divider flex items-center justify-end gap-2"
@@ -3916,16 +3910,16 @@ export default function CookPage() {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="px-4 py-3 border-b border-casa-divider">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-casa-muted font-semibold">Dinner Control Center</p>
+              <p className="text-caption uppercase tracking-[0.14em] text-casa-muted font-semibold">Dinner Control Center</p>
               <p className="text-body font-semibold text-casa-navy mt-1">Import recipe</p>
-              <p className="text-[11px] text-casa-muted mt-1">
+              <p className="text-caption text-casa-muted mt-1">
                 {importStep === 1 ? 'Step 1 of 3 · Add sources' : importStep === 2 ? 'Step 2 of 3 · Confirm sources' : 'Step 3 of 3 · Review + save'}
               </p>
             </div>
             <div className="p-4 space-y-3 overflow-y-auto flex-1">
               {(importStep === 1 || importStep === 2) && (
                 <div className="rounded-2xl border border-casa-border bg-casa-bg p-3 space-y-2">
-                  <p className="text-[11px] text-casa-muted">Add a URL and/or photos. Import will use whatever you provided.</p>
+                  <p className="text-caption text-casa-muted">Add a URL and/or photos. Import will use whatever you provided.</p>
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                     <input
                       type="url"
@@ -3985,7 +3979,7 @@ export default function CookPage() {
                   />
                   {importCaptureFiles.length > 0 && (
                     <div className="space-y-1">
-                      <p className="text-[11px] text-casa-muted">Attached photos ({importCaptureFiles.length}) · meal photo is optional</p>
+                      <p className="text-caption text-casa-muted">Attached photos ({importCaptureFiles.length}) · meal photo is optional</p>
                       <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                         {importCaptureFiles.map((file, index) => {
                           const selected = importMealPhotoIndex !== null && index === importMealPhotoIndex
@@ -4002,14 +3996,14 @@ export default function CookPage() {
                                   className="h-16 w-full object-cover bg-casa-surface"
                                   loading="lazy"
                                 />
-                                <span className={cn('block px-1 py-1 text-[10px] truncate text-left', selected ? 'text-casa-navy font-semibold' : 'text-casa-muted')}>
+                                <span className={cn('block px-1 py-1 text-caption truncate text-left', selected ? 'text-casa-navy font-semibold' : 'text-casa-muted')}>
                                   {selected ? 'Meal photo' : 'Set meal photo'}
                                 </span>
                               </button>
                               <button
                                 type="button"
                                 onClick={() => removeImportCaptureFile(file.id)}
-                                className="w-full border-t border-casa-divider px-1 py-1 text-[10px] text-casa-muted hover:bg-casa-bg"
+                                className="w-full border-t border-casa-divider px-1 py-1 text-caption text-casa-muted hover:bg-casa-bg"
                               >
                                 Remove
                               </button>
@@ -4021,7 +4015,7 @@ export default function CookPage() {
                         type="button"
                         onClick={() => setImportMealPhotoIndex(null)}
                         className={cn(
-                          'mt-1 px-2.5 py-1.5 rounded-button border text-[11px] transition-colors',
+                          'mt-1 px-2.5 py-1.5 rounded-button border text-caption transition-colors',
                           importMealPhotoIndex === null
                             ? 'border-casa-gold bg-casa-gold/10 text-casa-navy font-semibold'
                             : 'border-casa-border text-casa-muted hover:bg-casa-bg',
@@ -4035,10 +4029,10 @@ export default function CookPage() {
               )}
 
               {importingRecipe && (
-                <p className="text-[11px] text-casa-muted animate-breathe">Extracting recipe…</p>
+                <p className="text-caption text-casa-muted animate-breathe">Extracting recipe…</p>
               )}
               {importError && (
-                <p className="text-[11px] text-casa-error">{importError}</p>
+                <p className="text-caption text-casa-error">{importError}</p>
               )}
 
               {importStep === 3 && importDraft && (
@@ -4061,7 +4055,7 @@ export default function CookPage() {
                     />
                     <div className="min-w-0">
                       <p className="text-body-sm font-semibold text-casa-navy">{importDraft.name}</p>
-                      <p className="text-[11px] text-casa-muted">
+                      <p className="text-caption text-casa-muted">
                         {importDraft.ingredients.length} ingredients · {importDraft.steps.length} steps · {Math.round(importDraft.confidence * 100)}% confidence
                         {importDraft.servings ? ` · ${importDraft.servings}` : ''}
                         {importDraft.cook_time ? ` · ${importDraft.cook_time}` : ''}
@@ -4070,26 +4064,26 @@ export default function CookPage() {
                   </div>
 
                   <div className="rounded-xl border border-casa-border bg-casa-surface p-2">
-                    <p className="text-[11px] text-casa-muted mb-1">Recipe photos</p>
-                    <p className="text-[11px] text-casa-muted mb-2">Tap a photo to mark as meal photo (cover), or choose none.</p>
+                    <p className="text-caption text-casa-muted mb-1">Recipe photos</p>
+                    <p className="text-caption text-casa-muted mb-2">Tap a photo to mark as meal photo (cover), or choose none.</p>
                     <div className="flex items-center gap-2 mb-2">
                       <input
                         type="url"
                         value={importExtraImageUrl}
                         onChange={(event) => setImportExtraImageUrl(event.target.value)}
                         placeholder="https://.../another-photo.jpg"
-                        className="flex-1 rounded-button border border-casa-border bg-casa-bg px-2.5 py-1.5 text-[11px] text-casa-text outline-none"
+                        className="flex-1 rounded-button border border-casa-border bg-casa-bg px-2.5 py-1.5 text-caption text-casa-text outline-none"
                       />
                       <button
                         type="button"
                         onClick={addImportImageUrl}
-                        className="px-2.5 py-1.5 rounded-button border border-casa-border text-[11px] text-casa-navy hover:bg-casa-bg transition-colors"
+                        className="px-2.5 py-1.5 rounded-button border border-casa-border text-caption text-casa-navy hover:bg-casa-bg transition-colors"
                       >
                         Add image
                       </button>
                     </div>
                     {importDraft.image_urls.length === 0 ? (
-                      <p className="text-[11px] text-casa-muted">No images found yet.</p>
+                      <p className="text-caption text-casa-muted">No images found yet.</p>
                     ) : (
                       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                         {importDraft.image_urls.map((imageUrl, imageIndex) => {
@@ -4117,7 +4111,7 @@ export default function CookPage() {
                               />
                               <span
                                 className={cn(
-                                  'block px-1.5 py-1 text-[10px]',
+                                  'block px-1.5 py-1 text-caption',
                                   selected ? 'text-casa-navy font-semibold' : 'text-casa-muted'
                                 )}
                               >
@@ -4134,7 +4128,7 @@ export default function CookPage() {
                         setImportDraft((current) => current ? { ...current, primary_image_index: null, image_url: null } : current)
                       }}
                       className={cn(
-                        'mt-2 px-2.5 py-1.5 rounded-button border text-[11px] transition-colors',
+                        'mt-2 px-2.5 py-1.5 rounded-button border text-caption transition-colors',
                         importDraft.primary_image_index === null
                           ? 'border-casa-gold bg-casa-gold/10 text-casa-navy font-semibold'
                           : 'border-casa-border text-casa-muted hover:bg-casa-bg',
@@ -4146,7 +4140,7 @@ export default function CookPage() {
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
                     <div className="rounded-xl border border-casa-border bg-casa-surface p-2">
-                      <p className="text-[11px] text-casa-muted mb-1">Ingredients preview</p>
+                      <p className="text-caption text-casa-muted mb-1">Ingredients preview</p>
                       <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
                         {importDraft.ingredients.map((ingredient, index) => {
                           const normalized = normalizeRecipeIngredientFields({
@@ -4156,9 +4150,9 @@ export default function CookPage() {
                             unit: ingredient.unit,
                           })
                           return (
-                            <div key={`${ingredient.raw_text}-${index}`} className="rounded-lg border border-casa-border bg-casa-bg px-2 py-1.5 text-[11px] text-casa-text">
+                            <div key={`${ingredient.raw_text}-${index}`} className="rounded-lg border border-casa-border bg-casa-bg px-2 py-1.5 text-caption text-casa-text">
                               <p><span className="text-casa-muted">Item:</span> <span className="font-medium">{normalized.name || ingredient.raw_text}</span></p>
-                              <p className="text-[10px] text-casa-muted">
+                              <p className="text-caption text-casa-muted">
                                 Qty: {normalized.quantity || '—'} · Unit: {normalized.unit || '—'}
                               </p>
                             </div>
@@ -4169,12 +4163,12 @@ export default function CookPage() {
 
                     <div className="rounded-xl border border-casa-border bg-casa-surface p-2">
                       <div className="mb-2 flex items-center justify-between gap-2">
-                        <p className="text-[11px] text-casa-muted">Directions preview (literal text, ordered)</p>
+                        <p className="text-caption text-casa-muted">Directions preview (literal text, ordered)</p>
                         <button
                           type="button"
                           onClick={() => void runImportFromCurrentSources()}
                           disabled={importingRecipe}
-                          className="px-2 py-1 rounded-pill border border-casa-border text-[10px] text-casa-navy hover:bg-casa-bg disabled:opacity-60"
+                          className="px-2 py-1 rounded-pill border border-casa-border text-caption text-casa-navy hover:bg-casa-bg disabled:opacity-60"
                         >
                           {importingRecipe ? 'Re-extracting…' : 'Re-extract'}
                         </button>
@@ -4183,13 +4177,13 @@ export default function CookPage() {
                         {importDraft.steps.map((step, stepIndex) => (
                           <div key={`${step.step_number}-${stepIndex}`} className="rounded-lg border border-casa-border bg-casa-bg p-2">
                             <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
-                              <p className="text-[10px] font-semibold text-casa-muted">Step {stepIndex + 1}</p>
+                              <p className="text-caption font-semibold text-casa-muted">Step {stepIndex + 1}</p>
                               <div className="flex items-center gap-1">
                                 <button
                                   type="button"
                                   onClick={() => moveImportStep(stepIndex, -1)}
                                   disabled={stepIndex === 0}
-                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-[10px] text-casa-muted hover:bg-casa-surface disabled:opacity-50"
+                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-caption text-casa-muted hover:bg-casa-surface disabled:opacity-50"
                                 >
                                   Up
                                 </button>
@@ -4197,14 +4191,14 @@ export default function CookPage() {
                                   type="button"
                                   onClick={() => moveImportStep(stepIndex, 1)}
                                   disabled={stepIndex >= importDraft.steps.length - 1}
-                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-[10px] text-casa-muted hover:bg-casa-surface disabled:opacity-50"
+                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-caption text-casa-muted hover:bg-casa-surface disabled:opacity-50"
                                 >
                                   Down
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => addImportStepAfter(stepIndex)}
-                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-[10px] text-casa-navy hover:bg-casa-surface"
+                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-caption text-casa-navy hover:bg-casa-surface"
                                 >
                                   Add
                                 </button>
@@ -4212,7 +4206,7 @@ export default function CookPage() {
                                   type="button"
                                   onClick={() => removeImportStep(stepIndex)}
                                   disabled={importDraft.steps.length <= 1}
-                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-[10px] text-casa-error hover:bg-casa-surface disabled:opacity-50"
+                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-caption text-casa-error hover:bg-casa-surface disabled:opacity-50"
                                 >
                                   Remove
                                 </button>
@@ -4222,7 +4216,7 @@ export default function CookPage() {
                               value={step.instruction}
                               onChange={(event) => updateImportStepInstruction(stepIndex, event.target.value)}
                               rows={3}
-                              className="w-full rounded-button border border-casa-border bg-casa-surface px-2 py-1.5 text-[11px] text-casa-text outline-none resize-y"
+                              className="w-full rounded-button border border-casa-border bg-casa-surface px-2 py-1.5 text-caption text-casa-text outline-none resize-y"
                             />
                           </div>
                         ))}
@@ -4230,7 +4224,7 @@ export default function CookPage() {
                           <button
                             type="button"
                             onClick={() => addImportStepAfter(-1)}
-                            className="w-full px-2 py-1.5 rounded-button border border-casa-border text-[11px] text-casa-navy hover:bg-casa-surface"
+                            className="w-full px-2 py-1.5 rounded-button border border-casa-border text-caption text-casa-navy hover:bg-casa-surface"
                           >
                             Add first step
                           </button>
@@ -4336,14 +4330,14 @@ export default function CookPage() {
                     <p className="text-body font-semibold text-casa-navy truncate">
                       {recipeEditorDraft?.name ?? cookRecipe.name}
                     </p>
-                    <p className="text-[11px] text-casa-muted">Editing recipe</p>
+                    <p className="text-caption text-casa-muted">Editing recipe</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => openPhotoEditor(cookRecipe)}
-                    className="px-2.5 py-1.5 rounded-button border border-casa-border text-[11px] text-casa-muted hover:bg-casa-main inline-flex items-center gap-1"
+                    className="px-2.5 py-1.5 rounded-button border border-casa-border text-caption text-casa-muted hover:bg-casa-main inline-flex items-center gap-1"
                   >
                     <Camera size={12} />
                     Edit photo
@@ -4352,7 +4346,7 @@ export default function CookPage() {
                     type="button"
                     onClick={() => requestDeleteRecipe(cookRecipe)}
                     disabled={deletingRecipeId === cookRecipe.id}
-                    className="px-2.5 py-1.5 rounded-button border border-casa-error/40 text-[11px] text-casa-error hover:bg-casa-error/10 inline-flex items-center gap-1 disabled:opacity-60"
+                    className="px-2.5 py-1.5 rounded-button border border-casa-error/40 text-caption text-casa-error hover:bg-casa-error/10 inline-flex items-center gap-1 disabled:opacity-60"
                   >
                     <Trash2 size={12} />
                     {deletingRecipeId === cookRecipe.id ? 'Deleting…' : 'Delete'}
@@ -4384,10 +4378,10 @@ export default function CookPage() {
                     className="w-[104px] h-[104px] rounded-card object-cover border border-white/25 shadow-card flex-shrink-0 bg-casa-navy"
                   />
                   <div className="min-w-0 pb-1">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-casa-info">
+                    <p className="text-caption font-semibold uppercase tracking-[0.18em] text-casa-info">
                       Now cooking
                     </p>
-                    <p className="mt-0.5 text-white font-semibold text-[28px] leading-tight line-clamp-2 drop-shadow">
+                    <p className="mt-0.5 text-white font-semibold text-display-sm leading-tight line-clamp-2 drop-shadow">
                       {cookRecipe.name}
                     </p>
                   </div>
@@ -4398,7 +4392,7 @@ export default function CookPage() {
                       href={cookRecipe.source_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="px-2.5 py-1.5 rounded-button bg-casa-surface/85 backdrop-blur border border-casa-border text-[11px] text-casa-navy hover:bg-casa-surface inline-flex items-center gap-1"
+                      className="px-2.5 py-1.5 rounded-button bg-casa-surface/85 backdrop-blur border border-casa-border text-caption text-casa-navy hover:bg-casa-surface inline-flex items-center gap-1"
                     >
                       <ExternalLink size={12} />
                       Original
@@ -4407,7 +4401,7 @@ export default function CookPage() {
                   <button
                     type="button"
                     onClick={startRecipeEditing}
-                    className="px-2.5 py-1.5 rounded-button bg-casa-surface/85 backdrop-blur border border-casa-border text-[11px] text-casa-navy hover:bg-casa-surface inline-flex items-center gap-1"
+                    className="px-2.5 py-1.5 rounded-button bg-casa-surface/85 backdrop-blur border border-casa-border text-caption text-casa-navy hover:bg-casa-surface inline-flex items-center gap-1"
                   >
                     Edit
                   </button>
@@ -4618,7 +4612,7 @@ export default function CookPage() {
                 <div className="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_17.5rem] gap-3">
                   <div className="order-1 lg:min-w-0">
                     <div className="pb-2 flex items-center justify-between gap-2">
-                      <p className="text-[12px] font-bold text-casa-navy">
+                      <p className="text-body-sm font-bold text-casa-navy">
                         {directionsViewMode === 'step'
                           ? `Step ${stepIndex + 1} of ${Math.max(1, cookSteps.length)}`
                           : `${cookSteps.length} steps`}
@@ -4628,7 +4622,7 @@ export default function CookPage() {
                           type="button"
                           onClick={() => setDirectionsViewMode('step')}
                           className={cn(
-                            'px-3 py-1.5 rounded-pill text-[12px] transition-all',
+                            'px-3 py-1.5 rounded-pill text-body-sm transition-all',
                             directionsViewMode === 'step'
                               ? 'bg-casa-surface text-casa-navy font-bold shadow-[0_1px_2px_rgba(6,10,36,0.14)]'
                               : 'text-casa-text-secondary font-semibold'
@@ -4640,7 +4634,7 @@ export default function CookPage() {
                           type="button"
                           onClick={() => setDirectionsViewMode('all')}
                           className={cn(
-                            'px-3 py-1.5 rounded-pill text-[12px] transition-all',
+                            'px-3 py-1.5 rounded-pill text-body-sm transition-all',
                             directionsViewMode === 'all'
                               ? 'bg-casa-surface text-casa-navy font-bold shadow-[0_1px_2px_rgba(6,10,36,0.14)]'
                               : 'text-casa-text-secondary font-semibold'
@@ -4653,12 +4647,12 @@ export default function CookPage() {
                     {directionsViewMode === 'step' && neededNowIngredientRows.length > 0 && (
                       <div className="pb-3">
                         <div className="rounded-card border border-casa-accent-subtle-border bg-casa-accent-subtle px-3 py-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-casa-top-pick-band">Needed now</p>
+                          <p className="text-caption font-semibold uppercase tracking-[0.14em] text-casa-top-pick-band">Needed now</p>
                           <div className="mt-1.5 flex flex-wrap gap-1.5">
                             {neededNowIngredientRows.map((row) => (
                               <span
                                 key={`needed-now-${row.id}`}
-                                className="inline-flex items-center gap-1 rounded-pill border border-casa-accent-subtle-border bg-casa-surface px-2.5 py-1 text-[12px] font-semibold text-casa-top-pick-band"
+                                className="inline-flex items-center gap-1 rounded-pill border border-casa-accent-subtle-border bg-casa-surface px-2.5 py-1 text-body-sm font-semibold text-casa-top-pick-band"
                               >
                                 <span>{row.name}</span>
                                 {row.qty && <span className="font-normal text-casa-text-secondary">{row.qty}</span>}
@@ -4694,10 +4688,10 @@ export default function CookPage() {
                     <div className="pt-2">
                       {directionsViewMode === 'step' ? (
                         <div ref={(el) => { currentStepRef.current = el }} className="pr-1 flex gap-3">
-                          <span className="text-casa-accent-soft-border font-extrabold leading-none text-[46px] flex-shrink-0 tabular-nums">
+                          <span className="text-casa-accent-soft-border font-extrabold leading-none text-display-md flex-shrink-0 tabular-nums">
                             {stepIndex + 1}
                           </span>
-                          <p className="text-[28px] text-casa-navy leading-snug pt-1">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
+                          <p className="text-display-sm text-casa-navy leading-snug pt-1">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
                         </div>
                       ) : (
                         <div className="flex flex-col pr-1">
@@ -4721,7 +4715,7 @@ export default function CookPage() {
                               >
                                 <span
                                   className={cn(
-                                    'flex-none grid place-items-center w-[32px] h-[32px] rounded-pill text-[14px] font-bold leading-none border transition-colors',
+                                    'flex-none grid place-items-center w-[32px] h-[32px] rounded-pill text-body font-bold leading-none border transition-colors',
                                     isDone
                                       ? 'bg-casa-info border-casa-info text-white'
                                       : isCurrent
@@ -4733,13 +4727,13 @@ export default function CookPage() {
                                 </span>
                                 <div className="min-w-0 flex-1">
                                   {isCurrent && (
-                                    <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-casa-info-strong mb-2">
+                                    <p className="text-body-sm font-bold uppercase tracking-[0.12em] text-casa-info-strong mb-2">
                                       Current step
                                     </p>
                                   )}
                                   <p
                                     className={cn(
-                                      'text-[28px] leading-snug pt-0.5',
+                                      'text-display-sm leading-snug pt-0.5',
                                       isDone ? 'text-casa-text-tertiary' : 'text-casa-navy'
                                     )}
                                   >
@@ -4750,7 +4744,7 @@ export default function CookPage() {
                                       {neededNowIngredientRows.map((row) => (
                                         <span
                                           key={`mini-needed-${row.id}`}
-                                          className="inline-flex items-center gap-1.5 rounded-pill border border-casa-accent-soft-border bg-casa-surface px-3 py-1.5 text-[13px] font-semibold text-casa-top-pick-band"
+                                          className="inline-flex items-center gap-1.5 rounded-pill border border-casa-accent-soft-border bg-casa-surface px-3 py-1.5 text-body-sm font-semibold text-casa-top-pick-band"
                                         >
                                           {row.name}
                                           {row.qty && <b className="font-semibold text-casa-text-secondary">{row.qty}</b>}
@@ -4771,12 +4765,12 @@ export default function CookPage() {
                     <div className="rounded-card border border-casa-border bg-casa-surface overflow-hidden lg:sticky lg:top-0 shadow-[0_1px_2px_1px_rgba(6,10,36,0.05)]">
                     <div className="px-4 pt-3 pb-3 border-b border-casa-divider">
                       <div className="flex items-baseline justify-between gap-2 mb-1.5">
-                        <p className="text-[17px] font-bold text-casa-navy">Ingredients</p>
+                        <p className="text-body font-bold text-casa-navy">Ingredients</p>
                         <button
                           type="button"
                           onClick={() => setShowCupsConversion((current) => !current)}
                           className={cn(
-                            'flex-none inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-pill border text-[11px] font-semibold transition-colors',
+                            'flex-none inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-pill border text-caption font-semibold transition-colors',
                             showCupsConversion
                               ? 'border-casa-info/50 bg-casa-info-soft text-casa-info-strong'
                               : 'border-casa-control-border bg-casa-surface-subtle text-casa-text-secondary hover:bg-casa-surface'
@@ -4785,7 +4779,7 @@ export default function CookPage() {
                           {showCupsConversion ? 'Show grams' : (<>g <s className="no-underline text-casa-text-faint">→</s> cups</>)}
                         </button>
                       </div>
-                      <p className="text-[11.5px] text-casa-text-tertiary mb-3">{cookIngredients.length} items · low-touch shelf</p>
+                      <p className="text-caption text-casa-text-tertiary mb-3">{cookIngredients.length} items · low-touch shelf</p>
                       <div className="flex w-full bg-casa-bg-2 rounded-pill p-[3px] gap-[2px]">
                         {[0.5, 1, 2].map((scale) => {
                           const active = Math.abs(recipeScale - scale) < 0.001
@@ -4795,7 +4789,7 @@ export default function CookPage() {
                               type="button"
                               onClick={() => setRecipeScale(scale)}
                               className={cn(
-                                'flex-1 text-center py-1.5 rounded-pill text-[12px] transition-all',
+                                'flex-1 text-center py-1.5 rounded-pill text-body-sm transition-all',
                                 active
                                   ? 'bg-casa-surface text-casa-navy font-bold shadow-[0_1px_2px_rgba(6,10,36,0.14)]'
                                   : 'text-casa-text-secondary font-semibold'
@@ -4842,7 +4836,7 @@ export default function CookPage() {
                                   </span>
                                   <span
                                     className={cn(
-                                      'text-[15px] leading-snug transition-colors truncate',
+                                      'text-body leading-snug transition-colors truncate',
                                       checked ? 'text-casa-text-tertiary line-through' : 'text-casa-navy'
                                     )}
                                   >
@@ -4852,7 +4846,7 @@ export default function CookPage() {
                                 {row.qty && (
                                   <span
                                     className={cn(
-                                      'flex-none whitespace-nowrap text-[14px] font-semibold transition-colors',
+                                      'flex-none whitespace-nowrap text-body font-semibold transition-colors',
                                       checked ? 'text-casa-text-faint line-through' : 'text-casa-text-secondary'
                                     )}
                                   >
