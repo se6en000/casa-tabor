@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Plus, Mic, Undo2, Check, BookOpen } from 'lucide-react'
+import { X, Plus, Mic, Undo2, Check, BookOpen, Keyboard } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { GROCERY_CATEGORIES, type GroceryItem } from '../../hooks/useGroceryList'
 import { inferCategoryFromName } from '../../utils/groceryCategorization'
@@ -74,6 +74,30 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
   // In-field dictation: fills the same input you type into, keeping the sheet open.
   const { supported: dictationSupported, listening, toggle: toggleDictation, stop: stopDictation, resetBuffer: resetDictation } =
     useFieldDictation({ onText: setValue })
+
+  // On the Pi kiosk (touch + large screen) the custom TouchKeyboard is used.
+  // We suppress its auto-open (data-touch-keyboard="ignore") and instead offer a
+  // deliberate keyboard button, so opening the sheet doesn't crowd the screen
+  // with a keyboard the user may not want. Mirrors TouchKeyboard's own enable rule.
+  const [usesCustomKeyboard, setUsesCustomKeyboard] = useState(false)
+  useEffect(() => {
+    const check = () => {
+      const touch = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0
+      setUsesCustomKeyboard(touch && window.innerWidth >= 1024)
+    }
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  const toggleCustomKeyboard = useCallback(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.focus()
+    document.dispatchEvent(
+      new CustomEvent('touch-keyboard:control', { detail: { toggle: true, target: el } }),
+    )
+  }, [])
 
   const findDuplicate = useCallback((name: string) => findDuplicateItem(items, name), [items])
 
@@ -155,6 +179,7 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
 
   const handleClose = useCallback(() => {
     stopDictation()
+    document.dispatchEvent(new CustomEvent('touch-keyboard:control', { detail: { close: true } }))
     onClose()
   }, [stopDictation, onClose])
 
@@ -209,7 +234,7 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
             </div>
 
             {/* Input row */}
-            <div className="px-5 shrink-0">
+            <div className="px-5 shrink-0" data-touch-keyboard="ignore">
               <div className="flex items-center gap-2 bg-casa-bg rounded-2xl border border-casa-border px-4 h-14 focus-within:ring-2 focus-within:ring-casa-gold/40 transition-shadow">
                 <Plus size={20} className="text-casa-muted shrink-0" />
                 <input
@@ -233,6 +258,16 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
                   <span className="shrink-0 rounded-pill bg-casa-surface border border-casa-border px-2.5 py-1 text-caption font-semibold text-casa-navy whitespace-nowrap">
                     {CATEGORY_LABEL.get(previewCategory) ?? 'Other'}
                   </span>
+                )}
+                {usesCustomKeyboard && (
+                  <button
+                    type="button"
+                    onClick={toggleCustomKeyboard}
+                    aria-label="Show keyboard"
+                    className="shrink-0 h-10 w-10 rounded-full flex items-center justify-center text-casa-muted hover:bg-casa-main transition-colors"
+                  >
+                    <Keyboard size={18} />
+                  </button>
                 )}
                 {dictationSupported && (
                   <button

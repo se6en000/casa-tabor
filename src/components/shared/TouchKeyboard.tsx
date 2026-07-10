@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowBigUp, CornerDownLeft, Delete, MoveHorizontal, X } from 'lucide-react'
+import { ArrowBigUp, ChevronLeft, ChevronRight, CornerDownLeft, Delete, Settings2, X } from 'lucide-react'
 
 const MOBILE_BREAKPOINT = 1024
 const VK_GAP = 18
@@ -210,6 +210,7 @@ export default function TouchKeyboard() {
   const [handedness, setHandedness] = useState<Handedness>('right')
   const [haptics, setHaptics] = useState(true)
   const [sound, setSound] = useState(true)
+  const [showPrefs, setShowPrefs] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const pointerIntentAtRef = useRef(0)
   const pointerIntentElRef = useRef<EditableTarget | null>(null)
@@ -497,17 +498,6 @@ export default function TouchKeyboard() {
     })
   }
 
-  function handleDone() {
-    tapFeedback()
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-      if (!target.checkValidity()) {
-        target.reportValidity()
-        return
-      }
-    }
-    hideKeyboard()
-  }
-
   function hideKeyboard() {
     if (target) target.blur()
     setVisible(false)
@@ -541,47 +531,68 @@ export default function TouchKeyboard() {
           }}
         >
           <div className="h-full px-3 pt-2 pb-3 flex flex-col gap-2 select-none">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[12px] font-semibold text-casa-muted truncate">
+            {/* Slim header: field label · field nav · settings · close */}
+            <div className="flex items-center gap-1.5">
+              <p className="flex-1 text-[12px] font-semibold text-casa-muted truncate">
                 {getFieldLabel(target)}
               </p>
-              <div className="flex items-center gap-1.5">
-                <button onClick={() => setSize(nextSize(size))} className="rounded-pill bg-casa-bg border border-casa-border px-2.5 py-1 text-[11px] font-semibold text-casa-muted">
-                  Size
-                </button>
-                <button onClick={() => setHandedness(v => (v === 'left' ? 'right' : 'left'))} className="rounded-pill bg-casa-bg border border-casa-border px-2.5 py-1 text-[11px] font-semibold text-casa-muted">
-                  {handedness === 'left' ? 'Left' : 'Right'}
-                </button>
-                <button onClick={() => setHaptics(v => !v)} className="rounded-pill bg-casa-bg border border-casa-border px-2.5 py-1 text-[11px] font-semibold text-casa-muted">
-                  Haptic {haptics ? 'On' : 'Off'}
-                </button>
-                <button onClick={() => setSound(v => !v)} className="rounded-pill bg-casa-bg border border-casa-border px-2.5 py-1 text-[11px] font-semibold text-casa-muted">
-                  Sound {sound ? 'On' : 'Off'}
-                </button>
-                <button onClick={hideKeyboard} className="rounded-pill bg-casa-bg border border-casa-border px-2 py-1 text-casa-muted">
-                  <X size={12} />
-                </button>
-              </div>
+              <button onClick={() => moveFocusBy(-1)} aria-label="Previous field" className="h-8 w-8 rounded-full bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center">
+                <ChevronLeft size={16} />
+              </button>
+              <button onClick={() => moveFocusBy(1)} aria-label="Next field" className="h-8 w-8 rounded-full bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center">
+                <ChevronRight size={16} />
+              </button>
+              <button
+                onClick={() => setShowPrefs(v => !v)}
+                aria-label="Keyboard settings"
+                aria-pressed={showPrefs}
+                className={`h-8 w-8 rounded-full border flex items-center justify-center ${showPrefs ? 'bg-casa-gold/20 border-casa-gold text-casa-navy' : 'bg-casa-bg border-casa-border text-casa-muted'}`}
+              >
+                <Settings2 size={15} />
+              </button>
+              <button onClick={hideKeyboard} aria-label="Hide keyboard" className="h-8 w-8 rounded-full bg-casa-bg border border-casa-border text-casa-muted flex items-center justify-center">
+                <X size={14} />
+              </button>
             </div>
 
-            <div className="grid grid-cols-12 gap-1.5">
-              <button onClick={() => moveFocusBy(-1)} className="col-span-2 rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold" style={{ height: '36px', fontSize: '13px' }}>
-                Prev
-              </button>
-              <button onClick={() => moveFocusBy(1)} className="col-span-2 rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold flex items-center justify-center gap-1" style={{ height: '36px', fontSize: '13px' }}>
-                <MoveHorizontal size={14} /> Next
-              </button>
-              <button onClick={() => setMode('alpha')} className={`col-span-2 rounded-button border font-semibold ${mode === 'alpha' ? 'bg-casa-gold/20 border-casa-gold text-casa-navy' : 'bg-casa-bg border-casa-border text-casa-navy'}`} style={{ height: '36px', fontSize: '13px' }}>
+            {/* Collapsible preferences strip (set-once options live here) */}
+            <AnimatePresence initial={false}>
+              {showPrefs && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                  className="overflow-hidden"
+                >
+                  <div className="flex flex-wrap items-center gap-1.5 pb-0.5">
+                    <button onClick={() => setSize(nextSize(size))} className="rounded-pill bg-casa-bg border border-casa-border px-3 py-1.5 text-[11px] font-semibold text-casa-muted capitalize">
+                      Size · {size}
+                    </button>
+                    <button onClick={() => setHandedness(v => (v === 'left' ? 'right' : 'left'))} className="rounded-pill bg-casa-bg border border-casa-border px-3 py-1.5 text-[11px] font-semibold text-casa-muted">
+                      {handedness === 'left' ? 'Left hand' : 'Right hand'}
+                    </button>
+                    <button onClick={() => setHaptics(v => !v)} className="rounded-pill bg-casa-bg border border-casa-border px-3 py-1.5 text-[11px] font-semibold text-casa-muted">
+                      Haptic {haptics ? 'On' : 'Off'}
+                    </button>
+                    <button onClick={() => setSound(v => !v)} className="rounded-pill bg-casa-bg border border-casa-border px-3 py-1.5 text-[11px] font-semibold text-casa-muted">
+                      Sound {sound ? 'On' : 'Off'}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Mode segmented control */}
+            <div className="grid grid-cols-3 gap-1.5">
+              <button onClick={() => setMode('alpha')} className={`rounded-button border font-semibold ${mode === 'alpha' ? 'bg-casa-gold/20 border-casa-gold text-casa-navy' : 'bg-casa-bg border-casa-border text-casa-navy'}`} style={{ height: '36px', fontSize: '13px' }}>
                 ABC
               </button>
-              <button onClick={() => setMode('num')} className={`col-span-2 rounded-button border font-semibold ${mode === 'num' ? 'bg-casa-gold/20 border-casa-gold text-casa-navy' : 'bg-casa-bg border-casa-border text-casa-navy'}`} style={{ height: '36px', fontSize: '13px' }}>
+              <button onClick={() => setMode('num')} className={`rounded-button border font-semibold ${mode === 'num' ? 'bg-casa-gold/20 border-casa-gold text-casa-navy' : 'bg-casa-bg border-casa-border text-casa-navy'}`} style={{ height: '36px', fontSize: '13px' }}>
                 123
               </button>
-              <button onClick={() => setMode('sym')} className={`col-span-2 rounded-button border font-semibold ${mode === 'sym' ? 'bg-casa-gold/20 border-casa-gold text-casa-navy' : 'bg-casa-bg border-casa-border text-casa-navy'}`} style={{ height: '36px', fontSize: '13px' }}>
+              <button onClick={() => setMode('sym')} className={`rounded-button border font-semibold ${mode === 'sym' ? 'bg-casa-gold/20 border-casa-gold text-casa-navy' : 'bg-casa-bg border-casa-border text-casa-navy'}`} style={{ height: '36px', fontSize: '13px' }}>
                 #+=
-              </button>
-              <button onClick={handleDone} className="col-span-2 rounded-button bg-casa-navy text-white border border-casa-navy font-semibold" style={{ height: '36px', fontSize: '13px' }}>
-                Done
               </button>
             </div>
 
@@ -600,47 +611,77 @@ export default function TouchKeyboard() {
               </div>
             ))}
 
+            {/* Bottom action row — backspace + enter sit on the dominant hand */}
             <div className="grid grid-cols-12 gap-1.5">
-              <button
-                onClick={() => { tapFeedback(); setShift(v => !v) }}
-                className={`col-span-2 rounded-button border text-casa-navy flex items-center justify-center ${shift ? 'bg-casa-gold/20 border-casa-gold' : 'bg-casa-bg border-casa-border'}`}
-                style={{ height: '40px' }}
-                aria-label="Shift"
-              >
-                <ArrowBigUp size={18} />
-              </button>
-              <button
-                onClick={handleBackspace}
-                className="col-span-2 rounded-button bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center"
-                style={{ height: '40px' }}
-                aria-label="Backspace"
-              >
-                <Delete size={18} />
-              </button>
-              <button
-                onClick={() => insertText('\t')}
-                className="col-span-2 rounded-button bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center gap-1 font-semibold"
-                style={{ height: '40px', fontSize: '13px' }}
-                aria-label="Tab"
-              >
-                <MoveHorizontal size={14} />
-                Tab
-              </button>
-              <button
-                onClick={() => insertText(' ')}
-                className="col-span-4 rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold"
-                style={{ height: '40px', fontSize: '13px' }}
-              >
-                Space
-              </button>
-              <button
-                onClick={handleEnter}
-                className="col-span-2 rounded-button bg-casa-navy text-white border border-casa-navy flex items-center justify-center"
-                style={{ height: '40px' }}
-                aria-label="Enter"
-              >
-                <CornerDownLeft size={16} />
-              </button>
+              {handedness === 'right' ? (
+                <>
+                  <button
+                    onClick={() => { tapFeedback(); setShift(v => !v) }}
+                    className={`col-span-2 rounded-button border text-casa-navy flex items-center justify-center ${shift ? 'bg-casa-gold/20 border-casa-gold' : 'bg-casa-bg border-casa-border'}`}
+                    style={{ height: '40px' }}
+                    aria-label="Shift"
+                  >
+                    <ArrowBigUp size={18} />
+                  </button>
+                  <button
+                    onClick={() => insertText(' ')}
+                    className="col-span-6 rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold"
+                    style={{ height: '40px', fontSize: '13px' }}
+                  >
+                    Space
+                  </button>
+                  <button
+                    onClick={handleBackspace}
+                    className="col-span-2 rounded-button bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center"
+                    style={{ height: '40px' }}
+                    aria-label="Backspace"
+                  >
+                    <Delete size={18} />
+                  </button>
+                  <button
+                    onClick={handleEnter}
+                    className="col-span-2 rounded-button bg-casa-navy text-white border border-casa-navy flex items-center justify-center"
+                    style={{ height: '40px' }}
+                    aria-label="Enter"
+                  >
+                    <CornerDownLeft size={16} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={handleEnter}
+                    className="col-span-2 rounded-button bg-casa-navy text-white border border-casa-navy flex items-center justify-center"
+                    style={{ height: '40px' }}
+                    aria-label="Enter"
+                  >
+                    <CornerDownLeft size={16} />
+                  </button>
+                  <button
+                    onClick={handleBackspace}
+                    className="col-span-2 rounded-button bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center"
+                    style={{ height: '40px' }}
+                    aria-label="Backspace"
+                  >
+                    <Delete size={18} />
+                  </button>
+                  <button
+                    onClick={() => insertText(' ')}
+                    className="col-span-6 rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold"
+                    style={{ height: '40px', fontSize: '13px' }}
+                  >
+                    Space
+                  </button>
+                  <button
+                    onClick={() => { tapFeedback(); setShift(v => !v) }}
+                    className={`col-span-2 rounded-button border text-casa-navy flex items-center justify-center ${shift ? 'bg-casa-gold/20 border-casa-gold' : 'bg-casa-bg border-casa-border'}`}
+                    style={{ height: '40px' }}
+                    aria-label="Shift"
+                  >
+                    <ArrowBigUp size={18} />
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </motion.div>

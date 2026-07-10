@@ -219,7 +219,7 @@ function AppShell() {
       <NavBar />
 
       {!hideFab && (
-        <AddEventFab onClick={() => setQuickCreateOpen(true)} />
+        <AddEventFab onClick={() => setQuickCreateOpen(true)} visible={!quickCreateOpen} />
       )}
 
       <QuickCreateSheet
