@@ -258,13 +258,18 @@ export default function DesignSystemGalleryPage() {
         <div>
           <Text role="caption" muted className="font-bold uppercase tracking-widest mb-2">Chips</Text>
           <div className="flex flex-wrap gap-2">
-            <Chip>Neutral</Chip>
-            <Chip tone="accent">Accent</Chip>
+            <Chip>Static medium</Chip>
+            <Chip tone="accent" onClick={() => undefined}>Interactive medium</Chip>
             <Chip tone="success">Success</Chip>
             <Chip tone="info">Info</Chip>
             <Chip tone="warning">Warning</Chip>
             <Chip tone="danger">Danger</Chip>
             <Chip tone="accent" selected onClick={() => undefined}>Selected filter</Chip>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Chip size="sm">Static small</Chip>
+            <Chip size="sm" onClick={() => undefined}>Interactive small</Chip>
+            <Text role="caption" muted>Static and interactive chips share geometry at each size.</Text>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

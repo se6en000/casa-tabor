@@ -38,6 +38,7 @@ import {
 import { getEventEndDate, getEventStartDate } from '../utils/eventTime'
 import { formatDurationLabel, pickActiveHeroEvent, resolveRestingIndex } from '../lib/heroFocus.mjs'
 import { cleanEventTitle, isBirthdayEvent } from '../utils/eventTitle'
+import { chipClassName } from '../design-system/variants.mjs'
 
 const SHARED_GOLD = '#C9A96E'
 
@@ -372,7 +373,7 @@ export default function HomePage() {
 
   return (
     // lg: side-by-side with right panel. Mobile: single column.
-    <div className="casa-distance-readable flex h-full overflow-hidden bg-casa-bg" onClick={() => setSelectedEventId(null)}>
+    <div className="flex h-full overflow-hidden bg-casa-bg" onClick={() => setSelectedEventId(null)}>
 
       {/* ── Center content ─────────────────────────────────── */}
       <div
@@ -572,7 +573,8 @@ export default function HomePage() {
                   key={m.id}
                   onClick={() => toggleMember(m.id)}
                   className={cn(
-                    'flex items-center gap-2 px-3 py-1.5 rounded-pill border transition-all min-w-0',
+                    chipClassName({ tone: 'neutral', interactive: true, selected: active }),
+                    'min-w-0',
                     active
                       ? 'bg-casa-surface border-casa-border shadow-card'
                       : 'bg-transparent border-casa-divider hover:bg-casa-surface/50',
@@ -585,7 +587,7 @@ export default function HomePage() {
                   <span className={cn('text-body-sm font-semibold transition-opacity shrink-0', active ? 'text-casa-navy opacity-100' : 'text-casa-navy opacity-45')}>
                     {m.name}
                   </span>
-                  <span className={cn('text-[0.68rem] leading-[1.15] font-normal text-casa-text-faint tabular-nums truncate max-w-[11rem]', !active && 'opacity-80')}>
+                  <span className={cn('text-caption font-normal text-casa-text-faint tabular-nums truncate max-w-[11rem]', !active && 'opacity-80')}>
                     {status?.label ?? 'Free today'}
                   </span>
                   <span className={cn(
@@ -1043,7 +1045,7 @@ function DesktopHeroCard({
                 href={mapsUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="h-12 px-7 rounded-button bg-casa-gold text-casa-navy font-semibold text-[1.08rem] flex items-center justify-center gap-2 whitespace-nowrap hover:brightness-110 transition-all border border-casa-gold/50"
+                className="h-12 px-7 rounded-button bg-casa-gold text-casa-navy font-semibold text-body flex items-center justify-center gap-2 whitespace-nowrap hover:brightness-110 transition-all border border-casa-gold/50"
               >
                 <Navigation size={18} />
                 Get directions
@@ -1051,7 +1053,7 @@ function DesktopHeroCard({
             ) : telUrl ? (
               <a
                 href={telUrl}
-                className="h-12 px-7 rounded-button bg-casa-gold text-casa-navy font-semibold text-[1.08rem] flex items-center justify-center gap-2 whitespace-nowrap hover:brightness-110 transition-all border border-casa-gold/50"
+                className="h-12 px-7 rounded-button bg-casa-gold text-casa-navy font-semibold text-body flex items-center justify-center gap-2 whitespace-nowrap hover:brightness-110 transition-all border border-casa-gold/50"
               >
                 <Phone size={18} />
                 {contactName ? `Call ${contactName.split(' ')[0]}` : 'Call'}
@@ -1060,7 +1062,7 @@ function DesktopHeroCard({
             <button
               onClick={() => onViewDetails(focusEvent)}
               className={cn(
-                'h-12 px-7 rounded-button font-semibold text-[1.08rem] whitespace-nowrap transition-all',
+                'h-12 px-7 rounded-button font-semibold text-body whitespace-nowrap transition-all',
                 mapsUrl || telUrl
                   ? 'border border-white/25 bg-gradient-to-b from-white/6 to-white/[0.03] text-white hover:from-white/12 hover:to-white/[0.06]'
                   : 'bg-casa-gold text-casa-navy border border-casa-gold/50 hover:brightness-110',
@@ -1098,7 +1100,8 @@ function DesktopHeroCard({
               <p className="font-display text-display-md leading-none !text-white">{ringValue}</p>
               <p className="mt-2 text-caption tracking-[0.12em] text-white/72">{ringLabel}</p>
               <span className={cn(
-                'mt-2.5 inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-0.5 text-caption font-semibold',
+                chipClassName({ size: 'sm' }),
+                'mt-2.5',
                 heroStatusClasses(status.tone),
               )}>
                 <span className="h-2 w-2 rounded-full bg-current opacity-85" />
@@ -1253,7 +1256,7 @@ function TimelineRow({
                 {event.members.slice(0, 3).map((m) => (
                   <span
                     key={m.id}
-                    className="px-1.5 py-0.5 rounded-pill text-white text-[9px] font-bold leading-none whitespace-nowrap"
+                    className={cn(chipClassName({ size: 'sm' }), 'border-transparent text-white')}
                     style={{ backgroundColor: m.family_member?.color_hex ?? SHARED_GOLD }}
                   >
                     {m.family_member?.name}
@@ -1288,7 +1291,7 @@ function TimelineRow({
           <div className="relative shrink-0 pl-1 pt-0.5">
             <span
               className={cn(
-                'w-12 h-12 rounded-full text-white flex items-center justify-center text-[18px] font-bold shadow-card',
+                'w-12 h-12 rounded-full text-white flex items-center justify-center text-body-sm font-bold shadow-card',
                 responsibility.responsible?.role === 'caregiver' && 'ring-2 ring-casa-gold/55 ring-offset-2 ring-offset-casa-surface',
               )}
               style={{ backgroundColor: responsibility.responsible?.color ?? 'var(--color-casa-gold)' }}
@@ -1343,14 +1346,14 @@ function TimelineRow({
                   {responsibility.attendees.slice(0, 3).map((m) => (
                     <span
                       key={m.id}
-                      className="px-2 py-0.5 rounded-pill text-white text-caption font-bold leading-none whitespace-nowrap"
+                      className={cn(chipClassName({ size: 'sm' }), 'border-transparent text-white')}
                       style={{ backgroundColor: m.family_member?.color_hex ?? SHARED_GOLD }}
                     >
                       {m.family_member?.name}
                     </span>
                   ))}
                   {responsibility.attendees.length > 3 && (
-                    <span className="px-1.5 py-0.5 rounded-pill bg-casa-bg text-casa-muted text-caption font-bold leading-none">
+                    <span className={chipClassName({ size: 'sm' })}>
                       +{responsibility.attendees.length - 3}
                     </span>
                   )}

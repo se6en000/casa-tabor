@@ -19,6 +19,7 @@ import { normalizeRecipeIngredientFields } from '../utils/recipeIngredientParsin
 import { supabase } from '../lib/supabase'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
 import { Button, IconButton, Card, Chip, Input, Heading, SegmentedControl, Sheet, Text } from '../components/ui'
+import { chipClassName } from '../design-system/variants.mjs'
 import {
   appendPantryInventoryAudit,
   normalizePackageUnit,
@@ -2112,7 +2113,7 @@ export default function GroceryPage() {
   const weeklyHeroOverflowCount = Math.max(0, weeklyAutoListCandidates.length - weeklyHeroPreviewItems.length)
 
   return (
-    <div className="casa-distance-readable h-full min-h-0 bg-casa-bg flex flex-col overflow-hidden">
+    <div className="h-full min-h-0 bg-casa-bg flex flex-col overflow-hidden">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-casa-bg px-4 pt-safe-t">
         <div className="space-y-3 py-4">
@@ -2344,7 +2345,7 @@ export default function GroceryPage() {
                         key={`drop-target-${cat.key}`}
                         data-drop-category={cat.key}
                         className={cn(
-                          'px-3 py-1.5 rounded-full text-caption border transition-colors',
+                          chipClassName({ size: 'sm' }),
                           dragOverCategory === cat.key
                             ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
                             : 'border-casa-border text-casa-muted bg-casa-bg'
@@ -2357,7 +2358,7 @@ export default function GroceryPage() {
                 </div>
               )}
               {activeItemsByCategory.length === 0 ? (
-                <div className="mb-4 rounded-2xl border border-casa-border bg-casa-surface p-4 text-sm text-casa-muted">
+                <div className="mb-4 rounded-2xl border border-casa-border bg-casa-surface p-4 text-body-sm text-casa-muted">
                   Active list is clear. Completed items are hidden in the archive.
                 </div>
               ) : (
@@ -2571,7 +2572,7 @@ export default function GroceryPage() {
                                   </span>
                                 </div>
                               </div>
-                              <span className={cn('rounded-full px-2.5 py-1 text-caption font-semibold', urgencyTagClassName(visual.tone))}>
+                              <span className={cn(chipClassName({ size: 'sm' }), urgencyTagClassName(visual.tone))}>
                                 {visual.dueLabel}
                               </span>
                               <div className="flex shrink-0 items-center gap-1.5">
@@ -2705,7 +2706,7 @@ export default function GroceryPage() {
               type="button"
               onClick={() => setAddPanelMode('quick')}
               className={cn(
-                'px-2.5 py-1 rounded-pill border text-caption transition-colors',
+                chipClassName({ size: 'sm', interactive: true, selected: addPanelMode === 'quick' }),
                 addPanelMode === 'quick'
                   ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
                   : 'border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main',
@@ -2720,7 +2721,7 @@ export default function GroceryPage() {
                 if (!parsedRecipe) setRecipeImportStep(1)
               }}
               className={cn(
-                'px-2.5 py-1 rounded-pill border text-caption transition-colors inline-flex items-center gap-1',
+                chipClassName({ size: 'sm', interactive: true, selected: addPanelMode === 'recipe' }),
                 addPanelMode === 'recipe'
                   ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
                   : 'border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main',
@@ -2733,7 +2734,7 @@ export default function GroceryPage() {
               type="button"
               onClick={() => setAddPanelMode('library')}
               className={cn(
-                'px-2.5 py-1 rounded-pill border text-caption transition-colors inline-flex items-center gap-1',
+                chipClassName({ size: 'sm', interactive: true, selected: addPanelMode === 'library' }),
                 addPanelMode === 'library'
                   ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
                   : 'border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main',
@@ -2783,7 +2784,7 @@ export default function GroceryPage() {
                     setIsAddPanelOpen(false)
                     window.setTimeout(() => spotlightItem(mergeSuggestion.id), 280)
                   }}
-                  className="px-2.5 py-1 rounded-full border border-casa-gold/60 bg-casa-surface text-caption font-medium text-casa-navy hover:bg-casa-bg transition-colors"
+                  className={chipClassName({ tone: 'accent', size: 'sm', interactive: true })}
                 >
                   Use existing
                 </button>
@@ -2797,7 +2798,7 @@ export default function GroceryPage() {
                     setInputValue('')
                     inputRef.current?.focus()
                   }}
-                  className="px-2.5 py-1 rounded-full border border-casa-border text-caption text-casa-muted hover:bg-casa-bg transition-colors"
+                  className={chipClassName({ tone: 'neutral', size: 'sm', interactive: true })}
                 >
                   Add anyway
                 </button>
@@ -2810,7 +2811,7 @@ export default function GroceryPage() {
                 key={item}
                 type="button"
                 onClick={() => handleQuickAdd(item)}
-                className="flex-shrink-0 min-h-9 px-3 rounded-full border border-casa-border bg-casa-bg text-body-sm text-casa-text hover:bg-casa-main transition-colors"
+                className={cn(chipClassName({ tone: 'neutral', interactive: true }), 'flex-shrink-0')}
               >
                 + {item}
               </button>
@@ -2846,7 +2847,7 @@ export default function GroceryPage() {
                     type="button"
                     onClick={() => triggerFileInput(recipeFileInputRef)}
                     className={cn(
-                      'px-3 py-1.5 rounded-pill border border-casa-border text-caption text-casa-muted hover:bg-casa-surface transition-colors inline-flex items-center gap-1 cursor-pointer',
+                      chipClassName({ tone: 'neutral', size: 'sm', interactive: true }),
                       recipeImporting && 'opacity-60 pointer-events-none',
                     )}
                   >
@@ -2857,7 +2858,7 @@ export default function GroceryPage() {
                     type="button"
                     onClick={() => triggerFileInput(recipeCameraInputRef)}
                     className={cn(
-                      'px-3 py-1.5 rounded-pill border border-casa-border text-caption text-casa-muted hover:bg-casa-surface transition-colors inline-flex items-center gap-1 cursor-pointer',
+                      chipClassName({ tone: 'neutral', size: 'sm', interactive: true }),
                       recipeImporting && 'opacity-60 pointer-events-none',
                     )}
                   >
@@ -2938,7 +2939,7 @@ export default function GroceryPage() {
                     <button
                       type="button"
                       onClick={() => setRecipeImportStep((current) => (current === 3 ? 2 : 1))}
-                      className="px-3 py-1.5 rounded-pill border border-casa-border text-caption text-casa-muted hover:bg-casa-surface"
+                      className={chipClassName({ tone: 'neutral', size: 'sm', interactive: true })}
                     >
                       Back
                     </button>
@@ -2948,7 +2949,7 @@ export default function GroceryPage() {
                       type="button"
                       disabled={!hasRecipeImportSource}
                       onClick={() => setRecipeImportStep(2)}
-                      className="px-3 py-1.5 rounded-pill bg-casa-navy text-white text-caption font-semibold hover:bg-casa-navy/90 disabled:opacity-60"
+                      className={cn(chipClassName({ size: 'sm', interactive: true }), 'casa-action-strong border-transparent bg-casa-navy')}
                     >
                       Next
                     </button>
@@ -2958,7 +2959,7 @@ export default function GroceryPage() {
                       type="button"
                       disabled={recipeImporting || !hasRecipeImportSource}
                       onClick={() => void runRecipeImportFromCurrentSources()}
-                      className="px-3 py-1.5 rounded-pill bg-casa-navy text-white text-caption font-semibold hover:bg-casa-navy/90 disabled:opacity-60"
+                      className={cn(chipClassName({ size: 'sm', interactive: true }), 'casa-action-strong border-transparent bg-casa-navy')}
                     >
                       {recipeImporting ? 'Importing…' : 'Import'}
                     </button>
@@ -3081,7 +3082,7 @@ export default function GroceryPage() {
                               type="button"
                               onClick={() => setRecipeScale(scale)}
                               className={cn(
-                                'px-2 py-1 rounded-pill border text-caption transition-colors',
+                                chipClassName({ size: 'sm', interactive: true, selected: Math.abs(recipeScale - scale) < 0.001 }),
                                 Math.abs(recipeScale - scale) < 0.001
                                   ? 'border-casa-gold/50 bg-casa-gold/10 text-casa-navy'
                                   : 'border-casa-border text-casa-muted hover:bg-casa-surface'
@@ -3155,7 +3156,7 @@ export default function GroceryPage() {
                           type="button"
                           onClick={() => void runRecipeImportFromCurrentSources()}
                           disabled={recipeImporting}
-                          className="px-2 py-1 rounded-pill border border-casa-border text-caption text-casa-navy hover:bg-casa-surface disabled:opacity-60"
+                          className={chipClassName({ tone: 'neutral', size: 'sm', interactive: true })}
                         >
                           {recipeImporting ? 'Re-extracting…' : 'Re-extract'}
                         </button>
@@ -3170,7 +3171,7 @@ export default function GroceryPage() {
                                   type="button"
                                   onClick={() => moveParsedStep(stepIndex, -1)}
                                   disabled={stepIndex === 0}
-                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-caption text-casa-muted hover:bg-casa-bg disabled:opacity-50"
+                                  className={chipClassName({ tone: 'neutral', size: 'sm', interactive: true })}
                                 >
                                   Up
                                 </button>
@@ -3178,14 +3179,14 @@ export default function GroceryPage() {
                                   type="button"
                                   onClick={() => moveParsedStep(stepIndex, 1)}
                                   disabled={stepIndex >= parsedRecipe.steps.length - 1}
-                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-caption text-casa-muted hover:bg-casa-bg disabled:opacity-50"
+                                  className={chipClassName({ tone: 'neutral', size: 'sm', interactive: true })}
                                 >
                                   Down
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => addParsedStepAfter(stepIndex)}
-                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-caption text-casa-navy hover:bg-casa-bg"
+                                  className={chipClassName({ tone: 'accent', size: 'sm', interactive: true })}
                                 >
                                   Add
                                 </button>
@@ -3193,7 +3194,7 @@ export default function GroceryPage() {
                                   type="button"
                                   onClick={() => removeParsedStep(stepIndex)}
                                   disabled={parsedRecipe.steps.length <= 1}
-                                  className="px-1.5 py-0.5 rounded-pill border border-casa-border text-caption text-casa-error hover:bg-casa-bg disabled:opacity-50"
+                                  className={chipClassName({ tone: 'danger', size: 'sm', interactive: true })}
                                 >
                                   Remove
                                 </button>
@@ -3287,7 +3288,7 @@ export default function GroceryPage() {
                               type="button"
                               onClick={() => void planRecipeForSlot(recipe.id, slot)}
                               className={cn(
-                                'px-2.5 py-1 rounded-pill border text-caption transition-colors',
+                                chipClassName({ size: 'sm', interactive: true, selected: planned }),
                                 planned
                                   ? 'border-casa-gold/40 bg-casa-gold/10 text-casa-navy'
                                   : 'border-casa-border text-casa-muted hover:bg-casa-surface'
@@ -3300,14 +3301,14 @@ export default function GroceryPage() {
                         <button
                           type="button"
                           onClick={() => loadRecipeIntoChecklist(recipe)}
-                          className="px-2.5 py-1 rounded-pill border border-casa-border text-caption text-casa-muted hover:bg-casa-surface transition-colors"
+                          className={chipClassName({ tone: 'neutral', size: 'sm', interactive: true })}
                         >
                           Add again
                         </button>
                         <button
                           type="button"
                           onClick={() => void openRecipeForCookMode(recipe)}
-                          className="px-2.5 py-1 rounded-pill border border-casa-gold/40 bg-casa-gold/10 text-caption font-medium text-casa-navy hover:bg-casa-gold/15 transition-colors inline-flex items-center gap-1"
+                          className={chipClassName({ tone: 'accent', size: 'sm', interactive: true })}
                         >
                           <ChefHat size={12} />
                           Cook mode
@@ -3419,7 +3420,7 @@ export default function GroceryPage() {
                           remainingSeconds: timer.seconds,
                           label: timer.label,
                         })}
-                        className="px-2 py-1 rounded-pill border border-casa-border bg-casa-surface text-caption text-casa-muted hover:bg-casa-main transition-colors inline-flex items-center gap-1"
+                        className={chipClassName({ tone: 'neutral', size: 'sm', interactive: true })}
                       >
                         <Clock3 size={11} />
                         {timer.label}

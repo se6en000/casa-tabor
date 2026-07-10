@@ -97,8 +97,8 @@ const CHIP_TONE_CLASSES = {
 }
 
 const CHIP_SIZE_CLASSES = {
-  sm: 'min-h-[24px] px-2.5 text-caption gap-1',
-  md: 'min-h-[28px] px-3 text-caption gap-1.5',
+  sm: 'min-h-control-sm px-3 text-caption gap-1.5',
+  md: 'min-h-control px-4 text-body-sm gap-2',
 }
 
 /**
@@ -113,7 +113,7 @@ export function chipClassName(options = {}) {
     'transition-colors duration-150',
     CHIP_TONE_CLASSES[tone],
     CHIP_SIZE_CLASSES[size],
-    options.interactive ? 'min-h-control cursor-default outline-none focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-1' : '',
+    options.interactive ? 'cursor-default outline-none focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-1' : '',
     options.selected ? 'ring-2 ring-casa-gold ring-offset-1' : '',
   ].filter(Boolean).join(' ')
 }

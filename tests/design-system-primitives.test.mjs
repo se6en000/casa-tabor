@@ -145,9 +145,20 @@ test('chipClassName selected state adds a visible ring without losing the tone c
   assert.match(selected, /ring-2/)
 })
 
-test('interactive chips use the density-aware minimum target while static badges stay compact', () => {
-  assert.doesNotMatch(chipClassName(), /min-h-control/)
-  assert.match(chipClassName({ interactive: true }), /min-h-control/)
+test('chips keep identical geometry whether static or interactive', () => {
+  const staticChip = chipClassName({ size: 'md' })
+  const interactiveChip = chipClassName({ size: 'md', interactive: true })
+  assert.match(staticChip, /min-h-control/)
+  assert.match(interactiveChip, /min-h-control/)
+  assert.match(staticChip, /px-4/)
+  assert.match(interactiveChip, /px-4/)
+})
+
+test('chip sizes use density-aware control tokens instead of fixed pixel heights', () => {
+  assert.match(chipClassName({ size: 'sm' }), /min-h-control-sm/)
+  assert.match(chipClassName({ size: 'md' }), /min-h-control/)
+  assert.doesNotMatch(chipClassName({ size: 'sm' }), /min-h-\[/)
+  assert.doesNotMatch(chipClassName({ size: 'md' }), /min-h-\[/)
 })
 
 test('segmented control presents one track with a sliding selection thumb', () => {
