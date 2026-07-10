@@ -173,6 +173,21 @@ button:active, a:active, [role="button"]:active {
   transition: opacity 60ms, transform 60ms;
 }
 
+/* High-emphasis action foregrounds are component contracts, not utility
+   combinations. The descendant rule prevents nested label/icon styles from
+   weakening contrast on theme-customized touch surfaces. */
+.casa-action-primary,
+.casa-action-primary > span,
+.casa-action-primary svg {
+  color: var(--color-casa-navy) !important;
+}
+
+.casa-action-strong,
+.casa-action-strong > span,
+.casa-action-strong svg {
+  color: var(--color-casa-on-dark) !important;
+}
+
 @media (display-mode: standalone), (display-mode: fullscreen) {
   /* Hide scrollbars in kiosk */
   ::-webkit-scrollbar {

@@ -50,10 +50,10 @@ test('buttonClassName covers every documented variant with a distinct class set'
 
 test('high-emphasis button variants own readable foreground contrast', () => {
   assert.match(buttonClassName({ variant: 'primary' }), /bg-casa-gold/)
-  assert.match(buttonClassName({ variant: 'primary' }), /text-casa-navy/)
+  assert.match(buttonClassName({ variant: 'primary' }), /casa-action-primary/)
   assert.match(buttonClassName({ variant: 'strong' }), /bg-casa-navy/)
-  assert.match(buttonClassName({ variant: 'strong' }), /text-casa-on-dark/)
-  assert.match(iconButtonClassName({ variant: 'strong' }), /text-casa-on-dark/)
+  assert.match(buttonClassName({ variant: 'strong' }), /casa-action-strong/)
+  assert.match(iconButtonClassName({ variant: 'strong' }), /casa-action-strong/)
   assert.ok(
     contrastRatio(DEFAULT_THEME_COLORS['casa-gold'], DEFAULT_THEME_COLORS['casa-navy']) >= 4.5,
     'primary button colors must meet WCAG AA for normal text',
