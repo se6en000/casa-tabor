@@ -202,6 +202,14 @@ export function useFieldDictation({ onText }: { onText: (fullText: string) => vo
     else void start(seed)
   }, [start, stop])
 
+  // Clear the accumulated transcript so continued dictation starts fresh into an
+  // empty field — WITHOUT stopping the mic. Used after an item is added so the
+  // user can keep speaking the next item hands-free.
+  const resetBuffer = useCallback((seed = '') => {
+    baseRef.current = seed.trim()
+    committedRef.current = ''
+  }, [])
+
   useEffect(() => {
     return () => {
       activeRef.current = false
@@ -210,5 +218,5 @@ export function useFieldDictation({ onText }: { onText: (fullText: string) => vo
     }
   }, [stopWebSpeech, stopWS])
 
-  return { supported, listening, start, stop, toggle }
+  return { supported, listening, start, stop, toggle, resetBuffer }
 }

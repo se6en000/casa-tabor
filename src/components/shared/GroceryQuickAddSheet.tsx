@@ -72,7 +72,7 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
   const inputRef = useRef<HTMLInputElement>(null)
 
   // In-field dictation: fills the same input you type into, keeping the sheet open.
-  const { supported: dictationSupported, listening, toggle: toggleDictation, stop: stopDictation } =
+  const { supported: dictationSupported, listening, toggle: toggleDictation, stop: stopDictation, resetBuffer: resetDictation } =
     useFieldDictation({ onText: setValue })
 
   const findDuplicate = useCallback((name: string) => findDuplicateItem(items, name), [items])
@@ -134,11 +134,13 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
         { key: `${name}-${Date.now()}`, name, category },
         ...prev.filter((s) => normalizeGroceryNameKey(s.name) !== normalizeGroceryNameKey(name)),
       ])
-      stopDictation() // dictation resets to the freshly-cleared field for the next item
+      // Keep the mic listening (if on) but clear its buffer so the next spoken
+      // item starts fresh. Mic stays on until the sheet closes or is toggled off.
+      resetDictation('')
       setValue('')
       inputRef.current?.focus()
     },
-    [addItem, defaultListId, findDuplicate, stopDictation],
+    [addItem, defaultListId, findDuplicate, resetDictation],
   )
 
   const undoAdd = useCallback(
