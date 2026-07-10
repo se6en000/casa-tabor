@@ -18,11 +18,12 @@ const CONTROL_BASE =
   'focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-2 focus-visible:ring-offset-casa-bg ' +
   'disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none'
 
-export const BUTTON_VARIANTS = ['primary', 'secondary', 'ghost', 'danger']
+export const BUTTON_VARIANTS = ['primary', 'strong', 'secondary', 'ghost', 'danger']
 export const BUTTON_SIZES = ['sm', 'md', 'lg']
 
 const BUTTON_VARIANT_CLASSES = {
-  primary: 'bg-casa-gold text-white shadow-card hover:brightness-110',
+  primary: 'bg-casa-gold text-casa-navy shadow-card hover:brightness-110',
+  strong: 'bg-casa-navy text-casa-on-dark shadow-card hover:brightness-110',
   secondary: 'bg-casa-surface text-casa-navy border border-casa-border hover:bg-casa-bg',
   ghost: 'bg-transparent text-casa-navy hover:bg-casa-bg',
   danger: 'bg-casa-error text-white hover:brightness-110',
@@ -51,11 +52,12 @@ export function buttonClassName(options = {}) {
   ].filter(Boolean).join(' ')
 }
 
-export const ICON_BUTTON_VARIANTS = ['primary', 'secondary', 'ghost', 'danger']
+export const ICON_BUTTON_VARIANTS = ['primary', 'strong', 'secondary', 'ghost', 'danger']
 export const ICON_BUTTON_SIZES = ['sm', 'md', 'lg']
 
 const ICON_BUTTON_VARIANT_CLASSES = {
-  primary: 'bg-casa-gold text-white shadow-card hover:brightness-110',
+  primary: 'bg-casa-gold text-casa-navy shadow-card hover:brightness-110',
+  strong: 'bg-casa-navy text-casa-on-dark shadow-card hover:brightness-110',
   secondary: 'bg-casa-surface text-casa-navy border border-casa-border hover:bg-casa-bg',
   ghost: 'bg-transparent text-casa-muted hover:text-casa-navy hover:bg-casa-bg',
   danger: 'bg-transparent text-casa-error hover:bg-casa-error/10',
@@ -113,6 +115,23 @@ export function chipClassName(options = {}) {
     CHIP_SIZE_CLASSES[size],
     options.interactive ? 'min-h-control cursor-default outline-none focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-1' : '',
     options.selected ? 'ring-2 ring-casa-gold ring-offset-1' : '',
+  ].filter(Boolean).join(' ')
+}
+
+export function segmentedControlClassName(options = {}) {
+  return [
+    'inline-flex items-stretch gap-1 rounded-pill border border-casa-control-border bg-casa-toggle-track p-1',
+    options.fullWidth ? 'flex w-full' : '',
+  ].filter(Boolean).join(' ')
+}
+
+export function segmentedControlItemClassName(options = {}) {
+  return [
+    CONTROL_BASE,
+    'relative min-h-control flex-1 rounded-pill px-4 text-body-sm font-semibold',
+    options.selected
+      ? 'bg-casa-surface text-casa-text shadow-card ring-1 ring-casa-control-border'
+      : 'bg-transparent text-casa-text-secondary hover:bg-casa-surface/55 hover:text-casa-text',
   ].filter(Boolean).join(' ')
 }
 

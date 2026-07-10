@@ -384,9 +384,10 @@ export default function GroceryQuickAddSheet({ open, onClose, items, defaultList
                 )}
               </div>
               <Button
+                variant="strong"
                 size="sm"
                 onClick={handleClose}
-                className="shrink-0 bg-casa-navy hover:bg-casa-navy/90"
+                className="shrink-0"
               >
                 Done
               </Button>

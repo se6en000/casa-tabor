@@ -19,7 +19,24 @@ import {
   iconButtonClassName,
   modalPanelClassName,
   sheetPanelClassName,
+  segmentedControlClassName,
+  segmentedControlItemClassName,
 } from '../src/design-system/variants.mjs'
+import { DEFAULT_THEME_COLORS, DESIGN_TOKENS, MIDNIGHT_THEME_COLORS } from '../src/design-system/tokens.mjs'
+
+function relativeLuminance(hex) {
+  const channels = hex.match(/[0-9A-Fa-f]{2}/g).map((channel) => Number.parseInt(channel, 16) / 255)
+  const [red, green, blue] = channels.map((channel) =>
+    channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  )
+  return (0.2126 * red) + (0.7152 * green) + (0.0722 * blue)
+}
+
+function contrastRatio(first, second) {
+  const lighter = Math.max(relativeLuminance(first), relativeLuminance(second))
+  const darker = Math.min(relativeLuminance(first), relativeLuminance(second))
+  return (lighter + 0.05) / (darker + 0.05)
+}
 
 test('buttonClassName covers every documented variant with a distinct class set', () => {
   const seen = new Set()
@@ -29,6 +46,30 @@ test('buttonClassName covers every documented variant with a distinct class set'
     seen.add(cls)
   }
   assert.equal(seen.size, BUTTON_VARIANTS.length, 'each variant should be visually distinct')
+})
+
+test('high-emphasis button variants own readable foreground contrast', () => {
+  assert.match(buttonClassName({ variant: 'primary' }), /bg-casa-gold/)
+  assert.match(buttonClassName({ variant: 'primary' }), /text-casa-navy/)
+  assert.match(buttonClassName({ variant: 'strong' }), /bg-casa-navy/)
+  assert.match(buttonClassName({ variant: 'strong' }), /text-casa-on-dark/)
+  assert.match(iconButtonClassName({ variant: 'strong' }), /text-casa-on-dark/)
+  assert.ok(
+    contrastRatio(DEFAULT_THEME_COLORS['casa-gold'], DEFAULT_THEME_COLORS['casa-navy']) >= 4.5,
+    'primary button colors must meet WCAG AA for normal text',
+  )
+  assert.ok(
+    contrastRatio(DEFAULT_THEME_COLORS['casa-navy'], DESIGN_TOKENS.staticColor['casa-on-dark']) >= 4.5,
+    'strong button colors must meet WCAG AA for normal text',
+  )
+  assert.ok(
+    contrastRatio(MIDNIGHT_THEME_COLORS['casa-gold'], MIDNIGHT_THEME_COLORS['casa-navy']) >= 4.5,
+    'primary button colors must remain readable in the midnight theme',
+  )
+  assert.ok(
+    contrastRatio(MIDNIGHT_THEME_COLORS['casa-navy'], DESIGN_TOKENS.staticColor['casa-on-dark']) >= 4.5,
+    'strong button colors must remain readable in the midnight theme',
+  )
 })
 
 test('buttonClassName covers every documented size with a touch-target min-h utility', () => {
@@ -106,6 +147,25 @@ test('chipClassName selected state adds a visible ring without losing the tone c
 test('interactive chips use the density-aware minimum target while static badges stay compact', () => {
   assert.doesNotMatch(chipClassName(), /min-h-control/)
   assert.match(chipClassName({ interactive: true }), /min-h-control/)
+})
+
+test('segmented control presents one track with a distinct selected segment', () => {
+  const root = segmentedControlClassName()
+  const inactive = segmentedControlItemClassName()
+  const selected = segmentedControlItemClassName({ selected: true })
+  assert.match(root, /bg-casa-toggle-track/)
+  assert.match(root, /rounded-pill/)
+  assert.match(inactive, /bg-transparent/)
+  assert.match(selected, /bg-casa-surface/)
+  assert.match(selected, /text-casa-text/)
+  assert.match(selected, /shadow-card/)
+  assert.match(selected, /min-h-control/)
+  for (const palette of [DEFAULT_THEME_COLORS, MIDNIGHT_THEME_COLORS]) {
+    assert.ok(
+      contrastRatio(palette['casa-surface'], palette['casa-text']) >= 4.5,
+      'selected segment text must meet WCAG AA in every built-in theme',
+    )
+  }
 })
 
 test('cardClassName covers every padding and tone combination', () => {

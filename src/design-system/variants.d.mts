@@ -1,4 +1,4 @@
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+export type ButtonVariant = 'primary' | 'strong' | 'secondary' | 'ghost' | 'danger'
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
 export const BUTTON_VARIANTS: ButtonVariant[]
@@ -11,7 +11,7 @@ export function buttonClassName(options?: {
   loading?: boolean
 }): string
 
-export type IconButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+export type IconButtonVariant = 'primary' | 'strong' | 'secondary' | 'ghost' | 'danger'
 export type IconButtonSize = 'sm' | 'md' | 'lg'
 
 export const ICON_BUTTON_VARIANTS: IconButtonVariant[]
@@ -34,6 +34,9 @@ export function chipClassName(options?: {
   selected?: boolean
   interactive?: boolean
 }): string
+
+export function segmentedControlClassName(options?: { fullWidth?: boolean }): string
+export function segmentedControlItemClassName(options?: { selected?: boolean }): string
 
 export type CardPadding = 'none' | 'sm' | 'md' | 'lg'
 export type CardTone = 'surface' | 'subtle' | 'accent'

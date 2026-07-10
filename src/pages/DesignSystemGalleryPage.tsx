@@ -13,6 +13,7 @@ import {
   Modal,
   PageShell,
   Sheet,
+  SegmentedControl,
   Text,
   Textarea,
 } from '../components/ui'
@@ -124,6 +125,7 @@ export default function DesignSystemGalleryPage() {
   const { width, height, isFinePointer } = useViewport()
   const [modalOpen, setModalOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [segment, setSegment] = useState<'first' | 'second'>('first')
   const density = document.documentElement.dataset.density ?? 'touch'
   const closest = useMemo(
     () => closestDeviceProfile(width, height, isFinePointer ? 'fine-pointer' : 'touch'),
@@ -232,12 +234,25 @@ export default function DesignSystemGalleryPage() {
           <Text role="caption" muted className="font-bold uppercase tracking-widest mb-2">Buttons</Text>
           <div className="flex flex-wrap gap-3">
             <Button>Primary</Button>
+            <Button variant="strong">Strong</Button>
             <Button variant="secondary">Secondary</Button>
             <Button variant="ghost">Ghost</Button>
             <Button variant="danger">Danger</Button>
             <Button loading>Loading</Button>
             <Button disabled>Disabled</Button>
             <IconButton icon={<CheckCircle2 size={18} />} aria-label="Confirm example" variant="secondary" />
+          </div>
+          <div>
+            <Text role="caption" muted className="font-bold uppercase tracking-widest mb-2">Segmented control</Text>
+            <SegmentedControl
+              aria-label="Gallery view"
+              value={segment}
+              onChange={setSegment}
+              options={[
+                { value: 'first', label: 'First view' },
+                { value: 'second', label: 'Second view', icon: <CheckCircle2 size={15} /> },
+              ]}
+            />
           </div>
         </div>
         <div>

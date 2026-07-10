@@ -10,6 +10,7 @@ import { DEFAULT_FOOD_PROFILE, normalizeFoodProfile, type FoodProfile } from '..
 import { appendPantryInventoryAudit, normalizePackageUnit, normalizePantryKey, sanitizePantryInventoryAudit, type PantryInventoryAuditEntry } from '../lib/pantryInventoryUtils'
 import { cn } from '../utils/cn'
 import recipeFallbackHero from '../assets/hero.png'
+import { SegmentedControl } from '../components/ui'
 
 type Recipe = {
   id: string
@@ -2906,26 +2907,15 @@ export default function CookPage() {
     <div className="cook-v2-shell h-full overflow-y-auto p-4 lg:p-6 space-y-4">
       <section className="rounded-[14px] border border-casa-border bg-casa-surface p-4 lg:p-6 shadow-card">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="cook-v2-topline-toggle inline-flex items-center rounded-pill p-1">
-            {([
-              { id: 'cook-now', label: 'Cook tonight' },
-              { id: 'plan-week', label: 'Plan the week' },
-            ] as const).map((mode) => (
-              <button
-                key={mode.id}
-                type="button"
-                onClick={() => setCookLandingMode(mode.id)}
-                className={cn(
-                  'cook-v2-topline-toggle-btn px-4 py-2 rounded-pill text-body-sm font-semibold transition-colors inline-flex items-center gap-1.5',
-                  cookLandingMode === mode.id && 'cook-v2-topline-toggle-btn-active',
-                )}
-                aria-pressed={cookLandingMode === mode.id}
-              >
-                {mode.id === 'plan-week' && <Sparkles size={14} className="text-casa-info" />}
-                {mode.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            aria-label="Cook view"
+            value={cookLandingMode}
+            onChange={setCookLandingMode}
+            options={[
+              { value: 'cook-now', label: 'Cook tonight' },
+              { value: 'plan-week', label: 'Plan the week', icon: <Sparkles size={14} className="text-casa-info" /> },
+            ]}
+          />
           <p className="text-body-sm text-casa-text-tertiary">{landingMetaLabel}</p>
         </div>
 

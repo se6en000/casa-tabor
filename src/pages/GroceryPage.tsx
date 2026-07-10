@@ -18,7 +18,7 @@ import {
 import { normalizeRecipeIngredientFields } from '../utils/recipeIngredientParsing'
 import { supabase } from '../lib/supabase'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
-import { Button, IconButton, Card, Chip, Input, Heading, Sheet, Text } from '../components/ui'
+import { Button, IconButton, Card, Chip, Input, Heading, SegmentedControl, Sheet, Text } from '../components/ui'
 import {
   appendPantryInventoryAudit,
   normalizePackageUnit,
@@ -2141,23 +2141,16 @@ export default function GroceryPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="inline-flex shrink-0 items-center gap-1 rounded-pill border border-casa-border bg-casa-bg p-1">
-              {([
-                { id: 'manage', label: 'Manage list' },
-                { id: 'smart', label: 'Smart picks' },
-              ] as const).map((mode) => (
-                <Chip
-                  key={mode.id}
-                  tone={groceryViewMode === mode.id ? 'accent' : 'neutral'}
-                  selected={groceryViewMode === mode.id}
-                  icon={mode.id === 'smart' ? <Sparkles size={14} className="text-casa-info" /> : undefined}
-                  onClick={() => setGroceryViewMode(mode.id)}
-                  aria-pressed={groceryViewMode === mode.id}
-                >
-                  {mode.label}
-                </Chip>
-              ))}
-            </div>
+            <SegmentedControl
+              aria-label="Grocery view"
+              value={groceryViewMode}
+              onChange={setGroceryViewMode}
+              options={[
+                { value: 'manage', label: 'Manage list' },
+                { value: 'smart', label: 'Smart picks', icon: <Sparkles size={14} className="text-casa-info" /> },
+              ]}
+              className="shrink-0"
+            />
             {groceryViewMode === 'manage' && totalTrackedItems > 0 && (
               <div className="hidden md:block md:min-w-[14rem] md:flex-1 md:max-w-[42rem] px-2">
                 <div className="mb-1.5 flex items-center justify-between text-caption font-semibold text-casa-muted">
@@ -2514,9 +2507,9 @@ export default function GroceryPage() {
                           <Text role="body-sm" muted className="mt-1">Built from your last 30 days of repeat buys.</Text>
                         </div>
                         <Button
+                          variant="strong"
                           size="sm"
                           onClick={handleGenerateWeeklyList}
-                          className="bg-casa-navy hover:bg-casa-navy/90"
                         >
                           Add all {weeklyAutoListCandidates.length} →
                         </Button>

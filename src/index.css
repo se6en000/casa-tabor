@@ -429,20 +429,6 @@ html.midnight-gallery .stacked-event-title {
   background: var(--color-casa-bg);
 }
 
-.cook-v2-topline-toggle {
-  background: var(--color-casa-toggle-track);
-}
-
-.cook-v2-topline-toggle-btn {
-  color: var(--color-casa-text-secondary);
-}
-
-.cook-v2-topline-toggle-btn-active {
-  background: var(--color-casa-surface);
-  color: var(--color-casa-navy);
-  box-shadow: 0 1px 2px rgba(6, 10, 36, 0.14);
-}
-
 .cook-v2-mood-chip {
   border-color: var(--color-casa-control-border);
   background: var(--color-casa-surface);

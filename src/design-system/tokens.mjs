@@ -93,6 +93,7 @@ export const MIDNIGHT_THEME_COLORS = {
 
 export const DESIGN_TOKENS = {
   staticColor: {
+    'casa-on-dark': '#FFFFFF',
     'family-jake': '#1B2A4A',
     'family-kelly': '#C4693A',
     'family-liv': '#6A9E7F',
