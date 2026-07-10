@@ -83,6 +83,7 @@ test('Progress uses native progress semantics without layout-fragile inline widt
 test('event create and edit workflows use shared design-system contracts', () => {
   const quickCreate = readFileSync(resolve('src/components/shared/QuickCreateSheet.tsx'), 'utf8')
   const eventEdit = readFileSync(resolve('src/components/calendar/EventEditSheet.tsx'), 'utf8')
+  const eventDetail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
   assert.match(quickCreate, /<Sheet/)
   assert.match(quickCreate, /<Field label="Event title"/)
   assert.match(quickCreate, /<Button/)
@@ -95,6 +96,7 @@ test('event create and edit workflows use shared design-system contracts', () =>
   assert.match(eventEdit, /<Alert /)
   assert.doesNotMatch(eventEdit, /\btext-\[(?:\d|\.)+(?:px|rem|em)\]/)
   assert.doesNotMatch(eventEdit, /z-\[\d+\]/)
+  assert.match(eventDetail, /\{event && !showEdit && \(/)
 })
 
 test('inline calendar uses density-aware controls and semantic layering', () => {

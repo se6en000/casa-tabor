@@ -215,7 +215,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
   return (
     <>
       <AnimatePresence initial={false}>
-        {event && (
+        {event && !showEdit && (
           <>
             <motion.div
               key="backdrop"
