@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  X, Save, Sparkles, Trash2, AlertTriangle,
-  CheckCircle, MapPin, ChevronDown, Users, Lock, Clock, Repeat, Mic, MicOff,
+  X, Save, Sparkles, Trash2,
+  MapPin, ChevronDown, Users, Lock, Clock, Repeat, Mic, MicOff,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
@@ -16,6 +16,18 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useSavedPlaces } from '../../hooks/useSavedPlaces'
 import BounceScroll from '../shared/BounceScroll'
+import {
+  Alert,
+  Button,
+  Chip,
+  IconButton,
+  Input,
+  Modal,
+  SegmentedControl,
+  Select,
+  Switch,
+  Textarea,
+} from '../ui'
 
 const ALL_CATEGORIES = Object.keys(CATEGORY_LABEL) as string[]
 
@@ -792,7 +804,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 z-[60]"
+            className="fixed inset-0 z-scrim bg-black/50"
             onClick={e => { e.stopPropagation(); onClose(); }}
             onTouchStart={e => e.stopPropagation()}
             onTouchMove={e => e.stopPropagation()}
@@ -806,7 +818,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 32, stiffness: 260 }}
-            className="fixed bottom-0 left-0 right-0 z-[70] bg-casa-surface rounded-t-2xl shadow-modal flex flex-col h-[90vh] overflow-hidden sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-2xl sm:rounded-2xl sm:bottom-8 sm:h-[85vh]"
+            className="fixed bottom-0 left-0 right-0 z-modal bg-casa-surface rounded-t-modal shadow-modal flex flex-col h-[90vh] overflow-hidden sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-2xl sm:rounded-modal sm:bottom-8 sm:h-[85vh]"
             onClick={e => e.stopPropagation()}
           >
             {/* Drag handle */}
@@ -821,33 +833,30 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                 <div className="flex items-center gap-2">
                   <h3 className="font-display text-display-sm text-casa-navy leading-tight">Edit Details</h3>
                   {isInstance && (
-                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-casa-gold/10 text-casa-gold text-caption font-semibold uppercase tracking-wide">
-                      <Repeat size={9} />
+                    <Chip tone="accent" size="sm" icon={<Repeat size={12} />}>
                       Recurring
-                    </span>
+                    </Chip>
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <button
+                  <Button
                     onClick={handleSave}
-                    disabled={isSaving}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-button bg-casa-gold text-white text-caption font-semibold hover:brightness-110 disabled:opacity-50 transition-all"
+                    loading={isSaving}
+                    size="sm"
+                    leadingIcon={<Save size={14} />}
                   >
-                    <Save size={12} />
-                    {isSaving ? (saveStatus === 'slow' ? 'Waking…' : '…') : 'Save'}
-                  </button>
-                  <button onClick={handleClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-casa-bg text-casa-muted transition-colors shrink-0">
-                    <X size={18} />
-                  </button>
+                    {saveStatus === 'slow' && isSaving ? 'Waking…' : 'Save'}
+                  </Button>
+                  <IconButton icon={<X size={18} />} aria-label="Close event editor" onClick={handleClose} size="sm" />
                 </div>
               </div>
               {/* Full-width touch-friendly title input */}
-              <textarea
+              <Textarea
                 ref={titleRef}
                 value={displayTitle}
                 onChange={e => { setDisplayTitle(e.target.value); markDirty() }}
                 rows={2}
-                className="w-full bg-casa-bg border-2 border-casa-border focus:border-casa-gold rounded-xl px-4 py-3 font-display text-[22px] leading-snug text-casa-navy placeholder-casa-muted/40 outline-none transition-colors resize-none"
+                className="font-display text-heading leading-snug"
                 placeholder="Event title…"
                 style={{ touchAction: 'manipulation' }}
               />
@@ -863,43 +872,23 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     Type
                   </label>
                   {/* Inline delete */}
-                  {!showDeleteConfirm ? (
-                    <button
-                      onClick={() => setShowDeleteConfirm(true)}
-                      className="flex items-center gap-1 text-caption text-red-400 hover:text-red-600 transition-colors"
-                    >
-                      <Trash2 size={12} /> Delete
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <span className="text-caption text-red-600 font-semibold">Sure?</span>
-                      <button onClick={handleDelete} disabled={deleting} className="px-2 py-0.5 rounded bg-red-500 text-white text-caption font-semibold hover:bg-red-600 disabled:opacity-50 transition-colors">
-                        {deleting ? '…' : 'Yes'}
-                      </button>
-                      <button onClick={() => setShowDeleteConfirm(false)} className="px-2 py-0.5 rounded border border-casa-border text-caption text-casa-muted hover:bg-casa-divider transition-colors">
-                        No
-                      </button>
-                    </div>
-                  )}
+                  <Button variant="ghost" size="sm" onClick={() => setShowDeleteConfirm(true)} leadingIcon={<Trash2 size={14} />} className="text-casa-error">
+                    Delete
+                  </Button>
                 </div>
-                <div className="flex gap-2">
-                  {(['event', 'reminder'] as const).map(t => (
-                    <button
-                      key={t}
-                      onClick={() => { t === 'reminder' ? switchToReminder() : setEventType('event'); markDirty() }}
-                      className={cn(
-                        'flex items-center gap-1.5 px-4 py-2 rounded-button border text-body-sm font-semibold transition-all',
-                        eventType === t
-                          ? t === 'reminder'
-                            ? 'bg-amber-50 border-amber-300 text-amber-700'
-                            : 'bg-casa-navy text-white border-casa-navy'
-                          : 'bg-casa-surface border-casa-border text-casa-muted hover:border-casa-navy/40'
-                      )}
-                    >
-                      {t === 'reminder' ? '🔔' : '📅'} {t.charAt(0).toUpperCase() + t.slice(1)}
-                    </button>
-                  ))}
-                </div>
+                <SegmentedControl
+                  aria-label="Event type"
+                  value={eventType}
+                  onChange={(next) => {
+                    if (next === 'reminder') switchToReminder()
+                    else setEventType('event')
+                    markDirty()
+                  }}
+                  options={[
+                    { value: 'event', label: 'Event' },
+                    { value: 'reminder', label: 'Reminder' },
+                  ]}
+                />
                 {eventType === 'reminder' && (
                   <p className="text-caption text-casa-muted mt-2">
                     Reminders appear as a banner on the day — no time slot or travel needed.
@@ -914,63 +903,46 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                 </label>
                 {/* Textarea + mic + enrich button inline */}
                 <div className="flex items-start gap-2">
-                  <textarea
+                  <Textarea
                     rows={2}
                     value={extraContext}
                     onChange={e => setExtraContext(e.target.value)}
                     placeholder='Optional context — e.g. "EDS is the AC company, appointment at 3209 Washington Rd WPB"'
-                    className={cn(textareaCls, 'flex-1')}
+                    className="flex-1"
                   />
                   <div className="flex flex-col gap-1.5 shrink-0">
                     {/* Mic button */}
-                    <button
+                    <IconButton
+                      icon={micActive ? <MicOff size={16} /> : <Mic size={16} />}
+                      aria-label={micActive ? 'Stop listening' : 'Speak context'}
                       type="button"
                       onClick={micActive ? stopMic : startMic}
                       title={micActive ? 'Stop listening' : 'Speak context'}
-                      className={cn(
-                        'w-9 h-9 flex items-center justify-center rounded-lg border transition-colors',
-                        micActive
-                          ? 'bg-red-500 border-red-500 text-white animate-pulse'
-                          : 'border-casa-border text-casa-muted hover:border-casa-gold hover:text-casa-gold',
-                      )}
-                    >
-                      {micActive ? <MicOff size={15} /> : <Mic size={15} />}
-                    </button>
+                      variant={micActive ? 'danger' : 'secondary'}
+                      size="sm"
+                      className={cn(micActive && 'animate-pulse')}
+                    />
                     {/* Enrich button */}
-                    <button
+                    <IconButton
+                      icon={<Sparkles size={16} className={enrichStatus === 'loading' ? 'animate-pulse' : ''} />}
+                      aria-label="Re-enrich with AI"
                       onClick={handleReenrich}
                       disabled={enrichStatus === 'loading'}
                       title="Re-enrich with AI"
-                      className={cn(
-                        'w-9 h-9 flex items-center justify-center rounded-lg border border-casa-gold text-casa-gold hover:bg-casa-gold hover:text-white disabled:opacity-50 transition-all',
-                        enrichStatus === 'loading' && 'ai-thinking',
-                      )}
-                    >
-                      {enrichStatus === 'loading'
-                        ? <Sparkles size={14} className="animate-pulse" />
-                        : <Sparkles size={14} />}
-                    </button>
+                      variant="secondary"
+                      size="sm"
+                      className={cn(enrichStatus === 'loading' && 'ai-thinking')}
+                    />
                   </div>
                 </div>
 
                 {/* Status banner */}
                 <AnimatePresence>
                   {enrichStatus !== 'idle' && enrichStatus !== 'loading' && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className={cn(
-                        'mt-3 flex items-start gap-2 px-3 py-2.5 rounded-card border text-body-sm',
-                        enrichStatus === 'success'
-                          ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                          : 'bg-red-50 border-red-200 text-red-700',
-                      )}
-                    >
-                      {enrichStatus === 'success'
-                        ? <CheckCircle size={15} className="shrink-0 mt-0.5" />
-                        : <AlertTriangle size={15} className="shrink-0 mt-0.5" />}
-                      <span>{enrichMessage}</span>
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-3">
+                      <Alert tone={enrichStatus === 'success' ? 'success' : 'danger'} title={enrichStatus === 'success' ? 'Enrichment complete' : 'Enrichment failed'}>
+                        {enrichMessage}
+                      </Alert>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -994,7 +966,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                       const isTagged = isPrimary || isSupporting
 
                       return (
-                        <button
+                        <Chip
                           key={member.id}
                           onClick={() => { setMemberRoles(prev => {
                             const next = { ...prev }
@@ -1008,12 +980,9 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                             }
                             return next
                           }); markDirty() }}
-                          className={cn(
-                            'flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-body-sm font-medium transition-all',
-                            isPrimary && 'text-white border-transparent shadow-md ring-2 ring-offset-1',
-                            isSupporting && 'text-white border-transparent shadow-sm opacity-75',
-                            !isTagged && 'bg-casa-bg border-casa-border text-casa-muted hover:border-casa-navy hover:text-casa-navy',
-                          )}
+                          selected={isPrimary}
+                          tone={isTagged ? 'accent' : 'neutral'}
+                          className={cn(isTagged && 'border-transparent text-white', isSupporting && 'opacity-75')}
                           style={{
                             ...(isTagged ? { backgroundColor: member.color_hex, borderColor: member.color_hex } : {}),
                             ...(isPrimary ? { ringColor: member.color_hex } : {}),
@@ -1023,7 +992,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                           {isSupporting && <span className="w-2 h-2 rounded-full bg-white/60 shrink-0" />}
                           {!isTagged && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: member.color_hex }} />}
                           {member.name}
-                        </button>
+                        </Chip>
                       )
                     })}
                   </div>
@@ -1038,53 +1007,39 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     <Clock size={12} />
                     Date &amp; Time
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <span className="text-caption text-casa-muted font-medium">All day</span>
-                    <button
-                      type="button"
-                      onClick={() => { setIsAllDay(v => !v); markDirty() }}
-                      className={cn(
-                        'relative w-9 h-5 rounded-full transition-colors duration-200',
-                        isAllDay ? 'bg-casa-gold' : 'bg-casa-border'
-                      )}
-                    >
-                      <span className={cn(
-                        'absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200',
-                        isAllDay ? 'translate-x-4' : 'translate-x-0'
-                      )} />
-                    </button>
-                  </label>
+                  <Switch
+                    label="All day"
+                    checked={isAllDay}
+                    onCheckedChange={(checked) => { setIsAllDay(checked); markDirty() }}
+                  />
                 </div>
 
                 {/* Date/time pickers — collapse time when all-day */}
                 {isAllDay ? (
                   <div>
                     <p className="text-caption text-casa-muted mb-1">Date</p>
-                    <input
+                    <Input
                       type="date"
                       value={startDT.slice(0, 10)}
                       onChange={e => { setStartDT(`${e.target.value}T00:00`); setEndDT(`${e.target.value}T23:59`); markDirty() }}
-                      className={inputCls}
                     />
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <p className="text-caption text-casa-muted mb-1">Start</p>
-                      <input
+                      <Input
                         type="datetime-local"
                         value={startDT}
                         onChange={e => { setStartDT(e.target.value); markDirty() }}
-                        className={inputCls}
                       />
                     </div>
                     <div>
                       <p className="text-caption text-casa-muted mb-1">End</p>
-                      <input
+                      <Input
                         type="datetime-local"
                         value={endDT}
                         onChange={e => { setEndDT(e.target.value); markDirty() }}
-                        className={inputCls}
                       />
                     </div>
                   </div>
@@ -1095,28 +1050,28 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                   <div className="flex items-center gap-3">
                     <label className="text-caption text-casa-muted font-medium shrink-0">Repeat</label>
                     <div className="relative flex-1">
-                      <select
+                      <Select
                         value={recur.freq}
                         onChange={e => { setRecur(r => ({ ...r, freq: e.target.value as typeof r.freq, byDay: [] })); markDirty() }}
-                        className={cn(inputCls, 'pr-8 appearance-none')}
+                        className="pr-8 appearance-none"
                       >
                         <option value="none">Does not repeat</option>
                         <option value="daily">Daily</option>
                         <option value="weekly">Weekly</option>
                         <option value="monthly">Monthly</option>
                         <option value="yearly">Yearly</option>
-                      </select>
+                      </Select>
                       <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-casa-muted pointer-events-none" />
                     </div>
                     {recur.freq !== 'none' && (
                       <div className="flex items-center gap-1.5 shrink-0">
                         <span className="text-caption text-casa-muted">every</span>
-                        <input
+                        <Input
                           type="number"
                           min={1} max={99}
                           value={recur.interval}
                           onChange={e => { setRecur(r => ({ ...r, interval: Math.max(1, parseInt(e.target.value) || 1) })); markDirty() }}
-                          className={cn(inputCls, 'w-14 text-center')}
+                          className="w-20 text-center"
                         />
                         <span className="text-caption text-casa-muted">
                           {recur.freq === 'daily' ? 'day(s)' : recur.freq === 'weekly' ? 'wk(s)' : recur.freq === 'monthly' ? 'mo(s)' : 'yr(s)'}
@@ -1129,22 +1084,17 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                   {recur.freq === 'weekly' && (
                     <div className="flex gap-1.5 flex-wrap">
                       {['S','M','T','W','T','F','S'].map((d, i) => (
-                        <button
+                        <Chip
                           key={i}
                           type="button"
+                          selected={recur.byDay.includes(i)}
                           onClick={() => { setRecur(r => ({
                             ...r,
                             byDay: r.byDay.includes(i) ? r.byDay.filter(x => x !== i) : [...r.byDay, i]
                           })); markDirty() }}
-                          className={cn(
-                            'w-8 h-8 rounded-full text-caption font-bold transition-colors',
-                            recur.byDay.includes(i)
-                              ? 'bg-casa-gold text-white'
-                              : 'bg-casa-bg text-casa-muted border border-casa-border hover:border-casa-gold'
-                          )}
                         >
                           {d}
-                        </button>
+                        </Chip>
                       ))}
                     </div>
                   )}
@@ -1155,37 +1105,32 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                       <label className="text-caption text-casa-muted font-medium shrink-0">Ends</label>
                       <div className="flex gap-2">
                         {(['never','date','count'] as const).map(opt => (
-                          <button
+                          <Chip
                             key={opt}
                             type="button"
+                            selected={recur.endType === opt}
                             onClick={() => { setRecur(r => ({ ...r, endType: opt })); markDirty() }}
-                            className={cn(
-                              'px-3 py-1 rounded-full text-caption font-medium transition-colors',
-                              recur.endType === opt
-                                ? 'bg-casa-gold text-white'
-                                : 'bg-casa-bg border border-casa-border text-casa-muted hover:border-casa-gold'
-                            )}
                           >
                             {opt === 'never' ? 'Never' : opt === 'date' ? 'On date' : 'After'}
-                          </button>
+                          </Chip>
                         ))}
                       </div>
                       {recur.endType === 'date' && (
-                        <input
+                        <Input
                           type="date"
                           value={recur.endDate}
                           onChange={e => { setRecur(r => ({ ...r, endDate: e.target.value })); markDirty() }}
-                          className={cn(inputCls, 'flex-1 min-w-[130px]')}
+                          className="flex-1"
                         />
                       )}
                       {recur.endType === 'count' && (
                         <div className="flex items-center gap-1.5">
-                          <input
+                          <Input
                             type="number"
                             min={2} max={999}
                             value={recur.count}
                             onChange={e => { setRecur(r => ({ ...r, count: Math.max(2, parseInt(e.target.value) || 2) })); markDirty() }}
-                            className={cn(inputCls, 'w-16 text-center')}
+                            className="w-24 text-center"
                           />
                           <span className="text-caption text-casa-muted">occurrences</span>
                         </div>
@@ -1208,18 +1153,15 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                   )}
                 </div>
                 <div className="relative">
-                  <select
+                  <Select
                     value={category}
                     onChange={e => handleCategoryChange(e.target.value)}
-                    className={cn(
-                      "w-full appearance-none bg-casa-bg border rounded-card px-4 py-3 pr-10 text-body-sm text-casa-navy outline-none transition-colors",
-                      categoryLocked ? "border-casa-gold focus:border-casa-gold" : "border-casa-border focus:border-casa-gold"
-                    )}
+                    className={cn('appearance-none pr-10', categoryLocked && 'border-casa-gold')}
                   >
                     {ALL_CATEGORIES.map(cat => (
                       <option key={cat} value={cat}>{CATEGORY_LABEL[cat]}</option>
                     ))}
-                  </select>
+                  </Select>
                   <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-casa-muted pointer-events-none" />
                 </div>
                 <p className="text-caption text-casa-muted mt-1.5">
@@ -1236,14 +1178,13 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     <MapPin size={12} />
                     Location Name
                   </label>
-                  <input
+                  <Input
                     type="text"
                     value={location}
                     onChange={e => { setLocation(e.target.value); setShowLocationSuggest(true); markDirty() }}
                     onFocus={() => setShowLocationSuggest(true)}
                     onBlur={() => setTimeout(() => setShowLocationSuggest(false), 150)}
                     placeholder="e.g. EDS Air Conditioning, Lincoln Park"
-                    className={inputCls}
                   />
                   {showLocationSuggest && location.length > 0 && (() => {
                     const needle = location.toLowerCase()
@@ -1252,12 +1193,12 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     ).slice(0, 5)
                     if (matches.length === 0) return null
                     return (
-                      <ul className="absolute z-50 top-full left-0 right-0 mt-1 bg-casa-surface border border-casa-border rounded-xl shadow-lg overflow-hidden">
+                      <ul className="absolute z-popover top-full left-0 right-0 mt-1 bg-casa-surface border border-casa-border rounded-card shadow-modal overflow-hidden">
                         {matches.map(p => {
                           const fullAddr = [p.address, p.city, p.state, p.zip].filter(Boolean).join(', ')
                           return (
                             <li key={p.id}>
-                              <button
+                              <Button
                                 type="button"
                                 onMouseDown={() => {
                                   setLocation(p.name)
@@ -1265,14 +1206,16 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                                   setShowLocationSuggest(false)
                                   markDirty()
                                 }}
-                                className="w-full text-left px-3 py-2.5 hover:bg-casa-divider transition-colors flex items-center gap-2"
+                                variant="ghost"
+                                fullWidth
+                                className="justify-start text-left"
                               >
                                 <MapPin size={12} className="text-casa-gold shrink-0" />
                                 <span>
                                   <span className="text-body font-semibold text-casa-navy">{p.name}</span>
                                   {fullAddr && <span className="text-caption text-casa-muted ml-1.5">{fullAddr}</span>}
                                 </span>
-                              </button>
+                              </Button>
                             </li>
                           )
                         })}
@@ -1285,12 +1228,11 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     <MapPin size={12} />
                     Address
                   </label>
-                  <input
+                  <Input
                     type="text"
                     value={address}
                     onChange={e => { setAddress(e.target.value); markDirty() }}
                     placeholder="e.g. 3209 Washington Rd., West Palm Beach, FL"
-                    className={inputCls}
                   />
                 </div>
               </div>
@@ -1305,20 +1247,18 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                         {config.label}
                       </label>
                       {config.multiline ? (
-                        <textarea
+                        <Textarea
                           rows={field === 'what_to_bring' ? 5 : 3}
                           value={form[field] ?? ''}
                           onChange={e => set(field, e.target.value)}
                           placeholder={config.placeholder}
-                          className={textareaCls}
                         />
                       ) : (
-                        <input
+                        <Input
                           type={config.type ?? 'text'}
                           value={form[field] ?? ''}
                           onChange={e => set(field, e.target.value)}
                           placeholder={config.placeholder}
-                          className={inputCls}
                         />
                       )}
                     </div>
@@ -1332,61 +1272,45 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             {/* Footer removed — Save and Close are in the top bar */}
           </motion.div>
 
-          {/* Recurring edit scope modal */}
-          <AnimatePresence>
-            {showScopeModal && (
-              <motion.div
-                key="scope-modal"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[80] flex items-center justify-center p-6"
-                onClick={() => { setShowScopeModal(false); setPendingSave(false) }}
-              >
-                <motion.div
-                  initial={{ scale: 0.92, opacity: 0, y: 16 }}
-                  animate={{ scale: 1, opacity: 1, y: 0 }}
-                  exit={{ scale: 0.92, opacity: 0, y: 16 }}
-                  transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                  className="bg-casa-surface rounded-2xl shadow-modal w-full max-w-sm p-6"
-                  onClick={e => e.stopPropagation()}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <Repeat size={16} className="text-casa-gold" />
-                    <h4 className="font-display text-display-sm text-casa-navy">Edit recurring event</h4>
-                  </div>
-                  <p className="text-caption text-casa-muted mb-5">How would you like to apply your changes?</p>
-                  <div className="space-y-2">
-                    {([
-                      { scope: 'this', label: 'This event', desc: 'Only this occurrence will be updated' },
-                      { scope: 'future', label: 'This and following events', desc: 'This and all future occurrences' },
-                      { scope: 'all', label: 'All events', desc: 'Every occurrence in the series' },
-                    ] as { scope: RecurScope; label: string; desc: string }[]).map(({ scope, label, desc }) => (
-                      <button
-                        key={scope}
-                        onClick={() => handleScopeChoice(scope)}
-                        className="w-full text-left px-4 py-3 rounded-xl border border-casa-border hover:border-casa-gold hover:bg-casa-gold/5 transition-all group"
-                      >
-                        <p className="text-body-sm font-semibold text-casa-navy group-hover:text-casa-gold transition-colors">{label}</p>
-                        <p className="text-caption text-casa-muted mt-0.5">{desc}</p>
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => { setShowScopeModal(false); setPendingSave(false) }}
-                    className="mt-4 w-full py-2.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-muted hover:text-casa-navy transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <Modal
+            open={showScopeModal}
+            onClose={() => { setShowScopeModal(false); setPendingSave(false) }}
+            title="Edit recurring event"
+            size="md"
+          >
+            <p className="text-body-sm text-casa-muted mb-4">How would you like to apply your changes?</p>
+            <div className="space-y-2">
+              {([
+                { scope: 'this', label: 'This event', desc: 'Only this occurrence will be updated' },
+                { scope: 'future', label: 'This and following events', desc: 'This and all future occurrences' },
+                { scope: 'all', label: 'All events', desc: 'Every occurrence in the series' },
+              ] as { scope: RecurScope; label: string; desc: string }[]).map(({ scope, label, desc }) => (
+                <Button key={scope} variant="secondary" fullWidth className="h-auto justify-start py-3 text-left" onClick={() => handleScopeChoice(scope)}>
+                  <span>
+                    <span className="block text-body-sm font-semibold">{label}</span>
+                    <span className="mt-0.5 block text-caption text-casa-muted">{desc}</span>
+                  </span>
+                </Button>
+              ))}
+            </div>
+            <Button variant="ghost" fullWidth className="mt-4" onClick={() => { setShowScopeModal(false); setPendingSave(false) }}>
+              Cancel
+            </Button>
+          </Modal>
+          <Modal
+            open={showDeleteConfirm}
+            onClose={() => setShowDeleteConfirm(false)}
+            title="Delete this event?"
+            size="sm"
+          >
+            <p className="text-body-sm text-casa-muted">This removes the event from Casa and its connected Google Calendar.</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
+              <Button variant="danger" loading={deleting} onClick={() => void handleDelete()}>Delete event</Button>
+            </div>
+          </Modal>
         </>
       )}
     </AnimatePresence>
   )
 }
-
-const inputCls = 'w-full bg-casa-bg border border-casa-border rounded-card px-4 py-3 text-body-sm text-casa-navy placeholder-casa-muted/50 outline-none focus:border-casa-gold transition-colors'
-const textareaCls = 'w-full bg-casa-bg border border-casa-border rounded-card px-4 py-3 text-body-sm text-casa-navy placeholder-casa-muted/50 resize-none outline-none focus:border-casa-gold transition-colors'

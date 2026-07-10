@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { X, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { addHours, addDays, startOfDay, isToday, isTomorrow, format } from 'date-fns'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
+import { Alert, Button, Field, Input, Sheet } from '../ui'
 
 interface Props {
   open: boolean
@@ -211,17 +211,22 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
   const [startDT, setStartDT] = useState(toLocalDT(defaultStart))
   const [endDT, setEndDT] = useState(toLocalDT(defaultEnd))
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [dayAnchor, setDayAnchor] = useState(() => startOfDay(addDays(defaultStart, -30)).getTime())
 
   // Re-initialise whenever the sheet opens with a new slot
   useEffect(() => {
     if (!open) return
     const s = snapTo5(initialStart ?? new Date())
-    setTitle('')
-    setStartDT(toLocalDT(s))
-    setEndDT(toLocalDT(addHours(s, 1)))
-    setDayAnchor(startOfDay(addDays(s, -30)).getTime())
-    setSaving(false)
+    const frame = requestAnimationFrame(() => {
+      setTitle('')
+      setStartDT(toLocalDT(s))
+      setEndDT(toLocalDT(addHours(s, 1)))
+      setDayAnchor(startOfDay(addDays(s, -30)).getTime())
+      setSaving(false)
+      setSaveError('')
+    })
+    return () => cancelAnimationFrame(frame)
   }, [open, initialStart])
 
   useEffect(() => {
@@ -299,6 +304,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
 
   const handleSave = async () => {
     if (!title.trim()) return
+    setSaveError('')
     setSaving(true)
     const start = new Date(startDT)
     let end = new Date(endDT)
@@ -316,7 +322,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     }).select('id').single()
 
     if (error) {
-      alert(`Could not create event: ${error.message}`)
+      setSaveError(`Could not create event: ${error.message}`)
       setSaving(false)
       return
     }
@@ -336,63 +342,28 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
   }
 
   return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            key="qc-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 0.5 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black z-[60]"
-            onClick={onClose}
-          />
-
-          <motion.div
-            key="qc-sheet"
-            ref={sheetRef}
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 32, stiffness: 260 }}
-            className="fixed left-0 right-0 z-[70] bg-casa-surface rounded-t-2xl shadow-modal sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-lg sm:rounded-2xl overflow-y-auto"
-            tabIndex={-1}
-            style={{
-              bottom: 'max(0px, env(safe-area-inset-bottom))',
-              maxHeight: viewportHeight
-                ? `${Math.max(300, viewportHeight - 8)}px`
-                : 'calc(100dvh - 8px)',
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Drag handle */}
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full bg-casa-border" />
-            </div>
-
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-casa-border">
-              <h3 className="font-display text-display-sm text-casa-navy">New Event</h3>
-              <button onClick={onClose} className="p-1 rounded-full hover:bg-casa-bg transition-colors">
-                <X size={20} className="text-casa-muted" />
-              </button>
-            </div>
-
-            {/* Form */}
-            <div className="px-6 py-5 space-y-4">
-              {/* Title */}
-              <div>
-                <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide block mb-1.5">
-                  Event Title
-                </label>
-                <input
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title="New Event"
+      showHandle
+      panelClassName="sm:left-1/2 sm:right-auto sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:rounded-modal"
+      panelStyle={{
+        bottom: 'max(0px, env(safe-area-inset-bottom))',
+        maxHeight: viewportHeight ? `${Math.max(300, viewportHeight - 8)}px` : 'calc(100dvh - 8px)',
+      }}
+      contentClassName="px-6 py-5"
+      transition={{ type: 'spring', damping: 32, stiffness: 260 }}
+    >
+      <div ref={sheetRef} tabIndex={-1} className="space-y-4">
+              <Field label="Event title" required>
+                <Input
                   value={title}
                   onChange={e => setTitle(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
+                  onKeyDown={e => { if (e.key === 'Enter') void handleSave() }}
                   placeholder="What's happening?"
-                  className="w-full px-4 py-2.5 rounded-xl border border-casa-border bg-casa-bg text-body text-casa-navy placeholder:text-casa-muted focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
                 />
-              </div>
+              </Field>
 
               {/* Start wheel */}
               <div>
@@ -412,22 +383,19 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                 </div>
                 <WheelRow parts={endParts} onPatch={patchEnd} dayItems={dayItems} />
               </div>
-            </div>
-
-            {/* Footer */}
-            <div className="px-6 pb-6 pt-2">
-              <button
-                onClick={handleSave}
-                disabled={!title.trim() || saving}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-semibold text-body transition-all bg-casa-navy text-white hover:bg-casa-navy/90 disabled:opacity-40 disabled:cursor-not-allowed"
+              {saveError && <Alert tone="danger" title="Event was not created">{saveError}</Alert>}
+              <Button
+                fullWidth
+                size="lg"
+                variant="strong"
+                onClick={() => void handleSave()}
+                disabled={!title.trim()}
+                loading={saving}
+                leadingIcon={<Plus size={18} />}
               >
-                <Plus size={18} />
-                {saving ? 'Creating…' : 'Create Event'}
-              </button>
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+                Create Event
+              </Button>
+      </div>
+    </Sheet>
   )
 }

@@ -13,6 +13,7 @@ import {
 } from 'date-fns'
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '../../utils/cn'
+import { Button, IconButton } from '../ui'
 
 interface Props {
   value: string
@@ -35,11 +36,6 @@ export default function InlineCalendarPicker({ value, onChange, className }: Pro
 
   useEffect(() => {
     if (!open) return
-    setCursor(startOfMonth(selectedDate))
-  }, [open, selectedDate])
-
-  useEffect(() => {
-    if (!open) return
     const onDocClick = (e: MouseEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
     }
@@ -54,36 +50,41 @@ export default function InlineCalendarPicker({ value, onChange, className }: Pro
 
   return (
     <div ref={rootRef} className={cn('relative', className)}>
-      <button
+      <Button
         type="button"
-        onClick={() => setOpen(v => !v)}
-        className="w-full h-11 rounded-xl border border-casa-border bg-casa-bg px-3 text-left text-body-sm text-casa-navy hover:border-casa-gold transition-colors inline-flex items-center justify-between"
+        onClick={() => {
+          if (!open) setCursor(startOfMonth(selectedDate))
+          setOpen(v => !v)
+        }}
+        variant="secondary"
+        fullWidth
+        trailingIcon={<Calendar size={18} className="text-casa-muted" />}
+        className="justify-between"
       >
         <span>{format(selectedDate, 'EEE, MMM d, yyyy')}</span>
-        <Calendar size={16} className="text-casa-muted" />
-      </button>
+      </Button>
       {open && (
-        <div className="absolute left-0 right-0 mt-2 rounded-xl border border-casa-border bg-casa-surface shadow-modal z-[120] p-3">
+        <div className="absolute left-0 right-0 z-popover mt-2 rounded-card border border-casa-border bg-casa-surface p-3 shadow-modal">
           <div className="flex items-center justify-between mb-2">
-            <button
-              type="button"
+            <IconButton
+              icon={<ChevronLeft size={18} />}
+              aria-label="Previous month"
               onClick={() => setCursor(prev => subMonths(prev, 1))}
-              className="h-8 w-8 rounded-lg border border-casa-border text-casa-muted hover:text-casa-navy hover:border-casa-navy inline-flex items-center justify-center"
-            >
-              <ChevronLeft size={14} />
-            </button>
+              variant="secondary"
+              size="sm"
+            />
             <p className="text-body-sm font-semibold text-casa-text">{format(cursor, 'MMMM yyyy')}</p>
-            <button
-              type="button"
+            <IconButton
+              icon={<ChevronRight size={18} />}
+              aria-label="Next month"
               onClick={() => setCursor(prev => addMonths(prev, 1))}
-              className="h-8 w-8 rounded-lg border border-casa-border text-casa-muted hover:text-casa-navy hover:border-casa-navy inline-flex items-center justify-center"
-            >
-              <ChevronRight size={14} />
-            </button>
+              variant="secondary"
+              size="sm"
+            />
           </div>
           <div className="grid grid-cols-7 gap-1 mb-1">
-            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => (
-              <p key={d} className="text-caption font-semibold text-casa-muted text-center uppercase">{d}</p>
+            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((dayLabel, index) => (
+              <p key={`${dayLabel}-${index}`} className="text-caption font-semibold text-casa-muted text-center uppercase">{dayLabel}</p>
             ))}
           </div>
           <div className="grid grid-cols-7 gap-1">
@@ -100,9 +101,9 @@ export default function InlineCalendarPicker({ value, onChange, className }: Pro
                     setOpen(false)
                   }}
                   className={cn(
-                    'h-8 rounded-md text-body-sm transition-colors',
+                    'min-h-control-sm rounded-button text-body-sm transition-colors',
                     selected
-                      ? 'bg-casa-gold text-white font-semibold'
+                      ? 'casa-action-primary bg-casa-gold font-semibold'
                       : inMonth
                       ? 'text-casa-text hover:bg-casa-bg'
                       : 'text-casa-muted/45 hover:bg-casa-bg',
