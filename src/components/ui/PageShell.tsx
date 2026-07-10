@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react'
 import { cn } from '../../utils/cn'
+import { Heading, Text } from './Typography'
+
+export type PageShellWidth = 'narrow' | 'default' | 'wide' | 'full'
 
 export interface PageShellProps {
   title?: ReactNode
@@ -10,6 +13,15 @@ export interface PageShellProps {
   className?: string
   /** Class applied to the content wrapper below the header. Defaults to vertical section spacing. */
   contentClassName?: string
+  /** Semantic content measure for forms, standard pages, dashboards, or edge-to-edge tools. */
+  width?: PageShellWidth
+}
+
+const WIDTH_CLASSES: Record<PageShellWidth, string> = {
+  narrow: 'max-w-page-narrow',
+  default: 'max-w-page',
+  wide: 'max-w-page-wide',
+  full: 'max-w-none',
 }
 
 /**
@@ -18,19 +30,19 @@ export interface PageShellProps {
  * title/subtitle/actions header row. Purely structural — does not fetch
  * data or own any page-specific state.
  */
-export function PageShell({ title, subtitle, actions, children, className, contentClassName }: PageShellProps) {
+export function PageShell({ title, subtitle, actions, children, className, contentClassName, width = 'default' }: PageShellProps) {
   return (
-    <div className={cn('mx-auto w-full max-w-6xl px-page-gutter py-section-gap', className)}>
+    <div className={cn('mx-auto min-w-0 w-full px-page-gutter py-section-gap', WIDTH_CLASSES[width], className)}>
       {(title || subtitle || actions) && (
-        <div className="flex items-start justify-between gap-4 mb-section-gap flex-wrap">
+        <div className="flex min-w-0 flex-col items-stretch gap-3 mb-section-gap sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            {title && <h1 className="font-display text-display-sm text-casa-navy">{title}</h1>}
-            {subtitle && <p className="text-body-sm text-casa-muted mt-1">{subtitle}</p>}
+            {title && <Heading role="display-sm">{title}</Heading>}
+            {subtitle && <Text role="body-sm" muted className="mt-1">{subtitle}</Text>}
           </div>
-          {actions && <div className="flex items-center gap-2 flex-shrink-0">{actions}</div>}
+          {actions && <div className="flex min-w-0 flex-wrap items-center gap-2 sm:flex-shrink-0">{actions}</div>}
         </div>
       )}
-      <div className={cn('space-y-section-gap', contentClassName)}>{children}</div>
+      <div className={cn('min-w-0 space-y-section-gap', contentClassName)}>{children}</div>
     </div>
   )
 }

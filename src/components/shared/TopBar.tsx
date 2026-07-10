@@ -6,6 +6,7 @@ import { useLiveClock, greetingFor } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
+import { IconButton } from '../ui'
 
 /** Full-width Command Bar — CT logo · current events center · weather + clock + AI right */
 export function TopBarC() {
@@ -32,7 +33,7 @@ export function TopBarC() {
 
   return (
     <header
-      className="w-full flex items-center gap-4 px-4 h-12 flex-shrink-0 z-40"
+      className="app-topbar w-full flex items-center flex-shrink-0 z-sticky"
       style={{ backgroundColor: 'var(--color-casa-navy, #1E1A14)' }}
     >
       {/* ── Left: brand + greeting ──────────────────────── */}
@@ -51,7 +52,7 @@ export function TopBarC() {
       </div>
 
       {/* ── Center: current / next events ────────────── */}
-      <div className="flex-1 flex items-center justify-center gap-2 min-w-0 overflow-hidden">
+      <div className="app-topbar-events flex-1 flex items-center justify-center gap-2 min-w-0 overflow-hidden">
         {displayEvents.length > 0 ? (
           <>
             {isNow && (
@@ -108,16 +109,14 @@ export function TopBarC() {
         </div>
 
         {/* Art Mode button */}
-        <button
+        <IconButton
+          icon={<ImageIcon size={16} strokeWidth={1.8} />}
+          aria-label="Open Art Mode"
           onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
           title="Art Mode"
-          className={cn(
-            'w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
-            'bg-white/10 hover:bg-white/20 text-white/60 hover:text-white/90',
-          )}
-        >
-          <ImageIcon size={15} strokeWidth={1.8} />
-        </button>
+          size="sm"
+          className="bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+        />
 
         {/* AI button with subtle breathing ring */}
         {(() => {
@@ -141,7 +140,7 @@ export function TopBarC() {
               }}
               transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
               className={cn(
-                'relative w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
+                'relative size-control-sm rounded-lg flex items-center justify-center transition-colors',
                 'bg-casa-gold/15 hover:bg-casa-gold/30 text-casa-gold',
               )}
               title="Talk to Casa AI"

@@ -42,6 +42,8 @@ export const DESIGN_TOKENS: {
   fontFamily: Record<string, string>
   type: Record<string, { touch: string; compact: string; kiosk: string; lineHeight: string }>
   spacing: Record<string, string>
+  layout: Record<'breakpointTablet' | 'breakpointWide' | 'gutterPhone' | 'gutterTablet' | 'gutterWide', string>
+  container: Record<'page-narrow' | 'page' | 'page-wide', string>
   controls: Record<'compact' | 'touch' | 'kiosk', Record<'target' | 'sm' | 'md' | 'lg', string>>
   radius: Record<string, string>
   shadow: Record<string, string>

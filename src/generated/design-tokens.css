@@ -74,9 +74,13 @@
   --shadow-modal: 0 8px 30px rgba(27,42,74,0.12);
   --shadow-fab: 0 4px 14px rgba(201,169,110,0.3);
   --spacing-nav-height: 4.5rem;
-  --spacing-page-gutter: clamp(1rem, 2.5vw, 2rem);
+  --spacing-topbar-height: 3rem;
+  --spacing-page-gutter: var(--ds-page-gutter);
   --spacing-section-gap: clamp(1rem, 2vw, 1.5rem);
   --spacing-card-padding: clamp(0.875rem, 1.5vw, 1.25rem);
+  --container-page-narrow: 48rem;
+  --container-page: 80rem;
+  --container-page-wide: 96rem;
   --spacing-control: var(--ds-control-target);
   --spacing-control-sm: var(--ds-control-sm);
   --spacing-control-md: var(--ds-control-md);
@@ -101,6 +105,22 @@
   --animate-slide-up: slide-up 0.35s ease-out;
   --animate-pulse-gold: pulse-gold 2s ease-in-out infinite;
   --animate-breathe: breathe 3s ease-in-out infinite;
+}
+
+:root {
+  --ds-page-gutter: 1rem;
+}
+
+@media (min-width: 48rem) {
+  :root {
+    --ds-page-gutter: 1.5rem;
+  }
+}
+
+@media (min-width: 80rem) {
+  :root {
+    --ds-page-gutter: 2rem;
+  }
 }
 
 :root,

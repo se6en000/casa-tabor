@@ -25,7 +25,7 @@ export default function NavBar() {
 
   return (
     <>
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-casa-surface border-t border-casa-border h-[--spacing-nav-height] flex items-center justify-around px-2 z-50">
+      <nav className="app-bottom-nav lg:hidden fixed bottom-0 left-0 right-0 bg-casa-surface border-t border-casa-border flex items-center justify-around z-sticky">
         {primaryTabs.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
@@ -34,13 +34,13 @@ export default function NavBar() {
             onClick={() => { if (to === '/calendar') setActiveView('today') }}
             className={({ isActive }) =>
               cn(
-                'flex flex-col items-center gap-1 px-3 py-2 rounded-button transition-colors',
+                'app-bottom-nav-item flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-button transition-colors',
                 isActive ? 'text-casa-gold' : 'text-casa-muted hover:text-casa-navy'
               )
             }
           >
             <Icon size={22} strokeWidth={1.8} />
-            <span className="text-caption font-medium">{label}</span>
+            <span className="app-bottom-nav-label text-caption font-medium truncate">{label}</span>
           </NavLink>
         ))}
 
@@ -48,7 +48,7 @@ export default function NavBar() {
         <button
           onClick={() => setMoreOpen(o => !o)}
           className={cn(
-            'flex flex-col items-center gap-1 px-3 py-2 rounded-button transition-colors relative',
+            'app-bottom-nav-item flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-button transition-colors relative',
             moreOpen ? 'text-casa-gold' : 'text-casa-muted hover:text-casa-navy'
           )}
         >
@@ -58,7 +58,7 @@ export default function NavBar() {
               {unreadCount > 9 ? '9+' : unreadCount}
             </span>
           )}
-          <span className="text-caption font-medium">More</span>
+          <span className="app-bottom-nav-label text-caption font-medium">More</span>
         </button>
       </nav>
 
@@ -73,7 +73,7 @@ export default function NavBar() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="lg:hidden fixed inset-0 bg-black/40 z-40"
+              className="lg:hidden fixed inset-0 bg-black/40 z-scrim"
               onClick={() => setMoreOpen(false)}
             />
 
@@ -92,7 +92,7 @@ export default function NavBar() {
                 if (info.velocity.y > 300 || info.offset.y > 120) setMoreOpen(false)
               }}
               style={{ willChange: 'transform', touchAction: 'none', paddingBottom: 'calc(var(--spacing-nav-height) + env(safe-area-inset-bottom))' }}
-              className="lg:hidden fixed bottom-0 left-0 right-0 bg-casa-surface rounded-t-2xl z-50 shadow-[0_-8px_32px_rgba(0,0,0,0.15)] cursor-grab active:cursor-grabbing"
+              className="lg:hidden fixed bottom-0 left-0 right-0 bg-casa-surface rounded-t-2xl z-modal shadow-modal cursor-grab active:cursor-grabbing"
             >
               {/* Handle */}
               <div className="flex justify-center pt-3 pb-1">

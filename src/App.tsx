@@ -33,7 +33,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
   render() {
     if (this.state.error) {
       return (
-        <div className="flex flex-col items-center justify-center h-screen bg-casa-bg gap-4 px-8 text-center">
+        <div className="app-shell flex flex-col items-center justify-center bg-casa-bg gap-4 px-page-gutter text-center">
           <p className="font-display text-display-sm">😞</p>
           <p className="font-semibold text-casa-navy">Something went wrong</p>
           <p className="text-casa-muted text-body-sm">{(this.state.error as Error).message}</p>
@@ -204,11 +204,11 @@ function AppShell() {
   }, [settings.wakeWordSensitivity])
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-casa-bg">
+    <div className="app-shell flex flex-col overflow-hidden bg-casa-bg">
       {/* Full-width top bar — sticky, never scrolls */}
       <TopBarC />
 
-      <div className="flex flex-1 min-h-0 pb-[--spacing-nav-height] lg:pb-0">
+      <div className="app-shell-main flex flex-1 min-h-0">
         <TabletSidebar />
         <div className="flex-1 min-w-0 overflow-hidden h-full">
           <AnimatedRoutes />

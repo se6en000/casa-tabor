@@ -204,14 +204,9 @@ export default function SettingsShell() {
           </div>
         </div>
         
-        {/* Desktop title */}
-        <div className="hidden md:block px-5 py-5 border-b border-casa-border bg-casa-surface flex-shrink-0">
-          <h1 className="font-display text-display-sm text-casa-navy">{activeItem?.label || 'Settings'}</h1>
-        </div>
-
         {/* Page content */}
         <BounceScroll className="flex-1">
-          <div className="settings-surface max-w-3xl mx-auto px-6 py-8">
+          <div className="settings-surface mx-auto w-full max-w-page-narrow px-page-gutter py-section-gap">
             <Outlet />
           </div>
         </BounceScroll>

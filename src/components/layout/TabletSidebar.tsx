@@ -18,6 +18,7 @@ import { getPersistedDriverOverrideMemberIds } from '../../lib/eventPlanOverride
 import NotificationDrawer from '../shared/NotificationDrawer'
 import { useState, useMemo, useEffect } from 'react'
 import BounceScroll from '../shared/BounceScroll'
+import { IconButton } from '../ui'
 
 const NAV = [
   { to: '/',         icon: Home,         label: 'Home' },
@@ -36,13 +37,11 @@ export default function TabletSidebar() {
   useNotifications()
   const [notifOpen, setNotifOpen] = useState(false)
   const [familyOpen, setFamilyOpen] = useState(true)
-  const [collapsed, setCollapsed] = useState(false)
-  const { data: todayEvents } = useTodayEvents(now)
-
-  useEffect(() => {
+  const [collapsed, setCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar-collapsed')
-    if (saved !== null) setCollapsed(JSON.parse(saved))
-  }, [])
+    return saved === 'true'
+  })
+  const { data: todayEvents } = useTodayEvents(now)
 
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', JSON.stringify(collapsed))
@@ -84,7 +83,7 @@ export default function TabletSidebar() {
         .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
       return { member: m, activeNow, nextUp }
     })
-  }, [homeFamily, todayEvents, now, rulesByMember, exceptionsByMember])
+  }, [homeFamily, todayEvents, now])
 
   return (
     <>
@@ -98,13 +97,14 @@ export default function TabletSidebar() {
           innerClassName={cn('pt-3 pb-4 flex flex-col', collapsed ? 'px-2' : 'px-4')}
         >
           <div className={cn('flex mb-2', collapsed ? 'justify-center' : 'justify-end')}>
-            <button
+            <IconButton
+              icon={collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               onClick={() => setCollapsed(c => !c)}
-              className="p-1.5 rounded-md hover:bg-casa-bg transition-colors text-casa-muted hover:text-casa-navy"
               title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-            </button>
+              size="sm"
+              variant="ghost"
+            />
           </div>
 
           {/* Nav */}
@@ -141,7 +141,7 @@ export default function TabletSidebar() {
             <div className="mt-3">
               <button
                 onClick={() => setFamilyOpen(o => !o)}
-                className="w-full flex items-center px-1.5 pb-2 text-caption font-semibold text-casa-text-faint uppercase tracking-[0.18em] hover:text-casa-text-secondary transition-colors"
+                className="w-full min-h-control flex items-center px-1.5 text-caption font-semibold text-casa-text-faint uppercase tracking-[0.18em] hover:text-casa-text-secondary transition-colors"
               >
                 Family
                 <ChevronDown
@@ -192,7 +192,7 @@ export default function TabletSidebar() {
                             key={m.id}
                             onClick={() => toggleMember(m.id)}
                             className={cn(
-                              'flex items-center gap-2.5 px-1.5 py-1.5 rounded-xl transition-colors text-left w-full',
+                              'flex min-h-control items-center gap-2.5 px-1.5 py-1.5 rounded-xl transition-colors text-left w-full',
                               active ? 'bg-transparent' : 'bg-transparent hover:bg-casa-surface/35',
                             )}
                           >
@@ -210,7 +210,7 @@ export default function TabletSidebar() {
                               <p className={cn('text-body font-semibold leading-tight transition-opacity', active ? 'text-casa-navy opacity-100' : 'text-casa-navy opacity-45')}>
                                 {m.name}
                               </p>
-                              <p className={cn('text-[0.68rem] leading-[1.15] font-normal tabular-nums truncate mt-0.5', active ? 'text-casa-text-faint' : 'text-casa-text-faint/80')}>
+                              <p className={cn('text-caption leading-tight font-normal tabular-nums truncate mt-0.5', active ? 'text-casa-text-faint' : 'text-casa-text-faint/80')}>
                                 {statusLabel}
                               </p>
                             </div>

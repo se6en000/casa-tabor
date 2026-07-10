@@ -118,6 +118,60 @@ body {
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+/* ── Responsive application shell ─────────────────────────────── */
+.app-shell {
+  height: 100vh;
+  height: 100svh;
+  height: 100dvh;
+  min-width: 0;
+}
+
+.app-shell-main {
+  padding-bottom: calc(var(--spacing-nav-height) + env(safe-area-inset-bottom));
+}
+
+.app-topbar {
+  min-height: var(--spacing-topbar-height);
+  gap: clamp(0.5rem, 2vw, 1rem);
+  padding-left: max(var(--ds-page-gutter), env(safe-area-inset-left));
+  padding-right: max(var(--ds-page-gutter), env(safe-area-inset-right));
+  padding-top: env(safe-area-inset-top);
+}
+
+.app-bottom-nav {
+  height: calc(var(--spacing-nav-height) + env(safe-area-inset-bottom));
+  padding: 0 max(0.25rem, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(0.25rem, env(safe-area-inset-left));
+}
+
+.app-bottom-nav-item {
+  min-height: var(--ds-control-target);
+  padding: 0.5rem 0.25rem;
+}
+
+@media (max-width: 29.999rem) {
+  .app-topbar-events {
+    display: none;
+  }
+}
+
+@media (max-width: 24.374rem) {
+  .app-bottom-nav-label {
+    max-width: 100%;
+    font-size: var(--text-caption);
+  }
+}
+
+@media (min-width: 64rem) {
+  .app-shell-main {
+    padding-bottom: 0;
+  }
 }
 
 /* Headings default to display font */

@@ -128,9 +128,22 @@ export const DESIGN_TOKENS = {
   },
   spacing: {
     'nav-height': '4.5rem',
-    'page-gutter': 'clamp(1rem, 2.5vw, 2rem)',
+    'topbar-height': '3rem',
+    'page-gutter': 'var(--ds-page-gutter)',
     'section-gap': 'clamp(1rem, 2vw, 1.5rem)',
     'card-padding': 'clamp(0.875rem, 1.5vw, 1.25rem)',
+  },
+  layout: {
+    breakpointTablet: '48rem',
+    breakpointWide: '80rem',
+    gutterPhone: '1rem',
+    gutterTablet: '1.5rem',
+    gutterWide: '2rem',
+  },
+  container: {
+    'page-narrow': '48rem',
+    page: '80rem',
+    'page-wide': '96rem',
   },
   controls: {
     compact: { target: '44px', sm: '36px', md: '40px', lg: '44px' },

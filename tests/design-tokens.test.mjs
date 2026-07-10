@@ -15,9 +15,20 @@ test('day and midnight palettes implement the same complete color contract', () 
 })
 
 test('every design-system category has a non-empty semantic token set', () => {
-  for (const category of ['fontFamily', 'type', 'spacing', 'controls', 'radius', 'shadow', 'motion', 'zIndex']) {
+  for (const category of ['fontFamily', 'type', 'spacing', 'layout', 'container', 'controls', 'radius', 'shadow', 'motion', 'zIndex']) {
     assert.ok(Object.keys(DESIGN_TOKENS[category]).length > 0, `${category} must define tokens`)
   }
+})
+
+test('responsive layout tokens define explicit phone, tablet, and wide tiers', () => {
+  assert.equal(DESIGN_TOKENS.layout.breakpointTablet, '48rem')
+  assert.equal(DESIGN_TOKENS.layout.breakpointWide, '80rem')
+  assert.equal(DESIGN_TOKENS.layout.gutterPhone, '1rem')
+  assert.equal(DESIGN_TOKENS.layout.gutterTablet, '1.5rem')
+  assert.equal(DESIGN_TOKENS.layout.gutterWide, '2rem')
+  assert.equal(DESIGN_TOKENS.container['page-narrow'], '48rem')
+  assert.equal(DESIGN_TOKENS.container.page, '80rem')
+  assert.equal(DESIGN_TOKENS.container['page-wide'], '96rem')
 })
 
 test('semantic type roles define compact, touch, kiosk, and line-height values', () => {
