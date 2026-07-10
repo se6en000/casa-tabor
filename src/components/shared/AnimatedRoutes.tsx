@@ -69,9 +69,7 @@ export default function AnimatedRoutes() {
           <Route path="food-profile" element={<FoodProfileSettingsPage />} />
           <Route path="pantry-inventory" element={<PantryInventorySettingsPage />} />
           <Route path="admin-ops" element={<AdminOpsPage />} />
-          {/* Phase 0 internal design-system gallery — nav entry is dev-only
-              (see SettingsShell), but the route always resolves so QA can
-              reach it directly on any build, including a Pi/production preview. */}
+          {/* Design-system gallery is available from Settings in every build. */}
           <Route path="design-system" element={<DesignSystemGalleryPage />} />
           {/* Any unknown settings sub-path falls back to a valid page instead
               of rendering a blank Outlet (guards against link/route drift). */}

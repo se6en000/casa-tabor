@@ -18,7 +18,7 @@ import {
   Textarea,
 } from '../components/ui'
 
-// ── Internal-only Design System Gallery ─────────────────────────────────────
+// ── Design System Gallery ───────────────────────────────────────────────────
 // Renders the canonical Casa Tabor tokens (typography, color,
 // radius/shadow, spacing/touch-target guidance) plus a few representative
 // component states, purely by referencing current theme classes/vars from
@@ -27,9 +27,7 @@ import {
 // the required viewport/input validation matrix as data (src/lib/deviceMatrix.mjs)
 // so QA has one place to check acceptance criteria per breakpoint.
 //
-// Access: nav entry only shown in `npm run dev` (see SettingsShell), but the
-// route itself always resolves so QA can hit it directly at
-// /settings/design-system on any build, including a Pi/production preview.
+// Access: Settings → System → Design System, or /settings/design-system.
 
 function SectionHeader({ icon: Icon, title, desc }: { icon: React.ElementType; title: string; desc: string }) {
   return (
@@ -138,8 +136,8 @@ export default function DesignSystemGalleryPage() {
       <div className="rounded-card border border-casa-border bg-casa-surface p-4">
         <SectionHeader
           icon={Palette}
-          title="Design System Gallery (Phase 1 — internal)"
-          desc="Renders the generated Casa token contract and live capability-based density. Dev/QA only."
+          title="Design System Gallery"
+          desc="Casa’s token contract, reusable components, and live capability-based density."
         />
         <div className="mt-3 rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm text-casa-text-secondary">
           Live viewport: <span className="font-semibold text-casa-navy">{width}×{height}</span>{' '}
