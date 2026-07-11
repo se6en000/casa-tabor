@@ -7,6 +7,7 @@ import {
 } from '../_shared/ai-prompt-guardrails.mjs'
 import { optionalEnv, requireEnv } from '../_shared/env.mjs'
 import { computeTravelEta } from '../_shared/travel-eta.mjs'
+import { classifyAssistantIntent } from '../_shared/assistant-intent-profile.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -113,7 +114,7 @@ Deno.serve(async (req) => {
   const requestStartMs = Date.now()
   const REQUEST_HARD_TIMEOUT_MS = 9000
   const PRIMARY_HARD_TIMEOUT_MS = 6000
-  const SECONDARY_HARD_TIMEOUT_MS = 3500
+  const SECONDARY_HARD_TIMEOUT_MS = 5000
   const FALLBACK_HARD_TIMEOUT_MS = 2200
   const STAGE_SLO = {
     contextLoadMs: 1200,
@@ -157,6 +158,10 @@ Deno.serve(async (req) => {
       2000,
     )
     : null
+  const intentRouting = classifyAssistantIntent(latestUserText, {
+    focusedEvent: Boolean(context?.focusedEvent),
+    assistantMode: context?.assistant_mode,
+  })
   appendServerTrace('server_ai_assistant_start', `messages=${Array.isArray(messages) ? messages.length : 0}`, {
     message_count: Array.isArray(messages) ? messages.length : 0,
     has_image: Boolean(image),
@@ -164,6 +169,8 @@ Deno.serve(async (req) => {
     client_trace_present: clientTracePresent,
     client_build: clientBuild,
     client_trace_source: clientTraceSource,
+    intent_profile: intentRouting.profile,
+    force_event_search: intentRouting.forceEventSearch,
   })
   if (latestUserText) {
     appendServerTrace('server_ai_assistant_ingress_user_text', latestUserText.slice(0, 300), {
@@ -681,7 +688,7 @@ Deno.serve(async (req) => {
               },
             },
           },
-          required: ['id'],
+          required: ['id', 'expected_updated_at'],
         },
       },
       {
@@ -920,6 +927,51 @@ Deno.serve(async (req) => {
     ],
   }]
 
+  const toolNamesByProfile: Record<string, string[]> = {
+    event: ['search_events', 'create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title'],
+    grocery: ['add_grocery_items', 'check_grocery_item', 'clear_checked_grocery_items'],
+    weather: ['get_weather_forecast'],
+    travel: ['get_travel_eta'],
+    places: ['search_places'],
+    web: ['search_web'],
+    recipe: ['create_recipe', 'add_grocery_items'],
+    general: [],
+  }
+  const selectedToolNames = intentRouting.profile === 'full'
+    ? new Set(tools[0].function_declarations.map((tool) => tool.name))
+    : new Set(toolNamesByProfile[intentRouting.profile] ?? [])
+  const selectedToolDeclarations = tools[0].function_declarations
+    .filter((tool) => selectedToolNames.has(tool.name))
+  const primaryToolDeclarations = intentRouting.forceEventSearch
+    ? selectedToolDeclarations.filter((tool) => tool.name === 'search_events')
+    : selectedToolDeclarations
+  const primaryTools = primaryToolDeclarations.length > 0
+    ? [{ function_declarations: primaryToolDeclarations }]
+    : []
+  const routedWriteIntent = /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|shift|push)\b/i
+    .test(latestUserText ?? '')
+  const secondaryEventToolNames = /\b(delete|remove|cancel)\b/i.test(latestUserText ?? '')
+    ? ['delete_event', 'delete_events_by_title']
+    : /\b(all|every|each)\b/i.test(latestUserText ?? '')
+      ? ['bulk_update_events']
+      : ['update_event']
+  const secondaryToolDeclarations = intentRouting.profile === 'event' && intentRouting.forceEventSearch
+    ? routedWriteIntent
+      ? selectedToolDeclarations.filter((tool) => secondaryEventToolNames.includes(tool.name))
+      : []
+    : selectedToolDeclarations
+  const secondaryTools = secondaryToolDeclarations.length > 0
+    ? [{ function_declarations: secondaryToolDeclarations }]
+    : []
+
+  const includeEventContext =
+    intentRouting.profile === 'full' ||
+    (intentRouting.profile === 'event' && !intentRouting.forceEventSearch)
+  const includeGroceryContext = ['full', 'grocery', 'recipe'].includes(intentRouting.profile)
+  const includeRecipeContext = ['full', 'recipe'].includes(intentRouting.profile)
+  const includePlaceContext = ['full', 'event', 'places', 'travel'].includes(intentRouting.profile)
+  const includeAvailabilityContext = ['full', 'event'].includes(intentRouting.profile)
+
   // Build Gemini conversation with system instruction + history
   // Pull user-editable custom instructions (persist across all chats)
   const customRow = await sb.from('settings').select('value').eq('key', 'ai_custom_instructions').maybeSingle()
@@ -939,9 +991,10 @@ TEMPORAL ASSUMPTIONS (default unless user clearly overrides):
   - 1-6 means the next sensible daytime occurrence; prefer same-day PM when still upcoming.
   - "10" should usually be treated as 10 AM unless context strongly indicates otherwise.
 
+INTENT PROFILE: ${intentRouting.profile}
 FAMILY MEMBERS: ${familyNames}
-${placesText ? `\nSAVED PLACES (use for location nicknames):\n${placesText}` : ''}
-${contactsText ? `\nSAVED CONTACTS:\n${contactsText}` : ''}
+${includePlaceContext && placesText ? `\nSAVED PLACES (use for location nicknames):\n${placesText}` : ''}
+${includePlaceContext && contactsText ? `\nSAVED CONTACTS:\n${contactsText}` : ''}
 ${context.focusedEvent ? `
 ⭐ EVENT EDIT MODE — CRITICAL INSTRUCTIONS:
 You are EXCLUSIVELY focused on editing this one event. Do not answer general questions, discuss other events, or go off-topic. Every response must stay in the context of editing this event.
@@ -992,17 +1045,11 @@ RECENT CONTEXT (helps you infer vague references like "it", "that", "her"):
 Last mentioned: ${context.lastContextReference.summary}
 When the user says "change it", "move that", "add her", etc., they likely refer to the above.` : ''}
 
-UPCOMING EVENTS SNAPSHOT (next ${PROMPT_EVENT_WINDOW_DAYS} days, capped; use search_events for anything outside snapshot):
-${eventsText}
-
-GROCERY LIST (unchecked items):
-${groceryText}
-${defaultListId ? `Default list ID: ${defaultListId}` : ''}
-
-RECIPE LIBRARY SNAPSHOT (recent):
-${recipesText || 'No recipes saved yet.'}
-${foodProfileText ? `\nFOOD PROFILE (household dietary needs & preferences — honor for all meal/grocery/recipe suggestions):\n${foodProfileText}` : ''}
-${availabilityText ? `\nMEMBER AVAILABILITY (recurring rules + upcoming overrides — use to warn about conflicts and pick times people are free):\n${availabilityText}` : ''}
+${includeEventContext ? `UPCOMING EVENTS SNAPSHOT (next ${PROMPT_EVENT_WINDOW_DAYS} days, capped; use search_events for anything outside snapshot):\n${eventsText}` : ''}
+${includeGroceryContext ? `\nGROCERY LIST (unchecked items):\n${groceryText}\n${defaultListId ? `Default list ID: ${defaultListId}` : ''}` : ''}
+${includeRecipeContext ? `\nRECIPE LIBRARY SNAPSHOT (recent):\n${recipesText || 'No recipes saved yet.'}` : ''}
+${includeRecipeContext && foodProfileText ? `\nFOOD PROFILE (household dietary needs & preferences — honor for all meal/grocery/recipe suggestions):\n${foodProfileText}` : ''}
+${includeAvailabilityContext && availabilityText ? `\nMEMBER AVAILABILITY (recurring rules + upcoming overrides — use to warn about conflicts and pick times people are free):\n${availabilityText}` : ''}
 
 INSTRUCTIONS:
 - You are allowed to answer general/random questions directly (facts, explanations, ideas, writing help, etc.) when no Casa data/action is needed.
@@ -1235,6 +1282,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           title: e.title,
           start: e.start_time,
           end: e.end_time,
+          updated_at: e.updated_at,
           location: e.location_name,
           address: e.address,
           members: e.event_members?.map(m => m.family_members?.name).filter(Boolean),
@@ -1560,13 +1608,31 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   // Call Gemini with function calling — one primary and at most one synthesis round.
   async function callGeminiWithTools(contents: GeminiContent[]): Promise<{ type: string; [key: string]: unknown }> {
     const llmStartMs = Date.now()
+    const primaryToolConfig = intentRouting.forceEventSearch
+      ? { function_calling_config: { mode: 'ANY', allowed_function_names: ['search_events'] } }
+      : { function_calling_config: { mode: 'AUTO' } }
     const body = {
       system_instruction: { parts: [{ text: systemInstruction }] },
       contents,
-      tools,
       generation_config: { temperature: 0.4, max_output_tokens: 2048 },
-      tool_config: { function_calling_config: { mode: 'AUTO' } },
+      ...(primaryTools.length > 0 ? {
+        tools: primaryTools,
+        tool_config: primaryToolConfig,
+      } : {}),
     }
+    appendServerTrace(
+      'server_ai_assistant_prompt_profile',
+      `profile=${intentRouting.profile} tools=${primaryToolDeclarations.length} chars=${systemInstruction.length}`,
+      {
+        intent_profile: intentRouting.profile,
+        force_event_search: intentRouting.forceEventSearch,
+        tool_count: primaryToolDeclarations.length,
+        tool_names: primaryToolDeclarations.map((tool) => tool.name),
+        secondary_tool_count: secondaryToolDeclarations.length,
+        system_instruction_chars: systemInstruction.length,
+        history_turns: contents.length,
+      },
+    )
 
     const res = await callModel(body, { stream: wantStream, timeoutMs: PRIMARY_HARD_TIMEOUT_MS })
     const llmPrimaryMs = Date.now() - llmStartMs
@@ -1696,20 +1762,18 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         // Read-only tools: execute server-side. Only escalate to a second LLM call when the user likely wants a write.
         if (name === 'search_events' || name === 'search_places' || name === 'search_web' || name === 'get_weather_forecast' || name === 'get_travel_eta') {
           const toolResult = await executeReadTool(name, args)
-          const resultCount = (toolResult as { count?: number }).count ?? 0
           const resultFound = Boolean((toolResult as { found?: boolean }).found)
           const isMathQuery = Boolean((toolResult as { math_query?: boolean }).math_query)
           const isWeatherForecast = name === 'get_weather_forecast'
           const isTravelEta = name === 'get_travel_eta'
           // Run secondary LLM call when:
           // - user wants a write (search → then propose change), OR
-          // - multiple results found (list query like "what's on my calendar tomorrow") — LLM needs to generate the full answer
-          // - any question that requires synthesis/analysis of the results
+          // - a question requires actual analysis of the results
           // - math_query intercepted: LLM needs to compute directly
-          const userAsksSynthesis = /\b(how many|how busy|compare|summary|briefing|overview|rundown|what.*have|what.*on|what.*week|who.*have|any.*overlap|conflict|together)\b/i
+          const userAsksSynthesis = /\b(how busy|compare|any.*overlap|conflict|double[- ]?book|together)\b/i
             .test(latestUserText ?? '')
           const shouldRunSecondary = secondaryDepth === 0 && remainingRequestBudgetMs() >= 1000 && (
-            (name === 'search_events' && resultFound && (userLikelyRequestedWrite || resultCount > 1 || userAsksSynthesis)) ||
+            (name === 'search_events' && resultFound && (userLikelyRequestedWrite || userAsksSynthesis)) ||
             (name === 'search_web' && isMathQuery) ||
             (name === 'get_weather_forecast' && resultFound)
           )
@@ -1744,7 +1808,17 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
               ? '\n\nSECONDARY CALL — LIST MODE: The search_events result above contains all matching events. Enumerate them clearly in a concise list. Do NOT ask for clarification. Do NOT call any write tool.'
               : '\n\nSECONDARY CALL — WRITE MODE: You have the search result. Now IMMEDIATELY call the appropriate write tool (update_event, bulk_update_events, delete_event, delete_events_by_title, create_event, create_recipe). Do not output text first — call the tool directly.'
           const secondaryPrompt = systemInstruction + secondaryAddendum
-          const secondaryBody = { ...body, system_instruction: { parts: [{ text: secondaryPrompt }] }, contents: newContents }
+          const secondaryBody = {
+            system_instruction: { parts: [{ text: secondaryPrompt }] },
+            contents: newContents,
+            generation_config: body.generation_config,
+            ...(secondaryTools.length > 0
+              ? {
+                tools: secondaryTools,
+                tool_config: { function_calling_config: { mode: 'AUTO' } },
+              }
+              : {}),
+          }
           const secondaryStartMs = Date.now()
           const res2 = await callModel(secondaryBody, {
             stream: wantStream,

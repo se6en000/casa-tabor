@@ -64,6 +64,18 @@ test('assistant model calls have hard budgets and only one secondary synthesis r
   assert.doesNotMatch(assistantFunction, /stage=llm_retry/)
 })
 
+test('assistant narrows prompt context and tools by intent profile', () => {
+  assert.match(assistantFunction, /classifyAssistantIntent\(latestUserText/)
+  assert.match(assistantFunction, /selectedToolDeclarations/)
+  assert.match(assistantFunction, /primaryToolDeclarations/)
+  assert.match(assistantFunction, /server_ai_assistant_prompt_profile/)
+  assert.match(assistantFunction, /allowed_function_names: \['search_events'\]/)
+  assert.match(assistantFunction, /includeEventContext/)
+  assert.match(assistantFunction, /includeGroceryContext/)
+  assert.match(assistantFunction, /updated_at: e\.updated_at/)
+  assert.match(assistantFunction, /required: \['id', 'expected_updated_at'\]/)
+})
+
 test('confirmation state is atomic, self-clearing, and fully traced', () => {
   assert.match(drawer, /state: 'pending' \| 'executing'/)
   assert.match(drawer, /pending\.state = 'executing'/)
