@@ -22,3 +22,22 @@ export { EmptyState, type EmptyStateProps } from './EmptyState'
 export { DateTimeDial, type DateTimeDialProps } from './DateTimeDial'
 export { DisclosureSection, type DisclosureSectionProps } from './DisclosureSection'
 export { FormSummaryCard, type FormSummaryCardProps } from './FormSummaryCard'
+export {
+  ConfirmationDialog,
+  ContentSection,
+  MasterDetailLayout,
+  PageFeedback,
+  PageHeader,
+  PrimaryRail,
+  SecondaryRail,
+  SectionHeader,
+  ThreeRailLayout,
+  WorkflowActions,
+  type ConfirmationDialogProps,
+  type ContentSectionProps,
+  type MasterDetailLayoutProps,
+  type PageHeaderProps,
+  type SectionHeaderProps,
+  type ThreeRailLayoutProps,
+  type WorkflowActionsProps,
+} from './Patterns'

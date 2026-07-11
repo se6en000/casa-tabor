@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '../../utils/cn'
-import { Heading, Text } from './Typography'
+import { PageHeader } from './Patterns'
 
 export type PageShellWidth = 'narrow' | 'default' | 'wide' | 'full'
 
@@ -34,13 +34,7 @@ export function PageShell({ title, subtitle, actions, children, className, conte
   return (
     <div className={cn('mx-auto min-w-0 w-full px-page-gutter py-section-gap', WIDTH_CLASSES[width], className)}>
       {(title || subtitle || actions) && (
-        <div className="flex min-w-0 flex-col items-stretch gap-3 mb-section-gap sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            {title && <Heading role="display-sm">{title}</Heading>}
-            {subtitle && <Text role="body-sm" muted className="mt-1">{subtitle}</Text>}
-          </div>
-          {actions && <div className="flex min-w-0 flex-wrap items-center gap-2 sm:flex-shrink-0">{actions}</div>}
-        </div>
+        <PageHeader title={title} description={subtitle} actions={actions} className="mb-section-gap" />
       )}
       <div className={cn('min-w-0 space-y-section-gap', contentClassName)}>{children}</div>
     </div>

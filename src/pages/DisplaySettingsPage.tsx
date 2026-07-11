@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
-import { Button, IconButton } from '../components/ui'
+import { Button, IconButton, SectionHeader as SharedSectionHeader } from '../components/ui'
 import { useTheme, PRESETS, DEFAULTS, MIDNIGHT_GALLERY_DEFAULTS, type ThemeColors } from '../contexts/ThemeContext'
 import {
   useRoomTone,
@@ -51,12 +51,7 @@ const COLOR_FIELDS: { key: keyof ThemeColors; label: string; desc: string }[] = 
 ]
 
 function SectionHeader({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
-  return (
-    <div className="flex items-center gap-2 mb-2">
-      <Icon size={15} className="text-casa-gold" />
-      <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide">{label}</p>
-    </div>
-  )
+  return <SharedSectionHeader icon={Icon} title={label} compact className="mb-2" />
 }
 
 // ── Room Tone Preview ──────────────────────────────────────────────

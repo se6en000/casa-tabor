@@ -4,7 +4,7 @@ import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import { useArtFeedPrefs, MEDIA_OPTIONS } from '../hooks/useArtFeedPrefs'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
-import { Button, Checkbox, IconButton } from '../components/ui'
+import { Button, Checkbox, IconButton, SectionHeader as SharedSectionHeader } from '../components/ui'
 
 const COASTAL_STARTER_ARTISTS = [
   'Winslow Homer',
@@ -34,12 +34,7 @@ function uniqueTrimmed(values: string[]): string[] {
 }
 
 function SectionHeader({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
-  return (
-    <div className="flex items-center gap-2 mb-2">
-      <Icon size={15} className="text-casa-gold" />
-      <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide">{label}</p>
-    </div>
-  )
+  return <SharedSectionHeader icon={Icon} title={label} compact className="mb-2" />
 }
 
 function StepPicker({ value, onChange, min, max, step = 1, unit }: {

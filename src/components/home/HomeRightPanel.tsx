@@ -16,7 +16,7 @@ import { useCalendarStore } from '../../stores/calendarStore'
 import BounceScroll from '../shared/BounceScroll'
 import type { PrepItem } from '../../types'
 import { eventOverlapsDay } from '../../utils/eventTime'
-import { Button, Card, Chip, EmptyState, Heading, IconButton, Text } from '../ui'
+import { Button, Card, Chip, EmptyState, Heading, IconButton, SecondaryRail, Text } from '../ui'
 
 interface Props {
   now: Date
@@ -141,7 +141,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   }
 
   return (
-    <aside className="hidden lg:flex basis-5/16 flex-none min-w-0 flex-col border-l border-casa-border bg-casa-bg-2 self-stretch overflow-hidden">
+    <SecondaryRail className="flex-col border-l border-casa-border bg-surface-subtle self-stretch overflow-hidden">
       <BounceScroll className="flex-1 min-h-0">
         <section className="px-4 py-4">
           <div className="flex items-center justify-between">
@@ -322,6 +322,6 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
         </section>
 
       </BounceScroll>
-    </aside>
+    </SecondaryRail>
   )
 }

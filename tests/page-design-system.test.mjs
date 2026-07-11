@@ -97,6 +97,101 @@ test('Progress uses native progress semantics without layout-fragile inline widt
   assert.doesNotMatch(source, /style=\{\{/)
 })
 
+test('Phase 3 composition patterns are exported from the shared UI entrypoint', () => {
+  const source = readFileSync(resolve('src/components/ui/index.ts'), 'utf8')
+  for (const component of [
+    'PageHeader',
+    'SectionHeader',
+    'ContentSection',
+    'ThreeRailLayout',
+    'PrimaryRail',
+    'SecondaryRail',
+    'MasterDetailLayout',
+    'PageFeedback',
+    'WorkflowActions',
+    'ConfirmationDialog',
+  ]) {
+    assert.match(source, new RegExp(`\\b${component}\\b`))
+  }
+})
+
+test('three-rail patterns preserve the 20 / 55 / 25 desktop contract', () => {
+  const patterns = readFileSync(resolve('src/components/ui/Patterns.tsx'), 'utf8')
+  const home = readFileSync(resolve('src/pages/HomePage.tsx'), 'utf8')
+  const homeRight = readFileSync(resolve('src/components/home/HomeRightPanel.tsx'), 'utf8')
+  const navigation = readFileSync(resolve('src/components/layout/TabletSidebar.tsx'), 'utf8')
+
+  assert.match(patterns, /basis-1\/5/)
+  assert.match(patterns, /basis-1\/4/)
+  assert.match(patterns, /basis-5\/16/)
+  assert.match(home, /<PrimaryRail/)
+  assert.match(homeRight, /<SecondaryRail/)
+  assert.match(navigation, /basis-1\/5/)
+})
+
+test('page and Settings compositions delegate to shared Phase 3 patterns', () => {
+  const pageShell = readFileSync(resolve('src/components/ui/PageShell.tsx'), 'utf8')
+  const settingsHeader = readFileSync(resolve('src/components/settings/SettingsPageHeader.tsx'), 'utf8')
+  const settingsSection = readFileSync(resolve('src/components/settings/SettingsSection.tsx'), 'utf8')
+  const settingsShell = readFileSync(resolve('src/components/settings/SettingsShell.tsx'), 'utf8')
+  const display = readFileSync(resolve('src/pages/DisplaySettingsPage.tsx'), 'utf8')
+  const artMode = readFileSync(resolve('src/pages/ArtModeSettingsPage.tsx'), 'utf8')
+
+  assert.match(pageShell, /<PageHeader/)
+  assert.match(settingsHeader, /<PageHeader/)
+  assert.match(settingsSection, /<ContentSection/)
+  assert.match(settingsShell, /<MasterDetailLayout/)
+  assert.match(display, /<SharedSectionHeader/)
+  assert.match(artMode, /<SharedSectionHeader/)
+})
+
+test('page feedback and confirmation patterns preserve truthful ARIA and dismissal semantics', () => {
+  const source = readFileSync(resolve('src/components/ui/Patterns.tsx'), 'utf8')
+
+  assert.match(source, /role="status"/)
+  assert.match(source, /<Alert tone="success"/)
+  assert.match(source, /tone=\{state\}/)
+  assert.match(source, /closeOnBackdrop=\{!loading\}/)
+  assert.match(source, /closeOnEscape=\{!loading\}/)
+  assert.match(source, /variant=\{destructive \? 'danger' : 'primary'\}/)
+})
+
+test('semantic composition colors are aliases rather than brand-name dependencies', () => {
+  const generator = readFileSync(resolve('scripts/generate-design-tokens.mjs'), 'utf8')
+  const patterns = readFileSync(resolve('src/components/ui/Patterns.tsx'), 'utf8')
+
+  for (const alias of [
+    'surface-page',
+    'surface-subtle',
+    'surface-raised',
+    'surface-inset',
+    'content-primary',
+    'content-heading',
+    'content-muted',
+    'action-primary',
+    'action-accent',
+    'action-danger',
+  ]) {
+    assert.match(generator, new RegExp(`color-${alias}`))
+  }
+  assert.doesNotMatch(patterns, /(?:bg|text)-casa-(?:gold|navy|bg|surface|text)\b/)
+})
+
+test('Design System gallery demonstrates every Phase 3 pattern family', () => {
+  const source = readFileSync(resolve('src/pages/DesignSystemGalleryPage.tsx'), 'utf8')
+  for (const pattern of [
+    'Predictable page assembly',
+    '<ThreeRailLayout',
+    'Dense list section',
+    '<MasterDetailLayout',
+    '<PageFeedback',
+    '<WorkflowActions',
+    '<ConfirmationDialog',
+  ]) {
+    assert.match(source, new RegExp(pattern))
+  }
+})
+
 test('Grocery uses shared controls and feedback without changing its dense layout', () => {
   const source = readFileSync(resolve('src/pages/GroceryPage.tsx'), 'utf8')
   for (const component of ['Alert', 'Button', 'Checkbox', 'Chip', 'IconButton', 'Progress', 'SegmentedControl', 'Sheet']) {
@@ -297,7 +392,7 @@ test('Home and its right rail use shared touch-first design contracts', () => {
   assert.match(home, /<IconButton[\s\S]*aria-label=\{`Go to event \$\{i \+ 1\} of \$\{slides\.length\}`\}[\s\S]*className="rounded-full"/)
   assert.match(rightRail, /min-h-control rounded-button/)
   assert.match(leftRail, /collapsed \? 'w-20' : 'basis-1\/5'/)
-  assert.match(rightRail, /lg:flex basis-5\/16 flex-none/)
+  assert.match(rightRail, /<SecondaryRail/)
   assert.doesNotMatch(leftRail, /collapsed \? 'w-20' : 'w-72'/)
   assert.doesNotMatch(rightRail, /w-\[22rem\]/)
   assert.doesNotMatch(home, /const SHARED_GOLD = '#/)

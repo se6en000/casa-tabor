@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import BounceScroll from '../shared/BounceScroll'
-import { Button, Heading, Text } from '../ui'
+import { Button, Heading, MasterDetailLayout, Text } from '../ui'
 
 // ── Nav structure ──────────────────────────────────────────────────────────
 
@@ -113,16 +113,11 @@ export default function SettingsShell() {
   }, [activeItem])
 
   return (
-    <div className="flex flex-1 overflow-hidden h-full">
-
-      {/* ── Sidebar — hidden on mobile when viewing a detail page ── */}
-      <aside className={cn(
-        'flex-shrink-0 border-r border-casa-border bg-casa-surface flex flex-col overflow-hidden transition-all',
-        // Mobile: full width on list, hidden on detail
-        'w-full md:w-64 lg:w-72',
-        !isRoot && 'hidden md:flex',
-        isRoot && 'flex',
-      )}>
+    <MasterDetailLayout
+      showMasterOnMobile={isRoot}
+      showDetailOnMobile={!isRoot}
+      master={(
+        <>
         {/* Sidebar header */}
         <div className="px-5 py-5 border-b border-casa-border flex-shrink-0">
           <Heading role="display-sm">Settings</Heading>
@@ -166,13 +161,10 @@ export default function SettingsShell() {
             ))}
           </nav>
         </BounceScroll>
-      </aside>
-
-      {/* ── Detail panel ── */}
-      <div className={cn(
-        'flex-1 flex flex-col overflow-hidden',
-        isRoot && 'hidden md:flex',
-      )}>
+        </>
+      )}
+      detail={(
+        <>
         {/* Mobile horizontal tabs (replaces back button + menu) */}
         <div className="md:hidden border-b border-casa-border bg-casa-surface flex-shrink-0">
           {/* Tabs header */}
@@ -209,7 +201,8 @@ export default function SettingsShell() {
             <Outlet />
           </div>
         </BounceScroll>
-      </div>
-    </div>
+        </>
+      )}
+    />
   )
 }

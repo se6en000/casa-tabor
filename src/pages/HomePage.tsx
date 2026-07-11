@@ -32,7 +32,7 @@ import { getEventEndDate, getEventStartDate } from '../utils/eventTime'
 import { formatDurationLabel, pickActiveHeroEvent, resolveRestingIndex } from '../lib/heroFocus.mjs'
 import { cleanEventTitle, isBirthdayEvent } from '../utils/eventTitle'
 import { buttonClassName } from '../design-system/variants.mjs'
-import { Button, CalendarPill, Card, Chip, EmptyState, Heading, IconButton, Sheet, Text } from '../components/ui'
+import { Button, CalendarPill, Card, Chip, EmptyState, Heading, IconButton, PrimaryRail, Sheet, Text } from '../components/ui'
 
 const SHARED_GOLD = 'var(--color-casa-gold)'
 
@@ -337,9 +337,9 @@ export default function HomePage() {
     <div className="flex h-full overflow-hidden bg-casa-bg" onClick={() => setSelectedEventId(null)}>
 
       {/* ── Center content ─────────────────────────────────── */}
-      <div
+      <PrimaryRail
         ref={(el) => { ptrRef(el); scrollRef.current = el }}
-        className="flex-1 min-w-0 overflow-y-auto overscroll-contain touch-pan-y px-6 pt-8 pb-12 lg:px-8"
+        className="overflow-y-auto overscroll-contain touch-pan-y px-6 pt-8 pb-12 lg:px-8"
       >
         {/* ── Pull-to-refresh indicator ─────────────────────── */}
         <AnimatePresence>
@@ -559,7 +559,7 @@ export default function HomePage() {
         </Sheet>
 
 
-      </div>
+      </PrimaryRail>
 
       {/* ── Right panel (tablet only) ──────────────────────── */}
       <HomeRightPanel now={now} allTodayEvents={allTodayEvents ?? []} />

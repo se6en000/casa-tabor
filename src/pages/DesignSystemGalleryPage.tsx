@@ -13,6 +13,8 @@ import {
   Button,
   Checkbox,
   Combobox,
+  ConfirmationDialog,
+  ContentSection,
   Card,
   CalendarPill,
   Chip,
@@ -24,11 +26,15 @@ import {
   IconButton,
   Input,
   Modal,
+  MasterDetailLayout,
+  PageFeedback,
+  PageHeader,
   PageShell,
   Progress,
   Radio,
   Select,
   Sheet,
+  SectionHeader,
   SegmentedControl,
   Skeleton,
   SkeletonRow,
@@ -36,6 +42,8 @@ import {
   Text,
   Textarea,
   Toast,
+  ThreeRailLayout,
+  WorkflowActions,
   Alert,
 } from '../components/ui'
 
@@ -49,20 +57,6 @@ import {
 // so QA has one place to check acceptance criteria per breakpoint.
 //
 // Access: Settings → System → Design System, or /settings/design-system.
-
-function SectionHeader({ icon: Icon, title, desc }: { icon: React.ElementType; title: string; desc: string }) {
-  return (
-    <div className="flex items-start gap-3">
-      <div className="w-10 h-10 rounded-full border border-casa-border bg-casa-bg flex items-center justify-center text-casa-gold flex-shrink-0">
-        <Icon size={18} />
-      </div>
-      <div>
-        <h2 className="font-display text-heading text-casa-navy">{title}</h2>
-        <p className="text-body-sm text-casa-muted">{desc}</p>
-      </div>
-    </div>
-  )
-}
 
 const TYPE_ROLES: { className: string; role: string; token: string }[] = [
   { className: 'text-display-xl font-display', role: 'Display XL', token: '--text-display-xl' },
@@ -174,6 +168,7 @@ export default function DesignSystemGalleryPage() {
   const [radio, setRadio] = useState('first')
   const [comboValue, setComboValue] = useState('produce')
   const [toastOpen, setToastOpen] = useState(false)
+  const [confirmationOpen, setConfirmationOpen] = useState(false)
   const [dialStart, setDialStart] = useState('2026-07-10T15:00')
   const [dialEnd, setDialEnd] = useState('2026-07-10T16:00')
   const density = document.documentElement.dataset.density ?? 'touch'
@@ -189,7 +184,7 @@ export default function DesignSystemGalleryPage() {
         <SectionHeader
           icon={Palette}
           title="Design System Gallery"
-          desc="Casa’s token contract, reusable components, and live capability-based density."
+          description="Casa’s token contract, reusable components, and live capability-based density."
         />
         <div className="mt-3 rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm text-casa-text-secondary">
           Live viewport: <span className="font-semibold text-casa-navy">{width}×{height}</span>{' '}
@@ -204,7 +199,7 @@ export default function DesignSystemGalleryPage() {
         <SectionHeader
           icon={SlidersHorizontal}
           title="Live Theme Lab"
-          desc="Tune global type and color tokens. Changes apply across the app immediately and stay on this device."
+          description="Tune global type and color tokens. Changes apply across the app immediately and stay on this device."
         />
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
@@ -309,7 +304,7 @@ export default function DesignSystemGalleryPage() {
 
       {/* ── Typography ── */}
       <div className="rounded-card border border-casa-border bg-casa-surface p-4 space-y-4">
-        <SectionHeader icon={Type} title="Typography" desc="Fluid semantic roles generated from src/design-system/tokens.mjs." />
+        <SectionHeader icon={Type} title="Typography" description="Fluid semantic roles generated from src/design-system/tokens.mjs." />
         <div className="space-y-2">
           {TYPE_ROLES.map((t) => (
             <div key={t.role} className="flex items-baseline justify-between gap-4 border-b border-casa-border/60 pb-2 last:border-0">
@@ -331,7 +326,7 @@ export default function DesignSystemGalleryPage() {
 
       {/* ── Color ── */}
       <div className="rounded-card border border-casa-border bg-casa-surface p-4 space-y-4">
-        <SectionHeader icon={Palette} title="Color" desc="Core palette, semantic accents, and per-member colors from @theme." />
+        <SectionHeader icon={Palette} title="Color" description="Core palette, semantic accents, and per-member colors from @theme." />
         <ColorSwatchGrid title="Core palette" swatches={CORE_COLORS} />
         <ColorSwatchGrid title="Semantic accents" swatches={SEMANTIC_COLORS} />
         <ColorSwatchGrid title="Family member colors" swatches={FAMILY_COLORS} />
@@ -339,7 +334,7 @@ export default function DesignSystemGalleryPage() {
 
       {/* ── Radius & Shadow ── */}
       <div className="rounded-card border border-casa-border bg-casa-surface p-4 space-y-4">
-        <SectionHeader icon={Layers} title="Radius & Shadow" desc="Corner radii and elevation tokens." />
+        <SectionHeader icon={Layers} title="Radius & Shadow" description="Corner radii and elevation tokens." />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {RADII.map((r) => (
             <div key={r.label} className="text-center">
@@ -362,7 +357,7 @@ export default function DesignSystemGalleryPage() {
 
       {/* ── Spacing / touch targets ── */}
       <div className="rounded-card border border-casa-border bg-casa-surface p-4 space-y-4">
-        <SectionHeader icon={Ruler} title="Spacing & touch targets" desc="Minimum recommended control size for a touch-first kiosk/phone/tablet UI." />
+        <SectionHeader icon={Ruler} title="Spacing & touch targets" description="Minimum recommended control size for a touch-first kiosk/phone/tablet UI." />
         <div className="flex flex-wrap items-end gap-6">
           <div className="text-center">
             <div className="size-control-sm rounded-full bg-casa-accent-subtle border-2 border-casa-gold flex items-center justify-center text-caption font-semibold text-casa-navy mx-auto">S</div>
@@ -387,7 +382,7 @@ export default function DesignSystemGalleryPage() {
 
       {/* ── Shared primitives ── */}
       <div className="rounded-card border border-casa-border bg-casa-surface p-4 space-y-4">
-        <SectionHeader icon={CheckCircle2} title="Shared primitives" desc="Production components from src/components/ui with density-aware sizing and accessible states." />
+        <SectionHeader icon={CheckCircle2} title="Shared primitives" description="Production components from src/components/ui with density-aware sizing and accessible states." />
         <div>
           <Text role="caption" muted className="font-bold uppercase tracking-widest mb-2">Buttons</Text>
           <div className="flex flex-wrap gap-3">
@@ -513,6 +508,37 @@ export default function DesignSystemGalleryPage() {
           <Text role="body-sm">Page content aligns to the shared responsive grid.</Text>
         </PageShell>
         <div className="space-y-4 border-t border-casa-divider pt-4">
+          <PageHeader
+            eyebrow="Composition patterns"
+            title="Predictable page assembly"
+            description="These patterns combine tokens and primitives without changing their accessibility contracts."
+            actions={<Button size="sm" variant="secondary" onClick={() => setConfirmationOpen(true)}>Open confirmation</Button>}
+          />
+          <ThreeRailLayout
+            className="h-32 rounded-card border border-casa-border"
+            navigation={<div className="h-full bg-surface-subtle p-3 text-caption text-content-muted">20% navigation</div>}
+            primary={<div className="h-full bg-surface-page p-3 text-caption text-content-primary">55% primary</div>}
+            secondary={<div className="h-full bg-surface-inset p-3 text-caption text-content-muted">25% context</div>}
+          />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <ContentSection title="Dense list section" description="Shared header, surface, divider, and density rhythm." density="dense">
+              <div className="py-3 text-body-sm">First household setting</div>
+              <div className="py-3 text-body-sm">Second household setting</div>
+            </ContentSection>
+            <MasterDetailLayout
+              className="h-44 rounded-card border border-casa-border"
+              showDetailOnMobile={false}
+              master={<div className="p-3 text-body-sm font-semibold">Master navigation</div>}
+              detail={<div className="p-3 text-body-sm">Detail content</div>}
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <PageFeedback state="loading" title="Loading household data" rows={2} />
+            <PageFeedback state="empty" title="No saved places" description="Add a place to make planning faster." />
+            <PageFeedback state="success" title="Settings saved" description="Your changes are active on this device." />
+          </div>
+        </div>
+        <div className="space-y-4 border-t border-casa-divider pt-4">
           <div>
             <Heading role="display-sm">P0 touch contracts</Heading>
             <Text role="body-sm" muted>Shared controls and feedback patterns that prevent screens from inventing incompatible states.</Text>
@@ -609,8 +635,20 @@ export default function DesignSystemGalleryPage() {
       </Modal>
       <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Accessible sheet">
         <Text role="body-sm" muted>The sheet shares the same focus, dismissal, and layering contract.</Text>
-        <Button className="mt-4" fullWidth onClick={() => setSheetOpen(false)}>Done</Button>
+        <WorkflowActions className="mt-4">
+          <Button variant="secondary" onClick={() => setSheetOpen(false)}>Cancel</Button>
+          <Button onClick={() => setSheetOpen(false)}>Save changes</Button>
+        </WorkflowActions>
       </Sheet>
+      <ConfirmationDialog
+        open={confirmationOpen}
+        onClose={() => setConfirmationOpen(false)}
+        onConfirm={() => setConfirmationOpen(false)}
+        title="Remove this item?"
+        description="This confirmation pattern keeps destructive intent explicit and keyboard accessible."
+        confirmLabel="Remove item"
+        destructive
+      />
       <Toast
         open={toastOpen}
         tone="success"
@@ -625,7 +663,7 @@ export default function DesignSystemGalleryPage() {
         <SectionHeader
           icon={width >= 1024 ? Monitor : width >= 768 ? Tablet : Smartphone}
           title="Validation matrix"
-          desc="Required viewport/input surfaces (src/lib/deviceMatrix.mjs) with acceptance checks per profile."
+          description="Required viewport/input surfaces (src/lib/deviceMatrix.mjs) with acceptance checks per profile."
         />
         <div className="space-y-3">
           {DEVICE_MATRIX.map((d) => {
