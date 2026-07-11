@@ -10,6 +10,9 @@ scp -q "$(dirname "$0")/start-casa.sh" "${PI_HOST}:${PI_START_SCRIPT}"
 
 echo "[refresh] Restarting ${PI_SERVICE} via systemd"
 ssh "$PI_HOST" "
+  if [ -f /home/jake/.config/autostart/casa-tabor.desktop ]; then
+    mv /home/jake/.config/autostart/casa-tabor.desktop /home/jake/.config/autostart/casa-tabor.desktop.disabled
+  fi &&
   START_PIDS=\$(ps -eo pid,args | awk '\$0 ~ /\\/home\\/jake\\/start-casa\\.sh\$/ {print \$1}' | tr '\n' ' ') &&
   if [ -n \"\$START_PIDS\" ]; then
     kill \$START_PIDS 2>/dev/null || true
@@ -18,7 +21,12 @@ ssh "$PI_HOST" "
   if [ -n \"\$CHROME_PIDS\" ]; then
     kill \$CHROME_PIDS 2>/dev/null || true
   fi &&
+  LOCK_PIDS=\$(lsof -t /tmp/casa-kiosk-launch.lock 2>/dev/null | sort -u | tr '\n' ' ') &&
+  if [ -n \"\$LOCK_PIDS\" ]; then
+    kill \$LOCK_PIDS 2>/dev/null || true
+  fi &&
   sleep 3 &&
+  rm -f /tmp/casa-kiosk-launch.lock &&
   chmod +x '${PI_START_SCRIPT}' &&
   sudo systemctl daemon-reload &&
   sudo systemctl restart '${PI_SERVICE}' &&
@@ -26,25 +34,4 @@ ssh "$PI_HOST" "
   systemctl is-active '${PI_SERVICE}' >/dev/null
 "
 
-echo "[refresh] Verifying single launcher + kiosk process"
-ssh "$PI_HOST" '
-  START_COUNT=$(ps -eo args | awk '"'"'$0 ~ /\/home\/jake\/start-casa\.sh$/ {c++} END {print c+0}'"'"')
-  KIOSK_COUNT=0
-  for _ in $(seq 1 20); do
-    KIOSK_COUNT=$(ps -eo args | grep "[c]hromium --" | grep -c -- "--kiosk" || true)
-    [ "$KIOSK_COUNT" -ge 1 ] && break
-    sleep 2
-  done
-  if [ "$START_COUNT" -ne 1 ]; then
-    echo "Expected 1 start-casa.sh process, found $START_COUNT" >&2
-    exit 1
-  fi
-  if [ "$KIOSK_COUNT" -lt 1 ]; then
-    echo "Expected at least 1 Chromium kiosk process, found $KIOSK_COUNT" >&2
-    exit 1
-  fi
-  echo "START_COUNT=$START_COUNT KIOSK_COUNT=$KIOSK_COUNT"
-  ps -eo pid,args | grep "[c]hromium --" | head -n 1
-'
-
-echo "[refresh] Success"
+PI_HOST="$PI_HOST" "$(dirname "$0")/check-kiosk-health.sh"

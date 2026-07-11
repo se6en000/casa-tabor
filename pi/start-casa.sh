@@ -44,9 +44,24 @@ fi
 # Ensure X11 auth is available before any X11 commands
 export DISPLAY="${DISPLAY:-:0}"
 export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [ -S "$XDG_RUNTIME_DIR/bus" ]; then
+  export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+fi
 
-# Wait for X11 display to be ready (up to 20 seconds)
-for i in $(seq 1 20); do xdpyinfo >/dev/null 2>&1 && break; sleep 1; done
+# Wait for X11 display to be ready (up to 20 seconds).
+DISPLAY_READY=0
+for _ in $(seq 1 20); do
+  if xset q >/dev/null 2>&1; then
+    DISPLAY_READY=1
+    break
+  fi
+  sleep 1
+done
+if [ "$DISPLAY_READY" -ne 1 ]; then
+  echo "Casa Tabor: X11 display ${DISPLAY} was not ready after 20 seconds." >&2
+  exit 1
+fi
 
 # Restore QHD resolution — xrandr --auto can drop it to 1024x768 on reconnect.
 # This custom mode matches the Pisichen 23.8" 2560x1440 panel via HDMI-2.
@@ -57,7 +72,9 @@ xrandr --output HDMI-2 --mode "2560x1440_60" 2>/dev/null || true
 # Disable screen blanking and DPMS power management AFTER display is ready
 xset s off
 xset s noblank
-xset -dpms
+if xset q 2>/dev/null | grep -q "DPMS is"; then
+  xset -dpms
+fi
 
 # Hide the mouse cursor for a tablet-like touch experience.
 # unclutter-xfixes (install: sudo apt install unclutter-xfixes) hides the
@@ -66,9 +83,9 @@ xset -dpms
 # classic unclutter where xfixes isn't available.
 for pid in $(pgrep -x unclutter 2>/dev/null) $(pgrep -f unclutter-xfixes 2>/dev/null); do kill "$pid" 2>/dev/null || true; done
 if command -v unclutter-xfixes >/dev/null 2>&1; then
-  unclutter-xfixes --timeout 1 --jitter 2 --hide-on-touch --start-hidden --fork >/dev/null 2>&1
+  (exec 9>&-; unclutter-xfixes --timeout 1 --jitter 2 --hide-on-touch --start-hidden --fork >/dev/null 2>&1)
 else
-  unclutter -idle 1 -root &
+  (exec 9>&-; unclutter -idle 1 -root &)
 fi
 
 # Stop external keyboards; Casa now uses an integrated in-app keyboard.
@@ -90,7 +107,7 @@ sleep 3  # Wait for sockets to close (TIME_WAIT state)
 # sensor isn't wired yet — bridge starts in simulation mode.
 BRIDGE_DIR="$HOME/sensor-bridge"
 if [ -f "$BRIDGE_DIR/main.py" ]; then
-  python3 "$BRIDGE_DIR/main.py" &>> "$HOME/sensor-bridge.log" &
+  (exec 9>&-; python3 "$BRIDGE_DIR/main.py" >> "$HOME/sensor-bridge.log" 2>&1 &)
   sleep 1
 fi
 
@@ -98,7 +115,7 @@ fi
 # Listens on 127.0.0.1:8766; Chromium POSTs audio blobs, gets transcript back.
 WHISPER_DIR="$HOME/whisper-bridge"
 if [ -f "$WHISPER_DIR/main.py" ]; then
-  PATH="$HOME/.local/bin:$PATH" python3 "$WHISPER_DIR/main.py" &>> "$HOME/whisper-bridge.log" &
+  (exec 9>&-; PATH="$HOME/.local/bin:$PATH" python3 "$WHISPER_DIR/main.py" >> "$HOME/whisper-bridge.log" 2>&1 &)
   sleep 1
 fi
 
@@ -109,7 +126,18 @@ if [ "$KIOSK" = "1" ]; then
   KIOSK_FLAG="--kiosk"
 fi
 
-chromium-browser \
+# Debian's chromium wrapper currently injects an obsolete V8 flag on 16K-page
+# Raspberry Pi systems. Launch the packaged binary directly when available.
+CHROMIUM_BIN="${CHROMIUM_BIN:-/usr/lib/chromium/chromium}"
+if [ ! -x "$CHROMIUM_BIN" ]; then
+  CHROMIUM_BIN="$(command -v chromium-browser || command -v chromium || true)"
+fi
+if [ -z "$CHROMIUM_BIN" ]; then
+  echo "Casa Tabor: Chromium executable not found." >&2
+  exit 1
+fi
+
+"$CHROMIUM_BIN" \
   $KIOSK_FLAG \
   --password-store=basic \
   --no-sandbox \
@@ -133,4 +161,5 @@ chromium-browser \
   --check-for-update-interval=31536000 \
   --start-maximized \
   --window-position=0,0 \
-  'https://casa-tabor.vercel.app?density=kiosk'
+  'https://casa-tabor.vercel.app?density=kiosk' \
+  9>&-
