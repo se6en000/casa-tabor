@@ -59,6 +59,7 @@ test('semantic reads execute against authoritative calendar rows', () => {
 
   const conflicts = resolveCalendarSemanticRead(parseCalendarLanguage('Do we have any conflicts on Monday?'), events, options)
   assert.equal(conflicts.conflicts.length, 1)
+  assert.match(conflicts.text, /Monday/)
 })
 
 test('non-calendar language remains outside the deterministic contract', () => {

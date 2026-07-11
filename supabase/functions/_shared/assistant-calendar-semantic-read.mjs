@@ -44,7 +44,8 @@ function rangeForScope(scope, now, offset) {
     let daysAhead = target - localNow.getUTCDay()
     if (daysAhead < 0) daysAhead += 7
     const start = today + daysAhead * 86400000
-    return { start, end: start + 86400000, label: scope.weekday }
+    const label = `${scope.weekday[0].toUpperCase()}${scope.weekday.slice(1)}`
+    return { start, end: start + 86400000, label }
   }
   return { start: today, end: today + 86400000, label: 'today' }
 }
