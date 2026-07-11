@@ -112,6 +112,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
   const appliedLaunchRef = useRef<string | null>(null)
   const firedChefGreetRef = useRef<string | null>(null)
   const activeTraceRef = useRef<ReturnType<typeof createAssistantTraceContext> | null>(null)
+  const queuedVoiceTurnsRef = useRef<Array<{ text: string; confidence?: number | null }>>([])
 
   const registerPendingVoiceAction = useCallback((
     messageId: string,
@@ -163,7 +164,22 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
 
   const sendCurrentInput = useCallback((text: string, opts?: { fromVoice?: boolean; confidence?: number | null }) => {
     const trimmed = text.trim()
-    if (!trimmed || loading) return
+    if (!trimmed) return
+    if (loading) {
+      if (opts?.fromVoice) {
+        queuedVoiceTurnsRef.current.push({ text: trimmed, confidence: opts.confidence })
+        const trace = activeTraceRef.current
+        if (trace) {
+          emitAssistantTrace('voice_turn_queued', trace, {
+            payload: {
+              word_count: trimmed.split(/\s+/).length,
+              queue_depth: queuedVoiceTurnsRef.current.length,
+            },
+          })
+        }
+      }
+      return
+    }
     if (pendingLowConfidenceRef.current) {
       const pending = pendingLowConfidenceRef.current
       if (LOW_CONFIDENCE_CONFIRM_PHRASES.test(trimmed)) {
@@ -229,6 +245,25 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     }
   }, [loading, sendTraced, appendSyntheticMessage])
 
+  useEffect(() => {
+    if (loading || queuedVoiceTurnsRef.current.length === 0) return
+    const queued = queuedVoiceTurnsRef.current.shift()
+    if (!queued) return
+    const trace = activeTraceRef.current
+    if (trace) {
+      emitAssistantTrace('voice_turn_dequeued', trace, {
+        payload: {
+          word_count: queued.text.split(/\s+/).length,
+          queue_depth: queuedVoiceTurnsRef.current.length,
+        },
+      })
+    }
+    const timer = setTimeout(() => {
+      sendCurrentInput(queued.text, { fromVoice: true, confidence: queued.confidence })
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [loading, sendCurrentInput])
+
   const quickSaveRecipeSuggestion = useCallback(async (recipeMessage: string) => {
     if (loading) return
     markUserInteraction()
@@ -247,6 +282,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     if (!open) {
       activeTraceRef.current = null
       pendingVoiceActionRef.current = null
+      queuedVoiceTurnsRef.current = []
       return
     }
     const trace = createAssistantTraceContext({

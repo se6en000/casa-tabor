@@ -75,6 +75,17 @@ test('assistant buffers model text until output safety validation completes', ()
   assert.doesNotMatch(assistantFunction, /emitToken = \(delta: string\)/)
 })
 
+test('voice turns captured during loading are queued rather than dropped', () => {
+  assert.match(drawer, /queuedVoiceTurnsRef\.current\.push/)
+  assert.match(drawer, /voice_turn_queued/)
+  assert.match(drawer, /voice_turn_dequeued/)
+})
+
+test('revised event confirmations supersede stale pending cards', () => {
+  assert.match(assistant, /status: 'cancelled' as const/)
+  assert.match(assistant, /message\.toolAction\.args\.id === finalMsg\.toolAction\?\.args\.id/)
+})
+
 test('assistant narrows prompt context and tools by intent profile', () => {
   assert.match(assistantFunction, /classifyAssistantIntent\(latestUserText/)
   assert.match(assistantFunction, /selectedToolDeclarations/)

@@ -15,6 +15,13 @@ test('calendar reads and edits require authoritative event search', () => {
   }
 })
 
+test('schedule used as a noun remains an authoritative calendar read', () => {
+  assert.deepEqual(
+    classifyAssistantIntent("what's on the schedule for tomorrow"),
+    { profile: 'event', forceEventSearch: true },
+  )
+})
+
 test('calendar creates keep direct create tooling available', () => {
   assert.deepEqual(
     classifyAssistantIntent('Create a calendar event for dinner tomorrow'),
@@ -38,6 +45,15 @@ test('authoritative active events keep vague follow-ups on the event lane', () =
   ]) {
     assert.deepEqual(
       classifyAssistantIntent(input, { activeEntityType: 'event' }),
+      { profile: 'event', forceEventSearch: false },
+    )
+  }
+})
+
+test('pending event edits keep short list continuations on the event lane', () => {
+  for (const input of ['candles', 'cookies not cookie']) {
+    assert.deepEqual(
+      classifyAssistantIntent(input, { activeEntityType: 'event', pendingEventAction: true }),
       { profile: 'event', forceEventSearch: false },
     )
   }

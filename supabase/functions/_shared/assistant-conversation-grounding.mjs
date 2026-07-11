@@ -39,7 +39,7 @@ export function answerGroundedEventFollowUp(text, event, formatTime = (value) =>
   const enrichment = Array.isArray(event.event_enrichments) ? event.event_enrichments[0] : event.event_enrichments
   const members = list(event.event_members).map((entry) => entry?.family_members?.name).filter(Boolean)
 
-  if (/^(?:yes|yeah|yep|correct|right)(?:[,\s]+that(?:'s| is)\s+(?:the\s+)?one)?[.!]?$/i.test(input)) {
+  if (/^(?:yes|yeah|yep|correct|right)(?:[,\s]+that(?:'s| is)\s+(?:the\s+)?one)?(?:[,\s]+(?:obviously|exactly))?[.!]?$/i.test(input)) {
     return `Got it—I'm using the calendar event "${title}" for this conversation.`
   }
   if (/\b(?:right|correct|actual|calendar)\s+location\b|\bare you sure\b.*\blocation\b/i.test(input)) {

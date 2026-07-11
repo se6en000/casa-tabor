@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { tryLocalScheduleAnswer } from '../src/lib/scheduleFastPath.mjs'
+import { findSingleEventForScheduleQuery, tryLocalScheduleAnswer } from '../src/lib/scheduleFastPath.mjs'
 
 // Fixed "now": Wed Jul 8 2026, 10:00 local
 const NOW = new Date(2026, 6, 8, 10, 0, 0)
@@ -38,6 +38,11 @@ test('fast-path: "what\'s on tomorrow" lists tomorrow only', () => {
   assert.ok(!out.includes('Dentist'), 'excludes today event')
 })
 
+test('fast-path: a unique day result exposes its authoritative event', () => {
+  assert.equal(findSingleEventForScheduleQuery("what's on the schedule for tomorrow", events, NOW)?.title, 'Owen Birthday')
+  assert.equal(findSingleEventForScheduleQuery("what's next", events, NOW), null)
+})
+
 test('fast-path: empty today returns a clean nothing-left message', () => {
   const out = tryLocalScheduleAnswer("what's on today", [events[0]], NOW)
   assert.equal(out, 'Nothing left on your calendar today.')
@@ -60,6 +65,7 @@ test('fast-path: production schedule phrasing stays deterministic', () => {
   assert.match(tryLocalScheduleAnswer("what's next on the calendar", events, NOW), /Up next/)
   assert.match(tryLocalScheduleAnswer('what is on tomorrow', events, NOW), /thing tomorrow/)
   assert.match(tryLocalScheduleAnswer("what's on the calendar for tomorrow can you tell me", events, NOW), /thing tomorrow/)
+  assert.match(tryLocalScheduleAnswer("what's on the schedule for tomorrow", events, NOW), /Owen Birthday/)
 })
 
 test('fast-path: next today never leaks into tomorrow', () => {

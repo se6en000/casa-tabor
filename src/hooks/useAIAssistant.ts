@@ -3,7 +3,7 @@ import { supabase, supabaseUrl, supabaseAnonKey } from '../lib/supabase'
 import type { EventWithDetails } from './useCalendarEvents'
 import type { FamilyMember } from '../types'
 import { useAISession, type AIMessage } from './useAISession'
-import { tryLocalScheduleAnswer } from '../lib/scheduleFastPath.mjs'
+import { findSingleEventForScheduleQuery, tryLocalScheduleAnswer } from '../lib/scheduleFastPath.mjs'
 import {
   createAssistantTraceContext,
   emitAssistantTrace,
@@ -64,6 +64,10 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[]) {
     .reverse()
     .find((message) => message.role === 'assistant' && message.conversationState)
     ?.conversationState
+  const pendingAction = [...messages]
+    .reverse()
+    .find((message) => message.role === 'assistant' && message.toolAction?.status === 'pending')
+    ?.toolAction
 
   return {
     page: ctx.page,
@@ -74,6 +78,10 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[]) {
     homeCity: ctx.homeCity,
     lastContextReference: deriveLastContextReference(messages),
     conversationState,
+    pendingAction: pendingAction ? {
+      tool: pendingAction.tool,
+      args: pendingAction.args,
+    } : undefined,
     focusedEvent: ctx.focusedEvent ? {
       id: ctx.focusedEvent.id,
       title: ctx.focusedEvent.title,
@@ -188,6 +196,14 @@ export function useAIAssistant(ctx: AssistantContext) {
     if (!image) {
       const fastAnswer = tryLocalScheduleAnswer(text, ctxRef.current.events, new Date())
       if (fastAnswer) {
+        const selectedEvent = findSingleEventForScheduleQuery(text, ctxRef.current.events, new Date())
+        const conversationState = selectedEvent ? {
+          activeEntityType: 'event' as const,
+          activeEventId: selectedEvent.id,
+          activeEventUpdatedAt: selectedEvent.updated_at,
+          expectedFollowUp: 'event_follow_up' as const,
+          establishedAt: new Date().toISOString(),
+        } : undefined
         const fastTrace = { ...trace, lane: 'fast_path' as const }
         emitAssistantTrace('assistant_fast_path_matched', fastTrace, {
           payload: { kind: 'schedule_read' },
@@ -195,7 +211,11 @@ export function useAIAssistant(ctx: AssistantContext) {
         let fpSession = sessionRef.current
         if (!fpSession) fpSession = startNewSession()
         setMessages(prev => {
-          const updated = [...prev, { id: genId(), role: 'user' as const, content: text }, { id: genId(), role: 'assistant' as const, content: fastAnswer }]
+          const updated = [
+            ...prev,
+            { id: genId(), role: 'user' as const, content: text },
+            { id: genId(), role: 'assistant' as const, content: fastAnswer, conversationState },
+          ]
           if (fpSession) saveMessages(fpSession.id, updated)
           return updated
         })
@@ -276,7 +296,16 @@ export function useAIAssistant(ctx: AssistantContext) {
 
     const persist = (assistantMsg: AIMessage) => {
       setMessages(prev => {
-        const updated = [...prev, assistantMsg]
+        const revised = assistantMsg.toolAction?.status === 'pending'
+          ? prev.map((message) => (
+              message.toolAction?.status === 'pending' &&
+              message.toolAction.tool === assistantMsg.toolAction?.tool &&
+              message.toolAction.args.id === assistantMsg.toolAction?.args.id
+                ? { ...message, toolAction: { ...message.toolAction, status: 'cancelled' as const } }
+                : message
+            ))
+          : prev
+        const updated = [...revised, assistantMsg]
         if (activeSession) saveMessages(activeSession.id, updated)
         return updated
       })
@@ -359,9 +388,19 @@ export function useAIAssistant(ctx: AssistantContext) {
             const finalMsg = buildAssistantMsg(payload, streamMsgId)
             setMessages(prev => {
               const exists = prev.some(m => m.id === streamMsgId)
+              const revised = finalMsg.toolAction?.status === 'pending'
+                ? prev.map((message) => (
+                    message.id !== streamMsgId &&
+                    message.toolAction?.status === 'pending' &&
+                    message.toolAction.tool === finalMsg.toolAction?.tool &&
+                    message.toolAction.args.id === finalMsg.toolAction?.args.id
+                      ? { ...message, toolAction: { ...message.toolAction, status: 'cancelled' as const } }
+                      : message
+                  ))
+                : prev
               const updated = exists
-                ? prev.map(m => m.id === streamMsgId ? { ...finalMsg, streaming: false } : m)
-                : [...prev, { ...finalMsg, streaming: false }]
+                ? revised.map(m => m.id === streamMsgId ? { ...finalMsg, streaming: false } : m)
+                : [...revised, { ...finalMsg, streaming: false }]
               if (activeSession) saveMessages(activeSession.id, updated)
               return updated
             })

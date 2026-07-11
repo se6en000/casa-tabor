@@ -35,6 +35,10 @@ test('event follow-ups answer only from authoritative fields', () => {
   assert.doesNotMatch(answerGroundedEventFollowUp('Prep me for it', event), /FunZone|superhero|party favors/i)
 })
 
+test('natural candidate confirmations retain the active event', () => {
+  assert.match(answerGroundedEventFollowUp("yeah that's the one obviously", event), /using the calendar event/)
+})
+
 test('output safety rejects pseudo-tools and unsupported write claims', () => {
   assert.equal(
     secureAssistantResult({ type: 'text', text: 'tool_code\nprint(update_event({id: "made-up"}))' }).safety_rejection,

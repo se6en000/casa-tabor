@@ -1,6 +1,6 @@
 const EVENT_TERMS = /\b(calendar|event|events|appointment|appointments|reminder|reminders|schedule|scheduled|therapy|practice|birthday|party|double[- ]?book|conflict|busy|free)\b/i
 const EVENT_TIME_QUERY = /\b(what(?:'s| is| do we have| have we got)?|anything|who)\b.*\b(today|tomorrow|tonight|week|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next)\b/i
-const EVENT_CREATE = /\b(create|add|book|set up)\b.*\b(event|appointment|reminder|calendar)\b|\bschedule\b.*\b(for|on|at|tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i
+const EVENT_CREATE = /\b(create|add|book|set up)\b.*\b(event|appointment|reminder|calendar)\b|\b(?:schedule|book)\s+(?:an?\s+)?(?:event|appointment|reminder|meeting)\b/i
 const EVENT_MUTATION = /\b(move|resched(?:ule)?|change|update|edit|delete|remove|cancel|shift|push)\b/i
 const GENERIC_ACTION = /\b(add|create|save|store|check|clear|delete|remove|update|change|move|send|book|schedule)\b/i
 
@@ -8,8 +8,10 @@ export function classifyAssistantIntent(text, options = {}) {
   const input = String(text ?? '').trim()
   const focusedEvent = options.focusedEvent === true
   const activeEvent = options.activeEntityType === 'event'
+  const pendingEventAction = options.pendingEventAction === true
   const assistantMode = options.assistantMode === 'chef' ? 'chef' : 'general'
   const eventFollowUp = activeEvent && (
+    pendingEventAction ||
     /\b(it|that|this|one|party|location|address|venue|calendar|time|when|where|who|attend|bring|prep|prepare|details?)\b/i.test(input) ||
     /^(?:yes|yeah|yep|correct|right|do it|update it|change it)\b/i.test(input)
   )

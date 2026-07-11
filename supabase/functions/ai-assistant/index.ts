@@ -15,6 +15,9 @@ import {
   normalizeConversationState,
 } from '../_shared/assistant-conversation-grounding.mjs'
 import { secureAssistantResult } from '../_shared/assistant-output-safety.mjs'
+import { resolveCalendarDayRead } from '../_shared/assistant-calendar-read.mjs'
+import { resolveBringListEdit } from '../_shared/assistant-event-list-edit.mjs'
+import { resolveUniqueEventTitle } from '../_shared/assistant-event-selection.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -170,6 +173,7 @@ Deno.serve(async (req) => {
     focusedEvent: Boolean(context?.focusedEvent),
     assistantMode: context?.assistant_mode,
     activeEntityType: incomingConversationState?.activeEntityType,
+    pendingEventAction: context?.pendingAction?.tool === 'update_event',
   })
   appendServerTrace('server_ai_assistant_start', `messages=${Array.isArray(messages) ? messages.length : 0}`, {
     message_count: Array.isArray(messages) ? messages.length : 0,
@@ -1296,6 +1300,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           event.event_enrichments?.[0]?.prep_notes ?? '',
         ].join(' '))
 
+        let queryMatched = !query
         if (query) {
           if (title === query) score += 0.85
           else if (title.includes(query)) score += 0.65
@@ -1304,7 +1309,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           if (queryTokens.length > 0) {
             const overlap = queryTokens.filter((token) => searchableText.includes(token)).length / queryTokens.length
             score += overlap * 0.25
+            queryMatched = overlap > 0
           }
+          queryMatched = queryMatched || title === query || title.includes(query) || searchableText.includes(query)
         }
         if (memberName) {
           const memberHit = event.event_members?.some((m) => m.family_members?.name.toLowerCase().includes(memberName))
@@ -1312,9 +1319,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         }
         if (dateHint) score += 0.15
         if (!query && !memberName && !dateHint) score += 0.5
-        return { event, confidence: Math.min(1, Number(score.toFixed(2))) }
+        return { event, confidence: Math.min(1, Number(score.toFixed(2))), queryMatched }
       })
-        .filter(({ confidence }) => !query || confidence >= 0.2)
+        .filter(({ confidence, queryMatched }) => (!query || queryMatched) && confidence >= 0.2)
         .sort((a, b) => b.confidence - a.confidence)
 
       if (scoredResults.length === 0) return { found: false, message: 'No matching events found.' }
@@ -2172,7 +2179,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       if (args.location !== undefined || args.address !== undefined) parts.push(`location → "${String(args.location ?? args.address ?? '').slice(0, 30)}"`)
       if (args.notes !== undefined) parts.push('notes updated')
       if (args.category !== undefined) parts.push(`category → ${String(args.category)}`)
-      if (args.what_to_bring !== undefined) parts.push('bring list updated')
+      if (Array.isArray(args.what_to_bring)) parts.push(`bring list → ${(args.what_to_bring as string[]).join(', ')}`)
       if (args.checklist_items !== undefined) parts.push('checklist updated')
       if (args.action_items !== undefined) parts.push('actions updated')
       if ((args.members_add as string[])?.length) parts.push(`add ${(args.members_add as string[]).join(', ')}`)
@@ -2225,6 +2232,70 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   }
 
   try {
+    if (intentRouting.profile === 'event' && latestUserText) {
+      const dayRead = resolveCalendarDayRead(latestUserText, allEvents ?? [], { now, utcOffset })
+      if (dayRead) {
+        if (dayRead.events.length === 1) {
+          responseConversationState = eventConversationState(dayRead.events[0], now)
+        }
+        const requestTotalMs = Date.now() - requestStartMs
+        appendServerTrace('server_ai_assistant_calendar_day_read', `day=${dayRead.day} count=${dayRead.events.length} ms=${requestTotalMs}`, {
+          day: dayRead.day,
+          event_ids: dayRead.events.map((event: { id: string }) => event.id),
+          count: dayRead.events.length,
+          request_ms: requestTotalMs,
+        })
+        return {
+          status: 200,
+          payload: {
+            type: 'text',
+            text: dayRead.text,
+            correlation_id: cid,
+            authoritative_provenance: {
+              source: 'events',
+              event_ids: dayRead.events.map((event: { id: string }) => event.id),
+            },
+            conversation_state: responseConversationState,
+            telemetry: {
+              ...llmTelemetry,
+              request_total_ms: requestTotalMs,
+              context_load_ms: contextLoadMs,
+            },
+          },
+        }
+      }
+    }
+    if (intentRouting.profile === 'event' && latestUserText && activeConversationEvent) {
+      const bringListMutation = resolveBringListEdit(latestUserText, activeConversationEvent, {
+        pendingAction: context?.pendingAction,
+      })
+      if (bringListMutation) {
+        const requestTotalMs = Date.now() - requestStartMs
+        appendServerTrace('server_ai_assistant_deterministic_mutation', `tool=${bringListMutation.tool} field=what_to_bring ms=${requestTotalMs}`, {
+          tool: bringListMutation.tool,
+          field: 'what_to_bring',
+          event_id: activeConversationEvent.id,
+          item_count: bringListMutation.args.what_to_bring.length,
+          request_ms: requestTotalMs,
+        })
+        return {
+          status: 200,
+          payload: {
+            type: 'tool_action',
+            tool: bringListMutation.tool,
+            args: bringListMutation.args,
+            display_text: buildDisplayText(bringListMutation.tool, bringListMutation.args),
+            conversation_state: eventConversationState(activeConversationEvent, now),
+            correlation_id: cid,
+            telemetry: {
+              ...llmTelemetry,
+              request_total_ms: requestTotalMs,
+              context_load_ms: contextLoadMs,
+            },
+          },
+        }
+      }
+    }
     if (intentRouting.profile === 'event' && latestUserText && activeConversationEvent) {
       const groundedAnswer = answerGroundedEventFollowUp(latestUserText, activeConversationEvent, toLocal)
       if (groundedAnswer) {
@@ -2251,6 +2322,39 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
               source: 'events',
               event_id: activeConversationEvent.id,
               updated_at: activeConversationEvent.updated_at,
+            },
+            correlation_id: cid,
+            telemetry: {
+              ...llmTelemetry,
+              request_total_ms: requestTotalMs,
+              context_load_ms: contextLoadMs,
+            },
+          },
+        }
+      }
+    }
+    if (intentRouting.profile === 'event' && latestUserText && !activeConversationEvent) {
+      const selectedEvent = resolveUniqueEventTitle(latestUserText, allEvents ?? [])
+      if (selectedEvent) {
+        responseConversationState = eventConversationState(selectedEvent, now)
+        const groundedAnswer = answerGroundedEventFollowUp(latestUserText, selectedEvent, toLocal)
+          ?? `I'm using the calendar event "${selectedEvent.title}" for this conversation.`
+        const requestTotalMs = Date.now() - requestStartMs
+        appendServerTrace('server_ai_assistant_event_selected', `event=${selectedEvent.id} ms=${requestTotalMs}`, {
+          event_id: selectedEvent.id,
+          event_updated_at: selectedEvent.updated_at,
+          request_ms: requestTotalMs,
+        })
+        return {
+          status: 200,
+          payload: {
+            type: 'text',
+            text: groundedAnswer,
+            conversation_state: responseConversationState,
+            authoritative_provenance: {
+              source: 'events',
+              event_id: selectedEvent.id,
+              updated_at: selectedEvent.updated_at,
             },
             correlation_id: cid,
             telemetry: {

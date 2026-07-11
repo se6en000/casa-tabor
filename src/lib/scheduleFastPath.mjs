@@ -6,7 +6,8 @@
 // Pure module (no React / no types) so it is unit-testable via `node --test`.
 
 // Words that imply an action/mutation — never fast-path these; let the LLM handle.
-export const FASTPATH_BLOCK_VERBS = /\b(add|create|schedule|move|reschedule|delete|remove|cancel|remind|set|change|update|book|invite|clear|buy|plan|make)\b/i
+export const FASTPATH_BLOCK_VERBS = /\b(add|create|move|reschedule|delete|remove|cancel|remind|set|change|update|book|invite|clear|buy|plan|make)\b/i
+export const FASTPATH_SCHEDULE_ACTION = /\bschedule\s+(?:an?\s+)?(?:event|appointment|reminder|meeting)\b/i
 export const FASTPATH_NEXT_TODAY = /\b(what'?s|what is)\s+(the\s+)?next(\s+(thing|event))?\s+today\b/i
 export const FASTPATH_NEXT = /\b(what'?s|what is)\s+(coming\s+up\s+)?next(\s+on\s+(the\s+|my\s+)?(calendar|schedule))?\b|\bwhat'?s\s+up\s+next\b|^\s*next\s+(event|thing|up)\s*\??$/i
 export const FASTPATH_TODAY = /\b(today'?s\s+(schedule|events|agenda)|what'?s\s+(on|happening|up)\s+today|what\s+do\s+(i|we)\s+have\s+(going\s+on\s+)?today|what'?s\s+(on\s+)?(my\s+)?(calendar|schedule)\s+today|anything\s+(on\s+|going\s+on\s+)?today)\b/i
@@ -22,10 +23,29 @@ function formatEventLine(e) {
   return `• ${when} — ${e.title}${loc}`
 }
 
+export function findSingleEventForScheduleQuery(text, events, now = new Date()) {
+  const input = String(text ?? '').trim()
+  if (FASTPATH_BLOCK_VERBS.test(input) || FASTPATH_SCHEDULE_ACTION.test(input) || /\b(and|also|but)\b/i.test(input)) return null
+  const dayQuery = FASTPATH_TODAY.test(input) ? 'today' : FASTPATH_TOMORROW.test(input) ? 'tomorrow' : null
+  if (!dayQuery) return null
+  const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  const todayStart = startOfDay(now)
+  const tomorrowStart = todayStart + 24 * 3600_000
+  const [lo, hi] = dayQuery === 'today'
+    ? [todayStart, tomorrowStart]
+    : [tomorrowStart, tomorrowStart + 24 * 3600_000]
+  const matches = (events ?? []).filter((event) => {
+    const start = Date.parse(event?.start_time)
+    const end = Date.parse(event?.end_time ?? event?.start_time)
+    return Number.isFinite(start) && start >= lo && start < hi && (dayQuery !== 'today' || event.all_day || end > now.getTime())
+  })
+  return matches.length === 1 ? matches[0] : null
+}
+
 export function tryLocalScheduleAnswer(text, events, now = new Date()) {
   const t = (text ?? '').trim()
   if (!t || t.split(/\s+/).length > 16) return null
-  if (FASTPATH_BLOCK_VERBS.test(t)) return null
+  if (FASTPATH_BLOCK_VERBS.test(t) || FASTPATH_SCHEDULE_ACTION.test(t)) return null
   if (/\b(and|also|but)\b/i.test(t)) return null
 
   const nowMs = now.getTime()
