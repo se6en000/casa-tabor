@@ -1,4 +1,4 @@
-export const DESIGN_SYSTEM_VERSION = '1.1.0'
+export const DESIGN_SYSTEM_VERSION = '1.2.0'
 export const DESIGN_SYSTEM_RELEASE_DATE = '2026-07-11'
 export const DESIGN_SYSTEM_SCHEMA_VERSION = 1
 
@@ -216,7 +216,7 @@ export const COMPONENT_MANIFEST = [
     variants: ['default'],
     states: ['off', 'on', 'focus-visible', 'disabled'],
     accessibility: 'Exposes role=switch, checked state, visible label, and optional description.',
-    responsive: 'Row and control targets remain touch-safe across densities.',
+    responsive: 'The physical switch track and its row meet the 44px touch and 48px kiosk target minimums.',
     example: '<Switch label="Conversation mode" checked={enabled} onCheckedChange={setEnabled} />',
   }),
   component({
@@ -486,6 +486,15 @@ export const COMPONENT_MANIFEST = [
 ]
 
 export const DESIGN_SYSTEM_CHANGELOG = [
+  {
+    version: '1.2.0',
+    date: '2026-07-11',
+    changes: [
+      'Certified shared primitive adoption, design debt, responsive modes, keyboard behavior, accessible names, and distance readability.',
+      'Raised the Switch track to the density-aware physical target minimum.',
+      'Added global reduced-motion handling for CSS and Framer Motion interactions.',
+    ],
+  },
   {
     version: '1.1.0',
     date: '2026-07-11',

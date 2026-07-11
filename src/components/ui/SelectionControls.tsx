@@ -37,7 +37,7 @@ export const Switch = forwardRef<HTMLButtonElement, SwitchProps>(function Switch
         disabled={disabled}
         onClick={() => onCheckedChange(!checked)}
         className={cn(
-          'casa-switch-track relative h-control-sm shrink-0 rounded-pill border p-1 outline-none transition-colors',
+          'casa-switch-track relative h-control shrink-0 rounded-pill border p-1 outline-none transition-colors',
           'focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-2 disabled:opacity-40',
           checked ? 'border-casa-success bg-casa-success' : 'border-casa-control-border bg-casa-toggle-track',
           invalid && 'border-casa-error',

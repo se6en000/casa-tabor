@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run tokens:check && npm run style:check && tsc -b && vite build",
+    "build": "npm run tokens:check && npm run style:check && npm run certify:experience && tsc -b && vite build",
     "test": "node --test tests/*.test.mjs",
     "test:visual": "playwright test",
     "test:visual:update": "playwright test --update-snapshots=all",
@@ -16,7 +16,8 @@
     "design-system:export": "node scripts/export-design-system.mjs",
     "style:audit": "node scripts/style-audit.mjs",
     "style:report": "node scripts/style-audit.mjs --json",
-    "style:check": "node scripts/style-audit.mjs --check"
+    "style:check": "node scripts/style-audit.mjs --check",
+    "certify:experience": "node scripts/experience-certification.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",

@@ -21,11 +21,13 @@ import {
   Field,
   Heading,
   Input,
+  Modal,
   PageFeedback,
   PageHeader,
   PageShell,
   Progress,
   SegmentedControl,
+  Sheet,
   Switch,
   Text,
 } from '../components/ui'
@@ -251,6 +253,9 @@ function FeedbackFixture() {
 }
 
 export default function VisualRegressionPage() {
+  const [modalOpen, setModalOpen] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
+
   return (
     <main data-testid="visual-regression-fixture" className="min-h-screen bg-surface-page text-casa-text">
       <section aria-label="Representative Casa shell" className="overflow-hidden border-b border-casa-border">
@@ -281,8 +286,21 @@ export default function VisualRegressionPage() {
           <Button variant="subtle">Subtle</Button>
           <Button variant="ghost">Ghost</Button>
           <Button variant="danger">Destructive</Button>
+          <Button variant="secondary" onClick={() => setModalOpen(true)}>Review dialog</Button>
+          <Button variant="subtle" onClick={() => setSheetOpen(true)}>Open task sheet</Button>
         </section>
       </PageShell>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Review family plan">
+        <Text role="body-sm">Confirm that the shared schedule is ready for everyone.</Text>
+        <div className="mt-4 flex justify-end gap-3">
+          <Button variant="ghost" onClick={() => setModalOpen(false)}>Not yet</Button>
+          <Button variant="strong" onClick={() => setModalOpen(false)}>Confirm plan</Button>
+        </div>
+      </Modal>
+      <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Today’s task details" side="right">
+        <Text role="body-sm">Review the task details without losing your place.</Text>
+        <Button className="mt-4" variant="secondary" onClick={() => setSheetOpen(false)}>Done</Button>
+      </Sheet>
     </main>
   )
 }

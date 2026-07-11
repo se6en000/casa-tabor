@@ -22,7 +22,7 @@
 
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { CATEGORIES } from './lib/audit-rules.mjs'
 import { computeRows, findRegressions } from './lib/guardrail.mjs'
 
@@ -66,7 +66,7 @@ function collectSourceFiles(dir) {
   return out
 }
 
-function runAudit() {
+export function runAudit() {
   const files = collectSourceFiles(SRC_DIR)
   const exceptionConfig = JSON.parse(readFileSync(EXCEPTIONS_PATH, 'utf8'))
   const sourcePaths = new Set(files.map((file) => relative(REPO_ROOT, file)))
@@ -250,4 +250,6 @@ function main() {
   }
 }
 
-main()
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  main()
+}
