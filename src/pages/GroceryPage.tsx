@@ -2380,7 +2380,7 @@ export default function GroceryPage() {
                               <CategoryIcon size={18} />
                             </div>
                             <div className="min-w-0">
-                              <p className="truncate text-body-lg font-semibold leading-tight text-casa-navy">{section.label}</p>
+                              <p className="truncate text-body font-semibold leading-tight text-casa-navy">{section.label}</p>
                               <p className="mt-0.5 text-caption text-casa-top-pick-band/80">{section.visual.subtitle}</p>
                             </div>
                           </div>

@@ -44,11 +44,12 @@ test('Grocery uses a compact semantic hierarchy for its dense shopping surface',
 
   assert.match(source, /<Heading role="display-sm"[^>]*>Grocery List<\/Heading>/)
   assert.match(source, /text-body font-semibold text-casa-text/)
-  assert.match(source, /text-body-lg font-semibold leading-tight text-casa-navy/)
+  assert.match(source, /text-body font-semibold leading-tight text-casa-navy/)
   assert.match(source, /section\.visual\.subtitle/)
   assert.match(source, /columns-1 gap-3 lg:columns-2 2xl:columns-3/)
   assert.doesNotMatch(source, /text-body-lg font-semibold text-casa-text/)
   assert.doesNotMatch(source, /text-heading font-semibold leading-tight text-casa-navy/)
+  assert.doesNotMatch(source, /text-body-lg font-semibold leading-tight text-casa-navy/)
 })
 
 test('Design System gallery covers every P0 touch contract', () => {
