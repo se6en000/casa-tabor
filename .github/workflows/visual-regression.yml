@@ -8,7 +8,7 @@ on:
 
 jobs:
   visual-regression:
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -17,7 +17,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install chromium
       - run: npm test
       - run: npm run build
       - run: npm run test:visual
