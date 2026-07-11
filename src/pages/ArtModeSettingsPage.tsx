@@ -319,9 +319,8 @@ export default function ArtModeSettingsPage() {
                   <p className="text-body-sm font-semibold text-casa-navy">Starter themes</p>
                   <p className="text-caption text-casa-muted mt-0.5 mb-2">Quickly prefill a coastal modern vibe, then tweak it.</p>
                   <Button
-                    type="button"
+                    variant="strong"
                     onClick={applyCoastalStarterTheme}
-                    className="px-3.5 py-2 rounded-xl bg-casa-navy text-white text-body-sm font-semibold hover:bg-casa-navy/90 transition-colors"
                   >
                     Load West Palm Coastal Starter
                   </Button>

@@ -8,7 +8,7 @@ import type {
   MemberAvailabilityException,
   MemberAvailabilityRule,
 } from '../types'
-import { Button, SkeletonRow, Switch } from '../components/ui'
+import { Button, SegmentedControl, SkeletonRow, Switch } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 import {
   FALLBACK_PROFILE_COLOR,
@@ -436,37 +436,22 @@ export default function FamilySettingsPage() {
                   {/* Role */}
                   <div>
                     <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Role</label>
-                    <div className="flex gap-2">
-                      {ROLE_OPTIONS.map(({ value, label }) => (
-                        <Button
-                          key={value}
-                          onClick={() => {
-                            const nextCanDrive = value === 'parent' || value === 'caregiver'
-                            if (isNew) {
-                              patchNew(m._tempId!, {
-                                role: value,
-                                can_drive: nextCanDrive ? (m.can_drive ?? true) : false,
-                                availability_mode: value === 'parent' ? 'flexible' : value === 'caregiver' ? 'strict' : 'strict',
-                              })
-                            } else {
-                              patch(m.id!, {
-                                role: value,
-                                can_drive: nextCanDrive ? (m.can_drive ?? true) : false,
-                                availability_mode: value === 'parent' ? 'flexible' : value === 'caregiver' ? 'strict' : 'strict',
-                              })
-                            }
-                          }}
-                          className={cn(
-                            'flex-1 py-2 rounded-button border text-body-sm font-medium transition-all capitalize',
-                            (m.role ?? 'child') === value
-                              ? 'bg-casa-navy text-white border-casa-navy'
-                              : 'bg-white border-casa-border text-casa-navy hover:bg-casa-bg',
-                          )}
-                        >
-                          {label}
-                        </Button>
-                      ))}
-                    </div>
+                    <SegmentedControl
+                      aria-label={`${m.name || 'Family member'} role`}
+                      value={m.role ?? 'child'}
+                      options={ROLE_OPTIONS}
+                      onChange={(value) => {
+                        const nextCanDrive = value === 'parent' || value === 'caregiver'
+                        const changes = {
+                          role: value,
+                          can_drive: nextCanDrive ? (m.can_drive ?? true) : false,
+                          availability_mode: value === 'parent' ? 'flexible' as const : 'strict' as const,
+                        }
+                        if (isNew) patchNew(m._tempId!, changes)
+                        else patch(m.id!, changes)
+                      }}
+                      fullWidth
+                    />
                   </div>
 
                   {/* Color picker */}

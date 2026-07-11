@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const PAGE_PATHS = [
@@ -547,13 +547,22 @@ test('Settings selection controls do not repaint default primary buttons', () =>
   const calendars = readFileSync(resolve('src/pages/CalendarsSettingsPage.tsx'), 'utf8')
 
   assert.match(art, /aria-label="Art feed mode"/)
+  assert.match(art, /variant="strong"[\s\S]*?onClick=\{applyCoastalStarterTheme\}/)
   assert.match(display, /aria-label="Palette target"/)
   assert.match(family, /label="Show on homepage sidebar"/)
+  assert.match(family, /<SegmentedControl[\s\S]*?role`}/)
   assert.match(family, /variant=\{\(m\.availability_mode \?\? 'strict'\) === option\.value \? 'strong' : 'secondary'\}/)
   assert.match(calendars, /variant="strong"[\s\S]*?onClick=\{onConnect\}/)
 
-  for (const source of [art, display, family, calendars]) {
-    assert.doesNotMatch(source, /<Button[\s\S]{0,500}bg-casa-navy text-white border-casa-navy/)
+  const settingsPages = readdirSync(resolve('src/pages'))
+    .filter((file) => file.endsWith('SettingsPage.tsx'))
+  for (const file of settingsPages) {
+    const source = readFileSync(resolve('src/pages', file), 'utf8')
+    assert.doesNotMatch(
+      source,
+      /<Button\b(?:(?!<\/Button>)[\s\S])*?\bbg-casa-navy(?=\s|["'])/,
+      `${file} must use variant="strong" instead of repainting a default Button navy`,
+    )
   }
 })
 
