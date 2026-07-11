@@ -2994,7 +2994,7 @@ export default function CookPage() {
                         {isTop ? (
                           <Heading role="heading" className="font-semibold leading-tight">{insight.recipe.name}</Heading>
                         ) : (
-                          <Text as="h3" className="font-semibold leading-tight text-casa-navy">{insight.recipe.name}</Text>
+                          <Text as="h3" role="body-lg" className="font-semibold leading-tight text-casa-navy">{insight.recipe.name}</Text>
                         )}
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
                           <Chip tone="info" size="sm" icon={<Clock3 size={14} />}>

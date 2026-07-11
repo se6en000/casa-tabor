@@ -171,6 +171,7 @@ test('Cook preserves its landing hierarchy through shared design-system roles', 
   const cook = readFileSync(resolve('src/pages/CookPage.tsx'), 'utf8')
   const styles = readFileSync(resolve('src/index.css'), 'utf8')
   assert.match(cook, /<Heading role="display-sm"/)
+  assert.match(cook, /<Text as="h3" role="body-lg"[^>]*>\{insight\.recipe\.name\}<\/Text>/)
   assert.match(cook, /<SegmentedControl/)
   assert.match(cook, /<Card/)
   assert.match(cook, /<Chip/)
