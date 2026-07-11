@@ -484,13 +484,13 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <span className={cn(
-              'text-body-lg font-semibold text-casa-text leading-tight',
+              'text-body font-semibold text-casa-text leading-tight',
               visualChecked && 'line-through text-casa-muted'
             )}>
               {item.name}
             </span>
             {(item.quantity || item.unit) && (
-              <span className="ml-2 text-body-sm font-medium text-casa-muted">
+              <span className="ml-2 text-caption font-medium text-casa-muted">
                 {item.quantity}{item.unit ? ' ' + item.unit : ''}
               </span>
             )}
@@ -508,7 +508,7 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
             </Chip>
           )}
         </div>
-        <p className="mt-0.5 text-body-sm leading-relaxed text-casa-muted">
+        <p className="mt-0.5 text-caption leading-relaxed text-casa-muted">
           {metaParts.join(' · ')}
         </p>
         {item.notes && (
@@ -2101,8 +2101,8 @@ export default function GroceryPage() {
               <ShoppingCart size={20} />
             </div>
             <div className="min-w-0">
-              <Heading role="display-md" className="truncate leading-none">Grocery List</Heading>
-              <p className="mt-1 text-body-sm text-casa-muted">
+              <Heading role="display-sm" className="truncate leading-none">Grocery List</Heading>
+              <p className="mt-1 text-caption text-casa-muted">
                 {syncStatusLabel} · sorted by store aisle
               </p>
             </div>
@@ -2380,8 +2380,8 @@ export default function GroceryPage() {
                               <CategoryIcon size={18} />
                             </div>
                             <div className="min-w-0">
-                              <p className="truncate text-heading font-semibold leading-tight text-casa-navy">{section.label}</p>
-                              <p className="mt-0.5 text-body-sm text-casa-top-pick-band/80">{section.visual.subtitle}</p>
+                              <p className="truncate text-body-lg font-semibold leading-tight text-casa-navy">{section.label}</p>
+                              <p className="mt-0.5 text-caption text-casa-top-pick-band/80">{section.visual.subtitle}</p>
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-2 text-caption text-casa-muted">
