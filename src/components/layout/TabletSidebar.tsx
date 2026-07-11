@@ -89,7 +89,7 @@ export default function TabletSidebar() {
     <>
       <aside className={cn(
         'hidden lg:flex flex-none bg-casa-bg-2 border-r border-casa-border flex-col h-full min-h-0 overflow-hidden z-30 transition-all duration-300',
-        collapsed ? 'w-20' : 'basis-1/4',
+        collapsed ? 'w-20' : 'basis-1/5',
       )}>
 
         <BounceScroll
