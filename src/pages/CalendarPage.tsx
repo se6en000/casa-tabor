@@ -7,15 +7,14 @@ import WeekView from '../components/calendar/WeekView'
 import StackedView from '../components/calendar/StackedView'
 import DayView from '../components/calendar/DayView'
 import MonthView from '../components/calendar/MonthView'
-import { Button, IconButton } from '../components/ui'
-import type { CalendarView } from '../types'
+import { Button, IconButton, SegmentedControl } from '../components/ui'
 
-const views: { key: CalendarView; label: string }[] = [
-  { key: 'today', label: 'Day' },
-  { key: 'stacked', label: 'Stacked' },
-  { key: 'week', label: 'Week' },
-  { key: 'month', label: 'Month' },
-]
+const CALENDAR_VIEW_OPTIONS = [
+  { value: 'today', label: 'Day' },
+  { value: 'stacked', label: 'Stacked' },
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+] as const
 
 export default function CalendarPage() {
   const { activeView, setActiveView, selectedDate, setSelectedDate } = useCalendarStore()
@@ -119,18 +118,13 @@ export default function CalendarPage() {
           </h2>
         </div>
 
-        <div className="hidden md:flex gap-1 bg-casa-surface border border-casa-border rounded-button p-1">
-          {views.map((v) => (
-            <Button
-              key={v.key}
-              onClick={() => setActiveView(v.key)}
-              variant={activeView === v.key ? 'strong' : 'ghost'}
-              size="sm"
-              aria-pressed={activeView === v.key}
-            >
-              {v.label}
-            </Button>
-          ))}
+        <div className="hidden md:block">
+          <SegmentedControl
+            aria-label="Calendar view"
+            value={activeView}
+            options={CALENDAR_VIEW_OPTIONS}
+            onChange={setActiveView}
+          />
         </div>
       </div>
 
