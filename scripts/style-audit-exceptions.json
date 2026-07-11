@@ -43,6 +43,15 @@
         ]
       },
       {
+        "path": "src/pages/CookPage.tsx",
+        "reason": "Recipe image focal points are user-selected runtime values; modal footer padding follows the device safe-area inset.",
+        "snippets": [
+          "style={{ objectPosition: `${focalX}% ${focalY}%` }}",
+          "style={{ objectPosition: `${photoEditorFocalX}% ${photoEditorFocalY}%` }}",
+          "style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}"
+        ]
+      },
+      {
         "path": "src/components/shared/ArtScreensaver.tsx",
         "reason": "Artwork frame dimensions and image positioning are runtime-derived."
       },

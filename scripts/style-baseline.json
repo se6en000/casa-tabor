@@ -6,11 +6,11 @@
   "categories": {
     "arbitraryFontSize": 1,
     "rawHexColors": 48,
-    "arbitraryZIndex": 12,
-    "inlineStyleBlocks": 49,
+    "arbitraryZIndex": 8,
+    "inlineStyleBlocks": 43,
     "undersizedSquareControls": 0,
     "hoverOnlyReveals": 0,
     "titleOnlyButtonLabels": 8,
-    "nativeControlRecreations": 242
+    "nativeControlRecreations": 167
   }
 }

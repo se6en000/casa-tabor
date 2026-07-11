@@ -241,6 +241,19 @@ test('Cook preserves its landing hierarchy through shared design-system roles', 
   assert.doesNotMatch(styles, /\.cook-v2-/)
 })
 
+test('Cooking uses shared controls while preserving its interaction contracts', () => {
+  const source = readFileSync(resolve('src/pages/CookPage.tsx'), 'utf8')
+  for (const component of ['Alert', 'Button', 'Checkbox', 'Chip', 'IconButton', 'Progress', 'SegmentedControl', 'Switch']) {
+    assert.match(source, new RegExp(`<${component}\\b`))
+  }
+  assert.doesNotMatch(source, /<button\b/)
+  assert.doesNotMatch(source, /\bz-\[\d+\]/)
+  assert.match(source, /className="fixed inset-0 z-modal/)
+  assert.match(source, /aria-label="Cooking step progress"/)
+  assert.match(source, /aria-label="Saved cooking progress"/)
+  assert.match(source, /style=\{\{ objectPosition: `\$\{focalX\}% \$\{focalY\}%` \}\}/)
+})
+
 test('Design System settings expose persistent live font and color controls', () => {
   const gallery = readFileSync(resolve('src/pages/DesignSystemGalleryPage.tsx'), 'utf8')
   const theme = readFileSync(resolve('src/contexts/ThemeContext.tsx'), 'utf8')
