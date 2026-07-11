@@ -18,13 +18,14 @@ const CONTROL_BASE =
   'focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-2 focus-visible:ring-offset-casa-bg ' +
   'disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none'
 
-export const BUTTON_VARIANTS = ['primary', 'strong', 'secondary', 'ghost', 'danger']
+export const BUTTON_VARIANTS = ['primary', 'strong', 'secondary', 'subtle', 'ghost', 'danger']
 export const BUTTON_SIZES = ['sm', 'md', 'lg']
 
 const BUTTON_VARIANT_CLASSES = {
   primary: 'casa-action-primary bg-casa-gold shadow-card hover:brightness-110',
   strong: 'casa-action-strong bg-casa-navy shadow-card hover:brightness-110',
   secondary: 'bg-casa-surface text-casa-navy border border-casa-border hover:bg-casa-bg',
+  subtle: 'bg-surface-inset text-content-primary border border-casa-border/70 hover:bg-surface-subtle',
   ghost: 'bg-transparent text-casa-navy hover:bg-casa-bg',
   danger: 'bg-casa-error text-white hover:brightness-110',
 }

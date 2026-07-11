@@ -73,6 +73,13 @@ test('high-emphasis button variants own readable foreground contrast', () => {
   )
 })
 
+test('subtle button is a neutral low-emphasis utility surface', () => {
+  const classes = buttonClassName({ variant: 'subtle' })
+  assert.match(classes, /bg-surface-inset/)
+  assert.match(classes, /text-content-primary/)
+  assert.doesNotMatch(classes, /bg-casa-gold|bg-casa-navy/)
+})
+
 test('buttonClassName covers every documented size with a touch-target min-h utility', () => {
   for (const size of BUTTON_SIZES) {
     const cls = buttonClassName({ size })

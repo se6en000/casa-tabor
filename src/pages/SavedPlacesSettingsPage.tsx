@@ -166,10 +166,19 @@ function PlaceRow({ place, onEdit, onDelete }: { place: SavedPlace; onEdit: () =
         </div>
         {place.aliases.length > 0 && <p className="text-caption text-casa-gold mt-0.5 truncate">Also known as: {place.aliases.join(', ')}</p>}
         {fullAddress && (
-          <Button onClick={handleCopyAddress} className="flex items-center gap-1 text-caption text-casa-muted mt-1 hover:text-casa-navy transition-colors group text-left" title="Tap to copy address">
-            <MapPin size={11} className="shrink-0" />
-            <span className="group-hover:underline">{fullAddress}</span>
-            {copied ? <Check size={11} className="text-emerald-500 shrink-0" /> : <Copy size={11} className="opacity-60 group-hover:opacity-100 shrink-0 transition-opacity" />}
+          <Button
+            variant="subtle"
+            size="sm"
+            align="start"
+            onClick={handleCopyAddress}
+            leadingIcon={<MapPin size={14} aria-hidden="true" />}
+            trailingIcon={copied ? <Check size={14} className="text-casa-success" aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+            className="mt-1 max-w-full px-3"
+            contentClassName="min-w-0"
+            aria-label={copied ? `Address copied for ${place.name}` : `Copy address for ${place.name}`}
+          >
+            <span className="truncate">{fullAddress}</span>
+            <span className="sr-only" aria-live="polite">{copied ? 'Address copied' : ''}</span>
           </Button>
         )}
         {place.phone && <p className="flex items-center gap-1 text-caption text-casa-muted mt-0.5"><Phone size={11} />{place.phone}</p>}
@@ -283,10 +292,19 @@ function ContactRow({ contact, onEdit, onDelete }: { contact: SavedContact; onEd
         {contact.phone && <p className="flex items-center gap-1 text-caption text-casa-muted mt-1"><Phone size={11} />{contact.phone}</p>}
         {contact.email && <p className="flex items-center gap-1 text-caption text-casa-muted mt-0.5"><Mail size={11} />{contact.email}</p>}
         {contact.address && (
-          <Button onClick={handleCopyAddress} className="flex items-center gap-1 text-caption text-casa-muted mt-0.5 hover:text-casa-navy transition-colors group text-left" title="Tap to copy address">
-            <MapPin size={11} className="shrink-0" />
-            <span className="group-hover:underline">{contact.address}</span>
-            {copied ? <Check size={11} className="text-emerald-500 shrink-0" /> : <Copy size={11} className="opacity-60 group-hover:opacity-100 shrink-0 transition-opacity" />}
+          <Button
+            variant="subtle"
+            size="sm"
+            align="start"
+            onClick={handleCopyAddress}
+            leadingIcon={<MapPin size={14} aria-hidden="true" />}
+            trailingIcon={copied ? <Check size={14} className="text-casa-success" aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+            className="mt-0.5 max-w-full px-3"
+            contentClassName="min-w-0"
+            aria-label={copied ? `Address copied for ${contact.name}` : `Copy address for ${contact.name}`}
+          >
+            <span className="truncate">{contact.address}</span>
+            <span className="sr-only" aria-live="polite">{copied ? 'Address copied' : ''}</span>
           </Button>
         )}
         {contact.notes && <p className="text-caption text-casa-muted mt-1 italic line-clamp-2">{contact.notes}</p>}

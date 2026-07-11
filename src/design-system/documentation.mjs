@@ -1,4 +1,4 @@
-export const DESIGN_SYSTEM_VERSION = '1.0.1'
+export const DESIGN_SYSTEM_VERSION = '1.0.2'
 export const DESIGN_SYSTEM_RELEASE_DATE = '2026-07-10'
 export const DESIGN_SYSTEM_SCHEMA_VERSION = 1
 
@@ -33,7 +33,7 @@ export const COMPONENT_MANIFEST = [
     purpose: 'Runs a labeled user action with stable touch geometry.',
     useWhen: 'Use for primary, secondary, ghost, strong, or destructive actions.',
     avoid: 'Do not use for navigation or icon-only actions.',
-    variants: ['primary', 'strong', 'secondary', 'ghost', 'danger', 'align:center', 'align:start', 'align:between'],
+    variants: ['primary', 'strong', 'secondary', 'subtle', 'ghost', 'danger', 'align:center', 'align:start', 'align:between'],
     states: ['default', 'hover', 'focus-visible', 'disabled', 'loading'],
     accessibility: 'Use concrete visible text; loading disables the action and exposes aria-busy.',
     responsive: 'Sizes use density-aware control tokens; fullWidth is appropriate on narrow sheets and forms. Use start or between alignment for full-width list and sidebar rows.',
@@ -486,6 +486,14 @@ export const COMPONENT_MANIFEST = [
 ]
 
 export const DESIGN_SYSTEM_CHANGELOG = [
+  {
+    version: '1.0.2',
+    date: '2026-07-10',
+    changes: [
+      'Added a subtle Button variant for low-emphasis utility actions on cards and inset surfaces.',
+      'Moved saved-place and saved-contact copy-address actions away from primary gold emphasis.',
+    ],
+  },
   {
     version: '1.0.1',
     date: '2026-07-10',

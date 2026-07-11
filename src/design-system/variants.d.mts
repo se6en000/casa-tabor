@@ -1,4 +1,4 @@
-export type ButtonVariant = 'primary' | 'strong' | 'secondary' | 'ghost' | 'danger'
+export type ButtonVariant = 'primary' | 'strong' | 'secondary' | 'subtle' | 'ghost' | 'danger'
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
 export const BUTTON_VARIANTS: ButtonVariant[]

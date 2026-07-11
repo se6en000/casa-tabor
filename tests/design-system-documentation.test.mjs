@@ -77,4 +77,5 @@ test('Button documentation includes full-width content alignment guidance', () =
   assert.ok(button.variants.includes('align:start'))
   assert.ok(button.variants.includes('align:between'))
   assert.match(button.responsive, /sidebar rows/)
+  assert.ok(button.variants.includes('subtle'))
 })

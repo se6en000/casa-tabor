@@ -391,6 +391,7 @@ export default function DesignSystemGalleryPage() {
             <Button>Primary</Button>
             <Button variant="strong">Strong</Button>
             <Button variant="secondary">Secondary</Button>
+            <Button variant="subtle">Subtle utility</Button>
             <Button variant="ghost">Ghost</Button>
             <Button variant="danger">Danger</Button>
             <Button loading>Loading</Button>

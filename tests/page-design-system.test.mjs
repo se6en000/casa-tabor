@@ -412,6 +412,15 @@ test('Home Family widget uses the shared full-width Button alignment contract', 
   assert.doesNotMatch(sidebar, /className="w-full min-h-control flex items-center px-1\.5/)
 })
 
+test('Saved Places uses subtle address copy actions instead of primary gold buttons', () => {
+  const source = readFileSync(resolve('src/pages/SavedPlacesSettingsPage.tsx'), 'utf8')
+  const copyActions = source.match(/variant="subtle"[\s\S]*?aria-label=\{copied \? `Address copied for \$\{(?:place|contact)\.name\}` : `Copy address for \$\{(?:place|contact)\.name\}`\}/g) ?? []
+
+  assert.equal(copyActions.length, 2)
+  assert.doesNotMatch(source, /title="Tap to copy address"/)
+  assert.match(source, /aria-live="polite"/)
+})
+
 test('Home middle rail omits household availability pills', () => {
   const home = readFileSync(resolve('src/pages/HomePage.tsx'), 'utf8')
 
