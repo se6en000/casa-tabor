@@ -114,6 +114,9 @@ test('assistant narrows prompt context and tools by intent profile', () => {
   }
   assert.match(assistantFunction, /loaded_domains:/)
   assert.match(assistantFunction, /server_ai_assistant_deterministic_mutation/)
+  assert.match(assistantFunction, /server_ai_assistant_calendar_language_match/)
+  assert.match(assistantFunction, /server_ai_assistant_calendar_language_unmatched/)
+  assert.match(assistantFunction, /server_ai_assistant_calendar_semantic_read/)
 })
 
 test('confirmation state is atomic, self-clearing, and fully traced', () => {

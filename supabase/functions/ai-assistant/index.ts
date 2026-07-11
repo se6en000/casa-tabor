@@ -11,6 +11,7 @@ import { classifyAssistantIntent } from '../_shared/assistant-intent-profile.mjs
 import { resolveDeterministicEventMutation } from '../_shared/deterministic-event-mutation.mjs'
 import {
   answerGroundedEventFollowUp,
+  answerGroundedEventSemanticFrame,
   eventConversationState,
   normalizeConversationState,
 } from '../_shared/assistant-conversation-grounding.mjs'
@@ -23,6 +24,11 @@ import {
   eventTravelDestination,
   formatEventTravelAnswer,
 } from '../_shared/assistant-event-travel.mjs'
+import {
+  isCalendarLikeLanguage,
+  parseCalendarLanguage,
+} from '../_shared/assistant-calendar-language.mjs'
+import { resolveCalendarSemanticRead } from '../_shared/assistant-calendar-semantic-read.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -174,12 +180,26 @@ Deno.serve(async (req) => {
     )
     : null
   const incomingConversationState = normalizeConversationState(context?.conversationState)
-  const intentRouting = classifyAssistantIntent(latestUserText, {
+  const calendarFrame = parseCalendarLanguage(latestUserText, {
+    focusedEvent: Boolean(context?.focusedEvent),
+    activeEntityType: incomingConversationState?.activeEntityType,
+  })
+  const classifiedIntentRouting = classifyAssistantIntent(latestUserText, {
     focusedEvent: Boolean(context?.focusedEvent),
     assistantMode: context?.assistant_mode,
     activeEntityType: incomingConversationState?.activeEntityType,
     pendingEventAction: context?.pendingAction?.tool === 'update_event',
   })
+  const calendarFrameNeedsSearch = Boolean(
+    calendarFrame &&
+    !incomingConversationState &&
+    !context?.focusedEvent &&
+    calendarFrame.intent !== 'event.create' &&
+    !calendarFrame.requiresActiveEvent
+  )
+  const intentRouting = calendarFrame
+    ? { profile: 'event', forceEventSearch: calendarFrameNeedsSearch }
+    : classifiedIntentRouting
   appendServerTrace('server_ai_assistant_start', `messages=${Array.isArray(messages) ? messages.length : 0}`, {
     message_count: Array.isArray(messages) ? messages.length : 0,
     has_image: Boolean(image),
@@ -191,7 +211,24 @@ Deno.serve(async (req) => {
     force_event_search: intentRouting.forceEventSearch,
     active_entity_type: incomingConversationState?.activeEntityType ?? null,
     active_event_id: incomingConversationState?.activeEventId ?? null,
+    calendar_semantic_intent: calendarFrame?.intent ?? null,
+    calendar_semantic_confidence: calendarFrame?.confidence ?? null,
   })
+  if (calendarFrame) {
+    appendServerTrace('server_ai_assistant_calendar_language_match', `intent=${calendarFrame.intent}`, {
+      intent: calendarFrame.intent,
+      confidence: calendarFrame.confidence,
+      source: calendarFrame.source,
+      requires_active_event: calendarFrame.requiresActiveEvent,
+      temporal_scope: calendarFrame.slots?.temporalScope?.kind ?? null,
+    })
+  } else if (latestUserText && isCalendarLikeLanguage(latestUserText)) {
+    appendServerTrace('server_ai_assistant_calendar_language_unmatched', 'calendar_like=1', {
+      intent_profile: intentRouting.profile,
+      has_active_event: incomingConversationState?.activeEntityType === 'event',
+      word_count: latestUserText.split(/\s+/).length,
+    })
+  }
   if (latestUserText) {
     appendServerTrace('server_ai_assistant_ingress_user_text', latestUserText.slice(0, 300), {
       user_text: latestUserText,
@@ -2237,6 +2274,50 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   }
 
   try {
+    if (intentRouting.profile === 'event' && calendarFrame) {
+      const semanticRead = resolveCalendarSemanticRead(calendarFrame, allEvents ?? [], { now, utcOffset })
+      if (semanticRead) {
+        if (semanticRead.events.length === 1) {
+          responseConversationState = eventConversationState(semanticRead.events[0], now)
+        }
+        const requestTotalMs = Date.now() - requestStartMs
+        appendServerTrace('server_ai_assistant_calendar_semantic_read', `intent=${calendarFrame.intent} count=${semanticRead.events.length} ms=${requestTotalMs}`, {
+          intent: calendarFrame.intent,
+          confidence: calendarFrame.confidence,
+          event_ids: semanticRead.events.map((event: { id: string }) => event.id),
+          count: semanticRead.events.length,
+          conflict_count: semanticRead.conflicts?.length ?? 0,
+          scope: semanticRead.scope ?? null,
+          request_ms: requestTotalMs,
+        })
+        appendServerTrace('server_ai_assistant_result', `type=text ms=${requestTotalMs}`, {
+          result_type: 'text',
+          request_ms: requestTotalMs,
+          llm_calls: 0,
+          semantic_intent: calendarFrame.intent,
+          response_text: semanticRead.text,
+        })
+        return {
+          status: 200,
+          payload: {
+            type: 'text',
+            text: semanticRead.text,
+            correlation_id: cid,
+            authoritative_provenance: {
+              source: 'events',
+              event_ids: semanticRead.events.map((event: { id: string }) => event.id),
+              semantic_intent: calendarFrame.intent,
+            },
+            conversation_state: responseConversationState,
+            telemetry: {
+              ...llmTelemetry,
+              request_total_ms: requestTotalMs,
+              context_load_ms: contextLoadMs,
+            },
+          },
+        }
+      }
+    }
     if (intentRouting.profile === 'event' && latestUserText) {
       const dayRead = resolveCalendarDayRead(latestUserText, allEvents ?? [], { now, utcOffset })
       if (dayRead) {
@@ -2387,7 +2468,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       }
     }
     if (intentRouting.profile === 'event' && latestUserText && activeConversationEvent) {
-      const groundedAnswer = answerGroundedEventFollowUp(latestUserText, activeConversationEvent, toLocal)
+      const groundedAnswer = answerGroundedEventSemanticFrame(calendarFrame, activeConversationEvent, toLocal)
+        ?? answerGroundedEventFollowUp(latestUserText, activeConversationEvent, toLocal)
       if (groundedAnswer) {
         const requestTotalMs = Date.now() - requestStartMs
         appendServerTrace('server_ai_assistant_grounded_follow_up', `event=${activeConversationEvent.id} ms=${requestTotalMs}`, {

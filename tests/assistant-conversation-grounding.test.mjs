@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   answerGroundedEventFollowUp,
+  answerGroundedEventSemanticFrame,
   eventConversationState,
   normalizeConversationState,
 } from '../supabase/functions/_shared/assistant-conversation-grounding.mjs'
@@ -33,6 +34,12 @@ test('event follow-ups answer only from authoritative fields', () => {
   assert.match(answerGroundedEventFollowUp('Are you sure that is the right location?', event), /Greenacres Bowl/)
   assert.match(answerGroundedEventFollowUp("What's the address?", event), /6126 Lake Worth Rd/)
   assert.doesNotMatch(answerGroundedEventFollowUp('Prep me for it', event), /FunZone|superhero|party favors/i)
+})
+
+test('semantic event frames dispatch without re-parsing the original phrase', () => {
+  assert.match(answerGroundedEventSemanticFrame({ intent: 'event.location' }, event), /Greenacres Bowl/)
+  assert.match(answerGroundedEventSemanticFrame({ intent: 'event.duration' }, event), /2 hours/)
+  assert.match(answerGroundedEventSemanticFrame({ intent: 'event.attendees' }, event), /Owen/)
 })
 
 test('natural candidate confirmations retain the active event', () => {

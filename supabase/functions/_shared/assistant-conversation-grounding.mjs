@@ -91,3 +91,16 @@ export function answerGroundedEventFollowUp(text, event, formatTime = (value) =>
   }
   return null
 }
+
+export function answerGroundedEventSemanticFrame(frame, event, formatTime = (value) => value) {
+  const canonicalByIntent = {
+    'event.location': 'where is it',
+    'event.address': "what's the address",
+    'event.time': 'what time does it start and end',
+    'event.duration': 'how long does the event last',
+    'event.attendees': 'who is attending',
+    'event.preparation': 'prepare me with the details and what to bring',
+  }
+  const canonical = canonicalByIntent[frame?.intent]
+  return canonical ? answerGroundedEventFollowUp(canonical, event, formatTime) : null
+}
