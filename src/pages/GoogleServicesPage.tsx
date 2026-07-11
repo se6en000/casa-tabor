@@ -266,12 +266,15 @@ function MemberCard({
         </div>
         {isConnected && (
           <Button
+            variant="ghost"
+            size="sm"
             onClick={onDisconnect}
             disabled={isBusy}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-caption text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors"
+            className="text-casa-error hover:bg-casa-error/10"
             title="Disconnect Google account"
+            leadingIcon={<Unlink size={14} />}
           >
-            <Unlink size={12} /> Disconnect
+            Disconnect
           </Button>
         )}
       </div>
@@ -292,12 +295,14 @@ function MemberCard({
             errorText={s?.last_sync_error ?? undefined}
             action={
               <Button
+                variant="subtle"
+                size="sm"
                 onClick={onSyncCalendar}
                 disabled={isBusy}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-casa-border text-caption text-casa-navy hover:bg-casa-bg disabled:opacity-50 transition-colors"
                 title="Sync now"
+                leadingIcon={<RefreshCw size={14} className={isBusy ? 'animate-spin' : ''} />}
               >
-                <RefreshCw size={11} className={isBusy ? 'animate-spin' : ''} /> Sync now
+                Sync now
               </Button>
             }
           />
@@ -316,28 +321,35 @@ function MemberCard({
               gmailActive ? (
                 <div className="flex items-center gap-1.5">
                   <Button
+                    variant="subtle"
+                    size="sm"
                     onClick={onScanGmail}
                     disabled={isBusy}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-casa-border text-caption text-casa-navy hover:bg-casa-bg disabled:opacity-50 transition-colors"
                     title="Scan now"
+                    leadingIcon={<RefreshCw size={14} className={isBusy ? 'animate-spin' : ''} />}
                   >
-                    <RefreshCw size={11} className={isBusy ? 'animate-spin' : ''} /> Scan now
+                    Scan now
                   </Button>
                   <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => onToggleGmail(false)}
                     disabled={isBusy}
-                    className="px-2.5 py-1 rounded-lg border border-red-200 text-caption text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                    className="text-casa-error hover:bg-casa-error/10"
+                    aria-label="Disable Gmail inbox scan"
                   >
                     Disable
                   </Button>
                 </div>
               ) : (
                 <Button
+                  variant="strong"
+                  size="sm"
                   onClick={() => onToggleGmail(true)}
                   disabled={isBusy}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-casa-navy text-white text-caption font-semibold hover:bg-casa-navy/90 disabled:opacity-50 transition-colors"
+                  leadingIcon={<Mail size={14} />}
                 >
-                  <Mail size={11} /> Enable
+                  Enable
                 </Button>
               )
             }
@@ -379,11 +391,13 @@ function MemberCard({
           </label>
 
           <Button
+            variant="strong"
             onClick={() => onConnect(wantGmail)}
             disabled={isBusy}
-            className="mt-1 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-casa-navy text-white text-body-sm font-semibold hover:bg-casa-navy/90 disabled:opacity-60 transition-all"
+            fullWidth
+            className="mt-1"
+            leadingIcon={<GoogleIcon />}
           >
-            <GoogleIcon />
             {isBusy ? 'Redirecting…' : 'Connect Google Account'}
           </Button>
         </div>

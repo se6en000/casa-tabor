@@ -497,6 +497,19 @@ test('every Settings route is covered by the shared Settings surface contract', 
   assert.doesNotMatch(shell, /<button\b/, 'SettingsShell must use the shared Button primitive')
 })
 
+test('Google service maintenance actions use soft semantic button variants', () => {
+  const googleServices = readFileSync(resolve('src/pages/GoogleServicesPage.tsx'), 'utf8')
+
+  assert.match(googleServices, /variant="subtle"[\s\S]*?>[\s\S]*?Sync now/)
+  assert.match(googleServices, /variant="subtle"[\s\S]*?>[\s\S]*?Scan now/)
+  assert.match(googleServices, /variant="ghost"[\s\S]*?text-casa-error[\s\S]*?>[\s\S]*?Disconnect/)
+  assert.match(googleServices, /variant="ghost"[\s\S]*?text-casa-error[\s\S]*?>[\s\S]*?Disable/)
+  assert.doesNotMatch(
+    googleServices,
+    /className="[^"]*(?:border-red-200|text-red-500|hover:bg-red-50)[^"]*"/,
+  )
+})
+
 test('Settings toggles and key forms use shared accessible primitives', () => {
   const sharedToggle = readFileSync(resolve('src/components/settings/SettingsToggle.tsx'), 'utf8')
   const display = readFileSync(resolve('src/pages/DisplaySettingsPage.tsx'), 'utf8')
