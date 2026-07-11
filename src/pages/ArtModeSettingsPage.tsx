@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { Image, Clock, Sun, Palette, Monitor, Plus, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { Image, Clock, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import { useArtFeedPrefs, MEDIA_OPTIONS } from '../hooks/useArtFeedPrefs'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
-import { Button, Checkbox, IconButton, SectionHeader as SharedSectionHeader } from '../components/ui'
+import { Button, Checkbox, IconButton, SegmentedControl, SectionHeader as SharedSectionHeader } from '../components/ui'
+
+const ART_FEED_MODE_OPTIONS = [
+  { value: 'auto', label: 'Auto Gallery' },
+  { value: 'curated', label: 'Curated Gallery' },
+] as const
 
 const COASTAL_STARTER_ARTISTS = [
   'Winslow Homer',
@@ -43,20 +48,22 @@ function StepPicker({ value, onChange, min, max, step = 1, unit }: {
 }) {
   return (
     <div className="flex items-center gap-3">
-      <Button
+      <IconButton
         onClick={() => onChange(Math.max(min, value - step))}
-        className="size-control rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold font-display text-heading flex items-center justify-center active:scale-95 outline-none transition-transform focus-visible:ring-2 focus-visible:ring-casa-gold"
+        variant="secondary"
+        icon={<Minus size={18} />}
         aria-label={`Decrease ${unit}`}
-      >−</Button>
+      />
       <div className="min-w-[5rem] text-center">
         <span className="font-display text-display-sm text-casa-navy">{value}</span>
         <span className="text-caption text-casa-muted ml-1">{unit}</span>
       </div>
-      <Button
+      <IconButton
         onClick={() => onChange(Math.min(max, value + step))}
-        className="size-control rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold font-display text-heading flex items-center justify-center active:scale-95 outline-none transition-transform focus-visible:ring-2 focus-visible:ring-casa-gold"
+        variant="secondary"
+        icon={<Plus size={18} />}
         aria-label={`Increase ${unit}`}
-      >+</Button>
+      />
     </div>
   )
 }
@@ -217,32 +224,14 @@ export default function ArtModeSettingsPage() {
           />
 
           {settings.enabled && (
-            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-              <Button
-                type="button"
-                onClick={() => setFeedMode('auto')}
-                className={cn(
-                  'px-3 py-2 rounded-xl border text-body-sm font-semibold transition-colors',
-                  !curatedMode
-                    ? 'bg-casa-navy text-white border-casa-navy'
-                    : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy'
-                )}
-              >
-                Auto Gallery (Recommended)
-              </Button>
-              <Button
-                type="button"
-                onClick={() => setFeedMode('curated')}
-                className={cn(
-                  'px-3 py-2 rounded-xl border text-body-sm font-semibold transition-colors',
-                  curatedMode
-                    ? 'bg-casa-navy text-white border-casa-navy'
-                    : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy'
-                )}
-              >
-                Curated Gallery
-              </Button>
-            </div>
+            <SegmentedControl
+              aria-label="Art feed mode"
+              value={prefs.feedMode}
+              options={ART_FEED_MODE_OPTIONS}
+              onChange={setFeedMode}
+              fullWidth
+              className="mt-2"
+            />
           )}
 
           <Button

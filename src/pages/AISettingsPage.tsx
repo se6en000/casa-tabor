@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { FlaskConical, CheckCircle, AlertCircle, Home, Mic, Activity, RefreshCw, Gauge, BarChart3 } from 'lucide-react'
+import { FlaskConical, CheckCircle, AlertCircle, Home, Mic, Activity, RefreshCw, Gauge, BarChart3, Minus, Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
@@ -12,7 +12,7 @@ import {
   type VoiceRuntimeConfig,
 } from '../lib/voiceRuntimeConfig'
 import { VOICE_AUDIT_LOG_KEY } from '../lib/voiceAudit'
-import { Button, SegmentedControl, SkeletonRow } from '../components/ui'
+import { Button, IconButton, SegmentedControl, SkeletonRow, Switch } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
 interface LLMConfig {
@@ -53,6 +53,12 @@ const PROVIDER_OPTIONS = [
   { value: 'gemini', label: VENDORS.gemini.label },
   { value: 'openai', label: VENDORS.openai.label },
   { value: 'anthropic', label: VENDORS.anthropic.label },
+] as const
+
+const VOICE_DEBUG_OPTIONS = [
+  { value: 'off', label: 'Debug Off' },
+  { value: 'minimal', label: 'Debug Minimal' },
+  { value: 'verbose', label: 'Debug Verbose' },
 ] as const
 
 const DEFAULT_FAST_MODEL: Record<string, string> = {
@@ -638,86 +644,30 @@ export default function AISettingsPage() {
           </div>
 
           {/* Enable / disable wake word */}
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-body-sm font-medium text-casa-navy">Listen for wake word</p>
-              <p className="text-caption text-casa-muted mt-0.5">
-                {screensaverSettings.wakeWordEnabled
-                  ? 'Say "Alexa" to open the AI assistant'
-                  : 'Wake word disabled — use the ✨ button to open'}
-              </p>
-            </div>
-            <Button
-              type="button"
-              role="switch"
-              aria-checked={screensaverSettings.wakeWordEnabled}
-              onClick={() => updateScreensaver({ wakeWordEnabled: !screensaverSettings.wakeWordEnabled })}
-              className={cn(
-                'relative flex-shrink-0 w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-casa-gold',
-                screensaverSettings.wakeWordEnabled ? 'bg-casa-gold' : 'bg-casa-divider',
-              )}
-            >
-              <span className={cn(
-                'absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200',
-                screensaverSettings.wakeWordEnabled ? 'translate-x-7' : 'translate-x-1',
-              )} />
-            </Button>
-          </div>
+          <Switch
+            label="Listen for wake word"
+            description={screensaverSettings.wakeWordEnabled
+              ? 'Say "Alexa" to open the AI assistant'
+              : 'Wake word disabled — use the ✨ button to open'}
+            checked={screensaverSettings.wakeWordEnabled}
+            onCheckedChange={(wakeWordEnabled) => updateScreensaver({ wakeWordEnabled })}
+          />
 
           <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3 space-y-3">
             <p className="text-body-sm font-semibold text-casa-navy">Voice Runtime Controls</p>
-            <div className="grid gap-2 sm:grid-cols-3">
-              <Button
-                type="button"
-                onClick={() => setVoiceDebugLevel('off')}
-                className={cn(
-                  'rounded-button border px-2.5 py-2 text-caption font-semibold transition-colors',
-                  voiceRuntime.debugLevel === 'off'
-                    ? 'bg-casa-navy text-white border-casa-navy'
-                    : 'bg-white text-casa-navy border-casa-border hover:bg-casa-bg',
-                )}
-              >
-                Debug Off
-              </Button>
-              <Button
-                type="button"
-                onClick={() => setVoiceDebugLevel('minimal')}
-                className={cn(
-                  'rounded-button border px-2.5 py-2 text-caption font-semibold transition-colors',
-                  voiceRuntime.debugLevel === 'minimal'
-                    ? 'bg-casa-navy text-white border-casa-navy'
-                    : 'bg-white text-casa-navy border-casa-border hover:bg-casa-bg',
-                )}
-              >
-                Debug Minimal
-              </Button>
-              <Button
-                type="button"
-                onClick={() => setVoiceDebugLevel('verbose')}
-                className={cn(
-                  'rounded-button border px-2.5 py-2 text-caption font-semibold transition-colors',
-                  voiceRuntime.debugLevel === 'verbose'
-                    ? 'bg-casa-navy text-white border-casa-navy'
-                    : 'bg-white text-casa-navy border-casa-border hover:bg-casa-bg',
-                )}
-              >
-                Debug Verbose
-              </Button>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Button
-                type="button"
-                onClick={() => setVoiceAuditEnabled(!voiceRuntime.auditEnabled)}
-                className={cn(
-                  'rounded-button border px-2.5 py-2 text-caption font-semibold transition-colors',
-                  voiceRuntime.auditEnabled
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : 'bg-white text-casa-navy border-casa-border hover:bg-casa-bg',
-                )}
-              >
-                Audit Trail: {voiceRuntime.auditEnabled ? 'Enabled' : 'Disabled'}
-              </Button>
-            </div>
+            <SegmentedControl
+              aria-label="Voice debug level"
+              value={voiceRuntime.debugLevel}
+              options={VOICE_DEBUG_OPTIONS}
+              onChange={setVoiceDebugLevel}
+              fullWidth
+            />
+            <Switch
+              label="Audit trail"
+              description="Keep local diagnostic entries for voice reliability analysis."
+              checked={voiceRuntime.auditEnabled}
+              onCheckedChange={setVoiceAuditEnabled}
+            />
             <p className="text-caption text-casa-muted">
               Audit entries on this device: <span className="font-semibold text-casa-navy">{auditEntries}</span>
             </p>
@@ -753,11 +703,11 @@ export default function AISettingsPage() {
                 <label className="text-body-sm font-semibold text-casa-navy">AI Optimization Dashboard (24h)</label>
               </div>
               <Button
-                type="button"
+                variant="subtle"
+                size="sm"
                 onClick={() => void loadForensics()}
-                className="inline-flex items-center gap-1.5 rounded-button border border-casa-border bg-white px-2.5 py-1.5 text-caption font-semibold text-casa-navy hover:bg-casa-bg"
+                leadingIcon={<RefreshCw size={14} className={cn(forensicsLoading && 'animate-spin')} />}
               >
-                <RefreshCw size={12} className={cn(forensicsLoading && 'animate-spin')} />
                 Refresh
               </Button>
             </div>
@@ -812,12 +762,12 @@ export default function AISettingsPage() {
               <div className="flex items-center justify-between gap-2">
                 <p className="text-caption font-semibold text-casa-navy">Synthetic Phrase Regression Harness</p>
                 <Button
-                  type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={() => void runSyntheticRegressionHarness()}
                   disabled={regressionRunning}
-                  className="inline-flex items-center gap-1.5 rounded-button border border-casa-border bg-white px-2.5 py-1.5 text-caption font-semibold text-casa-navy hover:bg-casa-bg disabled:opacity-50"
+                  leadingIcon={<FlaskConical size={14} className={cn(regressionRunning && 'animate-spin')} />}
                 >
-                  <FlaskConical size={12} className={cn(regressionRunning && 'animate-spin')} />
                   {regressionRunning ? 'Running…' : 'Run 4-case pack'}
                 </Button>
               </div>
@@ -887,25 +837,27 @@ export default function AISettingsPage() {
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <Button
+              <IconButton
                 onClick={() => {
                   const next = Math.max(0.10, Math.round((screensaverSettings.wakeWordSensitivity - 0.05) * 100) / 100)
                   setWakeWordSensitivity(next)
                 }}
-                className="size-control rounded-button border border-casa-border bg-white text-casa-navy font-semibold text-heading flex items-center justify-center hover:bg-casa-bg active:scale-95 outline-none transition-all focus-visible:ring-2 focus-visible:ring-casa-gold"
+                variant="secondary"
+                icon={<Minus size={18} />}
                 aria-label="Decrease wake word sensitivity"
-              >−</Button>
+              />
               <span className="w-14 text-center text-body-sm font-semibold text-casa-navy tabular-nums">
                 {Math.round(screensaverSettings.wakeWordSensitivity * 100)}%
               </span>
-              <Button
+              <IconButton
                 onClick={() => {
                   const next = Math.min(0.90, Math.round((screensaverSettings.wakeWordSensitivity + 0.05) * 100) / 100)
                   setWakeWordSensitivity(next)
                 }}
-                className="size-control rounded-button border border-casa-border bg-white text-casa-navy font-semibold text-heading flex items-center justify-center hover:bg-casa-bg active:scale-95 outline-none transition-all focus-visible:ring-2 focus-visible:ring-casa-gold"
+                variant="secondary"
+                icon={<Plus size={18} />}
                 aria-label="Increase wake word sensitivity"
-              >+</Button>
+              />
             </div>
           </div>
           )}
@@ -937,11 +889,11 @@ export default function AISettingsPage() {
         {/* Actions */}
         <div className="flex gap-2 justify-end">
           <Button
+            variant="secondary"
             onClick={handleTest}
             disabled={!config.api_key || testStatus === 'testing'}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-bg disabled:opacity-40 transition-colors"
+            leadingIcon={<FlaskConical size={14} className={cn(testStatus === 'testing' && 'animate-spin')} />}
           >
-            <FlaskConical size={14} className={cn(testStatus === 'testing' && 'animate-spin')} />
             {testStatus === 'testing' ? 'Testing…' : 'Test connection'}
           </Button>
         </div>

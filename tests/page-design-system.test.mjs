@@ -525,6 +525,38 @@ test('AI provider and model selections use readable semantic controls', () => {
   )
 })
 
+test('AI voice settings use semantic sliders, switches, and utility actions', () => {
+  const aiSettings = readFileSync(resolve('src/pages/AISettingsPage.tsx'), 'utf8')
+
+  assert.match(aiSettings, /<SegmentedControl[\s\S]*?aria-label="Voice debug level"[\s\S]*?options=\{VOICE_DEBUG_OPTIONS\}/)
+  assert.match(aiSettings, /<Switch[\s\S]*?label="Listen for wake word"/)
+  assert.match(aiSettings, /<Switch[\s\S]*?label="Audit trail"/)
+  assert.match(aiSettings, /<IconButton[\s\S]*?aria-label="Decrease wake word sensitivity"/)
+  assert.match(aiSettings, /<IconButton[\s\S]*?aria-label="Increase wake word sensitivity"/)
+  assert.doesNotMatch(aiSettings, /role="switch"/)
+  assert.doesNotMatch(
+    aiSettings,
+    /voiceRuntime\.debugLevel[\s\S]{0,180}\? 'bg-casa-navy text-white border-casa-navy'/,
+  )
+})
+
+test('Settings selection controls do not repaint default primary buttons', () => {
+  const art = readFileSync(resolve('src/pages/ArtModeSettingsPage.tsx'), 'utf8')
+  const display = readFileSync(resolve('src/pages/DisplaySettingsPage.tsx'), 'utf8')
+  const family = readFileSync(resolve('src/pages/FamilySettingsPage.tsx'), 'utf8')
+  const calendars = readFileSync(resolve('src/pages/CalendarsSettingsPage.tsx'), 'utf8')
+
+  assert.match(art, /aria-label="Art feed mode"/)
+  assert.match(display, /aria-label="Palette target"/)
+  assert.match(family, /label="Show on homepage sidebar"/)
+  assert.match(family, /variant=\{\(m\.availability_mode \?\? 'strict'\) === option\.value \? 'strong' : 'secondary'\}/)
+  assert.match(calendars, /variant="strong"[\s\S]*?onClick=\{onConnect\}/)
+
+  for (const source of [art, display, family, calendars]) {
+    assert.doesNotMatch(source, /<Button[\s\S]{0,500}bg-casa-navy text-white border-casa-navy/)
+  }
+})
+
 test('Settings toggles and key forms use shared accessible primitives', () => {
   const sharedToggle = readFileSync(resolve('src/components/settings/SettingsToggle.tsx'), 'utf8')
   const display = readFileSync(resolve('src/pages/DisplaySettingsPage.tsx'), 'utf8')

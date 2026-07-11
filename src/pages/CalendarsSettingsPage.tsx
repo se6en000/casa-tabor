@@ -171,9 +171,10 @@ function MemberRow({
           </>
         ) : (
           <Button
+            variant="strong"
+            size="sm"
             onClick={onConnect}
             disabled={isBusy}
-            className="px-3 py-1.5 rounded-button bg-casa-navy text-white text-body-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all"
           >
             {isBusy ? 'Connecting…' : 'Connect Google'}
           </Button>

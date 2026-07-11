@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
-import { Button, IconButton, SectionHeader as SharedSectionHeader } from '../components/ui'
+import { Button, IconButton, SegmentedControl, SectionHeader as SharedSectionHeader } from '../components/ui'
 import { useTheme, PRESETS, DEFAULTS, MIDNIGHT_GALLERY_DEFAULTS, type ThemeColors } from '../contexts/ThemeContext'
 import {
   useRoomTone,
@@ -57,6 +57,11 @@ function SectionHeader({ icon: Icon, label }: { icon: React.ElementType; label: 
 // ── Room Tone Preview ──────────────────────────────────────────────
 
 const ZONES_IN_ORDER: RoomToneZone[] = ['day', 'afternoon', 'evening', 'night', 'late-night']
+
+const PALETTE_TARGET_OPTIONS = [
+  { value: 'day', label: 'Day Palette' },
+  { value: 'midnight', label: 'Midnight Gallery' },
+] as const
 
 const ZONE_FILTER: Record<RoomToneZone, string> = {
   'day':        'sepia(0) brightness(1)',
@@ -321,32 +326,13 @@ export default function DisplaySettingsPage() {
         {/* Preset palettes */}
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
           <SectionHeader icon={Palette} label="Presets" />
-          <div className="flex items-center gap-2 mb-4">
-            <Button
-              type="button"
-              onClick={() => setActiveTarget('day')}
-              className={cn(
-                'px-3 py-1.5 rounded-full text-caption font-medium border transition-colors',
-                activeTarget === 'day'
-                  ? 'bg-casa-navy text-white border-casa-navy'
-                  : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy'
-              )}
-            >
-              Day Palette
-            </Button>
-            <Button
-              type="button"
-              onClick={() => setActiveTarget('midnight')}
-              className={cn(
-                'px-3 py-1.5 rounded-full text-caption font-medium border transition-colors',
-                activeTarget === 'midnight'
-                  ? 'bg-casa-navy text-white border-casa-navy'
-                  : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy'
-              )}
-            >
-              Midnight Gallery Palette
-            </Button>
-          </div>
+          <SegmentedControl
+            aria-label="Palette target"
+            value={activeTarget}
+            options={PALETTE_TARGET_OPTIONS}
+            onChange={setActiveTarget}
+            className="mb-4"
+          />
           <div className="grid grid-cols-3 gap-3">
             {PRESETS.map(preset => {
               const active = Object.entries(preset.colors).every(
@@ -531,14 +517,10 @@ export default function DisplaySettingsPage() {
               {ZONES_IN_ORDER.map(z => (
                 <Button
                   key={z}
-                  type="button"
+                  variant={previewZone === z ? 'strong' : 'secondary'}
+                  size="sm"
                   onClick={() => setPreviewZone(z)}
-                  className={cn(
-                    'px-3 py-1.5 rounded-full text-caption font-medium border transition-colors',
-                    previewZone === z
-                      ? 'bg-casa-navy text-white border-casa-navy'
-                      : 'bg-white text-casa-muted border-casa-border hover:border-casa-navy/40 hover:text-casa-navy'
-                  )}
+                  aria-pressed={previewZone === z}
                 >
                   {z.charAt(0).toUpperCase() + z.slice(1).replace('-', ' ')}
                 </Button>

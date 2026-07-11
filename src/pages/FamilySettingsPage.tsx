@@ -8,7 +8,7 @@ import type {
   MemberAvailabilityException,
   MemberAvailabilityRule,
 } from '../types'
-import { Button, SkeletonRow } from '../components/ui'
+import { Button, SkeletonRow, Switch } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 import {
   FALLBACK_PROFILE_COLOR,
@@ -539,23 +539,13 @@ export default function FamilySettingsPage() {
 
                     <div>
                       <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Home sidebar visibility</p>
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <div
-                          onClick={() => isNew
-                            ? patchNew(m._tempId!, { show_on_home_sidebar: !(m.show_on_home_sidebar ?? true) })
-                            : patch(m.id!, { show_on_home_sidebar: !(m.show_on_home_sidebar ?? true) })}
-                          className={cn(
-                            'relative w-10 h-5 rounded-full transition-colors shrink-0',
-                            (m.show_on_home_sidebar ?? true) ? 'bg-casa-gold' : 'bg-casa-border',
-                          )}
-                        >
-                          <span className={cn(
-                            'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
-                            (m.show_on_home_sidebar ?? true) ? 'translate-x-5' : 'translate-x-0.5',
-                          )} />
-                        </div>
-                        <span className="text-body-sm text-casa-navy">Show on homepage sidebar</span>
-                      </label>
+                      <Switch
+                        label="Show on homepage sidebar"
+                        checked={m.show_on_home_sidebar ?? true}
+                        onCheckedChange={(show_on_home_sidebar) => isNew
+                          ? patchNew(m._tempId!, { show_on_home_sidebar })
+                          : patch(m.id!, { show_on_home_sidebar })}
+                      />
                     </div>
 
                     <>
@@ -565,16 +555,13 @@ export default function FamilySettingsPage() {
                             {AVAILABILITY_MODE_OPTIONS.map((option) => (
                               <Button
                                 key={option.value}
-                                type="button"
+                                variant={(m.availability_mode ?? 'strict') === option.value ? 'strong' : 'secondary'}
+                                align="start"
+                                contentClassName="flex-col items-start gap-0.5"
                                 onClick={() => isNew
                                   ? patchNew(m._tempId!, { availability_mode: option.value })
                                   : patch(m.id!, { availability_mode: option.value })}
-                                className={cn(
-                                  'rounded-button border px-2.5 py-2 text-left transition-colors',
-                                  (m.availability_mode ?? 'strict') === option.value
-                                    ? 'bg-casa-navy text-white border-casa-navy'
-                                    : 'bg-white border-casa-border text-casa-navy hover:bg-casa-bg',
-                                )}
+                                aria-pressed={(m.availability_mode ?? 'strict') === option.value}
                               >
                                 <p className="text-body-sm font-semibold">{option.label}</p>
                                 <p className={cn(
@@ -596,16 +583,17 @@ export default function FamilySettingsPage() {
                                 <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Weekly blocked hours</p>
                                 <div className="flex items-center gap-2">
                                   <Button
-                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
                                     onClick={() => { void applyWeekdayWorkTemplate(m.id!) }}
-                                    className="text-caption text-casa-navy px-2 py-1 rounded border border-casa-border hover:bg-casa-bg"
                                   >
                                     Apply M–F 7:30–6:30
                                   </Button>
                                   <Button
-                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
                                     onClick={() => { void clearAllWorkRules(m.id!) }}
-                                    className="text-caption text-casa-error px-2 py-1 rounded border border-casa-border hover:bg-casa-bg"
+                                    className="text-casa-error hover:bg-casa-error/10"
                                   >
                                     Clear
                                   </Button>
@@ -620,12 +608,10 @@ export default function FamilySettingsPage() {
                                   return (
                                     <div key={day} className="grid grid-cols-[56px_1fr_1fr] gap-2 items-center">
                                       <Button
-                                        type="button"
+                                        variant={enabled ? 'strong' : 'secondary'}
+                                        size="sm"
                                         onClick={() => { void upsertWorkRule(m.id!, day, !enabled, startLocal, endLocal) }}
-                                        className={cn(
-                                          'h-9 rounded-button border text-caption font-semibold',
-                                          enabled ? 'bg-casa-navy text-white border-casa-navy' : 'bg-white text-casa-muted border-casa-border',
-                                        )}
+                                        aria-pressed={enabled}
                                       >
                                         {label}
                                       </Button>
