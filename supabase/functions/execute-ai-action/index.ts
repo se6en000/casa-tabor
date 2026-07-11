@@ -239,9 +239,48 @@ Deno.serve(async (req) => {
     action_id: actionId,
     session_id: sessionId,
     correlation_id: correlationId,
+    trace_id: traceIdRaw,
+    turn_id: turnIdRaw,
+    lane: laneRaw,
+    device_id: deviceIdRaw,
+    client_trace_present: clientTracePresentRaw,
+    client_build: clientBuildRaw,
+    client_trace_source: clientTraceSourceRaw,
   } = await req.json()
   const cid = correlationId ?? `${sessionId ?? 'no-session'}:${actionId ?? 'no-action'}`
+  const traceId = normalizeOptionalText(traceIdRaw, 160) ?? normalizeOptionalText(sessionId, 160)
+  const turnId = normalizeOptionalText(turnIdRaw, 160)
+  const lane = normalizeOptionalText(laneRaw, 80) ?? 'tool_action'
+  const deviceId = normalizeOptionalText(deviceIdRaw, 160)
+  const appendActionTrace = (event: string, detail: string, payload?: Record<string, unknown>) => {
+    sb.from('ai_drawer_debug_events').insert({
+      event,
+      detail: detail.slice(0, 2000),
+      channel: 'debug',
+      session_id: traceId,
+      turn_id: turnId,
+      correlation_id: cid,
+      lane,
+      payload: {
+        action_id: actionId ?? null,
+        tool: tool ?? null,
+        client_trace_present: clientTracePresentRaw === true,
+        client_build: normalizeOptionalText(clientBuildRaw, 120),
+        client_trace_source: normalizeOptionalText(clientTraceSourceRaw, 80),
+        ...payload,
+      },
+      device_id: deviceId,
+      page: 'assistant_action',
+      source_component: 'server:execute-ai-action',
+      source_origin: 'ai-drawer-confirmation',
+      source_href: null,
+      user_agent: null,
+      platform: Deno.build.os,
+      dedupe_key: `${cid}|${event}|${actionId ?? 'no-action'}`,
+    }).then(() => {}).catch(() => {})
+  }
   console.log(`[execute-ai-action][${cid}] start tool=${tool}`)
+  appendActionTrace('server_ai_action_started', String(tool ?? 'unknown'))
 
   try {
     if (tool === 'create_event') {
@@ -772,6 +811,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     const msg = (e as Error).message ?? 'Action failed'
     console.error(`[execute-ai-action][${cid}] error ${msg}`)
+    appendActionTrace('server_ai_action_failed', msg)
     return new Response(JSON.stringify({ success: false, error: msg, correlation_id: cid }), {
       status: 200, headers: { ...CORS, 'content-type': 'application/json' },
     })

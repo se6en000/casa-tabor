@@ -111,6 +111,10 @@ Deno.serve(async (req) => {
     ? clientTracePresentRaw
     : inferredClientTracePresent
   const requestStartMs = Date.now()
+  const REQUEST_HARD_TIMEOUT_MS = 9000
+  const PRIMARY_HARD_TIMEOUT_MS = 6000
+  const SECONDARY_HARD_TIMEOUT_MS = 3500
+  const FALLBACK_HARD_TIMEOUT_MS = 2200
   const STAGE_SLO = {
     contextLoadMs: 1200,
     llmPrimaryMs: 4500,
@@ -121,6 +125,8 @@ Deno.serve(async (req) => {
       console.warn(`[ai-assistant][${cid}] slo_breach stage=${stage} elapsed=${elapsedMs} budget=${budgetMs}`)
     }
   }
+  const remainingRequestBudgetMs = () =>
+    Math.max(0, REQUEST_HARD_TIMEOUT_MS - (Date.now() - requestStartMs))
   const appendServerTrace = (event: string, detail: string, payload?: Record<string, unknown>) => {
     const dedupeKey = `${cid}|${event}|${turnId ?? 'no-turn'}|${detail.slice(0, 80)}`
     sb.from('ai_drawer_debug_events').insert({
@@ -284,18 +290,24 @@ Deno.serve(async (req) => {
   // so ALL downstream logic (functionCall detection, resolveModelParts, telemetry) is unchanged.
   const callModel = async (
     reqBody: unknown,
-    opts: { stream: boolean },
+    opts: { stream: boolean; timeoutMs: number },
   ): Promise<{ ok: boolean; status: number; data: any; errText: string }> => {
     const base = `https://generativelanguage.googleapis.com/v1beta/models/${model}`
+    const timeoutMs = Math.max(1, Math.min(opts.timeoutMs, remainingRequestBudgetMs()))
+    if (timeoutMs < 500) {
+      return { ok: false, status: 504, data: null, errText: 'request_budget_exhausted' }
+    }
+    const signal = AbortSignal.timeout(timeoutMs)
+    try {
     if (!opts.stream) {
       const res = await fetch(`${base}:generateContent?key=${apiKey}`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(reqBody),
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(reqBody), signal,
       })
       if (!res.ok) return { ok: false, status: res.status, data: null, errText: await res.text().catch(() => '') }
       return { ok: true, status: res.status, data: await res.json(), errText: '' }
     }
     const res = await fetch(`${base}:streamGenerateContent?alt=sse&key=${apiKey}`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(reqBody),
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(reqBody), signal,
     })
     if (!res.ok || !res.body) {
       return { ok: res.ok && Boolean(res.body), status: res.status, data: null, errText: await res.text().catch(() => '') }
@@ -338,6 +350,15 @@ Deno.serve(async (req) => {
     parts.push(...funcParts)
     const data = { candidates: [{ content: { parts }, finishReason }], usageMetadata }
     return { ok: true, status: res.status, data, errText: '' }
+    } catch (error) {
+      const timedOut = error instanceof DOMException && error.name === 'TimeoutError'
+      return {
+        ok: false,
+        status: timedOut ? 504 : 502,
+        data: null,
+        errText: timedOut ? `model_timeout_${timeoutMs}ms` : String((error as Error).message ?? 'model_request_failed'),
+      }
+    }
   }
   appendServerTrace('server_ai_assistant_context_load', `ms=${contextLoadMs}`, {
     context_load_ms: contextLoadMs,
@@ -1533,7 +1554,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     return { error: 'Unknown tool' }
   }
 
-  // Call Gemini with function calling — up to 2 rounds (tool call → result → final answer)
+  // Call Gemini with function calling — one primary and at most one synthesis round.
   async function callGeminiWithTools(contents: GeminiContent[]): Promise<{ type: string; [key: string]: unknown }> {
     const llmStartMs = Date.now()
     const body = {
@@ -1544,7 +1565,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       tool_config: { function_calling_config: { mode: 'AUTO' } },
     }
 
-    const res = await callModel(body, { stream: wantStream })
+    const res = await callModel(body, { stream: wantStream, timeoutMs: PRIMARY_HARD_TIMEOUT_MS })
     const llmPrimaryMs = Date.now() - llmStartMs
     console.log(`[ai-assistant][${cid}] stage=llm_primary ms=${llmPrimaryMs} status=${res.status}`)
     if (res.ok) {
@@ -1564,7 +1585,17 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const summarizeReadTool = (name: string, toolResult: Record<string, unknown>): string => {
         if (name === 'search_events') {
           const count = Number(toolResult.count ?? 0)
-          if (count > 0) return `I found ${count} matching event${count === 1 ? '' : 's'}.`
+          const events = (toolResult.events as Array<{ title?: string; start?: string }> | undefined) ?? []
+          if (count > 0) {
+            const items = events
+              .slice(0, 5)
+              .flatMap((event) => event.title && event.start ? [`${event.title} at ${toLocal(event.start)}`] : [])
+            const remaining = Math.max(0, count - items.length)
+            const remainder = remaining > 0 ? `, plus ${remaining} more` : ''
+            return items.length > 0
+              ? `I found ${count} matching event${count === 1 ? '' : 's'}: ${items.join('; ')}${remainder}.`
+              : `I found ${count} matching event${count === 1 ? '' : 's'}.`
+          }
           return 'I could not find any matching events.'
         }
         if (name === 'search_places') {
@@ -1610,7 +1641,10 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         return 'I found results for your request.'
       }
 
-      const resolveModelParts = async (parts: GeminiPart[]) => {
+      const userLikelyRequestedWrite = /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push)\b/i
+        .test(latestUserText ?? '')
+
+      const resolveModelParts = async (parts: GeminiPart[], secondaryDepth = 0) => {
         const funcCallPart = parts.find((p: { functionCall?: { name: string; args: Record<string, unknown> } }) => p.functionCall)
         const textParts = parts
           .flatMap((p) => 'text' in p && typeof p.text === 'string' && p.text.trim() ? [p.text.trim()] : [])
@@ -1656,9 +1690,6 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
         const { name, args } = (funcCallPart as { functionCall: { name: string; args: Record<string, unknown> } }).functionCall
 
-        const userLikelyRequestedWrite = /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push)\b/i
-          .test(latestUserText ?? '')
-
         // Read-only tools: execute server-side. Only escalate to a second LLM call when the user likely wants a write.
         if (name === 'search_events' || name === 'search_places' || name === 'search_web' || name === 'get_weather_forecast' || name === 'get_travel_eta') {
           const toolResult = await executeReadTool(name, args)
@@ -1674,17 +1705,19 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           // - math_query intercepted: LLM needs to compute directly
           const userAsksSynthesis = /\b(how many|how busy|compare|summary|briefing|overview|rundown|what.*have|what.*on|what.*week|who.*have|any.*overlap|conflict|together)\b/i
             .test(latestUserText ?? '')
-          const shouldRunSecondary =
+          const shouldRunSecondary = secondaryDepth === 0 && remainingRequestBudgetMs() >= 1000 && (
             (name === 'search_events' && resultFound && (userLikelyRequestedWrite || resultCount > 1 || userAsksSynthesis)) ||
             (name === 'search_web' && isMathQuery) ||
             (name === 'get_weather_forecast' && resultFound)
+          )
 
           if (!shouldRunSecondary) {
-            if (name === 'search_events' && resultFound) {
-              const topEvent = (toolResult as { events?: Array<{ title?: string; start?: string }> }).events?.[0]
-              if (topEvent?.title && topEvent?.start) {
-                return { type: 'text', text: `I found ${topEvent.title} at ${toLocal(topEvent.start)}.` }
-              }
+            if (secondaryDepth > 0) {
+              appendServerTrace('server_ai_assistant_secondary_cap', `tool=${name} depth=${secondaryDepth}`, {
+                tool: name,
+                secondary_depth: secondaryDepth,
+                request_elapsed_ms: Date.now() - requestStartMs,
+              })
             }
             return { type: 'text', text: summarizeReadTool(name, toolResult) }
           }
@@ -1710,12 +1743,21 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           const secondaryPrompt = systemInstruction + secondaryAddendum
           const secondaryBody = { ...body, system_instruction: { parts: [{ text: secondaryPrompt }] }, contents: newContents }
           const secondaryStartMs = Date.now()
-          const res2 = await callModel(secondaryBody, { stream: wantStream })
+          const res2 = await callModel(secondaryBody, {
+            stream: wantStream,
+            timeoutMs: SECONDARY_HARD_TIMEOUT_MS,
+          })
           const secondaryElapsedMs = Date.now() - secondaryStartMs
           console.log(`[ai-assistant][${cid}] stage=llm_secondary ms=${secondaryElapsedMs} status=${res2.status}`)
           if (!res2.ok) {
             recordLlmCall('llm_secondary', secondaryElapsedMs, res2.status)
-            return { type: 'error', code: 'llm_error', message: 'Second LLM call failed' }
+            const summary = summarizeReadTool(name, toolResult)
+            return {
+              type: 'text',
+              text: userLikelyRequestedWrite
+                ? `${summary} I could not safely prepare the requested change, so nothing was changed.`
+                : summary,
+            }
           }
           const data2 = res2.data
           recordLlmCall('llm_secondary', secondaryElapsedMs, res2.status, data2)
@@ -1724,7 +1766,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             `[ai-assistant][${cid}] secondary_parts_count=${secondaryParts.length} has_func_call=${secondaryParts.some((p: { functionCall?: unknown }) => Boolean(p.functionCall))} has_text=${secondaryParts.some((p: { text?: unknown }) => Boolean(p.text))}`,
           )
           // Recursively resolve secondary response in case it contains a tool call (e.g., update_event after search_events)
-          const secondaryResolved = await resolveModelParts(secondaryParts)
+          const secondaryResolved = await resolveModelParts(secondaryParts, secondaryDepth + 1)
           console.log(`[ai-assistant][${cid}] secondary_resolved type=${secondaryResolved?.type ?? 'null'}`)
           if (secondaryResolved) return secondaryResolved
           // Fallback to text if no tool was called
@@ -1912,26 +1954,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const initialResolved = await resolveModelParts(initialParts)
       if (initialResolved) return initialResolved
 
-      // Rare provider edge case: retry once before surfacing fallback copy.
+      // Rare provider edge case: use one compact, bounded fallback. Do not retry
+      // the full tool prompt first; that compounds tail latency without new context.
       console.error('[ai-assistant] Empty Gemini response. finishReason:', finishReason, 'parts:', JSON.stringify(initialParts))
-      const retryStartMs = Date.now()
-      const retryRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
-      )
-      const retryElapsedMs = Date.now() - retryStartMs
-      console.log(`[ai-assistant][${cid}] stage=llm_retry ms=${retryElapsedMs} status=${retryRes.status}`)
-      if (retryRes.ok) {
-        const retryData = await retryRes.json()
-        recordLlmCall('llm_retry', retryElapsedMs, retryRes.status, retryData)
-        const retryParts = retryData.candidates?.[0]?.content?.parts ?? []
-        const retryResolved = await resolveModelParts(retryParts)
-        if (retryResolved) return retryResolved
-        console.error('[ai-assistant] Empty retry response. finishReason:', retryData.candidates?.[0]?.finishReason, 'parts:', JSON.stringify(retryParts))
-      } else {
-        recordLlmCall('llm_retry', retryElapsedMs, retryRes.status)
-      }
-
       const fallbackUserText = [...contents]
         .reverse()
         .find((turn) => turn.role === 'user')
@@ -1940,7 +1965,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
       // Last-resort reliability pass: no tools, compact prompt, latest user turn only.
       // This avoids occasional empty tool-call responses from Gemini under load.
-      if (fallbackUserText) {
+      if (fallbackUserText && !userLikelyRequestedWrite && remainingRequestBudgetMs() >= 500) {
         const fallbackBody = {
           system_instruction: {
             parts: [{
@@ -1951,14 +1976,14 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           generation_config: { temperature: 0.2, max_output_tokens: 320 },
         }
         const fallbackStartMs = Date.now()
-        const fallbackRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(fallbackBody) }
-        )
+        const fallbackRes = await callModel(fallbackBody, {
+          stream: false,
+          timeoutMs: FALLBACK_HARD_TIMEOUT_MS,
+        })
         const fallbackElapsedMs = Date.now() - fallbackStartMs
         console.log(`[ai-assistant][${cid}] stage=llm_fallback ms=${fallbackElapsedMs} status=${fallbackRes.status}`)
-        if (fallbackRes.ok) {
-          const fallbackData = await fallbackRes.json()
+        if (fallbackRes.ok && fallbackRes.data) {
+          const fallbackData = fallbackRes.data
           recordLlmCall('llm_fallback', fallbackElapsedMs, fallbackRes.status, fallbackData)
           const fallbackParts = fallbackData.candidates?.[0]?.content?.parts ?? []
           const fallbackText = fallbackParts
@@ -1970,12 +1995,16 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           }
         } else {
           recordLlmCall('llm_fallback', fallbackElapsedMs, fallbackRes.status)
-          const fallbackErr = await fallbackRes.text().catch(() => '')
-          console.error(`[ai-assistant][${cid}] compact fallback failed status=${fallbackRes.status} body=${fallbackErr.slice(0, 180)}`)
+          console.error(`[ai-assistant][${cid}] compact fallback failed status=${fallbackRes.status} body=${fallbackRes.errText.slice(0, 180)}`)
         }
       }
 
-      return { type: 'text', text: 'I heard you, but I hit a brief response issue. Please continue and I will keep going.' }
+      return {
+        type: 'text',
+        text: userLikelyRequestedWrite
+          ? 'I could not prepare that change safely. Nothing was changed—please say the request again.'
+          : 'I heard you, but I hit a brief response issue. Please try that once more.',
+      }
     }
     warnIfSlow('llm_primary', llmPrimaryMs, STAGE_SLO.llmPrimaryMs)
     recordLlmCall('llm_primary', llmPrimaryMs, res.status)

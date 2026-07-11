@@ -6,6 +6,9 @@ const assistant = readFileSync(new URL('../src/hooks/useAIAssistant.ts', import.
 const speech = readFileSync(new URL('../src/hooks/useSpeechInput.ts', import.meta.url), 'utf8')
 const wake = readFileSync(new URL('../src/hooks/useWakeWord.ts', import.meta.url), 'utf8')
 const settings = readFileSync(new URL('../src/pages/AISettingsPage.tsx', import.meta.url), 'utf8')
+const drawer = readFileSync(new URL('../src/components/shared/AIChatDrawer.tsx', import.meta.url), 'utf8')
+const assistantFunction = readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
+const actionFunction = readFileSync(new URL('../supabase/functions/execute-ai-action/index.ts', import.meta.url), 'utf8')
 
 test('assistant requests carry complete client trace provenance', () => {
   for (const field of [
@@ -50,4 +53,43 @@ test('AI forensics reports the new client pipeline stages', () => {
   for (const metric of ['wakeToDrawerP95Ms', 'asrP95Ms', 'firstTokenP95Ms']) {
     assert.match(settings, new RegExp(metric))
   }
+})
+
+test('assistant model calls have hard budgets and only one secondary synthesis round', () => {
+  assert.match(assistantFunction, /AbortSignal\.timeout\(timeoutMs\)/)
+  assert.match(assistantFunction, /secondaryDepth === 0 && remainingRequestBudgetMs\(\) >= 1000/)
+  assert.match(assistantFunction, /resolveModelParts\(secondaryParts, secondaryDepth \+ 1\)/)
+  assert.match(assistantFunction, /server_ai_assistant_secondary_cap/)
+  assert.doesNotMatch(assistantFunction, /stage=llm_retry/)
+})
+
+test('confirmation state is atomic, self-clearing, and fully traced', () => {
+  assert.match(drawer, /state: 'pending' \| 'executing'/)
+  assert.match(drawer, /pending\.state = 'executing'/)
+  assert.match(drawer, /return \(\) => registerPendingAction\(msg\.id, null\)/)
+  for (const event of [
+    'confirmation_accepted',
+    'confirmation_cancelled',
+    'confirmation_ignored',
+    'action_execute_started',
+    'action_execute_completed',
+    'action_execute_failed',
+  ]) {
+    assert.match(drawer, new RegExp(`emitAssistantTrace\\('${event}'`))
+  }
+})
+
+test('confirmed actions preserve client trace provenance on the server', () => {
+  for (const field of [
+    'trace_id: actionTrace?.traceId',
+    'turn_id: actionTrace?.turnId',
+    'device_id: getAssistantDeviceId()',
+    'client_trace_present: Boolean(actionTrace)',
+    'client_build:',
+    'client_trace_source:',
+  ]) {
+    assert.match(drawer, new RegExp(field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  }
+  assert.match(actionFunction, /server_ai_action_started/)
+  assert.match(actionFunction, /server_ai_action_failed/)
 })

@@ -13,7 +13,7 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
 import { Button } from '../ui'
-import { createAssistantTraceContext, emitAssistantTrace } from '../../lib/assistantTelemetry'
+import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId } from '../../lib/assistantTelemetry'
 
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
 const LOW_CONFIDENCE_REJECT_PHRASES = /\b(no|nope|try again|wrong|not that|cancel)\b/i
@@ -21,6 +21,12 @@ const LOW_CONFIDENCE_REJECT_PHRASES = /\b(no|nope|try again|wrong|not that|cance
 const NO_ACTIVITY_AUTO_CLOSE_MS = 30_000
 const CONVERSATION_MODE_KEY = 'casa_ai_conversation_mode'
 
+type PendingVoiceAction = {
+  messageId: string
+  state: 'pending' | 'executing'
+  confirm: () => Promise<boolean>
+  cancel: () => Promise<boolean>
+}
 
 
 
@@ -97,8 +103,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     [page, events],
   )
 
-  const pendingConfirmRef = useRef<(() => Promise<boolean>) | null>(null)
-  const pendingCancelRef  = useRef<(() => Promise<boolean>) | null>(null)
+  const pendingVoiceActionRef = useRef<PendingVoiceAction | null>(null)
   const pendingLowConfidenceRef = useRef<{ transcript: string; confidence: number } | null>(null)
   // Ref to speech.stop — avoids circular dependency when calling stop inside useSpeechInput callbacks
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -107,6 +112,19 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
   const appliedLaunchRef = useRef<string | null>(null)
   const firedChefGreetRef = useRef<string | null>(null)
   const activeTraceRef = useRef<ReturnType<typeof createAssistantTraceContext> | null>(null)
+
+  const registerPendingVoiceAction = useCallback((
+    messageId: string,
+    handlers: Pick<PendingVoiceAction, 'confirm' | 'cancel'> | null,
+  ) => {
+    if (handlers) {
+      pendingVoiceActionRef.current = { messageId, state: 'pending', ...handlers }
+      return
+    }
+    if (pendingVoiceActionRef.current?.messageId === messageId) {
+      pendingVoiceActionRef.current = null
+    }
+  }, [])
 
   const clearIdleAutoCloseTimer = useCallback(() => {
     if (idleAutoCloseTimerRef.current) {
@@ -228,6 +246,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
   useEffect(() => {
     if (!open) {
       activeTraceRef.current = null
+      pendingVoiceActionRef.current = null
       return
     }
     const trace = createAssistantTraceContext({
@@ -295,9 +314,19 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     onConfirm: () => {
       markUserInteraction()
       led.confirm()
-      const run = pendingConfirmRef.current
-      if (!run) return
-      void Promise.resolve(run()).then((confirmed) => {
+      const pending = pendingVoiceActionRef.current
+      const trace = activeTraceRef.current
+      if (!pending || pending.state !== 'pending') {
+        if (trace) {
+          emitAssistantTrace('confirmation_ignored', trace, {
+            detail: pending?.state === 'executing' ? 'Action is already executing' : 'No pending action',
+            payload: { message_id: pending?.messageId ?? null },
+          })
+        }
+        return
+      }
+      pending.state = 'executing'
+      void Promise.resolve(pending.confirm()).then((confirmed) => {
         if (!confirmed) return
         startFresh()
         setTimeout(onClose, 350)
@@ -306,9 +335,19 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     onCancel:  () => {
       markUserInteraction()
       led.cancel()
-      const run = pendingCancelRef.current
-      if (!run) return
-      void Promise.resolve(run()).then((cancelled) => {
+      const pending = pendingVoiceActionRef.current
+      const trace = activeTraceRef.current
+      if (!pending || pending.state !== 'pending') {
+        if (trace) {
+          emitAssistantTrace('confirmation_ignored', trace, {
+            detail: pending?.state === 'executing' ? 'Action is already executing' : 'No pending action',
+            payload: { message_id: pending?.messageId ?? null },
+          })
+        }
+        return
+      }
+      pending.state = 'executing'
+      void Promise.resolve(pending.cancel()).then((cancelled) => {
         if (!cancelled) return
         startFresh()
         setTimeout(onClose, 350)
@@ -764,6 +803,18 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   onQuickSaveRecipe={quickSaveRecipeSuggestion}
                   onConfirmToolAction={async (messageId, tool, args) => {
                     updateMessageToolStatus(messageId, 'loading')
+                    const actionTrace = activeTraceRef.current
+                    const actionCorrelationId = buildCorrelationId(messageId)
+                    if (actionTrace) {
+                      emitAssistantTrace('confirmation_accepted', actionTrace, {
+                        detail: 'Confirmation accepted',
+                        payload: { message_id: messageId, tool },
+                      })
+                      emitAssistantTrace('action_execute_started', actionTrace, {
+                        detail: tool,
+                        payload: { message_id: messageId, tool, action_correlation_id: actionCorrelationId },
+                      })
+                    }
                     try {
                       const matchedEvent = tool === 'update_event'
                         ? events.find((event) => event.id === String(args.id ?? ''))
@@ -777,7 +828,14 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                           args: requestArgs,
                           action_id: messageId,
                           session_id: session?.id ?? null,
-                          correlation_id: buildCorrelationId(messageId),
+                          correlation_id: actionCorrelationId,
+                          trace_id: actionTrace?.traceId ?? null,
+                          turn_id: actionTrace?.turnId ?? null,
+                          lane: actionTrace?.lane ?? 'llm',
+                          device_id: getAssistantDeviceId(),
+                          client_trace_present: Boolean(actionTrace),
+                          client_build: typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'unknown',
+                          client_trace_source: actionTrace?.source ?? 'ai-drawer-confirmation',
                         },
                       })
                       if (error) throw error
@@ -792,9 +850,21 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                       })
                       qc.invalidateQueries({ queryKey: ['events'] })
                       qc.invalidateQueries({ queryKey: ['grocery'] })
+                      if (actionTrace) {
+                        emitAssistantTrace('action_execute_completed', actionTrace, {
+                          detail: tool,
+                          payload: { message_id: messageId, tool, action_correlation_id: actionCorrelationId },
+                        })
+                      }
                       return true
                     } catch (err) {
                       updateMessageToolStatus(messageId, 'error', { errorMsg: (err as Error).message })
+                      if (actionTrace) {
+                        emitAssistantTrace('action_execute_failed', actionTrace, {
+                          detail: (err as Error).message,
+                          payload: { message_id: messageId, tool, action_correlation_id: actionCorrelationId },
+                        })
+                      }
                       return false
                     }
                   }}
@@ -826,12 +896,20 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                       })
                     }
                   }}
-                  onCancelToolAction={(messageId) => updateMessageToolStatus(messageId, 'cancelled')}
+                  onCancelToolAction={(messageId) => {
+                    updateMessageToolStatus(messageId, 'cancelled')
+                    const trace = activeTraceRef.current
+                    if (trace) {
+                      emitAssistantTrace('confirmation_cancelled', trace, {
+                        detail: 'Confirmation cancelled',
+                        payload: { message_id: messageId },
+                      })
+                    }
+                  }}
                   onRefreshToolAction={() => {
                     qc.invalidateQueries({ queryKey: ['events'] })
                   }}
-                  registerPendingConfirm={(fn) => { pendingConfirmRef.current = fn }}
-                  registerPendingCancel={(fn)  => { pendingCancelRef.current  = fn }}
+                  registerPendingAction={registerPendingVoiceAction}
                   onEditMessage={(content) => {
                     markUserInteraction()
                     if (speech.listening || speech.connecting) speech.stop()
@@ -1013,7 +1091,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
 
 /* ── Message Bubble ─────────────────────────────────────────── */
 
-function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingConfirm, registerPendingCancel, onEditMessage }: {
+function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onEditMessage }: {
   msg: AIMessage
   isLatest: boolean
   enableQuickSaveRecipe?: boolean
@@ -1022,13 +1100,16 @@ function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe
   onUndoToolAction: (messageId: string, actionId: string) => Promise<void>
   onCancelToolAction: (messageId: string) => void
   onRefreshToolAction: () => void
-  registerPendingConfirm: (fn: () => Promise<boolean>) => void
-  registerPendingCancel:  (fn: () => Promise<boolean>) => void
+  registerPendingAction: (
+    messageId: string,
+    handlers: Pick<PendingVoiceAction, 'confirm' | 'cancel'> | null,
+  ) => void
   onEditMessage?: (content: string) => void
 }) {
   const isUser = msg.role === 'user'
   const ta = msg.toolAction
   const [quickSaving, setQuickSaving] = useState(false)
+  const actionTransitionRef = useRef(false)
   const hasPendingAction = !!ta && ta.status === 'pending'
   const showQuickSaveRecipe = !isUser && !ta && Boolean(onQuickSaveRecipe) && Boolean(enableQuickSaveRecipe) && looksLikeRecipeSuggestion(msg.content)
   // A plain user text message can be tapped to edit + resend (no images / tool actions).
@@ -1040,21 +1121,24 @@ function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe
     ta?.tool === 'clear_checked_grocery_items'
 
   const doConfirm = useCallback(async () => {
-    if (!ta) return false
+    if (!ta || actionTransitionRef.current) return false
+    actionTransitionRef.current = true
     return onConfirmToolAction(msg.id, ta.tool, ta.args)
   }, [msg.id, ta, onConfirmToolAction])
 
   const doCancel = useCallback(async () => {
+    if (actionTransitionRef.current) return false
+    actionTransitionRef.current = true
     onCancelToolAction(msg.id)
     return true
   }, [msg.id, onCancelToolAction])
 
   useEffect(() => {
     if (isLatest && hasPendingAction) {
-      registerPendingConfirm(doConfirm)
-      registerPendingCancel(doCancel)
+      registerPendingAction(msg.id, { confirm: doConfirm, cancel: doCancel })
     }
-  }, [isLatest, hasPendingAction, doConfirm, doCancel]) // eslint-disable-line react-hooks/exhaustive-deps
+    return () => registerPendingAction(msg.id, null)
+  }, [isLatest, hasPendingAction, doConfirm, doCancel, msg.id, registerPendingAction])
 
   return (
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
