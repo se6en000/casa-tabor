@@ -14,6 +14,14 @@ import {
   MIN_FONT_SCALE,
   THEME_COLOR_KEYS,
 } from '../src/design-system/tokens.mjs'
+import {
+  COMPONENT_MANIFEST,
+  DESIGN_SYSTEM_RELEASE_DATE,
+  DESIGN_SYSTEM_SCHEMA_VERSION,
+  DESIGN_SYSTEM_VERSION,
+  renderComponentGuide,
+  renderDesignSystemChangelog,
+} from '../src/design-system/documentation.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputFlagIndex = process.argv.indexOf('--output')
@@ -35,7 +43,9 @@ const copy = (source, destination = source) => {
 
 const guide = `# Casa Tabor Design System
 
-This bundle is the implementation source of truth for generating Casa Tabor UX.
+Version ${DESIGN_SYSTEM_VERSION} (${DESIGN_SYSTEM_RELEASE_DATE})
+
+This bundle is the implementation and usage source of truth for generating Casa Tabor UX.
 
 ## Required generation rules
 
@@ -46,6 +56,7 @@ This bundle is the implementation source of truth for generating Casa Tabor UX.
 - Use Cormorant Garamond for display/heading roles and DM Sans for body roles.
 - Use semantic roles rather than arbitrary font sizes.
 - Use shared Button, IconButton, Card, Chip, fields, selection controls, overlays, and feedback components.
+- Assemble pages from the supplied headers, sections, rail, master-detail, feedback, and workflow patterns.
 - Do not rely on hover, color alone, or tiny icon-only affordances.
 - Provide responsive mobile, desktop, and 2560x1440 kiosk layouts.
 - For the Home desktop shell, use 20% left rail, 55% center, and 25% right rail.
@@ -53,11 +64,15 @@ This bundle is the implementation source of truth for generating Casa Tabor UX.
 ## Bundle map
 
 - tokens.json: machine-readable themes, typography, controls, spacing, layout, motion, and elevation
+- version.json: design-system and manifest schema versions
+- component-manifest.json: machine-readable purpose, anti-pattern, variant, state, accessibility, responsive, and example contracts
+- COMPONENT-GUIDE.md: human-readable documentation and copyable example for every public component
+- CHANGELOG.md: versioned design-system history
 - design-tokens.css: generated CSS variables for all density modes
 - design-system/: canonical token and variant source
 - components/ui/: canonical React components and their props
 - DesignSystemGalleryPage.tsx: live component examples and supported states
-- examples/: current Home, Grocery, and Cook implementations
+- examples/: current Home, Settings, Grocery, and Cook implementations
 - design-system.instructions.md: mandatory UX implementation rules
 - index.css: application-level theme integration
 
@@ -66,13 +81,28 @@ This bundle is the implementation source of truth for generating Casa Tabor UX.
 Use the attached Casa Tabor design system as a strict source of truth. Reuse its
 semantic tokens and existing components without inventing replacements. Produce
 responsive mobile, desktop, and 2560x1440 kiosk UX. Explain which supplied
-components and semantic roles each part uses.
+components and semantic roles each part uses. Check component-manifest.json for
+required states, accessibility behavior, anti-patterns, and responsive rules
+before generating a component.
 `
 
 try {
   mkdirSync(bundleRoot, { recursive: true })
   writeFileSync(resolve(bundleRoot, 'README.md'), guide)
+  writeFileSync(resolve(bundleRoot, 'version.json'), `${JSON.stringify({
+    version: DESIGN_SYSTEM_VERSION,
+    releaseDate: DESIGN_SYSTEM_RELEASE_DATE,
+    manifestSchemaVersion: DESIGN_SYSTEM_SCHEMA_VERSION,
+  }, null, 2)}\n`)
+  writeFileSync(resolve(bundleRoot, 'component-manifest.json'), `${JSON.stringify({
+    schemaVersion: DESIGN_SYSTEM_SCHEMA_VERSION,
+    designSystemVersion: DESIGN_SYSTEM_VERSION,
+    components: COMPONENT_MANIFEST,
+  }, null, 2)}\n`)
+  writeFileSync(resolve(bundleRoot, 'COMPONENT-GUIDE.md'), renderComponentGuide())
+  writeFileSync(resolve(bundleRoot, 'CHANGELOG.md'), renderDesignSystemChangelog())
   writeFileSync(resolve(bundleRoot, 'tokens.json'), `${JSON.stringify({
+    designSystemVersion: DESIGN_SYSTEM_VERSION,
     themeColorKeys: THEME_COLOR_KEYS,
     themes: {
       default: DEFAULT_THEME_COLORS,
@@ -91,6 +121,7 @@ try {
   copy('src/components/ui', 'components/ui')
   copy('src/pages/DesignSystemGalleryPage.tsx', 'DesignSystemGalleryPage.tsx')
   copy('src/pages/HomePage.tsx', 'examples/HomePage.tsx')
+  copy('src/components/settings/SettingsShell.tsx', 'examples/SettingsShell.tsx')
   copy('src/pages/GroceryPage.tsx', 'examples/GroceryPage.tsx')
   copy('src/pages/CookPage.tsx', 'examples/CookPage.tsx')
   copy('src/index.css', 'index.css')

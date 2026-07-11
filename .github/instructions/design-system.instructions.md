@@ -10,6 +10,7 @@ Treat the current design system as the required source of truth for every user-f
 ## Reuse before creating
 
 - Search `src/components/ui/`, `src/design-system/`, and the Design System gallery before writing UI.
+- Check `src/design-system/documentation.mjs` for each component's intended use, anti-patterns, variants, states, accessibility, responsive behavior, and example.
 - Use shared semantic typography, color, spacing, control, radius, shadow, motion, and z-index tokens.
 - Use existing primitives and their documented variants instead of reproducing them with local Tailwind class combinations.
 - Do not hand-roll buttons, pills, toggles, fields, dialogs, alerts, progress bars, loading states, or empty/error states when a shared component exists.
@@ -31,6 +32,7 @@ When the existing system cannot express a genuinely new requirement:
 4. Add the component and usage guidance to `src/pages/DesignSystemGalleryPage.tsx`.
 5. Add focused regression tests for geometry, semantics, accessibility, and the original consuming surface.
 6. Migrate all in-scope duplicate implementations to the shared contract.
+7. Update the component manifest and changelog when a public design-system contract changes.
 
 Never solve a new UX need with a page-local one-off if it is likely to recur.
 

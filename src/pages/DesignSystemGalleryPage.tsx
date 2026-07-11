@@ -9,6 +9,7 @@ import {
   type ThemeColors,
 } from '../contexts/ThemeContext'
 import { DEFAULT_FONT_SCALE, MAX_FONT_SCALE, MIN_FONT_SCALE } from '../design-system/tokens.mjs'
+import { COMPONENT_MANIFEST, DESIGN_SYSTEM_VERSION } from '../design-system/documentation.mjs'
 import {
   Button,
   Checkbox,
@@ -185,6 +186,7 @@ export default function DesignSystemGalleryPage() {
           icon={Palette}
           title="Design System Gallery"
           description="Casa’s token contract, reusable components, and live capability-based density."
+          action={<Chip size="sm" tone="accent">v{DESIGN_SYSTEM_VERSION} · {COMPONENT_MANIFEST.length} components</Chip>}
         />
         <div className="mt-3 rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm text-casa-text-secondary">
           Live viewport: <span className="font-semibold text-casa-navy">{width}×{height}</span>{' '}
