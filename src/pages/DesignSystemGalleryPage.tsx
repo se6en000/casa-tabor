@@ -315,6 +315,12 @@ export default function DesignSystemGalleryPage() {
             </div>
           ))}
         </div>
+        <div className="rounded-card bg-casa-navy p-4">
+          <Heading role="display-sm" tone="on-dark">On-dark editorial heading</Heading>
+          <Text role="body-sm" className="mt-1 text-casa-on-dark/75">
+            Use the on-dark tone when a heading sits on a navy or dark branded surface.
+          </Text>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
           {FONT_FAMILIES.map((f) => (
             <div key={f.label} className="rounded-button border border-casa-border bg-casa-bg p-3">

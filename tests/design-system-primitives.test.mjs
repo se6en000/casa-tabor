@@ -1,5 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import {
   BUTTON_SIZES,
@@ -86,6 +88,15 @@ test('neutral controls use theme-aware semantic foregrounds', () => {
   assert.match(iconButtonClassName({ variant: 'secondary' }), /text-content-heading/)
   assert.match(chipClassName({ tone: 'accent' }), /text-content-heading/)
   assert.match(fieldControlClassName(), /text-content-primary/)
+})
+
+test('Heading exposes a dedicated on-dark contrast contract', () => {
+  const typography = readFileSync(resolve('src/components/ui/Typography.tsx'), 'utf8')
+  const styles = readFileSync(resolve('src/index.css'), 'utf8')
+
+  assert.match(typography, /export type HeadingTone = 'default' \| 'on-dark'/)
+  assert.match(typography, /tone === 'on-dark' \? 'casa-heading-on-dark'/)
+  assert.match(styles, /\.casa-heading-on-dark\s*\{[\s\S]*?color: var\(--color-casa-on-dark\)/)
 })
 
 test('buttonClassName covers every documented size with a touch-target min-h utility', () => {

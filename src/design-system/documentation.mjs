@@ -1,5 +1,5 @@
-export const DESIGN_SYSTEM_VERSION = '1.0.3'
-export const DESIGN_SYSTEM_RELEASE_DATE = '2026-07-10'
+export const DESIGN_SYSTEM_VERSION = '1.0.4'
+export const DESIGN_SYSTEM_RELEASE_DATE = '2026-07-11'
 export const DESIGN_SYSTEM_SCHEMA_VERSION = 1
 
 const component = ({
@@ -189,11 +189,11 @@ export const COMPONENT_MANIFEST = [
     purpose: 'Renders semantic display and heading typography roles.',
     useWhen: 'Use for page titles, section titles, and editorial display text.',
     avoid: 'Do not apply arbitrary font-size utilities or choose a role only for visual size.',
-    variants: ['display-xl', 'display-lg', 'display-md', 'display-sm', 'heading'],
+    variants: ['display-xl', 'display-lg', 'display-md', 'display-sm', 'heading', 'tone:default', 'tone:on-dark'],
     states: ['default'],
     accessibility: 'Choose the semantic element separately when document hierarchy requires it.',
     responsive: 'Each role scales through compact, touch, and kiosk density tokens.',
-    example: '<Heading role="display-sm" as="h1">Calendar</Heading>',
+    example: '<Heading role="display-sm" tone="on-dark" as="h1">Daily briefing</Heading>',
   }),
   component({
     name: 'Text',
@@ -486,6 +486,14 @@ export const COMPONENT_MANIFEST = [
 ]
 
 export const DESIGN_SYSTEM_CHANGELOG = [
+  {
+    version: '1.0.4',
+    date: '2026-07-11',
+    changes: [
+      'Added an on-dark Heading tone with guaranteed contrast on navy and other dark branded surfaces.',
+      'Documented the on-dark typography contract in the Design System gallery.',
+    ],
+  },
   {
     version: '1.0.3',
     date: '2026-07-10',

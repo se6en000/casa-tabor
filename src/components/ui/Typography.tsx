@@ -3,6 +3,7 @@ import type { ElementType, HTMLAttributes } from 'react'
 import { cn } from '../../utils/cn'
 
 export type HeadingRole = 'display-xl' | 'display-lg' | 'display-md' | 'display-sm' | 'heading'
+export type HeadingTone = 'default' | 'on-dark'
 export type TextRole = 'body-lg' | 'body' | 'body-sm' | 'caption'
 
 const HEADING_ROLE_CLASSES: Record<HeadingRole, string> = {
@@ -24,17 +25,25 @@ const DEFAULT_HEADING_ELEMENT: Record<HeadingRole, ElementType> = {
 export interface HeadingProps extends HTMLAttributes<HTMLHeadingElement> {
   /** Semantic type role from src/design-system/tokens.mjs — controls fluid font size. */
   role?: HeadingRole
+  /** Uses the guaranteed high-contrast heading color for navy and other dark branded surfaces. */
+  tone?: HeadingTone
   /** Overrides the default element for this role (e.g. force an <h2> for a display-xl look). */
   as?: ElementType
 }
 
 /** Semantic display/heading text — maps directly to the generated text-* tokens. */
 export const Heading = forwardRef<HTMLHeadingElement, HeadingProps>(function Heading(
-  { role = 'heading', as, className, ...rest },
+  { role = 'heading', tone = 'default', as, className, ...rest },
   ref,
 ) {
   const Tag = (as ?? DEFAULT_HEADING_ELEMENT[role]) as ElementType
-  return <Tag ref={ref} className={cn(HEADING_ROLE_CLASSES[role], 'text-content-heading', className)} {...rest} />
+  return (
+    <Tag
+      ref={ref}
+      className={cn(HEADING_ROLE_CLASSES[role], tone === 'on-dark' ? 'casa-heading-on-dark' : 'text-content-heading', className)}
+      {...rest}
+    />
+  )
 })
 
 const TEXT_ROLE_CLASSES: Record<TextRole, string> = {

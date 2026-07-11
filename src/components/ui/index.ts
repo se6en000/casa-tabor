@@ -11,7 +11,7 @@ export { Field, Input, Select, Textarea, type FieldProps, type InputProps, type 
 export { Modal, type ModalProps } from './Modal'
 export { Sheet, type SheetProps } from './Sheet'
 export { PageShell, type PageShellProps, type PageShellWidth } from './PageShell'
-export { Heading, Text, type HeadingProps, type TextProps, type HeadingRole, type TextRole } from './Typography'
+export { Heading, Text, type HeadingProps, type TextProps, type HeadingRole, type HeadingTone, type TextRole } from './Typography'
 export { Switch, Checkbox, Radio, type SwitchProps, type CheckboxProps, type RadioProps } from './SelectionControls'
 export { Combobox, type ComboboxOption, type ComboboxProps } from './Combobox'
 export { Alert, type AlertProps, type AlertTone } from './Alert'

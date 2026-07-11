@@ -670,3 +670,20 @@ test('remaining active surfaces use shared controls and semantic presentation co
   assert.match(roomTone, /ROOM_TONE_COLORS/)
   assert.match(tokens, /export const ROOM_TONE_COLORS/)
 })
+
+test('Briefing uses the Design 1B hierarchy with bounded needs and overlay review', () => {
+  const briefing = readFileSync(resolve('src/pages/BriefingPage.tsx'), 'utf8')
+  const addEventFab = readFileSync(resolve('src/components/shared/AddEventFab.tsx'), 'utf8')
+
+  assert.match(briefing, /visibleNeeds = needs\.slice\(0, 3\)/)
+  assert.match(briefing, /Everything that needs you/)
+  assert.match(briefing, /side=\{isNarrow \? 'bottom' : 'right'\}/)
+  assert.match(briefing, /<ScheduleRail/)
+  assert.match(briefing, /<MarkdownContent/)
+  assert.match(briefing, /variant="strong"[\s\S]*?>\s*Review/)
+  assert.doesNotMatch(briefing, /<ConflictAlertsSection/)
+  assert.doesNotMatch(briefing, /<PrepAlertsSection/)
+  assert.doesNotMatch(briefing, /<button\b/)
+  assert.match(addEventFab, /\bz-sticky\b/)
+  assert.doesNotMatch(addEventFab, /\bz-popover\b/)
+})
