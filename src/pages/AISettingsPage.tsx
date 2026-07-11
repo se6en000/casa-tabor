@@ -12,7 +12,7 @@ import {
   type VoiceRuntimeConfig,
 } from '../lib/voiceRuntimeConfig'
 import { VOICE_AUDIT_LOG_KEY } from '../lib/voiceAudit'
-import { Button, SkeletonRow } from '../components/ui'
+import { Button, SegmentedControl, SkeletonRow } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
 interface LLMConfig {
@@ -48,6 +48,12 @@ const VENDORS: Record<string, { label: string; models: { id: string; label: stri
     ],
   },
 }
+
+const PROVIDER_OPTIONS = [
+  { value: 'gemini', label: VENDORS.gemini.label },
+  { value: 'openai', label: VENDORS.openai.label },
+  { value: 'anthropic', label: VENDORS.anthropic.label },
+] as const
 
 const DEFAULT_FAST_MODEL: Record<string, string> = {
   gemini: 'gemini-2.5-flash',
@@ -555,23 +561,14 @@ export default function AISettingsPage() {
       <div className="mt-6 space-y-4">
         {/* Vendor */}
         <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-3">
-          <label className="block text-body-sm font-semibold text-casa-navy">AI Provider</label>
-          <div className="grid grid-cols-3 gap-2">
-            {Object.entries(VENDORS).map(([key, v]) => (
-              <Button
-                key={key}
-                onClick={() => handleProviderChange(key)}
-                className={cn(
-                  'py-2 px-3 rounded-button border text-body-sm font-medium transition-all',
-                  config.provider === key
-                    ? 'bg-casa-navy text-white border-casa-navy'
-                    : 'bg-white border-casa-border text-casa-navy hover:bg-casa-bg',
-                )}
-              >
-                {v.label}
-              </Button>
-            ))}
-          </div>
+          <p className="text-body-sm font-semibold text-casa-navy">AI Provider</p>
+          <SegmentedControl
+            aria-label="AI provider"
+            value={config.provider}
+            options={PROVIDER_OPTIONS}
+            onChange={handleProviderChange}
+            fullWidth
+          />
         </div>
 
         {/* Model */}
@@ -581,13 +578,11 @@ export default function AISettingsPage() {
             {models.map(m => (
               <Button
                 key={m.id}
+                variant={config.model === m.id ? 'strong' : 'secondary'}
                 onClick={() => handleModelChange(m.id)}
-                className={cn(
-                  'w-full flex items-center justify-between px-3 py-2.5 rounded-button border text-left transition-all',
-                  config.model === m.id
-                    ? 'bg-casa-navy text-white border-casa-navy'
-                    : 'bg-white border-casa-border text-casa-navy hover:bg-casa-bg',
-                )}
+                fullWidth
+                align="between"
+                aria-pressed={config.model === m.id}
               >
                 <span className="text-body-sm font-medium">{m.label}</span>
                 {m.fast && (

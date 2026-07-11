@@ -510,6 +510,19 @@ test('Google service maintenance actions use soft semantic button variants', () 
   )
 })
 
+test('AI provider and model selections use readable semantic controls', () => {
+  const aiSettings = readFileSync(resolve('src/pages/AISettingsPage.tsx'), 'utf8')
+
+  assert.match(aiSettings, /<SegmentedControl[\s\S]*?aria-label="AI provider"[\s\S]*?fullWidth/)
+  assert.match(aiSettings, /variant=\{config\.model === m\.id \? 'strong' : 'secondary'\}/)
+  assert.match(aiSettings, /aria-pressed=\{config\.model === m\.id\}/)
+  assert.match(aiSettings, /align="between"/)
+  assert.doesNotMatch(
+    aiSettings,
+    /config\.(?:provider|model)[\s\S]{0,180}\? 'bg-casa-navy text-white border-casa-navy'/,
+  )
+})
+
 test('Settings toggles and key forms use shared accessible primitives', () => {
   const sharedToggle = readFileSync(resolve('src/components/settings/SettingsToggle.tsx'), 'utf8')
   const display = readFileSync(resolve('src/pages/DisplaySettingsPage.tsx'), 'utf8')
