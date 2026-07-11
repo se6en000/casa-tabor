@@ -46,7 +46,7 @@ export function Combobox({ value, onChange, options, label, placeholder = 'Searc
 
   return (
     <div ref={rootRef} className={cn('relative', className)}>
-      <label className="mb-1.5 block text-body-sm font-medium text-casa-navy">{label}</label>
+      <label className="mb-1.5 block text-body-sm font-medium text-content-heading">{label}</label>
       <button
         type="button"
         aria-haspopup="listbox"

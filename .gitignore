@@ -29,3 +29,7 @@ dist-ssr
 # Generated style-audit JSON reports (scripts/style-baseline.json IS committed —
 # only the --json detail dump is transient/local).
 /reports
+
+# Playwright transient output (approved screenshot baselines are committed).
+/playwright-report
+/test-results

@@ -130,7 +130,7 @@ function WheelRow({ value, onChange, days }: { value: string; onChange: (value: 
   const parts = wheelParts(value)
   const patch = (next: Partial<WheelParts>) => onChange(toLocalValue(combine({ ...parts, ...next })))
   return (
-    <div className="relative flex gap-1 rounded-card border border-casa-border bg-casa-bg px-2 text-casa-navy">
+    <div className="relative flex gap-1 rounded-card border border-casa-border bg-casa-bg px-2 text-content-heading">
       <WheelColumn wide items={days} value={parts.dayTs} onChange={value => patch({ dayTs: value as number })} />
       <WheelColumn items={HOURS} value={parts.hour12} onChange={value => patch({ hour12: value as number })} />
       <WheelColumn items={MINUTES} value={parts.minute} onChange={value => patch({ minute: value as number })} />

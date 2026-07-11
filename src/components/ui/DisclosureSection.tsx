@@ -32,7 +32,7 @@ export function DisclosureSection({
       >
         {icon && <span className="shrink-0 text-casa-muted">{icon}</span>}
         <span className="min-w-0 flex-1">
-          <span className="block text-body font-semibold text-casa-navy">{title}</span>
+          <span className="block text-body font-semibold text-content-heading">{title}</span>
           {summary && <span className="mt-0.5 block truncate text-body-sm text-casa-muted">{summary}</span>}
         </span>
         <ChevronDown size={20} className={cn('shrink-0 text-casa-muted transition-transform', open && 'rotate-180')} />

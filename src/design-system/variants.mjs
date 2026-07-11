@@ -24,9 +24,9 @@ export const BUTTON_SIZES = ['sm', 'md', 'lg']
 const BUTTON_VARIANT_CLASSES = {
   primary: 'casa-action-primary bg-casa-gold shadow-card hover:brightness-110',
   strong: 'casa-action-strong bg-casa-navy shadow-card hover:brightness-110',
-  secondary: 'bg-casa-surface text-casa-navy border border-casa-border hover:bg-casa-bg',
+  secondary: 'bg-casa-surface text-content-heading border border-casa-border hover:bg-casa-bg',
   subtle: 'bg-surface-inset text-content-primary border border-casa-border/70 hover:bg-surface-subtle',
-  ghost: 'bg-transparent text-casa-navy hover:bg-casa-bg',
+  ghost: 'bg-transparent text-content-heading hover:bg-casa-bg',
   danger: 'bg-casa-error text-white hover:brightness-110',
 }
 
@@ -59,8 +59,8 @@ export const ICON_BUTTON_SIZES = ['sm', 'md', 'lg']
 const ICON_BUTTON_VARIANT_CLASSES = {
   primary: 'casa-action-primary bg-casa-gold shadow-card hover:brightness-110',
   strong: 'casa-action-strong bg-casa-navy shadow-card hover:brightness-110',
-  secondary: 'bg-casa-surface text-casa-navy border border-casa-border hover:bg-casa-bg',
-  ghost: 'bg-transparent text-casa-muted hover:text-casa-navy hover:bg-casa-bg',
+  secondary: 'bg-casa-surface text-content-heading border border-casa-border hover:bg-casa-bg',
+  ghost: 'bg-transparent text-casa-muted hover:text-content-heading hover:bg-casa-bg',
   danger: 'bg-transparent text-casa-error hover:bg-casa-error/10',
 }
 
@@ -90,7 +90,7 @@ export const CHIP_SIZES = ['sm', 'md']
 
 const CHIP_TONE_CLASSES = {
   neutral: 'bg-casa-bg text-casa-text-secondary border-casa-border',
-  accent: 'bg-casa-accent-soft text-casa-navy border-casa-accent-soft-border',
+  accent: 'bg-casa-accent-soft text-content-heading border-casa-accent-soft-border',
   success: 'bg-casa-success-soft text-casa-success-strong border-transparent',
   info: 'bg-casa-info-soft text-casa-info-strong border-transparent',
   warning: 'bg-casa-warning/15 text-casa-warning border-transparent',
@@ -177,7 +177,7 @@ export function cardClassName(options = {}) {
 }
 
 const FIELD_CONTROL_BASE =
-  'w-full min-h-control rounded-button border bg-casa-surface px-3 py-2 text-body-sm text-casa-navy ' +
+  'w-full min-h-control rounded-button border bg-casa-surface px-3 py-2 text-body-sm text-content-primary ' +
   'placeholder:text-casa-text-faint outline-none transition-colors duration-150 ' +
   'focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-0 ' +
   'disabled:opacity-50 disabled:cursor-not-allowed'

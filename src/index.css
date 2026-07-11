@@ -181,7 +181,7 @@ body {
 /* Headings default to display font */
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
-  color: var(--color-casa-navy);
+  color: var(--color-content-heading);
   font-weight: 700;
 }
 
@@ -356,6 +356,17 @@ button:active, a:active, [role="button"]:active {
 }
 
 /* ── Midnight Gallery readability + input surfaces ───────────────────── */
+
+html.midnight-gallery {
+  --color-content-heading: var(--color-casa-text);
+  --color-action-primary: var(--color-casa-text);
+}
+
+/* Compatibility shield for remaining legacy brand-foreground utilities.
+   High-emphasis buttons retain their explicit component-owned foregrounds. */
+html.midnight-gallery .text-casa-navy {
+  color: var(--color-content-heading);
+}
 
 html.midnight-gallery input:not([type='color']):not([type='checkbox']):not([type='radio']):not([type='range']),
 html.midnight-gallery textarea,

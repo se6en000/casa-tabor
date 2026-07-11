@@ -53,7 +53,7 @@ export function Field({ label, hint, error, required, htmlFor, className, childr
   return (
     <div className={cn('space-y-1.5', className)}>
       {label && (
-        <label htmlFor={id} className="block text-body-sm font-medium text-casa-navy">
+        <label htmlFor={id} className="block text-body-sm font-medium text-content-heading">
           {label}
           {required && <span className="text-casa-error ml-0.5">*</span>}
         </label>

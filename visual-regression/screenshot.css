@@ -1,0 +1,11 @@
+*,
+*::before,
+*::after {
+  animation: none !important;
+  caret-color: transparent !important;
+  transition: none !important;
+}
+
+html {
+  scroll-behavior: auto !important;
+}

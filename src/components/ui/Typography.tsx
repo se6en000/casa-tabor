@@ -34,7 +34,7 @@ export const Heading = forwardRef<HTMLHeadingElement, HeadingProps>(function Hea
   ref,
 ) {
   const Tag = (as ?? DEFAULT_HEADING_ELEMENT[role]) as ElementType
-  return <Tag ref={ref} className={cn(HEADING_ROLE_CLASSES[role], 'text-casa-navy', className)} {...rest} />
+  return <Tag ref={ref} className={cn(HEADING_ROLE_CLASSES[role], 'text-content-heading', className)} {...rest} />
 })
 
 const TEXT_ROLE_CLASSES: Record<TextRole, string> = {

@@ -80,6 +80,14 @@ test('subtle button is a neutral low-emphasis utility surface', () => {
   assert.doesNotMatch(classes, /bg-casa-gold|bg-casa-navy/)
 })
 
+test('neutral controls use theme-aware semantic foregrounds', () => {
+  assert.match(buttonClassName({ variant: 'secondary' }), /text-content-heading/)
+  assert.match(buttonClassName({ variant: 'ghost' }), /text-content-heading/)
+  assert.match(iconButtonClassName({ variant: 'secondary' }), /text-content-heading/)
+  assert.match(chipClassName({ tone: 'accent' }), /text-content-heading/)
+  assert.match(fieldControlClassName(), /text-content-primary/)
+})
+
 test('buttonClassName covers every documented size with a touch-target min-h utility', () => {
   for (const size of BUTTON_SIZES) {
     const cls = buttonClassName({ size })

@@ -75,7 +75,7 @@ export function Modal({
           >
             {showHeader && (
               <div className="flex items-start justify-between gap-3 p-6 pb-3">
-                <h3 id={titleId} className="font-display text-display-sm text-casa-navy leading-tight">{title}</h3>
+                <h3 id={titleId} className="font-display text-display-sm text-content-heading leading-tight">{title}</h3>
                 <IconButton
                   icon={<X size={18} />}
                   aria-label="Close"

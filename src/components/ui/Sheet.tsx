@@ -93,7 +93,7 @@ export function Sheet({
             )}
             {showHeader && (
               <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3 border-b border-casa-border flex-shrink-0">
-                <h3 id={titleId} className="font-display text-heading text-casa-navy">{title}</h3>
+                <h3 id={titleId} className="font-display text-heading text-content-heading">{title}</h3>
                 <IconButton icon={<X size={20} />} aria-label="Close" size="sm" variant="ghost" onClick={onClose} />
               </div>
             )}
