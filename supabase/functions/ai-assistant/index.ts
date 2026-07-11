@@ -8,6 +8,7 @@ import {
 import { optionalEnv, requireEnv } from '../_shared/env.mjs'
 import { computeTravelEta } from '../_shared/travel-eta.mjs'
 import { classifyAssistantIntent } from '../_shared/assistant-intent-profile.mjs'
+import { resolveDeterministicEventMutation } from '../_shared/deterministic-event-mutation.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -196,6 +197,14 @@ Deno.serve(async (req) => {
   // Start from 24h ago so in-progress events (started earlier today) are visible
   const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000)
   const yearEnd = new Date(); yearEnd.setFullYear(yearEnd.getFullYear() + 1, 11, 31); yearEnd.setHours(23,59,59,999)
+  const needsEventData = ['event', 'full', 'travel'].includes(intentRouting.profile)
+  const needsPlaceData = ['event', 'full', 'travel', 'places'].includes(intentRouting.profile)
+  const needsContactData = ['event', 'full', 'places'].includes(intentRouting.profile)
+  const needsGroceryData = ['grocery', 'recipe', 'full'].includes(intentRouting.profile)
+  const needsRecipeData = ['recipe', 'full'].includes(intentRouting.profile)
+  const needsAvailabilityData = ['event', 'full'].includes(intentRouting.profile)
+  const skippedRows = Promise.resolve({ data: [], error: null })
+  const skippedRow = Promise.resolve({ data: null, error: null })
 
   const contextLoadStartMs = Date.now()
   const [
@@ -212,30 +221,50 @@ Deno.serve(async (req) => {
     availabilityExceptionsResult,
   ] = await Promise.all([
     sb.from('settings').select('value').eq('key', 'llm_config').limit(1),
-    sb.from('settings').select('value').eq('key', 'home_config').maybeSingle(),
-    sb.from('saved_places').select('name, aliases, address, city, state, zip, category, notes, phone').order('name'),
-    sb.from('saved_contacts').select('name, aliases, phone, email, address, relationship, notes').order('name').then(r => r).catch(() => ({ data: null, error: null })),
-    sb.from('events')
+    needsPlaceData
+      ? sb.from('settings').select('value').eq('key', 'home_config').maybeSingle()
+      : skippedRow,
+    needsPlaceData
+      ? sb.from('saved_places').select('name, aliases, address, city, state, zip, category, notes, phone').order('name')
+      : skippedRows,
+    needsContactData
+      ? sb.from('saved_contacts').select('name, aliases, phone, email, address, relationship, notes').order('name').then(r => r).catch(() => ({ data: null, error: null }))
+      : skippedRows,
+    needsEventData
+      ? sb.from('events')
       .select('id, title, start_time, end_time, updated_at, location_name, address, all_day, event_type, description, event_enrichments(prep_notes, category, what_to_bring, outfit_suggestion, parking_notes, contact_name, contact_phone, cost_estimate, dietary_notes, meal_impact), event_checklist_items(id, label, note, checked, category, sort_order, created_at), event_action_items(id, title, description, due_date, is_urgent, completed, assigned_to, created_at), event_members(family_members(id, name))')
       .eq('status', 'confirmed')
       .gte('start_time', windowStart.toISOString())
       .lte('start_time', yearEnd.toISOString())
-      .order('start_time'),
-    sb.from('grocery_lists').select('id, name').order('created_at').limit(5),
-    sb.from('grocery_items')
+      .order('start_time')
+      : skippedRows,
+    needsGroceryData
+      ? sb.from('grocery_lists').select('id, name').order('created_at').limit(5)
+      : skippedRows,
+    needsGroceryData
+      ? sb.from('grocery_items')
       .select('id, list_id, name, quantity, unit, category, checked, notes')
       .eq('checked', false)
       .is('deleted_at', null)
       .order('category')
-      .order('name'),
-    sb.from('recipes')
+      .order('name')
+      : skippedRows,
+    needsRecipeData
+      ? sb.from('recipes')
       .select('id, name, cook_time, servings')
       .order('last_used_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
-      .limit(30),
-    sb.from('settings').select('value').eq('key', 'food_profile').maybeSingle().then(r => r).catch(() => ({ data: null, error: null })),
-    sb.from('member_availability_rules').select('member_id, day_of_week, start_local, end_local, availability_type, reason').then(r => r).catch(() => ({ data: null, error: null })),
-    sb.from('member_availability_exceptions').select('member_id, start_at, end_at, override_type, note').gte('end_at', windowStart.toISOString()).then(r => r).catch(() => ({ data: null, error: null })),
+      .limit(30)
+      : skippedRows,
+    needsRecipeData
+      ? sb.from('settings').select('value').eq('key', 'food_profile').maybeSingle().then(r => r).catch(() => ({ data: null, error: null }))
+      : skippedRow,
+    needsAvailabilityData
+      ? sb.from('member_availability_rules').select('member_id, day_of_week, start_local, end_local, availability_type, reason').then(r => r).catch(() => ({ data: null, error: null }))
+      : skippedRows,
+    needsAvailabilityData
+      ? sb.from('member_availability_exceptions').select('member_id, start_at, end_at, override_type, note').gte('end_at', windowStart.toISOString()).then(r => r).catch(() => ({ data: null, error: null }))
+      : skippedRows,
   ])
   const homeConfig = homeConfigResult?.data?.value as { address?: string; city?: string; state?: string; zip?: string } | null
   const homeAddress = [homeConfig?.address, homeConfig?.city, homeConfig?.state, homeConfig?.zip].filter(Boolean).join(', ')
@@ -374,6 +403,14 @@ Deno.serve(async (req) => {
     context_load_ms: contextLoadMs,
     events_loaded: allEvents?.length ?? 0,
     grocery_items_loaded: Array.isArray(groceryItems) ? groceryItems.length : 0,
+    loaded_domains: [
+      needsEventData ? 'events' : null,
+      needsPlaceData ? 'places' : null,
+      needsContactData ? 'contacts' : null,
+      needsGroceryData ? 'grocery' : null,
+      needsRecipeData ? 'recipes' : null,
+      needsAvailabilityData ? 'availability' : null,
+    ].filter(Boolean),
   })
   if (modelOverride && !validatedOverrideModel) {
     appendServerTrace('server_ai_assistant_model_override_rejected', `unsupported_override=${modelOverride}`, {
@@ -2161,6 +2198,53 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   }
 
   try {
+    if (intentRouting.profile === 'event' && latestUserText && !context.focusedEvent) {
+      const deterministicMutation = resolveDeterministicEventMutation(
+        latestUserText,
+        allEvents ?? [],
+        {
+          now,
+          utcOffset,
+          familyNames: (context.family as { name: string }[]).map((member) => member.name),
+        },
+      )
+      if (deterministicMutation) {
+        const requestTotalMs = Date.now() - requestStartMs
+        appendServerTrace(
+          'server_ai_assistant_deterministic_mutation',
+          `tool=${deterministicMutation.tool} ms=${requestTotalMs}`,
+          {
+            tool: deterministicMutation.tool,
+            event_id: deterministicMutation.event?.id ?? null,
+            request_ms: requestTotalMs,
+          },
+        )
+        appendServerTrace('server_ai_assistant_result', `type=tool_action ms=${requestTotalMs}`, {
+          result_type: 'tool_action',
+          request_ms: requestTotalMs,
+          llm_calls: 0,
+          llm_inference_ms: 0,
+          input_tokens: 0,
+          output_tokens: 0,
+          total_tokens: 0,
+        })
+        return {
+          status: 200,
+          payload: {
+            type: 'tool_action',
+            tool: deterministicMutation.tool,
+            args: deterministicMutation.args,
+            display_text: buildDisplayText(deterministicMutation.tool, deterministicMutation.args),
+            correlation_id: cid,
+            telemetry: {
+              ...llmTelemetry,
+              request_total_ms: requestTotalMs,
+              context_load_ms: contextLoadMs,
+            },
+          },
+        }
+      }
+    }
     const result = await callGeminiWithTools(history)
     const requestTotalMs = Date.now() - requestStartMs
     console.log(`[ai-assistant][${cid}] stage=request_total ms=${requestTotalMs} result_type=${String(result?.type ?? 'unknown')}`)

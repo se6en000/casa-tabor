@@ -74,6 +74,18 @@ test('assistant narrows prompt context and tools by intent profile', () => {
   assert.match(assistantFunction, /includeGroceryContext/)
   assert.match(assistantFunction, /updated_at: e\.updated_at/)
   assert.match(assistantFunction, /required: \['id', 'expected_updated_at'\]/)
+  for (const gate of [
+    'needsEventData',
+    'needsPlaceData',
+    'needsContactData',
+    'needsGroceryData',
+    'needsRecipeData',
+    'needsAvailabilityData',
+  ]) {
+    assert.match(assistantFunction, new RegExp(gate))
+  }
+  assert.match(assistantFunction, /loaded_domains:/)
+  assert.match(assistantFunction, /server_ai_assistant_deterministic_mutation/)
 })
 
 test('confirmation state is atomic, self-clearing, and fully traced', () => {
