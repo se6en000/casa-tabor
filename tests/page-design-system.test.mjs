@@ -548,6 +548,7 @@ test('Settings selection controls do not repaint default primary buttons', () =>
 
   assert.match(art, /aria-label="Art feed mode"/)
   assert.match(art, /variant="strong"[\s\S]*?onClick=\{applyCoastalStarterTheme\}/)
+  assert.match(art, /variant="subtle"[\s\S]*?aria-expanded=\{advancedOpen\}[\s\S]*?>[\s\S]*?Advanced filters/)
   assert.match(display, /aria-label="Palette target"/)
   assert.match(family, /label="Show on homepage sidebar"/)
   assert.match(family, /<SegmentedControl[\s\S]*?role`}/)

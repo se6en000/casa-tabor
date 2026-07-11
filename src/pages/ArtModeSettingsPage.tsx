@@ -369,11 +369,14 @@ export default function ArtModeSettingsPage() {
                 </div>
 
                 <Button
-                  type="button"
+                  variant="subtle"
+                  fullWidth
                   onClick={() => setAdvancedOpen(v => !v)}
-                  className="mt-4 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-casa-border text-casa-muted hover:text-casa-navy hover:border-casa-navy/40 transition-colors"
+                  className="mt-4"
+                  aria-expanded={advancedOpen}
+                  trailingIcon={advancedOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 >
-                  Advanced filters {advancedOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  Advanced filters
                 </Button>
 
                 {advancedOpen && (
