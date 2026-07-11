@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ShoppingCart, Trash2, Check, X, Plus, Minus, RefreshCw, GripVertical, Link2, Upload, BookOpen, ChefHat, ChevronLeft, ChevronRight, Clock3, ExternalLink, Camera, Sparkles, Leaf, Milk, Beef, Croissant, Snowflake, Package, Coffee, Popcorn, Sandwich, House, HeartPulse, Baby as BabyIcon, PawPrint, Circle } from 'lucide-react'
+import { ShoppingCart, Trash2, X, Plus, Minus, RefreshCw, GripVertical, Link2, Upload, BookOpen, ChefHat, ChevronLeft, ChevronRight, Clock3, ExternalLink, Camera, Sparkles, Leaf, Milk, Beef, Croissant, Snowflake, Package, Coffee, Popcorn, Sandwich, House, HeartPulse, Baby as BabyIcon, PawPrint, Circle } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -12,14 +12,12 @@ import {
   getCategoryTone,
   getDepletionVisual,
   urgencyDotClassName,
-  urgencyMeterClassName,
   urgencyTagClassName,
 } from '../utils/groceryVisuals'
 import { normalizeRecipeIngredientFields } from '../utils/recipeIngredientParsing'
 import { supabase } from '../lib/supabase'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
-import { Button, IconButton, Card, Chip, Input, Heading, Modal, SegmentedControl, Sheet, Text } from '../components/ui'
-import { chipClassName } from '../design-system/variants.mjs'
+import { Alert, Button, Checkbox, IconButton, Card, Chip, Input, Heading, Modal, Progress, SegmentedControl, Sheet, Text } from '../components/ui'
 import {
   appendPantryInventoryAudit,
   normalizePackageUnit,
@@ -465,21 +463,12 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
           aria-label={`Move ${item.name}`}
         />
       )}
-      <button
-        type="button"
-        onClick={() => onToggle(item.id, !visualChecked)}
-        aria-pressed={visualChecked}
-        aria-label={visualChecked ? `Mark ${item.name} as not done` : `Mark ${item.name} as done`}
-        className={cn(
-          'size-control flex flex-shrink-0 items-center justify-center rounded-xl border-2 transition-colors outline-none',
-          'focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-2 focus-visible:ring-offset-casa-bg',
-          visualChecked
-            ? 'border-casa-success bg-casa-success-soft text-casa-success-strong'
-            : 'border-casa-border bg-casa-surface text-casa-navy/60 hover:border-casa-gold/40'
-        )}
-      >
-        {visualChecked ? <Check size={15} className="text-casa-success-strong" /> : null}
-      </button>
+      <Checkbox
+        checked={visualChecked}
+        onChange={() => onToggle(item.id, !visualChecked)}
+        label={visualChecked ? `Mark ${item.name} as not done` : `Mark ${item.name} as done`}
+        className="min-h-0 shrink-0 gap-0 pt-0.5 [&>span:last-child]:sr-only"
+      />
       <div className="min-w-0 flex-1 pt-1.5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -2137,30 +2126,19 @@ export default function GroceryPage() {
                   <span><span className="text-casa-navy">{checkedCount}</span> of {totalTrackedItems} checked</span>
                   <span>{uncheckedCount} remaining</span>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-casa-border/70">
-                  <div
-                    className="h-full rounded-full bg-casa-success transition-all duration-300"
-                    style={{ width: `${checkedProgressPercent}%` }}
-                  />
-                </div>
+                <Progress value={checkedProgressPercent} aria-label="Grocery completion" className="[&_.casa-progress]:h-1.5" />
               </div>
             )}
           </div>
         </div>
-        {syncError && (
-          <Text role="caption" className="pb-3 text-casa-error">Sync error: {syncError}</Text>
-        )}
-        {pantryReconcileError && (
-          <Text role="caption" className="pb-3 text-casa-error">Pantry restock error: {pantryReconcileError}</Text>
-        )}
+        {syncError && <Alert tone="danger" title="Grocery sync failed" className="mb-3">{syncError}</Alert>}
+        {pantryReconcileError && <Alert tone="danger" title="Pantry restock failed" className="mb-3">{pantryReconcileError}</Alert>}
         {!pantryReconcileError && pantryReconcileMessage && (
-          <Text role="caption" muted className="pb-3">{pantryReconcileMessage}</Text>
+          <Alert tone="success" title="Pantry restock updated" className="mb-3">{pantryReconcileMessage}</Alert>
         )}
-        {predictionDeferralError && (
-          <Text role="caption" className="pb-3 text-casa-error">Prediction deferral error: {predictionDeferralError}</Text>
-        )}
+        {predictionDeferralError && <Alert tone="danger" title="Prediction update failed" className="mb-3">{predictionDeferralError}</Alert>}
         {!predictionDeferralError && predictionDeferralMessage && (
-          <Text role="caption" muted className="pb-3">{predictionDeferralMessage}</Text>
+          <Alert tone="success" title="Prediction updated" className="mb-3">{predictionDeferralMessage}</Alert>
         )}
         {pantryReconcileDraft && (
           <div className="pb-3">
@@ -2320,18 +2298,14 @@ export default function GroceryPage() {
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {GROCERY_CATEGORIES.map((cat) => (
-                      <div
+                      <Chip
                         key={`drop-target-${cat.key}`}
                         data-drop-category={cat.key}
-                        className={cn(
-                          chipClassName({ size: 'sm' }),
-                          dragOverCategory === cat.key
-                            ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
-                            : 'border-casa-border text-casa-muted bg-casa-bg'
-                        )}
+                        size="sm"
+                        selected={dragOverCategory === cat.key}
                       >
                         {splitCategoryLabel(cat.label)}
-                      </div>
+                      </Chip>
                     ))}
                   </div>
                 </div>
@@ -2422,13 +2396,14 @@ export default function GroceryPage() {
 
               {completedItemsByCategory.length > 0 && (
                 <div className="mt-5">
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setShowCompletedArchive(prev => !prev)}
-                    className="px-1 pb-2 text-caption font-semibold text-casa-muted hover:text-casa-text transition-colors"
+                    className="mb-2 min-h-0 px-1 py-0 text-caption text-casa-muted hover:bg-transparent"
                   >
                     {showCompletedArchive ? 'Hide completed archive' : `Show completed archive (${checkedCount})`}
-                  </button>
+                  </Button>
                   {showCompletedArchive && (
                     <div className="space-y-3">
                       {completedItemsByCategory.map(cat => (
@@ -2531,17 +2506,16 @@ export default function GroceryPage() {
                                 <p className="truncate text-body-sm font-semibold text-casa-navy">{prediction.name}</p>
                                 <div className="mt-0.5 flex items-center gap-2 text-caption text-casa-muted">
                                   <span>Cadence ~{prediction.cadenceDays}d</span>
-                                  <span className="h-1.5 w-16 overflow-hidden rounded-full bg-casa-border/80">
-                                    <span
-                                      className={cn('block h-full rounded-full', urgencyMeterClassName(visual.tone))}
-                                      style={{ width: `${cadenceMeterPercent}%` }}
-                                    />
-                                  </span>
+                                  <Progress
+                                    value={cadenceMeterPercent}
+                                    aria-label={`${prediction.name} depletion cadence`}
+                                    className="w-16 [&_.casa-progress]:h-1.5"
+                                  />
                                 </div>
                               </div>
-                              <span className={cn(chipClassName({ size: 'sm' }), urgencyTagClassName(visual.tone))}>
+                              <Chip size="sm" className={urgencyTagClassName(visual.tone)}>
                                 {visual.dueLabel}
-                              </span>
+                              </Chip>
                               <div className="flex shrink-0 items-center gap-1.5">
                                 <Button
                                   type="button"
@@ -2709,47 +2683,32 @@ export default function GroceryPage() {
           contentClassName="p-3"
         >
           <div className="mb-3 flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
+            <Chip
               onClick={() => setAddPanelMode('quick')}
-              className={cn(
-                chipClassName({ size: 'sm', interactive: true, selected: addPanelMode === 'quick' }),
-                addPanelMode === 'quick'
-                  ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
-                  : 'border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main',
-              )}
+              size="sm"
+              selected={addPanelMode === 'quick'}
             >
               Quick add
-            </button>
-            <button
-              type="button"
+            </Chip>
+            <Chip
               onClick={() => {
                 setAddPanelMode('recipe')
                 if (!parsedRecipe) setRecipeImportStep(1)
               }}
-              className={cn(
-                chipClassName({ size: 'sm', interactive: true, selected: addPanelMode === 'recipe' }),
-                addPanelMode === 'recipe'
-                  ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
-                  : 'border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main',
-              )}
+              size="sm"
+              selected={addPanelMode === 'recipe'}
             >
               <Upload size={12} />
               Recipe import
-            </button>
-            <button
-              type="button"
+            </Chip>
+            <Chip
               onClick={() => setAddPanelMode('library')}
-              className={cn(
-                chipClassName({ size: 'sm', interactive: true, selected: addPanelMode === 'library' }),
-                addPanelMode === 'library'
-                  ? 'border-casa-gold bg-casa-gold/15 text-casa-navy'
-                  : 'border-casa-border bg-casa-bg text-casa-muted hover:bg-casa-main',
-              )}
+              size="sm"
+              selected={addPanelMode === 'library'}
             >
               <BookOpen size={12} />
               Saved recipes
-            </button>
+            </Chip>
           </div>
 
           {addPanelMode === 'quick' && (
@@ -2765,19 +2724,14 @@ export default function GroceryPage() {
               placeholder="Add an item…"
               className="flex-1 bg-transparent text-body text-casa-text placeholder:text-casa-muted outline-none"
             />
-            <button
-              type="button"
+            <Button
               onClick={handleAddItem}
               disabled={!inputValue.trim() || !defaultListId}
-              className={cn(
-                'flex-shrink-0 min-h-10 px-4 rounded-button text-body-sm font-semibold transition-all',
-                inputValue.trim()
-                  ? 'bg-casa-gold text-white hover:brightness-110'
-                  : 'text-casa-muted'
-              )}
+              size="sm"
+              className="flex-shrink-0"
             >
               Add
-            </button>
+            </Button>
           </div>
           {mergeSuggestion && (
             <div className="mt-2 rounded-2xl border border-casa-gold/40 bg-casa-gold/10 px-3 py-2">
@@ -2785,18 +2739,19 @@ export default function GroceryPage() {
                 Similar item already on your list: <span className="font-semibold">{mergeSuggestion.name}</span>
               </p>
               <div className="mt-1.5 flex flex-wrap gap-2">
-                <button
-                  type="button"
+                <Chip
+                  tone="accent"
+                  size="sm"
                   onClick={() => {
                     setIsAddPanelOpen(false)
                     window.setTimeout(() => spotlightItem(mergeSuggestion.id), 280)
                   }}
-                  className={chipClassName({ tone: 'accent', size: 'sm', interactive: true })}
                 >
                   Use existing
-                </button>
-                <button
-                  type="button"
+                </Chip>
+                <Chip
+                  tone="neutral"
+                  size="sm"
                   onClick={() => {
                     const nextName = inputValue.trim()
                     if (!nextName || !defaultListId) return
@@ -2805,23 +2760,22 @@ export default function GroceryPage() {
                     setInputValue('')
                     inputRef.current?.focus()
                   }}
-                  className={chipClassName({ tone: 'neutral', size: 'sm', interactive: true })}
                 >
                   Add anyway
-                </button>
+                </Chip>
               </div>
             </div>
           )}
           <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
             {QUICK_ADD_TOUCH_ITEMS.map(item => (
-              <button
+              <Chip
                 key={item}
-                type="button"
                 onClick={() => handleQuickAdd(item)}
-                className={cn(chipClassName({ tone: 'neutral', interactive: true }), 'flex-shrink-0')}
+                tone="neutral"
+                className="flex-shrink-0"
               >
                 + {item}
-              </button>
+              </Chip>
             ))}
           </div>
           <p className="mt-1 text-caption text-casa-muted">
@@ -2850,28 +2804,24 @@ export default function GroceryPage() {
                   </div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
+                  <Chip
+                    tone="neutral"
+                    size="sm"
                     onClick={() => triggerFileInput(recipeFileInputRef)}
-                    className={cn(
-                      chipClassName({ tone: 'neutral', size: 'sm', interactive: true }),
-                      recipeImporting && 'opacity-60 pointer-events-none',
-                    )}
+                    disabled={recipeImporting}
                   >
                     <Upload size={12} />
                     Upload file(s)
-                  </button>
-                  <button
-                    type="button"
+                  </Chip>
+                  <Chip
+                    tone="neutral"
+                    size="sm"
                     onClick={() => triggerFileInput(recipeCameraInputRef)}
-                    className={cn(
-                      chipClassName({ tone: 'neutral', size: 'sm', interactive: true }),
-                      recipeImporting && 'opacity-60 pointer-events-none',
-                    )}
+                    disabled={recipeImporting}
                   >
                     <Camera size={12} />
                     Take photo(s)
-                  </button>
+                  </Chip>
                   <input
                     id="grocery-import-file-input"
                     ref={recipeFileInputRef}
@@ -2905,71 +2855,71 @@ export default function GroceryPage() {
                       const selected = recipeMealPhotoIndex !== null && index === recipeMealPhotoIndex
                       return (
                         <div key={file.id} className={cn('rounded-lg border overflow-hidden', selected ? 'border-casa-gold' : 'border-casa-border')}>
-                          <button
-                            type="button"
+                          <Button
+                            variant="ghost"
                             onClick={() => setRecipeMealPhotoIndex((current) => (current === index ? null : index))}
-                            className="block w-full"
+                            className="block h-auto min-h-0 w-full rounded-none p-0"
+                            contentClassName="block w-full"
                           >
                             <img src={file.previewUrl} alt={file.name} className="h-16 w-full object-cover bg-casa-surface" loading="lazy" />
                             <span className={cn('block px-1 py-1 text-caption truncate text-left', selected ? 'text-casa-navy font-semibold' : 'text-casa-muted')}>
                               {selected ? 'Meal photo' : 'Mark meal'}
                             </span>
-                          </button>
-                          <button
-                            type="button"
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => removeRecipeImportFile(file.id)}
-                            className="w-full border-t border-casa-divider px-1 py-1 text-caption text-casa-muted hover:bg-casa-bg"
+                            fullWidth
+                            className="min-h-0 rounded-none border-t border-casa-divider px-1 py-1 text-caption text-casa-muted"
                           >
                             Remove
-                          </button>
+                          </Button>
                         </div>
                       )
                     })}
                   </div>
                 )}
                 {recipeImportFiles.length > 0 && (
-                  <button
-                    type="button"
+                  <Chip
+                    size="sm"
+                    selected={recipeMealPhotoIndex === null}
                     onClick={() => setRecipeMealPhotoIndex(null)}
-                    className={cn(
-                      'mt-2 px-2.5 py-1.5 rounded-button border text-caption transition-colors',
-                      recipeMealPhotoIndex === null
-                        ? 'border-casa-gold bg-casa-gold/10 text-casa-navy font-semibold'
-                        : 'border-casa-border text-casa-muted hover:bg-casa-surface',
-                    )}
+                    className="mt-2"
                   >
                     No meal photo
-                  </button>
+                  </Chip>
                 )}
                 <div className="mt-2 flex items-center justify-end gap-2">
                   {recipeImportStep > 1 && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => setRecipeImportStep((current) => (current === 3 ? 2 : 1))}
-                      className={chipClassName({ tone: 'neutral', size: 'sm', interactive: true })}
                     >
                       Back
-                    </button>
+                    </Button>
                   )}
                   {recipeImportStep < 2 && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="strong"
+                      size="sm"
                       disabled={!hasRecipeImportSource}
                       onClick={() => setRecipeImportStep(2)}
-                      className={cn(chipClassName({ size: 'sm', interactive: true }), 'casa-action-strong border-transparent bg-casa-navy')}
                     >
                       Next
-                    </button>
+                    </Button>
                   )}
                   {recipeImportStep === 2 && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="strong"
+                      size="sm"
                       disabled={recipeImporting || !hasRecipeImportSource}
                       onClick={() => void runRecipeImportFromCurrentSources()}
-                      className={cn(chipClassName({ size: 'sm', interactive: true }), 'casa-action-strong border-transparent bg-casa-navy')}
+                      loading={recipeImporting}
                     >
-                      {recipeImporting ? 'Importing…' : 'Import'}
-                    </button>
+                      Import
+                    </Button>
                   )}
                 </div>
               </div>
@@ -2977,9 +2927,7 @@ export default function GroceryPage() {
               {recipeImporting && (
                 <p className="mt-2 text-caption text-casa-muted animate-breathe">Extracting recipe…</p>
               )}
-              {recipeImportError && (
-                <p className="mt-2 text-caption text-casa-error">{recipeImportError}</p>
-              )}
+              {recipeImportError && <Alert tone="danger" title="Recipe import failed" className="mt-2">{recipeImportError}</Alert>}
 
               {recipeImportStep === 3 && parsedRecipe && (
                 <div className="mt-2 rounded-2xl border border-casa-border bg-casa-surface p-3 space-y-2">
@@ -3019,13 +2967,13 @@ export default function GroceryPage() {
                         placeholder="https://.../another-photo.jpg"
                         className="flex-1 rounded-button border border-casa-border bg-casa-surface px-2.5 py-1.5 text-caption text-casa-text outline-none"
                       />
-                      <button
-                        type="button"
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={addRecipeImageUrl}
-                        className="px-2.5 py-1.5 rounded-button border border-casa-border text-caption text-casa-navy hover:bg-casa-surface transition-colors"
                       >
                         Add image
-                      </button>
+                      </Button>
                     </div>
                     {parsedRecipe.image_urls.length === 0 ? (
                       <p className="text-caption text-casa-muted">No images yet. Add one above.</p>
@@ -3034,14 +2982,15 @@ export default function GroceryPage() {
                         {parsedRecipe.image_urls.map((imageUrl, imageIndex) => {
                           const selected = parsedRecipe.primary_image_index !== null && imageIndex === parsedRecipe.primary_image_index
                           return (
-                            <button
+                            <Button
                               key={`${imageUrl}-${imageIndex}`}
-                              type="button"
+                              variant="ghost"
                               onClick={() => choosePrimaryRecipeImage(imageIndex)}
                               className={cn(
-                                'rounded-lg overflow-hidden border text-left transition-colors',
+                                'h-auto min-h-0 overflow-hidden rounded-lg border p-0 text-left',
                                 selected ? 'border-casa-gold' : 'border-casa-border hover:border-casa-gold/40',
                               )}
+                              contentClassName="block w-full"
                             >
                               <img
                                 src={imageUrl}
@@ -3057,25 +3006,21 @@ export default function GroceryPage() {
                               <span className="block px-1.5 py-1 text-caption text-casa-muted">
                                 {selected ? 'Meal cover' : 'Set as cover'}
                               </span>
-                            </button>
+                            </Button>
                           )
                         })}
                       </div>
                     )}
-                    <button
-                      type="button"
+                    <Chip
+                      size="sm"
+                      selected={parsedRecipe.primary_image_index === null}
                       onClick={() => {
                         setParsedRecipe((current) => current ? { ...current, primary_image_index: null, image_url: null } : current)
                       }}
-                      className={cn(
-                        'mt-2 px-2.5 py-1.5 rounded-button border text-caption transition-colors',
-                        parsedRecipe.primary_image_index === null
-                          ? 'border-casa-gold bg-casa-gold/10 text-casa-navy font-semibold'
-                          : 'border-casa-border text-casa-muted hover:bg-casa-surface',
-                      )}
+                      className="mt-2"
                     >
                       No meal photo
-                    </button>
+                    </Chip>
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
@@ -3084,19 +3029,14 @@ export default function GroceryPage() {
                         <p className="text-caption text-casa-muted">Ingredients (auto-hides likely pantry staples)</p>
                         <div className="flex items-center gap-1">
                           {[0.5, 1, 2].map((scale) => (
-                            <button
+                            <Chip
                               key={scale}
-                              type="button"
                               onClick={() => setRecipeScale(scale)}
-                              className={cn(
-                                chipClassName({ size: 'sm', interactive: true, selected: Math.abs(recipeScale - scale) < 0.001 }),
-                                Math.abs(recipeScale - scale) < 0.001
-                                  ? 'border-casa-gold/50 bg-casa-gold/10 text-casa-navy'
-                                  : 'border-casa-border text-casa-muted hover:bg-casa-surface'
-                              )}
+                              size="sm"
+                              selected={Math.abs(recipeScale - scale) < 0.001}
                             >
                               {scale}x
-                            </button>
+                            </Chip>
                           ))}
                         </div>
                       </div>
@@ -3159,14 +3099,15 @@ export default function GroceryPage() {
                     <div className="rounded-xl border border-casa-border bg-casa-bg p-2">
                       <div className="mb-2 flex items-center justify-between gap-2">
                         <p className="text-caption text-casa-muted">Directions (literal text, ordered)</p>
-                        <button
-                          type="button"
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() => void runRecipeImportFromCurrentSources()}
                           disabled={recipeImporting}
-                          className={chipClassName({ tone: 'neutral', size: 'sm', interactive: true })}
+                          loading={recipeImporting}
                         >
-                          {recipeImporting ? 'Re-extracting…' : 'Re-extract'}
-                        </button>
+                          Re-extract
+                        </Button>
                       </div>
                       <div className="max-h-52 overflow-y-auto space-y-2 pr-1">
                         {parsedRecipe.steps.map((step, stepIndex) => (
@@ -3174,37 +3115,37 @@ export default function GroceryPage() {
                             <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
                               <p className="text-caption font-semibold text-casa-muted">Step {stepIndex + 1}</p>
                               <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
+                                <Chip
+                                  tone="neutral"
+                                  size="sm"
                                   onClick={() => moveParsedStep(stepIndex, -1)}
                                   disabled={stepIndex === 0}
-                                  className={chipClassName({ tone: 'neutral', size: 'sm', interactive: true })}
                                 >
                                   Up
-                                </button>
-                                <button
-                                  type="button"
+                                </Chip>
+                                <Chip
+                                  tone="neutral"
+                                  size="sm"
                                   onClick={() => moveParsedStep(stepIndex, 1)}
                                   disabled={stepIndex >= parsedRecipe.steps.length - 1}
-                                  className={chipClassName({ tone: 'neutral', size: 'sm', interactive: true })}
                                 >
                                   Down
-                                </button>
-                                <button
-                                  type="button"
+                                </Chip>
+                                <Chip
+                                  tone="accent"
+                                  size="sm"
                                   onClick={() => addParsedStepAfter(stepIndex)}
-                                  className={chipClassName({ tone: 'accent', size: 'sm', interactive: true })}
                                 >
                                   Add
-                                </button>
-                                <button
-                                  type="button"
+                                </Chip>
+                                <Chip
+                                  tone="danger"
+                                  size="sm"
                                   onClick={() => removeParsedStep(stepIndex)}
                                   disabled={parsedRecipe.steps.length <= 1}
-                                  className={chipClassName({ tone: 'danger', size: 'sm', interactive: true })}
                                 >
                                   Remove
-                                </button>
+                                </Chip>
                               </div>
                             </div>
                             <textarea
@@ -3216,42 +3157,44 @@ export default function GroceryPage() {
                           </div>
                         ))}
                         {parsedRecipe.steps.length === 0 && (
-                          <button
-                            type="button"
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            fullWidth
                             onClick={() => addParsedStepAfter(-1)}
-                            className="w-full px-2 py-1.5 rounded-button border border-casa-border text-caption text-casa-navy hover:bg-casa-surface"
                           >
                             Add first step
-                          </button>
+                          </Button>
                         )}
                       </div>
                     </div>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => addSelectedRecipeIngredientsToCart(parsedRecipe)}
-                      className="px-3 py-1.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-main transition-colors"
                     >
                       Add selected ingredients ({selectedRecipeIngredientIndexes.size})
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       disabled={savingRecipe}
                       onClick={() => void saveRecipePreset({ addSelectedToCart: false })}
-                      className="px-3 py-1.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-main transition-colors disabled:opacity-60"
+                      loading={savingRecipe}
                     >
                       Save recipe
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      size="sm"
                       disabled={savingRecipe}
                       onClick={() => void saveRecipePreset({ addSelectedToCart: true })}
-                      className="px-3 py-1.5 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 transition-colors disabled:opacity-60"
+                      loading={savingRecipe}
                     >
                       Save + Add selected
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -3290,36 +3233,31 @@ export default function GroceryPage() {
                         {RECIPE_MEAL_SLOTS.map(({ slot, label }) => {
                           const planned = mealPlanSlotsByRecipe.get(recipe.id)?.has(slot) ?? false
                           return (
-                            <button
+                            <Chip
                               key={`${recipe.id}-${slot}`}
-                              type="button"
                               onClick={() => void planRecipeForSlot(recipe.id, slot)}
-                              className={cn(
-                                chipClassName({ size: 'sm', interactive: true, selected: planned }),
-                                planned
-                                  ? 'border-casa-gold/40 bg-casa-gold/10 text-casa-navy'
-                                  : 'border-casa-border text-casa-muted hover:bg-casa-surface'
-                              )}
+                              size="sm"
+                              selected={planned}
                             >
                               {planned ? `Planned: ${label}` : label}
-                            </button>
+                            </Chip>
                           )
                         })}
-                        <button
-                          type="button"
+                        <Chip
+                          tone="neutral"
+                          size="sm"
                           onClick={() => loadRecipeIntoChecklist(recipe)}
-                          className={chipClassName({ tone: 'neutral', size: 'sm', interactive: true })}
                         >
                           Add again
-                        </button>
-                        <button
-                          type="button"
+                        </Chip>
+                        <Chip
+                          tone="accent"
+                          size="sm"
                           onClick={() => void openRecipeForCookMode(recipe)}
-                          className={chipClassName({ tone: 'accent', size: 'sm', interactive: true })}
                         >
                           <ChefHat size={12} />
                           Cook mode
-                        </button>
+                        </Chip>
                       </div>
                     </div>
                   </div>
@@ -3419,19 +3357,19 @@ export default function GroceryPage() {
                 {cookStepTimerOptions.length > 0 && (
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     {cookStepTimerOptions.map((timer, index) => (
-                      <button
+                      <Chip
                         key={`${timer.label}-${index}`}
-                        type="button"
                         onClick={() => setCookTimer({
                           totalSeconds: timer.seconds,
                           remainingSeconds: timer.seconds,
                           label: timer.label,
                         })}
-                        className={chipClassName({ tone: 'neutral', size: 'sm', interactive: true })}
+                        tone="neutral"
+                        size="sm"
                       >
                         <Clock3 size={11} />
                         {timer.label}
-                      </button>
+                      </Chip>
                     ))}
                   </div>
                 )}
@@ -3440,13 +3378,14 @@ export default function GroceryPage() {
                     <p className="text-caption text-casa-navy">
                       Timer ({cookTimer.label}): <span className="font-semibold">{formatTimer(cookTimer.remainingSeconds)}</span>
                     </p>
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => setCookTimer(null)}
-                      className="text-caption text-casa-muted hover:text-casa-text"
+                      className="min-h-0 p-0 text-caption text-casa-muted hover:bg-transparent"
                     >
                       Clear
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -3469,8 +3408,8 @@ export default function GroceryPage() {
               </div>
             </div>
             <div className="px-4 py-3 border-t border-casa-divider flex items-center justify-between gap-2">
-              <button
-                type="button"
+              <Button
+                variant="secondary"
                 onClick={() => {
                   setCookTimer(null)
                   setCookView((current) => current
@@ -3478,13 +3417,11 @@ export default function GroceryPage() {
                     : current)
                 }}
                 disabled={cookView.stepIndex <= 0}
-                className="px-3 py-2 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-main transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                leadingIcon={<ChevronLeft size={14} />}
               >
-                <ChevronLeft size={14} />
                 Previous
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
                 onClick={() => {
                   setCookTimer(null)
                   setCookView((current) => current
@@ -3492,11 +3429,10 @@ export default function GroceryPage() {
                     : current)
                 }}
                 disabled={cookView.stepIndex >= cookView.recipe.steps.length - 1}
-                className="px-3 py-2 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                trailingIcon={<ChevronRight size={14} />}
               >
                 Next
-                <ChevronRight size={14} />
-              </button>
+              </Button>
             </div>
         </Sheet>
       )}

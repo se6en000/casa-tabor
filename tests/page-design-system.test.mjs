@@ -93,7 +93,20 @@ test('P0 controls preserve native and ARIA semantics', () => {
 test('Progress uses native progress semantics without layout-fragile inline widths', () => {
   const source = readFileSync(resolve('src/components/ui/Progress.tsx'), 'utf8')
   assert.match(source, /<progress/)
+  assert.match(source, /aria-label=\{ariaLabel \?\? label\}/)
   assert.doesNotMatch(source, /style=\{\{/)
+})
+
+test('Grocery uses shared controls and feedback without changing its dense layout', () => {
+  const source = readFileSync(resolve('src/pages/GroceryPage.tsx'), 'utf8')
+  for (const component of ['Alert', 'Button', 'Checkbox', 'Chip', 'IconButton', 'Progress', 'SegmentedControl', 'Sheet']) {
+    assert.match(source, new RegExp(`<${component}\\b`))
+  }
+  assert.doesNotMatch(source, /<button\b/)
+  assert.doesNotMatch(source, /chipClassName/)
+  assert.match(source, /columns-1 gap-3 lg:columns-2 2xl:columns-3/)
+  assert.match(source, /<Heading role="display-sm"[^>]*>Grocery List<\/Heading>/)
+  assert.match(source, /style=\{\{ left: dragState\.x \+ 14, top: dragState\.y \+ 14 \}\}/)
 })
 
 test('event create and edit workflows use shared design-system contracts', () => {

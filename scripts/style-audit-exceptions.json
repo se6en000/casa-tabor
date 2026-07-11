@@ -36,6 +36,13 @@
         ]
       },
       {
+        "path": "src/pages/GroceryPage.tsx",
+        "reason": "The drag preview position follows the active pointer at runtime.",
+        "snippets": [
+          "style={{ left: dragState.x + 14, top: dragState.y + 14 }}"
+        ]
+      },
+      {
         "path": "src/components/shared/ArtScreensaver.tsx",
         "reason": "Artwork frame dimensions and image positioning are runtime-derived."
       },
