@@ -1,4 +1,4 @@
-export const DESIGN_SYSTEM_VERSION = '1.0.2'
+export const DESIGN_SYSTEM_VERSION = '1.0.3'
 export const DESIGN_SYSTEM_RELEASE_DATE = '2026-07-10'
 export const DESIGN_SYSTEM_SCHEMA_VERSION = 1
 
@@ -486,6 +486,14 @@ export const COMPONENT_MANIFEST = [
 ]
 
 export const DESIGN_SYSTEM_CHANGELOG = [
+  {
+    version: '1.0.3',
+    date: '2026-07-10',
+    changes: [
+      'Moved Family member disclosure rows from primary gold to the subtle inset surface.',
+      'Added explicit expanded-state semantics to Family member rows.',
+    ],
+  },
   {
     version: '1.0.2',
     date: '2026-07-10',

@@ -421,6 +421,18 @@ test('Saved Places uses subtle address copy actions instead of primary gold butt
   assert.match(source, /aria-live="polite"/)
 })
 
+test('Family member disclosure rows use a calm subtle surface instead of primary gold', () => {
+  const source = readFileSync(resolve('src/pages/FamilySettingsPage.tsx'), 'utf8')
+  const header = source.match(/\{\/\* Row header — tap to expand \*\/\}([\s\S]*?)\{\/\* Expanded editor \*\/\}/)?.[1] ?? ''
+
+  assert.match(header, /variant="subtle"/)
+  assert.match(header, /fullWidth/)
+  assert.match(header, /align="start"/)
+  assert.match(header, /aria-expanded=\{isExpanded\}/)
+  assert.match(header, /isExpanded \? 'bg-surface-subtle' : 'bg-surface-inset'/)
+  assert.doesNotMatch(header, /bg-casa-gold/)
+})
+
 test('Home middle rail omits household availability pills', () => {
   const home = readFileSync(resolve('src/pages/HomePage.tsx'), 'utf8')
 

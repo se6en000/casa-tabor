@@ -374,8 +374,16 @@ export default function FamilySettingsPage() {
             <div key={id} className="bg-casa-surface rounded-card border border-casa-border shadow-card overflow-hidden">
               {/* Row header — tap to expand */}
               <Button
-                className="w-full flex items-center gap-3 p-4 text-left"
+                variant="subtle"
+                fullWidth
+                align="start"
+                contentClassName="gap-3"
+                className={cn(
+                  'rounded-none border-0 p-4 shadow-none',
+                  isExpanded ? 'bg-surface-subtle' : 'bg-surface-inset',
+                )}
                 onClick={() => setExpandedId(isExpanded ? null : id)}
+                aria-expanded={isExpanded}
               >
                 <GripVertical size={16} className="text-casa-muted shrink-0" />
                 {/* Color swatch */}
