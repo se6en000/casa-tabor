@@ -8,6 +8,7 @@
 import { Link } from 'react-router-dom'
 import { Play, Pause, SkipForward, Music } from 'lucide-react'
 import { useSpotify } from '../../hooks/useSpotify'
+import { Button, Progress } from '../ui'
 
 export default function MiniPlayer() {
   const { authed, ready, state, play, pause, next } = useSpotify()
@@ -56,7 +57,7 @@ export default function MiniPlayer() {
 
         {/* Controls */}
         <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-          <button
+          <Button variant="ghost"
             type="button"
             onClick={() => isPlaying ? pause() : play()}
             className="size-control rounded-button flex items-center justify-center text-casa-navy hover:bg-casa-bg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
@@ -66,26 +67,21 @@ export default function MiniPlayer() {
               ? <Pause size={16} fill="currentColor" />
               : <Play size={16} fill="currentColor" />
             }
-          </button>
-          <button
+          </Button>
+          <Button variant="ghost"
             type="button"
             onClick={() => next()}
             className="size-control rounded-button flex items-center justify-center text-casa-muted hover:text-casa-navy hover:bg-casa-bg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
             aria-label="Next"
           >
             <SkipForward size={16} />
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Progress bar */}
       {track && (
-        <div className="h-0.5 bg-casa-divider">
-          <div
-            className="h-full bg-casa-gold transition-all duration-1000 ease-linear"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
+        <Progress value={progress} aria-label="Current track progress" className="[&_.casa-progress]:h-0.5" />
       )}
     </div>
   )

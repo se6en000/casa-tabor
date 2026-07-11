@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { differenceInDays, parseISO } from 'date-fns'
 import { usePrepItems, useDismissPrepItem, useSnoozePrepItem } from '../../hooks/usePrepItems'
 import { cn } from '../../utils/cn'
+import { Button } from '../ui'
 
 function daysLabel(eventDate: string | null): string {
   if (!eventDate) return ''
@@ -26,7 +27,7 @@ export default function PrepAlertsSection({ className }: { className?: string })
       <AnimatePresence initial={false}>
         {items.map((item) => {
           const days = daysLabel(item.event_date)
-          const accent = item.priority === 3 ? '#ef4444' : item.priority === 2 ? '#f59e0b' : '#3b82f6'
+          const accent = item.priority === 3 ? 'border-l-casa-error' : item.priority === 2 ? 'border-l-casa-warning' : 'border-l-casa-info'
           return (
             <motion.div
               key={item.id}
@@ -37,8 +38,8 @@ export default function PrepAlertsSection({ className }: { className?: string })
               className={cn(
                 'flex items-start gap-3 px-4 py-3 rounded-card border border-l-4 text-body-sm shadow-card',
                 'bg-casa-surface border-casa-border',
+                accent,
               )}
-              style={{ borderLeftColor: accent }}
             >
               {/* Emoji */}
               <span className="shrink-0 mt-0.5 font-display text-heading leading-none select-none">
@@ -69,21 +70,21 @@ export default function PrepAlertsSection({ className }: { className?: string })
 
               {/* Actions */}
               <div className="shrink-0 flex items-center gap-1">
-                <button
+                <Button variant="ghost"
                   onClick={() => snooze(item.id)}
                   className="text-caption font-medium px-2 py-1 rounded-md text-casa-muted transition-colors hover:text-casa-text hover:bg-casa-bg"
                   title="Snooze until tomorrow morning"
                 >
                   Snooze
-                </button>
+                </Button>
                 <span className="text-casa-border text-caption">|</span>
-                <button
+                <Button variant="ghost"
                   onClick={() => dismiss(item.id)}
                   className="text-caption font-medium px-2 py-1 rounded-md text-casa-muted transition-colors hover:text-red-500 hover:bg-casa-bg"
                   title="Permanently dismiss"
                 >
                   Dismiss
-                </button>
+                </Button>
               </div>
             </motion.div>
           )

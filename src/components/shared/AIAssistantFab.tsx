@@ -34,7 +34,7 @@ export default function AIAssistantFab({ page, events, family, homeCity }: Props
         ref={btnRef}
         whileTap={{ scale: 0.9 }}
         onClick={() => setOpen(true)}
-        className="fixed bottom-24 right-5 z-[60] w-14 h-14 rounded-full bg-casa-gold text-white shadow-modal flex items-center justify-center hover:brightness-110 transition-all"
+        className="fixed bottom-24 right-5 z-popover w-14 h-14 rounded-full bg-casa-gold text-white shadow-modal flex items-center justify-center hover:brightness-110 transition-all"
         title="Ask AI"
       >
         <Sparkles size={22} />

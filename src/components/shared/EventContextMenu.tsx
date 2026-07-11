@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Pencil, Trash2, CheckCircle } from 'lucide-react'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { isReminder } from '../../utils/holidays'
+import { Button } from '../ui'
 
 interface Props {
   event: EventWithDetails | null
@@ -42,7 +43,7 @@ export default function EventContextMenu({ event, x, y, onClose, onEdit, onDelet
       {event && (
         <>
           {/* Transparent backdrop to close on outside tap */}
-          <div className="fixed inset-0 z-[90]" onClick={onClose} />
+          <div className="fixed inset-0 z-scrim" onClick={onClose} />
 
           <motion.div
             ref={menuRef}
@@ -51,7 +52,7 @@ export default function EventContextMenu({ event, x, y, onClose, onEdit, onDelet
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.88 }}
             transition={{ duration: 0.12 }}
-            className="fixed z-[100] bg-casa-surface rounded-2xl shadow-modal border border-casa-border overflow-hidden"
+            className="fixed z-popover bg-casa-surface rounded-2xl shadow-modal border border-casa-border overflow-hidden"
             style={{ left: clampedX, top: clampedY, minWidth: menuW }}
             onClick={e => e.stopPropagation()}
           >
@@ -62,31 +63,31 @@ export default function EventContextMenu({ event, x, y, onClose, onEdit, onDelet
 
             {/* Actions */}
             <div className="py-1">
-              <button
+              <Button variant="ghost"
                 onClick={() => { onEdit(event); onClose() }}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-body-sm text-casa-navy hover:bg-casa-bg transition-colors text-left"
               >
                 <Pencil size={15} className="text-casa-muted shrink-0" />
                 Edit event
-              </button>
+              </Button>
 
               {isReminder(event) && (
-                <button
+                <Button variant="ghost"
                   onClick={() => { onComplete(event); onClose() }}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-body-sm text-emerald-600 hover:bg-emerald-50 transition-colors text-left"
                 >
                   <CheckCircle size={15} className="shrink-0" />
                   Mark complete
-                </button>
+                </Button>
               )}
 
-              <button
+              <Button variant="ghost"
                 onClick={() => { onDelete(event); onClose() }}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-body-sm text-red-500 hover:bg-red-50 transition-colors text-left"
               >
                 <Trash2 size={15} className="shrink-0" />
                 Delete
-              </button>
+              </Button>
             </div>
           </motion.div>
         </>

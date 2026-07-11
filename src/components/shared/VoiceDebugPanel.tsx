@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ChevronDown, Trash2 } from 'lucide-react'
+import { Button } from '../ui'
 
 interface DebugEvent {
   timestamp: number
@@ -41,12 +42,12 @@ export function VoiceDebugPanel() {
 
   if (!expanded) {
     return (
-      <button
+      <Button variant="ghost"
         onClick={() => setExpanded(true)}
         className="fixed bottom-4 right-4 px-3 py-2 bg-casa-navy text-white text-xs rounded-lg z-50 hover:bg-casa-navy/80 transition-colors"
       >
         🎤 Debug ({events.length})
-      </button>
+      </Button>
     )
   }
 
@@ -64,12 +65,12 @@ export function VoiceDebugPanel() {
             />
             Auto-scroll
           </label>
-          <button onClick={clear} className="p-1 hover:bg-gray-100 rounded">
+          <Button variant="ghost" onClick={clear} className="p-1 hover:bg-gray-100 rounded">
             <Trash2 className="w-4 h-4" />
-          </button>
-          <button onClick={() => setExpanded(false)} className="p-1">
+          </Button>
+          <Button variant="ghost" onClick={() => setExpanded(false)} className="p-1">
             <ChevronDown className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
       </div>
 

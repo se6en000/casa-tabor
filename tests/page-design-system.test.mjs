@@ -425,3 +425,49 @@ test('responsive shell uses viewport-safe sizing and semantic layout tiers', () 
   assert.match(nav, /min-w-0 flex-1/)
   assert.match(settings, /max-w-page-narrow px-page-gutter py-section-gap/)
 })
+
+test('remaining active surfaces use shared controls and semantic presentation contracts', () => {
+  const sharedControlFiles = [
+    'src/App.tsx',
+    'src/components/layout/TabletSidebar.tsx',
+    'src/components/music/MiniPlayer.tsx',
+    'src/components/shared/AIChatDrawer.tsx',
+    'src/components/shared/ConflictAlertsSection.tsx',
+    'src/components/shared/EventContextMenu.tsx',
+    'src/components/shared/InlineCalendarPicker.tsx',
+    'src/components/shared/NavBar.tsx',
+    'src/components/shared/NotificationBell.tsx',
+    'src/components/shared/NotificationDrawer.tsx',
+    'src/components/shared/PinGate.tsx',
+    'src/components/shared/PrepAlertsSection.tsx',
+    'src/components/shared/VoiceDebugPanel.tsx',
+    'src/pages/ActionHubPage.tsx',
+    'src/pages/BriefingPage.tsx',
+    'src/pages/TabletPrototypePage.tsx',
+    'src/pages/TripDetailPage.tsx',
+  ]
+
+  for (const file of sharedControlFiles) {
+    const source = readFileSync(resolve(file), 'utf8')
+    assert.doesNotMatch(source, /<button\b/, `${file} must use shared button primitives`)
+  }
+
+  const semanticLayerFiles = [
+    'src/components/shared/AddEventFab.tsx',
+    'src/components/shared/AIAssistantFab.tsx',
+    'src/components/shared/AIChatDrawer.tsx',
+    'src/components/shared/EventContextMenu.tsx',
+    'src/components/shared/PinGate.tsx',
+    'src/components/shared/TouchKeyboard.tsx',
+  ]
+  for (const file of semanticLayerFiles) {
+    assert.doesNotMatch(readFileSync(resolve(file), 'utf8'), /\bz-\[\d+\]/, `${file} must use semantic layers`)
+  }
+
+  const miniPlayer = readFileSync(resolve('src/components/music/MiniPlayer.tsx'), 'utf8')
+  const roomTone = readFileSync(resolve('src/hooks/useRoomTone.ts'), 'utf8')
+  const tokens = readFileSync(resolve('src/design-system/tokens.mjs'), 'utf8')
+  assert.match(miniPlayer, /<Progress/)
+  assert.match(roomTone, /ROOM_TONE_COLORS/)
+  assert.match(tokens, /export const ROOM_TONE_COLORS/)
+})

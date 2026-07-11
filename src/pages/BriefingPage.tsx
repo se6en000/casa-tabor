@@ -8,6 +8,7 @@ import PrepAlertsSection from '../components/shared/PrepAlertsSection'
 import ConflictAlertsSection from '../components/shared/ConflictAlertsSection'
 import BounceScroll from '../components/shared/BounceScroll'
 import MarkdownContent, { formatTextForMarkdown } from '../components/shared/MarkdownContent'
+import { Button } from '../components/ui'
 
 interface MemberEvent {
   title: string
@@ -117,7 +118,7 @@ export default function BriefingPage() {
           >
             <Settings size={15} />
           </Link>
-          <button
+          <Button variant="ghost"
             onClick={generate}
             disabled={isGenerating}
             className={cn(
@@ -129,7 +130,7 @@ export default function BriefingPage() {
           >
             <Sparkles size={13} className={cn(isGenerating && 'animate-pulse')} />
             {isGenerating ? 'AI is thinking…' : 'Regenerate'}
-          </button>
+          </Button>
         </div>
       </div>
 

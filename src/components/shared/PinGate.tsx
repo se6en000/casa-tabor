@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { cn } from '../../utils/cn'
+import { Button } from '../ui'
 
 const STORAGE_KEY = 'casa_auth'
 const PIN = import.meta.env.VITE_APP_PIN as string | undefined
@@ -42,7 +43,7 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
   const pinLen = PIN?.length ?? 4
 
   return (
-    <div className="fixed inset-0 bg-casa-bg flex flex-col items-center justify-center gap-8 z-[9999]">
+    <div className="fixed inset-0 bg-casa-bg flex flex-col items-center justify-center gap-8 z-debug">
       <div className="flex flex-col items-center gap-2">
         <span className="text-4xl">🏠</span>
         <h1 className="font-display text-display-md text-casa-navy">Casa Tabor</h1>
@@ -79,7 +80,7 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
       {/* Numpad */}
       <div className="grid grid-cols-3 gap-3 w-64">
         {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((k, i) => (
-          <button
+          <Button variant="ghost"
             key={i}
             onClick={() => {
               if (k === '⌫') handleBackspace()
@@ -94,7 +95,7 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
             )}
           >
             {k}
-          </button>
+          </Button>
         ))}
       </div>
 

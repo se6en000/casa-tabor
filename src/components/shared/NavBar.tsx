@@ -6,6 +6,7 @@ import { useNotifications } from '../../hooks/useNotifications'
 import NotificationDrawer from './NotificationDrawer'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useCalendarStore } from '../../stores/calendarStore'
+import { Button } from '../ui'
 
 const primaryTabs = [
   { to: '/', icon: Home, label: 'Home' },
@@ -45,7 +46,7 @@ export default function NavBar() {
         ))}
 
         {/* More button */}
-        <button
+        <Button variant="ghost"
           onClick={() => setMoreOpen(o => !o)}
           className={cn(
             'app-bottom-nav-item flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-button transition-colors relative',
@@ -59,7 +60,7 @@ export default function NavBar() {
             </span>
           )}
           <span className="app-bottom-nav-label text-caption font-medium">More</span>
-        </button>
+        </Button>
       </nav>
 
       {/* More slide-up sheet */}
@@ -106,7 +107,7 @@ export default function NavBar() {
 
               {/* Row items */}
               <div className="py-2">
-                <button
+                <Button variant="ghost"
                   className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors"
                   onClick={() => { navigate('/music'); setMoreOpen(false) }}
                 >
@@ -114,9 +115,9 @@ export default function NavBar() {
                     <Music size={18} strokeWidth={1.8} className="text-casa-gold" />
                   </div>
                   <span className="text-body-md font-medium text-casa-navy">Music</span>
-                </button>
+                </Button>
 
-                <button
+                <Button variant="ghost"
                   className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors"
                   onClick={() => { navigate('/actions'); setMoreOpen(false) }}
                 >
@@ -124,9 +125,9 @@ export default function NavBar() {
                     <Sparkles size={18} strokeWidth={1.8} className="text-blue-600" />
                   </div>
                   <span className="text-body-md font-medium text-casa-navy">Action Hub</span>
-                </button>
+                </Button>
 
-                <button
+                <Button variant="ghost"
                   className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors relative"
                   onClick={() => { setNotifOpen(true); setMoreOpen(false) }}
                 >
@@ -142,7 +143,7 @@ export default function NavBar() {
                   {unreadCount > 0 && (
                     <span className="ml-auto text-caption text-casa-muted">{unreadCount} new</span>
                   )}
-                </button>
+                </Button>
               </div>
             </motion.div>
           </>

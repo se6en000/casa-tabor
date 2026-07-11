@@ -95,6 +95,15 @@ export const MIDNIGHT_THEME_COLORS = {
   'casa-top-pick-band': '#F0C98F',
 }
 
+export const ROOM_TONE_COLORS = {
+  day: '#FAF8F5',
+  afternoon: '#FDF4E7',
+  evening: '#F5E6CC',
+  night: '#2A1F0E',
+  'late-night': '#120D06',
+  manual: '#E8D5B0',
+}
+
 export const DESIGN_TOKENS = {
   staticColor: {
     'casa-on-dark': '#FFFFFF',

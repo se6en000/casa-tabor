@@ -12,6 +12,7 @@ import type { PrepItem } from '../types'
 import PrepItemDetailPanel from '../components/home/PrepItemDetailPanel'
 import { useLiveClock } from '../hooks/useLiveClock'
 import ConflictAlertsSection from '../components/shared/ConflictAlertsSection'
+import { Button } from '../components/ui'
 
 function sourceBadge(item: PrepItem) {
   const source = item.source_type ?? 'calendar_ai'
@@ -149,9 +150,9 @@ export default function ActionHubPage() {
                   )}
                 >
                   <div className="flex-1 min-w-0">
-                    <button className="w-full text-left" onClick={() => setSelected(item)}>
+                    <Button variant="ghost" className="w-full text-left" onClick={() => setSelected(item)}>
                       <p className="text-body-sm font-semibold text-casa-text leading-snug line-clamp-2">{item.description}</p>
-                    </button>
+                    </Button>
                     <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                       <span className={cn('inline-flex items-center gap-1 text-body-sm font-semibold px-2 py-0.5 rounded-full border leading-none', src.tone)}>
                         <SourceIcon size={10} /> {src.label}
@@ -164,21 +165,21 @@ export default function ActionHubPage() {
                       <span className="text-body-sm text-casa-muted truncate">{item.event_title || 'Casa Tabor'}</span>
                     </div>
                     <div className="mt-3 flex items-center gap-1.5 flex-wrap">
-                      <button onClick={() => run('dismiss', item.id)} className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition" title="Done">
+                      <Button variant="ghost" onClick={() => run('dismiss', item.id)} className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition" title="Done">
                         Done
-                      </button>
-                      <button onClick={() => run('snooze', item.id)} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors" title="Snooze">
+                      </Button>
+                      <Button variant="ghost" onClick={() => run('snooze', item.id)} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors" title="Snooze">
                         Snooze
-                      </button>
-                      <button onClick={() => run('downvote', item.id)} className="size-control rounded-button border border-casa-border bg-white text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold" title="Downvote" aria-label="Downvote">
+                      </Button>
+                      <Button variant="ghost" onClick={() => run('downvote', item.id)} className="size-control rounded-button border border-casa-border bg-white text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold" title="Downvote" aria-label="Downvote">
                         <ThumbsDown size={15} />
-                      </button>
-                      <button onClick={() => launchCreate(item, 'event')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create event draft">
+                      </Button>
+                      <Button variant="ghost" onClick={() => launchCreate(item, 'event')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create event draft">
                         <CalendarPlus size={14} /> Event
-                      </button>
-                      <button onClick={() => launchCreate(item, 'reminder')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create reminder draft">
+                      </Button>
+                      <Button variant="ghost" onClick={() => launchCreate(item, 'reminder')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create reminder draft">
                         <BellPlus size={14} /> Reminder
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -194,7 +195,7 @@ export default function ActionHubPage() {
             <div className="flex items-center gap-2">
               <span className="text-caption font-semibold rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">{unreadCount}</span>
               {notifications.length > 0 && (
-                <button onClick={() => clearAll.mutate()} className="h-8 px-2.5 rounded-button border border-casa-border text-caption text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors">Clear all</button>
+                <Button variant="ghost" onClick={() => clearAll.mutate()} className="h-8 px-2.5 rounded-button border border-casa-border text-caption text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors">Clear all</Button>
               )}
             </div>
           </div>
@@ -208,9 +209,9 @@ export default function ActionHubPage() {
                   <span className="text-body-sm font-semibold px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border text-casa-muted leading-none">{n.source ?? 'system'}</span>
                 </div>
                 {!n.read && (
-                  <button onClick={() => markRead.mutate(n.id)} className="mt-2 text-body-sm font-semibold text-casa-navy hover:text-casa-gold">
+                  <Button variant="ghost" onClick={() => markRead.mutate(n.id)} className="mt-2 text-body-sm font-semibold text-casa-navy hover:text-casa-gold">
                     Mark read
-                  </button>
+                  </Button>
                 )}
               </div>
             ))}

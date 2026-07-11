@@ -18,7 +18,7 @@ import { getPersistedDriverOverrideMemberIds } from '../../lib/eventPlanOverride
 import NotificationDrawer from '../shared/NotificationDrawer'
 import { useState, useMemo, useEffect } from 'react'
 import BounceScroll from '../shared/BounceScroll'
-import { IconButton } from '../ui'
+import { Button, IconButton } from '../ui'
 
 const NAV = [
   { to: '/',         icon: Home,         label: 'Home' },
@@ -139,7 +139,7 @@ export default function TabletSidebar() {
           {/* Family — collapsible filter + who's home */}
           {!collapsed && (
             <div className="mt-3">
-              <button
+              <Button variant="ghost"
                 onClick={() => setFamilyOpen(o => !o)}
                 className="w-full min-h-control flex items-center px-1.5 text-caption font-semibold text-casa-text-faint uppercase tracking-[0.18em] hover:text-casa-text-secondary transition-colors"
               >
@@ -148,7 +148,7 @@ export default function TabletSidebar() {
                   size={13}
                   className={cn('ml-auto transition-transform duration-200', familyOpen ? 'rotate-0' : '-rotate-90')}
                 />
-              </button>
+              </Button>
 
               <AnimatePresence initial={false}>
                 {familyOpen && (
@@ -158,7 +158,7 @@ export default function TabletSidebar() {
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-                    style={{ overflow: 'hidden' }}
+                    className="overflow-hidden"
                   >
                     <div className="flex flex-col gap-0.5">
                       {homeFamily.map(m => {
@@ -188,7 +188,7 @@ export default function TabletSidebar() {
                         const constrained = !availabilityAssessment.available || availabilityAssessment.softUnavailable
 
                         return (
-                          <button
+                          <Button variant="ghost"
                             key={m.id}
                             onClick={() => toggleMember(m.id)}
                             className={cn(
@@ -214,7 +214,7 @@ export default function TabletSidebar() {
                                 {statusLabel}
                               </p>
                             </div>
-                          </button>
+                          </Button>
                         )
                       })}
                     </div>

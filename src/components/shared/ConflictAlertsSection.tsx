@@ -7,14 +7,15 @@ import { useWeekConflicts, useResolveConflict, useSnoozeConflict } from '../../h
 import { useCalendarStore } from '../../stores/calendarStore'
 import { cn } from '../../utils/cn'
 import type { Conflict } from '../../types'
+import { Button } from '../ui'
 
 const TYPE_CONFIG: Record<string, { label: string; emoji: string; badge: string; accent: string }> = {
-  drive_time:    { label: 'Needs a Ride',   emoji: '🚗', badge: 'bg-red-500 text-white', accent: '#ef4444' },
-  double_book:   { label: 'Double Booked',  emoji: '⚡', badge: 'bg-amber-400 text-white', accent: '#f59e0b' },
-  overlap:       { label: 'Time Overlap',   emoji: '⏱', badge: 'bg-amber-400 text-white', accent: '#f59e0b' },
-  gear_conflict: { label: 'Gear Conflict',  emoji: '🎒', badge: 'bg-blue-500 text-white', accent: '#3b82f6' },
+  drive_time:    { label: 'Needs a Ride',   emoji: '🚗', badge: 'bg-casa-error text-white', accent: 'border-l-casa-error' },
+  double_book:   { label: 'Double Booked',  emoji: '⚡', badge: 'bg-casa-warning text-white', accent: 'border-l-casa-warning' },
+  overlap:       { label: 'Time Overlap',   emoji: '⏱', badge: 'bg-casa-warning text-white', accent: 'border-l-casa-warning' },
+  gear_conflict: { label: 'Gear Conflict',  emoji: '🎒', badge: 'bg-casa-info text-white', accent: 'border-l-casa-info' },
 }
-const DEFAULT_CONFIG = { label: 'Conflict', emoji: '⚠️', badge: 'bg-amber-400 text-white', accent: '#f59e0b' }
+const DEFAULT_CONFIG = { label: 'Conflict', emoji: '⚠️', badge: 'bg-casa-warning text-white', accent: 'border-l-casa-warning' }
 
 function shortTitle(raw: string): string {
   const stripped = raw.includes(' | ') ? raw.split(' | ').slice(1).join(' | ') : raw
@@ -38,10 +39,10 @@ function ConflictGroup({
       className={cn(
         'rounded-card border border-l-4 overflow-hidden',
         'bg-casa-surface border-casa-border shadow-card',
+        cfg.accent,
       )}
-      style={{ borderLeftColor: cfg.accent }}
     >
-      <button
+      <Button variant="ghost"
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center gap-2.5 px-4 py-3 text-left transition-all hover:bg-casa-bg/70"
       >
@@ -62,7 +63,7 @@ function ConflictGroup({
         <span className="text-casa-muted ml-1">
           {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </span>
-      </button>
+      </Button>
 
       <AnimatePresence initial={false}>
         {open && (
@@ -165,21 +166,21 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
       <ExternalLink size={12} className="shrink-0 text-casa-muted opacity-60 group-hover:opacity-100 transition-opacity" />
 
       <div className="shrink-0 flex items-center gap-1" onClick={e => e.stopPropagation()}>
-        <button
+        <Button variant="ghost"
           onClick={() => onSnooze(conflict.id)}
           className="text-caption font-medium px-2 py-1 rounded-md text-casa-muted transition-colors hover:text-casa-text hover:bg-casa-bg"
           title="Snooze until tomorrow"
         >
           Snooze
-        </button>
+        </Button>
         <span className="text-casa-border text-caption">|</span>
-        <button
+        <Button variant="ghost"
           onClick={() => onDismiss(conflict.id)}
           className="text-caption font-medium px-2 py-1 rounded-md text-casa-muted transition-colors hover:text-red-500 hover:bg-casa-bg"
           title="Dismiss permanently"
         >
           Dismiss
-        </button>
+        </Button>
       </div>
     </div>
   )

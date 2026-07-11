@@ -33,8 +33,7 @@ export function TopBarC() {
 
   return (
     <header
-      className="app-topbar w-full flex items-center flex-shrink-0 z-sticky"
-      style={{ backgroundColor: 'var(--color-casa-navy, #1E1A14)' }}
+      className="app-topbar w-full flex items-center flex-shrink-0 z-sticky bg-casa-navy"
     >
       {/* ── Left: brand + greeting ──────────────────────── */}
       <div className="flex items-center gap-2.5 flex-shrink-0">

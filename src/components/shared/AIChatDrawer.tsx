@@ -12,6 +12,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
+import { Button } from '../ui'
 
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
 const LOW_CONFIDENCE_REJECT_PHRASES = /\b(no|nope|try again|wrong|not that|cancel)\b/i
@@ -549,7 +550,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[65] max-sm:bg-black/40 sm:bg-transparent"
+            className="fixed inset-0 z-scrim max-sm:bg-black/40 sm:bg-transparent"
             onClick={onClose}
           />
 
@@ -559,7 +560,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
             exit={{ opacity: 0, y: -8, scale: 0.97 }}
             transition={{ type: 'spring', damping: 28, stiffness: 260 }}
             className={cn(
-              'fixed z-[70] bg-casa-surface flex flex-col transition-shadow',
+              'fixed z-popover bg-casa-surface flex flex-col transition-shadow',
               'max-sm:inset-x-0 max-sm:bottom-0 max-sm:rounded-t-2xl max-sm:w-full max-sm:shadow-modal',
               'sm:rounded-2xl sm:w-[760px] sm:shadow-[0_8px_40px_rgba(0,0,0,0.22)] sm:border sm:border-casa-border',
               loading && 'ai-thinking',
@@ -605,7 +606,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
               </div>
               <div className="flex items-center gap-1">
                 {speech.supported && (
-                  <button
+                  <Button variant="ghost"
                     type="button"
                     onClick={handleConversationToggle}
                     aria-pressed={conversationMode}
@@ -621,10 +622,10 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   >
                     <MessagesSquare size={13} />
                     {conversationMode && <span>Convo</span>}
-                  </button>
+                  </Button>
                 )}
                 {hasSession && (
-                  <button
+                  <Button variant="ghost"
                     type="button"
                     onClick={startFresh}
                     title="New conversation"
@@ -632,16 +633,16 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                     aria-label="New conversation"
                   >
                     <RotateCcw size={14} />
-                  </button>
+                  </Button>
                 )}
-                <button
+                <Button variant="ghost"
                   type="button"
                   onClick={onClose}
                   className="size-control flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-button hover:bg-casa-divider outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
                   aria-label="Close assistant"
                 >
                   <X size={18} />
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -652,13 +653,13 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                 <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-casa-gold/8 border border-casa-gold/20 text-caption text-casa-muted">
                   <Sparkles size={11} className="text-casa-gold flex-shrink-0" />
                   <span>Resuming previous conversation</span>
-                  <button
+                  <Button variant="ghost"
                     type="button"
                     onClick={startFresh}
                     className="ml-auto text-casa-gold font-semibold hover:underline"
                   >
                     New chat
-                  </button>
+                  </Button>
                 </div>
               )}
 
@@ -669,32 +670,32 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   {proactiveNudge && !nudgeDismissed && (
                     <div className="w-full flex items-start gap-2 px-3 py-2.5 rounded-2xl bg-casa-gold/8 border border-casa-gold/25 text-left">
                       <Sparkles size={13} className="text-casa-gold flex-shrink-0 mt-0.5" />
-                      <button
+                      <Button variant="ghost"
                         type="button"
                         onClick={() => { markUserInteraction(); sendCurrentInput(proactiveNudge.prompt) }}
                         className="flex-1 text-caption text-casa-navy leading-snug hover:underline"
                       >
                         {proactiveNudge.text}
-                      </button>
-                      <button
+                      </Button>
+                      <Button variant="ghost"
                         type="button"
                         onClick={() => setNudgeDismissed(true)}
                         aria-label="Dismiss"
                         className="flex-shrink-0 text-casa-muted hover:text-casa-navy"
                       >
                         <X size={13} />
-                      </button>
+                      </Button>
                     </div>
                   )}
                   <div className="flex flex-wrap justify-center gap-2 mt-1">
                     {dynamicSuggestions.map(s => (
-                      <button
+                      <Button variant="ghost"
                         key={s}
                         onClick={() => { markUserInteraction(); setInput(s); textareaRef.current?.focus() }}
                         className="px-3 py-1.5 rounded-full border border-casa-border text-caption text-casa-muted hover:bg-casa-bg hover:text-casa-navy transition-colors"
                       >
                         {s}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>
@@ -820,14 +821,14 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                         alt="Attached"
                         className="h-20 w-auto rounded-lg border border-casa-border object-cover"
                       />
-                      <button
+                      <Button variant="ghost"
                         type="button"
                         onClick={() => setAttachedImage(null)}
                         className="absolute -top-3 -right-3 size-control rounded-button bg-casa-error text-white flex items-center justify-center shadow outline-none focus-visible:ring-2 focus-visible:ring-casa-gold"
                         aria-label="Remove attached image"
                       >
                         <X size={10} />
-                      </button>
+                      </Button>
                       <div className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/50 rounded px-1 py-0.5">
                         <ImageIcon size={9} className="text-white" />
                         <span className="text-caption text-white font-medium">Image attached</span>
@@ -851,7 +852,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
                 <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
 
-                <button
+                <Button variant="ghost"
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   title="Attach image from library"
@@ -859,9 +860,9 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   aria-label="Attach image from library"
                 >
                   <Paperclip size={16} />
-                </button>
+                </Button>
 
-                <button
+                <Button variant="ghost"
                   type="button"
                   onClick={() => cameraInputRef.current?.click()}
                   title="Take a photo"
@@ -869,7 +870,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   aria-label="Take a photo"
                 >
                   <Camera size={16} />
-                </button>
+                </Button>
 
                 <textarea
                   ref={textareaRef}
@@ -878,12 +879,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   onKeyDown={handleKeyDown}
                   placeholder={speech.listening ? 'Listening… speak now' : attachedImage ? 'Ask about this image…' : "Ask anything or say 'add an event…'"}
                   rows={1}
-                  className="flex-1 bg-transparent text-body text-casa-navy placeholder:text-casa-muted outline-none resize-none leading-relaxed"
-                  style={{ minHeight: '24px', maxHeight: '120px' }}
+                  className="flex-1 min-h-6 max-h-30 bg-transparent text-body text-casa-navy placeholder:text-casa-muted outline-none resize-none leading-relaxed"
                 />
 
                 {speech.supported && (
-                  <button
+                  <Button variant="ghost"
                     type="button"
                     onClick={() => { markUserInteraction(); speech.toggle() }}
                     title={speech.listening ? 'Stop listening' : speech.connecting ? 'Connecting…' : 'Start voice input'}
@@ -900,10 +900,10 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                     {speech.connecting
                       ? <Loader2 size={14} className="animate-spin" />
                       : <Mic size={14} />}
-                  </button>
+                  </Button>
                 )}
 
-                <button
+                <Button variant="ghost"
                   type="button"
                   onClick={handleKeyboardToggle}
                   title="Toggle on-screen keyboard"
@@ -911,9 +911,9 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   aria-label="Toggle on-screen keyboard"
                 >
                   <Keyboard size={14} />
-                </button>
+                </Button>
 
-                <button
+                <Button variant="ghost"
                   type="button"
                   onClick={handleSend}
                   disabled={(!input.trim() && !attachedImage) || loading}
@@ -926,7 +926,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   aria-label="Send message"
                 >
                   <Send size={14} />
-                </button>
+                </Button>
               </div>
               <p className="text-caption text-casa-muted mt-1.5 text-center opacity-60">
                 {IS_SAFE_MODE
@@ -1031,7 +1031,7 @@ function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe
         )}
         {showQuickSaveRecipe && (
           <div className="mt-2">
-            <button
+            <Button variant="ghost"
               type="button"
               disabled={quickSaving}
               onClick={() => {
@@ -1043,7 +1043,7 @@ function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe
             >
               {quickSaving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
               Save to Recipe Library (2 servings)
-            </button>
+            </Button>
           </div>
         )}
 
@@ -1077,7 +1077,7 @@ function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe
                 )}
                 {ta.tool === 'update_event' && ta.actionId && ta.undoStatus !== 'done' && (
                   <div className="pt-1 space-y-1">
-                    <button
+                    <Button variant="ghost"
                       type="button"
                       onClick={() => onUndoToolAction(msg.id, ta.actionId!)}
                       disabled={ta.undoStatus === 'loading'}
@@ -1085,7 +1085,7 @@ function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe
                     >
                       {ta.undoStatus === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
                       Undo this edit
-                    </button>
+                    </Button>
                     {ta.undoStatus === 'error' && ta.undoErrorMsg && (
                       <p className="text-caption text-red-500">{ta.undoErrorMsg}</p>
                     )}
@@ -1106,21 +1106,21 @@ function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe
                 </div>
                 {ta.errorMsg && <p className="text-caption text-red-500">{ta.errorMsg}</p>}
                 <div className="flex gap-2 flex-wrap">
-                  <button
+                  <Button variant="ghost"
                     type="button"
                     onClick={doConfirm}
                     className="flex items-center gap-1.5 px-3 py-1 rounded-button bg-red-600 text-white text-caption font-semibold hover:brightness-110 transition-all"
                   >
                     <Loader2 size={12} /> Retry
-                  </button>
+                  </Button>
                   {isStaleError && (
-                    <button
+                    <Button variant="ghost"
                       type="button"
                       onClick={onRefreshToolAction}
                       className="flex items-center gap-1.5 px-3 py-1 rounded-button border border-casa-border text-casa-navy text-caption font-semibold hover:bg-casa-bg transition-all"
                     >
                       Refresh event
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -1128,7 +1128,7 @@ function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe
               <>
                 <ToolActionPreview tool={ta.tool} args={ta.args} />
                 <div className="flex gap-2 mt-2">
-                  <button
+                  <Button variant="ghost"
                     type="button"
                     disabled={ta.status === 'loading'}
                     onClick={doConfirm}
@@ -1149,14 +1149,14 @@ function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe
                             ? 'Delete matching events'
                           : 'Clear checked items'
                         : 'Confirm'}
-                  </button>
-                  <button
+                  </Button>
+                  <Button variant="ghost"
                     type="button"
                     onClick={doCancel}
                     className="flex items-center gap-1.5 px-3 py-1 rounded-button border border-casa-border text-caption text-casa-muted hover:bg-casa-divider transition-colors"
                   >
                     <XCircle size={12} /> Cancel
-                  </button>
+                  </Button>
                 </div>
               </>
             )}
@@ -1412,13 +1412,13 @@ function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, 
           ))}
         </div>
         {changes.length > MAX_VISIBLE && (
-          <button
+          <Button variant="ghost"
             type="button"
             onClick={() => setExpanded((value) => !value)}
             className="text-caption font-semibold text-casa-gold hover:underline"
           >
             {expanded ? 'Show less' : `Show ${changes.length - MAX_VISIBLE} more`}
-          </button>
+          </Button>
         )}
       </div>
     )

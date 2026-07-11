@@ -522,7 +522,7 @@ export default function TouchKeyboard() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: '110%', opacity: 0 }}
           transition={{ type: 'spring', damping: 28, stiffness: 250 }}
-          className="fixed z-[85] border border-casa-border bg-casa-surface/98 backdrop-blur-sm shadow-modal overflow-y-auto rounded-2xl"
+          className="fixed z-toast border border-casa-border bg-casa-surface/98 backdrop-blur-sm shadow-modal overflow-y-auto rounded-2xl"
           style={{
             maxHeight: `${keyboardHeight}px`,
             width: `${keyboardWidthPx}px`,

@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import { useNotifications, type Notification } from '../../hooks/useNotifications'
 import { cn } from '../../utils/cn'
 import BounceScroll from './BounceScroll'
+import { Button } from '../ui'
 
 const TYPE_CONFIG: Record<Notification['type'], { icon: React.ElementType; color: string; bg: string }> = {
   event_added:    { icon: CalendarPlus,  color: 'text-emerald-600',  bg: 'bg-emerald-50' },
@@ -86,25 +87,25 @@ export default function NotificationDrawer({ open, onClose }: Props) {
               </div>
               <div className="flex items-center gap-2">
                 {unreadCount > 0 && (
-                  <button
+                  <Button variant="ghost"
                     onClick={() => markAllRead.mutate()}
                     className="flex items-center gap-1 text-caption text-casa-muted hover:text-casa-navy transition-colors"
                   >
                     <CheckCheck size={14} />
                     <span>Mark all read</span>
-                  </button>
+                  </Button>
                 )}
                 {notifications.some(n => n.read) && (
-                  <button
+                  <Button variant="ghost"
                     onClick={() => clearAll.mutate()}
                     className="flex items-center gap-1 text-caption text-casa-muted hover:text-red-500 transition-colors ml-2"
                   >
                     <Trash2 size={14} />
-                  </button>
+                  </Button>
                 )}
-                <button onClick={onClose} className="ml-2 text-casa-muted hover:text-casa-navy">
+                <Button variant="ghost" onClick={onClose} className="ml-2 text-casa-muted hover:text-casa-navy">
                   <X size={20} />
-                </button>
+                </Button>
               </div>
             </div>
 

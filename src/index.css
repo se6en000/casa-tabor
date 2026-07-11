@@ -10,6 +10,10 @@
 @import "./generated/design-tokens.css";
 
 @layer components {
+  .trip-hero-glow {
+    background-image: radial-gradient(circle at 80% 50%, white 0%, transparent 60%);
+  }
+
   .settings-surface {
     color: var(--color-casa-text);
   }

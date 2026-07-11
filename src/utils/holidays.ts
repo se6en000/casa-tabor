@@ -1,7 +1,7 @@
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 
-export const HOLIDAY_COLOR = '#B91C1C'  // festive red
-export const REMINDER_COLOR = '#D97706' // amber
+export const HOLIDAY_COLOR = 'var(--color-casa-error)'
+export const REMINDER_COLOR = 'var(--color-casa-warning)'
 
 const EMOJI_MAP: Record<string, string> = {
   "new year's day":            '🎆',

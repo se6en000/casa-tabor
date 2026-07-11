@@ -13,6 +13,7 @@ import {
   LayoutGrid, X, ChevronDown, Edit3, Tag, Car,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Button } from '../components/ui'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { useTodayEvents } from '../hooks/useCalendarEvents'
 import { useLiveClock, greetingFor } from '../hooks/useLiveClock'
@@ -22,7 +23,7 @@ import { useNotifications } from '../hooks/useNotifications'
 import { cn } from '../utils/cn'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 
-const SHARED_GOLD = '#C9A96E'
+const SHARED_GOLD = 'var(--color-casa-gold)'
 function memberColor(ev: EventWithDetails) {
   if (!ev.members || ev.members.length === 0) return SHARED_GOLD
   return ev.members[0].family_member?.color_hex ?? SHARED_GOLD
@@ -86,7 +87,7 @@ export default function TabletPrototypePage() {
             <strong>PROTOTYPE</strong> — Tablet layout mockup. Click events to expand · Double-click to edit.
             <Link to="/" className="underline ml-3 opacity-60 hover:opacity-100">← Back to real app</Link>
           </span>
-          <button onClick={() => setBannerDismissed(true)} className="opacity-60 hover:opacity-100 ml-4"><X size={14} /></button>
+          <Button variant="ghost" onClick={() => setBannerDismissed(true)} className="opacity-60 hover:opacity-100 ml-4"><X size={14} /></Button>
         </div>
       )}
 
@@ -128,7 +129,7 @@ export default function TabletPrototypePage() {
                     : 'Free'
 
                 return (
-                  <button
+                  <Button variant="ghost"
                     key={m.id}
                     onClick={() => toggleMember(m.id)}
                     className={cn(
@@ -155,7 +156,7 @@ export default function TabletPrototypePage() {
                       'w-2.5 h-2.5 rounded-full flex-shrink-0',
                       !active ? 'bg-casa-muted/30' : busy ? 'bg-amber-400' : 'bg-emerald-400'
                     )} />
-                  </button>
+                  </Button>
                 )
               })}
             </div>
@@ -180,17 +181,17 @@ export default function TabletPrototypePage() {
 
           {/* AI + notifications */}
           <div className="px-4 pb-8 pt-4 border-t border-casa-border flex flex-col gap-2">
-            <button className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-casa-gold/10 hover:bg-casa-gold/20 text-casa-gold transition-colors text-body font-medium">
+            <Button variant="ghost" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-casa-gold/10 hover:bg-casa-gold/20 text-casa-gold transition-colors text-body font-medium">
               <Sparkles size={19} strokeWidth={1.8} /> Ask AI
-            </button>
-            <button className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-casa-muted hover:text-casa-navy hover:bg-casa-bg transition-colors text-body font-medium">
+            </Button>
+            <Button variant="ghost" className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-casa-muted hover:text-casa-navy hover:bg-casa-bg transition-colors text-body font-medium">
               <Bell size={19} strokeWidth={1.8} /> Activity
               {unreadCount > 0 && (
                 <span className="ml-auto text-caption font-bold bg-red-500 text-white rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
-            </button>
+            </Button>
           </div>
         </aside>
 
@@ -334,9 +335,9 @@ export default function TabletPrototypePage() {
               <div className="bg-casa-surface rounded-2xl shadow-modal p-7 w-[min(520px,90vw)] pointer-events-auto">
                 <div className="flex items-start justify-between mb-5">
                   <h2 className="font-display text-display-md text-casa-navy leading-tight pr-4">{editingEvent.title}</h2>
-                  <button onClick={() => setEditingEvent(null)} className="text-casa-muted hover:text-casa-navy flex-shrink-0">
+                  <Button variant="ghost" onClick={() => setEditingEvent(null)} className="text-casa-muted hover:text-casa-navy flex-shrink-0">
                     <X size={20} />
-                  </button>
+                  </Button>
                 </div>
                 <div className="space-y-3 text-body text-casa-muted">
                   <div className="flex items-center gap-2.5">
@@ -371,12 +372,12 @@ export default function TabletPrototypePage() {
                   )}
                 </div>
                 <div className="mt-6 pt-5 border-t border-casa-border flex items-center gap-3">
-                  <button className="flex items-center gap-2 px-5 py-2.5 bg-casa-navy text-white rounded-xl text-body font-medium hover:brightness-110 transition-all">
+                  <Button variant="ghost" className="flex items-center gap-2 px-5 py-2.5 bg-casa-navy text-white rounded-xl text-body font-medium hover:brightness-110 transition-all">
                     <Edit3 size={15} /> Edit Event
-                  </button>
-                  <button onClick={() => setEditingEvent(null)} className="px-5 py-2.5 text-casa-muted rounded-xl text-body hover:bg-casa-bg transition-colors">
+                  </Button>
+                  <Button variant="ghost" onClick={() => setEditingEvent(null)} className="px-5 py-2.5 text-casa-muted rounded-xl text-body hover:bg-casa-bg transition-colors">
                     Close
-                  </button>
+                  </Button>
                   <p className="ml-auto text-caption text-casa-muted italic">Prototype — edit not wired yet</p>
                 </div>
               </div>

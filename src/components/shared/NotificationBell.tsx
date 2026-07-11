@@ -3,6 +3,7 @@ import { Bell } from 'lucide-react'
 import { useNotifications } from '../../hooks/useNotifications'
 import NotificationDrawer from './NotificationDrawer'
 import { cn } from '../../utils/cn'
+import { Button } from '../ui'
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false)
@@ -10,7 +11,7 @@ export default function NotificationBell() {
 
   return (
     <>
-      <button
+      <Button variant="ghost"
         onClick={() => setOpen(o => !o)}
         className={cn(
           'relative flex size-control items-center justify-center rounded-button outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold',
@@ -24,7 +25,7 @@ export default function NotificationBell() {
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
-      </button>
+      </Button>
 
       <NotificationDrawer open={open} onClose={() => setOpen(false)} />
     </>

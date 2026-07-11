@@ -54,7 +54,7 @@ export interface PlanModel {
   headline: string | null
 }
 
-const FALLBACK_COLOR = '#8A8A8A'
+const FALLBACK_COLOR = 'var(--color-casa-muted)'
 
 // ── Person helpers ───────────────────────────────────────────────────────────
 

@@ -100,6 +100,54 @@
         "reason": "Theme swatches bind the live user-selected design-system palette."
       },
       {
+        "path": "src/components/layout/TabletSidebar.tsx",
+        "reason": "Household avatars bind persisted member colors."
+      },
+      {
+        "path": "src/components/shared/AIChatDrawer.tsx",
+        "reason": "The responsive assistant panel is anchored to its trigger and sized to the active viewport and safe area."
+      },
+      {
+        "path": "src/components/shared/BounceScroll.tsx",
+        "reason": "Framer Motion binds the live overscroll spring transform."
+      },
+      {
+        "path": "src/components/shared/EventContextMenu.tsx",
+        "reason": "The context menu position is clamped from the pointer origin and current viewport."
+      },
+      {
+        "path": "src/components/shared/NavBar.tsx",
+        "reason": "The draggable mobile sheet binds motion hints and device safe-area padding."
+      },
+      {
+        "path": "src/components/shared/SwipeableReminderPill.tsx",
+        "reason": "Swipe transforms and persisted household member colors are runtime-derived."
+      },
+      {
+        "path": "src/components/shared/TopBar.tsx",
+        "reason": "Current-event indicators bind runtime family-member colors."
+      },
+      {
+        "path": "src/components/ui/CalendarPill.tsx",
+        "reason": "The shared calendar pill accepts runtime event and member colors as part of its public contract."
+      },
+      {
+        "path": "src/components/ui/DateTimeDial.tsx",
+        "reason": "Wheel height, padding, and active scroll position are derived from dial geometry."
+      },
+      {
+        "path": "src/components/ui/SegmentedControl.tsx",
+        "reason": "The shared segmented-control thumb binds segment count and pointer drag position through CSS variables."
+      },
+      {
+        "path": "src/pages/BriefingPage.tsx",
+        "reason": "Briefing schedule markers bind persisted household member colors."
+      },
+      {
+        "path": "src/pages/TabletPrototypePage.tsx",
+        "reason": "The prototype previews live event and household member colors."
+      },
+      {
         "path": "src/components/calendar/DayView.tsx",
         "reason": "Family-member avatar colors are selected from runtime household data."
       },

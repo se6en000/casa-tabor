@@ -18,6 +18,7 @@ import AddEventFab from './components/shared/AddEventFab'
 import TouchKeyboard from './components/shared/TouchKeyboard'
 import { useRollingEvents } from './hooks/useCalendarEvents'
 import { useFamilyMembers } from './hooks/useFamilyMembers'
+import { Button } from './components/ui'
 import { useHomeWeather } from './hooks/useHomeWeather'
 import { useLiveClock } from './hooks/useLiveClock'
 import { useWakeWord } from './hooks/useWakeWord'
@@ -37,12 +38,12 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
           <p className="font-display text-display-sm">😞</p>
           <p className="font-semibold text-casa-navy">Something went wrong</p>
           <p className="text-casa-muted text-body-sm">{(this.state.error as Error).message}</p>
-          <button
+          <Button variant="ghost"
             onClick={() => { this.setState({ error: null }); window.location.reload() }}
             className="mt-2 px-4 py-2 bg-casa-gold text-white rounded-button text-body-sm font-medium"
           >
             Reload app
-          </button>
+          </Button>
         </div>
       )
     }

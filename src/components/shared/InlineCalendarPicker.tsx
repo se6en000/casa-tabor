@@ -93,7 +93,8 @@ export default function InlineCalendarPicker({ value, onChange, className }: Pro
               const selected = isSameDay(day, selectedDate)
               const today = isSameDay(day, new Date())
               return (
-                <button
+                <Button
+                  variant="ghost"
                   key={day.toISOString()}
                   type="button"
                   onClick={() => {
@@ -111,7 +112,7 @@ export default function InlineCalendarPicker({ value, onChange, className }: Pro
                   )}
                 >
                   {format(day, 'd')}
-                </button>
+                </Button>
               )
             })}
           </div>

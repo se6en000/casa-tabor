@@ -41,11 +41,11 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
 
     if (bgRef.current) {
       if (clamped > 0) {
-        bgRef.current.style.background = `rgba(34,197,94,${progress * 0.25})`
-        bgRef.current.style.borderColor = `rgba(34,197,94,${0.3 + progress * 0.7})`
+        bgRef.current.style.background = `color-mix(in srgb, var(--color-casa-success) ${progress * 25}%, transparent)`
+        bgRef.current.style.borderColor = `color-mix(in srgb, var(--color-casa-success) ${(0.3 + progress * 0.7) * 100}%, transparent)`
       } else {
-        bgRef.current.style.background = `rgba(239,68,68,${progress * 0.25})`
-        bgRef.current.style.borderColor = `rgba(239,68,68,${0.3 + progress * 0.7})`
+        bgRef.current.style.background = `color-mix(in srgb, var(--color-casa-error) ${progress * 25}%, transparent)`
+        bgRef.current.style.borderColor = `color-mix(in srgb, var(--color-casa-error) ${(0.3 + progress * 0.7) * 100}%, transparent)`
       }
     }
   }
@@ -103,16 +103,16 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
       if (bgRef.current) {
         bgRef.current.style.transition = 'background 0.2s, border-color 0.2s'
         bgRef.current.style.background = 'transparent'
-        bgRef.current.style.borderColor = '#C4893A'
+        bgRef.current.style.borderColor = 'var(--color-casa-gold)'
         setTimeout(() => { if (bgRef.current) bgRef.current.style.transition = '' }, 200)
       }
     }
   }
 
   return (
-    <div className="relative" style={{ display: 'inline-flex' }}>
+    <div className="relative inline-flex">
       {/* Action hint icons behind the pill */}
-      <div className="absolute inset-0 rounded-full flex items-center justify-between px-3 pointer-events-none" style={{ zIndex: 0 }}>
+      <div className="absolute inset-0 z-base rounded-full flex items-center justify-between px-3 pointer-events-none">
         <Check size={11} className="text-green-500" />
         <X size={11} className="text-red-400" />
       </div>
@@ -124,11 +124,8 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         onClick={() => { if (!moved.current) onClick?.() }}
-        className="relative z-10 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-caption font-semibold select-none cursor-pointer"
+        className="relative z-raised inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border-[1.5px] border-casa-gold bg-casa-accent-soft text-casa-navy text-caption font-semibold select-none cursor-pointer"
         style={{
-          border: '1.5px solid #C4893A',
-          backgroundColor: '#FDFAF4',
-          color: '#7A5520',
           willChange: 'transform',
           touchAction: 'pan-y',
           WebkitUserSelect: 'none',
@@ -137,10 +134,9 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
         {/* Bg overlay that tints on swipe */}
         <div
           ref={bgRef}
-          className="absolute inset-0 rounded-full pointer-events-none"
-          style={{ border: '1.5px solid #C4893A', background: 'transparent', transition: '' }}
+          className="absolute inset-0 rounded-full border-[1.5px] border-casa-gold bg-transparent pointer-events-none"
         />
-        <Bell size={13} style={{ color: '#C4893A' }} className="relative shrink-0" />
+        <Bell size={13} className="relative shrink-0 text-casa-gold" />
         <span className="relative">{title}</span>
         {members.length > 0 && (
           <div className="relative flex gap-0.5 ml-0.5">

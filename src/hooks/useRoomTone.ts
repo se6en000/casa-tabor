@@ -18,6 +18,7 @@
 import { useEffect, useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { ROOM_TONE_COLORS } from '../design-system/tokens.mjs'
 
 export type RoomToneZone = 'day' | 'afternoon' | 'evening' | 'night' | 'late-night' | 'manual'
 
@@ -107,14 +108,7 @@ export const ZONE_LABELS: Record<RoomToneZone, string> = {
   'manual':     'Manual Override',
 }
 
-export const ZONE_COLORS: Record<RoomToneZone, string> = {
-  'day':        '#FAF8F5',
-  'afternoon':  '#FDF4E7',
-  'evening':    '#F5E6CC',
-  'night':      '#2A1F0E',
-  'late-night': '#120D06',
-  'manual':     '#E8D5B0',
-}
+export const ZONE_COLORS: Record<RoomToneZone, string> = ROOM_TONE_COLORS
 
 // CSS filter layer removed — hardware DDC/CI handles brightness and CCT via sensor bridge
 

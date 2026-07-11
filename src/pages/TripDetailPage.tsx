@@ -19,6 +19,7 @@ import {
   ChevronRight, Phone, Hash, Armchair, DoorOpen, RefreshCw, Loader2,
   Users, Luggage, Copy, Check,
 } from 'lucide-react'
+import { Button } from '../components/ui'
 import { cn } from '../utils/cn'
 import { useTrip, type WeatherDay, type PackingItem } from '../hooks/useTrips'
 import { supabase } from '../lib/supabase'
@@ -129,10 +130,10 @@ function TimelineStep({
           <div>
             <p className={cn('font-semibold text-body-sm', accent ? 'text-casa-navy' : 'text-casa-text')}>{title}</p>
             {subtitle && (subtitleCopyable ? (
-              <button onClick={handleCopy} className="flex items-center gap-1.5 mt-0.5 text-caption text-casa-muted hover:text-casa-navy transition-colors group text-left" title="Tap to copy address">
+              <Button variant="ghost" onClick={handleCopy} className="flex items-center gap-1.5 mt-0.5 text-caption text-casa-muted hover:text-casa-navy transition-colors group text-left" title="Tap to copy address">
                 <span className="group-hover:underline">{subtitle}</span>
                 {copied ? <Check size={11} className="text-emerald-500 shrink-0" /> : <Copy size={11} className="opacity-60 group-hover:opacity-100 shrink-0 transition-opacity" />}
-              </button>
+              </Button>
             ) : (
               <p className="text-caption text-casa-muted mt-0.5">{subtitle}</p>
             ))}
@@ -229,7 +230,7 @@ function WeatherCard({ day }: { day: WeatherDay }) {
       <div className="my-2 flex justify-center">{weatherIcon(day.condition)}</div>
       <p className="text-caption font-bold text-casa-navy">{day.high}°</p>
       <p className="text-caption text-casa-muted">{day.low}°</p>
-      <p className="text-[9px] text-casa-muted/70 mt-1 capitalize leading-tight">{day.condition}</p>
+      <p className="text-caption text-casa-muted/70 mt-1 capitalize leading-tight">{day.condition}</p>
     </div>
   )
 }
@@ -299,7 +300,7 @@ export default function TripDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4">
         <p className="text-casa-muted">Trip not found.</p>
-        <button onClick={goBack} className="text-casa-gold text-body-sm">← Go back</button>
+        <Button variant="ghost" onClick={goBack} className="text-casa-gold text-body-sm">← Go back</Button>
       </div>
     )
   }
@@ -315,10 +316,10 @@ export default function TripDetailPage() {
     <div className="min-h-screen bg-casa-bg overflow-y-auto">
       {/* ── Header ─────────────────────────────────────── */}
       <div className="bg-casa-navy px-5 pt-12 pb-6 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 80% 50%, white 0%, transparent 60%)' }} />
-        <button onClick={goBack} className="flex items-center gap-1 text-white/60 text-body-sm mb-4">
+        <div className="trip-hero-glow absolute inset-0 opacity-5" />
+        <Button variant="ghost" onClick={goBack} className="flex items-center gap-1 text-white/60 text-body-sm mb-4">
           <ArrowLeft size={14} /> Back
-        </button>
+        </Button>
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -458,7 +459,7 @@ export default function TripDetailPage() {
         {/* RETURN */}
         {(trip.return_flight_number || trip.return_departs_at) && (
           <div className="mt-6">
-            <SectionHead label="Return Journey" icon={<Plane size={12} style={{ transform: 'scaleX(-1)' }} />} />
+            <SectionHead label="Return Journey" icon={<Plane size={12} className="-scale-x-100" />} />
             <div>
               {trip.hotel_name && (
                 <TimelineStep
@@ -508,7 +509,7 @@ export default function TripDetailPage() {
             <SectionHead label="What to Pack" icon={<Luggage size={12} />} />
             <div className="bg-white rounded-2xl border border-casa-border divide-y divide-casa-divider overflow-hidden">
               {packing.map((p, i) => (
-                <button
+                <Button variant="ghost"
                   key={i}
                   onClick={() => toggleItem(i)}
                   className="w-full flex items-center gap-3 px-4 py-3 text-left"
@@ -521,7 +522,7 @@ export default function TripDetailPage() {
                     <p className="text-body-sm text-casa-navy font-medium">{p.item}</p>
                     {p.reason && <p className="text-caption text-casa-muted">{p.reason}</p>}
                   </div>
-                </button>
+                </Button>
               ))}
             </div>
             {checkedItems.size > 0 && (
@@ -557,14 +558,14 @@ export default function TripDetailPage() {
 
         {/* Rescan footer */}
         <div className="mt-8 pb-8 flex flex-col items-center gap-2">
-          <button
+          <Button variant="ghost"
             onClick={rescan}
             disabled={scanning}
             className="flex items-center gap-2 text-body-sm text-casa-muted hover:text-casa-navy transition-colors"
           >
             {scanning ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             Rescan Gmail for updates
-          </button>
+          </Button>
           {scanMsg && <p className="text-caption text-casa-gold">{scanMsg}</p>}
         </div>
       </div>
