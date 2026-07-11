@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { AlertCircle, CheckCircle, Lock, LogOut, RefreshCw, Trash2, Calendar } from 'lucide-react'
 import BounceScroll from '../components/shared/BounceScroll'
-import { Heading } from '../components/ui'
+import { Button, Heading } from '../components/ui'
 
 interface OperationPlan {
   operation: 'delete' | 'add' | 'edit'
@@ -196,13 +196,13 @@ export default function AdminOpsPage() {
               {pinError && <p className="text-sm text-red-500 mt-1">{pinError}</p>}
             </div>
 
-            <button
+            <Button
               onClick={handlePinSubmit}
               disabled={!pin.trim()}
-              className="w-full px-4 py-2 bg-casa-gold text-white font-medium rounded-lg hover:bg-casa-gold/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              fullWidth
             >
               Authenticate
-            </button>
+            </Button>
 
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-xs text-blue-700 leading-relaxed">
@@ -223,13 +223,13 @@ export default function AdminOpsPage() {
         <div className="max-w-4xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between mb-8">
             <Heading role="display-sm">Bulk Calendar Operations</Heading>
-            <button
+            <Button
               onClick={handleLogout}
-              className="flex items-center gap-2 px-3 py-2 text-casa-muted hover:text-casa-navy transition-colors"
+              variant="ghost"
+              leadingIcon={<LogOut size={16} />}
             >
-              <LogOut size={16} />
-              <span className="text-sm">Exit</span>
-            </button>
+              Exit
+            </Button>
           </div>
 
           <div className="space-y-6">
@@ -264,14 +264,13 @@ export default function AdminOpsPage() {
               </p>
             </div>
 
-            <button
+            <Button
               onClick={handleGeneratePlan}
               disabled={loading || !request.trim()}
-              className="px-6 py-3 bg-casa-gold text-white font-medium rounded-lg hover:bg-casa-gold/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              loading={loading}
             >
-              {loading && <RefreshCw size={16} className="animate-spin" />}
-              {loading ? 'Generating Plan...' : 'Generate Plan'}
-            </button>
+              Generate Plan
+            </Button>
           </div>
         </div>
       </BounceScroll>
@@ -285,13 +284,13 @@ export default function AdminOpsPage() {
         <div className="max-w-4xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between mb-8">
             <Heading role="display-sm">Preview Operation</Heading>
-            <button
+            <Button
               onClick={handleLogout}
-              className="flex items-center gap-2 px-3 py-2 text-casa-muted hover:text-casa-navy transition-colors"
+              variant="ghost"
+              leadingIcon={<LogOut size={16} />}
             >
-              <LogOut size={16} />
-              <span className="text-sm">Exit</span>
-            </button>
+              Exit
+            </Button>
           </div>
 
           <div className="space-y-6">
@@ -414,12 +413,12 @@ export default function AdminOpsPage() {
                   Query/add/edit requests are currently preview-only in this screen. Refine the request as needed, or
                   use a delete/archive request when you want to execute a bulk update.
                 </p>
-                <button
+                <Button
                   onClick={() => setPhase('request')}
-                  className="px-4 py-2 bg-casa-surface border border-casa-border text-casa-navy font-medium rounded-lg hover:bg-casa-bg transition-colors"
+                  variant="secondary"
                 >
                   Back to request
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -507,12 +506,12 @@ export default function AdminOpsPage() {
               </dl>
             </div>
 
-            <button
+            <Button
               onClick={handleReset}
-              className="w-full px-6 py-3 bg-casa-gold text-white font-medium rounded-lg hover:bg-casa-gold/90 transition-colors"
+              fullWidth
             >
               Start New Operation
-            </button>
+            </Button>
           </div>
         </div>
       </BounceScroll>
@@ -537,21 +536,23 @@ function ConfirmationStep({ onConfirm, loading, onCancel }: { onConfirm: () => v
         className="w-full px-4 py-2 border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono tracking-widest uppercase"
       />
       <div className="flex gap-3">
-        <button
+        <Button
           onClick={onCancel}
           disabled={loading}
-          className="flex-1 px-4 py-2 border border-casa-border text-casa-navy font-medium rounded-lg hover:bg-casa-bg disabled:opacity-50 transition-colors"
+          variant="secondary"
+          className="flex-1"
         >
           Back
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={onConfirm}
           disabled={!isValid || loading}
-          className="flex-1 px-4 py-2 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+          variant="danger"
+          loading={loading}
+          className="flex-1"
         >
-          {loading && <RefreshCw size={16} className="animate-spin" />}
-          {loading ? 'Executing...' : 'Execute Operation'}
-        </button>
+          Execute Operation
+        </Button>
       </div>
     </div>
   )

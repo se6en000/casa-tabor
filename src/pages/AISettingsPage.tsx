@@ -12,7 +12,7 @@ import {
   type VoiceRuntimeConfig,
 } from '../lib/voiceRuntimeConfig'
 import { VOICE_AUDIT_LOG_KEY } from '../lib/voiceAudit'
-import { SkeletonRow } from '../components/ui'
+import { Button, SkeletonRow } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
 interface LLMConfig {
@@ -558,7 +558,7 @@ export default function AISettingsPage() {
           <label className="block text-body-sm font-semibold text-casa-navy">AI Provider</label>
           <div className="grid grid-cols-3 gap-2">
             {Object.entries(VENDORS).map(([key, v]) => (
-              <button
+              <Button
                 key={key}
                 onClick={() => handleProviderChange(key)}
                 className={cn(
@@ -569,7 +569,7 @@ export default function AISettingsPage() {
                 )}
               >
                 {v.label}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -579,7 +579,7 @@ export default function AISettingsPage() {
           <label className="block text-body-sm font-semibold text-casa-navy">Model</label>
           <div className="space-y-2">
             {models.map(m => (
-              <button
+              <Button
                 key={m.id}
                 onClick={() => handleModelChange(m.id)}
                 className={cn(
@@ -598,7 +598,7 @@ export default function AISettingsPage() {
                     ⚡ Fast
                   </span>
                 )}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -652,7 +652,7 @@ export default function AISettingsPage() {
                   : 'Wake word disabled — use the ✨ button to open'}
               </p>
             </div>
-            <button
+            <Button
               type="button"
               role="switch"
               aria-checked={screensaverSettings.wakeWordEnabled}
@@ -666,13 +666,13 @@ export default function AISettingsPage() {
                 'absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200',
                 screensaverSettings.wakeWordEnabled ? 'translate-x-7' : 'translate-x-1',
               )} />
-            </button>
+            </Button>
           </div>
 
           <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3 space-y-3">
             <p className="text-body-sm font-semibold text-casa-navy">Voice Runtime Controls</p>
             <div className="grid gap-2 sm:grid-cols-3">
-              <button
+              <Button
                 type="button"
                 onClick={() => setVoiceDebugLevel('off')}
                 className={cn(
@@ -683,8 +683,8 @@ export default function AISettingsPage() {
                 )}
               >
                 Debug Off
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={() => setVoiceDebugLevel('minimal')}
                 className={cn(
@@ -695,8 +695,8 @@ export default function AISettingsPage() {
                 )}
               >
                 Debug Minimal
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={() => setVoiceDebugLevel('verbose')}
                 className={cn(
@@ -707,10 +707,10 @@ export default function AISettingsPage() {
                 )}
               >
                 Debug Verbose
-              </button>
+              </Button>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
-              <button
+              <Button
                 type="button"
                 onClick={() => setVoiceAuditEnabled(!voiceRuntime.auditEnabled)}
                 className={cn(
@@ -721,7 +721,7 @@ export default function AISettingsPage() {
                 )}
               >
                 Audit Trail: {voiceRuntime.auditEnabled ? 'Enabled' : 'Disabled'}
-              </button>
+              </Button>
             </div>
             <p className="text-caption text-casa-muted">
               Audit entries on this device: <span className="font-semibold text-casa-navy">{auditEntries}</span>
@@ -757,14 +757,14 @@ export default function AISettingsPage() {
                 <Gauge size={15} className="text-casa-gold" />
                 <label className="text-body-sm font-semibold text-casa-navy">AI Optimization Dashboard (24h)</label>
               </div>
-              <button
+              <Button
                 type="button"
                 onClick={() => void loadForensics()}
                 className="inline-flex items-center gap-1.5 rounded-button border border-casa-border bg-white px-2.5 py-1.5 text-caption font-semibold text-casa-navy hover:bg-casa-bg"
               >
                 <RefreshCw size={12} className={cn(forensicsLoading && 'animate-spin')} />
                 Refresh
-              </button>
+              </Button>
             </div>
             <p className="text-caption text-casa-muted">
               End-to-end quality signals from centralized AI traces: capture quality, completion, latency, action reliability, and state-machine stability.
@@ -816,7 +816,7 @@ export default function AISettingsPage() {
             <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-caption font-semibold text-casa-navy">Synthetic Phrase Regression Harness</p>
-                <button
+                <Button
                   type="button"
                   onClick={() => void runSyntheticRegressionHarness()}
                   disabled={regressionRunning}
@@ -824,7 +824,7 @@ export default function AISettingsPage() {
                 >
                   <FlaskConical size={12} className={cn(regressionRunning && 'animate-spin')} />
                   {regressionRunning ? 'Running…' : 'Run 4-case pack'}
-                </button>
+                </Button>
               </div>
               <p className="text-caption text-casa-muted">
                 Dry-run evaluation of parser and tool routing quality without creating/updating real data.
@@ -892,25 +892,25 @@ export default function AISettingsPage() {
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <button
+              <Button
                 onClick={() => {
                   const next = Math.max(0.10, Math.round((screensaverSettings.wakeWordSensitivity - 0.05) * 100) / 100)
                   setWakeWordSensitivity(next)
                 }}
                 className="size-control rounded-button border border-casa-border bg-white text-casa-navy font-semibold text-heading flex items-center justify-center hover:bg-casa-bg active:scale-95 outline-none transition-all focus-visible:ring-2 focus-visible:ring-casa-gold"
                 aria-label="Decrease wake word sensitivity"
-              >−</button>
+              >−</Button>
               <span className="w-14 text-center text-body-sm font-semibold text-casa-navy tabular-nums">
                 {Math.round(screensaverSettings.wakeWordSensitivity * 100)}%
               </span>
-              <button
+              <Button
                 onClick={() => {
                   const next = Math.min(0.90, Math.round((screensaverSettings.wakeWordSensitivity + 0.05) * 100) / 100)
                   setWakeWordSensitivity(next)
                 }}
                 className="size-control rounded-button border border-casa-border bg-white text-casa-navy font-semibold text-heading flex items-center justify-center hover:bg-casa-bg active:scale-95 outline-none transition-all focus-visible:ring-2 focus-visible:ring-casa-gold"
                 aria-label="Increase wake word sensitivity"
-              >+</button>
+              >+</Button>
             </div>
           </div>
           )}
@@ -941,14 +941,14 @@ export default function AISettingsPage() {
 
         {/* Actions */}
         <div className="flex gap-2 justify-end">
-          <button
+          <Button
             onClick={handleTest}
             disabled={!config.api_key || testStatus === 'testing'}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-bg disabled:opacity-40 transition-colors"
           >
             <FlaskConical size={14} className={cn(testStatus === 'testing' && 'animate-spin')} />
             {testStatus === 'testing' ? 'Testing…' : 'Test connection'}
-          </button>
+          </Button>
         </div>
         {saveStatus === 'saving' && (
           <p className="text-caption text-casa-muted text-right">Saving…</p>

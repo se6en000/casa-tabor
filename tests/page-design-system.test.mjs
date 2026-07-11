@@ -358,7 +358,14 @@ test('every Settings route is covered by the shared Settings surface contract', 
     const source = readFileSync(resolve('src/pages', file), 'utf8')
     assert.match(source, /from '\.\.\/components\/(?:ui|settings)'/, `${file} must use shared design-system components`)
     assert.doesNotMatch(source, /\btext-\[(?:\d|\.)+(?:px|rem|em)\]/, `${file} must use semantic typography`)
+    assert.doesNotMatch(source, /<button\b/, `${file} must use shared button primitives`)
   }
+
+  for (const file of ['CalendarsSettingsPage.tsx', 'GmailScanPage.tsx']) {
+    const source = readFileSync(resolve('src/pages', file), 'utf8')
+    assert.doesNotMatch(source, /<button\b/, `${file} must keep legacy Settings controls on shared primitives`)
+  }
+  assert.doesNotMatch(shell, /<button\b/, 'SettingsShell must use the shared Button primitive')
 })
 
 test('Settings toggles and key forms use shared accessible primitives', () => {
@@ -367,8 +374,12 @@ test('Settings toggles and key forms use shared accessible primitives', () => {
   const art = readFileSync(resolve('src/pages/ArtModeSettingsPage.tsx'), 'utf8')
   const sms = readFileSync(resolve('src/pages/SmsSettingsPage.tsx'), 'utf8')
   const home = readFileSync(resolve('src/pages/HomeSettingsPage.tsx'), 'utf8')
+  const family = readFileSync(resolve('src/pages/FamilySettingsPage.tsx'), 'utf8')
   const food = readFileSync(resolve('src/pages/FoodProfileSettingsPage.tsx'), 'utf8')
   const pantry = readFileSync(resolve('src/pages/PantryInventorySettingsPage.tsx'), 'utf8')
+  const groceryIntelligence = readFileSync(resolve('src/pages/GroceryIntelligenceSettingsPage.tsx'), 'utf8')
+  const music = readFileSync(resolve('src/pages/MusicPage.tsx'), 'utf8')
+  const familyColors = readFileSync(resolve('src/design-system/memberColors.ts'), 'utf8')
 
   assert.match(sharedToggle, /<Switch/)
   assert.doesNotMatch(display, /function Toggle/)
@@ -379,6 +390,12 @@ test('Settings toggles and key forms use shared accessible primitives', () => {
   assert.match(food, /<Textarea/)
   assert.match(pantry, /<Select/)
   assert.match(pantry, /<EmptyState/)
+  assert.match(groceryIntelligence, /<Progress/)
+  assert.match(music, /<Progress/)
+  assert.match(music, /<IconButton/)
+  assert.match(family, /from '\.\.\/design-system\/memberColors'/)
+  assert.match(familyColors, /FALLBACK_PROFILE_COLOR/)
+  assert.doesNotMatch(family, /#[0-9a-fA-F]{3,8}\b/)
 })
 
 test('responsive shell uses viewport-safe sizing and semantic layout tiers', () => {

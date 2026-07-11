@@ -248,7 +248,7 @@ export default function StatusDashboardPage() {
                     style={{ height: `${Math.max(4, (d.calls / maxCalls) * 100)}px` }}
                     title={`${d.calls} calls`}
                   />
-                  <span className="text-casa-muted" style={{ fontSize: 10 }}>{d.date}</span>
+                  <span className="text-caption text-casa-muted">{d.date}</span>
                 </div>
               ))}
             </div>

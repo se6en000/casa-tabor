@@ -11,6 +11,7 @@ import {
 } from '../hooks/useCalendarConnections'
 import { cn } from '../utils/cn'
 import BounceScroll from '../components/shared/BounceScroll'
+import { Button, IconButton } from '../components/ui'
 
 export default function CalendarsSettingsPage() {
   const { data: members, isLoading, refetch } = useCalendarConnections()
@@ -88,14 +89,14 @@ export default function CalendarsSettingsPage() {
       )}
 
       <div className="mt-6 flex justify-end">
-        <button
+        <Button
           onClick={() => syncNow.mutate(undefined)}
           disabled={syncNow.isPending}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-surface disabled:opacity-50 transition-colors"
         >
           <RefreshCw size={14} className={cn(syncNow.isPending && 'animate-spin')} />
           Sync all now
-        </button>
+        </Button>
       </div>
     </div>
     </BounceScroll>
@@ -149,31 +150,33 @@ function MemberRow({
       <div className="flex items-center gap-2 shrink-0">
         {c ? (
           <>
-            <button
+            <IconButton
               onClick={onSync}
               disabled={isBusy}
-              className="p-2 rounded-button border border-casa-border text-casa-navy hover:bg-casa-bg disabled:opacity-50 transition-colors"
+              variant="secondary"
+              size="sm"
+              icon={<RefreshCw size={14} className={cn(isBusy && 'animate-spin')} />}
+              aria-label="Sync now"
               title="Sync now"
-            >
-              <RefreshCw size={14} className={cn(isBusy && 'animate-spin')} />
-            </button>
-            <button
+            />
+            <IconButton
               onClick={onDisconnect}
               disabled={isBusy}
-              className="p-2 rounded-button border border-casa-border text-casa-error hover:bg-red-50 disabled:opacity-50 transition-colors"
+              variant="danger"
+              size="sm"
+              icon={<Unlink size={14} />}
+              aria-label="Disconnect"
               title="Disconnect"
-            >
-              <Unlink size={14} />
-            </button>
+            />
           </>
         ) : (
-          <button
+          <Button
             onClick={onConnect}
             disabled={isBusy}
             className="px-3 py-1.5 rounded-button bg-casa-navy text-white text-body-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all"
           >
             {isBusy ? 'Connecting…' : 'Connect Google'}
-          </button>
+          </Button>
         )}
       </div>
     </div>

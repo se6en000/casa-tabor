@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Brain, Layers3, RefreshCw, ScanSearch, ShieldCheck, Sparkles, Store } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
-import { Alert, IconButton, SkeletonRow } from '../components/ui'
+import { Alert, IconButton, Progress, SkeletonRow } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
 type GroceryItemLite = {
@@ -323,9 +323,7 @@ export default function GroceryIntelligenceSettingsPage() {
                   <span className="capitalize">{category}</span>
                   <span>{fmtNumber(count)}</span>
                 </div>
-                <div className="h-2 rounded-full bg-casa-bg">
-                  <div className="h-2 rounded-full bg-casa-gold/70" style={{ width: `${widthPct}%` }} />
-                </div>
+                <Progress value={widthPct} aria-label={`${category} share of active grocery items`} className="[&_.casa-progress]:h-2" />
               </div>
             ))}
           </div>

@@ -13,12 +13,13 @@ import {
   RefreshCw, Unlink,
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Alert } from '../components/ui'
+import { Alert, Button } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 import { formatDistanceToNow, format } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import type { FamilyMember } from '../types'
+import { FALLBACK_PROFILE_COLOR } from '../design-system/memberColors'
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -253,7 +254,7 @@ function MemberCard({
       <div className="flex items-center gap-3 mb-4">
         <div
           className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-body shrink-0"
-          style={{ backgroundColor: member.color_hex ?? '#2D3B4E' }}
+          style={{ backgroundColor: member.color_hex ?? FALLBACK_PROFILE_COLOR }}
         >
           {member.name.charAt(0).toUpperCase()}
         </div>
@@ -264,14 +265,14 @@ function MemberCard({
           )}
         </div>
         {isConnected && (
-          <button
+          <Button
             onClick={onDisconnect}
             disabled={isBusy}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-caption text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors"
             title="Disconnect Google account"
           >
             <Unlink size={12} /> Disconnect
-          </button>
+          </Button>
         )}
       </div>
 
@@ -290,14 +291,14 @@ function MemberCard({
               : 'Not active'}
             errorText={s?.last_sync_error ?? undefined}
             action={
-              <button
+              <Button
                 onClick={onSyncCalendar}
                 disabled={isBusy}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-casa-border text-caption text-casa-navy hover:bg-casa-bg disabled:opacity-50 transition-colors"
                 title="Sync now"
               >
                 <RefreshCw size={11} className={isBusy ? 'animate-spin' : ''} /> Sync now
-              </button>
+              </Button>
             }
           />
 
@@ -314,30 +315,30 @@ function MemberCard({
             action={
               gmailActive ? (
                 <div className="flex items-center gap-1.5">
-                  <button
+                  <Button
                     onClick={onScanGmail}
                     disabled={isBusy}
                     className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-casa-border text-caption text-casa-navy hover:bg-casa-bg disabled:opacity-50 transition-colors"
                     title="Scan now"
                   >
                     <RefreshCw size={11} className={isBusy ? 'animate-spin' : ''} /> Scan now
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={() => onToggleGmail(false)}
                     disabled={isBusy}
                     className="px-2.5 py-1 rounded-lg border border-red-200 text-caption text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors"
                   >
                     Disable
-                  </button>
+                  </Button>
                 </div>
               ) : (
-                <button
+                <Button
                   onClick={() => onToggleGmail(true)}
                   disabled={isBusy}
                   className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-casa-navy text-white text-caption font-semibold hover:bg-casa-navy/90 disabled:opacity-50 transition-colors"
                 >
                   <Mail size={11} /> Enable
-                </button>
+                </Button>
               )
             }
           />
@@ -377,14 +378,14 @@ function MemberCard({
             </div>
           </label>
 
-          <button
+          <Button
             onClick={() => onConnect(wantGmail)}
             disabled={isBusy}
             className="mt-1 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-casa-navy text-white text-body-sm font-semibold hover:bg-casa-navy/90 disabled:opacity-60 transition-all"
           >
             <GoogleIcon />
             {isBusy ? 'Redirecting…' : 'Connect Google Account'}
-          </button>
+          </Button>
         </div>
       )}
     </div>

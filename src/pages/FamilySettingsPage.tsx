@@ -8,44 +8,14 @@ import type {
   MemberAvailabilityException,
   MemberAvailabilityRule,
 } from '../types'
-import { SkeletonRow } from '../components/ui'
+import { Button, SkeletonRow } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
-
-// Profile color palette (alert-like hues intentionally excluded)
-const PROFILE_COLOR_OPTIONS = [
-  { hex: '#2C3E6B', name: 'Navy' },
-  { hex: '#C8A96E', name: 'Gold' },
-  { hex: '#4A7C59', name: 'Forest' },
-  { hex: '#8E44AD', name: 'Purple' },
-  { hex: '#2980B9', name: 'Blue' },
-  { hex: '#16A085', name: 'Teal' },
-  { hex: '#6B7FD7', name: 'Indigo' },
-  { hex: '#4F9D9D', name: 'Sea Glass' },
-  { hex: '#7F8C8D', name: 'Slate' },
-]
-
-const ALERT_RESERVED_COLORS = [
-  { hex: '#C0392B', name: 'Red (alerts)' },
-  { hex: '#E67E22', name: 'Orange (alerts)' },
-  { hex: '#D35400', name: 'Burnt Orange (alerts)' },
-]
-
-const ALL_COLOR_OPTIONS = [
-  ...PROFILE_COLOR_OPTIONS,
-  ...ALERT_RESERVED_COLORS,
-]
-
-const COLOR_NAME_BY_HEX = new Map(
-  ALL_COLOR_OPTIONS.map((color) => [color.hex, color.name]),
-)
-
-const FALLBACK_PROFILE_COLOR = PROFILE_COLOR_OPTIONS[0].hex
-
-const getDisplayColor = (hex?: string | null) =>
-  hex && hex.trim().length > 0 ? hex : FALLBACK_PROFILE_COLOR
-
-const normalizeProfileColorName = (hex: string) =>
-  COLOR_NAME_BY_HEX.get(hex) ?? hex
+import {
+  FALLBACK_PROFILE_COLOR,
+  getDisplayMemberColor,
+  getMemberColorName,
+  PROFILE_COLOR_OPTIONS,
+} from '../design-system/memberColors'
 
 const COLOR_OPTIONS = PROFILE_COLOR_OPTIONS
 
@@ -301,11 +271,11 @@ export default function FamilySettingsPage() {
       // Update existing members that have edits
       const updates = Object.entries(edits).map(([id, changes]) => {
         const base = members.find(m => m.id === id)!
-        const selectedColor = getDisplayColor(changes.color_hex ?? base.color_hex)
+        const selectedColor = getDisplayMemberColor(changes.color_hex ?? base.color_hex)
         return supabase.from('family_members').update({
           ...changes,
           color_hex: selectedColor,
-          color_name: normalizeProfileColorName(selectedColor),
+          color_name: getMemberColorName(selectedColor),
           can_drive: changes.can_drive ?? base.can_drive,
           availability_mode: changes.availability_mode ?? base.availability_mode,
           show_on_home_sidebar: changes.show_on_home_sidebar ?? base.show_on_home_sidebar,
@@ -318,13 +288,13 @@ export default function FamilySettingsPage() {
       const draftNewMembers = newMembers.filter(m => !m.name?.trim())
       const inserts = insertableNewMembers
         .map((m, i) => {
-          const selectedColor = getDisplayColor(m.color_hex)
+          const selectedColor = getDisplayMemberColor(m.color_hex)
           return supabase.from('family_members').insert({
             name: m.name!.trim(),
             full_name: m.full_name?.trim() || null,
             role: m.role ?? 'child',
             color_hex: selectedColor,
-            color_name: normalizeProfileColorName(selectedColor),
+            color_name: getMemberColorName(selectedColor),
             phone: m.phone?.trim() || null,
             email: m.email?.trim() || null,
             can_drive: m.can_drive ?? (m.role === 'parent' || m.role === 'caregiver'),
@@ -395,7 +365,7 @@ export default function FamilySettingsPage() {
           const id = m.id ?? m._tempId!
           const isNew = !!m._isNew
           const isExpanded = expandedId === id
-          const colorHex = getDisplayColor(m.color_hex ?? '#2C3E6B')
+          const colorHex = getDisplayMemberColor(m.color_hex ?? FALLBACK_PROFILE_COLOR)
           const memberRules = m.id ? rulesForMember(m.id) : []
           const memberExceptions = m.id ? exceptionsForMember(m.id) : []
           const dayOffDraft = dayOffDraftByMember[id] ?? ''
@@ -403,7 +373,7 @@ export default function FamilySettingsPage() {
           return (
             <div key={id} className="bg-casa-surface rounded-card border border-casa-border shadow-card overflow-hidden">
               {/* Row header — tap to expand */}
-              <button
+              <Button
                 className="w-full flex items-center gap-3 p-4 text-left"
                 onClick={() => setExpandedId(isExpanded ? null : id)}
               >
@@ -426,7 +396,7 @@ export default function FamilySettingsPage() {
                   </p>
                 </div>
                 <span className="text-caption text-casa-muted">{isExpanded ? '▲' : '▼'}</span>
-              </button>
+              </Button>
 
               {/* Expanded editor */}
               {isExpanded && (
@@ -460,7 +430,7 @@ export default function FamilySettingsPage() {
                     <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Role</label>
                     <div className="flex gap-2">
                       {ROLE_OPTIONS.map(({ value, label }) => (
-                        <button
+                        <Button
                           key={value}
                           onClick={() => {
                             const nextCanDrive = value === 'parent' || value === 'caregiver'
@@ -486,7 +456,7 @@ export default function FamilySettingsPage() {
                           )}
                         >
                           {label}
-                        </button>
+                        </Button>
                       ))}
                     </div>
                   </div>
@@ -496,7 +466,7 @@ export default function FamilySettingsPage() {
                     <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Color</label>
                     <div className="flex flex-wrap gap-2">
                       {COLOR_OPTIONS.map(c => (
-                        <button
+                        <Button
                           key={c.hex}
                           onClick={() => isNew ? patchNew(m._tempId!, { color_hex: c.hex, color_name: c.name }) : patch(m.id!, { color_hex: c.hex, color_name: c.name })}
                           className={cn(
@@ -585,7 +555,7 @@ export default function FamilySettingsPage() {
                           <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Availability mode</p>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                             {AVAILABILITY_MODE_OPTIONS.map((option) => (
-                              <button
+                              <Button
                                 key={option.value}
                                 type="button"
                                 onClick={() => isNew
@@ -606,7 +576,7 @@ export default function FamilySettingsPage() {
                                 >
                                   {option.helper}
                                 </p>
-                              </button>
+                              </Button>
                             ))}
                           </div>
                         </div>
@@ -617,20 +587,20 @@ export default function FamilySettingsPage() {
                               <div className="flex items-center justify-between gap-2 mb-2">
                                 <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Weekly blocked hours</p>
                                 <div className="flex items-center gap-2">
-                                  <button
+                                  <Button
                                     type="button"
                                     onClick={() => { void applyWeekdayWorkTemplate(m.id!) }}
                                     className="text-caption text-casa-navy px-2 py-1 rounded border border-casa-border hover:bg-casa-bg"
                                   >
                                     Apply M–F 7:30–6:30
-                                  </button>
-                                  <button
+                                  </Button>
+                                  <Button
                                     type="button"
                                     onClick={() => { void clearAllWorkRules(m.id!) }}
                                     className="text-caption text-casa-error px-2 py-1 rounded border border-casa-border hover:bg-casa-bg"
                                   >
                                     Clear
-                                  </button>
+                                  </Button>
                                 </div>
                               </div>
                               <div className="space-y-1.5">
@@ -641,7 +611,7 @@ export default function FamilySettingsPage() {
                                   const endLocal = dayRule?.end_local?.slice(0, 5) ?? '18:30'
                                   return (
                                     <div key={day} className="grid grid-cols-[56px_1fr_1fr] gap-2 items-center">
-                                      <button
+                                      <Button
                                         type="button"
                                         onClick={() => { void upsertWorkRule(m.id!, day, !enabled, startLocal, endLocal) }}
                                         className={cn(
@@ -650,7 +620,7 @@ export default function FamilySettingsPage() {
                                         )}
                                       >
                                         {label}
-                                      </button>
+                                      </Button>
                                       <input
                                         type="time"
                                         value={startLocal}
@@ -686,14 +656,14 @@ export default function FamilySettingsPage() {
                                   onChange={(event) => setDayOffDraftByMember((prev) => ({ ...prev, [id]: event.target.value }))}
                                   className="h-9 rounded-button border border-casa-border px-2 text-body-sm text-casa-navy"
                                 />
-                                <button
+                                <Button
                                   type="button"
                                   onClick={() => { void addDayOffException(m.id!, dayOffDraft) }}
                                   disabled={!dayOffDraft}
                                   className="h-9 px-3 rounded-button border border-casa-border text-body-sm font-medium text-casa-navy disabled:opacity-50"
                                 >
                                   Add day off
-                                </button>
+                                </Button>
                               </div>
                               <div className="mt-2 space-y-1.5">
                                 {memberExceptions.length === 0 && (
@@ -705,13 +675,13 @@ export default function FamilySettingsPage() {
                                       <p className="text-body-sm text-casa-navy font-medium">{exception.override_type.replace('_', ' ')}</p>
                                       <p className="text-caption text-casa-muted">{formatExceptionWindow(exception)}</p>
                                     </div>
-                                    <button
+                                    <Button
                                       type="button"
                                       onClick={() => { void removeAvailabilityException(exception.id) }}
                                       className="text-caption text-casa-error hover:underline"
                                     >
                                       Remove
-                                    </button>
+                                    </Button>
                                   </div>
                                 ))}
                               </div>
@@ -748,7 +718,7 @@ export default function FamilySettingsPage() {
 
                   {/* Delete */}
                   {!isNew && (
-                    <button
+                    <Button
                       onClick={() => {
                         if (confirm(`Remove ${m.name} from the family?`)) {
                           deleteMutation.mutate(m.id!)
@@ -758,15 +728,15 @@ export default function FamilySettingsPage() {
                       className="flex items-center gap-2 text-body-sm text-casa-error hover:underline"
                     >
                       <Trash2 size={13} /> Remove {m.name}
-                    </button>
+                    </Button>
                   )}
                   {isNew && (
-                    <button
+                    <Button
                       onClick={() => setNewMembers(prev => prev.filter(x => x._tempId !== m._tempId))}
                       className="flex items-center gap-2 text-body-sm text-casa-error hover:underline"
                     >
                       <Trash2 size={13} /> Discard
-                    </button>
+                    </Button>
                   )}
                 </div>
               )}
@@ -775,7 +745,7 @@ export default function FamilySettingsPage() {
         })}
 
         {/* Add member */}
-        <button
+        <Button
           onClick={() => {
             const nm = emptyMember()
             setNewMembers(prev => [...prev, nm])
@@ -784,7 +754,7 @@ export default function FamilySettingsPage() {
           className="w-full flex items-center justify-center gap-2 py-3 rounded-card border-2 border-dashed border-casa-border text-casa-muted hover:border-casa-gold hover:text-casa-gold transition-all text-body-sm font-medium"
         >
           <Plus size={16} /> Add Family Member
-        </button>
+        </Button>
       </div>
     </>
   )

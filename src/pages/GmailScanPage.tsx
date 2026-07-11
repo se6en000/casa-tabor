@@ -13,6 +13,8 @@ import { formatDistanceToNow, format } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import type { FamilyMember } from '../types'
+import { Button } from '../components/ui'
+import { FALLBACK_PROFILE_COLOR } from '../design-system/memberColors'
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -165,7 +167,7 @@ export default function GmailScanPage() {
           </p>
         </div>
         {enabledCount > 0 && (
-          <button
+          <Button
             type="button"
             onClick={() => runScan()}
             disabled={scanning}
@@ -173,7 +175,7 @@ export default function GmailScanPage() {
           >
             <RefreshCw size={15} className={scanning ? 'animate-spin' : ''} />
             {scanning ? 'Scanning…' : 'Scan Now'}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -224,7 +226,7 @@ export default function GmailScanPage() {
                   {/* Avatar */}
                   <div
                     className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-body shrink-0"
-                    style={{ backgroundColor: member.color_hex ?? '#2D3B4E' }}
+                    style={{ backgroundColor: member.color_hex ?? FALLBACK_PROFILE_COLOR }}
                   >
                     {member.name.charAt(0).toUpperCase()}
                   </div>
@@ -254,24 +256,24 @@ export default function GmailScanPage() {
                     </p>
                   ) : gmailEnabled ? (
                     <>
-                      <button
+                      <Button
                         type="button"
                         onClick={() => runScan(member.id)}
                         disabled={scanning}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-casa-border text-body-sm text-casa-navy hover:bg-casa-bg disabled:opacity-60 transition-colors"
                       >
                         <RefreshCw size={13} className={scanning ? 'animate-spin' : ''} /> Scan now
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
                         onClick={() => disableGmail.mutate(member.id)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-body-sm text-red-600 hover:bg-red-50 transition-colors"
                       >
                         Disable
-                      </button>
+                      </Button>
                     </>
                   ) : (
-                    <button
+                    <Button
                       type="button"
                       onClick={() => enableGmail.mutate(member.id)}
                       disabled={enableGmail.isPending}
@@ -279,7 +281,7 @@ export default function GmailScanPage() {
                     >
                       <Mail size={14} />
                       {enableGmail.isPending ? 'Redirecting…' : 'Enable Gmail Scan'}
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>

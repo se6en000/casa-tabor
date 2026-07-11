@@ -2,15 +2,15 @@
   "version": 1,
   "description": "Committed style-debt budget for Casa Tabor Phase 0 guardrail. style:check fails only when a category count exceeds these numbers — reducing debt below baseline is always allowed and encouraged; update this file downward with `npm run style:audit -- --update-baseline` once debt is intentionally reduced.",
   "generatedFrom": "current committed src/ at time of generation (deterministic regex scan)",
-  "filesScanned": 160,
+  "filesScanned": 161,
   "categories": {
     "arbitraryFontSize": 1,
-    "rawHexColors": 48,
+    "rawHexColors": 25,
     "arbitraryZIndex": 8,
-    "inlineStyleBlocks": 43,
+    "inlineStyleBlocks": 32,
     "undersizedSquareControls": 0,
     "hoverOnlyReveals": 0,
-    "titleOnlyButtonLabels": 8,
-    "nativeControlRecreations": 167
+    "titleOnlyButtonLabels": 0,
+    "nativeControlRecreations": 67
   }
 }

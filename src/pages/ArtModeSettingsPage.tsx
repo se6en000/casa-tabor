@@ -4,7 +4,7 @@ import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import { useArtFeedPrefs, MEDIA_OPTIONS } from '../hooks/useArtFeedPrefs'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
-import { Checkbox } from '../components/ui'
+import { Button, Checkbox, IconButton } from '../components/ui'
 
 const COASTAL_STARTER_ARTISTS = [
   'Winslow Homer',
@@ -48,20 +48,20 @@ function StepPicker({ value, onChange, min, max, step = 1, unit }: {
 }) {
   return (
     <div className="flex items-center gap-3">
-      <button
+      <Button
         onClick={() => onChange(Math.max(min, value - step))}
         className="size-control rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold font-display text-heading flex items-center justify-center active:scale-95 outline-none transition-transform focus-visible:ring-2 focus-visible:ring-casa-gold"
         aria-label={`Decrease ${unit}`}
-      >−</button>
+      >−</Button>
       <div className="min-w-[5rem] text-center">
         <span className="font-display text-display-sm text-casa-navy">{value}</span>
         <span className="text-caption text-casa-muted ml-1">{unit}</span>
       </div>
-      <button
+      <Button
         onClick={() => onChange(Math.min(max, value + step))}
         className="size-control rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold font-display text-heading flex items-center justify-center active:scale-95 outline-none transition-transform focus-visible:ring-2 focus-visible:ring-casa-gold"
         aria-label={`Increase ${unit}`}
-      >+</button>
+      >+</Button>
     </div>
   )
 }
@@ -114,13 +114,13 @@ function TagInput({
             className="inline-flex items-center gap-1 bg-casa-navy text-white text-caption px-2.5 py-1 rounded-full"
           >
             {tag}
-            <button
+            <Button
               type="button"
               onClick={() => onRemove(tag)}
               className="hover:text-red-200 transition-colors"
             >
               <X size={11} />
-            </button>
+            </Button>
           </span>
         ))}
       </div>
@@ -140,14 +140,15 @@ function TagInput({
             placeholder={placeholder}
             className="flex-1 text-body-sm bg-casa-bg border border-casa-border rounded-xl px-3 py-2 text-casa-navy placeholder:text-casa-muted focus:outline-none focus:border-casa-navy/40"
           />
-          <button
+          <IconButton
             type="button"
             onClick={commitInput}
             disabled={!input.trim()}
-            className="px-3 py-2 rounded-xl bg-casa-bg border border-casa-border text-casa-navy disabled:opacity-40 hover:border-casa-navy/40 transition-colors"
-          >
-            <Plus size={14} />
-          </button>
+            variant="secondary"
+            size="sm"
+            icon={<Plus size={14} />}
+            aria-label="Add artist"
+          />
         </div>
       )}
       {tags.length >= maxTags && (
@@ -222,7 +223,7 @@ export default function ArtModeSettingsPage() {
 
           {settings.enabled && (
             <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-              <button
+              <Button
                 type="button"
                 onClick={() => setFeedMode('auto')}
                 className={cn(
@@ -233,8 +234,8 @@ export default function ArtModeSettingsPage() {
                 )}
               >
                 Auto Gallery (Recommended)
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={() => setFeedMode('curated')}
                 className={cn(
@@ -245,11 +246,11 @@ export default function ArtModeSettingsPage() {
                 )}
               >
                 Curated Gallery
-              </button>
+              </Button>
             </div>
           )}
 
-          <button
+          <Button
             type="button"
             onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
             disabled={!settings.enabled}
@@ -261,7 +262,7 @@ export default function ArtModeSettingsPage() {
             )}
           >
             ▶ Preview Art Mode
-          </button>
+          </Button>
         </div>
 
         {settings.enabled && (
@@ -333,13 +334,13 @@ export default function ArtModeSettingsPage() {
                 <div className="rounded-xl border border-casa-border bg-casa-bg p-3 mb-4">
                   <p className="text-body-sm font-semibold text-casa-navy">Starter themes</p>
                   <p className="text-caption text-casa-muted mt-0.5 mb-2">Quickly prefill a coastal modern vibe, then tweak it.</p>
-                  <button
+                  <Button
                     type="button"
                     onClick={applyCoastalStarterTheme}
                     className="px-3.5 py-2 rounded-xl bg-casa-navy text-white text-body-sm font-semibold hover:bg-casa-navy/90 transition-colors"
                   >
                     Load West Palm Coastal Starter
-                  </button>
+                  </Button>
                 </div>
 
                 <div className="space-y-4">
@@ -384,13 +385,13 @@ export default function ArtModeSettingsPage() {
                   </div>
                 </div>
 
-                <button
+                <Button
                   type="button"
                   onClick={() => setAdvancedOpen(v => !v)}
                   className="mt-4 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-casa-border text-casa-muted hover:text-casa-navy hover:border-casa-navy/40 transition-colors"
                 >
                   Advanced filters {advancedOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </button>
+                </Button>
 
                 {advancedOpen && (
                   <div className="mt-4 pt-4 border-t border-casa-border space-y-4">

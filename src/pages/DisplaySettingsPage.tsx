@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
+import { Button, IconButton } from '../components/ui'
 import { useTheme, PRESETS, DEFAULTS, MIDNIGHT_GALLERY_DEFAULTS, type ThemeColors } from '../contexts/ThemeContext'
 import {
   useRoomTone,
@@ -114,19 +115,19 @@ function HourPicker({ label, value, onChange }: { label: string; value: number; 
     <div className="flex items-center justify-between gap-4 py-2">
       <span className="text-body-sm text-casa-navy">{label}</span>
       <div className="flex items-center gap-2">
-        <button
+        <Button
           type="button"
           onClick={() => onChange((value - 1 + 24) % 24)}
           className="size-control rounded-button border border-casa-border flex items-center justify-center text-casa-muted hover:text-casa-navy hover:border-casa-navy/40 outline-none transition-colors text-body-sm focus-visible:ring-2 focus-visible:ring-casa-gold"
           aria-label={`Move ${label} one hour earlier`}
-        >−</button>
+        >−</Button>
         <span className="w-16 text-center text-body-sm font-medium text-casa-navy tabular-nums">{display}</span>
-        <button
+        <Button
           type="button"
           onClick={() => onChange((value + 1) % 24)}
           className="size-control rounded-button border border-casa-border flex items-center justify-center text-casa-muted hover:text-casa-navy hover:border-casa-navy/40 outline-none transition-colors text-body-sm focus-visible:ring-2 focus-visible:ring-casa-gold"
           aria-label={`Move ${label} one hour later`}
-        >+</button>
+        >+</Button>
       </div>
     </div>
   )
@@ -175,20 +176,20 @@ function StepPicker({ value, onChange, min, max, step = 1, unit }: {
 }) {
   return (
     <div className="flex items-center gap-3">
-      <button
+      <Button
         onClick={() => onChange(Math.max(min, value - step))}
         className="size-control rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold font-display text-heading flex items-center justify-center active:scale-95 outline-none transition-transform focus-visible:ring-2 focus-visible:ring-casa-gold"
         aria-label={`Decrease ${unit}`}
-      >−</button>
+      >−</Button>
       <div className="min-w-[5rem] text-center">
         <span className="font-display text-display-sm text-casa-navy">{value}</span>
         <span className="text-caption text-casa-muted ml-1">{unit}</span>
       </div>
-      <button
+      <Button
         onClick={() => onChange(Math.min(max, value + step))}
         className="size-control rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold font-display text-heading flex items-center justify-center active:scale-95 outline-none transition-transform focus-visible:ring-2 focus-visible:ring-casa-gold"
         aria-label={`Increase ${unit}`}
-      >+</button>
+      >+</Button>
     </div>
   )
 }
@@ -326,7 +327,7 @@ export default function DisplaySettingsPage() {
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
           <SectionHeader icon={Palette} label="Presets" />
           <div className="flex items-center gap-2 mb-4">
-            <button
+            <Button
               type="button"
               onClick={() => setActiveTarget('day')}
               className={cn(
@@ -337,8 +338,8 @@ export default function DisplaySettingsPage() {
               )}
             >
               Day Palette
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => setActiveTarget('midnight')}
               className={cn(
@@ -349,7 +350,7 @@ export default function DisplaySettingsPage() {
               )}
             >
               Midnight Gallery Palette
-            </button>
+            </Button>
           </div>
           <div className="grid grid-cols-3 gap-3">
             {PRESETS.map(preset => {
@@ -357,7 +358,7 @@ export default function DisplaySettingsPage() {
                 ([k, v]) => colors[k as keyof ThemeColors] === v
               )
               return (
-                <button
+                <Button
                   key={preset.id}
                   onClick={() => applyPreset(preset)}
                   className={cn(
@@ -377,7 +378,7 @@ export default function DisplaySettingsPage() {
                   <p className="text-caption font-semibold" style={{ color: preset.colors['casa-navy'] }}>
                     {preset.emoji} {preset.label}
                   </p>
-                </button>
+                </Button>
               )
             })}
           </div>
@@ -432,13 +433,14 @@ export default function DisplaySettingsPage() {
                     {colors[key].toUpperCase()}
                   </code>
                   {colors[key] !== (activeTarget === 'midnight' ? MIDNIGHT_GALLERY_DEFAULTS[key] : DEFAULTS[key]) && (
-                    <button
+                    <IconButton
                       onClick={() => setColor(key, activeTarget === 'midnight' ? MIDNIGHT_GALLERY_DEFAULTS[key] : DEFAULTS[key])}
+                      variant="ghost"
+                      size="sm"
+                      icon={<RotateCcw size={13} />}
+                      aria-label="Reset this color"
                       title="Reset this color"
-                      className="text-casa-muted hover:text-casa-gold transition-colors"
-                    >
-                      <RotateCcw size={13} />
-                    </button>
+                    />
                   )}
                 </div>
               </div>
@@ -480,13 +482,13 @@ export default function DisplaySettingsPage() {
                 Restore original {activeTarget === 'midnight' ? 'Midnight Gallery' : 'Casa Tabor day'} colors
               </p>
             </div>
-            <button
+            <Button
               onClick={resetToDefaults}
               className="flex items-center gap-2 bg-white border border-amber-300 text-amber-700 text-body-sm font-semibold px-4 py-2 rounded-xl hover:bg-amber-50 transition-colors shadow-sm"
             >
               <RotateCcw size={14} />
               Reset palette defaults
-            </button>
+            </Button>
           </div>
         )}
 
@@ -532,7 +534,7 @@ export default function DisplaySettingsPage() {
             {/* Zone tabs */}
             <div className="flex gap-1.5 flex-wrap mb-4">
               {ZONES_IN_ORDER.map(z => (
-                <button
+                <Button
                   key={z}
                   type="button"
                   onClick={() => setPreviewZone(z)}
@@ -544,7 +546,7 @@ export default function DisplaySettingsPage() {
                   )}
                 >
                   {z.charAt(0).toUpperCase() + z.slice(1).replace('-', ' ')}
-                </button>
+                </Button>
               ))}
             </div>
 
@@ -920,13 +922,13 @@ export default function DisplaySettingsPage() {
           <div className="flex items-center gap-2 text-caption text-casa-muted mt-1">
             <span className="text-casa-gold">✓</span> Gallery label auto-fades after a few seconds
           </div>
-          <button
+          <Button
             type="button"
             onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
             className="mt-4 px-4 py-2 rounded-lg text-body-sm font-medium bg-casa-gold text-white hover:bg-casa-gold/90 transition-colors"
           >
             Preview Art Mode
-          </button>
+          </Button>
         </div>
 
          </div>

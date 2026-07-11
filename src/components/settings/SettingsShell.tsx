@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import BounceScroll from '../shared/BounceScroll'
-import { Heading, Text } from '../ui'
+import { Button, Heading, Text } from '../ui'
 
 // ── Nav structure ──────────────────────────────────────────────────────────
 
@@ -183,11 +183,10 @@ export default function SettingsShell() {
           {/* Scrollable tabs */}
           <div
             ref={tabsRef}
-            className="overflow-x-auto scrollbar-hide flex settings-tabs"
-            style={{ scrollBehavior: 'smooth' }}
+            className="overflow-x-auto scroll-smooth scrollbar-hide flex settings-tabs"
           >
             {ALL_ITEMS.map((item) => (
-              <button
+              <Button
                 key={item.to}
                 data-path={item.to}
                 onClick={() => navigate(item.to)}
@@ -199,7 +198,7 @@ export default function SettingsShell() {
                 )}
               >
                 {item.label}
-              </button>
+              </Button>
             ))}
           </div>
         </div>

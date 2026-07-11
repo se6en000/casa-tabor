@@ -17,7 +17,7 @@ import {
   ChevronLeft, RefreshCw, LogOut
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Heading } from '../components/ui'
+import { Button, Heading, IconButton, Progress } from '../components/ui'
 import { useSpotify } from '../hooks/useSpotify'
 import {
   getClientId, setClientId, startAuthFlow, handleOAuthCallback,
@@ -150,14 +150,14 @@ function SetupScreen() {
           {error && <p className="text-caption text-red-500 mt-1">{error}</p>}
         </div>
 
-        <button
+        <Button
           type="button"
           onClick={connect}
           disabled={connecting}
           className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-[#1DB954] text-white font-semibold text-body-sm hover:bg-[#1aa34a] active:scale-[0.98] transition-all disabled:opacity-60"
         >
           {connecting ? 'Redirecting to Spotify…' : 'Connect Spotify →'}
-        </button>
+        </Button>
       </div>
 
       <p className="text-caption text-casa-muted text-center mt-6">
@@ -198,14 +198,18 @@ function PlayerScreen({ onBack }: { onBack: () => void }) {
     <div className="min-h-screen bg-casa-bg pb-28 flex flex-col max-w-lg mx-auto px-5">
       {/* Header */}
       <header className="flex items-center justify-between pt-8 pb-4">
-        <button type="button" onClick={onBack} className="flex items-center gap-1 text-casa-muted hover:text-casa-navy transition-colors">
-          <ChevronLeft size={20} />
-          <span className="text-body-sm">Back</span>
-        </button>
+        <Button type="button" onClick={onBack} variant="ghost" leadingIcon={<ChevronLeft size={20} />}>
+          Back
+        </Button>
         <Heading role="heading">Music</Heading>
-        <button type="button" onClick={disconnect} className="text-casa-muted hover:text-red-500 transition-colors" title="Disconnect Spotify">
-          <LogOut size={18} />
-        </button>
+        <IconButton
+          onClick={disconnect}
+          variant="danger"
+          size="sm"
+          icon={<LogOut size={18} />}
+          aria-label="Disconnect Spotify"
+          title="Disconnect Spotify"
+        />
       </header>
 
       {/* Album art */}
@@ -247,15 +251,14 @@ function PlayerScreen({ onBack }: { onBack: () => void }) {
         <div className="mb-5 px-1">
           <div
             ref={progressBarRef}
-            className="h-1.5 bg-casa-divider rounded-full cursor-pointer group relative"
+            className="cursor-pointer"
             onClick={handleSeekClick}
           >
-            <div
-              className="h-full bg-casa-navy rounded-full transition-all duration-1000 ease-linear relative"
-              style={{ width: `${progressPct}%` }}
-            >
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-casa-navy rounded-full opacity-60 group-hover:opacity-100 transition-opacity translate-x-1/2" />
-            </div>
+            <Progress
+              value={progressPct}
+              aria-label="Track progress"
+              className="[&_.casa-progress]:h-1.5"
+            />
           </div>
           <div className="flex justify-between mt-1.5">
             <span className="text-caption text-casa-muted tabular-nums">{fmtTime(progress)}</span>
@@ -266,40 +269,38 @@ function PlayerScreen({ onBack }: { onBack: () => void }) {
 
       {/* Playback controls */}
       <div className="flex items-center justify-between mb-6 px-2">
-        <button
-          type="button"
+        <IconButton
           onClick={() => setShuffle(!state?.shuffle)}
-          className={cn('p-2 rounded-full transition-colors', state?.shuffle ? 'text-casa-gold' : 'text-casa-muted hover:text-casa-navy')}
-        >
-          <Shuffle size={20} />
-        </button>
+          variant={state?.shuffle ? 'primary' : 'ghost'}
+          size="sm"
+          icon={<Shuffle size={20} />}
+          aria-label={state?.shuffle ? 'Disable shuffle' : 'Enable shuffle'}
+          aria-pressed={state?.shuffle ?? false}
+        />
 
-        <button type="button" onClick={previous} className="p-2 text-casa-navy hover:text-casa-gold transition-colors">
-          <SkipBack size={28} fill="currentColor" />
-        </button>
+        <IconButton onClick={previous} variant="ghost" icon={<SkipBack size={28} fill="currentColor" />} aria-label="Previous track" />
 
-        <button
-          type="button"
+        <IconButton
           onClick={() => isPlaying ? pause() : play()}
-          className="w-16 h-16 rounded-full bg-casa-navy text-white flex items-center justify-center shadow-lg hover:bg-casa-navy/90 active:scale-95 transition-all"
-        >
-          {isPlaying
+          variant="strong"
+          size="lg"
+          icon={isPlaying
             ? <Pause size={28} fill="currentColor" />
             : <Play size={28} fill="currentColor" className="translate-x-0.5" />
           }
-        </button>
+          aria-label={isPlaying ? 'Pause' : 'Play'}
+        />
 
-        <button type="button" onClick={next} className="p-2 text-casa-navy hover:text-casa-gold transition-colors">
-          <SkipForward size={28} fill="currentColor" />
-        </button>
+        <IconButton onClick={next} variant="ghost" icon={<SkipForward size={28} fill="currentColor" />} aria-label="Next track" />
 
-        <button
-          type="button"
+        <IconButton
           onClick={() => setRepeat(state?.repeatMode === 0 ? 1 : state?.repeatMode === 1 ? 2 : 0)}
-          className={cn('p-2 rounded-full transition-colors', (state?.repeatMode ?? 0) > 0 ? 'text-casa-gold' : 'text-casa-muted hover:text-casa-navy')}
-        >
-          {state?.repeatMode === 2 ? <Repeat1 size={20} /> : <Repeat size={20} />}
-        </button>
+          variant={(state?.repeatMode ?? 0) > 0 ? 'primary' : 'ghost'}
+          size="sm"
+          icon={state?.repeatMode === 2 ? <Repeat1 size={20} /> : <Repeat size={20} />}
+          aria-label={state?.repeatMode === 0 ? 'Enable repeat' : state?.repeatMode === 1 ? 'Repeat one track' : 'Disable repeat'}
+          aria-pressed={(state?.repeatMode ?? 0) > 0}
+        />
       </div>
 
       {/* Volume */}
@@ -318,7 +319,7 @@ function PlayerScreen({ onBack }: { onBack: () => void }) {
 
       {/* Device switcher */}
       <div className="mb-6">
-        <button
+        <Button
           type="button"
           onClick={() => { setShowDevices(v => !v); void refreshDevices() }}
           className="flex items-center gap-2 text-body-sm text-casa-muted hover:text-casa-navy transition-colors w-full text-left"
@@ -328,7 +329,7 @@ function PlayerScreen({ onBack }: { onBack: () => void }) {
             {devices.find(d => d.isActive)?.name ?? 'No active device'}
           </span>
           <RefreshCw size={13} className="ml-auto" />
-        </button>
+        </Button>
 
         <AnimatePresence>
           {showDevices && (
@@ -346,7 +347,7 @@ function PlayerScreen({ onBack }: { onBack: () => void }) {
                 devices.map(device => {
                   const DevIcon = deviceIcon(device.type)
                   return (
-                    <button
+                    <Button
                       key={device.id}
                       type="button"
                       onClick={() => transferTo(device.id)}
@@ -365,7 +366,7 @@ function PlayerScreen({ onBack }: { onBack: () => void }) {
                       {device.isActive && (
                         <span className="text-caption font-semibold text-casa-gold">Playing</span>
                       )}
-                    </button>
+                    </Button>
                   )
                 })
               )}
@@ -380,7 +381,7 @@ function PlayerScreen({ onBack }: { onBack: () => void }) {
           <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">Your Playlists</p>
           <div className="space-y-2">
             {playlists.map(pl => (
-              <button
+              <Button
                 key={pl.id}
                 type="button"
                 onClick={() => playPlaylist(pl.uri)}
@@ -398,7 +399,7 @@ function PlayerScreen({ onBack }: { onBack: () => void }) {
                   <p className="text-caption text-casa-muted">{pl.trackCount} tracks</p>
                 </div>
                 <Play size={16} className="text-casa-muted shrink-0" />
-              </button>
+              </Button>
             ))}
           </div>
         </div>

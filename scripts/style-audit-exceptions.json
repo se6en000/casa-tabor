@@ -22,6 +22,18 @@
       {
         "path": "src/pages/DisplaySettingsPage.tsx",
         "reason": "Live theme editor renders user-selected color values."
+      },
+      {
+        "path": "src/design-system/memberColors.ts",
+        "reason": "Canonical persisted household profile palette; alert-like hues remain reserved from profile selection."
+      },
+      {
+        "path": "src/pages/GoogleServicesPage.tsx",
+        "reason": "Official Google logo artwork must retain Google brand colors."
+      },
+      {
+        "path": "src/pages/MusicPage.tsx",
+        "reason": "Official Spotify identity and connect action retain Spotify brand colors."
       }
     ],
     "inlineStyleBlocks": [
@@ -62,6 +74,30 @@
       {
         "path": "src/pages/DisplaySettingsPage.tsx",
         "reason": "Live theme previews bind runtime color values."
+      },
+      {
+        "path": "src/pages/CalendarsSettingsPage.tsx",
+        "reason": "Calendar connection avatars bind persisted household member colors."
+      },
+      {
+        "path": "src/pages/FamilySettingsPage.tsx",
+        "reason": "Family profile previews and the color picker bind persisted or user-selected member colors."
+      },
+      {
+        "path": "src/pages/GmailScanPage.tsx",
+        "reason": "Gmail member avatars bind persisted household member colors."
+      },
+      {
+        "path": "src/pages/GoogleServicesPage.tsx",
+        "reason": "Google service member avatars bind persisted household member colors."
+      },
+      {
+        "path": "src/pages/StatusDashboardPage.tsx",
+        "reason": "Usage chart bar heights are derived from the current seven-day call volume."
+      },
+      {
+        "path": "src/pages/DesignSystemGalleryPage.tsx",
+        "reason": "Theme swatches bind the live user-selected design-system palette."
       },
       {
         "path": "src/components/calendar/DayView.tsx",

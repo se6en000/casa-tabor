@@ -4,7 +4,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
-import { Field as FormField, Input } from '../components/ui'
+import { Button, Field as FormField, Input } from '../components/ui'
 
 interface SmsConfig {
   enabled: boolean
@@ -289,7 +289,7 @@ export default function SmsSettingsPage() {
           )}
           <div className="space-y-2">
             {members.map(m => (
-              <button
+              <Button
                 key={m.id}
                 type="button"
                 onClick={() => toggleMember(m.id)}
@@ -304,7 +304,7 @@ export default function SmsSettingsPage() {
                 <span className="text-caption text-casa-muted">
                   {m.phone ?? <span className="italic text-amber-600">no phone number</span>}
                 </span>
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -328,14 +328,14 @@ export default function SmsSettingsPage() {
             </p>
             <div className="flex items-center gap-2 bg-casa-bg border border-casa-border rounded-lg px-3 py-2">
               <code className="flex-1 text-caption text-casa-navy truncate">{webhookUrl}</code>
-              <button
+              <Button
                 type="button"
                 onClick={copyWebhook}
                 className="text-casa-muted hover:text-casa-navy transition-colors shrink-0"
                 title="Copy URL"
               >
                 {copied ? <CheckCircle size={15} className="text-green-600" /> : <Copy size={15} />}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -344,7 +344,7 @@ export default function SmsSettingsPage() {
             <p className="text-caption text-casa-muted mb-2">
               Send the morning briefing right now to all configured members.
             </p>
-            <button
+            <Button
               type="button"
               onClick={sendTestBriefing}
               disabled={testStatus === 'sending'}
@@ -360,7 +360,7 @@ export default function SmsSettingsPage() {
                 : testStatus === 'ok' ? 'Sent!'
                 : testStatus === 'error' ? 'Failed — check credentials'
                 : 'Send Briefing Now'}
-            </button>
+            </Button>
           </div>
         </div>
       )}

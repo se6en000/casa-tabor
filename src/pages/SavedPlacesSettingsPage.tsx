@@ -8,7 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import type { SavedPlace, SavedPlaceCategory } from '../types'
-import { Button } from '../components/ui'
+import { Button, IconButton } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -90,11 +90,11 @@ function PlaceForm({ initial, onSave, onCancel, saving }: PlaceFormProps) {
             const Icon = cat.icon
             const selected = form.category === cat.value
             return (
-              <button key={cat.value} type="button" onClick={() => set('category', cat.value)}
+              <Button key={cat.value} type="button" onClick={() => set('category', cat.value)}
                 className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-full text-caption font-semibold border transition-colors',
                   selected ? 'bg-casa-gold text-white border-casa-gold' : 'bg-casa-bg text-casa-muted border-casa-border hover:border-casa-gold')}>
                 <Icon size={12} />{cat.label}
-              </button>
+              </Button>
             )
           })}
         </div>
@@ -134,10 +134,10 @@ function PlaceForm({ initial, onSave, onCancel, saving }: PlaceFormProps) {
           className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold resize-none" />
       </div>
       <div className="flex gap-2 justify-end pt-1">
-        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-casa-border text-body text-casa-muted hover:bg-casa-divider transition-colors">Cancel</button>
-        <button type="submit" disabled={saving} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-casa-gold text-white text-body font-semibold hover:bg-casa-gold/90 transition-colors disabled:opacity-50">
+        <Button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-casa-border text-body text-casa-muted hover:bg-casa-divider transition-colors">Cancel</Button>
+        <Button type="submit" disabled={saving} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-casa-gold text-white text-body font-semibold hover:bg-casa-gold/90 transition-colors disabled:opacity-50">
           <Save size={14} />{saving ? 'Saving…' : 'Save Place'}
-        </button>
+        </Button>
       </div>
     </form>
   )
@@ -166,18 +166,18 @@ function PlaceRow({ place, onEdit, onDelete }: { place: SavedPlace; onEdit: () =
         </div>
         {place.aliases.length > 0 && <p className="text-caption text-casa-gold mt-0.5 truncate">Also known as: {place.aliases.join(', ')}</p>}
         {fullAddress && (
-          <button onClick={handleCopyAddress} className="flex items-center gap-1 text-caption text-casa-muted mt-1 hover:text-casa-navy transition-colors group text-left" title="Tap to copy address">
+          <Button onClick={handleCopyAddress} className="flex items-center gap-1 text-caption text-casa-muted mt-1 hover:text-casa-navy transition-colors group text-left" title="Tap to copy address">
             <MapPin size={11} className="shrink-0" />
             <span className="group-hover:underline">{fullAddress}</span>
             {copied ? <Check size={11} className="text-emerald-500 shrink-0" /> : <Copy size={11} className="opacity-60 group-hover:opacity-100 shrink-0 transition-opacity" />}
-          </button>
+          </Button>
         )}
         {place.phone && <p className="flex items-center gap-1 text-caption text-casa-muted mt-0.5"><Phone size={11} />{place.phone}</p>}
         {place.notes && <p className="text-caption text-casa-muted mt-1 italic line-clamp-2">{place.notes}</p>}
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        <button onClick={onEdit} className="p-3 rounded hover:bg-casa-divider transition-colors text-casa-muted hover:text-casa-navy" title="Edit"><Edit2 size={16} /></button>
-        <button onClick={onDelete} className="p-3 rounded hover:bg-red-50 transition-colors text-casa-muted hover:text-red-600" title="Delete"><Trash2 size={16} /></button>
+        <IconButton onClick={onEdit} variant="ghost" size="sm" icon={<Edit2 size={16} />} aria-label="Edit place" title="Edit place" />
+        <IconButton onClick={onDelete} variant="danger" size="sm" icon={<Trash2 size={16} />} aria-label="Delete place" title="Delete place" />
       </div>
     </div>
   )
@@ -252,10 +252,10 @@ function ContactForm({ initial, onSave, onCancel, saving }: ContactFormProps) {
           className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold resize-none" />
       </div>
       <div className="flex gap-2 justify-end pt-1">
-        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-casa-border text-body text-casa-muted hover:bg-casa-divider transition-colors">Cancel</button>
-        <button type="submit" disabled={saving} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-casa-gold text-white text-body font-semibold hover:bg-casa-gold/90 transition-colors disabled:opacity-50">
+        <Button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-casa-border text-body text-casa-muted hover:bg-casa-divider transition-colors">Cancel</Button>
+        <Button type="submit" disabled={saving} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-casa-gold text-white text-body font-semibold hover:bg-casa-gold/90 transition-colors disabled:opacity-50">
           <Save size={14} />{saving ? 'Saving…' : 'Save Contact'}
-        </button>
+        </Button>
       </div>
     </form>
   )
@@ -283,17 +283,17 @@ function ContactRow({ contact, onEdit, onDelete }: { contact: SavedContact; onEd
         {contact.phone && <p className="flex items-center gap-1 text-caption text-casa-muted mt-1"><Phone size={11} />{contact.phone}</p>}
         {contact.email && <p className="flex items-center gap-1 text-caption text-casa-muted mt-0.5"><Mail size={11} />{contact.email}</p>}
         {contact.address && (
-          <button onClick={handleCopyAddress} className="flex items-center gap-1 text-caption text-casa-muted mt-0.5 hover:text-casa-navy transition-colors group text-left" title="Tap to copy address">
+          <Button onClick={handleCopyAddress} className="flex items-center gap-1 text-caption text-casa-muted mt-0.5 hover:text-casa-navy transition-colors group text-left" title="Tap to copy address">
             <MapPin size={11} className="shrink-0" />
             <span className="group-hover:underline">{contact.address}</span>
             {copied ? <Check size={11} className="text-emerald-500 shrink-0" /> : <Copy size={11} className="opacity-60 group-hover:opacity-100 shrink-0 transition-opacity" />}
-          </button>
+          </Button>
         )}
         {contact.notes && <p className="text-caption text-casa-muted mt-1 italic line-clamp-2">{contact.notes}</p>}
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        <button onClick={onEdit} className="p-3 rounded hover:bg-casa-divider transition-colors text-casa-muted hover:text-casa-navy" title="Edit"><Edit2 size={16} /></button>
-        <button onClick={onDelete} className="p-3 rounded hover:bg-red-50 transition-colors text-casa-muted hover:text-red-600" title="Delete"><Trash2 size={16} /></button>
+        <IconButton onClick={onEdit} variant="ghost" size="sm" icon={<Edit2 size={16} />} aria-label="Edit contact" title="Edit contact" />
+        <IconButton onClick={onDelete} variant="danger" size="sm" icon={<Trash2 size={16} />} aria-label="Delete contact" title="Delete contact" />
       </div>
     </div>
   )
@@ -407,16 +407,16 @@ export default function SavedPlacesSettingsPage() {
 
         {/* Tabs */}
         <div className="flex gap-1 bg-casa-divider p-1 rounded-xl mb-6">
-          <button onClick={() => { setTab('places'); setSearch('') }}
+          <Button onClick={() => { setTab('places'); setSearch('') }}
             className={cn('flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-body font-semibold transition-colors',
               tab === 'places' ? 'bg-casa-surface text-casa-navy shadow-card' : 'text-casa-muted hover:text-casa-navy')}>
             <BookmarkCheck size={15} />Places ({places.length})
-          </button>
-          <button onClick={() => { setTab('people'); setSearch('') }}
+          </Button>
+          <Button onClick={() => { setTab('people'); setSearch('') }}
             className={cn('flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-body font-semibold transition-colors',
               tab === 'people' ? 'bg-casa-surface text-casa-navy shadow-card' : 'text-casa-muted hover:text-casa-navy')}>
             <Users size={15} />People ({contacts.length})
-          </button>
+          </Button>
         </div>
 
         {/* ── PLACES TAB ── */}
@@ -428,7 +428,7 @@ export default function SavedPlacesSettingsPage() {
                   <h2 className="font-display text-heading text-casa-navy">
                     {placeMode.type === 'add' ? 'Add New Place' : `Edit — ${(placeMode as { type: 'edit'; place: SavedPlace }).place.name}`}
                   </h2>
-                  <button onClick={() => setPlaceMode({ type: 'list' })} className="p-1 rounded hover:bg-casa-divider text-casa-muted transition-colors"><X size={16} /></button>
+                  <IconButton onClick={() => setPlaceMode({ type: 'list' })} variant="ghost" size="sm" icon={<X size={16} />} aria-label="Close place editor" />
                 </div>
                 <PlaceForm
                   initial={placeMode.type === 'edit' ? placeMode.place : null}
@@ -449,21 +449,21 @@ export default function SavedPlacesSettingsPage() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 mb-5">
-                  <button onClick={() => setFilterCat('all')}
+                  <Button onClick={() => setFilterCat('all')}
                     className={cn('px-3 py-1 rounded-full text-caption font-semibold border transition-colors',
                       filterCat === 'all' ? 'bg-casa-gold text-white border-casa-gold' : 'bg-casa-bg text-casa-muted border-casa-border hover:border-casa-gold')}>
                     All ({places.length})
-                  </button>
+                  </Button>
                   {CATEGORIES.map(cat => {
                     const count = places.filter(p => p.category === cat.value).length
                     if (count === 0) return null
                     const Icon = cat.icon
                     return (
-                      <button key={cat.value} onClick={() => setFilterCat(cat.value)}
+                      <Button key={cat.value} onClick={() => setFilterCat(cat.value)}
                         className={cn('flex items-center gap-1.5 px-3 py-1 rounded-full text-caption font-semibold border transition-colors',
                           filterCat === cat.value ? 'bg-casa-gold text-white border-casa-gold' : 'bg-casa-bg text-casa-muted border-casa-border hover:border-casa-gold')}>
                         <Icon size={11} />{cat.label} ({count})
-                      </button>
+                      </Button>
                     )
                   })}
                 </div>
@@ -474,10 +474,10 @@ export default function SavedPlacesSettingsPage() {
                     <p className="text-body font-semibold">{search || filterCat !== 'all' ? 'No matching places' : 'No saved places yet'}</p>
                     <p className="text-caption text-center max-w-xs">Add your family's favorite spots and the AI will look them up automatically.</p>
                     {!search && filterCat === 'all' && (
-                      <button onClick={() => setPlaceMode({ type: 'add' })}
+                      <Button onClick={() => setPlaceMode({ type: 'add' })}
                         className="flex items-center gap-2 mt-2 px-4 py-2 rounded-lg bg-casa-gold text-white text-body font-semibold hover:bg-casa-gold/90 transition-colors">
                         <Plus size={14} />Add your first place
-                      </button>
+                      </Button>
                     )}
                   </div>
                 )}
@@ -502,7 +502,7 @@ export default function SavedPlacesSettingsPage() {
                   <h2 className="font-display text-heading text-casa-navy">
                     {contactMode.type === 'add' ? 'Add New Person' : `Edit — ${(contactMode as { type: 'edit'; contact: SavedContact }).contact.name}`}
                   </h2>
-                  <button onClick={() => setContactMode({ type: 'list' })} className="p-1 rounded hover:bg-casa-divider text-casa-muted transition-colors"><X size={16} /></button>
+                  <IconButton onClick={() => setContactMode({ type: 'list' })} variant="ghost" size="sm" icon={<X size={16} />} aria-label="Close contact editor" />
                 </div>
                 <ContactForm
                   initial={contactMode.type === 'edit' ? contactMode.contact : null}
@@ -527,10 +527,10 @@ export default function SavedPlacesSettingsPage() {
                     <p className="text-body font-semibold">{search ? 'No matching people' : 'No saved contacts yet'}</p>
                     <p className="text-caption text-center max-w-xs">Add friends, family, doctors, coaches — the AI will recognize them by name or nickname.</p>
                     {!search && (
-                      <button onClick={() => setContactMode({ type: 'add' })}
+                      <Button onClick={() => setContactMode({ type: 'add' })}
                         className="flex items-center gap-2 mt-2 px-4 py-2 rounded-lg bg-casa-gold text-white text-body font-semibold hover:bg-casa-gold/90 transition-colors">
                         <Plus size={14} />Add your first person
-                      </button>
+                      </Button>
                     )}
                   </div>
                 )}
