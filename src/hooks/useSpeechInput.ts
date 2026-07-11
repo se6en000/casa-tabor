@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { normalizeConfidence as normalizeConfidencePure } from '../lib/sttConfidence.mjs'
+import { isIncompleteVoiceFragment } from '../lib/voiceTurnTaking.mjs'
 
 const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s all|all done|never mind|nevermind|stop)\b/i
 const CONFIRM_PHRASES = /\b(yes|yeah|yep|confirm|ok|okay|go ahead|do it|sounds good|correct|right|affirmative|absolutely|sure|proceed)\b/i
@@ -36,6 +37,7 @@ export function useSpeechInput({
   onDismiss,
   onConfirm,
   onCancel,
+  onIncomplete,
   hasPendingAction,
   onTrace,
 }: {
@@ -44,6 +46,7 @@ export function useSpeechInput({
   onDismiss: () => void
   onConfirm: () => void
   onCancel: () => void
+  onIncomplete?: (text: string) => void
   hasPendingAction: boolean
   onTrace?: (event: string, payload?: Record<string, unknown>) => void
 }) {
@@ -60,6 +63,9 @@ export function useSpeechInput({
   const connectStartRef    = useRef(0)
   const listeningStartRef  = useRef(0)
   const firstInterimRef    = useRef(false)
+  const utteranceIdRef     = useRef('')
+  const pendingFragmentRef = useRef('')
+  const fragmentTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [phase, setPhase]  = useState<VoicePhase>('idle')
   const phaseRef           = useRef<VoicePhase>('idle')
   const setPhaseSync = (p: VoicePhase) => { phaseRef.current = p; setPhase(p) }
@@ -76,6 +82,7 @@ export function useSpeechInput({
   const onDismissRef       = useRef(onDismiss)
   const onConfirmRef       = useRef(onConfirm)
   const onCancelRef        = useRef(onCancel)
+  const onIncompleteRef    = useRef(onIncomplete)
   const onTraceRef         = useRef(onTrace)
   const hasPendingRef      = useRef(hasPendingAction)
   useEffect(() => { onInterimRef.current  = onInterim },        [onInterim])
@@ -83,6 +90,7 @@ export function useSpeechInput({
   useEffect(() => { onDismissRef.current  = onDismiss },         [onDismiss])
   useEffect(() => { onConfirmRef.current  = onConfirm },         [onConfirm])
   useEffect(() => { onCancelRef.current   = onCancel },          [onCancel])
+  useEffect(() => { onIncompleteRef.current = onIncomplete },     [onIncomplete])
   useEffect(() => { onTraceRef.current    = onTrace },           [onTrace])
   useEffect(() => { hasPendingRef.current = hasPendingAction },  [hasPendingAction])
 
@@ -106,6 +114,13 @@ export function useSpeechInput({
     }
   }
   const stopSilenceTimer = () => { if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
+  const stopFragmentTimer = () => { if (fragmentTimerRef.current) clearTimeout(fragmentTimerRef.current); fragmentTimerRef.current = null }
+  const newUtteranceId = () => {
+    utteranceIdRef.current = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
+    return utteranceIdRef.current
+  }
 
   // No deps — uses only refs, so triggerFinal/startBridge are created once and never stale
   const handleFinalTranscript = useCallback((transcript: string) => {
@@ -129,16 +144,46 @@ export function useSpeechInput({
     onFinalRef.current('__SEND__', { confidence: lastConfidenceRef.current })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const triggerFinal = useCallback((text: string) => {
+  const triggerFinal = useCallback((text: string, metadata: { endpointReason?: string } = {}) => {
     stopWS()
     stopSilenceTimer()
-    setPhaseSync('processing')
-    const finalText = text.trim() || lastInterimRef.current.trim()
+    const capturedText = text.trim() || lastInterimRef.current.trim()
+    const finalText = [pendingFragmentRef.current, capturedText].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
     const asrElapsedMs = listeningStartRef.current > 0 ? Date.now() - listeningStartRef.current : null
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     firstInterimRef.current = false
+    if (isIncompleteVoiceFragment(finalText)) {
+      pendingFragmentRef.current = finalText
+      setPhaseSync('connecting')
+      onInterimRef.current(finalText)
+      onTraceRef.current?.('asr_fragment_held', {
+        utterance_id: utteranceIdRef.current,
+        endpoint_reason: metadata.endpointReason ?? 'unknown',
+        asr_elapsed_ms: asrElapsedMs,
+        word_count: finalText.split(/\s+/).length,
+      })
+      stopFragmentTimer()
+      fragmentTimerRef.current = setTimeout(() => {
+        const abandoned = pendingFragmentRef.current
+        pendingFragmentRef.current = ''
+        fragmentTimerRef.current = null
+        onInterimRef.current('')
+        onTraceRef.current?.('asr_fragment_discarded', {
+          utterance_id: utteranceIdRef.current,
+          reason: 'continuation_timeout',
+          word_count: abandoned ? abandoned.split(/\s+/).length : 0,
+        })
+        if (abandoned) onIncompleteRef.current?.(abandoned)
+      }, 4500)
+      return
+    }
+    stopFragmentTimer()
+    pendingFragmentRef.current = ''
+    setPhaseSync('processing')
     onTraceRef.current?.('asr_final', {
+      utterance_id: utteranceIdRef.current,
+      endpoint_reason: metadata.endpointReason ?? 'unknown',
       asr_elapsed_ms: asrElapsedMs,
       confidence: lastConfidenceRef.current,
       word_count: finalText ? finalText.split(/\s+/).length : 0,
@@ -155,9 +200,10 @@ export function useSpeechInput({
       recognitionRef.current = null
     }
     listeningStartRef.current = Date.now()
+    newUtteranceId()
     firstInterimRef.current = false
     setPhaseSync('listening')
-    onTraceRef.current?.('asr_listening_ready', { connect_ms: 0, mode: 'webspeech' })
+    onTraceRef.current?.('asr_listening_ready', { connect_ms: 0, mode: 'webspeech', utterance_id: utteranceIdRef.current })
 
     const recognition = new WebSpeech()
     recognitionRef.current = recognition
@@ -186,7 +232,7 @@ export function useSpeechInput({
         lastInterimRef.current = ''
         onInterimRef.current(finalAccum.trim())
         try { recognition.stop() } catch { /* ignore */ }
-        triggerFinal(finalAccum.trim())
+        triggerFinal(finalAccum.trim(), { endpointReason: 'provider_final' })
         if (activeRef.current) setTimeout(() => startWebSpeech(), 300)
         return
       }
@@ -211,7 +257,7 @@ export function useSpeechInput({
           const toSend = lastInterimRef.current
           lastInterimRef.current = ''
           try { recognition.stop() } catch { /* ignore */ }
-          triggerFinal(toSend)
+          triggerFinal(toSend, { endpointReason: 'client_silence_timeout' })
           if (activeRef.current) setTimeout(() => startWebSpeech(), 300)
         }
       }, SILENCE_MS)
@@ -252,8 +298,9 @@ export function useSpeechInput({
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     connectStartRef.current = Date.now()
+    newUtteranceId()
     firstInterimRef.current = false
-    onTraceRef.current?.('asr_connect_started', { mode: 'bridge' })
+    onTraceRef.current?.('asr_connect_started', { mode: 'bridge', utterance_id: utteranceIdRef.current })
     setPhaseSync('connecting')
 
     const ws = new WebSocket(BRIDGE_WS)
@@ -274,6 +321,7 @@ export function useSpeechInput({
             onTraceRef.current?.('asr_listening_ready', {
               connect_ms: connectStartRef.current > 0 ? Date.now() - connectStartRef.current : null,
               mode: 'bridge',
+              utterance_id: utteranceIdRef.current,
             })
             setPhaseSync('listening')
             connectStartRef.current = 0
@@ -289,6 +337,7 @@ export function useSpeechInput({
                 onTraceRef.current?.('asr_first_interim', {
                   first_interim_ms: listeningStartRef.current > 0 ? Date.now() - listeningStartRef.current : null,
                   mode: 'bridge',
+                  utterance_id: utteranceIdRef.current,
                 })
               }
               lastInterimRef.current = msg.text
@@ -300,7 +349,7 @@ export function useSpeechInput({
           case 'final':
             if (phaseRef.current !== 'processing') {
               lastConfidenceRef.current = normalizeConfidence(msg.confidence)
-              triggerFinal(msg.text)
+              triggerFinal(msg.text, { endpointReason: String(msg.endpoint_reason ?? 'bridge_final') })
               if (activeRef.current) setTimeout(() => startBridge(), 300)
             }
             break
@@ -347,6 +396,8 @@ export function useSpeechInput({
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     lastConfidenceRef.current = null
+    pendingFragmentRef.current = ''
+    stopFragmentTimer()
     connectStartRef.current = 0
     listeningStartRef.current = 0
     firstInterimRef.current = false
@@ -362,7 +413,8 @@ export function useSpeechInput({
     if (IS_SAFE_MODE) return
     activeRef.current = true
     setPhaseSync('connecting')
-    onTraceRef.current?.('asr_start_requested')
+    newUtteranceId()
+    onTraceRef.current?.('asr_start_requested', { utterance_id: utteranceIdRef.current })
 
     // Auto-detect once per component lifetime — don't re-probe on every open
     if (modeRef.current === 'unknown') {

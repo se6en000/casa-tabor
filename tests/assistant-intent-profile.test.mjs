@@ -8,6 +8,8 @@ test('calendar reads and edits require authoritative event search', () => {
     'Give me a rundown of everything on the calendar tomorrow',
     'How many appointments are there this week?',
     'Move Owen therapy to 9 tomorrow',
+    'Prep me for "Owen 6th Birthday Party"',
+    "I'm talking about Owen's birthday party",
   ]) {
     assert.deepEqual(classifyAssistantIntent(input), { profile: 'event', forceEventSearch: true })
   }
@@ -25,6 +27,20 @@ test('focused event edits never search for an event already in context', () => {
     classifyAssistantIntent('Change the location', { focusedEvent: true }),
     { profile: 'event', forceEventSearch: false },
   )
+})
+
+test('authoritative active events keep vague follow-ups on the event lane', () => {
+  for (const input of [
+    'Are you sure that is the right location?',
+    "What's the address?",
+    "Yes that's the one",
+    'Prep me for it',
+  ]) {
+    assert.deepEqual(
+      classifyAssistantIntent(input, { activeEntityType: 'event' }),
+      { profile: 'event', forceEventSearch: false },
+    )
+  }
 })
 
 test('common assistant domains select narrow profiles', () => {

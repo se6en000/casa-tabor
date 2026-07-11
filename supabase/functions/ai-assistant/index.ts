@@ -9,6 +9,12 @@ import { optionalEnv, requireEnv } from '../_shared/env.mjs'
 import { computeTravelEta } from '../_shared/travel-eta.mjs'
 import { classifyAssistantIntent } from '../_shared/assistant-intent-profile.mjs'
 import { resolveDeterministicEventMutation } from '../_shared/deterministic-event-mutation.mjs'
+import {
+  answerGroundedEventFollowUp,
+  eventConversationState,
+  normalizeConversationState,
+} from '../_shared/assistant-conversation-grounding.mjs'
+import { secureAssistantResult } from '../_shared/assistant-output-safety.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -159,9 +165,11 @@ Deno.serve(async (req) => {
       2000,
     )
     : null
+  const incomingConversationState = normalizeConversationState(context?.conversationState)
   const intentRouting = classifyAssistantIntent(latestUserText, {
     focusedEvent: Boolean(context?.focusedEvent),
     assistantMode: context?.assistant_mode,
+    activeEntityType: incomingConversationState?.activeEntityType,
   })
   appendServerTrace('server_ai_assistant_start', `messages=${Array.isArray(messages) ? messages.length : 0}`, {
     message_count: Array.isArray(messages) ? messages.length : 0,
@@ -172,6 +180,8 @@ Deno.serve(async (req) => {
     client_trace_source: clientTraceSource,
     intent_profile: intentRouting.profile,
     force_event_search: intentRouting.forceEventSearch,
+    active_entity_type: incomingConversationState?.activeEntityType ?? null,
+    active_event_id: incomingConversationState?.activeEventId ?? null,
   })
   if (latestUserText) {
     appendServerTrace('server_ai_assistant_ingress_user_text', latestUserText.slice(0, 300), {
@@ -274,6 +284,12 @@ Deno.serve(async (req) => {
     return { status: 200, payload: { type: 'debug', error: eventsResult.error, yearStart: windowStart.toISOString(), yearEnd: yearEnd.toISOString(), correlation_id: cid } }
   }
   const allEvents = eventsResult.data
+  const activeConversationEvent = incomingConversationState
+    ? allEvents?.find((event: { id: string }) => event.id === incomingConversationState.activeEventId) ?? null
+    : null
+  let responseConversationState = activeConversationEvent
+    ? eventConversationState(activeConversationEvent, now)
+    : null
   console.log('[ai-assistant] events loaded:', allEvents?.length ?? 0)
   const contextLoadMs = Date.now() - contextLoadStartMs
   console.log(`[ai-assistant][${cid}] stage=context_load ms=${contextLoadMs}`)
@@ -1080,7 +1096,13 @@ ON OPEN (the [EVENT_EDIT_MODE] signal): Give a concise friendly summary of the e
 ${context.lastContextReference?.summary ? `
 RECENT CONTEXT (helps you infer vague references like "it", "that", "her"):
 Last mentioned: ${context.lastContextReference.summary}
-When the user says "change it", "move that", "add her", etc., they likely refer to the above.` : ''}
+This prose is not authoritative data. Never assert event facts or prepare an event write from it alone.` : ''}
+
+${incomingConversationState?.activeEntityType === 'event' ? `
+AUTHORITATIVE CONVERSATION ENTITY:
+The current conversation is grounded to event ID ${incomingConversationState.activeEventId}.
+Use only the matching database event loaded by Casa. Never copy event facts from earlier assistant prose.
+If that event is unavailable, say so and search again instead of guessing.` : ''}
 
 ${includeEventContext ? `UPCOMING EVENTS SNAPSHOT (next ${PROMPT_EVENT_WINDOW_DAYS} days, capped; use search_events for anything outside snapshot):\n${eventsText}` : ''}
 ${includeGroceryContext ? `\nGROCERY LIST (unchecked items):\n${groceryText}\n${defaultListId ? `Default list ID: ${defaultListId}` : ''}` : ''}
@@ -1358,6 +1380,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
               assigned_to: item.assigned_to ?? null,
             })),
         })),
+      }
+      if (payload.count === 1 && payload.ambiguity.ambiguous === false) {
+        responseConversationState = eventConversationState(scoredResults[0].event, now)
       }
       console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=${payload.count ?? 0}`)
       return payload
@@ -1947,7 +1972,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             ? ` I interpreted ${corrected.join('; ')}.`
             : ''
 
-          return { type: 'text', text: `${addedLine}${correctionLine}` }
+          return { type: 'text', text: `${addedLine}${correctionLine}`, write_verified: true }
         }
 
         if (name === 'create_event') {
@@ -2005,13 +2030,14 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             }
 
             if (payload.sync_status === 'synced') {
-              return { type: 'text', text: `Confirmed — I created "${title}" at ${start}.` }
+              return { type: 'text', text: `Confirmed — I created "${title}" at ${start}.`, write_verified: true }
             }
             if (payload.sync_status === 'queued') {
-              return { type: 'text', text: `Saved in Casa Tabor. Google sync is queued and still in progress for "${title}".` }
+              return { type: 'text', text: `Saved in Casa Tabor. Google sync is queued and still in progress for "${title}".`, write_verified: true }
             }
             return {
               type: 'text',
+              write_verified: true,
               text: payload.sync_warning
                 ? payload.sync_warning
                 : `Saved in Casa Tabor, but I could not confirm Google sync yet for "${title}".`,
@@ -2049,6 +2075,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           }
           return {
             type: 'text',
+            write_verified: true,
             text: payload.image_url
               ? 'Saved to Recipe Library with ingredients, steps, and a photo.'
               : 'Saved to Recipe Library with complete ingredients and steps. (No photo found yet.)',
@@ -2198,6 +2225,43 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   }
 
   try {
+    if (intentRouting.profile === 'event' && latestUserText && activeConversationEvent) {
+      const groundedAnswer = answerGroundedEventFollowUp(latestUserText, activeConversationEvent, toLocal)
+      if (groundedAnswer) {
+        const requestTotalMs = Date.now() - requestStartMs
+        appendServerTrace('server_ai_assistant_grounded_follow_up', `event=${activeConversationEvent.id} ms=${requestTotalMs}`, {
+          event_id: activeConversationEvent.id,
+          event_updated_at: activeConversationEvent.updated_at,
+          request_ms: requestTotalMs,
+        })
+        appendServerTrace('server_ai_assistant_result', `type=text ms=${requestTotalMs}`, {
+          result_type: 'text',
+          request_ms: requestTotalMs,
+          llm_calls: 0,
+          authoritative_event_id: activeConversationEvent.id,
+          response_text: groundedAnswer,
+        })
+        return {
+          status: 200,
+          payload: {
+            type: 'text',
+            text: groundedAnswer,
+            conversation_state: responseConversationState,
+            authoritative_provenance: {
+              source: 'events',
+              event_id: activeConversationEvent.id,
+              updated_at: activeConversationEvent.updated_at,
+            },
+            correlation_id: cid,
+            telemetry: {
+              ...llmTelemetry,
+              request_total_ms: requestTotalMs,
+              context_load_ms: contextLoadMs,
+            },
+          },
+        }
+      }
+    }
     if (intentRouting.profile === 'event' && latestUserText && !context.focusedEvent) {
       const deterministicMutation = resolveDeterministicEventMutation(
         latestUserText,
@@ -2235,6 +2299,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             tool: deterministicMutation.tool,
             args: deterministicMutation.args,
             display_text: buildDisplayText(deterministicMutation.tool, deterministicMutation.args),
+            conversation_state: deterministicMutation.event
+              ? eventConversationState(deterministicMutation.event, now)
+              : responseConversationState,
             correlation_id: cid,
             telemetry: {
               ...llmTelemetry,
@@ -2245,7 +2312,17 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         }
       }
     }
-    const result = await callGeminiWithTools(history)
+    const rawResult = await callGeminiWithTools(history)
+    const result = secureAssistantResult(rawResult, {
+      userRequestedWrite: /\b(move|resched|change|update|edit|delete|remove|cancel|add|create|set|shift|push)\b/i.test(latestUserText ?? ''),
+      writeWasVerified: rawResult?.write_verified === true,
+    })
+    if (result?.safety_rejection) {
+      appendServerTrace('server_ai_assistant_output_rejected', String(result.safety_rejection), {
+        reason: result.safety_rejection,
+        original_response_preview: typeof rawResult?.text === 'string' ? rawResult.text.slice(0, 240) : null,
+      })
+    }
     const requestTotalMs = Date.now() - requestStartMs
     console.log(`[ai-assistant][${cid}] stage=request_total ms=${requestTotalMs} result_type=${String(result?.type ?? 'unknown')}`)
     appendServerTrace(
@@ -2287,6 +2364,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     
     return { status: 200, payload: {
       ...result,
+      conversation_state: responseConversationState,
       correlation_id: cid,
       telemetry: {
         ...llmTelemetry,
@@ -2318,12 +2396,14 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   const sse = (event: string, data: unknown) => encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
   const stream = new ReadableStream({
     async start(controller) {
-      emitToken = (delta: string) => {
-        if (!delta) return
-        try { controller.enqueue(sse('token', { delta })) } catch { /* stream closed */ }
-      }
+      // Model output remains buffered until the final result passes the server
+      // safety validator. This prevents pseudo-tool syntax from reaching UI/TTS.
+      emitToken = () => {}
       try {
         const { payload } = await run()
+        if (payload.type === 'text' && typeof payload.text === 'string' && payload.text) {
+          controller.enqueue(sse('token', { delta: payload.text }))
+        }
         controller.enqueue(sse('final', payload))
       } catch (e) {
         controller.enqueue(sse('final', {

@@ -19,8 +19,8 @@ DG_URL = (
     '&channels=1'
     '&model=nova-2'
     '&interim_results=true'
-    '&endpointing=800'
-    '&utterance_end_ms=1000'
+    '&endpointing=1200'
+    '&utterance_end_ms=1800'
     '&vad_events=true'
 )
 
@@ -458,7 +458,7 @@ def _on_message(ws_arg, message):
                 # Keep recording hot between turns so grocery rapid mode doesn't
                 # thrash into wake-recorder restarts between each finalized phrase.
                 _set(transcript=full, interim_transcript='')
-                _ws_push_stt({'type': 'final', 'text': full, 'confidence': conf})
+                _ws_push_stt({'type': 'final', 'text': full, 'confidence': conf, 'endpoint_reason': 'utterance_end'})
             return
 
         if msg_type != 'Results':
@@ -487,7 +487,7 @@ def _on_message(ws_arg, message):
                 # Keep recording hot between turns so grocery rapid mode doesn't
                 # thrash into wake-recorder restarts between each finalized phrase.
                 _set(transcript=full, interim_transcript='')
-                _ws_push_stt({'type': 'final', 'text': full, 'confidence': conf})
+                _ws_push_stt({'type': 'final', 'text': full, 'confidence': conf, 'endpoint_reason': 'speech_final'})
         elif is_final and text:
             _finals.append(text)
             if isinstance(confidence, (int, float)):

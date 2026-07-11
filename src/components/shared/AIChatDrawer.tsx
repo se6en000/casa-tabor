@@ -273,7 +273,27 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
   const speech = useSpeechInput({
     onTrace: (event, payload) => {
       const trace = activeTraceRef.current
-      if (trace) emitAssistantTrace(event, trace, { payload })
+      if (trace) {
+        const utteranceId = typeof payload?.utterance_id === 'string' ? payload.utterance_id : undefined
+        const asrTrace = utteranceId
+          ? createAssistantTraceContext({
+              traceId: trace.traceId,
+              turnId: utteranceId,
+              page,
+              lane: 'voice',
+              source: launchContext?.source ?? 'assistant_drawer',
+              startedAt: trace.startedAt,
+            })
+          : trace
+        emitAssistantTrace(event, asrTrace, { payload })
+      }
+    },
+    onIncomplete: (fragment) => {
+      appendSyntheticMessage({
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: `I only caught “${fragment}…” Please finish the thought.`,
+      })
     },
     onInterim: (interim) => {
       if (interim.trim()) markUserInteraction()

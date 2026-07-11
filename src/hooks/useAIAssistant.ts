@@ -60,6 +60,11 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[]) {
   const offsetAbs = Math.abs(offsetMins)
   const utcOffset = `${offsetSign}${String(Math.floor(offsetAbs / 60)).padStart(2, '0')}:${String(offsetAbs % 60).padStart(2, '0')}`
 
+  const conversationState = [...messages]
+    .reverse()
+    .find((message) => message.role === 'assistant' && message.conversationState)
+    ?.conversationState
+
   return {
     page: ctx.page,
     assistant_mode: ctx.assistantMode ?? 'general',
@@ -68,6 +73,7 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[]) {
     family: ctx.family.map(f => ({ id: f.id, name: f.name })),
     homeCity: ctx.homeCity,
     lastContextReference: deriveLastContextReference(messages),
+    conversationState,
     focusedEvent: ctx.focusedEvent ? {
       id: ctx.focusedEvent.id,
       title: ctx.focusedEvent.title,
@@ -257,9 +263,15 @@ export function useAIAssistant(ctx: AssistantContext) {
             displayText,
             status: 'pending',
           },
+          conversationState: data.conversation_state,
         }
       }
-      return { id, role: 'assistant', content: (data?.text ?? '') as string }
+      return {
+        id,
+        role: 'assistant',
+        content: (data?.text ?? '') as string,
+        conversationState: data?.conversation_state,
+      }
     }
 
     const persist = (assistantMsg: AIMessage) => {

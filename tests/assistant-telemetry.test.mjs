@@ -44,6 +44,10 @@ test('voice telemetry covers wake through final ASR without recording transcript
     assert.match(speech, new RegExp(`onTraceRef\\.current\\?\\.\\('${event}'`))
   }
   assert.doesNotMatch(speech, /onTraceRef\.current\?\.\('asr_final',\s*\{[^}]*transcript/s)
+  assert.match(speech, /asr_fragment_held/)
+  assert.match(speech, /asr_fragment_discarded/)
+  assert.match(speech, /endpoint_reason:/)
+  assert.match(drawer, /turnId: utteranceId/)
 })
 
 test('AI forensics reports the new client pipeline stages', () => {
@@ -62,6 +66,13 @@ test('assistant model calls have hard budgets and only one secondary synthesis r
   assert.match(assistantFunction, /resolveModelParts\(secondaryParts, secondaryDepth \+ 1\)/)
   assert.match(assistantFunction, /server_ai_assistant_secondary_cap/)
   assert.doesNotMatch(assistantFunction, /stage=llm_retry/)
+})
+
+test('assistant buffers model text until output safety validation completes', () => {
+  assert.match(assistantFunction, /secureAssistantResult\(rawResult/)
+  assert.match(assistantFunction, /server_ai_assistant_output_rejected/)
+  assert.match(assistantFunction, /emitToken = \(\) => \{\}/)
+  assert.doesNotMatch(assistantFunction, /emitToken = \(delta: string\)/)
 })
 
 test('assistant narrows prompt context and tools by intent profile', () => {

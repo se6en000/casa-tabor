@@ -1,4 +1,4 @@
-const EVENT_TERMS = /\b(calendar|event|events|appointment|appointments|reminder|reminders|schedule|scheduled|therapy|practice|double[- ]?book|conflict|busy|free)\b/i
+const EVENT_TERMS = /\b(calendar|event|events|appointment|appointments|reminder|reminders|schedule|scheduled|therapy|practice|birthday|party|double[- ]?book|conflict|busy|free)\b/i
 const EVENT_TIME_QUERY = /\b(what(?:'s| is| do we have| have we got)?|anything|who)\b.*\b(today|tomorrow|tonight|week|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next)\b/i
 const EVENT_CREATE = /\b(create|add|book|set up)\b.*\b(event|appointment|reminder|calendar)\b|\bschedule\b.*\b(for|on|at|tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i
 const EVENT_MUTATION = /\b(move|resched(?:ule)?|change|update|edit|delete|remove|cancel|shift|push)\b/i
@@ -7,8 +7,13 @@ const GENERIC_ACTION = /\b(add|create|save|store|check|clear|delete|remove|updat
 export function classifyAssistantIntent(text, options = {}) {
   const input = String(text ?? '').trim()
   const focusedEvent = options.focusedEvent === true
+  const activeEvent = options.activeEntityType === 'event'
   const assistantMode = options.assistantMode === 'chef' ? 'chef' : 'general'
-  const hasEventIntent = focusedEvent || EVENT_TERMS.test(input) || EVENT_TIME_QUERY.test(input)
+  const eventFollowUp = activeEvent && (
+    /\b(it|that|this|one|party|location|address|venue|calendar|time|when|where|who|attend|bring|prep|prepare|details?)\b/i.test(input) ||
+    /^(?:yes|yeah|yep|correct|right|do it|update it|change it)\b/i.test(input)
+  )
+  const hasEventIntent = focusedEvent || eventFollowUp || EVENT_TERMS.test(input) || EVENT_TIME_QUERY.test(input)
   const hasWeatherIntent = /\b(weather|forecast|temperature|rain|storm|umbrella|uv|heat index|beach day|kayak)\b/i.test(input)
   const hasTravelIntent = /\b(traffic|commute|drive time|travel time|leave by|when should (?:i|we) leave|eta|route)\b/i.test(input)
   const hasGroceryIntent = /\b(grocer(?:y|ies)|shopping list|buy|pantry|restock|food shop)\b/i.test(input)
@@ -26,11 +31,12 @@ export function classifyAssistantIntent(text, options = {}) {
   ].filter(Boolean).length
 
   if (hasEventIntent) {
-    const createIntent = !focusedEvent && EVENT_CREATE.test(input) && !EVENT_MUTATION.test(input)
-    if (matchedDomains > 1 && !focusedEvent && !createIntent) {
+    const hasAuthoritativeEvent = focusedEvent || eventFollowUp
+    const createIntent = !hasAuthoritativeEvent && EVENT_CREATE.test(input) && !EVENT_MUTATION.test(input)
+    if (matchedDomains > 1 && !hasAuthoritativeEvent && !createIntent) {
       return { profile: 'full', forceEventSearch: false }
     }
-    return { profile: 'event', forceEventSearch: !focusedEvent && !createIntent }
+    return { profile: 'event', forceEventSearch: !hasAuthoritativeEvent && !createIntent }
   }
   if (matchedDomains > 1) return { profile: 'full', forceEventSearch: false }
   if (hasWeatherIntent) return { profile: 'weather', forceEventSearch: false }
