@@ -60,6 +60,10 @@ test('output safety rejects pseudo-tools and unsupported write claims', () => {
     secureAssistantResult({ type: 'text', text: 'Confirmed—I created it.', write_verified: true }, { userRequestedWrite: true }).safety_rejection,
     undefined,
   )
+  assert.equal(
+    secureAssistantResult({ type: 'text', text: "Okay, I'm searching for your events now. Please bear with me." }).safety_rejection,
+    'unsupported_deferred_progress',
+  )
 })
 
 test('turn-taking holds incomplete clauses but preserves short commands', () => {

@@ -67,7 +67,7 @@ function eventLine(event, offset) {
 }
 
 export function resolveCalendarSemanticRead(frame, events, options = {}) {
-  if (!frame || !['calendar.list', 'calendar.next', 'calendar.count', 'calendar.availability'].includes(frame.intent)) return null
+  if (!frame || !['calendar.list', 'calendar.next', 'calendar.count', 'calendar.availability', 'calendar.destinations'].includes(frame.intent)) return null
   const now = options.now instanceof Date ? options.now : new Date()
   const offset = offsetMinutes(options.utcOffset)
   const scope = frame.slots?.temporalScope
@@ -108,6 +108,21 @@ export function resolveCalendarSemanticRead(frame, events, options = {}) {
         ? `You have ${rows.length} ${rows.length === 1 ? 'event' : 'events'} ${range.label}, with no overlaps.`
         : `Your calendar is free ${range.label}.`
     return { text, events: rows, conflicts: overlaps, intent: frame.intent, scope: range.label }
+  }
+  if (frame.intent === 'calendar.destinations') {
+    if (rows.length === 0) return { text: `You do not have any calendar destinations ${range.label}.`, events: [], intent: frame.intent, scope: range.label }
+    const lines = rows.map((event) => {
+      const destination = event.address || event.location_name
+      return destination
+        ? `${localTime(event.start_time, offset)} — ${event.title}: ${destination}`
+        : `${localTime(event.start_time, offset)} — ${event.title}: no destination is saved`
+    })
+    return {
+      text: `${rows.length === 1 ? 'One destination' : `${rows.length} destinations`} ${range.label}:\n${lines.join('\n')}`,
+      events: rows,
+      intent: frame.intent,
+      scope: range.label,
+    }
   }
 
   if (rows.length === 0) return { text: `Nothing is on your calendar ${range.label}.`, events: [], intent: frame.intent, scope: range.label }

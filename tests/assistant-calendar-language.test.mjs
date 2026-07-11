@@ -13,7 +13,7 @@ const NOW = new Date('2026-07-11T15:00:00Z')
 const options = { now: NOW, utcOffset: '-04:00' }
 const events = [
   { id: 'party', title: 'Owen Party', start_time: '2026-07-11T16:30:00Z', end_time: '2026-07-11T18:30:00Z' },
-  { id: 'pool', title: 'Pool Party', start_time: '2026-07-12T18:00:00Z', end_time: '2026-07-12T22:00:00Z' },
+  { id: 'pool', title: 'Pool Party', start_time: '2026-07-12T18:00:00Z', end_time: '2026-07-12T22:00:00Z', location_name: "Uncle Mark's House", address: '1826 4th Place' },
   { id: 'monday-a', title: 'Therapy', start_time: '2026-07-13T13:00:00Z', end_time: '2026-07-13T14:00:00Z' },
   { id: 'monday-b', title: 'School Meeting', start_time: '2026-07-13T13:30:00Z', end_time: '2026-07-13T14:30:00Z' },
 ]
@@ -39,6 +39,7 @@ test('calendar parser supports ordinary flexible read language', () => {
   assert.equal(parseCalendarLanguage('Do we have any conflicts on Monday?')?.intent, 'calendar.availability')
   assert.equal(parseCalendarLanguage('How many meetings are there next week?')?.intent, 'calendar.count')
   assert.equal(parseCalendarLanguage('What do I have coming up?')?.intent, 'calendar.next')
+  assert.equal(parseCalendarLanguage('Where do I need to go tomorrow?')?.intent, 'calendar.destinations')
 })
 
 test('active event follow-ups resolve pronouns without phrase-specific routing', () => {
@@ -60,6 +61,9 @@ test('semantic reads execute against authoritative calendar rows', () => {
   const conflicts = resolveCalendarSemanticRead(parseCalendarLanguage('Do we have any conflicts on Monday?'), events, options)
   assert.equal(conflicts.conflicts.length, 1)
   assert.match(conflicts.text, /Monday/)
+
+  const destinations = resolveCalendarSemanticRead(parseCalendarLanguage('Where do I need to go tomorrow?'), events, options)
+  assert.match(destinations.text, /1826 4th Place/)
 })
 
 test('non-calendar language remains outside the deterministic contract', () => {

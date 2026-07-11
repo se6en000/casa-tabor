@@ -13,6 +13,7 @@ export const CALENDAR_INTENTS = Object.freeze([
   'calendar.list',
   'calendar.next',
   'calendar.count',
+  'calendar.destinations',
   'calendar.availability',
   'event.select',
   'event.location',
@@ -38,6 +39,8 @@ export const CALENDAR_UTTERANCE_CORPUS = Object.freeze([
   }))),
   ...DAY_SCOPES.map((scope) => ({ text: `how many appointments do we have ${scope}`, intent: 'calendar.count' })),
   ...DAY_SCOPES.map((scope) => ({ text: `are we free ${scope}`, intent: 'calendar.availability' })),
+  ...DAY_SCOPES.map((scope) => ({ text: `where do I need to go ${scope}`, intent: 'calendar.destinations' })),
+  ...DAY_SCOPES.map((scope) => ({ text: `what places am I going ${scope}`, intent: 'calendar.destinations' })),
   ...['what is next', "what's next", 'what do I have next', 'what is coming up', 'anything after this'].map((text) => ({
     text,
     intent: 'calendar.next',
@@ -155,6 +158,9 @@ export function parseCalendarLanguage(text, options = {}) {
   }
   if (/\b(?:am i|are we|is everyone)\s+(?:free|busy)\b|\bany (?:conflicts?|overlaps?)\b/.test(input)) {
     return frame('calendar.availability', 0.97, { temporalScope: scope })
+  }
+  if (scope && /\bwhere\b.*\b(?:need to|have to|should|am i|are we)\s+go\b|\bwhat (?:places?|locations?|addresses?)\b.*\b(?:going|visiting|have)\b/.test(input)) {
+    return frame('calendar.destinations', 0.98, { temporalScope: scope })
   }
   const listLanguage = /\b(?:what(?:'s| is) on|what do (?:i|we) have|show me|tell me|give me|run through|rundown|anything on|anything happening)\b/.test(input)
   if ((CALENDAR_NOUNS.test(input) || scope) && listLanguage && !mutationLanguage) {
