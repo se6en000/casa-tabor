@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "tokens:generate": "node scripts/generate-design-tokens.mjs",
     "tokens:check": "node scripts/generate-design-tokens.mjs --check",
+    "design-system:export": "node scripts/export-design-system.mjs",
     "style:audit": "node scripts/style-audit.mjs",
     "style:check": "node scripts/style-audit.mjs --check"
   },
