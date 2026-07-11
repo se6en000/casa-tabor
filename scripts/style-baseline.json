@@ -5,12 +5,12 @@
   "filesScanned": 160,
   "categories": {
     "arbitraryFontSize": 77,
-    "rawHexColors": 295,
+    "rawHexColors": 76,
     "arbitraryZIndex": 16,
-    "inlineStyleBlocks": 247,
+    "inlineStyleBlocks": 198,
     "undersizedSquareControls": 0,
     "hoverOnlyReveals": 0,
-    "titleOnlyButtonLabels": 26,
-    "nativeControlRecreations": 342
+    "titleOnlyButtonLabels": 8,
+    "nativeControlRecreations": 322
   }
 }

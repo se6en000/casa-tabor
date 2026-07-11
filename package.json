@@ -13,6 +13,7 @@
     "tokens:check": "node scripts/generate-design-tokens.mjs --check",
     "design-system:export": "node scripts/export-design-system.mjs",
     "style:audit": "node scripts/style-audit.mjs",
+    "style:report": "node scripts/style-audit.mjs --json",
     "style:check": "node scripts/style-audit.mjs --check"
   },
   "dependencies": {

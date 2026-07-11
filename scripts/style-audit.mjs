@@ -30,6 +30,7 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const REPO_ROOT = resolve(__dirname, '..')
 const SRC_DIR = join(REPO_ROOT, 'src')
 const BASELINE_PATH = join(__dirname, 'style-baseline.json')
+const EXCEPTIONS_PATH = join(__dirname, 'style-audit-exceptions.json')
 const REPORT_DIR = join(REPO_ROOT, 'reports')
 const REPORT_PATH = join(REPORT_DIR, 'style-audit.report.json')
 
@@ -67,9 +68,24 @@ function collectSourceFiles(dir) {
 
 function runAudit() {
   const files = collectSourceFiles(SRC_DIR)
-  /** @type {Record<string, { count: number, byFile: Record<string, {line:number, snippet:string}[]> }>} */
+  const exceptionConfig = JSON.parse(readFileSync(EXCEPTIONS_PATH, 'utf8'))
+  const sourcePaths = new Set(files.map((file) => relative(REPO_ROOT, file)))
+  const categoryIds = new Set(CATEGORIES.map((category) => category.id))
+  for (const [categoryId, entries] of Object.entries(exceptionConfig.categories ?? {})) {
+    if (!categoryIds.has(categoryId)) throw new Error(`Unknown style-audit exception category: ${categoryId}`)
+    const seenPaths = new Set()
+    for (const entry of entries) {
+      if (!sourcePaths.has(entry.path)) throw new Error(`Style-audit exception path does not exist: ${entry.path}`)
+      if (!entry.reason?.trim()) throw new Error(`Style-audit exception needs a reason: ${categoryId} ${entry.path}`)
+      if (seenPaths.has(entry.path)) throw new Error(`Duplicate style-audit exception: ${categoryId} ${entry.path}`)
+      seenPaths.add(entry.path)
+    }
+  }
+  /** @type {Record<string, { count: number, byFile: Record<string, {line:number, snippet:string}[]>, exceptionCount: number, exceptionsByFile: Record<string, {reason:string, matches:{line:number, snippet:string}[]}[]> }>} */
   const results = {}
-  for (const cat of CATEGORIES) results[cat.id] = { count: 0, byFile: {} }
+  for (const cat of CATEGORIES) {
+    results[cat.id] = { count: 0, byFile: {}, exceptionCount: 0, exceptionsByFile: {} }
+  }
 
   for (const file of files) {
     const content = readFileSync(file, 'utf8')
@@ -77,12 +93,45 @@ function runAudit() {
     for (const cat of CATEGORIES) {
       const matches = cat.run(content, relPath)
       if (matches.length === 0) continue
+      const exception = exceptionConfig.categories?.[cat.id]?.find((entry) => entry.path === relPath)
+      if (exception) {
+        results[cat.id].exceptionCount += matches.length
+        results[cat.id].exceptionsByFile[relPath] = [{ reason: exception.reason, matches }]
+        continue
+      }
       results[cat.id].count += matches.length
       results[cat.id].byFile[relPath] = matches
     }
+
   }
 
   return { filesScanned: files.length, results }
+}
+
+function surfaceForPath(filePath) {
+  if (filePath.startsWith('src/pages/')) return filePath.slice('src/pages/'.length).replace(/Page\.tsx?$/, '')
+  if (filePath.startsWith('src/components/calendar/')) return 'Calendar'
+  if (filePath.startsWith('src/components/home/')) return 'Home'
+  if (filePath.startsWith('src/components/settings/')) return 'Settings'
+  if (filePath.startsWith('src/components/shared/')) return 'Shared shell'
+  if (filePath.startsWith('src/components/ui/')) return 'Design system'
+  if (filePath.startsWith('src/contexts/') || filePath.startsWith('src/design-system/')) return 'Foundations'
+  return 'Cross-cutting'
+}
+
+function summarizeBySurface(audit) {
+  const surfaces = {}
+  for (const cat of CATEGORIES) {
+    for (const [filePath, matches] of Object.entries(audit.results[cat.id].byFile)) {
+      const surface = surfaceForPath(filePath)
+      surfaces[surface] ??= { total: 0, categories: {} }
+      surfaces[surface].total += matches.length
+      surfaces[surface].categories[cat.id] = (surfaces[surface].categories[cat.id] ?? 0) + matches.length
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(surfaces).sort(([, first], [, second]) => second.total - first.total),
+  )
 }
 
 function loadBaseline() {
@@ -118,7 +167,9 @@ function printReport(audit, baseline) {
     const baseStr = typeof r.base === 'number' ? `baseline ${r.base}` : 'no baseline'
     const deltaStr =
       r.delta === null ? '' : r.delta > 0 ? `  (+${r.delta} REGRESSION)` : r.delta < 0 ? `  (${r.delta} improved)` : '  (no change)'
-    console.log(`  ${r.id.padEnd(idWidth)}  ${String(r.count).padStart(4)}   ${baseStr}${deltaStr}`)
+    const exceptions = audit.results[r.id].exceptionCount
+    const exceptionStr = exceptions > 0 ? `  (${exceptions} classified exceptions)` : ''
+    console.log(`  ${r.id.padEnd(idWidth)}  ${String(r.count).padStart(4)}   ${baseStr}${deltaStr}${exceptionStr}`)
   }
   console.log('\nHeuristic limits (read before treating counts as precise):')
   for (const cat of CATEGORIES) {
@@ -139,6 +190,7 @@ function main() {
   const rows = printReport(audit, baseline)
 
   if (wantsJson) {
+    const surfaces = summarizeBySurface(audit)
     mkdirSync(REPORT_DIR, { recursive: true })
     writeFileSync(
       REPORT_PATH,
@@ -148,6 +200,11 @@ function main() {
           filesScanned: audit.filesScanned,
           categories: Object.fromEntries(rows.map((r) => [r.id, { count: r.count, baseline: r.base, delta: r.delta }])),
           details: Object.fromEntries(CATEGORIES.map((cat) => [cat.id, audit.results[cat.id].byFile])),
+          classifiedExceptions: Object.fromEntries(CATEGORIES.map((cat) => [cat.id, {
+            count: audit.results[cat.id].exceptionCount,
+            files: audit.results[cat.id].exceptionsByFile,
+          }])),
+          surfaces,
         },
         null,
         2,

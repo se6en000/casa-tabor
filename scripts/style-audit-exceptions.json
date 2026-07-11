@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "description": "Explicit, reviewed file-level exceptions for style-audit heuristics. Matches remain visible as classified exceptions in reports; they are not counted as actionable design-system debt.",
+  "categories": {
+    "rawHexColors": [
+      {
+        "path": "src/contexts/ThemeContext.tsx",
+        "reason": "Canonical user-selectable theme preset palettes."
+      },
+      {
+        "path": "src/utils/colorUtils.ts",
+        "reason": "Adaptive artwork color extraction and curated editorial mat palette."
+      },
+      {
+        "path": "src/components/shared/ArtScreensaver.tsx",
+        "reason": "Editorial artwork presentation and image-derived framing."
+      },
+      {
+        "path": "src/components/shared/BirthdayCardDecoration.tsx",
+        "reason": "Intentional editorial celebration illustration."
+      },
+      {
+        "path": "src/pages/DisplaySettingsPage.tsx",
+        "reason": "Live theme editor renders user-selected color values."
+      }
+    ],
+    "inlineStyleBlocks": [
+      {
+        "path": "src/components/shared/ArtScreensaver.tsx",
+        "reason": "Artwork frame dimensions and image positioning are runtime-derived."
+      },
+      {
+        "path": "src/components/shared/TouchKeyboard.tsx",
+        "reason": "Virtual-keyboard geometry is runtime-derived from the viewport."
+      },
+      {
+        "path": "src/pages/DisplaySettingsPage.tsx",
+        "reason": "Live theme previews bind runtime color values."
+      }
+    ],
+    "nativeControlRecreations": [
+      {
+        "path": "src/components/shared/TouchKeyboard.tsx",
+        "reason": "Specialized virtual-keyboard keys require keyboard-specific interaction and repeat behavior."
+      }
+    ]
+  }
+}

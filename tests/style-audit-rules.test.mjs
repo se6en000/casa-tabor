@@ -80,6 +80,8 @@ test('hover-only reveal audit catches touch-inaccessible visibility contracts', 
 test('title-only button labels require an explicit aria-label', () => {
   assert.equal(findTitleOnlyButtonLabels('<button title="Delete"><Trash /></button>').length, 1)
   assert.equal(findTitleOnlyButtonLabels('<button title="Delete" aria-label="Delete"><Trash /></button>').length, 0)
+  assert.equal(findTitleOnlyButtonLabels('<button title="Save">Save changes</button>').length, 0)
+  assert.equal(findTitleOnlyButtonLabels('<button title="Copy"><Copy /> Copy address</button>').length, 0)
 })
 
 test('native control recreation audit exempts shared UI primitives', () => {

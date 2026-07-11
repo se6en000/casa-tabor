@@ -174,6 +174,16 @@ function findTitleOnlyButtonLabels(content) {
   const offsets = lineStarts(content)
   for (const tag of collectJsxOpeningTags(content, new Set(['button']))) {
     if (!/\btitle=/.test(tag.source) || /\baria-label=/.test(tag.source)) continue
+    const openingEnd = tag.offset + tag.source.length
+    const closingOffset = content.indexOf('</button>', openingEnd)
+    if (closingOffset >= 0) {
+      const children = content.slice(openingEnd, closingOffset)
+      const visibleText = children
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+        .replace(/<[^>]+>/g, '')
+        .trim()
+      if (visibleText.length > 0) continue
+    }
     const idx = lineIndexAt(offsets, tag.offset)
     out.push({ line: idx + 1, snippet: (fileLines[idx] ?? '').trim().slice(0, 160) })
   }
@@ -194,10 +204,9 @@ export const CATEGORIES = [
     label: 'Raw hex colors in TS/TSX',
     run: findRawHexColors,
     heuristicLimits:
-      'Matches any #hex literal in scanned files, including legitimate token/theme ' +
-      'definition files (e.g. contexts/ThemeContext.tsx) — those are expected to ' +
-      'contain hex values and are counted as-is rather than special-cased, which ' +
-      'can overstate true "component debt". Does not detect rgb()/hsl() equivalents.',
+      'Matches any #hex literal in scanned files. Reviewed canonical palettes, ' +
+      'editorial artwork, and runtime color utilities are reported separately as ' +
+      'classified exceptions. Does not detect rgb()/hsl() equivalents.',
   },
   {
     id: 'arbitraryZIndex',
@@ -212,9 +221,8 @@ export const CATEGORIES = [
     label: 'Inline style={{...}} blocks',
     run: findInlineStyleBlocks,
     heuristicLimits:
-      'Counts the opening `style={{` token once per occurrence. Does not evaluate ' +
-      'whether the inline style is justified (e.g. dynamic transforms/positions ' +
-      'that cannot reasonably be static Tailwind classes).',
+      'Counts the opening `style={{` token once per occurrence. Reviewed files whose ' +
+      'geometry or colors are runtime-derived are reported separately as classified exceptions.',
   },
   {
     id: 'undersizedSquareControls',
@@ -237,8 +245,8 @@ export const CATEGORIES = [
     label: 'Buttons relying on title instead of aria-label',
     run: findTitleOnlyButtonLabels,
     heuristicLimits:
-      'Matches button opening tags containing title without aria-label. It may ' +
-      'include text buttons whose visible children already provide an accessible name.',
+      'Matches icon-only button elements containing title without aria-label. Buttons ' +
+      'with literal visible child text are excluded; expression-derived labels remain conservative.',
   },
   {
     id: 'nativeControlRecreations',
