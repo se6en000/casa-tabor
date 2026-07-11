@@ -1,7 +1,7 @@
 // Phase 2 shared UI primitives — see src/pages/DesignSystemGalleryPage.tsx
 // for a live rendering of every state, and src/design-system/variants.mjs
 // for the pure (framework-free) class-name logic behind each variant.
-export { Button, type ButtonProps } from './Button'
+export { Button, type ButtonContentAlign, type ButtonProps } from './Button'
 export { IconButton, type IconButtonProps } from './IconButton'
 export { Card, type CardProps } from './Card'
 export { Chip, type ChipProps } from './Chip'

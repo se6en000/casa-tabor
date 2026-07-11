@@ -1,4 +1,4 @@
-export const DESIGN_SYSTEM_VERSION = '1.0.0'
+export const DESIGN_SYSTEM_VERSION = '1.0.1'
 export const DESIGN_SYSTEM_RELEASE_DATE = '2026-07-10'
 export const DESIGN_SYSTEM_SCHEMA_VERSION = 1
 
@@ -33,11 +33,11 @@ export const COMPONENT_MANIFEST = [
     purpose: 'Runs a labeled user action with stable touch geometry.',
     useWhen: 'Use for primary, secondary, ghost, strong, or destructive actions.',
     avoid: 'Do not use for navigation or icon-only actions.',
-    variants: ['primary', 'strong', 'secondary', 'ghost', 'danger'],
+    variants: ['primary', 'strong', 'secondary', 'ghost', 'danger', 'align:center', 'align:start', 'align:between'],
     states: ['default', 'hover', 'focus-visible', 'disabled', 'loading'],
     accessibility: 'Use concrete visible text; loading disables the action and exposes aria-busy.',
-    responsive: 'Sizes use density-aware control tokens; fullWidth is appropriate on narrow sheets and forms.',
-    example: '<Button variant="primary" loading={saving}>Save changes</Button>',
+    responsive: 'Sizes use density-aware control tokens; fullWidth is appropriate on narrow sheets and forms. Use start or between alignment for full-width list and sidebar rows.',
+    example: '<Button variant="primary" align="start" fullWidth loading={saving}>Save changes</Button>',
   }),
   component({
     name: 'IconButton',
@@ -486,6 +486,14 @@ export const COMPONENT_MANIFEST = [
 ]
 
 export const DESIGN_SYSTEM_CHANGELOG = [
+  {
+    version: '1.0.1',
+    date: '2026-07-10',
+    changes: [
+      'Added explicit center, start, and between Button content alignment contracts.',
+      'Aligned the Home Family sidebar heading and member rows to one shared inset.',
+    ],
+  },
   {
     version: '1.0.0',
     date: '2026-07-10',

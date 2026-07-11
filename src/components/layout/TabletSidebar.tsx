@@ -139,15 +139,20 @@ export default function TabletSidebar() {
           {/* Family — collapsible filter + who's home */}
           {!collapsed && (
             <div className="mt-3">
-              <Button variant="ghost"
+              <Button
+                variant="ghost"
+                fullWidth
+                align="between"
                 onClick={() => setFamilyOpen(o => !o)}
-                className="w-full min-h-control flex items-center px-1.5 text-caption font-semibold text-casa-text-faint uppercase tracking-[0.18em] hover:text-casa-text-secondary transition-colors"
+                trailingIcon={(
+                  <ChevronDown
+                    size={13}
+                    className={cn('transition-transform duration-200', familyOpen ? 'rotate-0' : '-rotate-90')}
+                  />
+                )}
+                className="min-h-control px-1.5 text-caption font-semibold text-casa-text-faint uppercase tracking-[0.18em] hover:text-casa-text-secondary transition-colors"
               >
                 Family
-                <ChevronDown
-                  size={13}
-                  className={cn('ml-auto transition-transform duration-200', familyOpen ? 'rotate-0' : '-rotate-90')}
-                />
               </Button>
 
               <AnimatePresence initial={false}>
@@ -188,11 +193,15 @@ export default function TabletSidebar() {
                         const constrained = !availabilityAssessment.available || availabilityAssessment.softUnavailable
 
                         return (
-                          <Button variant="ghost"
+                          <Button
+                            variant="ghost"
+                            fullWidth
+                            align="start"
                             key={m.id}
                             onClick={() => toggleMember(m.id)}
+                            contentClassName="gap-2.5"
                             className={cn(
-                              'flex min-h-control items-center gap-2.5 px-1.5 py-1.5 rounded-xl transition-colors text-left w-full',
+                              'min-h-control px-1.5 py-1.5 rounded-xl transition-colors',
                               active ? 'bg-transparent' : 'bg-transparent hover:bg-casa-surface/35',
                             )}
                           >

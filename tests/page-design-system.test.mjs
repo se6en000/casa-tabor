@@ -81,7 +81,7 @@ test('P0 controls preserve native and ARIA semantics', () => {
   const comboboxSource = readFileSync(resolve('src/components/ui/Combobox.tsx'), 'utf8')
   const feedbackSource = readFileSync(resolve('src/components/ui/Toast.tsx'), 'utf8')
   assert.match(buttonSource, /contentClassName/)
-  assert.match(buttonSource, /cn\('inline-flex items-center justify-center gap-2', contentClassName/)
+  assert.match(buttonSource, /cn\('inline-flex items-center gap-2', CONTENT_ALIGNMENT_CLASSES\[align\], contentClassName/)
   assert.match(selectionSource, /role="switch"/)
   assert.match(selectionSource, /type="checkbox"/)
   assert.match(selectionSource, /type="radio"/)
@@ -398,6 +398,18 @@ test('Home and its right rail use shared touch-first design contracts', () => {
   assert.doesNotMatch(rightRail, /w-\[22rem\]/)
   assert.doesNotMatch(home, /const SHARED_GOLD = '#/)
   assert.doesNotMatch(rightRail, /text-\[\d+(?:\.\d+)?(?:px|rem|em)\]/)
+})
+
+test('Home Family widget uses the shared full-width Button alignment contract', () => {
+  const sidebar = readFileSync(resolve('src/components/layout/TabletSidebar.tsx'), 'utf8')
+  const button = readFileSync(resolve('src/components/ui/Button.tsx'), 'utf8')
+
+  assert.match(button, /export type ButtonContentAlign = 'center' \| 'start' \| 'between'/)
+  assert.match(button, /start: 'w-full justify-start text-left'/)
+  assert.match(button, /between: 'w-full justify-between text-left'/)
+  assert.match(sidebar, /align="between"[\s\S]*Family/)
+  assert.match(sidebar, /align="start"[\s\S]*contentClassName="gap-2\.5"/)
+  assert.doesNotMatch(sidebar, /className="w-full min-h-control flex items-center px-1\.5/)
 })
 
 test('Home middle rail omits household availability pills', () => {

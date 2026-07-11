@@ -70,3 +70,11 @@ test('portable export includes version, manifest, guide, and changelog artifacts
   assert.match(source, /designSystemVersion: DESIGN_SYSTEM_VERSION/)
   assert.match(source, /examples\/SettingsShell\.tsx/)
 })
+
+test('Button documentation includes full-width content alignment guidance', () => {
+  const button = COMPONENT_MANIFEST.find((entry) => entry.name === 'Button')
+  assert.ok(button)
+  assert.ok(button.variants.includes('align:start'))
+  assert.ok(button.variants.includes('align:between'))
+  assert.match(button.responsive, /sidebar rows/)
+})

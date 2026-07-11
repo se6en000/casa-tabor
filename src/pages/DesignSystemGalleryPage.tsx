@@ -397,6 +397,12 @@ export default function DesignSystemGalleryPage() {
             <Button disabled>Disabled</Button>
             <IconButton icon={<CheckCircle2 size={18} />} aria-label="Confirm example" variant="secondary" />
           </div>
+          <div className="mt-3 max-w-sm space-y-2">
+            <Button variant="secondary" fullWidth align="start">Start-aligned list action</Button>
+            <Button variant="secondary" fullWidth align="between" trailingIcon={<CheckCircle2 size={18} />}>
+              Between-aligned sidebar action
+            </Button>
+          </div>
           <Card padding="sm">
             <Heading role="heading">Progressive event editing</Heading>
             <Text role="body-sm" muted className="mb-3">Use compact summaries for scanning, then reveal touch dials or optional fields only when needed.</Text>
