@@ -141,7 +141,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   }
 
   return (
-    <aside className="hidden lg:flex w-[22rem] flex-shrink-0 flex-col border-l border-casa-border bg-casa-bg-2 self-stretch overflow-hidden">
+    <aside className="hidden lg:flex basis-1/3 flex-none min-w-0 flex-col border-l border-casa-border bg-casa-bg-2 self-stretch overflow-hidden">
       <BounceScroll className="flex-1 min-h-0">
         <section className="px-4 py-4">
           <div className="flex items-center justify-between">

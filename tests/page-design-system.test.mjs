@@ -214,6 +214,7 @@ test('Cook mode, unit, and quantity selectors use shared toggle controls', () =>
 test('Home and its right rail use shared touch-first design contracts', () => {
   const home = readFileSync(resolve('src/pages/HomePage.tsx'), 'utf8')
   const rightRail = readFileSync(resolve('src/components/home/HomeRightPanel.tsx'), 'utf8')
+  const leftRail = readFileSync(resolve('src/components/layout/TabletSidebar.tsx'), 'utf8')
 
   for (const component of ['Button', 'CalendarPill', 'Card', 'Chip', 'EmptyState', 'Heading', 'IconButton', 'Text']) {
     assert.match(home, new RegExp(`<${component}`))
@@ -225,6 +226,10 @@ test('Home and its right rail use shared touch-first design contracts', () => {
   assert.match(home, /aria-label="Snooze reminder one hour"/)
   assert.match(home, /size-control-sm rounded-full/)
   assert.match(rightRail, /min-h-control rounded-button/)
+  assert.match(leftRail, /collapsed \? 'w-20' : 'basis-1\/4'/)
+  assert.match(rightRail, /lg:flex basis-1\/3 flex-none/)
+  assert.doesNotMatch(leftRail, /collapsed \? 'w-20' : 'w-72'/)
+  assert.doesNotMatch(rightRail, /w-\[22rem\]/)
   assert.doesNotMatch(home, /const SHARED_GOLD = '#/)
   assert.doesNotMatch(rightRail, /text-\[\d+(?:\.\d+)?(?:px|rem|em)\]/)
 })

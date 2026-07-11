@@ -88,8 +88,8 @@ export default function TabletSidebar() {
   return (
     <>
       <aside className={cn(
-        'hidden lg:flex flex-shrink-0 bg-casa-bg-2 border-r border-casa-border flex-col h-full min-h-0 overflow-hidden z-30 transition-all duration-300',
-        collapsed ? 'w-20' : 'w-72',
+        'hidden lg:flex flex-none bg-casa-bg-2 border-r border-casa-border flex-col h-full min-h-0 overflow-hidden z-30 transition-all duration-300',
+        collapsed ? 'w-20' : 'basis-1/4',
       )}>
 
         <BounceScroll
