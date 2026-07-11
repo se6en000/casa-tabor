@@ -65,6 +65,7 @@ export function useSpeechInput({
   const firstInterimRef    = useRef(false)
   const utteranceIdRef     = useRef('')
   const pendingFragmentRef = useRef('')
+  const pendingFragmentUtteranceIdRef = useRef('')
   const fragmentTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [phase, setPhase]  = useState<VoicePhase>('idle')
   const phaseRef           = useRef<VoicePhase>('idle')
@@ -115,6 +116,23 @@ export function useSpeechInput({
   }
   const stopSilenceTimer = () => { if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
   const stopFragmentTimer = () => { if (fragmentTimerRef.current) clearTimeout(fragmentTimerRef.current); fragmentTimerRef.current = null }
+  const scheduleFragmentTimeout = () => {
+    stopFragmentTimer()
+    fragmentTimerRef.current = setTimeout(() => {
+      const abandoned = pendingFragmentRef.current
+      const abandonedUtteranceId = pendingFragmentUtteranceIdRef.current
+      pendingFragmentRef.current = ''
+      pendingFragmentUtteranceIdRef.current = ''
+      fragmentTimerRef.current = null
+      onInterimRef.current('')
+      onTraceRef.current?.('asr_fragment_discarded', {
+        utterance_id: abandonedUtteranceId,
+        reason: 'continuation_timeout',
+        word_count: abandoned ? abandoned.split(/\s+/).length : 0,
+      })
+      if (abandoned) onIncompleteRef.current?.(abandoned)
+    }, 4500)
+  }
   const newUtteranceId = () => {
     utteranceIdRef.current = typeof crypto !== 'undefined' && crypto.randomUUID
       ? crypto.randomUUID()
@@ -155,6 +173,7 @@ export function useSpeechInput({
     firstInterimRef.current = false
     if (isIncompleteVoiceFragment(finalText)) {
       pendingFragmentRef.current = finalText
+      pendingFragmentUtteranceIdRef.current = utteranceIdRef.current
       setPhaseSync('connecting')
       onInterimRef.current(finalText)
       onTraceRef.current?.('asr_fragment_held', {
@@ -163,23 +182,12 @@ export function useSpeechInput({
         asr_elapsed_ms: asrElapsedMs,
         word_count: finalText.split(/\s+/).length,
       })
-      stopFragmentTimer()
-      fragmentTimerRef.current = setTimeout(() => {
-        const abandoned = pendingFragmentRef.current
-        pendingFragmentRef.current = ''
-        fragmentTimerRef.current = null
-        onInterimRef.current('')
-        onTraceRef.current?.('asr_fragment_discarded', {
-          utterance_id: utteranceIdRef.current,
-          reason: 'continuation_timeout',
-          word_count: abandoned ? abandoned.split(/\s+/).length : 0,
-        })
-        if (abandoned) onIncompleteRef.current?.(abandoned)
-      }, 4500)
+      scheduleFragmentTimeout()
       return
     }
     stopFragmentTimer()
     pendingFragmentRef.current = ''
+    pendingFragmentUtteranceIdRef.current = ''
     setPhaseSync('processing')
     onTraceRef.current?.('asr_final', {
       utterance_id: utteranceIdRef.current,
@@ -332,6 +340,7 @@ export function useSpeechInput({
             break
           case 'interim':
             if (msg.text !== lastInterimRef.current) {
+              if (pendingFragmentRef.current) scheduleFragmentTimeout()
               if (!firstInterimRef.current) {
                 firstInterimRef.current = true
                 onTraceRef.current?.('asr_first_interim', {
@@ -397,6 +406,7 @@ export function useSpeechInput({
     lastInterimTimeRef.current = 0
     lastConfidenceRef.current = null
     pendingFragmentRef.current = ''
+    pendingFragmentUtteranceIdRef.current = ''
     stopFragmentTimer()
     connectStartRef.current = 0
     listeningStartRef.current = 0

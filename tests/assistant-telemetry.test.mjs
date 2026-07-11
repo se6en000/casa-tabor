@@ -50,6 +50,12 @@ test('voice telemetry covers wake through final ASR without recording transcript
   assert.match(drawer, /turnId: utteranceId/)
 })
 
+test('active continuation speech cannot expire a held ASR fragment', () => {
+  assert.match(speech, /if \(pendingFragmentRef\.current\) scheduleFragmentTimeout\(\)/)
+  assert.match(speech, /pendingFragmentUtteranceIdRef\.current = utteranceIdRef\.current/)
+  assert.match(speech, /utterance_id: abandonedUtteranceId/)
+})
+
 test('AI forensics reports the new client pipeline stages', () => {
   for (const event of ['drawer_opened', 'asr_final', 'assistant_first_token', 'assistant_invoke_started']) {
     assert.match(settings, new RegExp(event))

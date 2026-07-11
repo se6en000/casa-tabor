@@ -38,9 +38,19 @@ test('fast-path: "what\'s on tomorrow" lists tomorrow only', () => {
   assert.ok(!out.includes('Dentist'), 'excludes today event')
 })
 
-test('fast-path: a unique day result exposes its authoritative event', () => {
+test('fast-path: unique schedule results expose their authoritative event', () => {
   assert.equal(findSingleEventForScheduleQuery("what's on the schedule for tomorrow", events, NOW)?.title, 'Owen Birthday')
-  assert.equal(findSingleEventForScheduleQuery("what's next", events, NOW), null)
+  assert.equal(findSingleEventForScheduleQuery("what's next", events, NOW)?.title, 'Dentist')
+  assert.equal(findSingleEventForScheduleQuery("what's next today", events, NOW)?.title, 'Dentist')
+})
+
+test('fast-path: an answer containing current and upcoming events stays ungrounded', () => {
+  const overlapping = [
+    { title: 'Current Meeting', start_time: iso(2026, 6, 8, 9, 30), end_time: iso(2026, 6, 8, 10, 30) },
+    { title: 'Dentist', start_time: iso(2026, 6, 8, 14, 0), end_time: iso(2026, 6, 8, 15, 0) },
+  ]
+  assert.equal(findSingleEventForScheduleQuery("what's next", overlapping, NOW), null)
+  assert.equal(findSingleEventForScheduleQuery("what's next today", overlapping, NOW)?.title, 'Current Meeting')
 })
 
 test('fast-path: empty today returns a clean nothing-left message', () => {

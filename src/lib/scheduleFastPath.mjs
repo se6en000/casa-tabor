@@ -26,6 +26,30 @@ function formatEventLine(e) {
 export function findSingleEventForScheduleQuery(text, events, now = new Date()) {
   const input = String(text ?? '').trim()
   if (FASTPATH_BLOCK_VERBS.test(input) || FASTPATH_SCHEDULE_ACTION.test(input) || /\b(and|also|but)\b/i.test(input)) return null
+  const nowMs = now.getTime()
+  const parsed = (events ?? [])
+    .filter((event) => event?.start_time)
+    .map((event) => ({
+      event,
+      start: Date.parse(event.start_time),
+      end: Date.parse(event.end_time ?? event.start_time),
+    }))
+    .filter(({ start }) => Number.isFinite(start))
+    .sort((a, b) => a.start - b.start)
+
+  if (FASTPATH_NEXT_TODAY.test(input)) {
+    const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime()
+    return parsed.find(({ event, start, end }) => (
+      !event.all_day && start <= nowMs && end > nowMs
+    ))?.event ?? parsed.find(({ start }) => start > nowMs && start < tomorrowStart)?.event ?? null
+  }
+
+  if (FASTPATH_NEXT.test(input)) {
+    const inProgress = parsed.find(({ event, start, end }) => !event.all_day && start <= nowMs && end > nowMs)
+    const upcoming = parsed.find(({ start }) => start > nowMs)
+    return inProgress && upcoming ? null : (inProgress ?? upcoming)?.event ?? null
+  }
+
   const dayQuery = FASTPATH_TODAY.test(input) ? 'today' : FASTPATH_TOMORROW.test(input) ? 'tomorrow' : null
   if (!dayQuery) return null
   const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
@@ -34,12 +58,10 @@ export function findSingleEventForScheduleQuery(text, events, now = new Date()) 
   const [lo, hi] = dayQuery === 'today'
     ? [todayStart, tomorrowStart]
     : [tomorrowStart, tomorrowStart + 24 * 3600_000]
-  const matches = (events ?? []).filter((event) => {
-    const start = Date.parse(event?.start_time)
-    const end = Date.parse(event?.end_time ?? event?.start_time)
-    return Number.isFinite(start) && start >= lo && start < hi && (dayQuery !== 'today' || event.all_day || end > now.getTime())
-  })
-  return matches.length === 1 ? matches[0] : null
+  const matches = parsed.filter(({ event, start, end }) => (
+    start >= lo && start < hi && (dayQuery !== 'today' || event.all_day || end > nowMs)
+  ))
+  return matches.length === 1 ? matches[0].event : null
 }
 
 export function tryLocalScheduleAnswer(text, events, now = new Date()) {
