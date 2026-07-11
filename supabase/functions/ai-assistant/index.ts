@@ -297,17 +297,18 @@ Deno.serve(async (req) => {
     if (timeoutMs < 500) {
       return { ok: false, status: 504, data: null, errText: 'request_budget_exhausted' }
     }
-    const signal = AbortSignal.timeout(timeoutMs)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
     try {
     if (!opts.stream) {
       const res = await fetch(`${base}:generateContent?key=${apiKey}`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(reqBody), signal,
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(reqBody), signal: controller.signal,
       })
       if (!res.ok) return { ok: false, status: res.status, data: null, errText: await res.text().catch(() => '') }
       return { ok: true, status: res.status, data: await res.json(), errText: '' }
     }
     const res = await fetch(`${base}:streamGenerateContent?alt=sse&key=${apiKey}`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(reqBody), signal,
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(reqBody), signal: controller.signal,
     })
     if (!res.ok || !res.body) {
       return { ok: res.ok && Boolean(res.body), status: res.status, data: null, errText: await res.text().catch(() => '') }
@@ -351,13 +352,15 @@ Deno.serve(async (req) => {
     const data = { candidates: [{ content: { parts }, finishReason }], usageMetadata }
     return { ok: true, status: res.status, data, errText: '' }
     } catch (error) {
-      const timedOut = error instanceof DOMException && error.name === 'TimeoutError'
+      const timedOut = controller.signal.aborted
       return {
         ok: false,
         status: timedOut ? 504 : 502,
         data: null,
         errText: timedOut ? `model_timeout_${timeoutMs}ms` : String((error as Error).message ?? 'model_request_failed'),
       }
+    } finally {
+      clearTimeout(timeoutId)
     }
   }
   appendServerTrace('server_ai_assistant_context_load', `ms=${contextLoadMs}`, {

@@ -56,7 +56,8 @@ test('AI forensics reports the new client pipeline stages', () => {
 })
 
 test('assistant model calls have hard budgets and only one secondary synthesis round', () => {
-  assert.match(assistantFunction, /AbortSignal\.timeout\(timeoutMs\)/)
+  assert.match(assistantFunction, /setTimeout\(\(\) => controller\.abort\(\), timeoutMs\)/)
+  assert.match(assistantFunction, /clearTimeout\(timeoutId\)/)
   assert.match(assistantFunction, /secondaryDepth === 0 && remainingRequestBudgetMs\(\) >= 1000/)
   assert.match(assistantFunction, /resolveModelParts\(secondaryParts, secondaryDepth \+ 1\)/)
   assert.match(assistantFunction, /server_ai_assistant_secondary_cap/)
