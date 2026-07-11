@@ -123,7 +123,8 @@ test('three-rail patterns preserve the 20 / 55 / 25 desktop contract', () => {
 
   assert.match(patterns, /basis-1\/5/)
   assert.match(patterns, /basis-1\/4/)
-  assert.match(patterns, /basis-5\/16/)
+  assert.match(patterns, /basis-5\/16 min-w-0 shrink-0/)
+  assert.doesNotMatch(patterns, /basis-5\/16[^'\n]*flex-none/)
   assert.match(home, /<PrimaryRail/)
   assert.match(homeRight, /<SecondaryRail/)
   assert.match(navigation, /basis-1\/5/)

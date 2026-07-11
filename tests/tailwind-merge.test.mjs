@@ -27,3 +27,13 @@ test('later semantic text colors still replace earlier colors', () => {
     'text-casa-navy',
   )
 })
+
+test('percentage rail basis survives shared class merging', () => {
+  const classes = casaTwMerge(
+    'hidden basis-5/16 min-w-0 shrink-0 lg:flex',
+    'flex-col border-l',
+  )
+
+  assert.match(classes, /\bbasis-5\/16\b/)
+  assert.match(classes, /\bshrink-0\b/)
+})

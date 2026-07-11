@@ -129,7 +129,7 @@ export const PrimaryRail = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElem
 })
 
 export function SecondaryRail({ className, ...rest }: HTMLAttributes<HTMLElement>) {
-  return <aside className={cn('hidden basis-5/16 min-w-0 flex-none lg:flex', className)} {...rest} />
+  return <aside className={cn('hidden basis-5/16 min-w-0 shrink-0 lg:flex', className)} {...rest} />
 }
 
 export interface MasterDetailLayoutProps extends HTMLAttributes<HTMLDivElement> {
