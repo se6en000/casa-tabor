@@ -31,6 +31,7 @@ export async function computeTravelEta({
   departureTimeIso = null,
   arrivalTimeIso = null,
   bufferMins = 10,
+  signal,
 }) {
   if (!mapsKey) return { found: false, error: 'GOOGLE_MAPS_API_KEY not configured' }
   if (!origin || !destination) return { found: false, error: 'Missing origin or destination' }
@@ -47,7 +48,7 @@ export async function computeTravelEta({
       const url = new URL('https://maps.googleapis.com/maps/api/geocode/json')
       url.searchParams.set('address', query)
       url.searchParams.set('key', mapsKey)
-      const res = await fetch(url.toString())
+      const res = await fetch(url.toString(), { signal })
       const data = await res.json()
       if (!res.ok || data?.status !== 'OK') return null
       const result = data?.results?.[0]
@@ -85,6 +86,7 @@ export async function computeTravelEta({
         'X-Goog-FieldMask': 'routes.duration,routes.staticDuration,routes.distanceMeters',
       },
       body: JSON.stringify(body),
+      signal,
     })
     const data = await res.json()
     if (!res.ok) {
@@ -100,6 +102,7 @@ export async function computeTravelEta({
             'X-Goog-FieldMask': 'routes.duration,routes.staticDuration,routes.distanceMeters',
           },
           body: JSON.stringify(retryBody),
+          signal,
         })
         const retryData = await retryRes.json()
         if (!retryRes.ok) {

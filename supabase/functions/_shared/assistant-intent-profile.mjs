@@ -12,7 +12,7 @@ export function classifyAssistantIntent(text, options = {}) {
   const assistantMode = options.assistantMode === 'chef' ? 'chef' : 'general'
   const eventFollowUp = activeEvent && (
     pendingEventAction ||
-    /\b(it|that|this|one|party|location|address|venue|calendar|time|when|where|who|attend|bring|prep|prepare|details?)\b/i.test(input) ||
+    /\b(it|that|this|one|party|location|address|venue|calendar|time|when|where|who|attend|bring|prep|prepare|details?|drive|travel|traffic|route|eta|leave|get there|how long)\b/i.test(input) ||
     /^(?:yes|yeah|yep|correct|right|do it|update it|change it)\b/i.test(input)
   )
   const hasEventIntent = focusedEvent || eventFollowUp || EVENT_TERMS.test(input) || EVENT_TIME_QUERY.test(input)

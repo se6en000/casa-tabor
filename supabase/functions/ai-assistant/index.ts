@@ -18,6 +18,11 @@ import { secureAssistantResult } from '../_shared/assistant-output-safety.mjs'
 import { resolveCalendarDayRead } from '../_shared/assistant-calendar-read.mjs'
 import { resolveBringListEdit } from '../_shared/assistant-event-list-edit.mjs'
 import { resolveUniqueEventTitle } from '../_shared/assistant-event-selection.mjs'
+import {
+  classifyEventTravelFollowUp,
+  eventTravelDestination,
+  formatEventTravelAnswer,
+} from '../_shared/assistant-event-travel.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -2292,6 +2297,91 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
               request_total_ms: requestTotalMs,
               context_load_ms: contextLoadMs,
             },
+          },
+        }
+      }
+    }
+    if (intentRouting.profile === 'event' && latestUserText && activeConversationEvent) {
+      const travelFollowUp = classifyEventTravelFollowUp(latestUserText)
+      if (travelFollowUp === 'ambiguous') {
+        const requestTotalMs = Date.now() - requestStartMs
+        const text = `Do you mean the drive time to "${activeConversationEvent.title}", or how long the event lasts?`
+        appendServerTrace('server_ai_assistant_event_travel_clarification', `event=${activeConversationEvent.id} ms=${requestTotalMs}`, {
+          event_id: activeConversationEvent.id,
+          request_ms: requestTotalMs,
+        })
+        return {
+          status: 200,
+          payload: {
+            type: 'text',
+            text,
+            conversation_state: responseConversationState,
+            correlation_id: cid,
+            telemetry: { ...llmTelemetry, request_total_ms: requestTotalMs, context_load_ms: contextLoadMs },
+          },
+        }
+      }
+      if (travelFollowUp === 'route') {
+        const destination = eventTravelDestination(activeConversationEvent)
+        let text: string
+        let route: Record<string, unknown> | null = null
+        if (!destination) {
+          text = `The calendar does not have a destination saved for "${activeConversationEvent.title}".`
+        } else if (!homeAddress) {
+          text = 'I have the event destination, but the home address is not configured in Settings.'
+        } else {
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 5000)
+          try {
+            const eventStartMs = Date.parse(activeConversationEvent.start_time)
+            route = await computeTravelEta({
+              mapsKey,
+              origin: homeAddress,
+              destination,
+              arrivalTimeIso: Number.isFinite(eventStartMs) && eventStartMs > Date.now() + 2 * 60 * 1000
+                ? activeConversationEvent.start_time
+                : null,
+              bufferMins: 10,
+              signal: controller.signal,
+            })
+            text = formatEventTravelAnswer(activeConversationEvent, route, toLocal)
+              ?? `I could not calculate a reliable route to "${activeConversationEvent.title}" right now.`
+          } catch (error) {
+            text = error instanceof DOMException && error.name === 'AbortError'
+              ? `Route lookup timed out for "${activeConversationEvent.title}". Please try again.`
+              : `Route lookup failed for "${activeConversationEvent.title}". Please try again.`
+          } finally {
+            clearTimeout(timeoutId)
+          }
+        }
+        const requestTotalMs = Date.now() - requestStartMs
+        appendServerTrace('server_ai_assistant_event_travel', `event=${activeConversationEvent.id} found=${route?.found ? 1 : 0} ms=${requestTotalMs}`, {
+          event_id: activeConversationEvent.id,
+          destination_source: activeConversationEvent.address ? 'event_address' : 'event_location',
+          route_found: route?.found === true,
+          drive_time_mins: route?.drive_time_mins ?? null,
+          request_ms: requestTotalMs,
+        })
+        appendServerTrace('server_ai_assistant_result', `type=text ms=${requestTotalMs}`, {
+          result_type: 'text',
+          request_ms: requestTotalMs,
+          llm_calls: 0,
+          authoritative_event_id: activeConversationEvent.id,
+          response_text: text,
+        })
+        return {
+          status: 200,
+          payload: {
+            type: 'text',
+            text,
+            conversation_state: responseConversationState,
+            authoritative_provenance: {
+              source: 'events+google_routes',
+              event_id: activeConversationEvent.id,
+              updated_at: activeConversationEvent.updated_at,
+            },
+            correlation_id: cid,
+            telemetry: { ...llmTelemetry, request_total_ms: requestTotalMs, context_load_ms: contextLoadMs },
           },
         }
       }

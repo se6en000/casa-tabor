@@ -57,6 +57,20 @@ export function answerGroundedEventFollowUp(text, event, formatTime = (value) =>
       ? `"${title}" is at ${location}${address ? `, ${address}` : ''}.`
       : `The calendar does not have a location saved for "${title}".`
   }
+  if (/\bhow long\b.*\b(?:event|party|appointment|meeting)\b|\bhow long (?:is|does) (?:it|that) (?:last|run)\b/i.test(input)) {
+    const start = Date.parse(event.start_time)
+    const end = Date.parse(event.end_time)
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+      return `The calendar does not have a valid duration saved for "${title}".`
+    }
+    const totalMins = Math.round((end - start) / 60000)
+    const hours = Math.floor(totalMins / 60)
+    const mins = totalMins % 60
+    const duration = [hours ? `${hours} ${hours === 1 ? 'hour' : 'hours'}` : null, mins ? `${mins} minutes` : null]
+      .filter(Boolean)
+      .join(' ')
+    return `"${title}" lasts ${duration}.`
+  }
   if (/\b(?:what time|when|start|end)\b/i.test(input)) {
     return `"${title}" runs from ${formatTime(event.start_time)} to ${formatTime(event.end_time)}.`
   }

@@ -40,6 +40,8 @@ test('authoritative active events keep vague follow-ups on the event lane', () =
   for (const input of [
     'Are you sure that is the right location?',
     "What's the address?",
+    'How long will it take to get there?',
+    'When should we leave?',
     "Yes that's the one",
     'Prep me for it',
   ]) {
