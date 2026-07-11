@@ -76,9 +76,12 @@ test('P0 primitives are exported from the shared UI entrypoint', () => {
 })
 
 test('P0 controls preserve native and ARIA semantics', () => {
+  const buttonSource = readFileSync(resolve('src/components/ui/Button.tsx'), 'utf8')
   const selectionSource = readFileSync(resolve('src/components/ui/SelectionControls.tsx'), 'utf8')
   const comboboxSource = readFileSync(resolve('src/components/ui/Combobox.tsx'), 'utf8')
   const feedbackSource = readFileSync(resolve('src/components/ui/Toast.tsx'), 'utf8')
+  assert.match(buttonSource, /contentClassName/)
+  assert.match(buttonSource, /cn\('inline-flex items-center justify-center gap-2', contentClassName/)
   assert.match(selectionSource, /role="switch"/)
   assert.match(selectionSource, /type="checkbox"/)
   assert.match(selectionSource, /type="radio"/)
@@ -224,7 +227,7 @@ test('Home and its right rail use shared touch-first design contracts', () => {
   }
   assert.match(home, /aria-label="Previous event"/)
   assert.match(home, /aria-label="Snooze reminder one hour"/)
-  assert.match(home, /size-control-sm rounded-full/)
+  assert.match(home, /<IconButton[\s\S]*aria-label=\{`Go to event \$\{i \+ 1\} of \$\{slides\.length\}`\}[\s\S]*className="rounded-full"/)
   assert.match(rightRail, /min-h-control rounded-button/)
   assert.match(leftRail, /collapsed \? 'w-20' : 'basis-1\/5'/)
   assert.match(rightRail, /lg:flex basis-5\/16 flex-none/)

@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import { Plane, Clock, MapPin, ChevronRight, Hotel } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import type { Trip, TripLeg } from '../../hooks/useTrips'
+import { Card } from '../ui'
 
 // Read literal time digits — stored times are nominal local (no TZ conversion)
 function fmtTime(iso: string | null): string {
@@ -77,14 +78,15 @@ export default function TripCard({ trip }: { trip: Trip }) {
   const hotelName = getHotelName(trip)
 
   return (
-    <button
+    <Card
+      interactive
       onClick={() => navigate(`/trips/${trip.id}`)}
-      className="w-full text-left"
+      padding="none"
+      className="w-full overflow-hidden text-left"
     >
       <div className={cn(
-        'rounded-2xl border overflow-hidden transition-all hover:shadow-md',
-        isToday ? 'border-casa-gold bg-gradient-to-br from-casa-navy to-[#1a2a4a]'
-          : 'border-casa-border bg-white'
+        'overflow-hidden',
+        isToday ? 'bg-gradient-to-br from-casa-navy to-casa-navy/90' : 'bg-casa-surface'
       )}>
         {/* Header row */}
         <div className={cn(
@@ -163,6 +165,6 @@ export default function TripCard({ trip }: { trip: Trip }) {
           )}
         </div>
       </div>
-    </button>
+    </Card>
   )
 }

@@ -10,6 +10,7 @@ import { differenceInDays, parseISO } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { usePrepItems, useDismissPrepItem, useSnoozePrepItem, useDownvotePrepItem } from '../../hooks/usePrepItems'
 import type { PrepItem } from '../../types'
+import { Button, CalendarPill, IconButton, Text } from '../ui'
 
 const PREP_SECTION_KEY = 'casa-home-prep-section-open-v1'
 
@@ -119,7 +120,7 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
 
     return (
       <div key={label} className="space-y-1">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-casa-muted px-0.5">{label}</p>
+        <Text role="caption" muted className="px-0.5 font-bold uppercase tracking-wide">{label}</Text>
         {groupItems.map((item) => {
           const days = daysUntil(item.event_date)
           const urg = urgencyConfig(days)
@@ -141,87 +142,79 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
              className={cn('py-2.5 border-b border-casa-divider last:border-0 group')}
             >
               <div className="flex items-start gap-2.5">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  fullWidth
                   onClick={(e) => {
                     e.stopPropagation()
                     onSelectItem?.(item)
                   }}
-                  className="flex-1 min-w-0 text-left"
+                  className="flex-1 min-w-0 p-0 text-left hover:bg-transparent"
+                  contentClassName="w-full flex-col items-stretch gap-0"
                 >
                   <div className="flex items-start gap-1.5">
                     <span className={cn('mt-1.5 h-2.5 w-2.5 rounded-full shrink-0', urg.dot)} />
-                    <p
+                    <Text
+                      role="body-sm"
                       className={cn(
-                        'text-body-sm leading-relaxed',
+                        'leading-relaxed text-casa-text',
                         isDone && 'line-through text-casa-muted',
                       )}
-                      style={{ fontFamily: "'DM Sans', system-ui, sans-serif", color: isDone ? undefined : 'var(--color-casa-text)' }}
                     >
                       <span className="mr-1 inline-flex align-top"><PrepTypeIcon type={item.type} /></span>
                       {item.description}
-                    </p>
+                    </Text>
                   </div>
 
                   <div className="mt-2 flex items-center gap-1.5 flex-wrap pl-4">
-                    <span className={cn('inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border', src.tone)}>
+                    <CalendarPill className={cn('gap-1', src.tone)}>
                       <SourceIcon size={9} /> {src.label}
-                    </span>
+                    </CalendarPill>
                     {item.event_title && (
                       <span className="text-caption text-casa-muted truncate max-w-[150px]">
                         {item.event_title}
                       </span>
                     )}
-                    <span className={cn('text-[9px] font-bold leading-none px-1.5 py-0.5 rounded-full whitespace-nowrap shrink-0', urg.badge)}>
+                    <CalendarPill className={urg.badge}>
                       {urg.badgeText}
-                    </span>
+                    </CalendarPill>
                   </div>
-                </button>
+                </Button>
 
                 <div className="shrink-0 flex flex-col items-center gap-1">
-                  <button
+                  <IconButton
                     onClick={(e) => {
                       e.stopPropagation()
                       handleCheck(item.id)
                     }}
-                    className={cn(
-                      'size-control rounded-button flex items-center justify-center border bg-white outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold',
-                      isDone
-                        ? 'border-green-500 text-green-600'
-                        : 'border-casa-border text-casa-muted hover:text-casa-navy hover:bg-casa-bg',
-                    )}
+                    variant="secondary"
+                    className={isDone ? 'border-casa-success text-casa-success' : undefined}
                     title="Mark done"
                     aria-label="Mark done"
-                  >
-                    <Check size={15} strokeWidth={2.2} />
-                  </button>
-                  <button
+                    icon={<Check size={15} strokeWidth={2.2} />}
+                  />
+                  <IconButton
                     onClick={(e) => {
                       e.stopPropagation()
                       handleSnooze(item.id)
                     }}
-                    className="size-control rounded-button flex items-center justify-center border border-casa-border bg-white text-casa-muted hover:text-casa-text hover:bg-casa-bg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
+                    variant="secondary"
                     title="Snooze until tomorrow"
                     aria-label="Snooze until tomorrow"
-                  >
-                    <Moon size={15} strokeWidth={2.1} />
-                  </button>
-                  <button
+                    icon={<Moon size={15} strokeWidth={2.1} />}
+                  />
+                  <IconButton
                     onClick={(e) => {
                       e.stopPropagation()
                       handleDownvote(item.id)
                     }}
-                    className={cn(
-                      'size-control rounded-button flex items-center justify-center border bg-white outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold',
-                      isDownvoting
-                        ? 'border-red-300 text-red-500'
-                        : 'border-casa-border text-casa-muted hover:text-red-500 hover:bg-red-50',
-                    )}
+                    variant="danger"
+                    className={isDownvoting ? 'border border-casa-error/40' : undefined}
                     title="Not relevant — teach AI"
                     aria-label="Not relevant — teach AI"
-                  >
-                    <ThumbsDown size={15} strokeWidth={2.1} />
-                  </button>
+                    icon={<ThumbsDown size={15} strokeWidth={2.1} />}
+                  />
                 </div>
               </div>
             </motion.div>
@@ -234,7 +227,9 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
   return (
     <div className="px-5 py-5 border-b border-casa-border">
       <div className="w-full flex items-center justify-between">
-        <button
+        <Button
+          variant="ghost"
+          fullWidth
           onClick={() => setOpen(v => {
             const next = !v
             try {
@@ -244,7 +239,8 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
             }
             return next
           })}
-          className="flex-1 flex items-center gap-1.5 text-body font-semibold text-casa-text text-left"
+          className="flex-1 justify-start p-0 text-body font-semibold text-casa-text hover:bg-transparent"
+          contentClassName="w-full gap-1.5"
         >
           <ClipboardList size={15} className="text-casa-gold" />
           Prep &amp; Action
@@ -255,7 +251,7 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
             size={13}
             className={cn('ml-auto text-casa-muted transition-transform duration-200', open ? 'rotate-0' : '-rotate-90')}
           />
-        </button>
+        </Button>
         <Link to={seeAllHref} className="ml-2 text-caption text-casa-gold hover:brightness-110">
           See all <span aria-hidden>→</span>
         </Link>

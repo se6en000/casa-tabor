@@ -95,8 +95,17 @@ function runAudit() {
       if (matches.length === 0) continue
       const exception = exceptionConfig.categories?.[cat.id]?.find((entry) => entry.path === relPath)
       if (exception) {
-        results[cat.id].exceptionCount += matches.length
-        results[cat.id].exceptionsByFile[relPath] = [{ reason: exception.reason, matches }]
+        const classified = exception.snippets?.length
+          ? matches.filter((match) => exception.snippets.some((snippet) => match.snippet.includes(snippet)))
+          : matches
+        const actionable = matches.filter((match) => !classified.includes(match))
+        if (classified.length > 0) {
+          results[cat.id].exceptionCount += classified.length
+          results[cat.id].exceptionsByFile[relPath] = [{ reason: exception.reason, matches: classified }]
+        }
+        if (actionable.length === 0) continue
+        results[cat.id].count += actionable.length
+        results[cat.id].byFile[relPath] = actionable
         continue
       }
       results[cat.id].count += matches.length

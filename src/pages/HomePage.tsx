@@ -844,19 +844,20 @@ function HeroCarousel({
           />
           <div className="flex items-center gap-1.5">
             {slides.map((s, i) => (
-              <button
+              <IconButton
                 key={s.id}
                 type="button"
                 onClick={() => goTo(i)}
                 aria-label={`Go to event ${i + 1} of ${slides.length}`}
                 aria-current={i === safeIndex}
-                className="size-control-sm rounded-full outline-none focus-visible:ring-2 focus-visible:ring-casa-gold"
-              >
-                <span className={cn(
+                size="sm"
+                variant="ghost"
+                className="rounded-full"
+                icon={<span className={cn(
                   'mx-auto block h-1.5 rounded-full transition-all',
                   i === safeIndex ? 'w-6 bg-casa-gold' : 'w-1.5 bg-casa-navy/25',
-                )} />
-              </button>
+                )} />}
+              />
             ))}
           </div>
           <IconButton

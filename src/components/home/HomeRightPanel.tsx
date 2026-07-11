@@ -158,15 +158,16 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
               )).length ?? 0
 
               return (
-                <button
+                <Button
                   key={day.toISOString()}
                   type="button"
                   onClick={() => handleWeekDayClick(day)}
+                  variant={isToday ? 'strong' : 'secondary'}
+                  size="sm"
+                  contentClassName="flex-col gap-0"
                   className={cn(
-                    'min-h-control rounded-button px-1 py-2 text-center border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-casa-gold',
-                    isToday
-                      ? 'bg-casa-navy border-casa-navy text-white'
-                      : 'bg-casa-bg border-casa-divider text-casa-text hover:bg-casa-surface',
+                    'min-w-0 px-1 py-2 text-center',
+                    !isToday && 'bg-casa-bg',
                   )}
                 >
                   <p className={cn('text-caption font-semibold uppercase', isToday ? 'text-white/70' : 'text-casa-muted')}>
@@ -176,7 +177,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                   <p className={cn('text-caption mt-0.5 min-h-3', isToday ? 'text-casa-gold' : 'text-casa-muted')}>
                     {eventCount > 0 ? eventCount : ''}
                   </p>
-                </button>
+                </Button>
               )
             })}
           </div>
@@ -213,10 +214,13 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                       (isDone || isDownvoting) && 'opacity-60',
                     )}
                   >
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      fullWidth
                       onClick={() => onSelectPrepItem?.(item)}
-                      className="w-full min-h-control text-left rounded-button outline-none focus-visible:ring-2 focus-visible:ring-casa-gold"
+                      className="p-0 text-left hover:bg-transparent"
+                      contentClassName="w-full flex-col items-stretch gap-0"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="inline-flex items-center gap-2">
@@ -243,7 +247,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                           {item.event_title || 'Casa Tabor'}
                         </span>
                       </div>
-                    </button>
+                    </Button>
                     <div className="mt-3 border-t border-casa-border/80 pt-3">
                       <div className="grid grid-cols-[1.7fr_0.85fr_auto_auto_auto] items-center gap-1.5">
                         <Button

@@ -26,6 +26,16 @@
     ],
     "inlineStyleBlocks": [
       {
+        "path": "src/pages/HomePage.tsx",
+        "reason": "Pull distance, Framer Motion position, and family-member colors are runtime-derived.",
+        "snippets": [
+          "style={{ height: refreshing ? 40 : pullDistance }}",
+          "style={{ x, gap: HERO_SLIDE_GAP }}",
+          "style={{ backgroundColor: color }}",
+          "style={{ backgroundColor: responsibility.responsible?.color"
+        ]
+      },
+      {
         "path": "src/components/shared/ArtScreensaver.tsx",
         "reason": "Artwork frame dimensions and image positioning are runtime-derived."
       },

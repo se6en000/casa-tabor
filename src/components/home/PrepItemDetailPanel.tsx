@@ -6,6 +6,7 @@ import { cn } from '../../utils/cn'
 import { useDismissPrepItem, useDownvotePrepItem, usePrepItemDetails, useSnoozePrepItem } from '../../hooks/usePrepItems'
 import type { PrepItem } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
+import { Button, CalendarPill, Heading, IconButton } from '../ui'
 
 interface PrepItemDetailPanelProps {
   item: PrepItem | null
@@ -129,7 +130,7 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/40 z-[54]"
+            className="fixed inset-0 z-scrim bg-black/40"
             onClick={onClose}
           />
 
@@ -139,7 +140,7 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
             exit={isMobile ? { y: '100%' } : { x: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 220 }}
             className={cn(
-              'fixed z-[55] bg-casa-surface border-casa-border shadow-2xl flex flex-col overflow-hidden',
+              'fixed z-modal bg-casa-surface border-casa-border shadow-modal flex flex-col overflow-hidden',
               isMobile
                 ? 'inset-x-0 bottom-0 top-[8vh] rounded-t-2xl border-t'
                 : 'top-0 right-0 h-full w-[min(680px,92vw)] border-l',
@@ -147,16 +148,15 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
             onClick={e => e.stopPropagation()}
           >
             <div className="px-6 py-5 border-b border-casa-border relative">
-              <button
+              <IconButton
                 onClick={onClose}
-                className="absolute top-3 right-3 size-control flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-button hover:bg-casa-divider outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
+                className="absolute right-3 top-3"
                 aria-label="Close prep item details"
-              >
-                <X size={18} />
-              </button>
-              <h2 className="font-display text-display-sm text-casa-navy pr-8 leading-tight">
+                icon={<X size={18} />}
+              />
+              <Heading role="display-sm" className="pr-8 leading-tight">
                 Prep item details
-              </h2>
+              </Heading>
               <p className="text-body-sm text-casa-muted mt-1">{item.event_title ?? 'Action context'}</p>
             </div>
 
@@ -165,55 +165,66 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
                 <section className="rounded-card border border-casa-border bg-casa-bg p-4">
                   <p className="text-body text-casa-text leading-relaxed">{item.description}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption bg-casa-surface border border-casa-border text-casa-muted">
+                    <CalendarPill className="gap-1 bg-casa-surface">
                       <ClipboardList size={11} /> {item.type}
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption bg-casa-surface border border-casa-border text-casa-muted">
+                    </CalendarPill>
+                    <CalendarPill className="gap-1 bg-casa-surface">
                       <Mail size={11} /> {sourceLabel(item.source_type)}
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption bg-casa-surface border border-casa-border text-casa-muted">
+                    </CalendarPill>
+                    <CalendarPill className="gap-1 bg-casa-surface">
                       <CalendarDays size={11} /> Due {formatWhen(item.due_by)}
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption bg-casa-surface border border-casa-border text-casa-muted">
+                    </CalendarPill>
+                    <CalendarPill className="gap-1 bg-casa-surface">
                       <Clock3 size={11} /> Added {formatWhen(item.created_at)}
-                    </span>
+                    </CalendarPill>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2">
-                    <button
+                    <Button
                       onClick={() => runAction('snooze')}
                       disabled={!!acting}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-caption font-semibold border border-casa-border text-casa-text hover:bg-casa-surface disabled:opacity-60"
+                      variant="secondary"
+                      size="sm"
+                      leadingIcon={<TimerReset size={13} />}
                     >
-                      <TimerReset size={13} /> Snooze
-                    </button>
-                    <button
+                      Snooze
+                    </Button>
+                    <Button
                       onClick={() => runAction('dismiss')}
                       disabled={!!acting}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-caption font-semibold border border-casa-border text-casa-text hover:bg-casa-surface disabled:opacity-60"
+                      variant="secondary"
+                      size="sm"
+                      leadingIcon={<Ban size={13} />}
                     >
-                      <Ban size={13} /> Dismiss
-                    </button>
-                    <button
+                      Dismiss
+                    </Button>
+                    <Button
                       onClick={() => runAction('downvote')}
                       disabled={!!acting}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-caption font-semibold border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60"
+                      variant="danger"
+                      size="sm"
+                      leadingIcon={<ThumbsDown size={13} />}
                     >
-                      <ThumbsDown size={13} /> Downvote
-                    </button>
-                    <button
+                      Downvote
+                    </Button>
+                    <Button
                       onClick={() => launchCreate('event')}
                       disabled={!!acting}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-caption font-semibold border border-casa-gold/40 text-casa-navy hover:bg-casa-gold/10 disabled:opacity-60"
+                      variant="primary"
+                      size="sm"
+                      leadingIcon={<CalendarPlus size={13} />}
                     >
-                      <CalendarPlus size={13} /> Create event
-                    </button>
-                    <button
+                      Create event
+                    </Button>
+                    <Button
                       onClick={() => launchCreate('reminder')}
                       disabled={!!acting}
-                      className="col-span-2 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-caption font-semibold border border-casa-gold/40 text-casa-navy hover:bg-casa-gold/10 disabled:opacity-60"
+                      variant="primary"
+                      size="sm"
+                      className="col-span-2"
+                      leadingIcon={<BellPlus size={13} />}
                     >
-                      <BellPlus size={13} /> Create reminder
-                    </button>
+                      Create reminder
+                    </Button>
                   </div>
                 </section>
 

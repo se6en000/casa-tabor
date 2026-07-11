@@ -14,6 +14,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   leadingIcon?: ReactNode
   /** Icon rendered after the label (hidden while loading). */
   trailingIcon?: ReactNode
+  /** Layout overrides for the label/icon wrapper, useful for rich button content. */
+  contentClassName?: string
 }
 
 /**
@@ -23,7 +25,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  * never reflows while an async action is in flight.
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant, size, fullWidth, loading = false, disabled, leadingIcon, trailingIcon, className, children, type = 'button', ...rest },
+  { variant, size, fullWidth, loading = false, disabled, leadingIcon, trailingIcon, contentClassName, className, children, type = 'button', ...rest },
   ref,
 ) {
   return (
@@ -38,7 +40,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {loading && (
         <Loader2 size={16} className="absolute animate-spin" aria-hidden="true" />
       )}
-      <span className={cn('inline-flex items-center justify-center gap-2', loading && 'invisible')}>
+      <span className={cn('inline-flex items-center justify-center gap-2', contentClassName, loading && 'invisible')}>
         {leadingIcon}
         {children}
         {trailingIcon}
