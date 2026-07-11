@@ -13,6 +13,7 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
 import { Button } from '../ui'
+import { createAssistantTraceContext, emitAssistantTrace } from '../../lib/assistantTelemetry'
 
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
 const LOW_CONFIDENCE_REJECT_PHRASES = /\b(no|nope|try again|wrong|not that|cancel)\b/i
@@ -35,6 +36,8 @@ interface Props {
     source?: string
     page?: string
     agent?: 'general' | 'chef'
+    traceId?: string
+    wakeAt?: number
   }
   events: EventWithDetails[]
   family: FamilyMember[]
@@ -103,6 +106,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
   const latestVoiceConfidenceRef = useRef<number | null>(null)
   const appliedLaunchRef = useRef<string | null>(null)
   const firedChefGreetRef = useRef<string | null>(null)
+  const activeTraceRef = useRef<ReturnType<typeof createAssistantTraceContext> | null>(null)
 
   const clearIdleAutoCloseTimer = useCallback(() => {
     if (idleAutoCloseTimerRef.current) {
@@ -119,6 +123,26 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
   // True when the latest assistant message has a pending tool action awaiting confirmation
   const hasPendingToolAction = messages.some(m => m.toolAction?.status === 'pending')
 
+  const sendTraced = useCallback((
+    text: string,
+    image?: { dataUrl: string; mimeType: string },
+    fromVoice = false,
+  ) => {
+    const baseTrace = activeTraceRef.current ?? createAssistantTraceContext({
+      page,
+      lane: fromVoice ? 'voice' : 'text',
+      source: launchContext?.source ?? 'assistant_drawer',
+    })
+    activeTraceRef.current = baseTrace
+    return send(text, image, createAssistantTraceContext({
+      traceId: baseTrace.traceId,
+      turnId: crypto.randomUUID(),
+      page,
+      lane: fromVoice ? 'voice' : 'text',
+      source: launchContext?.source ?? 'assistant_drawer',
+    }))
+  }, [send, page, launchContext?.source])
+
   const sendCurrentInput = useCallback((text: string, opts?: { fromVoice?: boolean; confidence?: number | null }) => {
     const trimmed = text.trim()
     if (!trimmed || loading) return
@@ -134,7 +158,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
         setInput('')
         interimRef.current = ''
         if (textareaRef.current) textareaRef.current.value = ''
-        send(pending.transcript)
+        void sendTraced(pending.transcript, undefined, true)
         return
       }
       if (LOW_CONFIDENCE_REJECT_PHRASES.test(trimmed)) {
@@ -173,7 +197,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
       // one paint with the full transcript visible before it dissolves.
       setInput(trimmed)
       if (textareaRef.current) textareaRef.current.value = trimmed
-      send(trimmed)
+      void sendTraced(trimmed, undefined, true)
       setTimeout(() => {
         setInput('')
         interimRef.current = ''
@@ -183,9 +207,9 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
       setInput('')
       interimRef.current = ''
       if (textareaRef.current) textareaRef.current.value = ''
-      send(trimmed)
+      void sendTraced(trimmed)
     }
-  }, [loading, send, appendSyntheticMessage])
+  }, [loading, sendTraced, appendSyntheticMessage])
 
   const quickSaveRecipeSuggestion = useCallback(async (recipeMessage: string) => {
     if (loading) return
@@ -198,10 +222,40 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
       'If you can find a suitable photo, include it; otherwise save without one.',
       recipeExcerpt ? `\nRecipe draft:\n${recipeExcerpt}` : '',
     ].join('\n')
-    await send(prompt)
-  }, [loading, markUserInteraction, send])
+    await sendTraced(prompt)
+  }, [loading, markUserInteraction, sendTraced])
+
+  useEffect(() => {
+    if (!open) {
+      activeTraceRef.current = null
+      return
+    }
+    const trace = createAssistantTraceContext({
+      traceId: launchContext?.traceId ?? launchContext?.launchId,
+      page,
+      lane: launchContext?.source === 'wake_word' ? 'voice' : 'text',
+      source: launchContext?.source ?? 'assistant_drawer',
+      startedAt: launchContext?.wakeAt,
+    })
+    activeTraceRef.current = trace
+    if (launchContext?.wakeAt) {
+      emitAssistantTrace('wake_detected', trace, {
+        at: new Date(launchContext.wakeAt).toISOString(),
+        elapsedMs: 0,
+      })
+    }
+    emitAssistantTrace('drawer_opened', trace, {
+      payload: {
+        wake_to_drawer_ms: launchContext?.wakeAt ? Date.now() - launchContext.wakeAt : null,
+      },
+    })
+  }, [open, launchContext?.launchId, launchContext?.traceId, launchContext?.wakeAt, launchContext?.source, page])
 
   const speech = useSpeechInput({
+    onTrace: (event, payload) => {
+      const trace = activeTraceRef.current
+      if (trace) emitAssistantTrace(event, trace, { payload })
+    },
     onInterim: (interim) => {
       if (interim.trim()) markUserInteraction()
       interimRef.current = interim
@@ -481,8 +535,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
     setAttachedImage(null)
-    send(text || '(see attached image)', img ?? undefined)
-  }, [input, attachedImage, loading, send, markUserInteraction])
+    void sendTraced(text || '(see attached image)', img ?? undefined)
+  }, [input, attachedImage, loading, sendTraced, markUserInteraction])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {

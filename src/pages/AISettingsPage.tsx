@@ -87,6 +87,9 @@ type ForensicsSnapshot = {
   actionFailureRate: number
   llmP95Ms: number | null
   llmP99Ms: number | null
+  wakeToDrawerP95Ms: number | null
+  asrP95Ms: number | null
+  firstTokenP95Ms: number | null
   activeDevices: number
   refreshedAt: string
 }
@@ -107,6 +110,9 @@ const EMPTY_FORENSICS: ForensicsSnapshot = {
   actionFailureRate: 0,
   llmP95Ms: null,
   llmP99Ms: null,
+  wakeToDrawerP95Ms: null,
+  asrP95Ms: null,
+  firstTokenP95Ms: null,
   activeDevices: 0,
   refreshedAt: new Date().toISOString(),
 }
@@ -242,7 +248,7 @@ export default function AISettingsPage() {
       const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
       const { data, error } = await supabase
         .from('ai_drawer_debug_events')
-        .select('event,session_id,device_id,payload,detail')
+        .select('event,session_id,device_id,payload,detail,elapsed_ms')
         .gte('received_at', sinceIso)
         .order('received_at', { ascending: false })
         .limit(4000)
@@ -253,6 +259,9 @@ export default function AISettingsPage() {
       const sessions = new Map<string, { hasFinal: boolean; hasSend: boolean; hasStart: boolean; hasTerminal: boolean; hasServer: boolean }>()
       const devices = new Set<string>()
       const llmMs: number[] = []
+      const wakeToDrawerMs: number[] = []
+      const asrMs: number[] = []
+      const firstTokenMs: number[] = []
       let stallCount = 0
       let invalidTransitionCount = 0
       let actionStartCount = 0
@@ -269,12 +278,23 @@ export default function AISettingsPage() {
         if (sid) {
           if (!sessions.has(sid)) sessions.set(sid, { hasFinal: false, hasSend: false, hasStart: false, hasTerminal: false, hasServer: false })
           const entry = sessions.get(sid)!
-          if (row.event === 'trace_started') entry.hasStart = true
-          if (row.event === 'turn_completed' || row.event === 'turn_aborted' || row.event === 'turn_timeout' || row.event === 'asr_no_final' || row.event === 'trace_outcome') entry.hasTerminal = true
+          if (row.event === 'trace_started' || row.event === 'drawer_opened') entry.hasStart = true
+          if (row.event === 'turn_completed' || row.event === 'turn_failed' || row.event === 'turn_aborted' || row.event === 'turn_timeout' || row.event === 'asr_no_final' || row.event === 'trace_outcome') entry.hasTerminal = true
           if (typeof row.event === 'string' && row.event.startsWith('server_')) entry.hasServer = true
-          if (row.event === 'speech_trigger_final') entry.hasFinal = true
+          if (row.event === 'speech_trigger_final' || row.event === 'asr_final') entry.hasFinal = true
           if (row.event === 'voice_final' && typeof row.detail === 'string' && row.detail !== '__SEND__') entry.hasFinal = true
-          if (row.event === 'send_current_input') entry.hasSend = true
+          if (row.event === 'send_current_input' || row.event === 'assistant_invoke_started' || row.event === 'assistant_fast_path_matched') entry.hasSend = true
+        }
+
+        const payload = row.payload as Record<string, unknown> | null
+        if (row.event === 'drawer_opened' && typeof payload?.wake_to_drawer_ms === 'number') {
+          wakeToDrawerMs.push(payload.wake_to_drawer_ms)
+        }
+        if (row.event === 'asr_final' && typeof payload?.asr_elapsed_ms === 'number') {
+          asrMs.push(payload.asr_elapsed_ms)
+        }
+        if (row.event === 'assistant_first_token' && typeof row.elapsed_ms === 'number') {
+          firstTokenMs.push(row.elapsed_ms)
         }
 
         if (row.event === 'trace_outcome') {
@@ -319,6 +339,9 @@ export default function AISettingsPage() {
         actionFailureRate,
         llmP95Ms: percentile(llmMs, 95),
         llmP99Ms: percentile(llmMs, 99),
+        wakeToDrawerP95Ms: percentile(wakeToDrawerMs, 95),
+        asrP95Ms: percentile(asrMs, 95),
+        firstTokenP95Ms: percentile(firstTokenMs, 95),
         activeDevices: devices.size,
         refreshedAt: new Date().toISOString(),
       })
@@ -748,6 +771,14 @@ export default function AISettingsPage() {
                   {localLatencyRollup?.sampleCount ? ` · n=${localLatencyRollup.sampleCount}` : ''}
                 </p>
               </div>
+            </div>
+            <div className="rounded-button border border-casa-border bg-casa-bg/60 px-2.5 py-2 text-caption">
+              <p className="text-casa-muted">Voice pipeline P95 · wake / ASR / first token</p>
+              <p className="text-body-sm font-semibold text-casa-navy tabular-nums">
+                {forensics.wakeToDrawerP95Ms !== null ? `${Math.round(forensics.wakeToDrawerP95Ms)}ms` : '—'} /{' '}
+                {forensics.asrP95Ms !== null ? `${Math.round(forensics.asrP95Ms)}ms` : '—'} /{' '}
+                {forensics.firstTokenP95Ms !== null ? `${Math.round(forensics.firstTokenP95Ms)}ms` : '—'}
+              </p>
             </div>
             <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3">
               <p className="text-caption font-semibold text-casa-navy mb-1">Expert roadmap progress</p>

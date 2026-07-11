@@ -66,6 +66,18 @@ const REMOTE_CRITICAL_EVENTS = new Set([
   'trace_context',
   'trace_closed',
   'voice_stage_ms',
+  'wake_detected',
+  'drawer_opened',
+  'asr_listening_ready',
+  'asr_final',
+  'asr_error',
+  'turn_started',
+  'assistant_fast_path_matched',
+  'assistant_invoke_started',
+  'assistant_first_token',
+  'assistant_result_received',
+  'assistant_stream_fallback',
+  'turn_failed',
 ])
 
 let queue: RemoteQueueItem[] = []
@@ -143,7 +155,7 @@ async function postToIngest(
     body: JSON.stringify({
       entries,
       meta: {
-        device_id: getDeviceId(),
+        device_id: getVoiceDeviceId(),
         user_agent: navigator.userAgent,
         platform: navigator.platform,
         origin: window.location.origin,
@@ -159,7 +171,7 @@ async function postToIngest(
   }
 }
 
-function getDeviceId(): string {
+export function getVoiceDeviceId(): string {
   if (typeof window === 'undefined') return 'server'
   try {
     const existing = localStorage.getItem(DEVICE_ID_KEY)
@@ -281,7 +293,7 @@ export function enqueueRemoteVoiceTrace(
   if (shouldSkipRemote(withChannel.event, config)) return
   if (shouldDropRecentDuplicate(withChannel)) return
   const dedupeSource = [
-    getDeviceId(),
+    getVoiceDeviceId(),
     channel,
     withChannel.sessionId ?? '',
     withChannel.turnId ?? '',

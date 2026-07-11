@@ -37,6 +37,7 @@ export function useSpeechInput({
   onConfirm,
   onCancel,
   hasPendingAction,
+  onTrace,
 }: {
   onInterim: (text: string) => void
   onFinalTranscript: (text: string, meta?: { confidence?: number | null }) => void
@@ -44,6 +45,7 @@ export function useSpeechInput({
   onConfirm: () => void
   onCancel: () => void
   hasPendingAction: boolean
+  onTrace?: (event: string, payload?: Record<string, unknown>) => void
 }) {
   const wsRef              = useRef<WebSocket | null>(null)
   const activeRef          = useRef(false)
@@ -56,6 +58,8 @@ export function useSpeechInput({
   const lastInterimTimeRef = useRef(0)
   const lastConfidenceRef  = useRef<number | null>(null)
   const connectStartRef    = useRef(0)
+  const listeningStartRef  = useRef(0)
+  const firstInterimRef    = useRef(false)
   const [phase, setPhase]  = useState<VoicePhase>('idle')
   const phaseRef           = useRef<VoicePhase>('idle')
   const setPhaseSync = (p: VoicePhase) => { phaseRef.current = p; setPhase(p) }
@@ -72,12 +76,14 @@ export function useSpeechInput({
   const onDismissRef       = useRef(onDismiss)
   const onConfirmRef       = useRef(onConfirm)
   const onCancelRef        = useRef(onCancel)
+  const onTraceRef         = useRef(onTrace)
   const hasPendingRef      = useRef(hasPendingAction)
   useEffect(() => { onInterimRef.current  = onInterim },        [onInterim])
   useEffect(() => { onFinalRef.current    = onFinalTranscript }, [onFinalTranscript])
   useEffect(() => { onDismissRef.current  = onDismiss },         [onDismiss])
   useEffect(() => { onConfirmRef.current  = onConfirm },         [onConfirm])
   useEffect(() => { onCancelRef.current   = onCancel },          [onCancel])
+  useEffect(() => { onTraceRef.current    = onTrace },           [onTrace])
   useEffect(() => { hasPendingRef.current = hasPendingAction },  [hasPendingAction])
 
   const normalizeConfidence = useCallback((raw: unknown): number | null => {
@@ -128,8 +134,15 @@ export function useSpeechInput({
     stopSilenceTimer()
     setPhaseSync('processing')
     const finalText = text.trim() || lastInterimRef.current.trim()
+    const asrElapsedMs = listeningStartRef.current > 0 ? Date.now() - listeningStartRef.current : null
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
+    firstInterimRef.current = false
+    onTraceRef.current?.('asr_final', {
+      asr_elapsed_ms: asrElapsedMs,
+      confidence: lastConfidenceRef.current,
+      word_count: finalText ? finalText.split(/\s+/).length : 0,
+    })
     handleFinalTranscript(finalText)
   }, [handleFinalTranscript])
 
@@ -141,7 +154,10 @@ export function useSpeechInput({
       try { recognitionRef.current.stop() } catch { /* ignore */ }
       recognitionRef.current = null
     }
+    listeningStartRef.current = Date.now()
+    firstInterimRef.current = false
     setPhaseSync('listening')
+    onTraceRef.current?.('asr_listening_ready', { connect_ms: 0, mode: 'webspeech' })
 
     const recognition = new WebSpeech()
     recognitionRef.current = recognition
@@ -178,6 +194,13 @@ export function useSpeechInput({
       const display = interim.trim()
       if (!display) return
 
+      if (!firstInterimRef.current) {
+        firstInterimRef.current = true
+        onTraceRef.current?.('asr_first_interim', {
+          first_interim_ms: Date.now() - listeningStartRef.current,
+          mode: 'webspeech',
+        })
+      }
       onInterimRef.current(display)
       lastInterimRef.current = display
 
@@ -198,6 +221,7 @@ export function useSpeechInput({
     recognition.onerror = (e: any) => {
       // 'no-speech' and 'aborted' are expected — no-speech = silence, aborted = we called stop()
       if (e.error === 'no-speech' || e.error === 'aborted') return
+      onTraceRef.current?.('asr_error', { mode: 'webspeech', reason: String(e.error ?? 'unknown').slice(0, 120) })
       console.warn('[WebSpeech] error', e.error)
       if (activeRef.current) setTimeout(() => startWebSpeech(), 500)
     }
@@ -228,6 +252,8 @@ export function useSpeechInput({
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     connectStartRef.current = Date.now()
+    firstInterimRef.current = false
+    onTraceRef.current?.('asr_connect_started', { mode: 'bridge' })
     setPhaseSync('connecting')
 
     const ws = new WebSocket(BRIDGE_WS)
@@ -244,6 +270,11 @@ export function useSpeechInput({
         const msg = JSON.parse(evt.data as string)
         switch (msg.type) {
           case 'ready':
+            listeningStartRef.current = Date.now()
+            onTraceRef.current?.('asr_listening_ready', {
+              connect_ms: connectStartRef.current > 0 ? Date.now() - connectStartRef.current : null,
+              mode: 'bridge',
+            })
             setPhaseSync('listening')
             connectStartRef.current = 0
             setBridgeDown(false)
@@ -253,6 +284,13 @@ export function useSpeechInput({
             break
           case 'interim':
             if (msg.text !== lastInterimRef.current) {
+              if (!firstInterimRef.current) {
+                firstInterimRef.current = true
+                onTraceRef.current?.('asr_first_interim', {
+                  first_interim_ms: listeningStartRef.current > 0 ? Date.now() - listeningStartRef.current : null,
+                  mode: 'bridge',
+                })
+              }
               lastInterimRef.current = msg.text
               lastInterimTimeRef.current = Date.now()
               lastConfidenceRef.current = normalizeConfidence(msg.confidence)
@@ -267,6 +305,10 @@ export function useSpeechInput({
             }
             break
           case 'error':
+            onTraceRef.current?.('asr_error', {
+              mode: 'bridge',
+              reason: String(msg.msg ?? 'bridge_error').slice(0, 120),
+            })
             console.warn('[STT] bridge error', msg.msg)
             if (activeRef.current) setTimeout(() => startBridge(), 500)
             break
@@ -275,6 +317,7 @@ export function useSpeechInput({
     }
 
     ws.onerror = () => {
+      onTraceRef.current?.('asr_error', { mode: 'bridge', reason: 'websocket_error' })
       console.warn('[STT] WS connection error')
     }
 
@@ -305,6 +348,8 @@ export function useSpeechInput({
     lastInterimTimeRef.current = 0
     lastConfidenceRef.current = null
     connectStartRef.current = 0
+    listeningStartRef.current = 0
+    firstInterimRef.current = false
     setPhaseSync('idle')
     setVolume(0)
     onInterimRef.current('')
@@ -317,11 +362,13 @@ export function useSpeechInput({
     if (IS_SAFE_MODE) return
     activeRef.current = true
     setPhaseSync('connecting')
+    onTraceRef.current?.('asr_start_requested')
 
     // Auto-detect once per component lifetime — don't re-probe on every open
     if (modeRef.current === 'unknown') {
       const hasBridge = await probeBridge()
       modeRef.current = hasBridge ? 'bridge' : (WebSpeech ? 'webspeech' : 'bridge')
+      onTraceRef.current?.('asr_mode_selected', { mode: modeRef.current })
       console.log(`[STT] mode: ${modeRef.current}`)
     }
 

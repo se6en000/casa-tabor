@@ -53,3 +53,27 @@ test('fast-path: unrelated / long queries return null', () => {
   assert.equal(tryLocalScheduleAnswer('what is the weather like in Paris right now please', events, NOW), null)
   assert.equal(tryLocalScheduleAnswer('tell me a joke', events, NOW), null)
 })
+
+test('fast-path: production schedule phrasing stays deterministic', () => {
+  assert.match(tryLocalScheduleAnswer("what's up today", events, NOW), /thing left today/)
+  assert.match(tryLocalScheduleAnswer('what do we have going on today?', events, NOW), /thing left today/)
+  assert.match(tryLocalScheduleAnswer("what's next on the calendar", events, NOW), /Up next/)
+  assert.match(tryLocalScheduleAnswer('what is on tomorrow', events, NOW), /thing tomorrow/)
+  assert.match(tryLocalScheduleAnswer("what's on the calendar for tomorrow can you tell me", events, NOW), /thing tomorrow/)
+})
+
+test('fast-path: next today never leaks into tomorrow', () => {
+  const onlyTomorrow = [events.find((event) => event.title === 'Owen Birthday')]
+  assert.equal(tryLocalScheduleAnswer("what's next today", onlyTomorrow, NOW), 'Nothing else on your calendar today.')
+})
+
+test('fast-path: compound schedule-and-write requests stay on the safe lane', () => {
+  assert.equal(
+    tryLocalScheduleAnswer("what's going on tomorrow and set a reminder to take out the trash", events, NOW),
+    null,
+  )
+  assert.equal(
+    tryLocalScheduleAnswer("what's on tomorrow and tell me a joke", events, NOW),
+    null,
+  )
+})

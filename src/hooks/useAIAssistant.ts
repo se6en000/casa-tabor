@@ -4,6 +4,12 @@ import type { EventWithDetails } from './useCalendarEvents'
 import type { FamilyMember } from '../types'
 import { useAISession, type AIMessage } from './useAISession'
 import { tryLocalScheduleAnswer } from '../lib/scheduleFastPath.mjs'
+import {
+  createAssistantTraceContext,
+  emitAssistantTrace,
+  getAssistantDeviceId,
+  type AssistantTraceContext,
+} from '../lib/assistantTelemetry'
 
 export type { AIMessage }
 
@@ -16,6 +22,8 @@ export interface AssistantContext {
   focusedEvent?: EventWithDetails
   onSessionEnd?: () => void
 }
+
+export type AssistantSendTrace = Pick<AssistantTraceContext, 'traceId' | 'turnId' | 'lane' | 'source' | 'startedAt'>
 
 const genId = (): string =>
   typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -143,7 +151,25 @@ export function useAIAssistant(ctx: AssistantContext) {
     return `${sid}:${messageId}:${Date.now().toString(36)}`
   }, [])
 
-  const send = useCallback(async (text: string, image?: { dataUrl: string; mimeType: string }) => {
+  const send = useCallback(async (
+    text: string,
+    image?: { dataUrl: string; mimeType: string },
+    sendTrace?: AssistantSendTrace,
+  ) => {
+    const trace = createAssistantTraceContext({
+      traceId: sendTrace?.traceId,
+      turnId: sendTrace?.turnId ?? genId(),
+      page: ctxRef.current.page,
+      lane: sendTrace?.lane ?? 'text',
+      source: sendTrace?.source ?? 'assistant_drawer',
+      startedAt: sendTrace?.startedAt,
+    })
+    emitAssistantTrace('turn_started', trace, {
+      payload: {
+        has_image: Boolean(image),
+        word_count: text.trim().split(/\s+/).filter(Boolean).length,
+      },
+    })
     // Check for goodbye phrase → end session
     if (GOODBYE_PHRASES.test(text)) {
       const farewell: AIMessage = { id: genId(), role: 'assistant', content: "You're welcome! Session saved. Say hi when you need me 👋" }
@@ -155,6 +181,9 @@ export function useAIAssistant(ctx: AssistantContext) {
       endSession()
       // Close the drawer after a brief moment so user sees the farewell message
       setTimeout(() => ctxRef.current.onSessionEnd?.(), 1200)
+      emitAssistantTrace('turn_completed', trace, {
+        payload: { outcome: 'session_ended', result_type: 'text' },
+      })
       return
     }
 
@@ -163,12 +192,19 @@ export function useAIAssistant(ctx: AssistantContext) {
     if (!image) {
       const fastAnswer = tryLocalScheduleAnswer(text, ctxRef.current.events, new Date())
       if (fastAnswer) {
+        const fastTrace = { ...trace, lane: 'fast_path' as const }
+        emitAssistantTrace('assistant_fast_path_matched', fastTrace, {
+          payload: { kind: 'schedule_read' },
+        })
         let fpSession = sessionRef.current
         if (!fpSession) fpSession = startNewSession()
         setMessages(prev => {
           const updated = [...prev, { id: genId(), role: 'user' as const, content: text }, { id: genId(), role: 'assistant' as const, content: fastAnswer }]
           if (fpSession) saveMessages(fpSession.id, updated)
           return updated
+        })
+        emitAssistantTrace('turn_completed', fastTrace, {
+          payload: { outcome: 'success', result_type: 'text' },
         })
         return
       }
@@ -194,8 +230,16 @@ export function useAIAssistant(ctx: AssistantContext) {
       context: buildContext(ctxRef.current, currentMessages),
       image: imagePayload,
       session_id: activeSession.id,
-      correlation_id: buildCorrelationId(userMsg.id, activeSession.id),
+      correlation_id: trace.correlationId ?? buildCorrelationId(userMsg.id, activeSession.id),
+      trace_id: trace.traceId,
+      turn_id: trace.turnId,
+      lane: trace.lane === 'voice' ? 'voice' : 'llm',
+      device_id: getAssistantDeviceId(),
+      client_trace_present: true,
+      client_build: typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'unknown',
+      client_trace_source: trace.source,
     }
+    emitAssistantTrace('assistant_invoke_started', trace)
 
     // Maps a server payload (identical shape for streaming `final` and the
     // non-streaming JSON body) into an AIMessage. One code path → both flows stay
@@ -238,6 +282,7 @@ export function useAIAssistant(ctx: AssistantContext) {
 
     // Non-streaming path (also the fallback when streaming fails). Unchanged behavior.
     const runNonStreaming = async () => {
+      emitAssistantTrace('assistant_non_streaming_started', trace)
       const invokePromise = supabase.functions.invoke('ai-assistant', { body: requestBody })
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('AI request timed out')), 30000)
@@ -245,6 +290,9 @@ export function useAIAssistant(ctx: AssistantContext) {
       const { data, error } = await Promise.race([invokePromise, timeoutPromise]) as Awaited<typeof invokePromise>
       if (error) throw error
       persist(buildAssistantMsg(data, genId()))
+      emitAssistantTrace('assistant_result_received', trace, {
+        payload: { transport: 'json', result_type: data?.type ?? 'unknown' },
+      })
     }
 
     // Streaming path: progressively render tokens, then reconcile with the `final`
@@ -257,6 +305,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       let sawToken = false
       let finalApplied = false
       let streamedText = ''
+      let firstTokenSeen = false
       const salvagePartial = () => {
         setMessages(prev => {
           const updated = prev.map(m => m.id === streamMsgId ? { ...m, content: streamedText, streaming: false } : m)
@@ -286,6 +335,12 @@ export function useAIAssistant(ctx: AssistantContext) {
           let payload: any
           try { payload = JSON.parse(dataStr) } catch { return }
           if (evt === 'token') {
+            if (!firstTokenSeen) {
+              firstTokenSeen = true
+              emitAssistantTrace('assistant_first_token', trace, {
+                payload: { transport: 'sse' },
+              })
+            }
             if (!placeholderAdded) {
               placeholderAdded = true
               setMessages(prev => [...prev, { id: streamMsgId, role: 'assistant', content: '', streaming: true }])
@@ -296,6 +351,9 @@ export function useAIAssistant(ctx: AssistantContext) {
             setMessages(prev => prev.map(m => m.id === streamMsgId ? { ...m, content: next } : m))
           } else if (evt === 'final') {
             finalApplied = true
+            emitAssistantTrace('assistant_result_received', trace, {
+              payload: { transport: 'sse', result_type: payload?.type ?? 'unknown' },
+            })
             const finalMsg = buildAssistantMsg(payload, streamMsgId)
             setMessages(prev => {
               const exists = prev.some(m => m.id === streamMsgId)
@@ -344,7 +402,15 @@ export function useAIAssistant(ctx: AssistantContext) {
 
     try {
       const streamed = await runStreaming()
-      if (!streamed) await runNonStreaming()
+      if (!streamed) {
+        emitAssistantTrace('assistant_stream_fallback', trace, {
+          payload: { reason: 'stream_unavailable_before_content' },
+        })
+        await runNonStreaming()
+      }
+      emitAssistantTrace('turn_completed', trace, {
+        payload: { outcome: 'success' },
+      })
     } catch (e) {
       const msg = (e as Error).message ?? 'Something went wrong'
       const isTimeout = msg.includes('timed out')
@@ -357,6 +423,10 @@ export function useAIAssistant(ctx: AssistantContext) {
       }
       setMessages(prev => [...prev, errMsg])
       console.error('[useAIAssistant]', e)
+      emitAssistantTrace('turn_failed', trace, {
+        detail: isTimeout ? 'timeout' : 'request_error',
+        payload: { failure_class: isTimeout ? 'timeout' : 'request_error' },
+      })
     } finally {
       setLoading(false)
     }

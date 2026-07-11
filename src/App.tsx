@@ -69,6 +69,8 @@ interface AIDrawerLaunchContext {
   source?: string
   page?: string
   agent?: LaunchAgent
+  traceId?: string
+  wakeAt?: number
 }
 
 type OpenAIChatDetail = {
@@ -80,6 +82,8 @@ type OpenAIChatDetail = {
   source?: string
   page?: string
   agent?: LaunchAgent
+  traceId?: string
+  wakeAt?: number
 }
 
 function GlobalAIDrawer({
@@ -134,6 +138,8 @@ function GlobalAIDrawer({
         source: detail.source,
         page: detail.page ?? routePage,
         agent: inferredAgent,
+        traceId: detail.traceId,
+        wakeAt: detail.wakeAt,
       })
       setOpen(true)
     }

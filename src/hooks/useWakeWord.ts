@@ -5,6 +5,11 @@ const SCREENSAVER_GRACE_MS = 3000  // ignore wake triggers for 3s after screensa
 const DRAWER_CLOSE_GRACE_MS = 5000 // ignore wake triggers for 5s after drawer closes
 const RECONNECT_MS = 3000          // backoff before reconnecting WS
 
+const createTraceId = () =>
+  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `wake-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+
 /**
  * Connects to the STT bridge WebSocket while the AI drawer is closed.
  * Listens for {type: 'wake'} push events — no polling.
@@ -69,15 +74,17 @@ export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean, ena
           if (now - drawerClosedAtRef.current < DRAWER_CLOSE_GRACE_MS) return
           if (screensaverActiveRef.current && now - screensaverActiveAtRef.current < SCREENSAVER_GRACE_MS) return
 
+          const traceId = createTraceId()
+          const launchDetail = { source: 'wake_word', traceId, wakeAt: now }
           if (screensaverActiveRef.current) {
             document.dispatchEvent(new CustomEvent('wake-kiosk'))
             // Single wake phrase should both wake screen and start listening.
             setTimeout(() => {
-              document.dispatchEvent(new CustomEvent('open-ai-chat', { detail: { source: 'wake_word' } }))
+              document.dispatchEvent(new CustomEvent('open-ai-chat', { detail: launchDetail }))
             }, 120)
             return
           }
-          document.dispatchEvent(new CustomEvent('open-ai-chat', { detail: { source: 'wake_word' } }))
+          document.dispatchEvent(new CustomEvent('open-ai-chat', { detail: launchDetail }))
         } catch { /* ignore */ }
       }
 
