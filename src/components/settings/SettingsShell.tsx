@@ -15,7 +15,7 @@ const NAV_GROUPS = [
   {
     label: 'Visual & Display',
     items: [
-      { to: '/settings/display', icon: Sun,           label: 'Display & Art Mode',  desc: 'Theme, colors, brightness, art mode, sensors' },
+      { to: '/settings/display', icon: Sun,           label: 'Appearance & Display', desc: 'Palettes, text size, room tone, and sensors' },
       { to: '/settings/art-mode', icon: Palette,      label: 'Art Mode',            desc: 'Art feed, rotation cadence, and display behavior' },
     ],
   },
@@ -50,7 +50,12 @@ const NAV_GROUPS = [
       { to: '/settings/analytics', icon: LineChart,     label: 'Data & Analytics',    desc: 'Orchestration and graph health' },
       { to: '/settings/status',  icon: Activity,      label: 'Status Dashboard',    desc: 'AI usage and cost' },
       { to: '/settings/admin-ops', icon: Lock,        label: 'Admin Operations',    desc: 'Mass calendar operations (PIN required)' },
-      { to: '/settings/design-system', icon: LayoutGrid, label: 'Design System', desc: 'Tokens, components, states, and device validation' },
+    ],
+  },
+  {
+    label: 'Developer & Diagnostics',
+    items: [
+      { to: '/settings/design-system', icon: LayoutGrid, label: 'Design System Reference', desc: 'Read-only components, tokens, and device validation' },
     ],
   },
 ]
@@ -181,11 +186,12 @@ export default function SettingsShell() {
               <Button
                 key={item.to}
                 data-path={item.to}
+                variant="ghost"
                 onClick={() => navigate(item.to)}
                 className={cn(
                   'min-h-control px-4 py-3 text-body-sm font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-all outline-none focus-visible:ring-2 focus-visible:ring-casa-gold',
                   activeItem?.to === item.to
-                    ? 'border-casa-gold text-casa-gold'
+                    ? 'border-casa-navy bg-casa-bg text-casa-navy'
                     : 'border-transparent text-casa-muted hover:text-casa-navy'
                 )}
               >

@@ -25,7 +25,9 @@ import {
   segmentedControlItemClassName,
   segmentedControlThumbClassName,
 } from '../src/design-system/variants.mjs'
-import { DEFAULT_THEME_COLORS, DESIGN_TOKENS, MIDNIGHT_THEME_COLORS } from '../src/design-system/tokens.mjs'
+import { DEFAULT_THEME_COLORS, DESIGN_TOKENS, MIDNIGHT_THEME_COLORS, THEME_COLOR_KEYS } from '../src/design-system/tokens.mjs'
+import { APPEARANCE_PRESETS } from '../src/design-system/themes.mjs'
+import { getThemeContrastIssues } from '../src/design-system/themeContrast.mjs'
 
 function relativeLuminance(hex) {
   const channels = hex.match(/[0-9A-Fa-f]{2}/g).map((channel) => Number.parseInt(channel, 16) / 255)
@@ -73,6 +75,25 @@ test('high-emphasis button variants own readable foreground contrast', () => {
     contrastRatio(MIDNIGHT_THEME_COLORS['casa-navy'], DESIGN_TOKENS.staticColor['casa-on-dark']) >= 4.5,
     'strong button colors must remain readable in the midnight theme',
   )
+})
+
+test('every curated appearance preset implements the complete theme contract with readable core text', () => {
+  assert.deepEqual(
+    APPEARANCE_PRESETS.map(preset => preset.id),
+    ['default', 'espresso', 'liv-blush', 'kitchen-teal', 'belgian-linen', 'weathered-olive', 'slate-atelier'],
+  )
+  for (const preset of APPEARANCE_PRESETS) {
+    assert.deepEqual(
+      Object.keys(preset.colors).sort(),
+      [...THEME_COLOR_KEYS].sort(),
+      `${preset.label} must define every semantic theme color`,
+    )
+    assert.deepEqual(
+      getThemeContrastIssues(preset.colors),
+      [],
+      `${preset.label} must pass the core WCAG AA contrast checks`,
+    )
+  }
 })
 
 test('subtle button is a neutral low-emphasis utility surface', () => {

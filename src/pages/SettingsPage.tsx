@@ -3,7 +3,7 @@ import { Users, Sun, MessageSquare, Bot, ChevronRight, Music2, Home, Activity, B
 import BounceScroll from '../components/shared/BounceScroll'
 
 const sections = [
-  { to: '/settings/display', icon: Sun,           label: 'Display & Art Mode',      desc: 'Theme colors, room tone, brightness, art mode, sensors' },
+  { to: '/settings/display', icon: Sun,           label: 'Appearance & Display',    desc: 'Palettes, text size, room tone, and sensors' },
   { to: '/settings/home',   icon: Home,           label: 'Home & Profile',          desc: 'Home address and home screen layout configuration' },
   { to: '/settings/google',  icon: Layers,        label: 'Google Services',         desc: 'Calendar sync + Gmail inbox scan — one auth per member' },
   { to: '/settings/ai',      icon: Bot,           label: 'AI Settings',             desc: 'Vendor, model, and API key for briefings' },

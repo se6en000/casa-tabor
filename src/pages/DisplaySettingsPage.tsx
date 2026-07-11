@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
-import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Image, ToggleLeft, Sun, RotateCcw } from 'lucide-react'
+import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Image, ToggleLeft, Sun, RotateCcw, Type } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
-import { Button, IconButton, SegmentedControl, SectionHeader as SharedSectionHeader } from '../components/ui'
+import { Alert, Button, Card, DisclosureSection, IconButton, SegmentedControl, SectionHeader as SharedSectionHeader } from '../components/ui'
 import { useTheme, PRESETS, DEFAULTS, MIDNIGHT_GALLERY_DEFAULTS, type ThemeColors } from '../contexts/ThemeContext'
+import { DEFAULT_FONT_SCALE, MAX_FONT_SCALE, MIN_FONT_SCALE } from '../design-system/tokens.mjs'
+import { getThemeContrastIssues } from '../design-system/themeContrast.mjs'
 import {
   useRoomTone,
   getZoneForHour,
@@ -236,14 +238,17 @@ export default function DisplaySettingsPage() {
   const { settings, update: updateScreensaver } = useScreensaverSettings()
   const {
     colors,
+    dayColors,
     activeTarget,
     autoMidnight,
     forceMidnight,
     setAutoMidnight,
     setForceMidnight,
+    fontScale,
+    setFontScale,
     setActiveTarget,
     setColor,
-    applyPreset,
+    applyDayPreset,
     resetToDefaults,
     isDefault,
   } = useTheme()
@@ -252,6 +257,7 @@ export default function DisplaySettingsPage() {
   const [previewZone, setPreviewZone] = useState<RoomToneZone>('day')
   // Track whether config has been user-modified (vs just loaded from DB)
   const [dirty, setDirty] = useState(false)
+  const contrastIssues = getThemeContrastIssues(colors)
 
   useEffect(() => {
     setConfig({ ...DISPLAY_DEFAULTS, ...liveCfg })
@@ -304,7 +310,7 @@ export default function DisplaySettingsPage() {
     <>
       {/* Page header */}
       <div className="mb-6">
-        <SettingsPageHeader icon={Monitor} title="Display Settings" description="Customize colors, room tone, sensors, and art mode" />
+        <SettingsPageHeader icon={Monitor} title="Appearance & Display" description="Choose Casa’s look, text size, room tone, sensors, and art behavior" />
       </div>
 
       <div className="space-y-4">
@@ -318,52 +324,96 @@ export default function DisplaySettingsPage() {
           <div className="flex-1 h-px bg-casa-border" />
           <span className="flex items-center gap-2 px-1">
             <Palette size={15} className="text-casa-gold" />
-            <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Theme &amp; Colors</span>
+            <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Appearance</span>
           </span>
           <div className="flex-1 h-px bg-casa-border" />
         </div>
 
         {/* Preset palettes */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Palette} label="Presets" />
-          <SegmentedControl
-            aria-label="Palette target"
-            value={activeTarget}
-            options={PALETTE_TARGET_OPTIONS}
-            onChange={setActiveTarget}
-            className="mb-4"
-          />
-          <div className="grid grid-cols-3 gap-3">
+        <Card padding="sm">
+          <SectionHeader icon={Palette} label="Casa Palettes" />
+          <p className="mb-4 text-body-sm text-casa-text-secondary">
+            Curated, room-friendly palettes with complete semantic colors for every Casa component.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {PRESETS.map(preset => {
               const active = Object.entries(preset.colors).every(
-                ([k, v]) => colors[k as keyof ThemeColors] === v
+                ([k, v]) => dayColors[k as keyof ThemeColors] === v
               )
               return (
                 <Button
                   key={preset.id}
-                  onClick={() => applyPreset(preset)}
+                  variant="secondary"
+                  onClick={() => applyDayPreset(preset)}
+                  aria-pressed={active}
                   className={cn(
-                    'rounded-2xl border-2 p-3 text-left transition-all hover:shadow-md',
+                    'h-auto min-h-control-lg items-start rounded-card border-2 p-3 text-left transition-all',
                     active
-                      ? 'border-casa-gold shadow-md'
-                      : 'border-casa-border hover:border-casa-gold/40'
+                      ? 'border-casa-navy shadow-card-hover'
+                      : 'border-casa-border'
                   )}
                   style={{ background: preset.colors['casa-surface'] }}
                 >
-                  {/* Mini color preview */}
-                  <div className="flex gap-1 mb-2">
-                    <div className="w-5 h-5 rounded-full" style={{ background: preset.colors['casa-navy'] }} />
-                    <div className="w-5 h-5 rounded-full" style={{ background: preset.colors['casa-gold'] }} />
-                    <div className="w-5 h-5 rounded-full border" style={{ background: preset.colors['casa-bg'], borderColor: preset.colors['casa-border'] }} />
+                  <div className="flex w-full items-start gap-3">
+                    <div className="flex shrink-0 -space-x-1">
+                      <span className="size-6 rounded-full border border-white" style={{ background: preset.colors['casa-navy'] }} />
+                      <span className="size-6 rounded-full border border-white" style={{ background: preset.colors['casa-gold'] }} />
+                      <span className="size-6 rounded-full border" style={{ background: preset.colors['casa-bg'], borderColor: preset.colors['casa-border'] }} />
+                    </div>
+                    <span className="min-w-0">
+                      <span className="block text-body-sm font-bold" style={{ color: preset.colors['casa-navy'] }}>
+                        {preset.label}
+                      </span>
+                      <span className="mt-0.5 block text-caption" style={{ color: preset.colors['casa-text-secondary'] }}>
+                        {preset.description}
+                      </span>
+                    </span>
                   </div>
-                  <p className="text-caption font-semibold" style={{ color: preset.colors['casa-navy'] }}>
-                    {preset.emoji} {preset.label}
-                  </p>
                 </Button>
               )
             })}
           </div>
-        </div>
+        </Card>
+
+        <Card padding="sm">
+          <SectionHeader icon={Type} label="Text Size" />
+          <div className="flex items-start justify-between gap-4">
+            <p className="text-body-sm text-casa-text-secondary">
+              Scales every semantic text role while preserving Casa’s hierarchy.
+            </p>
+            <span className="shrink-0 text-body font-bold tabular-nums text-casa-navy">
+              {Math.round(fontScale * 100)}%
+            </span>
+          </div>
+          <input
+            type="range"
+            min={MIN_FONT_SCALE}
+            max={MAX_FONT_SCALE}
+            step={0.01}
+            value={fontScale}
+            aria-label="Global text size"
+            onChange={event => setFontScale(Number(event.target.value))}
+            className="mt-4 w-full accent-casa-gold"
+          />
+          <div className="mt-1 flex justify-between text-caption text-casa-muted">
+            <span>{Math.round(MIN_FONT_SCALE * 100)}%</span>
+            <span>Default 100%</span>
+            <span>{Math.round(MAX_FONT_SCALE * 100)}%</span>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {[0.9, DEFAULT_FONT_SCALE, 1.15, 1.25].map(scale => (
+              <Button
+                key={scale}
+                size="sm"
+                variant={Math.abs(fontScale - scale) < 0.005 ? 'strong' : 'secondary'}
+                aria-pressed={Math.abs(fontScale - scale) < 0.005}
+                onClick={() => setFontScale(scale)}
+              >
+                {Math.round(scale * 100)}%
+              </Button>
+            ))}
+          </div>
+        </Card>
 
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
           <SectionHeader icon={Sunset} label="Midnight Gallery Activation" />
@@ -381,13 +431,25 @@ export default function DisplaySettingsPage() {
           />
         </div>
 
-        {/* Individual color pickers */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Palette} label="Custom Colors" />
-          <p className="text-caption text-casa-muted mb-2">
-            Editing: <span className="font-medium text-casa-navy">{activeTarget === 'midnight' ? 'Midnight Gallery palette' : 'Day palette'}</span>
-          </p>
-          <div className="divide-y divide-casa-divider">
+        <Card padding="none">
+          <DisclosureSection
+            title="Advanced Colors"
+            summary="Fine-tune semantic colors with live contrast checks"
+            icon={<Palette size={18} />}
+          >
+            <SegmentedControl
+              aria-label="Custom palette to edit"
+              value={activeTarget}
+              options={PALETTE_TARGET_OPTIONS}
+              onChange={setActiveTarget}
+              className="mb-4"
+            />
+            {contrastIssues.length > 0 && (
+              <Alert tone="warning" title="Some text may be difficult to read" className="mb-4">
+                Adjust: {contrastIssues.join(', ')}. Casa recommends WCAG AA contrast for all normal text.
+              </Alert>
+            )}
+            <div className="divide-y divide-casa-divider">
             {COLOR_FIELDS.map(({ key, label, desc }) => (
               <div key={key} className="flex items-center gap-4 px-0 py-3.5">
                 {/* Color swatch + picker */}
@@ -426,8 +488,9 @@ export default function DisplaySettingsPage() {
                 </div>
               </div>
             ))}
-          </div>
-        </div>
+            </div>
+          </DisclosureSection>
+        </Card>
 
         {/* Live preview strip */}
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
@@ -465,7 +528,7 @@ export default function DisplaySettingsPage() {
             </div>
             <Button
               onClick={resetToDefaults}
-              className="flex items-center gap-2 bg-white border border-amber-300 text-amber-700 text-body-sm font-semibold px-4 py-2 rounded-xl hover:bg-amber-50 transition-colors shadow-sm"
+              variant="secondary"
             >
               <RotateCcw size={14} />
               Reset palette defaults

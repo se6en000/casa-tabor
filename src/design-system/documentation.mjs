@@ -1,4 +1,4 @@
-export const DESIGN_SYSTEM_VERSION = '1.0.4'
+export const DESIGN_SYSTEM_VERSION = '1.1.0'
 export const DESIGN_SYSTEM_RELEASE_DATE = '2026-07-11'
 export const DESIGN_SYSTEM_SCHEMA_VERSION = 1
 
@@ -486,6 +486,15 @@ export const COMPONENT_MANIFEST = [
 ]
 
 export const DESIGN_SYSTEM_CHANGELOG = [
+  {
+    version: '1.1.0',
+    date: '2026-07-11',
+    changes: [
+      'Established Appearance & Display as the sole household-facing owner of palettes and text sizing.',
+      'Added seven complete, contrast-certified Casa palettes and guarded advanced semantic color editing.',
+      'Converted the Design System gallery into a read-only developer and diagnostics reference.',
+    ],
+  },
   {
     version: '1.0.4',
     date: '2026-07-11',
