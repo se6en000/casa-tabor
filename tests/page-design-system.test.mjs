@@ -172,6 +172,8 @@ test('Cook preserves its landing hierarchy through shared design-system roles', 
   const styles = readFileSync(resolve('src/index.css'), 'utf8')
   assert.match(cook, /<Heading role="display-sm"/)
   assert.match(cook, /<Text as="h3" role="body-lg"[^>]*>\{insight\.recipe\.name\}<\/Text>/)
+  assert.match(cook, /variant=\{isTop \? 'primary' : 'secondary'\}\s+className="mt-auto"/)
+  assert.doesNotMatch(cook, /className="mt-auto pt-3"/)
   assert.match(cook, /<SegmentedControl/)
   assert.match(cook, /<Card/)
   assert.match(cook, /<Chip/)

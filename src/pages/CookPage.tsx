@@ -3014,7 +3014,7 @@ export default function CookPage() {
                         <Button
                           onClick={() => openRecipeForCookMode(insight.recipe.id)}
                           variant={isTop ? 'primary' : 'secondary'}
-                          className="mt-auto pt-3"
+                          className="mt-auto"
                         >
                           Start cooking
                         </Button>
