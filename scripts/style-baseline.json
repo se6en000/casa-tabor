@@ -4,13 +4,13 @@
   "generatedFrom": "current committed src/ at time of generation (deterministic regex scan)",
   "filesScanned": 160,
   "categories": {
-    "arbitraryFontSize": 74,
-    "rawHexColors": 75,
-    "arbitraryZIndex": 14,
-    "inlineStyleBlocks": 193,
+    "arbitraryFontSize": 1,
+    "rawHexColors": 48,
+    "arbitraryZIndex": 12,
+    "inlineStyleBlocks": 52,
     "undersizedSquareControls": 0,
     "hoverOnlyReveals": 0,
     "titleOnlyButtonLabels": 8,
-    "nativeControlRecreations": 307
+    "nativeControlRecreations": 279
   }
 }

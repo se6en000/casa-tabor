@@ -94,7 +94,7 @@ export default function LargeEventCard({
               <div className="flex items-center gap-1 shrink-0 pt-0.5">
                 {primary && (
                   <CalendarPill
-                    color={primary.family_member?.color_hex ?? '#888'}
+                    color={primary.family_member?.color_hex ?? 'var(--color-casa-muted)'}
                     title={ownerName}
                   >
                     {ownerName}
@@ -103,7 +103,7 @@ export default function LargeEventCard({
                 {others.slice(0, 3).map((m) => (
                   <CalendarPill
                     key={m.id}
-                    color={m.family_member?.color_hex ?? '#888'}
+                    color={m.family_member?.color_hex ?? 'var(--color-casa-muted)'}
                   >
                     {m.family_member?.name}
                   </CalendarPill>

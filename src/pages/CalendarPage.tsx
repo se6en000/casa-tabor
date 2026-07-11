@@ -7,6 +7,7 @@ import WeekView from '../components/calendar/WeekView'
 import StackedView from '../components/calendar/StackedView'
 import DayView from '../components/calendar/DayView'
 import MonthView from '../components/calendar/MonthView'
+import { Button, IconButton } from '../components/ui'
 import type { CalendarView } from '../types'
 
 const views: { key: CalendarView; label: string }[] = [
@@ -100,20 +101,17 @@ export default function CalendarPage() {
       {/* Top toolbar */}
       <div className="flex items-center justify-between px-6 py-3 bg-casa-bg">
         <div className="flex items-center gap-3">
-          <button
+          <Button
             onClick={goToToday}
-            className="px-3 py-1.5 rounded-button border border-casa-border text-body-sm font-semibold text-casa-text hover:bg-casa-surface transition-colors"
+            variant="secondary"
+            size="sm"
           >
             Today
-          </button>
+          </Button>
           {!isStacked && (
             <>
-              <button onClick={goPrev} className="p-2.5 rounded-button hover:bg-casa-divider transition-colors text-casa-muted min-w-[44px] min-h-[44px] flex items-center justify-center">
-                <ChevronLeft size={20} />
-              </button>
-              <button onClick={goNext} className="p-2.5 rounded-button hover:bg-casa-divider transition-colors text-casa-muted min-w-[44px] min-h-[44px] flex items-center justify-center">
-                <ChevronRight size={20} />
-              </button>
+              <IconButton onClick={goPrev} aria-label="Previous calendar period" icon={<ChevronLeft size={20} />} />
+              <IconButton onClick={goNext} aria-label="Next calendar period" icon={<ChevronRight size={20} />} />
             </>
           )}
           <h2 className="font-display text-heading text-casa-text ml-2">
@@ -123,17 +121,15 @@ export default function CalendarPage() {
 
         <div className="hidden md:flex gap-1 bg-casa-surface border border-casa-border rounded-button p-1">
           {views.map((v) => (
-            <button
+            <Button
               key={v.key}
               onClick={() => setActiveView(v.key)}
-              className={`px-4 py-1.5 rounded-button text-body-sm font-medium transition-colors ${
-                activeView === v.key
-                  ? 'bg-casa-navy text-white shadow-card'
-                  : 'text-casa-text hover:bg-casa-bg'
-              }`}
+              variant={activeView === v.key ? 'strong' : 'ghost'}
+              size="sm"
+              aria-pressed={activeView === v.key}
             >
               {v.label}
-            </button>
+            </Button>
           ))}
         </div>
       </div>

@@ -170,6 +170,47 @@ test('dense calendar metadata uses the Day-view-sized read-only pill', () => {
   assert.match(large, /<CalendarPill/)
 })
 
+test('calendar views use semantic theme, typography, and layering contracts', () => {
+  const paths = [
+    'src/components/calendar/DayView.tsx',
+    'src/components/calendar/EventBlock.tsx',
+    'src/components/calendar/EventDetailPanel.tsx',
+    'src/components/calendar/MonthView.tsx',
+    'src/components/calendar/StackedView.tsx',
+    'src/components/calendar/WeekView.tsx',
+  ]
+  for (const path of paths) {
+    const source = readFileSync(resolve(path), 'utf8')
+    assert.doesNotMatch(source, /\btext-\[(?:\d|\.)+(?:px|rem|em)\]/, `${path} has arbitrary typography`)
+    assert.doesNotMatch(source, /#[\da-f]{3,8}\b/i, `${path} has a raw color`)
+    assert.doesNotMatch(source, /\bz-\[\d+\]/, `${path} has arbitrary layering`)
+  }
+})
+
+test('calendar chrome uses shared controls while runtime event geometry stays intact', () => {
+  const page = readFileSync(resolve('src/pages/CalendarPage.tsx'), 'utf8')
+  const day = readFileSync(resolve('src/components/calendar/DayView.tsx'), 'utf8')
+  const month = readFileSync(resolve('src/components/calendar/MonthView.tsx'), 'utf8')
+  const week = readFileSync(resolve('src/components/calendar/WeekView.tsx'), 'utf8')
+  const block = readFileSync(resolve('src/components/calendar/EventBlock.tsx'), 'utf8')
+  const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
+
+  assert.match(day, /import \{ Button, CalendarPill, IconButton \} from '\.\.\/ui'/)
+  assert.match(month, /import \{ Button, CalendarPill, IconButton \} from '\.\.\/ui'/)
+  assert.match(detail, /import \{ Button, Card, Chip, IconButton, Switch \} from '\.\.\/ui'/)
+  assert.match(page, /import \{ Button, IconButton \} from '\.\.\/components\/ui'/)
+  assert.doesNotMatch(page, /<button\b/)
+  assert.match(detail, /<Switch[\s\S]*label="Someone waits on site"/)
+  assert.equal((detail.match(/<button\b/g) ?? []).length, 1)
+  assert.match(detail, /data-native-drag/)
+
+  assert.match(block, /top: `\$\{top\}px`/)
+  assert.match(block, /height: `\$\{height\}px`/)
+  assert.match(block, /backgroundColor: color/)
+  assert.match(week, /left: `calc\(\$\{leftPct\}% \+ 2px\)`/)
+  assert.match(week, /className="pointer-events-none fixed z-popover/)
+})
+
 test('Cook preserves its landing hierarchy through shared design-system roles', () => {
   const cook = readFileSync(resolve('src/pages/CookPage.tsx'), 'utf8')
   const styles = readFileSync(resolve('src/index.css'), 'utf8')

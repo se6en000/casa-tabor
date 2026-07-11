@@ -9,13 +9,13 @@ const HOUR_HEIGHT = 60 // px per hour
 const GRID_START_HOUR = 6 // 6 AM
 
 // When all 5 members are on an event, use gold (shared family)
-const SHARED_COLOR = '#C9A96E'
+const SHARED_COLOR = 'var(--color-casa-gold)'
 
 // Confidence dot colors
 const CONFIDENCE_DOT: Record<string, string> = {
-  high: '#22c55e',    // green
-  medium: '#f59e0b',  // amber
-  low: '#ef4444',     // red
+  high: 'bg-casa-success',
+  medium: 'bg-casa-warning',
+  low: 'bg-casa-error',
 }
 
 interface EventBlockProps {
@@ -62,7 +62,7 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
 
   const isCompact = height < 50
   const confidence = event.enrichment?.confidence
-  const confidenceDotColor = confidence ? CONFIDENCE_DOT[confidence] : null
+  const confidenceDotClass = confidence ? CONFIDENCE_DOT[confidence] : null
 
   // ── Long-press drag detection ────────────────────────────────
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -168,10 +168,9 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
       })()}
 
       {/* Confidence dot — top right corner */}
-      {confidenceDotColor && (
+      {confidenceDotClass && (
         <span
-          className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full border border-white/50"
-          style={{ backgroundColor: confidenceDotColor }}
+          className={cn('absolute right-1.5 top-1.5 h-2 w-2 rounded-full border border-white/50', confidenceDotClass)}
           title={`Enrichment confidence: ${confidence}`}
         />
       )}

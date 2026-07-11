@@ -18,7 +18,7 @@ const START_HOUR = 6
 const END_HOUR = 21
 const HOURS = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i)
 const MULTIDAY_ROW_H = 26 // px per multi-day event row
-const SHARED_COLOR = '#C9A96E'
+const SHARED_COLOR = 'var(--color-casa-gold)'
 
 // ── Drag-to-reschedule types & helpers ──────────────────────────
 
@@ -367,12 +367,11 @@ export default function WeekView() {
       {/* ── Multi-day event banner ────────────────────────────────── */}
       {visibleMultiDay.length > 0 && (
         <div
-          className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-casa-border bg-casa-bg sticky z-[9]"
-          style={{ top: 0 }}
+          className="sticky top-0 z-raised grid grid-cols-[60px_repeat(7,1fr)] border-b border-casa-border bg-casa-bg"
           onClick={() => setSelectedEventId(null)}
         >
           {/* "all‑day" label */}
-          <div className="text-[9px] text-casa-muted text-right pr-2 pt-2 leading-tight select-none">
+          <div className="select-none pr-2 pt-2 text-right text-caption leading-tight text-casa-muted">
             all‑day
           </div>
 
@@ -519,7 +518,7 @@ export default function WeekView() {
         const dropDayKey = dropInfo ? format(dropInfo.targetDay, 'yyyy-MM-dd') : origDayKey
         return (
           <div
-            className="fixed pointer-events-none z-[200] rounded-lg px-2.5 py-1.5 text-white shadow-2xl ring-2 ring-white/40"
+            className="pointer-events-none fixed z-popover rounded-lg px-2.5 py-1.5 text-white shadow-modal ring-2 ring-white/40"
             style={{
               left: drag.clientX - drag.ghostWidth / 2,
               top: drag.clientY - drag.grabOffsetPx,

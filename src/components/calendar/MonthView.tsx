@@ -12,8 +12,9 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, REMINDER_COLOR } from '../../utils/holidays'
 import EventDetailPanel from './EventDetailPanel'
 import QuickCreateSheet from '../shared/QuickCreateSheet'
+import { Button, CalendarPill, IconButton } from '../ui'
 
-const SHARED_COLOR = '#C9A96E'
+const SHARED_COLOR = 'var(--color-casa-gold)'
 
 function getPrimaryColor(event: EventWithDetails): string {
   if (!event.members || event.members.length === 0) return SHARED_COLOR
@@ -62,15 +63,14 @@ function DayPopover({ day, events, onClose, onSelectDay, onSelectEvent }: DayPop
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-casa-border">
-        <button
+        <Button
           onClick={() => { onSelectDay(day); onClose() }}
-          className="font-display text-heading text-casa-navy hover:text-casa-gold transition-colors"
+          variant="ghost"
+          className="p-0 font-display text-heading text-casa-navy hover:bg-transparent hover:text-casa-gold"
         >
           {format(day, 'EEEE, MMMM d')}
-        </button>
-        <button onClick={onClose} className="p-1 rounded hover:bg-casa-divider transition-colors text-casa-muted">
-          <X size={14} />
-        </button>
+        </Button>
+        <IconButton onClick={onClose} aria-label="Close day preview" icon={<X size={14} />} />
       </div>
 
       {/* Event list */}
@@ -102,7 +102,7 @@ function DayPopover({ day, events, onClose, onSelectDay, onSelectEvent }: DayPop
                   {holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : event.title}
                 </p>
                 {reminder && (
-                  <span className="text-[9px] font-semibold text-amber-500 uppercase tracking-wide">Reminder</span>
+                  <span className="text-caption font-semibold uppercase tracking-wide text-casa-warning">Reminder</span>
                 )}
                 <div className="flex items-center gap-3 mt-0.5">
                   {!isAllDay && !reminder && (
@@ -121,13 +121,12 @@ function DayPopover({ day, events, onClose, onSelectDay, onSelectEvent }: DayPop
                 {event.members.length > 0 && (
                   <div className="flex gap-1 mt-1 flex-wrap">
                     {event.members.map(m => (
-                      <span
+                      <CalendarPill
                         key={m.id}
-                        className="px-1.5 py-0.5 rounded text-[9px] font-semibold text-white leading-none"
-                        style={{ backgroundColor: m.family_member?.color_hex || SHARED_COLOR }}
+                        color={m.family_member?.color_hex || SHARED_COLOR}
                       >
                         {m.family_member?.name?.split(' ')[0] ?? '?'}
-                      </span>
+                      </CalendarPill>
                     ))}
                   </div>
                 )}
@@ -139,12 +138,14 @@ function DayPopover({ day, events, onClose, onSelectDay, onSelectEvent }: DayPop
 
       {/* Drill-in link */}
       <div className="px-4 py-2.5 border-t border-casa-border">
-        <button
+        <Button
           onClick={() => { onSelectDay(day); onClose() }}
-          className="text-caption text-casa-gold font-semibold hover:underline"
+          variant="ghost"
+          size="sm"
+          className="min-h-0 p-0 text-caption text-casa-gold hover:bg-transparent hover:underline"
         >
           View full day →
-        </button>
+        </Button>
       </div>
     </motion.div>
   )
@@ -199,7 +200,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
               : isCurrentMonth
               ? 'text-casa-navy group-hover:text-casa-gold'
               : 'text-casa-muted/50',
-          )} style={{ fontSize: '17px' }}>
+          )}>
             {format(day, 'd')}
           </span>
         </div>
@@ -219,7 +220,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
                   holiday && 'font-semibold tracking-tight',
                   reminder && 'font-semibold',
                 )}
-                style={{ backgroundColor: color + '22', color, fontSize: '15px', lineHeight: '1.5' }}
+                style={{ backgroundColor: color + '22', color }}
                 onClick={e => { e.stopPropagation(); onSelectEvent(event) }}
               >
                 <span
@@ -231,7 +232,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
             )
           })}
           {overflow > 0 && (
-            <div className="text-casa-muted pl-1" style={{ fontSize: '15px' }}>+{overflow} more</div>
+            <div className="pl-1 text-body-sm text-casa-muted">+{overflow} more</div>
           )}
         </div>
       </div>

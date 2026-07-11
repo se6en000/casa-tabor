@@ -17,7 +17,7 @@ import EventDetailPanel from './EventDetailPanel'
 import { WeatherIcon } from '../shared/WeatherIcon'
 import { LeaveByCard } from '../shared/LeaveByCard'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
-import { CalendarPill } from '../ui'
+import { Button, CalendarPill, IconButton } from '../ui'
 import { differenceInDays } from 'date-fns'
 import { isHoliday, isReminder, isTimedReminder } from '../../utils/holidays'
 import { supabase } from '../../lib/supabase'
@@ -33,7 +33,7 @@ import { derivePlan, type DerivedPerson } from '../../lib/eventCommandCenter'
 import type { FamilyMember } from '../../types'
 import { cleanEventTitle, isBirthdayEvent } from '../../utils/eventTitle'
 
-const SHARED_GOLD = '#C9A96E'
+const SHARED_GOLD = 'var(--color-casa-gold)'
 
 function eventColor(ev: EventWithDetails): string {
   if (!ev.members || ev.members.length === 0) return SHARED_GOLD
@@ -223,39 +223,37 @@ function DayEventCard({
         <div className="relative w-full overflow-hidden rounded-card border border-casa-accent-soft-border bg-casa-accent-subtle px-4 py-2.5">
           <span className="absolute left-0 top-0 bottom-0 w-[8px] rounded-l-card bg-casa-warning" />
           <div className="flex items-center gap-2 pl-1 text-caption font-semibold text-casa-top-pick-band">
-            <button
+            <IconButton
               onClick={handleCheck}
               disabled={checking || snoozing || movingToNeedsYou}
-              className={`shrink-0 size-control rounded-button border-2 flex items-center justify-center outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold ${
-                checking ? 'bg-green-500 border-green-500' : 'border-casa-accent-soft-border hover:border-casa-success bg-transparent'
-              }`}
+              variant={checking ? 'primary' : 'secondary'}
+              className={checking ? 'border-casa-success bg-casa-success text-white' : 'border-casa-accent-soft-border bg-transparent'}
               title="Mark done"
               aria-label="Mark done"
-            >
-              {checking && (
+              icon={checking ? (
                 <svg width="8" height="6" viewBox="0 0 9 7" fill="none">
                   <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-              )}
-            </button>
-            <button
+              ) : <span className="size-2 rounded-full border-2 border-casa-accent-soft-border" />}
+            />
+            <IconButton
               onClick={handleSnooze}
               disabled={checking || snoozing || movingToNeedsYou || !onSnooze}
-              className="shrink-0 size-control rounded-button border border-casa-accent-soft-border bg-white/80 text-casa-muted hover:text-casa-text hover:bg-white transition-colors inline-flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold disabled:opacity-40"
+              variant="secondary"
+              className="border-casa-accent-soft-border bg-casa-surface/80"
               title="Snooze 1 hour"
               aria-label="Snooze 1 hour"
-            >
-              <SnoozeOneHourIcon className={cn('w-3 h-3', snoozing && 'animate-pulse')} />
-            </button>
-            <button
+              icon={<SnoozeOneHourIcon className={cn('w-3 h-3', snoozing && 'animate-pulse')} />}
+            />
+            <IconButton
               onClick={handleMoveToNeedsYou}
               disabled={checking || snoozing || movingToNeedsYou || !onSendToNeedsYou}
-              className="shrink-0 size-control rounded-button border border-casa-accent-soft-border bg-white/80 text-casa-muted hover:text-casa-text hover:bg-white transition-colors inline-flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold disabled:opacity-40"
+              variant="secondary"
+              className="border-casa-accent-soft-border bg-casa-surface/80"
               title="Move to Needs you"
               aria-label="Move to Needs you"
-            >
-              <NeedsYouTransferIcon className={cn('w-3 h-3', movingToNeedsYou && 'animate-pulse')} />
-            </button>
+              icon={<NeedsYouTransferIcon className={cn('w-3 h-3', movingToNeedsYou && 'animate-pulse')} />}
+            />
             <Bell size={13} className="shrink-0 text-casa-warning" />
             <span className="text-casa-muted tabular-nums">
               {format(start, 'h:mm a')}
@@ -290,7 +288,7 @@ function DayEventCard({
     >
       <div className={cn(
         'relative w-full min-w-0 overflow-hidden rounded-card border border-casa-border px-4 py-3 shadow-card',
-        isBirthday ? 'bg-gradient-to-br from-[#FDF1F6] via-casa-surface to-[#FFFBEE]' : 'bg-casa-surface',
+        isBirthday ? 'bg-gradient-to-br from-casa-accent-subtle via-casa-surface to-casa-bg' : 'bg-casa-surface',
       )}>
         {isBirthday && <BirthdayCardDecoration />}
         <span
@@ -301,7 +299,7 @@ function DayEventCard({
           <div className="relative shrink-0 pl-1 pt-0.5">
             <span
               className={cn(
-                'w-12 h-12 rounded-full text-white flex items-center justify-center text-[18px] font-bold shadow-card',
+                'w-12 h-12 rounded-full text-white flex items-center justify-center text-body-sm font-bold shadow-card',
                 responsibility.responsible?.role === 'caregiver' && 'ring-2 ring-casa-gold/55 ring-offset-2 ring-offset-casa-surface',
               )}
               style={{ backgroundColor: responsibility.responsible?.color ?? 'var(--color-casa-gold)' }}
@@ -513,12 +511,14 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
               {dayConflicts.map(c => (
                 <div key={c.id} className="px-3 py-2.5 rounded-lg bg-casa-surface border border-casa-border border-l-4 border-l-casa-error">
                   <p className="text-body-sm text-casa-text leading-snug">{c.description}</p>
-                  <button
+                  <Button
                     onClick={() => resolveConflict(c.id, 'dismissed from day view')}
-                    className="text-caption text-casa-muted hover:text-red-500 mt-1 transition-colors"
+                    variant="ghost"
+                    size="sm"
+                    className="mt-1 min-h-0 p-0 text-caption text-casa-muted hover:bg-transparent hover:text-casa-error"
                   >
                     Dismiss
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>
@@ -555,19 +555,23 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
                       <p className="text-caption text-casa-muted mt-1 ml-6">{daysLabel}</p>
                     )}
                     <div className="flex gap-2 mt-2 ml-6">
-                      <button
+                      <Button
                         onClick={() => snooze(item.id)}
-                        className="text-caption text-casa-muted hover:text-casa-text transition-colors"
+                        variant="ghost"
+                        size="sm"
+                        className="min-h-0 p-0 text-caption text-casa-muted hover:bg-transparent"
                       >
                         Snooze
-                      </button>
+                      </Button>
                       <span className="text-casa-border text-caption">|</span>
-                      <button
+                      <Button
                         onClick={() => dismiss(item.id)}
-                        className="text-caption text-casa-muted hover:text-red-600 transition-colors"
+                        variant="ghost"
+                        size="sm"
+                        className="min-h-0 p-0 text-caption text-casa-muted hover:bg-transparent hover:text-casa-error"
                       >
                         Dismiss
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )

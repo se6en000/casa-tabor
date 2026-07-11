@@ -103,7 +103,7 @@ export default function ReminderEventCard({
         <div className="flex items-center gap-1 shrink-0">
           {primary && (
            <CalendarPill
-             color={primary.family_member?.color_hex ?? '#888'}
+             color={primary.family_member?.color_hex ?? 'var(--color-casa-muted)'}
              title={primary.family_member?.name ?? ''}
            >
              {primary.family_member?.name}
@@ -112,7 +112,7 @@ export default function ReminderEventCard({
           {others.slice(0, 1).map((m) => (
            <CalendarPill
              key={m.id}
-             color={m.family_member?.color_hex ?? '#888'}
+             color={m.family_member?.color_hex ?? 'var(--color-casa-muted)'}
            >
              {m.family_member?.name}
            </CalendarPill>

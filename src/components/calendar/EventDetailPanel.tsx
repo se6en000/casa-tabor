@@ -30,12 +30,11 @@ import { getPersistedPlanOverrides, locationSignature, overridesStorageKey } fro
 import { getEventDisplayStartDay } from '../../utils/eventTime'
 import { isBirthdayEvent } from '../../utils/eventTitle'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
-import { Button, Card, Chip, IconButton } from '../ui'
+import { Button, Card, Chip, IconButton, Switch } from '../ui'
 
-// ── Exact design tokens from the Event Command Center handoff (SPEC §2) ──────
+// Calendar-specific aliases compose the shared theme contract without creating a parallel palette.
 const S = {
   navy: 'var(--color-casa-navy)',
-  navyHex: '#1B2A44',
   muted: 'var(--color-casa-muted)',
   label: 'color-mix(in srgb, var(--color-casa-muted) 85%, white)',
   eyebrow: 'color-mix(in srgb, var(--color-casa-muted) 75%, white)',
@@ -44,21 +43,18 @@ const S = {
   yourTimeFill: 'var(--color-casa-bg)',
   coverFill: 'var(--color-casa-bg)',
   gold: 'var(--color-casa-gold)',
-  goldHex: '#C6A15B',
   goldBadge: 'color-mix(in srgb, var(--color-casa-gold) 72%, white)',
   goldText: 'color-mix(in srgb, var(--color-casa-warning) 70%, var(--color-casa-text))',
-  amberBg: '#FCF3E0',
-  amberBorder: '#EAD3A0',
+  amberBg: 'color-mix(in srgb, var(--color-casa-warning) 12%, var(--color-casa-surface))',
+  amberBorder: 'color-mix(in srgb, var(--color-casa-warning) 35%, var(--color-casa-border))',
   green: 'var(--color-casa-success)',
-  greenHex: '#2F8F5B',
-  greenBg: '#E6F4EC',
+  greenBg: 'var(--color-casa-success-soft)',
   red: 'var(--color-casa-error)',
-  redBg: '#FBEAE7',
+  redBg: 'color-mix(in srgb, var(--color-casa-error) 12%, var(--color-casa-surface))',
   borderSoft: 'color-mix(in srgb, var(--color-casa-navy) 8%, transparent)',
   borderMed: 'color-mix(in srgb, var(--color-casa-navy) 10%, transparent)',
   hair: 'color-mix(in srgb, var(--color-casa-navy) 6%, transparent)',
 }
-const serif = { fontFamily: "'Source Serif 4', Georgia, serif" }
 const MODE_OVERRIDE_OPTIONS: Array<{ value: 'auto' | EventMode; label: string; helper?: string }> = [
   { value: 'auto', label: 'Auto' },
   { value: 'appointment', label: 'Appointment' },
@@ -68,14 +64,6 @@ const MODE_OVERRIDE_OPTIONS: Array<{ value: 'auto' | EventMode; label: string; h
 ]
 const PANEL_ENTER_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1]
 const PANEL_EXIT_EASE: [number, number, number, number] = [0.4, 0, 1, 1]
-
-function hexToRgba(hex: string, alpha: number): string {
-  const h = hex.replace('#', '')
-  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
-  const n = parseInt(full, 16)
-  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
-  return `rgba(${r},${g},${b},${alpha})`
-}
 
 function verifyFromTrustedSource(event: EventWithDetails, savedPlaces: SavedPlace[] = []): boolean {
   if (findSavedPlace(savedPlaces ?? [], event.location_name, event.address)) return true
@@ -472,7 +460,7 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
                     className="justify-start"
                   >
                     <span
-                      className="w-6 h-6 rounded-full text-white text-[11px] font-bold flex items-center justify-center shrink-0"
+                      className="w-6 h-6 rounded-full text-white text-caption font-bold flex items-center justify-center shrink-0"
                       style={{ backgroundColor: fm.color_hex ?? 'var(--color-casa-muted)' }}
                     >
                       {fm.name?.[0]}
@@ -525,7 +513,7 @@ function PanelHeader({
 
   return (
     <div
-      className={cn('relative overflow-hidden px-7 pt-6 pb-5', isBirthday && 'bg-gradient-to-br from-[#FDF1F6] via-transparent to-[#FFFBEE]')}
+      className={cn('relative overflow-hidden px-7 pb-5 pt-6', isBirthday && 'bg-gradient-to-br from-casa-accent-subtle via-transparent to-casa-bg')}
       style={{ borderBottom: `1px solid ${S.borderSoft}` }}
     >
       {isBirthday && <BirthdayCardDecoration className="opacity-70" />}
@@ -536,7 +524,7 @@ function PanelHeader({
               size="sm"
               tone="accent"
               className="capitalize"
-              style={{ background: hexToRgba(accent, 0.14), color: S.navy, letterSpacing: '0.04em' }}
+              style={{ background: `color-mix(in srgb, ${accent} 14%, transparent)`, color: S.navy, letterSpacing: '0.04em' }}
             >
               {CATEGORY_LABEL[category] ?? category}
             </Chip>
@@ -940,12 +928,12 @@ function StandardPanelBody({
           <div className="rounded-[14px] px-4 py-1.5" style={{ background: S.coverFill }}>
             {coverageRows.map((row, i) => (
               <div key={row.id} className="flex items-center gap-3 py-2.5" style={i > 0 ? { borderTop: `1px solid ${S.hair}` } : undefined}>
-                <span className="w-[30px] h-[30px] rounded-full text-white text-[12px] font-bold inline-flex items-center justify-center" style={{ background: row.color }}>
+                <span className="w-[30px] h-[30px] rounded-full text-white text-caption font-bold inline-flex items-center justify-center" style={{ background: row.color }}>
                   {row.initial}
                 </span>
-                <span className="flex-1 text-[14px] font-semibold" style={{ color: S.navy }}>{row.name}</span>
-                <span className="text-[13px]" style={{ color: S.muted }}>{row.status}</span>
-                <span className="text-[13px]" style={{ color: row.ok ? S.green : S.goldText }}>{row.ok ? '✓' : '•'}</span>
+                <span className="flex-1 text-body-sm font-semibold" style={{ color: S.navy }}>{row.name}</span>
+                <span className="text-body-sm" style={{ color: S.muted }}>{row.status}</span>
+                <span className="text-body-sm" style={{ color: row.ok ? S.green : S.goldText }}>{row.ok ? '✓' : '•'}</span>
               </div>
             ))}
           </div>
@@ -977,7 +965,7 @@ function DestinationHeaderCard({ locationName, address, verified, atHome, onChec
   const hasDestination = Boolean(locationName || address)
   const headline = locationName ?? (atHome ? 'Home' : 'Destination needed')
   const subline = address ?? (!atHome ? 'Add an address to unlock live drive times.' : null)
-  const border = verified ? hexToRgba(S.greenHex, 0.28) : S.amberBorder
+  const border = verified ? 'color-mix(in srgb, var(--color-casa-success) 28%, transparent)' : S.amberBorder
   const bg = verified ? S.greenBg : S.amberBg
   return (
     <Card padding="sm" className="mt-4 flex items-center gap-3" style={{ border: `1px solid ${border}`, background: bg }}>
@@ -1021,7 +1009,7 @@ function TrafficBadge({ deltaMin }: { deltaMin: number | null | undefined }) {
     : pill.tone === 'light' ? { bg: S.amberBg, fg: S.goldText }
     : { bg: S.redBg, fg: S.red }
   return (
-    <span className="inline-flex items-center rounded-pill px-2 py-0.5 text-[11px] font-bold" style={{ background: tone.bg, color: tone.fg }}>
+    <span className="inline-flex items-center rounded-pill px-2 py-0.5 text-caption font-bold" style={{ background: tone.bg, color: tone.fg }}>
       {pill.label}
     </span>
   )
@@ -1065,18 +1053,18 @@ function DriverChip({
   })
   return (
     <div className={cn('relative shrink-0', open ? 'z-popover' : 'z-10')} ref={pickerRef}>
-      <button
+      <Button
         onClick={() => setOpen((prev) => !prev)}
-        type="button"
-        className="min-h-[44px] inline-flex items-center gap-1.5 rounded-pill pl-2 pr-3 py-1 text-[13px] font-semibold"
-        style={{ border: `1px dashed ${S.borderMed}`, color: S.navy }}
+        variant="secondary"
+        size="sm"
+        className="rounded-pill border-dashed"
       >
-        <span className="w-6 h-6 rounded-full text-white flex items-center justify-center text-[11px] font-bold" style={{ backgroundColor: driver.color }}>
+        <span className="w-6 h-6 rounded-full text-white flex items-center justify-center text-caption font-bold" style={{ backgroundColor: driver.color }}>
           {driver.initial}
         </span>
         {driver.name}
         <ChevronRight size={13} className={cn('ml-0.5 transition-transform', open && 'rotate-90')} />
-      </button>
+      </Button>
       <AnimatePresence>
         {open && options.length > 0 && (
           <motion.div
@@ -1090,9 +1078,8 @@ function DriverChip({
             {sortedOptions.map((option) => {
               const selected = option.id === driver.id
               return (
-                <button
+                <Button
                   key={option.id}
-                  type="button"
                   onClick={() => {
                     if (option.conflictWith && option.id !== driver.id) {
                       const ok = window.confirm(`${option.name} is already assigned to "${option.conflictWith}" during this time. Assign anyway?`)
@@ -1101,25 +1088,29 @@ function DriverChip({
                     onSelectDriver?.(option.id)
                     setOpen(false)
                   }}
-                  className="w-full min-h-[44px] rounded-lg px-2.5 py-1.5 flex items-center gap-2 text-left hover:bg-casa-bg"
+                  variant="ghost"
+                  size="sm"
+                  fullWidth
+                  className="rounded-lg px-2.5 py-1.5 text-left"
+                  contentClassName="w-full justify-start"
                   style={selected ? { background: S.coverFill } : option.conflictWith ? { background: S.amberBg } : undefined}
                 >
-                  <span className="w-6 h-6 rounded-full text-white text-[11px] font-bold inline-flex items-center justify-center" style={{ background: option.color }}>
+                  <span className="w-6 h-6 rounded-full text-white text-caption font-bold inline-flex items-center justify-center" style={{ background: option.color }}>
                     {option.initial}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-semibold" style={{ color: S.navy }}>{option.name}</span>
+                    <span className="block truncate text-body-sm font-semibold" style={{ color: S.navy }}>{option.name}</span>
                     {option.conflictWith && !selected && (
-                      <span className="block truncate text-[11px]" style={{ color: S.goldText }}>
+                      <span className="block truncate text-caption" style={{ color: S.goldText }}>
                         Busy: {option.conflictWith}
                       </span>
                     )}
                   </span>
                   {option.conflictWith && !selected && (
-                    <span className="text-[10px] font-bold uppercase" style={{ color: S.goldText, letterSpacing: '0.06em' }}>Busy</span>
+                    <span className="text-caption font-bold uppercase" style={{ color: S.goldText, letterSpacing: '0.06em' }}>Busy</span>
                   )}
                   {selected && <Check size={14} style={{ color: S.green }} />}
-                </button>
+                </Button>
               )
             })}
           </motion.div>
@@ -1180,9 +1171,9 @@ function PlanBlock({
   }, [effective.twoDrivers, twoDriverConfirmed, onSetTwoDriverConfirmed])
 
   const legDot = (kind: string) =>
-    kind === 'drop' || kind === 'depart' ? { color: S.navy, halo: hexToRgba(S.navyHex, 0.12) }
-    : kind === 'stay' || kind === 'host' ? { color: S.gold, halo: hexToRgba(S.goldHex, 0.18) }
-    : { color: S.green, halo: hexToRgba(S.greenHex, 0.15) }
+    kind === 'drop' || kind === 'depart' ? { color: S.navy, halo: 'color-mix(in srgb, var(--color-casa-navy) 12%, transparent)' }
+    : kind === 'stay' || kind === 'host' ? { color: S.gold, halo: 'color-mix(in srgb, var(--color-casa-gold) 18%, transparent)' }
+    : { color: S.green, halo: 'color-mix(in srgb, var(--color-casa-success) 15%, transparent)' }
   const [modeMenuOpen, setModeMenuOpen] = useState(false)
   const modePickerRef = useRef<HTMLDivElement | null>(null)
   const selectedMode = modeOverride ?? 'auto'
@@ -1207,24 +1198,25 @@ function PlanBlock({
     <div className="relative rounded-2xl overflow-visible" style={{ border: `1px solid ${S.borderMed}` }}>
       <div className="rounded-t-2xl px-[18px] py-3.5 flex items-center justify-between gap-2" style={{ background: S.navy }}>
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase" style={{ color: S.planLabel, letterSpacing: '0.12em' }}>The Plan</p>
-          {plan.headline && <p className="truncate mt-0.5" style={{ ...serif, fontSize: 18, fontWeight: 600, color: 'var(--color-casa-surface)' }}>{plan.headline}</p>}
+          <p className="text-caption font-bold uppercase" style={{ color: S.planLabel, letterSpacing: '0.12em' }}>The Plan</p>
+          {plan.headline && <p className="mt-0.5 truncate font-display text-body-lg font-semibold text-casa-surface">{plan.headline}</p>}
         </div>
         <div ref={modePickerRef} className="relative shrink-0">
-          <button
-            type="button"
+          <Button
             onClick={() => setModeMenuOpen((open) => !open)}
-            className="inline-flex items-center gap-1.5 rounded-pill bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white"
+            variant="ghost"
+            size="sm"
+            className="rounded-pill bg-white/10 px-2.5 text-caption font-bold text-white hover:bg-white/20 hover:text-white"
             aria-expanded={modeMenuOpen}
             aria-haspopup="dialog"
             aria-label="Open mode options"
           >
             {effective.pattern}
-            <span className="text-[9px] font-bold rounded-pill px-1.5 py-px" style={{ color: 'var(--color-casa-text)', background: S.goldBadge }}>
+            <span className="text-caption font-bold rounded-pill px-1.5 py-px" style={{ color: 'var(--color-casa-text)', background: S.goldBadge }}>
               {modeOverride ? 'MANUAL' : 'AUTO'}
             </span>
             <ChevronRight size={12} className={cn('transition-transform', modeMenuOpen && 'rotate-90')} />
-          </button>
+          </Button>
           {modeMenuOpen && (
             <div
               role="dialog"
@@ -1232,20 +1224,18 @@ function PlanBlock({
               className="absolute right-0 top-[calc(100%+8px)] z-20 w-[320px] max-w-[calc(100vw-48px)] rounded-xl p-3"
               style={{ background: 'var(--color-casa-surface)', border: `1px solid ${S.borderMed}`, boxShadow: '0 18px 34px rgba(27,42,74,0.18)' }}
             >
-              <p className="text-[11px] font-bold uppercase" style={{ color: S.label, letterSpacing: '0.08em' }}>
+              <p className="text-caption font-bold uppercase" style={{ color: S.label, letterSpacing: '0.08em' }}>
                 Mode
               </p>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 {MODE_OVERRIDE_OPTIONS.map((option) => {
                   const selected = selectedMode === option.value
                   return (
-                    <button
+                    <Button
                       key={option.value}
-                      type="button"
-                      className="min-h-[42px] rounded-pill px-3 text-[12px] font-bold inline-flex items-center justify-center gap-1.5 transition-colors"
-                      style={selected
-                        ? { background: S.navy, color: 'var(--color-casa-surface)' }
-                        : { background: S.chipFill, color: S.navy, border: `1px solid ${S.borderSoft}` }}
+                      variant={selected ? 'strong' : 'secondary'}
+                      size="sm"
+                      className="rounded-pill px-3 text-caption font-bold"
                       onClick={() => {
                         onSetModeOverride(option.value === 'auto' ? null : option.value)
                         setModeMenuOpen(false)
@@ -1255,7 +1245,7 @@ function PlanBlock({
                       {option.label}
                       {option.helper && (
                         <span
-                          className="rounded-pill px-1.5 py-px text-[9px] font-bold uppercase"
+                          className="rounded-pill px-1.5 py-px text-caption font-bold uppercase"
                           style={selected
                             ? { background: 'rgba(255,255,255,0.18)', color: 'var(--color-casa-surface)' }
                             : { background: S.goldBadge, color: 'var(--color-casa-text)' }}
@@ -1263,17 +1253,17 @@ function PlanBlock({
                           {option.helper}
                         </span>
                       )}
-                    </button>
+                    </Button>
                   )
                 })}
               </div>
               {!modeOverride && (
-                <p className="mt-2 text-[11px]" style={{ color: S.muted }}>
+                <p className="mt-2 text-caption" style={{ color: S.muted }}>
                   Auto is active and should improve as Casa learns your routines.
                 </p>
               )}
               {modeOverride && (
-                <p className="mt-2 text-[11px]" style={{ color: S.goldText }}>
+                <p className="mt-2 text-caption" style={{ color: S.goldText }}>
                   Manual mode override is active.
                 </p>
               )}
@@ -1282,7 +1272,7 @@ function PlanBlock({
         </div>
       </div>
 
-      <div className="px-[18px] pt-2 text-[11px]" style={{ color: S.label }}>Tap a driver to reassign →</div>
+      <div className="px-[18px] pt-2 text-caption" style={{ color: S.label }}>Tap a driver to reassign →</div>
       <div className="px-[18px] pb-2">
         <ol>
           {renderedLegs.map((leg, i) => {
@@ -1292,8 +1282,8 @@ function PlanBlock({
                 <span className="flex-none w-3 h-3 rounded-full" style={{ background: legDot(leg.kind).color, boxShadow: `0 0 0 4px ${legDot(leg.kind).halo}` }} />
                 <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-[14px] font-bold leading-tight" style={{ color: S.navy }}>{leg.title}</p>
-                    {leg.detail && <p className="text-[12px] mt-0.5" style={{ color: S.muted }}>{leg.detail}</p>}
+                    <p className="text-body-sm font-bold leading-tight" style={{ color: S.navy }}>{leg.title}</p>
+                    {leg.detail && <p className="text-caption mt-0.5" style={{ color: S.muted }}>{leg.detail}</p>}
                     {leg.trafficDeltaMin != null && (
                       <div className="mt-1"><TrafficBadge deltaMin={leg.trafficDeltaMin} /></div>
                     )}
@@ -1310,50 +1300,43 @@ function PlanBlock({
         </ol>
 
         {loading && (
-          <p className="text-[12px] mt-2 flex items-center gap-1.5" style={{ color: S.label }}>
+          <p className="text-caption mt-2 flex items-center gap-1.5" style={{ color: S.label }}>
             <Loader2 size={12} className="animate-spin" /> Calculating drive times…
           </p>
         )}
 
         {renderedLegs.some((l) => l.estimate) && (
-          <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px]" style={{ color: S.goldText, background: S.amberBg, border: `1px solid ${S.amberBorder}` }}>
+          <div className="mt-3 rounded-lg px-3 py-2.5 text-caption" style={{ color: S.goldText, background: S.amberBg, border: `1px solid ${S.amberBorder}` }}>
             ⚠ Drive times are <strong>estimates</strong> until you confirm the address above.
           </div>
         )}
 
         {plan.mode === 'appointment' && renderedLegs.some((l) => l.kind === 'stay') && (
-          <button
-            type="button"
-            onClick={() => onSetWaitsOverride(!waits)}
-            className="mt-3 min-h-[44px] w-full rounded-[10px] px-3 py-2.5 flex items-center justify-between gap-3 text-[13px] font-semibold"
-            style={{ color: S.navy, border: `1px solid ${S.borderSoft}`, background: S.chipFill }}
-          >
-            <span className="text-left">Someone waits on site</span>
-            <span className="inline-flex w-[40px] h-[22px] rounded-pill p-0.5 shrink-0" style={{ background: waits ? S.green : hexToRgba(S.navyHex, 0.22) }}>
-              <span
-                className="block w-[18px] h-[18px] rounded-full bg-white shadow"
-                style={{ transform: waits ? 'translateX(18px)' : 'translateX(0px)', transition: 'transform 180ms ease' }}
-              />
-            </span>
-          </button>
+          <Switch
+            checked={waits}
+            onCheckedChange={onSetWaitsOverride}
+            label="Someone waits on site"
+            className="mt-3 rounded-button border border-casa-border bg-casa-bg px-3"
+          />
         )}
 
         {effective.twoDrivers && (
-          <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] flex items-center gap-2" style={{ color: S.goldText, background: S.amberBg, border: `1px solid ${S.amberBorder}` }}>
+          <div className="mt-3 rounded-lg px-3 py-2.5 text-caption flex items-center gap-2" style={{ color: S.goldText, background: S.amberBg, border: `1px solid ${S.amberBorder}` }}>
             <strong>Two drivers</strong> — {twoDriverConfirmed ? 'assignments locked in.' : 'both need to be locked in.'}
-            <button
-              className="ml-auto underline font-bold"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto min-h-0 p-0 font-bold underline hover:bg-transparent"
               onClick={() => onSetTwoDriverConfirmed(true)}
-              type="button"
             >
               {twoDriverConfirmed ? 'Locked' : 'Confirm'}
-            </button>
+            </Button>
           </div>
         )}
 
         {effective.yourTime && (
           <div className="mt-3 rounded-lg px-3 py-2" style={{ background: S.yourTimeFill }}>
-            <p className="text-[13px]" style={{ color: S.navy }}>
+            <p className="text-body-sm" style={{ color: S.navy }}>
               <span className="font-bold">Your time:</span> {effective.yourTime}
             </p>
           </div>
@@ -1468,8 +1451,8 @@ function ReferenceBlock({
   if (hasText(source?.contact_name) || hasText(source?.contact_phone)) {
     rows.push(
       <div key="contact">
-        <p className="text-[11px] font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Contact</p>
-        <p className="text-[14px] mt-1" style={{ color: S.navy }}>
+        <p className="text-caption font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Contact</p>
+        <p className="text-body-sm mt-1" style={{ color: S.navy }}>
           {source?.contact_name}
           {source?.contact_name && source?.contact_phone && ' · '}
           {source?.contact_phone && <a href={`tel:${source.contact_phone.replace(/\D/g, '')}`} style={{ color: S.gold, fontWeight: 600 }}>{source.contact_phone}</a>}
@@ -1480,32 +1463,32 @@ function ReferenceBlock({
   if (hasText(source?.cost_estimate)) {
     rows.push(
       <div key="cost">
-        <p className="text-[11px] font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Cost</p>
-        <p className="text-[14px] mt-1" style={{ color: S.navy }}>{source?.cost_estimate}</p>
+        <p className="text-caption font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Cost</p>
+        <p className="text-body-sm mt-1" style={{ color: S.navy }}>{source?.cost_estimate}</p>
       </div>,
     )
   }
   if (hasText(source?.outfit_suggestion)) {
-    rows.push(<div key="outfit"><p className="text-[11px] font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>What to wear</p><p className="text-[14px] mt-1" style={{ color: S.muted }}>{source?.outfit_suggestion}</p></div>)
+    rows.push(<div key="outfit"><p className="text-caption font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>What to wear</p><p className="text-body-sm mt-1" style={{ color: S.muted }}>{source?.outfit_suggestion}</p></div>)
   }
   if (hasText(source?.dietary_notes)) {
-    rows.push(<div key="diet"><p className="text-[11px] font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Dietary notes</p><p className="text-[14px] mt-1" style={{ color: S.muted }}>{source?.dietary_notes}</p></div>)
+    rows.push(<div key="diet"><p className="text-caption font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Dietary notes</p><p className="text-body-sm mt-1" style={{ color: S.muted }}>{source?.dietary_notes}</p></div>)
   }
   if (hasText(source?.meal_impact)) {
     rows.push(
       <div key="meal">
-        <p className="text-[11px] font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Meal impact</p>
-        <p className="text-[14px] mt-1" style={{ color: S.muted }}>{source?.meal_impact}</p>
+        <p className="text-caption font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Meal impact</p>
+        <p className="text-body-sm mt-1" style={{ color: S.muted }}>{source?.meal_impact}</p>
       </div>,
     )
   }
   if (hasText(source?.prep_notes)) {
-    rows.push(<div key="notes"><p className="text-[11px] font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Notes</p><p className="text-[14px] mt-1 whitespace-pre-line leading-relaxed" style={{ color: S.muted }}>{source?.prep_notes}</p></div>)
+    rows.push(<div key="notes"><p className="text-caption font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Notes</p><p className="text-body-sm mt-1 whitespace-pre-line leading-relaxed" style={{ color: S.muted }}>{source?.prep_notes}</p></div>)
   }
   if (actions.length > 0) {
     rows.push(
       <div key="actions">
-        <p className="text-[11px] font-bold uppercase mb-1.5" style={{ color: S.label, letterSpacing: '0.1em' }}>Prep lane</p>
+        <p className="text-caption font-bold uppercase mb-1.5" style={{ color: S.label, letterSpacing: '0.1em' }}>Prep lane</p>
         <ActionItemsSection items={actions} />
       </div>,
     )
@@ -1513,7 +1496,7 @@ function ReferenceBlock({
   if (logistics.length > 0) {
     rows.push(
       <div key="logistics">
-        <p className="text-[11px] font-bold uppercase mb-1.5" style={{ color: S.label, letterSpacing: '0.1em' }}>Logistics</p>
+        <p className="text-caption font-bold uppercase mb-1.5" style={{ color: S.label, letterSpacing: '0.1em' }}>Logistics</p>
         <LogisticsSection items={logistics} />
       </div>,
     )
@@ -1521,17 +1504,19 @@ function ReferenceBlock({
 
   return (
     <section className="pt-1">
-      <button
+      <Button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center justify-between w-full text-left py-2.5"
-        style={{ borderTop: `1px solid ${S.borderMed}` }}
+        variant="ghost"
+        fullWidth
+        className="border-t border-casa-border py-2.5 text-left hover:bg-transparent"
+        contentClassName="w-full justify-between"
       >
         <span>
-          <span className="block text-[11px] font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Reference</span>
-          <span className="block text-[12px]" style={{ color: S.muted }}>Contact, cost, notes</span>
+          <span className="block text-caption font-bold uppercase" style={{ color: S.label, letterSpacing: '0.1em' }}>Reference</span>
+          <span className="block text-caption" style={{ color: S.muted }}>Contact, cost, notes</span>
         </span>
         <ChevronRight size={16} className={cn('transition-transform', open && 'rotate-90')} style={{ color: S.label }} />
-      </button>
+      </Button>
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
@@ -1543,7 +1528,7 @@ function ReferenceBlock({
           >
             <div className="pt-1.5 pb-3 space-y-2.5">
               {rows.length > 0 ? rows : (
-                <p className="text-[13px]" style={{ color: S.label }}>No reference details yet.</p>
+                <p className="text-body-sm" style={{ color: S.label }}>No reference details yet.</p>
               )}
             </div>
           </motion.div>
@@ -1582,9 +1567,9 @@ function ChecklistSection({ items }: { items: EventChecklistItem[]; eventId: str
                 <Check size={13} />
               </span>
             ) : (
-              <span className="flex-none w-[22px] h-[22px] rounded-md" style={{ border: `2px solid ${hexToRgba(S.navyHex, 0.25)}` }} />
+              <span className="flex-none w-[22px] h-[22px] rounded-md border-2 border-casa-navy/25" />
             )}
-            <span className="text-[14px]" style={{ color: checked ? S.label : S.navy, textDecoration: checked ? 'line-through' : 'none' }}>
+            <span className="text-body-sm" style={{ color: checked ? S.label : S.navy, textDecoration: checked ? 'line-through' : 'none' }}>
               {item.label}
             </span>
           </div>
@@ -1625,14 +1610,14 @@ function ActionItemsSection({ items }: { items: EventActionItem[] }) {
                 <Check size={13} />
               </span>
             ) : (
-              <span className="flex-none w-[22px] h-[22px] rounded-md" style={{ border: `2px solid ${hexToRgba(S.navyHex, 0.25)}` }} />
+              <span className="flex-none w-[22px] h-[22px] rounded-md border-2 border-casa-navy/25" />
             )}
             <div className="min-w-0 flex-1">
-              <p className="text-[14px]" style={{ color: completed ? S.label : S.navy, textDecoration: completed ? 'line-through' : 'none' }}>
+              <p className="text-body-sm" style={{ color: completed ? S.label : S.navy, textDecoration: completed ? 'line-through' : 'none' }}>
                 {item.title}
               </p>
               {item.description && (
-                <p className="text-[12px]" style={{ color: S.muted }}>
+                <p className="text-caption" style={{ color: S.muted }}>
                   {item.description}
                 </p>
               )}
@@ -1650,16 +1635,16 @@ function LogisticsSection({ items }: { items: EventLogistic[] }) {
       {items.map((item, i) => (
         <div key={item.id} className="py-2.5" style={i > 0 ? { borderTop: `1px solid ${S.hair}` } : undefined}>
           <div className="flex items-start gap-3">
-            <span className="mt-1 w-2.5 h-2.5 rounded-full" style={{ background: hexToRgba(S.navyHex, 0.6) }} />
+            <span className="mt-1 h-2.5 w-2.5 rounded-full bg-casa-navy/60" />
             <div className="min-w-0">
-              <p className="text-[14px] font-semibold" style={{ color: S.navy }}>{item.title}</p>
+              <p className="text-body-sm font-semibold" style={{ color: S.navy }}>{item.title}</p>
               {(item.time || item.location_name) && (
-                <p className="text-[12px]" style={{ color: S.muted }}>
+                <p className="text-caption" style={{ color: S.muted }}>
                   {[item.time, item.location_name].filter(Boolean).join(' · ')}
                 </p>
               )}
               {item.description && (
-                <p className="text-[12px] mt-0.5" style={{ color: S.muted }}>{item.description}</p>
+                <p className="text-caption mt-0.5" style={{ color: S.muted }}>{item.description}</p>
               )}
             </div>
           </div>
@@ -1712,9 +1697,9 @@ function FallbackBringChecklist({ items, eventId }: { items: string[]; eventId: 
                 <Check size={13} />
               </span>
             ) : (
-              <span className="flex-none w-[22px] h-[22px] rounded-md" style={{ border: `2px solid ${hexToRgba(S.navyHex, 0.25)}` }} />
+              <span className="flex-none w-[22px] h-[22px] rounded-md border-2 border-casa-navy/25" />
             )}
-            <span className="text-[14px]" style={{ color: isChecked ? S.label : S.navy, textDecoration: isChecked ? 'line-through' : 'none' }}>
+            <span className="text-body-sm" style={{ color: isChecked ? S.label : S.navy, textDecoration: isChecked ? 'line-through' : 'none' }}>
               {item}
             </span>
           </div>
@@ -1862,7 +1847,7 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
         style={{
           height: 'clamp(360px, 42vh, 400px)',
           minHeight: 360,
-          background: 'linear-gradient(135deg,#DCE6DA,#C9DBD9)',
+          background: 'linear-gradient(135deg, var(--color-casa-info-soft), var(--color-casa-success-soft))',
         }}
         className="relative overflow-hidden"
       >
@@ -1891,61 +1876,62 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
         )}
         {needsGeocode && geocodeState === 'loading' && (
           <div className="absolute inset-0 bg-white/55 backdrop-blur-[1px] flex items-center justify-center">
-            <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold rounded-pill px-3 py-1.5" style={{ background: 'var(--color-casa-surface)', color: S.navy }}>
+            <span className="inline-flex items-center gap-1.5 text-caption font-semibold rounded-pill px-3 py-1.5" style={{ background: 'var(--color-casa-surface)', color: S.navy }}>
               <Loader2 size={12} className="animate-spin" /> Resolving map snapshot…
             </span>
           </div>
         )}
         {weatherAtVenue && (
-          <div className="absolute left-3 top-2.5 text-[11px] rounded-md px-2 py-0.5" style={{ background: 'rgba(255,255,255,.85)', color: S.muted }}>
+          <div className="absolute left-3 top-2.5 text-caption rounded-md px-2 py-0.5" style={{ background: 'rgba(255,255,255,.85)', color: S.muted }}>
             {weatherAtVenue}
           </div>
         )}
       </div>
       <div className="p-4">
-        <div className="text-[15px] font-bold" style={{ color: S.navy }}>{title}</div>
+        <div className="text-body font-bold" style={{ color: S.navy }}>{title}</div>
         {subtitle && (
-          <div className="text-[13px] mt-0.5" style={{ color: S.muted }}>
+          <div className="text-body-sm mt-0.5" style={{ color: S.muted }}>
             {subtitle}
           </div>
         )}
         {needsGeocode && geocodeState === 'error' && (
-          <div className="mt-2 rounded-lg px-3 py-2 text-[12px]" style={{ background: S.amberBg, border: `1px solid ${S.amberBorder}`, color: S.goldText }}>
+          <div className="mt-2 rounded-lg px-3 py-2 text-caption" style={{ background: S.amberBg, border: `1px solid ${S.amberBorder}`, color: S.goldText }}>
             Map snapshot unavailable for this address.
-            <button
-              type="button"
-              className="ml-2 underline font-semibold"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-2 min-h-0 p-0 font-semibold underline hover:bg-transparent"
               onClick={() => setGeocodeState('idle')}
             >
               Retry
-            </button>
+            </Button>
           </div>
         )}
         {verified && hasDestination ? (
-          <div className="mt-3 text-[12px] font-semibold flex items-center gap-1.5" style={{ color: S.green }}>
+          <div className="mt-3 text-caption font-semibold flex items-center gap-1.5" style={{ color: S.green }}>
             <Check size={13} /> Address confirmed · drive times are live
           </div>
         ) : !hasDestination && mode !== 'hosted' ? (
           <div className="mt-3 rounded-lg px-3 py-2.5" style={{ background: S.amberBg, border: `1px solid ${S.amberBorder}` }}>
-            <div className="text-[13px] font-bold" style={{ color: S.goldText }}>Missing destination</div>
-            <div className="text-[12px] mt-0.5" style={{ color: S.muted }}>Add an address before we calculate travel and leave times.</div>
+            <div className="text-body-sm font-bold" style={{ color: S.goldText }}>Missing destination</div>
+            <div className="text-caption mt-0.5" style={{ color: S.muted }}>Add an address before we calculate travel and leave times.</div>
             <div className="flex gap-2 mt-2.5">
-              <button onClick={onEditAddress} className="text-[12px] font-bold rounded-pill px-3.5 py-1.5" style={{ color: S.goldText, border: `1px solid ${S.goldBadge}` }}>
+              <Button onClick={onEditAddress} variant="secondary" size="sm" className="rounded-pill text-caption font-bold">
                 Add address
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
           <div className="mt-3 rounded-lg px-3 py-2.5" style={{ background: S.amberBg, border: `1px solid ${S.amberBorder}` }}>
-            <div className="text-[13px] font-bold" style={{ color: S.goldText }}>Is this the right place?</div>
-            <div className="text-[12px] mt-0.5" style={{ color: S.muted }}>Confirm the pin before we trust the drive time.</div>
+            <div className="text-body-sm font-bold" style={{ color: S.goldText }}>Is this the right place?</div>
+            <div className="text-caption mt-0.5" style={{ color: S.muted }}>Confirm the pin before we trust the drive time.</div>
             <div className="flex gap-2 mt-2.5">
-              <button onClick={onConfirmAddress} className="text-[12px] font-bold rounded-pill px-3.5 py-1.5 text-white" style={{ background: S.green }}>
+              <Button onClick={onConfirmAddress} variant="primary" size="sm" className="rounded-pill bg-casa-success text-caption font-bold text-white">
                 Yes, confirm
-              </button>
-              <button onClick={onEditAddress} className="text-[12px] font-bold rounded-pill px-3.5 py-1.5" style={{ color: S.goldText, border: `1px solid ${S.goldBadge}` }}>
+              </Button>
+              <Button onClick={onEditAddress} variant="secondary" size="sm" className="rounded-pill text-caption font-bold">
                 Edit address
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -1955,7 +1941,7 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
               href={googleMapsUrl}
               target="_blank"
               rel="noreferrer"
-              className="flex-1 text-center py-2.5 rounded-[10px] text-[14px] font-semibold inline-flex items-center justify-center gap-1.5 text-white"
+              className="flex-1 text-center py-2.5 rounded-[10px] text-body-sm font-semibold inline-flex items-center justify-center gap-1.5 text-white"
               style={{ background: S.navy }}
             >
               <Navigation size={14} />
@@ -1965,32 +1951,33 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
           {callUrl && (
             <a
               href={callUrl}
-              className="flex-1 text-center py-2.5 rounded-[10px] text-[14px] font-semibold inline-flex items-center justify-center"
+              className="flex-1 text-center py-2.5 rounded-[10px] text-body-sm font-semibold inline-flex items-center justify-center"
               style={{ border: `1px solid ${S.borderMed}`, color: S.navy }}
             >
               Call
             </a>
           )}
           {!googleMapsUrl && mode !== 'hosted' && (
-            <button
+            <Button
               onClick={onEditAddress}
-              className="flex-1 text-center py-2.5 rounded-[10px] text-[14px] font-semibold"
-              style={{ border: `1px solid ${S.borderMed}`, color: S.navy }}
+              variant="secondary"
+              className="flex-1 text-body-sm font-semibold"
             >
               Add destination
-            </button>
+            </Button>
           )}
         </div>
         {hasDestination && (
           <div className="mt-2">
-            <button
+            <Button
               onClick={handleSave}
               disabled={isAlreadySaved || saving}
-              className="w-full text-center py-2 rounded-[10px] text-[13px] font-semibold"
-              style={{ border: `1px solid ${S.borderMed}`, color: isAlreadySaved ? S.gold : S.navy, opacity: isAlreadySaved ? 0.8 : 1 }}
+              variant="secondary"
+              fullWidth
+              className="text-body-sm font-semibold"
             >
               {isAlreadySaved ? 'Saved place' : saving ? 'Saving…' : 'Save place'}
-            </button>
+            </Button>
           </div>
         )}
       </div>

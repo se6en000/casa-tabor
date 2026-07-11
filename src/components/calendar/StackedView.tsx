@@ -26,7 +26,7 @@ import { getPersistedPlanOverrides, resolveEventMode } from '../../lib/eventPlan
 import { derivePlan } from '../../lib/eventCommandCenter'
 import { Button, CalendarPill, Chip } from '../ui'
 
-const SHARED_COLOR = '#C9A96E'
+const SHARED_COLOR = 'var(--color-casa-gold)'
 
 function getPrimaryColor(event: EventWithDetails): string {
   if (!event.members || event.members.length === 0) return SHARED_COLOR
@@ -438,7 +438,7 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
                       {visibleGoingMembers.map((member) => (
                         <CalendarPill
                           key={member.id}
-                          color={member.color_hex ?? '#888'}
+                          color={member.color_hex ?? 'var(--color-casa-muted)'}
                           className="shrink-0"
                         >
                           {member.name}
@@ -457,7 +457,7 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
                         {responsibilityChip.label}
                       </span>
                       <CalendarPill
-                        color={responsibilityChip.person.color ?? '#888'}
+                        color={responsibilityChip.person.color ?? 'var(--color-casa-muted)'}
                         className="shrink-0"
                       >
                         {responsibilityChip.person.name}
