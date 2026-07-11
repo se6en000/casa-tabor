@@ -43,6 +43,12 @@ function contrastRatio(first, second) {
   return (lighter + 0.05) / (darker + 0.05)
 }
 
+function colorDistance(first, second) {
+  const firstChannels = first.match(/[0-9A-Fa-f]{2}/g).map(channel => Number.parseInt(channel, 16))
+  const secondChannels = second.match(/[0-9A-Fa-f]{2}/g).map(channel => Number.parseInt(channel, 16))
+  return Math.hypot(...firstChannels.map((channel, index) => channel - secondChannels[index]))
+}
+
 test('buttonClassName covers every documented variant with a distinct class set', () => {
   const seen = new Set()
   for (const variant of BUTTON_VARIANTS) {
@@ -93,6 +99,24 @@ test('every curated appearance preset implements the complete theme contract wit
       [],
       `${preset.label} must pass the core WCAG AA contrast checks`,
     )
+  }
+})
+
+test('heritage palettes keep visibly distinct primary and accent identities', () => {
+  const heritageIds = ['espresso', 'belgian-linen', 'weathered-olive', 'slate-atelier']
+  const heritagePresets = APPEARANCE_PRESETS.filter(preset => heritageIds.includes(preset.id))
+
+  for (const [index, preset] of heritagePresets.entries()) {
+    for (const comparison of heritagePresets.slice(index + 1)) {
+      assert.ok(
+        colorDistance(preset.colors['casa-navy'], comparison.colors['casa-navy']) >= 24,
+        `${preset.label} and ${comparison.label} need more distinct primary colors`,
+      )
+      assert.ok(
+        colorDistance(preset.colors['casa-gold'], comparison.colors['casa-gold']) >= 24,
+        `${preset.label} and ${comparison.label} need more distinct accent colors`,
+      )
+    }
   }
 })
 
