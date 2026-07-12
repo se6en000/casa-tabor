@@ -5,14 +5,18 @@ import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIc
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { useAIAssistant, type AIMessage } from '../../hooks/useAIAssistant'
-import { useSpeechInput, IS_SAFE_MODE } from '../../hooks/useSpeechInput'
+import {
+  useSpeechInput,
+  IS_SAFE_MODE,
+  type VoiceTranscriptRevision,
+} from '../../hooks/useSpeechInput'
 import { useLedStrip } from '../../hooks/useLedStrip'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
-import { Button } from '../ui'
+import { Button, LiveTranscript } from '../ui'
 import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId } from '../../lib/assistantTelemetry'
 
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
@@ -56,6 +60,11 @@ const SLEEP_PHRASES = /\b(sleep|goodnight|good night|art mode|screen saver|scree
 
 export default function AIChatDrawer({ open, onClose, anchor, page, launchContext, events, family, homeCity, onSleepCommand, focusedEvent }: Props) {
   const [input, setInput] = useState('')
+  const [voiceTranscript, setVoiceTranscript] = useState<VoiceTranscriptRevision>({
+    committed: '',
+    interim: '',
+    isFinal: false,
+  })
   const interimRef = useRef('')
   const idleAutoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hadUserInteractionRef = useRef(false)
@@ -139,6 +148,10 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     clearIdleAutoCloseTimer()
   }, [clearIdleAutoCloseTimer])
 
+  const clearVoiceTranscript = useCallback(() => {
+    setVoiceTranscript({ committed: '', interim: '', isFinal: false })
+  }, [])
+
   // True when the latest assistant message has a pending tool action awaiting confirmation
   const hasPendingToolAction = messages.some(m => m.toolAction?.status === 'pending')
 
@@ -191,6 +204,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
         })
         setInput('')
         interimRef.current = ''
+        clearVoiceTranscript()
         if (textareaRef.current) textareaRef.current.value = ''
         void sendTraced(pending.transcript, undefined, true)
         return
@@ -199,6 +213,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
         pendingLowConfidenceRef.current = null
         setInput('')
         interimRef.current = ''
+        clearVoiceTranscript()
         if (textareaRef.current) textareaRef.current.value = ''
         appendSyntheticMessage({
           id: crypto.randomUUID(),
@@ -215,6 +230,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
         pendingLowConfidenceRef.current = { transcript: trimmed, confidence }
         setInput('')
         interimRef.current = ''
+        clearVoiceTranscript()
         if (textareaRef.current) textareaRef.current.value = ''
         appendSyntheticMessage({
           id: crypto.randomUUID(),
@@ -235,15 +251,17 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
       setTimeout(() => {
         setInput('')
         interimRef.current = ''
+        clearVoiceTranscript()
         if (textareaRef.current) textareaRef.current.value = ''
       }, 800)
     } else {
       setInput('')
       interimRef.current = ''
+      clearVoiceTranscript()
       if (textareaRef.current) textareaRef.current.value = ''
       void sendTraced(trimmed)
     }
-  }, [loading, sendTraced, appendSyntheticMessage])
+  }, [loading, sendTraced, appendSyntheticMessage, clearVoiceTranscript])
 
   useEffect(() => {
     if (loading || queuedVoiceTurnsRef.current.length === 0) return
@@ -331,10 +349,15 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
         content: `I only caught “${fragment}…” Please finish the thought.`,
       })
     },
-    onInterim: (interim) => {
+    onInterim: (interim, revision) => {
       if (interim.trim()) markUserInteraction()
       interimRef.current = interim
       setInput(interim)
+      setVoiceTranscript(revision ?? {
+        committed: '',
+        interim,
+        isFinal: false,
+      })
     },
     onFinalTranscript: (text, meta) => {
       latestVoiceConfidenceRef.current = meta?.confidence ?? null
@@ -359,6 +382,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
         if (text.trim()) markUserInteraction()
         interimRef.current = text
         setInput(text)
+        setVoiceTranscript({ committed: text, interim: '', isFinal: true })
       }
     },
     onDismiss: () => {
@@ -456,6 +480,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
       reset()
       setInput('')
       interimRef.current = ''
+      clearVoiceTranscript()
       pendingLowConfidenceRef.current = null
       latestVoiceConfidenceRef.current = null
       setAttachedImage(null)
@@ -645,8 +670,9 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     if (value.trim() && (speech.listening || speech.connecting)) {
       speech.stop()
     }
+    clearVoiceTranscript()
     setInput(value)
-  }, [markUserInteraction, speech.connecting, speech.listening, speech.stop])
+  }, [markUserInteraction, speech.connecting, speech.listening, speech.stop, clearVoiceTranscript])
 
   const handleKeyboardToggle = useCallback(() => {
     markUserInteraction()
@@ -1060,15 +1086,26 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   <Camera size={16} />
                 </Button>
 
-                <textarea
-                  ref={textareaRef}
-                  value={input}
-                  onChange={e => handleInputChange(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={speech.listening ? 'Listening… speak now' : attachedImage ? 'Ask about this image…' : "Ask anything or say 'add an event…'"}
-                  rows={1}
-                  className="flex-1 min-h-6 max-h-30 bg-transparent text-body text-casa-navy placeholder:text-casa-muted outline-none resize-none leading-relaxed"
-                />
+                <div className="relative min-w-0 flex-1">
+                  <LiveTranscript
+                    committed={voiceTranscript.committed}
+                    interim={voiceTranscript.interim}
+                    active={speech.listening && Boolean(input.trim())}
+                  />
+                  <textarea
+                    ref={textareaRef}
+                    value={input}
+                    onChange={e => handleInputChange(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={speech.listening ? 'Listening… speak now' : attachedImage ? 'Ask about this image…' : "Ask anything or say 'add an event…'"}
+                    rows={1}
+                    aria-label="Assistant message"
+                    className={cn(
+                      'w-full min-h-6 max-h-30 bg-transparent text-body text-casa-navy placeholder:text-casa-muted outline-none resize-none leading-relaxed',
+                      speech.listening && input.trim() && 'text-transparent caret-transparent',
+                    )}
+                  />
+                </div>
 
                 {speech.supported && (
                   <Button variant="ghost"

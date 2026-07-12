@@ -19,6 +19,11 @@ export const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MO
 
 export type VoicePhase = 'idle' | 'connecting' | 'listening' | 'processing'
 export type STTMode = 'unknown' | 'bridge' | 'webspeech'
+export type VoiceTranscriptRevision = {
+  committed: string
+  interim: string
+  isFinal: boolean
+}
 
 const SILENCE_MS = 2500
 const CONNECT_TIMEOUT_MS = 5000
@@ -54,7 +59,7 @@ export function useSpeechInput({
   hasPendingAction,
   onTrace,
 }: {
-  onInterim: (text: string) => void
+  onInterim: (text: string, revision?: VoiceTranscriptRevision) => void
   onFinalTranscript: (text: string, meta?: { confidence?: number | null }) => void
   onDismiss: () => void
   onConfirm: () => void
@@ -346,7 +351,11 @@ export function useSpeechInput({
           mode: 'webspeech',
         })
       }
-      onInterimRef.current(display)
+      onInterimRef.current(display, {
+        committed: '',
+        interim: display,
+        isFinal: false,
+      })
       lastInterimRef.current = display
 
       // Silence timer fallback for browsers that don't emit isFinal promptly
@@ -479,14 +488,22 @@ export function useSpeechInput({
               lastInterimRef.current = display
               lastInterimTimeRef.current = now
               lastConfidenceRef.current = normalizeConfidence(msg.confidence)
-              onInterimRef.current(display)
+              onInterimRef.current(display, {
+                committed: String(msg.committed ?? ''),
+                interim: String(msg.interim ?? ''),
+                isFinal: msg.is_final === true,
+              })
             }
             break
           case 'segment_final': {
             const text = String(msg.text ?? '')
             lastInterimRef.current = text
             lastConfidenceRef.current = normalizeConfidence(msg.confidence)
-            onInterimRef.current(text)
+            onInterimRef.current(text, {
+              committed: text,
+              interim: '',
+              isFinal: true,
+            })
             onTraceRef.current?.('asr_segment_final', {
               utterance_id: utteranceIdRef.current,
               word_count: text.trim().split(/\s+/).filter(Boolean).length,

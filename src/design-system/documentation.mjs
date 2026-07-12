@@ -1,5 +1,5 @@
-export const DESIGN_SYSTEM_VERSION = '1.2.0'
-export const DESIGN_SYSTEM_RELEASE_DATE = '2026-07-11'
+export const DESIGN_SYSTEM_VERSION = '1.3.0'
+export const DESIGN_SYSTEM_RELEASE_DATE = '2026-07-12'
 export const DESIGN_SYSTEM_SCHEMA_VERSION = 1
 
 const component = ({
@@ -146,6 +146,18 @@ export const COMPONENT_MANIFEST = [
     accessibility: 'Pair with Field and provide meaningful errors or hints.',
     responsive: 'Uses full width while rows control its initial height.',
     example: '<Field label="Notes"><Textarea rows={4} value={notes} /></Field>',
+  }),
+  component({
+    name: 'LiveTranscript',
+    category: 'feedback',
+    purpose: 'Shows finalized speech as a stable prefix while the recognizer revises only the live suffix.',
+    useWhen: 'Use over a voice-input control that receives separate committed and interim transcript parts.',
+    avoid: 'Do not use for static text, final assistant responses, or as a replacement for the editable control.',
+    variants: ['committed-prefix', 'revisable-suffix'],
+    states: ['listening', 'segment-final', 'hidden'],
+    accessibility: 'The visual stream is presentation-only; finalized speech is announced politely without reading every interim correction.',
+    responsive: 'Inherits semantic body typography and wraps within phone, desktop, and kiosk composers.',
+    example: '<LiveTranscript committed="Add milk" interim="and eggs" active={listening} />',
   }),
   component({
     name: 'Modal',
@@ -486,6 +498,14 @@ export const COMPONENT_MANIFEST = [
 ]
 
 export const DESIGN_SYSTEM_CHANGELOG = [
+  {
+    version: '1.3.0',
+    date: '2026-07-12',
+    changes: [
+      'Added LiveTranscript for stable committed speech with a revisable interim suffix.',
+      'Defined polite finalized-speech announcements without exposing rapid interim corrections.',
+    ],
+  },
   {
     version: '1.2.0',
     date: '2026-07-11',

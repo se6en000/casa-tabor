@@ -19,6 +19,7 @@ import {
   Heading,
   IconButton,
   Input,
+  LiveTranscript,
   Modal,
   MasterDetailLayout,
   PageFeedback,
@@ -379,6 +380,16 @@ export default function DesignSystemGalleryPage() {
           <Field label="Notes" className="md:col-span-2">
             <Textarea rows={2} placeholder="Add helpful context" />
           </Field>
+          <div className="md:col-span-2">
+            <Text role="body-sm" className="mb-1.5 font-medium">Live voice transcript</Text>
+            <div className="relative min-h-12 rounded-control border border-casa-border bg-casa-bg px-3 py-2">
+              <LiveTranscript
+                committed="Add milk and eggs"
+                interim="for tomorrow morning"
+                className="px-3 py-2"
+              />
+            </div>
+          </div>
         </div>
         <div className="flex flex-wrap gap-3">
           <Button variant="secondary" onClick={() => setModalOpen(true)}>Open modal</Button>
