@@ -35,6 +35,7 @@ import {
   parseGroceryLanguage,
 } from '../_shared/assistant-grocery-language.mjs'
 import { resolveGrocerySemantic } from '../_shared/assistant-grocery-semantic.mjs'
+import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -635,36 +636,7 @@ Deno.serve(async (req) => {
       }
 
       if (semantic.tool === 'add_grocery_items' && !dryRun) {
-        const actionId = `grocery-contract-${Date.now().toString(36)}`
-        const execResult = await sb.functions.invoke('execute-ai-action', {
-          body: {
-            tool: semantic.tool,
-            args: semantic.args,
-            action_id: actionId,
-            session_id: traceId,
-            correlation_id: `${cid}:grocery-action`,
-            trace_id: traceId,
-            turn_id: turnId,
-            lane: 'tool_action',
-            device_id: deviceId,
-            client_trace_present: clientTracePresent,
-            client_build: clientBuild,
-            client_trace_source: clientTraceSource ?? 'grocery-language-contract',
-          },
-        })
-        const execError = execResult.error?.message ?? (execResult.data as { error?: string } | null)?.error ?? null
-        if (execError) {
-          return { status: 200, payload: { type: 'error', code: 'grocery_action_failed', message: execError, correlation_id: cid } }
-        }
-        const result = (execResult.data as {
-          success?: boolean
-          count?: number
-          already_present_count?: number
-          items?: { id: string; name: string; already_present?: boolean }[]
-        } | null) ?? {}
-        if (!result.success) {
-          return { status: 200, payload: { type: 'error', code: 'grocery_action_failed', message: 'The grocery items were not saved.', correlation_id: cid } }
-        }
+        const result = await saveGroceryItems(sb, semantic.args.items)
         const savedItems = result.items ?? []
         if (savedItems.length === 1) responseConversationState = groceryConversationState(savedItems[0], now)
         const addedNames = savedItems.filter((item) => !item.already_present).map((item) => item.name)
