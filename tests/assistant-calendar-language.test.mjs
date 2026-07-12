@@ -67,7 +67,7 @@ test('semantic reads execute against authoritative calendar rows', () => {
 })
 
 test('non-calendar language remains outside the deterministic contract', () => {
-  for (const text of ['Tell me a joke', 'Will it rain tomorrow?', 'How do I cook pasta?', 'Find a nearby restaurant']) {
+  for (const text of ['Tell me a joke', 'Will it rain tomorrow?', 'How do I cook pasta?', 'Find a nearby restaurant', 'Add milk to the grocery list']) {
     assert.equal(parseCalendarLanguage(text), null, text)
   }
   assert.equal(isCalendarLikeLanguage('Can you show my schedule later?'), true)
