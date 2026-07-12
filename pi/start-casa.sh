@@ -115,6 +115,12 @@ fi
 # Listens on 127.0.0.1:8766; Chromium POSTs audio blobs, gets transcript back.
 WHISPER_DIR="$HOME/whisper-bridge"
 if [ -f "$WHISPER_DIR/main.py" ]; then
+  WHISPER_ENV="$HOME/.config/casa/whisper-bridge.env"
+  if [ -r "$WHISPER_ENV" ]; then
+    set -a
+    . "$WHISPER_ENV"
+    set +a
+  fi
   (exec 9>&-; PATH="$HOME/.local/bin:$PATH" python3 "$WHISPER_DIR/main.py" >> "$HOME/whisper-bridge.log" 2>&1 &)
   sleep 1
 fi

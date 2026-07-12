@@ -50,6 +50,15 @@ test('voice telemetry covers wake through final ASR without recording transcript
   assert.match(drawer, /turnId: utteranceId/)
 })
 
+test('voice turn lifecycle separates provider segments from committed turns', () => {
+  for (const event of ['asr_speech_started', 'asr_transcript_revision', 'asr_segment_final', 'asr_turn_candidate', 'asr_turn_resumed']) {
+    assert.match(speech, new RegExp(`onTraceRef\\.current\\?\\.\\('${event}'`))
+  }
+  assert.match(speech, /turn_protocol: STT_TURN_PROTOCOL/)
+  assert.match(speech, /next_utterance_id:/)
+  assert.match(speech, /TURN_COMMIT_GRACE_MS/)
+})
+
 test('active continuation speech cannot expire a held ASR fragment', () => {
   assert.match(speech, /if \(pendingFragmentRef\.current\) scheduleFragmentTimeout\(\)/)
   assert.match(speech, /pendingFragmentUtteranceIdRef\.current = utteranceIdRef\.current/)

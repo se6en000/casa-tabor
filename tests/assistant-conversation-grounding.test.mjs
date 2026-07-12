@@ -71,10 +71,14 @@ test('output safety rejects pseudo-tools and unsupported write claims', () => {
     secureAssistantResult({ type: 'text', text: "Okay, I'm searching for your events now. Please bear with me." }).safety_rejection,
     'unsupported_deferred_progress',
   )
+  assert.equal(
+    secureAssistantResult({ type: 'text', text: "Do we have what? Tell me more about what you're looking for." }).safety_rejection,
+    undefined,
+  )
 })
 
 test('turn-taking holds incomplete clauses but preserves short commands', () => {
-  for (const text of ["yes that's the", "what's the", "don't", 'can you']) {
+  for (const text of ["yes that's the", "what's the", "don't", 'can you', 'do we have']) {
     assert.equal(isIncompleteVoiceFragment(text), true, text)
   }
   for (const text of ['yes', 'cancel', "what's the address", 'conversation']) {

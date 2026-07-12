@@ -6,5 +6,6 @@ export function isIncompleteVoiceFragment(value) {
   if (!text || COMPLETE_SHORT_COMMAND.test(text)) return false
   const words = text.split(' ')
   if (INCOMPLETE_ENDING.test(text)) return true
-  return words.length <= 2 && /^(?:what(?:'s| is)?|where(?:'s| is)?|who(?:'s| is)?|how(?:'s| is)?|why|can you|could you|would you|i want|i need|let's|lets)\b/i.test(text)
+  if (words.length <= 2 && /^(?:what(?:'s| is)?|where(?:'s| is)?|who(?:'s| is)?|how(?:'s| is)?|why|can you|could you|would you|i want|i need|let's|lets)\b/i.test(text)) return true
+  return /^(?:do|did|can|could|would|should|will)\s+(?:we|you|i|they|he|she)\s+(?:have|need|want|know|see|find|get|go|make|bring)$/i.test(text)
 }

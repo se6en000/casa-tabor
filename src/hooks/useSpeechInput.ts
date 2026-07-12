@@ -1,5 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { normalizeConfidence as normalizeConfidencePure } from '../lib/sttConfidence.mjs'
+import {
+  normalizeBridgeTurnMessage,
+  reconcileTranscriptRevision,
+  STT_TURN_PROTOCOL,
+} from '../lib/sttTurnProtocol.mjs'
 import { isIncompleteVoiceFragment } from '../lib/voiceTurnTaking.mjs'
 
 const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s all|all done|never mind|nevermind|stop)\b/i
@@ -17,6 +22,14 @@ export type STTMode = 'unknown' | 'bridge' | 'webspeech'
 
 const SILENCE_MS = 2500
 const CONNECT_TIMEOUT_MS = 5000
+const TURN_COMMIT_GRACE_MS = 700
+const MANUAL_FINALIZE_TIMEOUT_MS = 1800
+
+function createUtteranceId() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
+}
 
 /** Quick probe — resolves true if bridge is reachable within 800ms */
 async function probeBridge(): Promise<boolean> {
@@ -67,6 +80,14 @@ export function useSpeechInput({
   const pendingFragmentRef = useRef('')
   const pendingFragmentUtteranceIdRef = useRef('')
   const fragmentTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const turnCandidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const manualFinalizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const turnCandidateAtRef = useRef(0)
+  const speechStartedAtRef = useRef(0)
+  const finalizingRef = useRef(false)
+  const lastTranscriptAtRef = useRef(0)
+  const startWebSpeechRef = useRef<() => void>(() => {})
+  const startBridgeRef = useRef<() => void>(() => {})
   const [phase, setPhase]  = useState<VoicePhase>('idle')
   const phaseRef           = useRef<VoicePhase>('idle')
   const setPhaseSync = (p: VoicePhase) => { phaseRef.current = p; setPhase(p) }
@@ -116,6 +137,16 @@ export function useSpeechInput({
   }
   const stopSilenceTimer = () => { if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
   const stopFragmentTimer = () => { if (fragmentTimerRef.current) clearTimeout(fragmentTimerRef.current); fragmentTimerRef.current = null }
+  const stopTurnCandidateTimer = () => {
+    if (turnCandidateTimerRef.current) clearTimeout(turnCandidateTimerRef.current)
+    turnCandidateTimerRef.current = null
+    turnCandidateAtRef.current = 0
+  }
+  const stopManualFinalizeTimer = () => {
+    if (manualFinalizeTimerRef.current) clearTimeout(manualFinalizeTimerRef.current)
+    manualFinalizeTimerRef.current = null
+    finalizingRef.current = false
+  }
   const scheduleFragmentTimeout = () => {
     stopFragmentTimer()
     fragmentTimerRef.current = setTimeout(() => {
@@ -124,6 +155,17 @@ export function useSpeechInput({
       pendingFragmentRef.current = ''
       pendingFragmentUtteranceIdRef.current = ''
       fragmentTimerRef.current = null
+      const nextUtteranceId = createUtteranceId()
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({
+          type: 'discard',
+          utterance_id: abandonedUtteranceId,
+          next_utterance_id: nextUtteranceId,
+        }))
+      }
+      utteranceIdRef.current = nextUtteranceId
+      listeningStartRef.current = Date.now()
+      speechStartedAtRef.current = 0
       onInterimRef.current('')
       onTraceRef.current?.('asr_fragment_discarded', {
         utterance_id: abandonedUtteranceId,
@@ -133,13 +175,6 @@ export function useSpeechInput({
       if (abandoned) onIncompleteRef.current?.(abandoned)
     }, 4500)
   }
-  const newUtteranceId = () => {
-    utteranceIdRef.current = typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
-    return utteranceIdRef.current
-  }
-
   // No deps — uses only refs, so triggerFinal/startBridge are created once and never stale
   const handleFinalTranscript = useCallback((transcript: string) => {
     if (!transcript.trim()) return
@@ -160,21 +195,29 @@ export function useSpeechInput({
     }
     onFinalRef.current(transcript.trim(), { confidence: lastConfidenceRef.current })
     onFinalRef.current('__SEND__', { confidence: lastConfidenceRef.current })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   const triggerFinal = useCallback((text: string, metadata: { endpointReason?: string } = {}) => {
-    stopWS()
     stopSilenceTimer()
+    stopTurnCandidateTimer()
+    stopManualFinalizeTimer()
     const capturedText = text.trim() || lastInterimRef.current.trim()
-    const finalText = [pendingFragmentRef.current, capturedText].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
+    const pendingFragment = pendingFragmentRef.current.trim()
+    const includesPending = pendingFragment
+      && capturedText.toLocaleLowerCase().startsWith(pendingFragment.toLocaleLowerCase())
+    const finalText = [
+      includesPending ? '' : pendingFragment,
+      capturedText,
+    ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
     const asrElapsedMs = listeningStartRef.current > 0 ? Date.now() - listeningStartRef.current : null
+    const speechToCommitMs = speechStartedAtRef.current > 0 ? Date.now() - speechStartedAtRef.current : null
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     firstInterimRef.current = false
     if (isIncompleteVoiceFragment(finalText)) {
       pendingFragmentRef.current = finalText
       pendingFragmentUtteranceIdRef.current = utteranceIdRef.current
-      setPhaseSync('connecting')
+      setPhaseSync('listening')
       onInterimRef.current(finalText)
       onTraceRef.current?.('asr_fragment_held', {
         utterance_id: utteranceIdRef.current,
@@ -189,15 +232,63 @@ export function useSpeechInput({
     pendingFragmentRef.current = ''
     pendingFragmentUtteranceIdRef.current = ''
     setPhaseSync('processing')
+    const completedUtteranceId = utteranceIdRef.current
+    const nextUtteranceId = createUtteranceId()
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'commit',
+        utterance_id: completedUtteranceId,
+        next_utterance_id: nextUtteranceId,
+      }))
+    }
     onTraceRef.current?.('asr_final', {
-      utterance_id: utteranceIdRef.current,
+      utterance_id: completedUtteranceId,
       endpoint_reason: metadata.endpointReason ?? 'unknown',
       asr_elapsed_ms: asrElapsedMs,
+      speech_to_commit_ms: speechToCommitMs,
       confidence: lastConfidenceRef.current,
       word_count: finalText ? finalText.split(/\s+/).length : 0,
     })
     handleFinalTranscript(finalText)
-  }, [handleFinalTranscript])
+    if (activeRef.current) {
+      utteranceIdRef.current = nextUtteranceId
+      listeningStartRef.current = Date.now()
+      speechStartedAtRef.current = 0
+    }
+  }, [handleFinalTranscript]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const cancelTurnCandidate = useCallback((reason: string) => {
+    if (!turnCandidateTimerRef.current) return
+    const candidateAgeMs = turnCandidateAtRef.current > 0 ? Date.now() - turnCandidateAtRef.current : null
+    stopTurnCandidateTimer()
+    onTraceRef.current?.('asr_turn_resumed', {
+      utterance_id: utteranceIdRef.current,
+      reason,
+      candidate_age_ms: candidateAgeMs,
+    })
+  }, [])
+
+  const scheduleTurnCommit = useCallback((
+    text: string,
+    metadata: { endpointReason?: string; confidence?: unknown } = {},
+  ) => {
+    if (!text.trim() || turnCandidateTimerRef.current) return
+    lastInterimRef.current = text.trim()
+    lastConfidenceRef.current = normalizeConfidence(metadata.confidence)
+      ?? lastConfidenceRef.current
+    turnCandidateAtRef.current = Date.now()
+    onTraceRef.current?.('asr_turn_candidate', {
+      utterance_id: utteranceIdRef.current,
+      endpoint_reason: metadata.endpointReason ?? 'unknown',
+      word_count: text.trim().split(/\s+/).length,
+    })
+    const graceMs = finalizingRef.current ? 300 : TURN_COMMIT_GRACE_MS
+    turnCandidateTimerRef.current = setTimeout(() => {
+      turnCandidateTimerRef.current = null
+      turnCandidateAtRef.current = 0
+      triggerFinal(text, metadata)
+    }, graceMs)
+  }, [normalizeConfidence, triggerFinal])
 
   // ── Web Speech API path (Safari / iOS) ──────────────────────────────────
   const startWebSpeech = useCallback(() => {
@@ -208,7 +299,7 @@ export function useSpeechInput({
       recognitionRef.current = null
     }
     listeningStartRef.current = Date.now()
-    newUtteranceId()
+    utteranceIdRef.current = createUtteranceId()
     firstInterimRef.current = false
     setPhaseSync('listening')
     onTraceRef.current?.('asr_listening_ready', { connect_ms: 0, mode: 'webspeech', utterance_id: utteranceIdRef.current })
@@ -241,7 +332,7 @@ export function useSpeechInput({
         onInterimRef.current(finalAccum.trim())
         try { recognition.stop() } catch { /* ignore */ }
         triggerFinal(finalAccum.trim(), { endpointReason: 'provider_final' })
-        if (activeRef.current) setTimeout(() => startWebSpeech(), 300)
+        if (activeRef.current) setTimeout(() => startWebSpeechRef.current(), 300)
         return
       }
 
@@ -266,7 +357,7 @@ export function useSpeechInput({
           lastInterimRef.current = ''
           try { recognition.stop() } catch { /* ignore */ }
           triggerFinal(toSend, { endpointReason: 'client_silence_timeout' })
-          if (activeRef.current) setTimeout(() => startWebSpeech(), 300)
+          if (activeRef.current) setTimeout(() => startWebSpeechRef.current(), 300)
         }
       }, SILENCE_MS)
     }
@@ -277,19 +368,20 @@ export function useSpeechInput({
       if (e.error === 'no-speech' || e.error === 'aborted') return
       onTraceRef.current?.('asr_error', { mode: 'webspeech', reason: String(e.error ?? 'unknown').slice(0, 120) })
       console.warn('[WebSpeech] error', e.error)
-      if (activeRef.current) setTimeout(() => startWebSpeech(), 500)
+      if (activeRef.current) setTimeout(() => startWebSpeechRef.current(), 500)
     }
 
     recognition.onend = () => {
       // continuous=true can still stop on silence — restart transparently
       // Use phaseRef (not phase) to avoid stale closure
       if (activeRef.current && phaseRef.current !== 'processing') {
-        setTimeout(() => startWebSpeech(), 150)
+        setTimeout(() => startWebSpeechRef.current(), 150)
       }
     }
 
     recognition.start()
   }, [WebSpeech, triggerFinal, normalizeConfidence]) // all state accessed via refs
+  useEffect(() => { startWebSpeechRef.current = startWebSpeech }, [startWebSpeech])
 
   const stopWebSpeech = useCallback(() => {
     stopSilenceTimer()
@@ -306,7 +398,7 @@ export function useSpeechInput({
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     connectStartRef.current = Date.now()
-    newUtteranceId()
+    utteranceIdRef.current = createUtteranceId()
     firstInterimRef.current = false
     onTraceRef.current?.('asr_connect_started', { mode: 'bridge', utterance_id: utteranceIdRef.current })
     setPhaseSync('connecting')
@@ -316,13 +408,18 @@ export function useSpeechInput({
 
     ws.onopen = () => {
       setBridgeDown(false)
-      ws.send(JSON.stringify({ type: 'start' }))
+      ws.send(JSON.stringify({
+        type: 'start',
+        turn_protocol: STT_TURN_PROTOCOL,
+        utterance_id: utteranceIdRef.current,
+      }))
     }
 
     ws.onmessage = (evt) => {
       if (!activeRef.current) return
       try {
-        const msg = JSON.parse(evt.data as string)
+        const msg = normalizeBridgeTurnMessage(JSON.parse(evt.data as string))
+        if (!msg) return
         switch (msg.type) {
           case 'ready':
             listeningStartRef.current = Date.now()
@@ -338,8 +435,86 @@ export function useSpeechInput({
           case 'volume':
             setVolume(msg.level ?? 0)
             break
-          case 'interim':
-            if (msg.text !== lastInterimRef.current) {
+          case 'speech_started':
+            if (speechStartedAtRef.current === 0) speechStartedAtRef.current = Date.now()
+            if (pendingFragmentRef.current) scheduleFragmentTimeout()
+            cancelTurnCandidate('speech_started')
+            onTraceRef.current?.('asr_speech_started', {
+              utterance_id: utteranceIdRef.current,
+              provider_timestamp: msg.provider_timestamp ?? null,
+              ready_to_speech_ms: listeningStartRef.current > 0 ? Date.now() - listeningStartRef.current : null,
+            })
+            break
+          case 'transcript':
+            if (!msg.is_final) cancelTurnCandidate('interim_after_candidate')
+            {
+              const display = reconcileTranscriptRevision(msg)
+              const now = Date.now()
+              const revisionIntervalMs = lastTranscriptAtRef.current > 0
+                ? now - lastTranscriptAtRef.current
+                : null
+              lastTranscriptAtRef.current = now
+              onTraceRef.current?.('asr_transcript_revision', {
+                utterance_id: utteranceIdRef.current,
+                revision_interval_ms: revisionIntervalMs,
+                is_final: msg.is_final === true,
+                committed_word_count: String(msg.committed ?? '').trim().split(/\s+/).filter(Boolean).length,
+                interim_word_count: String(msg.interim ?? '').trim().split(/\s+/).filter(Boolean).length,
+              })
+              if (display === lastInterimRef.current) break
+              if (pendingFragmentRef.current) scheduleFragmentTimeout()
+              if (!firstInterimRef.current) {
+                firstInterimRef.current = true
+                onTraceRef.current?.('asr_first_interim', {
+                  first_interim_ms: speechStartedAtRef.current > 0
+                    ? Date.now() - speechStartedAtRef.current
+                    : null,
+                  ready_to_first_interim_ms: listeningStartRef.current > 0
+                    ? Date.now() - listeningStartRef.current
+                    : null,
+                  mode: 'bridge',
+                  utterance_id: utteranceIdRef.current,
+                })
+              }
+              lastInterimRef.current = display
+              lastInterimTimeRef.current = now
+              lastConfidenceRef.current = normalizeConfidence(msg.confidence)
+              onInterimRef.current(display)
+            }
+            break
+          case 'segment_final': {
+            const text = String(msg.text ?? '')
+            lastInterimRef.current = text
+            lastConfidenceRef.current = normalizeConfidence(msg.confidence)
+            onInterimRef.current(text)
+            onTraceRef.current?.('asr_segment_final', {
+              utterance_id: utteranceIdRef.current,
+              word_count: text.trim().split(/\s+/).filter(Boolean).length,
+              speech_final: true,
+            })
+            break
+          }
+          case 'turn_candidate':
+            scheduleTurnCommit(String(msg.text ?? ''), {
+              endpointReason: String(msg.endpoint_reason ?? 'bridge_candidate'),
+              confidence: msg.confidence,
+            })
+            break
+          case 'committed':
+            onTraceRef.current?.('asr_commit_ack', {
+              utterance_id: String(msg.utterance_id ?? ''),
+              next_utterance_id: String(msg.next_utterance_id ?? ''),
+            })
+            break
+          case 'discarded':
+            onTraceRef.current?.('asr_discard_ack', {
+              utterance_id: String(msg.utterance_id ?? ''),
+              next_utterance_id: String(msg.next_utterance_id ?? ''),
+            })
+            break
+          case 'interim': {
+            const text = String(msg.text ?? '')
+            if (text !== lastInterimRef.current) {
               if (pendingFragmentRef.current) scheduleFragmentTimeout()
               if (!firstInterimRef.current) {
                 firstInterimRef.current = true
@@ -349,17 +524,17 @@ export function useSpeechInput({
                   utterance_id: utteranceIdRef.current,
                 })
               }
-              lastInterimRef.current = msg.text
+              lastInterimRef.current = text
               lastInterimTimeRef.current = Date.now()
               lastConfidenceRef.current = normalizeConfidence(msg.confidence)
-              onInterimRef.current(msg.text)
+              onInterimRef.current(text)
             }
             break
+          }
           case 'final':
             if (phaseRef.current !== 'processing') {
               lastConfidenceRef.current = normalizeConfidence(msg.confidence)
-              triggerFinal(msg.text, { endpointReason: String(msg.endpoint_reason ?? 'bridge_final') })
-              if (activeRef.current) setTimeout(() => startBridge(), 300)
+              triggerFinal(String(msg.text ?? ''), { endpointReason: String(msg.endpoint_reason ?? 'bridge_final') })
             }
             break
           case 'error':
@@ -368,7 +543,7 @@ export function useSpeechInput({
               reason: String(msg.msg ?? 'bridge_error').slice(0, 120),
             })
             console.warn('[STT] bridge error', msg.msg)
-            if (activeRef.current) setTimeout(() => startBridge(), 500)
+            if (activeRef.current) setTimeout(() => startBridgeRef.current(), 500)
             break
         }
       } catch { /* ignore */ }
@@ -387,10 +562,11 @@ export function useSpeechInput({
         setBridgeDown(true)
       }
       if (activeRef.current && phaseRef.current !== 'processing') {
-        setTimeout(() => startBridge(), 500)
+        setTimeout(() => startBridgeRef.current(), 500)
       }
     }
-  }, [triggerFinal, normalizeConfidence]) // onInterim/phase via refs
+  }, [triggerFinal, normalizeConfidence, cancelTurnCandidate, scheduleTurnCommit]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { startBridgeRef.current = startBridge }, [startBridge])
 
   const stopBridge = useCallback(() => {
     if (wsRef.current) {
@@ -408,9 +584,13 @@ export function useSpeechInput({
     pendingFragmentRef.current = ''
     pendingFragmentUtteranceIdRef.current = ''
     stopFragmentTimer()
+    stopTurnCandidateTimer()
+    stopManualFinalizeTimer()
     connectStartRef.current = 0
     listeningStartRef.current = 0
     firstInterimRef.current = false
+    speechStartedAtRef.current = 0
+    lastTranscriptAtRef.current = 0
     setPhaseSync('idle')
     setVolume(0)
     onInterimRef.current('')
@@ -418,12 +598,37 @@ export function useSpeechInput({
     else stopBridge()
   }, [stopWebSpeech, stopBridge])
 
+  const finish = useCallback(() => {
+    if (!activeRef.current || finalizingRef.current) return
+    const capturedText = lastInterimRef.current.trim()
+    if (!capturedText) {
+      void stop()
+      return
+    }
+    finalizingRef.current = true
+    onTraceRef.current?.('asr_finalize_requested', {
+      utterance_id: utteranceIdRef.current,
+      word_count: capturedText.split(/\s+/).length,
+    })
+    if (modeRef.current === 'bridge' && wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'finalize', utterance_id: utteranceIdRef.current }))
+    } else if (modeRef.current === 'webspeech' && recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch { /* ignore */ }
+    }
+    stopManualFinalizeTimer()
+    finalizingRef.current = true
+    manualFinalizeTimerRef.current = setTimeout(() => {
+      manualFinalizeTimerRef.current = null
+      triggerFinal(lastInterimRef.current || capturedText, { endpointReason: 'manual_finalize_timeout' })
+    }, MANUAL_FINALIZE_TIMEOUT_MS)
+  }, [stop, triggerFinal])
+
   const start = useCallback(async () => {
     if (activeRef.current) return
     if (IS_SAFE_MODE) return
     activeRef.current = true
     setPhaseSync('connecting')
-    newUtteranceId()
+    utteranceIdRef.current = createUtteranceId()
     onTraceRef.current?.('asr_start_requested', { utterance_id: utteranceIdRef.current })
 
     // Auto-detect once per component lifetime — don't re-probe on every open
@@ -439,9 +644,9 @@ export function useSpeechInput({
   }, [startWebSpeech, startBridge, WebSpeech])
 
   const toggle = useCallback(() => {
-    if (activeRef.current) stop()
+    if (activeRef.current) finish()
     else start()
-  }, [start, stop])
+  }, [start, finish])
 
   // Suppress/unsuppress without stopping the mic — used during AI loading
   const suppress  = useCallback(() => { suppressRef.current = true  }, [])
@@ -478,6 +683,7 @@ export function useSpeechInput({
     bridgeDown,
     start,
     stop,
+    finish,
     toggle,
     suppress,
     unsuppress,

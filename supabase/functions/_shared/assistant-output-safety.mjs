@@ -1,7 +1,7 @@
 const RAW_TOOL_SYNTAX = /(?:^|\n)\s*(?:```(?:tool|python|json)?|tool_code\b|function_call\b)|\bprint\s*\(\s*(?:update|create|delete|bulk_update)_[a-z_]+\s*\(|\b(?:update|create|delete|bulk_update)_[a-z_]+\s*\(\s*\{/i
 const UNSUPPORTED_WRITE_PROMISE = /\b(?:i['’]?ll|i will|let me|i(?:'m| am) going to)\s+(?:update|change|save|delete|create|add|move|reschedule)\b/i
 const UNSUPPORTED_WRITE_COMPLETION = /\b(?:i(?: have|'ve)\s+)?(?:updated|changed|saved|deleted|created|added|moved|rescheduled)\b/i
-const DEFERRED_PROGRESS_ONLY = /\b(?:let me|i(?:'m| am)|i(?:'ll| will))\s+(?:check|look(?:ing)?|search(?:ing)?|find(?:ing)?|work(?:ing)?)\b|\b(?:still\s+)?(?:looking|searching|checking)\s+(?:for|now)\b|\bplease (?:wait|bear with me)\b/i
+const DEFERRED_PROGRESS_ONLY = /\b(?:let me|i(?:'m| am)|i(?:'ll| will))\s+(?:check|look(?:ing)?|search(?:ing)?|find(?:ing)?|work(?:ing)?)\b|(?:^|[.!?]\s+)(?:still\s+)?(?:looking|searching|checking)\s+(?:for|now)\b|\bplease (?:wait|bear with me)\b/i
 
 export function secureAssistantResult(result, options = {}) {
   if (!result || result.type !== 'text') return result

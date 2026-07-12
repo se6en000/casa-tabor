@@ -1,4 +1,4 @@
-import json, logging, math, struct, subprocess, threading, time
+import json, logging, math, os, struct, subprocess, threading, time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib import request as _urlrequest
 import websocket
@@ -11,7 +11,9 @@ ALSA_DEVICE   = 'plughw:2,0'
 RATE          = 16000
 WARMUP_CHUNKS = 2
 
-DEEPGRAM_KEY  = 'f76cd9fb7e118eebb9f99e8d6673fce38ab8e4fa'
+DEEPGRAM_KEY  = os.environ.get('DEEPGRAM_API_KEY', '').strip()
+if not DEEPGRAM_KEY:
+    raise RuntimeError('DEEPGRAM_API_KEY is required')
 DG_URL = (
     'wss://api.deepgram.com/v1/listen'
     '?encoding=linear16'
@@ -19,7 +21,7 @@ DG_URL = (
     '&channels=1'
     '&model=nova-2'
     '&interim_results=true'
-    '&endpointing=1200'
+    '&endpointing=500'
     '&utterance_end_ms=1800'
     '&vad_events=true'
 )
@@ -89,6 +91,8 @@ _stt_client = None   # browser WS that owns the current STT session
 _stt_lock   = threading.Lock()
 _stt_missing_since = 0.0
 _stt_disconnect_seq = 0
+_stt_protocol = 'legacy'
+_turn_id = ''
 
 def _ws_push_all(msg: dict):
     data = json.dumps(msg)
@@ -115,7 +119,7 @@ def _ws_push_stt(msg: dict):
             _stt_client = None
 
 def _handle_ws_client(ws):
-    global _stt_client, _stt_disconnect_seq
+    global _stt_client, _stt_disconnect_seq, _stt_protocol, _turn_id, _finals, _final_conf
     with _ws_clients_lock:
         _ws_clients.add(ws)
     log.info('[WS] browser client connected')
@@ -130,9 +134,40 @@ def _handle_ws_client(ws):
                 with _stt_lock:
                     _stt_client = ws
                     _stt_disconnect_seq += 1
+                    _stt_protocol = msg.get('turn_protocol', 'legacy')
+                    _turn_id = str(msg.get('utterance_id', ''))
                 started = start_recording(reason='ws_start')
                 if not started and _get().get('recording') and _get().get('ready'):
                     _ws_push_stt({'type': 'ready'})
+            elif cmd == 'commit':
+                committed_turn_id = _turn_id
+                _finals = []
+                _final_conf = []
+                _turn_id = str(msg.get('next_utterance_id', ''))
+                _set(transcript=None, interim_transcript='')
+                _ws_push_stt({
+                    'type': 'committed',
+                    'utterance_id': committed_turn_id,
+                    'next_utterance_id': _turn_id,
+                })
+            elif cmd == 'discard':
+                discarded_turn_id = _turn_id
+                _finals = []
+                _final_conf = []
+                _turn_id = str(msg.get('next_utterance_id', ''))
+                _set(transcript=None, interim_transcript='')
+                _ws_push_stt({
+                    'type': 'discarded',
+                    'utterance_id': discarded_turn_id,
+                    'next_utterance_id': _turn_id,
+                })
+            elif cmd == 'finalize':
+                current_ws = _ws
+                if current_ws:
+                    try:
+                        current_ws.send(json.dumps({'type': 'Finalize'}))
+                    except Exception as e:
+                        _ws_push_stt({'type': 'error', 'msg': f'Finalize failed: {e}'})
             elif cmd == 'stop':
                 with _stt_lock:
                     if _stt_client is ws:
@@ -434,6 +469,40 @@ def _strip_wake(text: str) -> str:
     """Remove leading 'Alexa' (and any variant) from transcript."""
     return _WAKE_STRIP.sub('', text).strip()
 
+def _turn_text():
+    return _strip_wake(' '.join(_finals).strip())
+
+def _turn_confidence(fallback=None):
+    return (sum(_final_conf) / len(_final_conf)) if _final_conf else fallback
+
+def _emit_turn_candidate(reason, fallback_confidence=None):
+    global _finals, _final_conf, _wake_cooldown_until, _wake_disarmed_until
+    full = _turn_text()
+    if not full:
+        return
+    conf = _turn_confidence(fallback_confidence)
+    now = time.time()
+    _wake_cooldown_until = max(_wake_cooldown_until, now + POST_FINAL_WAKE_COOLDOWN_SECS)
+    _wake_disarmed_until = max(_wake_disarmed_until, now + POST_FINAL_WAKE_DISARM_SECS)
+    _set(transcript=full, interim_transcript='')
+    if _stt_protocol == 'candidate-v1':
+        _ws_push_stt({
+            'type': 'turn_candidate',
+            'text': full,
+            'confidence': conf,
+            'endpoint_reason': reason,
+            'utterance_id': _turn_id,
+        })
+        return
+    _finals = []
+    _final_conf = []
+    _ws_push_stt({
+        'type': 'final',
+        'text': full,
+        'confidence': conf,
+        'endpoint_reason': reason,
+    })
+
 def _on_message(ws_arg, message):
     global _finals, _final_conf, _wake_cooldown_until, _wake_disarmed_until, _last_speech_started_ts
     try:
@@ -443,22 +512,19 @@ def _on_message(ws_arg, message):
         if msg_type == 'SpeechStarted':
             _last_speech_started_ts = time.time()
             log.info('[DG] SpeechStarted')
+            if _stt_protocol == 'candidate-v1':
+                _ws_push_stt({
+                    'type': 'speech_started',
+                    'provider_timestamp': data.get('timestamp'),
+                    'utterance_id': _turn_id,
+                })
             return
 
         if msg_type == 'UtteranceEnd':
-            full = _strip_wake(' '.join(_finals).strip())
-            conf = (sum(_final_conf) / len(_final_conf)) if _final_conf else None
-            if full:
+            full = _turn_text()
+            if full and data.get('last_word_end') != -1:
                 log.info(f'[DG] UtteranceEnd -> "{full}"')
-                now = time.time()
-                _wake_cooldown_until = max(_wake_cooldown_until, now + POST_FINAL_WAKE_COOLDOWN_SECS)
-                _wake_disarmed_until = max(_wake_disarmed_until, now + POST_FINAL_WAKE_DISARM_SECS)
-                _finals = []
-                _final_conf = []
-                # Keep recording hot between turns so grocery rapid mode doesn't
-                # thrash into wake-recorder restarts between each finalized phrase.
-                _set(transcript=full, interim_transcript='')
-                _ws_push_stt({'type': 'final', 'text': full, 'confidence': conf, 'endpoint_reason': 'utterance_end'})
+                _emit_turn_candidate('utterance_end')
             return
 
         if msg_type != 'Results':
@@ -469,36 +535,61 @@ def _on_message(ws_arg, message):
         confidence = alt.get('confidence')
         is_final   = data.get('is_final', False)
         spch_final = data.get('speech_final', False)
+        from_finalize = data.get('from_finalize', False)
+        words      = alt.get('words', [])
 
-        if spch_final:
+        if is_final or spch_final:
             if text:
                 _finals.append(text)
                 if isinstance(confidence, (int, float)):
                     _final_conf.append(float(confidence))
-            full = _strip_wake(' '.join(_finals).strip())
-            conf = (sum(_final_conf) / len(_final_conf)) if _final_conf else confidence
-            _finals = []
-            _final_conf = []
+            full = _turn_text()
+            conf = _turn_confidence(confidence)
             if full:
-                log.info(f'[DG] speech_final -> "{full}"')
-                now = time.time()
-                _wake_cooldown_until = max(_wake_cooldown_until, now + POST_FINAL_WAKE_COOLDOWN_SECS)
-                _wake_disarmed_until = max(_wake_disarmed_until, now + POST_FINAL_WAKE_DISARM_SECS)
-                # Keep recording hot between turns so grocery rapid mode doesn't
-                # thrash into wake-recorder restarts between each finalized phrase.
-                _set(transcript=full, interim_transcript='')
-                _ws_push_stt({'type': 'final', 'text': full, 'confidence': conf, 'endpoint_reason': 'speech_final'})
-        elif is_final and text:
-            _finals.append(text)
-            if isinstance(confidence, (int, float)):
-                _final_conf.append(float(confidence))
-            interim = _strip_wake(' '.join(_finals))
-            _set(interim_transcript=interim)
-            _ws_push_stt({'type': 'interim', 'text': interim})
+                _set(interim_transcript=full)
+                _ws_push_stt({
+                    'type': 'transcript',
+                    'text': full,
+                    'committed': full,
+                    'interim': '',
+                    'confidence': conf,
+                    'is_final': True,
+                    'speech_final': spch_final,
+                    'words': words,
+                    'utterance_id': _turn_id,
+                })
+                if _stt_protocol != 'candidate-v1' and not spch_final:
+                    _ws_push_stt({'type': 'interim', 'text': full})
+            if (spch_final or from_finalize) and full:
+                endpoint_reason = 'manual_finalize' if from_finalize else 'speech_final'
+                log.info(f'[DG] {endpoint_reason} candidate -> "{full}"')
+                if _stt_protocol == 'candidate-v1':
+                    _ws_push_stt({
+                        'type': 'segment_final',
+                        'text': full,
+                        'confidence': conf,
+                        'words': words,
+                        'utterance_id': _turn_id,
+                    })
+                _emit_turn_candidate(endpoint_reason, confidence)
         elif text:
-            interim = _strip_wake((' '.join(_finals) + ' ' + text).strip())
+            committed = _turn_text()
+            interim = _strip_wake((committed + ' ' + text).strip())
             _set(interim_transcript=interim)
-            _ws_push_stt({'type': 'interim', 'text': interim})
+            if _stt_protocol == 'candidate-v1':
+                _ws_push_stt({
+                    'type': 'transcript',
+                    'text': interim,
+                    'committed': committed,
+                    'interim': text,
+                    'confidence': confidence,
+                    'is_final': False,
+                    'speech_final': False,
+                    'words': words,
+                    'utterance_id': _turn_id,
+                })
+            else:
+                _ws_push_stt({'type': 'interim', 'text': interim})
     except Exception as e:
         log.error(f'on_message: {e}')
 
