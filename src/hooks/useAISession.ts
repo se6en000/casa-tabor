@@ -6,13 +6,20 @@ export interface AIMessage {
   content: string
   imageDataUrl?: string
   streaming?: boolean
-  conversationState?: {
-    activeEntityType: 'event'
-    activeEventId: string
-    activeEventUpdatedAt?: string | null
-    expectedFollowUp: 'event_follow_up'
-    establishedAt: string
-  }
+  conversationState?:
+    | {
+        activeEntityType: 'event'
+        activeEventId: string
+        activeEventUpdatedAt?: string | null
+        expectedFollowUp: 'event_follow_up'
+        establishedAt: string
+      }
+    | {
+        activeEntityType: 'grocery_item'
+        activeGroceryItemId: string
+        expectedFollowUp: 'grocery_follow_up'
+        establishedAt: string
+      }
   toolAction?: {
     tool: string
     args: Record<string, unknown>

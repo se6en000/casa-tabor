@@ -5,6 +5,7 @@ import {
   answerGroundedEventFollowUp,
   answerGroundedEventSemanticFrame,
   eventConversationState,
+  groceryConversationState,
   normalizeConversationState,
 } from '../supabase/functions/_shared/assistant-conversation-grounding.mjs'
 import { secureAssistantResult } from '../supabase/functions/_shared/assistant-output-safety.mjs'
@@ -28,6 +29,12 @@ test('conversation state retains an authoritative event identity and expires', (
   const state = eventConversationState(event, now)
   assert.equal(normalizeConversationState(state, now.getTime() + 1000)?.activeEventId, event.id)
   assert.equal(normalizeConversationState(state, now.getTime() + 31 * 60 * 1000), null)
+})
+
+test('conversation state retains an authoritative grocery item identity', () => {
+  const now = new Date('2026-07-11T13:00:00Z')
+  const state = groceryConversationState({ id: 'milk' }, now)
+  assert.equal(normalizeConversationState(state, now.getTime() + 1000)?.activeGroceryItemId, 'milk')
 })
 
 test('event follow-ups answer only from authoritative fields', () => {

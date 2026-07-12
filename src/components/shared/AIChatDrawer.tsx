@@ -1174,6 +1174,7 @@ function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe
   const isDestructiveAction =
     ta?.tool === 'delete_event' ||
     ta?.tool === 'delete_events_by_title' ||
+    ta?.tool === 'remove_grocery_item' ||
     ta?.tool === 'clear_checked_grocery_items'
 
   const doConfirm = useCallback(async () => {
@@ -1255,6 +1256,9 @@ function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe
                     : ta.tool === 'delete_event' ? 'Deleted ✓'
                     : ta.tool === 'delete_events_by_title' ? 'Deleted matching events ✓'
                     : ta.tool === 'add_grocery_items' ? 'Added to grocery list ✓'
+                    : ta.tool === 'check_grocery_item' ? 'Grocery item updated ✓'
+                    : ta.tool === 'remove_grocery_item' ? 'Removed from grocery list ✓'
+                    : ta.tool === 'update_grocery_item_quantity' ? 'Grocery quantity updated ✓'
                     : 'Done ✓'}
                 </div>
                 {ta.tool === 'create_event' && ta.resultEventId && (
@@ -1262,6 +1266,9 @@ function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe
                 )}
                 {ta.tool === 'create_recipe' && (
                   <p className="text-caption text-casa-muted">Visible in Cook → Recipe library now</p>
+                )}
+                {['add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items'].includes(ta.tool) && (
+                  <p className="text-caption text-casa-muted">Saved in Casa; iOS Reminders syncs asynchronously</p>
                 )}
                 {ta.syncWarning && (
                   <p className="text-caption text-amber-600">{ta.syncWarning}</p>
@@ -1689,6 +1696,17 @@ function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, 
   }
   if (tool === 'check_grocery_item') {
     return <p className="text-caption text-casa-muted">Mark item as {args.checked ? 'done ✓' : 'undone'}</p>
+  }
+  if (tool === 'remove_grocery_item') {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2">
+        <p className="text-caption text-amber-800 font-semibold">Remove this grocery item?</p>
+        <p className="text-caption text-amber-700 mt-0.5">The deletion will sync to iOS Reminders asynchronously.</p>
+      </div>
+    )
+  }
+  if (tool === 'update_grocery_item_quantity') {
+    return <p className="text-caption text-casa-muted">Set quantity to {String(args.quantity ?? '')}</p>
   }
   if (tool === 'clear_checked_grocery_items') {
     return (

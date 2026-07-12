@@ -773,34 +773,116 @@ Deno.serve(async (req) => {
       const listId = lists?.[0]?.id
       if (!listId) throw new Error('No grocery list found')
 
-      const items = (args.items as { name: string; quantity?: string; unit?: string; category?: string; notes?: string }[]).map(i => ({
-        list_id: listId,
-        name: i.name,
-        quantity: i.quantity ?? null,
-        unit: i.unit ?? null,
-        category: i.category ?? 'other',
-        notes: i.notes ?? null,
-        checked: false,
-      }))
-      const { error } = await sb.from('grocery_items').insert(items)
-      if (error) throw new Error(error.message)
-      return new Response(JSON.stringify({ success: true, count: items.length, correlation_id: cid }), {
+      const requested = Array.isArray(args.items) ? args.items : []
+      const savedItems: { id: string; name: string; category: string; already_present: boolean }[] = []
+      for (const raw of requested as { name?: string; quantity?: string; unit?: string; category?: string; notes?: string }[]) {
+        const name = normalizeOptionalText(raw.name, 180)
+        if (!name) continue
+        const row = {
+          list_id: listId,
+          name,
+          quantity: normalizeOptionalText(raw.quantity, 60),
+          unit: normalizeOptionalText(raw.unit, 60),
+          category: normalizeOptionalText(raw.category, 60) ?? 'other',
+          notes: normalizeOptionalText(raw.notes, 500),
+          checked: false,
+          last_modified_source: 'casa',
+        }
+        const { data: inserted, error } = await sb
+          .from('grocery_items')
+          .insert(row)
+          .select('id, name, category')
+          .single()
+        if (error?.code === '23505') {
+          const { data: existing, error: existingError } = await sb
+            .from('grocery_items')
+            .select('id, name, category')
+            .eq('list_id', listId)
+            .eq('name_normalized', name.toLowerCase().replace(/\s+/g, ' ').trim())
+            .eq('checked', false)
+            .is('deleted_at', null)
+            .maybeSingle()
+          if (existingError) throw new Error(existingError.message)
+          if (existing) savedItems.push({ ...existing, already_present: true })
+          continue
+        }
+        if (error) throw new Error(error.message)
+        if (inserted) savedItems.push({ ...inserted, already_present: false })
+      }
+      return new Response(JSON.stringify({
+        success: true,
+        count: savedItems.filter((item) => !item.already_present).length,
+        already_present_count: savedItems.filter((item) => item.already_present).length,
+        items: savedItems,
+        external_sync_status: 'asynchronous',
+        correlation_id: cid,
+      }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
 
     if (tool === 'check_grocery_item') {
-      const { error } = await sb.from('grocery_items').update({ checked: args.checked }).eq('id', args.item_id)
+      const { data, error } = await sb
+        .from('grocery_items')
+        .update({ checked: args.checked, last_modified_source: 'casa' })
+        .eq('id', args.item_id)
+        .is('deleted_at', null)
+        .select('id, name')
+        .maybeSingle()
       if (error) throw new Error(error.message)
-      return new Response(JSON.stringify({ success: true, correlation_id: cid }), {
+      if (!data) throw new Error('Grocery item not found')
+      return new Response(JSON.stringify({ success: true, item: data, external_sync_status: 'asynchronous', correlation_id: cid }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
+    if (tool === 'remove_grocery_item') {
+      const { data, error } = await sb
+        .from('grocery_items')
+        .update({ deleted_at: new Date().toISOString(), last_modified_source: 'casa' })
+        .eq('id', args.item_id)
+        .is('deleted_at', null)
+        .select('id, name')
+        .maybeSingle()
+      if (error) throw new Error(error.message)
+      if (!data) throw new Error('Grocery item not found')
+      return new Response(JSON.stringify({ success: true, item: data, external_sync_status: 'asynchronous', correlation_id: cid }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
+    if (tool === 'update_grocery_item_quantity') {
+      const quantity = normalizeOptionalText(args.quantity, 60)
+      if (!quantity) throw new Error('Grocery quantity is required')
+      const { data, error } = await sb
+        .from('grocery_items')
+        .update({ quantity, last_modified_source: 'casa' })
+        .eq('id', args.item_id)
+        .eq('checked', false)
+        .is('deleted_at', null)
+        .select('id, name, quantity')
+        .maybeSingle()
+      if (error) throw new Error(error.message)
+      if (!data) throw new Error('Grocery item not found')
+      return new Response(JSON.stringify({ success: true, item: data, external_sync_status: 'asynchronous', correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
 
     if (tool === 'clear_checked_grocery_items') {
-      const { error } = await sb.from('grocery_items').delete().eq('checked', true)
+      const { data, error } = await sb
+        .from('grocery_items')
+        .update({ deleted_at: new Date().toISOString(), last_modified_source: 'casa' })
+        .eq('checked', true)
+        .is('deleted_at', null)
+        .select('id')
       if (error) throw new Error(error.message)
-      return new Response(JSON.stringify({ success: true, correlation_id: cid }), {
+      return new Response(JSON.stringify({
+        success: true,
+        count: data?.length ?? 0,
+        external_sync_status: 'asynchronous',
+        correlation_id: cid,
+      }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }

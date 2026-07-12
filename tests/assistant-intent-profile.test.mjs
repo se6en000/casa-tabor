@@ -61,6 +61,13 @@ test('pending event edits keep short list continuations on the event lane', () =
   }
 })
 
+test('active grocery items keep quantity follow-ups on the grocery lane', () => {
+  assert.deepEqual(
+    classifyAssistantIntent('Make that two', { activeEntityType: 'grocery_item' }),
+    { profile: 'grocery', forceEventSearch: false },
+  )
+})
+
 test('common assistant domains select narrow profiles', () => {
   assert.equal(classifyAssistantIntent('Will it rain tomorrow?').profile, 'weather')
   assert.equal(classifyAssistantIntent('When should we leave for school?').profile, 'travel')

@@ -13,6 +13,7 @@ import {
   answerGroundedEventFollowUp,
   answerGroundedEventSemanticFrame,
   eventConversationState,
+  groceryConversationState,
   normalizeConversationState,
 } from '../_shared/assistant-conversation-grounding.mjs'
 import { secureAssistantResult } from '../_shared/assistant-output-safety.mjs'
@@ -29,6 +30,11 @@ import {
   parseCalendarLanguage,
 } from '../_shared/assistant-calendar-language.mjs'
 import { resolveCalendarSemanticRead } from '../_shared/assistant-calendar-semantic-read.mjs'
+import {
+  isGroceryLikeLanguage,
+  parseGroceryLanguage,
+} from '../_shared/assistant-grocery-language.mjs'
+import { resolveGrocerySemantic } from '../_shared/assistant-grocery-semantic.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -184,6 +190,9 @@ Deno.serve(async (req) => {
     focusedEvent: Boolean(context?.focusedEvent),
     activeEntityType: incomingConversationState?.activeEntityType,
   })
+  const groceryFrame = parseGroceryLanguage(latestUserText, {
+    activeEntityType: incomingConversationState?.activeEntityType,
+  })
   const classifiedIntentRouting = classifyAssistantIntent(latestUserText, {
     focusedEvent: Boolean(context?.focusedEvent),
     assistantMode: context?.assistant_mode,
@@ -199,6 +208,8 @@ Deno.serve(async (req) => {
   )
   const intentRouting = calendarFrame
     ? { profile: 'event', forceEventSearch: calendarFrameNeedsSearch }
+    : groceryFrame
+      ? { profile: 'grocery', forceEventSearch: false }
     : classifiedIntentRouting
   appendServerTrace('server_ai_assistant_start', `messages=${Array.isArray(messages) ? messages.length : 0}`, {
     message_count: Array.isArray(messages) ? messages.length : 0,
@@ -213,6 +224,8 @@ Deno.serve(async (req) => {
     active_event_id: incomingConversationState?.activeEventId ?? null,
     calendar_semantic_intent: calendarFrame?.intent ?? null,
     calendar_semantic_confidence: calendarFrame?.confidence ?? null,
+    grocery_semantic_intent: groceryFrame?.intent ?? null,
+    grocery_semantic_confidence: groceryFrame?.confidence ?? null,
   })
   if (calendarFrame) {
     appendServerTrace('server_ai_assistant_calendar_language_match', `intent=${calendarFrame.intent}`, {
@@ -227,6 +240,19 @@ Deno.serve(async (req) => {
       intent_profile: intentRouting.profile,
       has_active_event: incomingConversationState?.activeEntityType === 'event',
       word_count: latestUserText.split(/\s+/).length,
+    })
+  }
+  if (groceryFrame) {
+    appendServerTrace('server_ai_assistant_grocery_language_match', `intent=${groceryFrame.intent}`, {
+      intent: groceryFrame.intent,
+      confidence: groceryFrame.confidence,
+      source: groceryFrame.source,
+      slots: groceryFrame.slots,
+    })
+  } else if (latestUserText && isGroceryLikeLanguage(latestUserText)) {
+    appendServerTrace('server_ai_assistant_grocery_language_unmatched', latestUserText.slice(0, 300), {
+      user_text: latestUserText,
+      active_entity_type: incomingConversationState?.activeEntityType ?? null,
     })
   }
   if (latestUserText) {
@@ -544,6 +570,156 @@ Deno.serve(async (req) => {
             semantic_intent: calendarFrame.intent,
           },
           conversation_state: responseConversationState,
+          telemetry: {
+            ...llmTelemetry,
+            request_total_ms: requestTotalMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+  }
+
+  if (intentRouting.profile === 'grocery' && groceryFrame) {
+    const semantic = resolveGrocerySemantic(groceryFrame, groceryItems ?? [], {
+      activeItemId: incomingConversationState?.activeEntityType === 'grocery_item'
+        ? incomingConversationState.activeGroceryItemId
+        : null,
+    })
+    if (semantic) {
+      const requestTotalMs = Date.now() - requestStartMs
+      const semanticItems = Array.isArray(semantic.items)
+        ? semantic.items
+        : semantic.item
+          ? [semantic.item]
+          : []
+      if (semanticItems.length === 1) {
+        responseConversationState = groceryConversationState(semanticItems[0], now)
+      }
+      appendServerTrace('server_ai_assistant_grocery_semantic_dispatch', `intent=${groceryFrame.intent} type=${semantic.type} ms=${requestTotalMs}`, {
+        intent: groceryFrame.intent,
+        confidence: groceryFrame.confidence,
+        result_type: semantic.type,
+        item_ids: semanticItems.map((item: { id: string }) => item.id),
+        tool: semantic.tool ?? null,
+        request_ms: requestTotalMs,
+      })
+
+      if (semantic.type === 'text') {
+        appendServerTrace('server_ai_assistant_result', `type=text ms=${requestTotalMs}`, {
+          result_type: 'text',
+          request_ms: requestTotalMs,
+          llm_calls: 0,
+          semantic_intent: groceryFrame.intent,
+          response_text: semantic.text,
+        })
+        return {
+          status: 200,
+          payload: {
+            type: 'text',
+            text: semantic.text,
+            correlation_id: cid,
+            authoritative_provenance: {
+              source: 'grocery_items',
+              item_ids: semanticItems.map((item: { id: string }) => item.id),
+              semantic_intent: groceryFrame.intent,
+            },
+            conversation_state: responseConversationState,
+            telemetry: {
+              ...llmTelemetry,
+              request_total_ms: requestTotalMs,
+              context_load_ms: contextLoadMs,
+            },
+          },
+        }
+      }
+
+      if (semantic.tool === 'add_grocery_items' && !dryRun) {
+        const actionId = `grocery-contract-${Date.now().toString(36)}`
+        const execResult = await sb.functions.invoke('execute-ai-action', {
+          body: {
+            tool: semantic.tool,
+            args: semantic.args,
+            action_id: actionId,
+            session_id: traceId,
+            correlation_id: `${cid}:grocery-action`,
+            trace_id: traceId,
+            turn_id: turnId,
+            lane: 'tool_action',
+            device_id: deviceId,
+            client_trace_present: clientTracePresent,
+            client_build: clientBuild,
+            client_trace_source: clientTraceSource ?? 'grocery-language-contract',
+          },
+        })
+        const execError = execResult.error?.message ?? (execResult.data as { error?: string } | null)?.error ?? null
+        if (execError) {
+          return { status: 200, payload: { type: 'error', code: 'grocery_action_failed', message: execError, correlation_id: cid } }
+        }
+        const result = (execResult.data as {
+          success?: boolean
+          count?: number
+          already_present_count?: number
+          items?: { id: string; name: string; already_present?: boolean }[]
+        } | null) ?? {}
+        if (!result.success) {
+          return { status: 200, payload: { type: 'error', code: 'grocery_action_failed', message: 'The grocery items were not saved.', correlation_id: cid } }
+        }
+        const savedItems = result.items ?? []
+        if (savedItems.length === 1) responseConversationState = groceryConversationState(savedItems[0], now)
+        const addedNames = savedItems.filter((item) => !item.already_present).map((item) => item.name)
+        const existingNames = savedItems.filter((item) => item.already_present).map((item) => item.name)
+        const text = [
+          addedNames.length ? `Saved in Casa: ${addedNames.join(', ')}.` : null,
+          existingNames.length ? `${existingNames.join(', ')} ${existingNames.length === 1 ? 'was' : 'were'} already on the list.` : null,
+          'iOS Reminders sync runs asynchronously.',
+        ].filter(Boolean).join(' ')
+        const completedMs = Date.now() - requestStartMs
+        appendServerTrace('server_ai_assistant_result', `type=text ms=${completedMs}`, {
+          result_type: 'text',
+          request_ms: completedMs,
+          llm_calls: 0,
+          semantic_intent: groceryFrame.intent,
+          response_text: text,
+          saved_count: result.count ?? 0,
+          already_present_count: result.already_present_count ?? 0,
+        })
+        return {
+          status: 200,
+          payload: {
+            type: 'text',
+            text,
+            write_verified: true,
+            correlation_id: cid,
+            conversation_state: responseConversationState,
+            authoritative_provenance: {
+              source: 'grocery_items',
+              item_ids: savedItems.map((item) => item.id),
+              semantic_intent: groceryFrame.intent,
+            },
+            telemetry: {
+              ...llmTelemetry,
+              request_total_ms: completedMs,
+              context_load_ms: contextLoadMs,
+            },
+          },
+        }
+      }
+
+      return {
+        status: 200,
+        payload: {
+          type: 'tool_action',
+          tool: semantic.tool,
+          args: semantic.args,
+          display_text: buildDisplayText(semantic.tool, semantic.args),
+          conversation_state: responseConversationState,
+          correlation_id: cid,
+          authoritative_provenance: {
+            source: 'grocery_items',
+            item_ids: semanticItems.map((item: { id: string }) => item.id),
+            semantic_intent: groceryFrame.intent,
+          },
           telemetry: {
             ...llmTelemetry,
             request_total_ms: requestTotalMs,
@@ -1027,6 +1203,29 @@ Deno.serve(async (req) => {
         },
       },
       {
+        name: 'remove_grocery_item',
+        description: 'Soft-delete one exact grocery item so Casa can synchronize the deletion to iOS Reminders.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            item_id: { type: 'STRING', description: 'Exact grocery item UUID' },
+          },
+          required: ['item_id'],
+        },
+      },
+      {
+        name: 'update_grocery_item_quantity',
+        description: 'Update the quantity of one exact active grocery item.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            item_id: { type: 'STRING', description: 'Exact grocery item UUID' },
+            quantity: { type: 'STRING', description: 'New quantity, such as 2 or 1.5' },
+          },
+          required: ['item_id', 'quantity'],
+        },
+      },
+      {
         name: 'clear_checked_grocery_items',
         description: 'Remove all checked/completed items from the grocery list.',
         parameters: { type: 'OBJECT', properties: {} },
@@ -1073,7 +1272,7 @@ Deno.serve(async (req) => {
 
   const toolNamesByProfile: Record<string, string[]> = {
     event: ['search_events', 'create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title'],
-    grocery: ['add_grocery_items', 'check_grocery_item', 'clear_checked_grocery_items'],
+    grocery: ['add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items'],
     weather: ['get_weather_forecast'],
     travel: ['get_travel_eta'],
     places: ['search_places'],
@@ -2303,6 +2502,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       return `Add to grocery list: ${items.map(i => `${i.name}${i.quantity ? ` (${i.quantity})` : ''}`).join(', ')}`
     }
     if (name === 'check_grocery_item') return `Mark grocery item as ${args.checked ? 'done' : 'undone'}`
+    if (name === 'remove_grocery_item') return 'Remove this grocery item'
+    if (name === 'update_grocery_item_quantity') return `Change grocery quantity to ${args.quantity}`
     if (name === 'clear_checked_grocery_items') return 'Clear all checked grocery items'
     return `Action: ${name}`
   }

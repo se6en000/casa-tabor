@@ -8,6 +8,7 @@ export function classifyAssistantIntent(text, options = {}) {
   const input = String(text ?? '').trim()
   const focusedEvent = options.focusedEvent === true
   const activeEvent = options.activeEntityType === 'event'
+  const activeGroceryItem = options.activeEntityType === 'grocery_item'
   const pendingEventAction = options.pendingEventAction === true
   const assistantMode = options.assistantMode === 'chef' ? 'chef' : 'general'
   const eventFollowUp = activeEvent && (
@@ -18,7 +19,8 @@ export function classifyAssistantIntent(text, options = {}) {
   const hasEventIntent = focusedEvent || eventFollowUp || EVENT_TERMS.test(input) || EVENT_TIME_QUERY.test(input)
   const hasWeatherIntent = /\b(weather|forecast|temperature|rain|storm|umbrella|uv|heat index|beach day|kayak)\b/i.test(input)
   const hasTravelIntent = /\b(traffic|commute|drive time|travel time|leave by|when should (?:i|we) leave|eta|route)\b/i.test(input)
-  const hasGroceryIntent = /\b(grocer(?:y|ies)|shopping list|buy|pantry|restock|food shop)\b/i.test(input)
+  const groceryFollowUp = activeGroceryItem && /^(?:make|change|update|set)\s+(?:that|it)\b/i.test(input)
+  const hasGroceryIntent = groceryFollowUp || /\b(grocer(?:y|ies)|shopping list|buy|bought|picked up|pantry|restock|food shop|check off)\b/i.test(input)
   const hasRecipeIntent = assistantMode === 'chef' || /\b(recipe|cook|meal|dinner|lunch|breakfast|ingredient|servings?)\b/i.test(input)
   const hasPlaceIntent = /\b(address|phone number|where is|find (?:a|an|the)?\s*(?:restaurant|store|business|place)|nearby)\b/i.test(input)
   const hasWebIntent = /\b(latest|news|score|stock price|current price|recent review|look it up|search the web)\b/i.test(input)

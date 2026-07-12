@@ -300,7 +300,8 @@ export function useAIAssistant(ctx: AssistantContext) {
           ? prev.map((message) => (
               message.toolAction?.status === 'pending' &&
               message.toolAction.tool === assistantMsg.toolAction?.tool &&
-              message.toolAction.args.id === assistantMsg.toolAction?.args.id
+              (message.toolAction.args.id ?? message.toolAction.args.item_id) ===
+                (assistantMsg.toolAction?.args.id ?? assistantMsg.toolAction?.args.item_id)
                 ? { ...message, toolAction: { ...message.toolAction, status: 'cancelled' as const } }
                 : message
             ))

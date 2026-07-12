@@ -1,18 +1,39 @@
 const STATE_TTL_MS = 30 * 60 * 1000
 
 export function normalizeConversationState(value, now = Date.now()) {
-  if (!value || typeof value !== 'object' || value.activeEntityType !== 'event') return null
-  const activeEventId = typeof value.activeEventId === 'string' ? value.activeEventId.trim() : ''
+  if (!value || typeof value !== 'object') return null
   const establishedAt = typeof value.establishedAt === 'string' ? Date.parse(value.establishedAt) : NaN
-  if (!activeEventId || !Number.isFinite(establishedAt) || now - establishedAt > STATE_TTL_MS || establishedAt > now + 60000) {
+  if (!Number.isFinite(establishedAt) || now - establishedAt > STATE_TTL_MS || establishedAt > now + 60000) {
     return null
   }
+  if (value.activeEntityType === 'grocery_item') {
+    const activeGroceryItemId = typeof value.activeGroceryItemId === 'string' ? value.activeGroceryItemId.trim() : ''
+    if (!activeGroceryItemId) return null
+    return {
+      activeEntityType: 'grocery_item',
+      activeGroceryItemId,
+      expectedFollowUp: 'grocery_follow_up',
+      establishedAt: new Date(establishedAt).toISOString(),
+    }
+  }
+  if (value.activeEntityType !== 'event') return null
+  const activeEventId = typeof value.activeEventId === 'string' ? value.activeEventId.trim() : ''
+  if (!activeEventId) return null
   return {
     activeEntityType: 'event',
     activeEventId,
     activeEventUpdatedAt: typeof value.activeEventUpdatedAt === 'string' ? value.activeEventUpdatedAt : null,
     expectedFollowUp: 'event_follow_up',
     establishedAt: new Date(establishedAt).toISOString(),
+  }
+}
+
+export function groceryConversationState(item, now = new Date()) {
+  return {
+    activeEntityType: 'grocery_item',
+    activeGroceryItemId: item.id,
+    expectedFollowUp: 'grocery_follow_up',
+    establishedAt: now.toISOString(),
   }
 }
 
