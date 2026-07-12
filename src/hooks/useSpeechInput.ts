@@ -529,6 +529,31 @@ export function useSpeechInput({
               next_utterance_id: String(msg.next_utterance_id ?? ''),
             })
             break
+          case 'shadow_metric':
+            onTraceRef.current?.('asr_flux_shadow', {
+              utterance_id: utteranceIdRef.current,
+              provider: String(msg.provider ?? 'flux'),
+              status: String(msg.status ?? 'unknown'),
+              shadow_session_id: String(msg.session_id ?? ''),
+              shadow_turn_index: msg.turn_index ?? null,
+              primary_discarded: msg.primary_discarded ?? null,
+              primary_word_count: msg.primary_word_count ?? null,
+              shadow_word_count: msg.shadow_word_count ?? null,
+              average_confidence: msg.average_confidence ?? null,
+              normalized_edit_distance: msg.normalized_edit_distance ?? null,
+              end_of_turn_confidence: msg.end_of_turn_confidence ?? null,
+              speech_to_first_update_ms: msg.speech_to_first_update_ms ?? null,
+              average_update_interval_ms: msg.average_update_interval_ms ?? null,
+              update_count: msg.update_count ?? null,
+              last_word_to_eot_ms: msg.last_word_to_eot_ms ?? null,
+              turn_resumed_count: msg.turn_resumed_count ?? null,
+              queue_drops: msg.queue_drops ?? 0,
+              max_queue_depth: msg.max_queue_depth ?? 0,
+              average_primary_offer_us: msg.average_primary_offer_us ?? null,
+              max_primary_offer_us: msg.max_primary_offer_us ?? null,
+              offer_us: msg.offer_us ?? null,
+            })
+            break
           case 'interim': {
             const text = String(msg.text ?? '')
             if (text !== lastInterimRef.current) {

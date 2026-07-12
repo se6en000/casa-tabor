@@ -12,6 +12,7 @@ const MESSAGE_TYPES = new Set([
   'interim',
   'final',
   'error',
+  'shadow_metric',
 ])
 
 export function normalizeBridgeTurnMessage(value) {

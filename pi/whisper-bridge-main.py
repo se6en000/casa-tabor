@@ -3,6 +3,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib import request as _urlrequest
 import websocket
 from websockets.sync.server import serve as ws_serve
+from stt_flux_shadow import FluxShadow
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 log = logging.getLogger('stt-bridge')
@@ -93,6 +94,7 @@ _stt_missing_since = 0.0
 _stt_disconnect_seq = 0
 _stt_protocol = 'legacy'
 _turn_id = ''
+_turn_index = 0
 
 def _ws_push_all(msg: dict):
     data = json.dumps(msg)
@@ -119,7 +121,7 @@ def _ws_push_stt(msg: dict):
             _stt_client = None
 
 def _handle_ws_client(ws):
-    global _stt_client, _stt_disconnect_seq, _stt_protocol, _turn_id, _finals, _final_conf
+    global _stt_client, _stt_disconnect_seq, _stt_protocol, _turn_id, _turn_index, _finals, _final_conf
     with _ws_clients_lock:
         _ws_clients.add(ws)
     log.info('[WS] browser client connected')
@@ -136,11 +138,14 @@ def _handle_ws_client(ws):
                     _stt_disconnect_seq += 1
                     _stt_protocol = msg.get('turn_protocol', 'legacy')
                     _turn_id = str(msg.get('utterance_id', ''))
+                    _turn_index = 0
                 started = start_recording(reason='ws_start')
                 if not started and _get().get('recording') and _get().get('ready'):
                     _ws_push_stt({'type': 'ready'})
             elif cmd == 'commit':
                 committed_turn_id = _turn_id
+                _flux_shadow.observe_primary_commit(_turn_index, committed_turn_id, _turn_text())
+                _turn_index += 1
                 _finals = []
                 _final_conf = []
                 _turn_id = str(msg.get('next_utterance_id', ''))
@@ -152,6 +157,8 @@ def _handle_ws_client(ws):
                 })
             elif cmd == 'discard':
                 discarded_turn_id = _turn_id
+                _flux_shadow.observe_primary_discard(_turn_index)
+                _turn_index += 1
                 _finals = []
                 _final_conf = []
                 _turn_id = str(msg.get('next_utterance_id', ''))
@@ -469,6 +476,21 @@ def _strip_wake(text: str) -> str:
     """Remove leading 'Alexa' (and any variant) from transcript."""
     return _WAKE_STRIP.sub('', text).strip()
 
+FLUX_SHADOW_ENABLED = os.environ.get('STT_FLUX_SHADOW_ENABLED', '0').lower() in {'1', 'true', 'yes'}
+try:
+    FLUX_SHADOW_SAMPLE_PERCENT = int(os.environ.get('STT_FLUX_SHADOW_SAMPLE_PERCENT', '0'))
+except ValueError:
+    FLUX_SHADOW_SAMPLE_PERCENT = 0
+_flux_shadow = FluxShadow(
+    api_key=DEEPGRAM_KEY,
+    websocket_module=websocket,
+    emit=lambda message: _ws_push_stt(message),
+    enabled=FLUX_SHADOW_ENABLED,
+    sample_percent=FLUX_SHADOW_SAMPLE_PERCENT,
+    sample_rate=RATE,
+    normalize_transcript=_strip_wake,
+)
+
 def _turn_text():
     return _strip_wake(' '.join(_finals).strip())
 
@@ -656,6 +678,14 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
             except Exception as e:
                 log.error(f'send_binary failed: {e}')
                 break
+            shadow_offer_us = _flux_shadow.offer_audio(raw)
+            if shadow_offer_us > 1000:
+                _ws_push_stt({
+                    'type': 'shadow_metric',
+                    'provider': 'flux',
+                    'status': 'primary_offer_slow',
+                    'offer_us': shadow_offer_us,
+                })
     finally:
         # Release ALSA device as soon as audio stream ends — allows wake word arecord to open it
         global _rec_proc
@@ -669,7 +699,7 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
         log.info('[stream_audio] thread exited')
 
 def start_recording(force_restart=False, reason='manual'):
-    global _rec_proc, _ws, _finals, _final_conf, _wake_proc, _ws_gen, _recording_started_at
+    global _rec_proc, _ws, _finals, _final_conf, _wake_proc, _ws_gen, _recording_started_at, _turn_index
 
     now = time.time()
     state = _get()
@@ -690,6 +720,7 @@ def start_recording(force_restart=False, reason='manual'):
     
     _finals = []
     _final_conf = []
+    _turn_index = 0
     _ws_gen += 1          # invalidate any in-flight _on_close / _stream_audio from old session
     current_gen = _ws_gen
     # Set recording=True NOW so the wake word loop immediately yields the mic.
@@ -717,6 +748,14 @@ def start_recording(force_restart=False, reason='manual'):
     def _on_open(ws_arg):
         log.info('[WS] connected — starting audio stream')
         _set(recording=True, ready=True)
+        if (
+            _stt_protocol == 'candidate-v1'
+            and _flux_shadow.start(f'nova-{current_gen}')
+            and initial_buffer
+        ):
+            shadow_chunk_bytes = (RATE // 10) * 2
+            for offset in range(0, len(initial_buffer), shadow_chunk_bytes):
+                _flux_shadow.offer_audio(initial_buffer[offset:offset + shadow_chunk_bytes])
         ws_ready.set()
         _ws_push_stt({'type': 'ready'})
 
@@ -768,6 +807,7 @@ def stop_recording():
     if old_ws:
         try: old_ws.close()
         except: pass
+    _flux_shadow.stop()
     _wake_disarmed_until = max(_wake_disarmed_until, time.time() + POST_STOP_WAKE_DISARM_SECS)
     _set(recording=False, ready=False, volume=0)
     log.info('[bridge] stopped')

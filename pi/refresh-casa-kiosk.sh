@@ -3,10 +3,19 @@ set -euo pipefail
 
 PI_HOST="${PI_HOST:-jake@192.168.86.118}"
 PI_START_SCRIPT="${PI_START_SCRIPT:-/home/jake/start-casa.sh}"
+PI_WHISPER_DIR="${PI_WHISPER_DIR:-/home/jake/whisper-bridge}"
 PI_SERVICE="${PI_SERVICE:-casa-kiosk.service}"
 
 echo "[refresh] Syncing launcher to ${PI_HOST}:${PI_START_SCRIPT}"
 scp -q "$(dirname "$0")/start-casa.sh" "${PI_HOST}:${PI_START_SCRIPT}"
+echo "[refresh] Syncing STT bridge modules to ${PI_HOST}:${PI_WHISPER_DIR}"
+ssh "$PI_HOST" "mkdir -p '${PI_WHISPER_DIR}'"
+scp -q \
+  "$(dirname "$0")/whisper-bridge-main.py" \
+  "${PI_HOST}:${PI_WHISPER_DIR}/main.py"
+scp -q \
+  "$(dirname "$0")/stt_flux_shadow.py" \
+  "${PI_HOST}:${PI_WHISPER_DIR}/stt_flux_shadow.py"
 
 echo "[refresh] Restarting ${PI_SERVICE} via systemd"
 ssh "$PI_HOST" "

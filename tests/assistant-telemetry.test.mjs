@@ -57,6 +57,8 @@ test('voice turn lifecycle separates provider segments from committed turns', ()
   assert.match(speech, /turn_protocol: STT_TURN_PROTOCOL/)
   assert.match(speech, /next_utterance_id:/)
   assert.match(speech, /TURN_COMMIT_GRACE_MS/)
+  assert.match(speech, /asr_flux_shadow/)
+  assert.doesNotMatch(speech, /case 'shadow_metric':[\s\S]{0,1200}transcript:/)
 })
 
 test('active continuation speech cannot expire a held ASR fragment', () => {
