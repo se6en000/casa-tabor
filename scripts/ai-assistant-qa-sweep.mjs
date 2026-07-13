@@ -276,6 +276,10 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames) {
       assistantMode: 'general',
       steps: [
         { text: "what's on my calendar tomorrow?", expect: { type: 'text' } },
+        {
+          text: "what's going on on Thursday?",
+          expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 0 },
+        },
         { text: 'how many appointments do i have next week?', expect: { type: 'text' } },
         { text: 'where do i need to go on Thursday?', expect: { type: 'text' } },
         { text: 'do i have any conflicts on monday?', expect: { type: 'text' } },
@@ -476,6 +480,8 @@ async function run() {
         assistant_type: null,
         assistant_text: null,
         tool: null,
+        semantic_intent: null,
+        llm_calls: null,
         action_result: null,
         note: null,
       }
@@ -493,6 +499,8 @@ async function run() {
       output.assistant_type = response?.type ?? 'unknown'
       output.assistant_text = response?.text ?? response?.display_text ?? null
       output.tool = response?.tool ?? null
+      output.semantic_intent = response?.authoritative_provenance?.semantic_intent ?? null
+      output.llm_calls = response?.telemetry?.llm_calls ?? null
 
       if (response?.conversation_state) {
         conversationStates.set(step.groupKey, response.conversation_state)
@@ -509,6 +517,24 @@ async function run() {
         if (response?.type !== 'text') {
           output.ok = false
           output.note = `expected_text:got_${stepSummary(response)}`
+        } else if (
+          step.expect.semanticIntent
+          && response?.authoritative_provenance?.semantic_intent !== step.expect.semanticIntent
+        ) {
+          output.ok = false
+          output.note = `semantic_intent_mismatch:expected_${step.expect.semanticIntent}:got_${response?.authoritative_provenance?.semantic_intent ?? 'none'}`
+        } else if (
+          Number.isFinite(step.expect.maxLlmCalls)
+          && !Number.isFinite(response?.telemetry?.llm_calls)
+        ) {
+          output.ok = false
+          output.note = 'llm_calls_missing'
+        } else if (
+          Number.isFinite(step.expect.maxLlmCalls)
+          && response.telemetry.llm_calls > step.expect.maxLlmCalls
+        ) {
+          output.ok = false
+          output.note = `llm_calls_exceeded:max_${step.expect.maxLlmCalls}:got_${response?.telemetry?.llm_calls}`
         }
       } else if (step.expect.type === 'write') {
         if (response?.type === 'text' && response?.write_verified === true) {

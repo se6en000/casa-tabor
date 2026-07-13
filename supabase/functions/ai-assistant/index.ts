@@ -323,7 +323,7 @@ Deno.serve(async (req) => {
       ? sb.from('events')
       .select('id, title, start_time, end_time, updated_at, location_name, address, all_day, event_type, description, event_enrichments(prep_notes, category, what_to_bring, outfit_suggestion, parking_notes, contact_name, contact_phone, cost_estimate, dietary_notes, meal_impact), event_checklist_items(id, label, note, checked, category, sort_order, created_at), event_action_items(id, title, description, due_date, is_urgent, completed, assigned_to, created_at), event_members(family_members(id, name))')
       .eq('status', 'confirmed')
-      .gte('start_time', windowStart.toISOString())
+      .or(`start_time.gte.${windowStart.toISOString()},end_time.gte.${windowStart.toISOString()}`)
       .lte('start_time', yearEnd.toISOString())
       .order('start_time')
       : skippedRows,

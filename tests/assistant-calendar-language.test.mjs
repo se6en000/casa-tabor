@@ -52,6 +52,32 @@ test('calendar parser supports ordinary flexible read language', () => {
   assert.equal(parseCalendarLanguage('Where do I need to go tomorrow?')?.intent, 'calendar.destinations')
 })
 
+test('going-on language composes with natural calendar time frames', () => {
+  const samples = [
+    ['What is going on tomorrow morning?', { kind: 'tomorrow', dayPart: 'morning' }],
+    ["What's going on Friday afternoon?", { kind: 'weekday', weekday: 'friday', dayPart: 'afternoon' }],
+    ["What's going on next Thursday evening?", { kind: 'weekday', weekday: 'thursday', modifier: 'next', dayPart: 'evening' }],
+    ["What's going on the day after tomorrow?", { kind: 'relative_day', daysAhead: 2 }],
+    ["What's going on for the next 3 days?", { kind: 'next_days', count: 3 }],
+    ["What's going on this month?", { kind: 'month' }],
+    ["What's going on next month?", { kind: 'next_month' }],
+    ["What's going on July 20th?", { kind: 'date', month: 7, day: 20 }],
+    ["What's going on 8/2/2026?", { kind: 'date', month: 8, day: 2, year: 2026 }],
+    ["What's going on in August?", { kind: 'named_month', month: 8 }],
+    ["What's going on tomorrow at 3:30 pm?", { kind: 'tomorrow', time: { hour: 15, minute: 30 } }],
+    ["What's going on Monday through Wednesday?", { kind: 'weekday_range', startWeekday: 'monday', endWeekday: 'wednesday' }],
+    ["What's going on July 20th through July 24th?", { kind: 'date_range', start: { month: 7, day: 20 }, end: { month: 7, day: 24 } }],
+    ["What's going on from 7/20 to 7/24?", { kind: 'date_range', start: { month: 7, day: 20 }, end: { month: 7, day: 24 } }],
+    ["What's going on Thursday between 2 pm and 5 pm?", { kind: 'weekday', weekday: 'thursday', timeRange: { start: { hour: 14, minute: 0 }, end: { hour: 17, minute: 0 } } }],
+  ]
+  for (const [text, expectedScope] of samples) {
+    const parsed = parseCalendarLanguage(text)
+    assert.equal(parsed?.intent, 'calendar.list', text)
+    assert.deepEqual(parsed?.slots.temporalScope, expectedScope, text)
+  }
+  assert.equal(parseCalendarLanguage("What's going on?"), null)
+})
+
 test('active event follow-ups resolve pronouns without phrase-specific routing', () => {
   const active = { activeEntityType: 'event' }
   assert.equal(parseCalendarLanguage('Where do we need to go?', active)?.intent, 'event.location')
@@ -82,6 +108,32 @@ test('semantic reads execute against authoritative calendar rows', () => {
   const thursday = resolveCalendarSemanticRead(parseCalendarLanguage("What's going on on Thursday?"), thursdayEvents, options)
   assert.deepEqual(thursday.events.map((event) => event.id), ['thursday'])
   assert.match(thursday.text, /Dentist/)
+})
+
+test('calendar time-frame reads filter by day part, date, month, and overlap', () => {
+  const expandedEvents = [
+    ...events,
+    { id: 'friday-morning', title: 'Breakfast', start_time: '2026-07-17T13:00:00Z', end_time: '2026-07-17T14:00:00Z' },
+    { id: 'friday-afternoon', title: 'Checkup', start_time: '2026-07-17T18:00:00Z', end_time: '2026-07-17T19:00:00Z' },
+    { id: 'july-20', title: 'Camp', start_time: '2026-07-20T14:00:00Z', end_time: '2026-07-20T15:00:00Z' },
+    { id: 'august', title: 'Vacation', start_time: '2026-08-02T13:00:00Z', end_time: '2026-08-06T21:00:00Z' },
+    { id: 'overlap', title: 'Long Trip', start_time: '2026-07-15T13:00:00Z', end_time: '2026-07-18T21:00:00Z' },
+  ]
+  const fridayAfternoon = resolveCalendarSemanticRead(
+    parseCalendarLanguage("What's going on Friday afternoon?"),
+    expandedEvents,
+    options,
+  )
+  assert.deepEqual(fridayAfternoon.events.map((event) => event.id), ['overlap', 'friday-afternoon'])
+
+  const july20 = resolveCalendarSemanticRead(parseCalendarLanguage("What's going on July 20th?"), expandedEvents, options)
+  assert.deepEqual(july20.events.map((event) => event.id), ['july-20'])
+
+  const august = resolveCalendarSemanticRead(parseCalendarLanguage("What's going on in August?"), expandedEvents, options)
+  assert.deepEqual(august.events.map((event) => event.id), ['august'])
+
+  const dateRange = resolveCalendarSemanticRead(parseCalendarLanguage("What's going on July 15th through July 17th?"), expandedEvents, options)
+  assert.deepEqual(dateRange.events.map((event) => event.id), ['overlap', 'friday-morning', 'friday-afternoon'])
 })
 
 test('non-calendar language remains outside the deterministic contract', () => {
