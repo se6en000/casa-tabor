@@ -52,6 +52,16 @@ test('supports find-then-move production phrasing', () => {
   assert.equal(result?.args.id, 'therapy-monday')
 })
 
+test('supports quoted move phrasing with relative day in destination time', () => {
+  const result = resolveDeterministicEventMutation(
+    'Move "Owen | ABA Therapy Drop Off" on Monday to 9:00 AM.',
+    events,
+    options,
+  )
+  assert.equal(result?.tool, 'update_event')
+  assert.equal(result?.args.id, 'therapy-monday')
+})
+
 test('refuses ambiguous moves without a date', () => {
   assert.equal(
     resolveDeterministicEventMutation('Move Owen ABA Therapy Drop Off to 9:00 AM.', events, options),
@@ -70,6 +80,15 @@ test('resolves a singular destructive action but refuses bulk language', () => {
     resolveDeterministicEventMutation('Delete all Owen ABA Therapy Drop Off', events, options),
     null,
   )
+})
+
+test('supports quoted delete phrasing with calendar suffix', () => {
+  const result = resolveDeterministicEventMutation(
+    'Delete the event "Owen | ABA Therapy Drop Off" on Monday from my calendar.',
+    events,
+    options,
+  )
+  assert.deepEqual(result?.args, { id: 'therapy-monday', title: 'Owen | ABA Therapy Drop Off' })
 })
 
 test('refuses weak title matches', () => {

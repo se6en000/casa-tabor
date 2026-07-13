@@ -1947,9 +1947,16 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   // Call Gemini with function calling — one primary and at most one synthesis round.
   async function callGeminiWithTools(contents: GeminiContent[]): Promise<{ type: string; [key: string]: unknown }> {
     const llmStartMs = Date.now()
+    const userLikelyRequestedWrite = /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push|book|schedule|plan)\b/i
+      .test(latestUserText ?? '')
+    const primaryWriteToolNames = primaryToolDeclarations
+      .filter((tool) => ['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'create_recipe'].includes(tool.name))
+      .map((tool) => tool.name)
     const primaryToolConfig = intentRouting.forceEventSearch
       ? { function_calling_config: { mode: 'ANY', allowed_function_names: ['search_events'] } }
-      : { function_calling_config: { mode: 'AUTO' } }
+      : userLikelyRequestedWrite && primaryWriteToolNames.length > 0
+        ? { function_calling_config: { mode: 'ANY', allowed_function_names: primaryWriteToolNames } }
+        : { function_calling_config: { mode: 'AUTO' } }
     const body = {
       system_instruction: { parts: [{ text: systemInstruction }] },
       contents,
@@ -2049,8 +2056,6 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         return 'I found results for your request.'
       }
 
-      const userLikelyRequestedWrite = /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push)\b/i
-        .test(latestUserText ?? '')
       const writeToolNameSet = new Set([
         'create_event',
         'update_event',
@@ -2074,7 +2079,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         rescueContents: GeminiContent[],
         secondaryDepth: number,
       ): Promise<GeminiPart[] | null> => {
-        if (!userLikelyRequestedWrite || secondaryDepth > 0 || writeTools.length === 0 || remainingRequestBudgetMs() < 1000) {
+        if (!userLikelyRequestedWrite || writeTools.length === 0 || remainingRequestBudgetMs() < 1000) {
           return null
         }
         const rescueBody = {
@@ -2235,7 +2240,11 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             ...(secondaryTools.length > 0
               ? {
                 tools: secondaryTools,
-                tool_config: { function_calling_config: { mode: 'AUTO' } },
+                tool_config: {
+                  function_calling_config: isListRead
+                    ? { mode: 'AUTO' }
+                    : { mode: 'ANY', allowed_function_names: secondaryToolDeclarations.map((tool) => tool.name) },
+                },
               }
               : {}),
           }
@@ -2884,7 +2893,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     }
     const rawResult = await callGeminiWithTools(history)
     const result = secureAssistantResult(rawResult, {
-      userRequestedWrite: /\b(move|resched|change|update|edit|delete|remove|cancel|add|create|set|shift|push)\b/i.test(latestUserText ?? ''),
+      userRequestedWrite: /\b(move|resched|change|update|edit|delete|remove|cancel|add|create|set|shift|push|book|schedule|plan)\b/i.test(latestUserText ?? ''),
       writeWasVerified: rawResult?.write_verified === true,
     })
     if (result?.safety_rejection) {

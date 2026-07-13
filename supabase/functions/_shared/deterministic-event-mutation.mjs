@@ -55,6 +55,12 @@ function titleTokens(value) {
 }
 
 function matchingEvents(events, titleQuery, dateHint, now, offsetMinutes) {
+  const normalizedExactQuery = normalize(titleQuery)
+  const exactMatches = events.filter((event) =>
+    matchesDateHint(event, dateHint, now, offsetMinutes) &&
+    normalize(event.title) === normalizedExactQuery
+  )
+  if (exactMatches.length > 0) return exactMatches
   const queryTokens = titleTokens(titleQuery)
   if (queryTokens.length < 2) return []
   return events.filter((event) => {
@@ -123,6 +129,7 @@ export function resolveDeterministicEventMutation(text, events, options = {}) {
   const now = options.now instanceof Date ? options.now : new Date()
   const offsetMinutes = parseOffsetMinutes(options.utcOffset)
   const dateHint = extractDateHint(input)
+  const quotedTitle = input.match(/["“](.+?)["”]/)?.[1]?.trim() ?? null
 
   const createPrefix = /^(?:create|add|book|schedule)\s+(?:an?\s+)?(?:calendar\s+)?(?:event|appointment|apt|reminder)\b/i
   if (createPrefix.test(input)) {
@@ -156,8 +163,8 @@ export function resolveDeterministicEventMutation(text, events, options = {}) {
   }
 
   const findThenMove = input.match(/^find\s+(.+?)(?:\s+on\s+(?:today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday))?\s+and\s+(?:move|reschedule|shift|push)\s+(?:it\s+)?to\s+\d/i)
-  const directMove = input.match(/^(?:move|reschedule|shift|push)\s+(.+?)(?:\s+on\s+(?:today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday))?\s+to\s+\d/i)
-  const moveTitle = findThenMove?.[1] ?? directMove?.[1]
+  const directMove = input.match(/^(?:move|reschedule|shift|push)\s+(.+?)(?:\s+on\s+(?:today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday))?\s+to\s+(?:(?:today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\s+)?(?:at\s+)?\d/i)
+  const moveTitle = findThenMove?.[1] ?? directMove?.[1] ?? (/^(?:move|reschedule|shift|push)\b/i.test(input) ? quotedTitle : null)
   if (moveTitle) {
     const requestedTime = parseRequestedTime(input)
     if (!requestedTime) return null
@@ -181,9 +188,22 @@ export function resolveDeterministicEventMutation(text, events, options = {}) {
     }
   }
 
-  const deleteMatch = input.match(/^(?:delete|cancel|remove)\s+(?:the\s+)?(.+?)(?:\s+on\s+(?:today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday))?\.?$/i)
-  if (deleteMatch && !/\b(all|every|both)\b/i.test(input)) {
-    const candidates = matchingEvents(events, deleteMatch[1], dateHint, now, offsetMinutes)
+  if (quotedTitle && /^(?:delete|cancel|remove)\b/i.test(input) && !/\b(all|every|both)\b/i.test(input)) {
+    const exactQuotedCandidates = matchingEvents(events, quotedTitle, dateHint, now, offsetMinutes)
+    if (exactQuotedCandidates.length === 1) {
+      const event = exactQuotedCandidates[0]
+      return {
+        tool: 'delete_event',
+        args: { id: event.id, title: event.title },
+        event,
+      }
+    }
+  }
+
+  const deleteMatch = input.match(/^(?:delete|cancel|remove)\s+(?:the\s+)?(.+?)(?:\s+on\s+(?:today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday))?(?:\s+from\s+my\s+calendar)?\.?$/i)
+  if ((deleteMatch || (quotedTitle && /^(?:delete|cancel|remove)\b/i.test(input))) && !/\b(all|every|both)\b/i.test(input)) {
+    const deleteTitle = quotedTitle ?? deleteMatch?.[1]
+    const candidates = matchingEvents(events, deleteTitle, dateHint, now, offsetMinutes)
     if (candidates.length !== 1) return null
     const event = candidates[0]
     return {
