@@ -11,11 +11,10 @@ export function classifyAssistantIntent(text, options = {}) {
   const activeGroceryItem = options.activeEntityType === 'grocery_item'
   const pendingEventAction = options.pendingEventAction === true
   const assistantMode = options.assistantMode === 'chef' ? 'chef' : 'general'
-  const eventFollowUp = activeEvent && (
-    pendingEventAction ||
+  const eventFollowUp = pendingEventAction || (activeEvent && (
     /\b(it|that|this|one|party|location|address|venue|calendar|time|when|where|who|attend|bring|prep|prepare|details?|drive|travel|traffic|route|eta|leave|get there|how long)\b/i.test(input) ||
     /^(?:yes|yeah|yep|correct|right|do it|update it|change it)\b/i.test(input)
-  )
+  ))
   const hasEventIntent = focusedEvent || eventFollowUp || EVENT_TERMS.test(input) || EVENT_TIME_QUERY.test(input)
   const hasWeatherIntent = /\b(weather|forecast|temperature|rain|storm|umbrella|uv|heat index|beach day|kayak)\b/i.test(input)
   const hasTravelIntent = /\b(traffic|commute|drive time|travel time|leave by|when should (?:i|we) leave|eta|route)\b/i.test(input)

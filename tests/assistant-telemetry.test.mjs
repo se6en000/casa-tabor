@@ -133,6 +133,8 @@ test('assistant narrows prompt context and tools by intent profile', () => {
 test('confirmation state is atomic, self-clearing, and fully traced', () => {
   assert.match(drawer, /state: 'pending' \| 'executing'/)
   assert.match(drawer, /pending\.state = 'executing'/)
+  assert.match(drawer, /dispatchPendingConfirmation/)
+  assert.match(drawer, /isActivePending && hasPendingAction/)
   assert.match(drawer, /return \(\) => registerPendingAction\(msg\.id, null\)/)
   for (const event of [
     'confirmation_accepted',

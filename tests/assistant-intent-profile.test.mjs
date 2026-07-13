@@ -61,6 +61,15 @@ test('pending event edits keep short list continuations on the event lane', () =
   }
 })
 
+test('pending event confirmations keep retry and review requests on the event lane', () => {
+  for (const input of ['retry', 'look at the conversation', 'review that again']) {
+    assert.deepEqual(
+      classifyAssistantIntent(input, { pendingEventAction: true }),
+      { profile: 'event', forceEventSearch: false },
+    )
+  }
+})
+
 test('active grocery items keep quantity follow-ups on the grocery lane', () => {
   assert.deepEqual(
     classifyAssistantIntent('Make that two', { activeEntityType: 'grocery_item' }),

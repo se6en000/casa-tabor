@@ -18,6 +18,7 @@ import type { FamilyMember } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
 import { Button, LiveTranscript } from '../ui'
 import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId } from '../../lib/assistantTelemetry'
+import { classifyPendingConfirmation } from '../../lib/assistantConfirmation.mjs'
 
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
 const LOW_CONFIDENCE_REJECT_PHRASES = /\b(no|nope|try again|wrong|not that|cancel)\b/i
@@ -152,8 +153,26 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     setVoiceTranscript({ committed: '', interim: '', isFinal: false })
   }, [])
 
-  // True when the latest assistant message has a pending tool action awaiting confirmation
-  const hasPendingToolAction = messages.some(m => m.toolAction?.status === 'pending')
+  const activePendingToolMessage = [...messages]
+    .reverse()
+    .find(message => message.toolAction?.status === 'pending')
+  const hasPendingToolAction = Boolean(activePendingToolMessage)
+  const activePendingToolMessageId = activePendingToolMessage?.id
+
+  const dispatchPendingConfirmation = useCallback((text: string) => {
+    const intent = classifyPendingConfirmation(text)
+    const pending = pendingVoiceActionRef.current
+    if (!intent || !pending || pending.state !== 'pending') return false
+
+    pending.state = 'executing'
+    appendSyntheticMessage({
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: text.trim(),
+    })
+    void Promise.resolve(intent === 'confirm' ? pending.confirm() : pending.cancel())
+    return true
+  }, [appendSyntheticMessage])
 
   const sendTraced = useCallback((
     text: string,
@@ -178,6 +197,13 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
   const sendCurrentInput = useCallback((text: string, opts?: { fromVoice?: boolean; confidence?: number | null }) => {
     const trimmed = text.trim()
     if (!trimmed) return
+    if (dispatchPendingConfirmation(trimmed)) {
+      setInput('')
+      interimRef.current = ''
+      clearVoiceTranscript()
+      if (textareaRef.current) textareaRef.current.value = ''
+      return
+    }
     if (loading) {
       if (opts?.fromVoice) {
         queuedVoiceTurnsRef.current.push({ text: trimmed, confidence: opts.confidence })
@@ -261,7 +287,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
       if (textareaRef.current) textareaRef.current.value = ''
       void sendTraced(trimmed)
     }
-  }, [loading, sendTraced, appendSyntheticMessage, clearVoiceTranscript])
+  }, [loading, sendTraced, appendSyntheticMessage, clearVoiceTranscript, dispatchPendingConfirmation])
 
   useEffect(() => {
     if (loading || queuedVoiceTurnsRef.current.length === 0) return
@@ -655,8 +681,9 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
     setAttachedImage(null)
+    if (!img && dispatchPendingConfirmation(text)) return
     void sendTraced(text || '(see attached image)', img ?? undefined)
-  }, [input, attachedImage, loading, sendTraced, markUserInteraction])
+  }, [input, attachedImage, loading, sendTraced, markUserInteraction, dispatchPendingConfirmation])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -876,11 +903,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                 </div>
               )}
 
-              {messages.map((msg, idx) => (
+              {messages.map((msg) => (
                 <MessageBubble
                   key={msg.id}
                   msg={msg}
-                  isLatest={idx === messages.length - 1}
+                  isActivePending={msg.id === activePendingToolMessageId}
                   enableQuickSaveRecipe={page === 'cook' || launchContext?.agent === 'chef'}
                   onQuickSaveRecipe={quickSaveRecipeSuggestion}
                   onConfirmToolAction={async (messageId, tool, args) => {
@@ -1184,9 +1211,9 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
 
 /* ── Message Bubble ─────────────────────────────────────────── */
 
-function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onEditMessage }: {
+function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onEditMessage }: {
   msg: AIMessage
-  isLatest: boolean
+  isActivePending: boolean
   enableQuickSaveRecipe?: boolean
   onQuickSaveRecipe?: (recipeMessage: string) => Promise<void>
   onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<boolean>
@@ -1228,11 +1255,11 @@ function MessageBubble({ msg, isLatest, enableQuickSaveRecipe, onQuickSaveRecipe
   }, [msg.id, onCancelToolAction])
 
   useEffect(() => {
-    if (isLatest && hasPendingAction) {
+    if (isActivePending && hasPendingAction) {
       registerPendingAction(msg.id, { confirm: doConfirm, cancel: doCancel })
     }
     return () => registerPendingAction(msg.id, null)
-  }, [isLatest, hasPendingAction, doConfirm, doCancel, msg.id, registerPendingAction])
+  }, [isActivePending, hasPendingAction, doConfirm, doCancel, msg.id, registerPendingAction])
 
   return (
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>

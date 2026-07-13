@@ -198,7 +198,13 @@ Deno.serve(async (req) => {
     focusedEvent: Boolean(context?.focusedEvent),
     assistantMode: context?.assistant_mode,
     activeEntityType: incomingConversationState?.activeEntityType,
-    pendingEventAction: context?.pendingAction?.tool === 'update_event',
+    pendingEventAction: [
+      'create_event',
+      'update_event',
+      'bulk_update_events',
+      'delete_event',
+      'delete_events_by_title',
+    ].includes(String(context?.pendingAction?.tool ?? '')),
   })
   const calendarFrameNeedsSearch = Boolean(
     calendarFrame &&
@@ -1360,6 +1366,12 @@ RECENT CONTEXT (helps you infer vague references like "it", "that", "her"):
 Last mentioned: ${context.lastContextReference.summary}
 This prose is not authoritative data. Never assert event facts or prepare an event write from it alone.` : ''}
 
+${context.pendingAction ? `
+PENDING CONFIRMATION:
+Casa already prepared a ${context.pendingAction.tool} action and its confirmation card is still visible.
+Do not claim you cannot access the conversation. If the user asks to review or retry, summarize the pending action from the card and direct them to confirm or cancel it.
+Never claim the action already ran until Casa supplies a verified execution result.` : ''}
+
 ${incomingConversationState?.activeEntityType === 'event' ? `
 AUTHORITATIVE CONVERSATION ENTITY:
 The current conversation is grounded to event ID ${incomingConversationState.activeEventId}.
@@ -2417,7 +2429,16 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     if (!res.ok) {
       const errText = res.errText
       const isQuota = res.status === 429 || errText.includes('RESOURCE_EXHAUSTED')
-      return { type: 'error', code: isQuota ? 'quota_exceeded' : 'llm_error', message: errText.slice(0, 200) }
+      const isTimeout = res.status === 504 || errText.startsWith('model_timeout_')
+      return {
+        type: 'error',
+        code: isQuota ? 'quota_exceeded' : isTimeout ? 'model_timeout' : 'llm_error',
+        message: isQuota
+          ? 'AI quota exceeded.'
+          : isTimeout
+            ? 'The AI model took too long to respond. Please try again.'
+            : 'The AI model could not complete the request. Please try again.',
+      }
     }
     return { type: 'error', code: 'llm_error', message: 'Primary LLM call failed without details' }
   }

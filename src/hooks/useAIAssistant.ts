@@ -10,6 +10,7 @@ import {
   getAssistantDeviceId,
   type AssistantTraceContext,
 } from '../lib/assistantTelemetry'
+import { assistantErrorMessage } from '../lib/assistantErrors.mjs'
 
 export type { AIMessage }
 
@@ -262,13 +263,10 @@ export function useAIAssistant(ctx: AssistantContext) {
     // perfectly consistent.
     const buildAssistantMsg = (data: any, id: string): AIMessage => {
       if (data?.type === 'error') {
-        const isQuota = data.code === 'quota_exceeded'
         return {
           id,
           role: 'assistant',
-          content: isQuota
-            ? '⚠️ AI quota reached for today. Go to Settings → AI to check your billing.'
-            : `Sorry, something went wrong: ${data.message ?? 'unknown error'}`,
+          content: assistantErrorMessage(data.code, data.message),
         }
       }
       if (data?.type === 'tool_action') {
