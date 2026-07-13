@@ -19,6 +19,7 @@ import BounceScroll from '../shared/BounceScroll'
 import { Button, LiveTranscript } from '../ui'
 import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId } from '../../lib/assistantTelemetry'
 import { classifyPendingConfirmation } from '../../lib/assistantConfirmation.mjs'
+import { buildCreatePreviewCopy, buildDeletePreviewCopy, buildUpdatePreviewCopy } from '../../utils/aiConfirmPreview'
 
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
 const LOW_CONFIDENCE_REJECT_PHRASES = /\b(no|nope|try again|wrong|not that|cancel)\b/i
@@ -906,6 +907,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   key={msg.id}
                   msg={msg}
                   isActivePending={msg.id === activePendingToolMessageId}
+                  events={events}
                   enableQuickSaveRecipe={page === 'cook' || launchContext?.agent === 'chef'}
                   onQuickSaveRecipe={quickSaveRecipeSuggestion}
                   onConfirmToolAction={async (messageId, tool, args) => {
@@ -1209,10 +1211,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
 
 /* ── Message Bubble ─────────────────────────────────────────── */
 
-function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onEditMessage }: {
+function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, events, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onEditMessage }: {
   msg: AIMessage
   isActivePending: boolean
   enableQuickSaveRecipe?: boolean
+  events: EventWithDetails[]
   onQuickSaveRecipe?: (recipeMessage: string) => Promise<void>
   onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<boolean>
   onUndoToolAction: (messageId: string, actionId: string) => Promise<void>
@@ -1389,7 +1392,7 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, onQuickSav
               </div>
             ) : (
               <>
-                <ToolActionPreview tool={ta.tool} args={ta.args} />
+                <ToolActionPreview tool={ta.tool} args={ta.args} events={events} />
                 <div className="flex gap-2 mt-2">
                   <Button variant="ghost"
                     type="button"
@@ -1411,7 +1414,11 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, onQuickSav
                           : ta.tool === 'delete_events_by_title'
                             ? 'Delete matching events'
                           : 'Clear checked items'
-                        : 'Confirm'}
+                        : ta.tool === 'update_event'
+                          ? 'Apply change'
+                          : ta.tool === 'create_event'
+                            ? 'Create event'
+                            : 'Confirm'}
                   </Button>
                   <Button variant="ghost"
                     type="button"
@@ -1640,29 +1647,50 @@ function MarkdownMessage({ content }: { content: string }) {
   return <div className="space-y-2">{blocks}</div>
 }
 
-function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, unknown> }) {
+function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<string, unknown>; events: EventWithDetails[] }) {
   const [expanded, setExpanded] = useState(false)
 
   if (tool === 'create_event') {
-    const start = new Date(args.start as string)
-    const end = new Date(args.end as string)
+    const preview = buildCreatePreviewCopy(args)
     return (
-      <div className="space-y-1 text-caption text-casa-muted">
-        <p className="font-semibold text-casa-navy text-body-sm">{args.title as string}</p>
-        <p>{format(start, 'EEE, MMM d · h:mm a')} – {format(end, 'h:mm a')}</p>
-        {!!args.location && <p>📍 {String(args.location)}</p>}
-        {(args.members as string[])?.length > 0 && <p>👤 {(args.members as string[]).join(', ')}</p>}
+      <div className="space-y-2">
+        <p className="font-semibold text-casa-navy text-body-sm">{preview.heading}</p>
+        {preview.when && <p className="text-caption text-casa-muted">{preview.when}</p>}
+        {preview.details.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {preview.details.map((detail) => (
+              <span key={detail} className="inline-flex items-center rounded-full bg-casa-surface border border-casa-border px-2 py-0.5 text-caption text-casa-muted">
+                {detail}
+              </span>
+            ))}
+          </div>
+        )}
+        <p className="text-caption text-casa-muted">This will add 1 event to the calendar.</p>
       </div>
     )
   }
   if (tool === 'update_event') {
+    const matchedEvent = events.find((event) => event.id === String(args.id ?? ''))
+    const preview = buildUpdatePreviewCopy(args, matchedEvent)
     const changes = summarizeUpdateArgs(args)
     const MAX_VISIBLE = 6
     const visibleChanges = expanded ? changes : changes.slice(0, MAX_VISIBLE)
     return (
       <div className="space-y-2">
-        <p className="text-caption font-semibold text-casa-navy">
-          Applying {changes.length} change{changes.length === 1 ? '' : 's'}
+        <p className="font-semibold text-casa-navy text-body-sm">{preview.heading}</p>
+        {preview.currentSpan && preview.nextSpan && (
+          <div className="rounded-lg border border-casa-border bg-casa-surface px-2.5 py-2 text-caption text-casa-muted space-y-1">
+            <p><span className="font-semibold text-casa-navy">Current:</span> {preview.currentSpan}</p>
+            <p><span className="font-semibold text-casa-navy">New:</span> {preview.nextSpan}</p>
+          </div>
+        )}
+        {!preview.currentSpan && preview.nextSpan && (
+          <p className="text-caption text-casa-muted">{preview.nextSpan}</p>
+        )}
+        <p className="text-caption text-casa-muted">
+          {changes.length > 0
+            ? `Updating ${changes.length} field${changes.length === 1 ? '' : 's'} on one event.`
+            : 'Updating one event.'}
         </p>
         <div className="flex flex-wrap gap-1.5">
           {visibleChanges.map((change) => (
@@ -1713,10 +1741,13 @@ function ToolActionPreview({ tool, args }: { tool: string; args: Record<string, 
     )
   }
   if (tool === 'delete_event') {
+    const matchedEvent = events.find((event) => event.id === String(args.id ?? ''))
+    const preview = buildDeletePreviewCopy(matchedEvent, args)
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2">
-        <p className="text-caption text-red-700 font-semibold">Delete this event permanently?</p>
-        <p className="text-caption text-red-600 mt-0.5">"{args.title as string}" will be removed from your calendar and synced deletion will follow.</p>
+      <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 space-y-1">
+        <p className="font-semibold text-red-700 text-body-sm">{preview.heading}</p>
+        {preview.when && <p className="text-caption text-red-600">{preview.when}</p>}
+        <p className="text-caption text-red-600">{preview.note}</p>
       </div>
     )
   }
