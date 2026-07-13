@@ -928,7 +928,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                       const matchedEvent = tool === 'update_event'
                         ? events.find((event) => event.id === String(args.id ?? ''))
                         : undefined
-                      const requestArgs = tool === 'update_event' && matchedEvent && args.expected_updated_at === undefined
+                      const requestArgs = tool === 'update_event' && matchedEvent
                         ? { ...args, expected_updated_at: matchedEvent.updated_at }
                         : args
                       const { data, error } = await supabase.functions.invoke('execute-ai-action', {
@@ -1377,7 +1377,7 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, events, on
                     onClick={doConfirm}
                     className="flex items-center gap-1.5 px-3 py-1 rounded-button bg-red-600 text-white text-caption font-semibold hover:brightness-110 transition-all"
                   >
-                    <Loader2 size={12} /> Retry
+                    <Loader2 size={12} /> {isStaleError ? 'Retry with latest' : 'Retry'}
                   </Button>
                   {isStaleError && (
                     <Button variant="ghost"
