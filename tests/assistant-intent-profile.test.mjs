@@ -27,6 +27,14 @@ test('calendar creates keep direct create tooling available', () => {
     classifyAssistantIntent('Create a calendar event for dinner tomorrow'),
     { profile: 'event', forceEventSearch: false },
   )
+  assert.deepEqual(
+    classifyAssistantIntent('create an apt from july 21 to july 28 for Jake and the girls'),
+    { profile: 'event', forceEventSearch: false },
+  )
+  assert.deepEqual(
+    classifyAssistantIntent('schedule a trip from august 2 through august 6 for Emme'),
+    { profile: 'event', forceEventSearch: false },
+  )
 })
 
 test('focused event edits never search for an event already in context', () => {
@@ -84,6 +92,17 @@ test('common assistant domains select narrow profiles', () => {
   assert.equal(classifyAssistantIntent('Suggest a chicken dinner').profile, 'recipe')
   assert.equal(classifyAssistantIntent('What is the latest stock price?').profile, 'web')
   assert.equal(classifyAssistantIntent('Explain photosynthesis').profile, 'general')
+})
+
+test('event mutations with calendar context stay on event lane', () => {
+  assert.deepEqual(
+    classifyAssistantIntent('move soccer practice to next friday at 7 pm'),
+    { profile: 'event', forceEventSearch: true },
+  )
+  assert.deepEqual(
+    classifyAssistantIntent('delete summer trip on august 12'),
+    { profile: 'event', forceEventSearch: true },
+  )
 })
 
 test('cross-domain requests preserve the full tool lane', () => {

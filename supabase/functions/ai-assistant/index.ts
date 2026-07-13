@@ -2051,6 +2051,68 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
       const userLikelyRequestedWrite = /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push)\b/i
         .test(latestUserText ?? '')
+      const writeToolNameSet = new Set([
+        'create_event',
+        'update_event',
+        'bulk_update_events',
+        'delete_event',
+        'delete_events_by_title',
+        'create_recipe',
+        'add_grocery_items',
+        'check_grocery_item',
+        'remove_grocery_item',
+        'update_grocery_item_quantity',
+        'clear_checked_grocery_items',
+      ])
+      const writeToolDeclarations = secondaryToolDeclarations.filter((tool) => writeToolNameSet.has(tool.name))
+      const writeTools = writeToolDeclarations.length > 0
+        ? [{ function_declarations: writeToolDeclarations }]
+        : []
+
+      const runWriteToolRescue = async (
+        reason: string,
+        rescueContents: GeminiContent[],
+        secondaryDepth: number,
+      ): Promise<GeminiPart[] | null> => {
+        if (!userLikelyRequestedWrite || secondaryDepth > 0 || writeTools.length === 0 || remainingRequestBudgetMs() < 1000) {
+          return null
+        }
+        const rescueBody = {
+          system_instruction: {
+            parts: [{
+              text: `${systemInstruction}\n\nWRITE TOOL RESCUE: The user requested a write action. You MUST return exactly one valid function call using the available write tools. Do not return plain text first.`,
+            }],
+          },
+          contents: rescueContents,
+          generation_config: { temperature: 0.1, max_output_tokens: 512 },
+          tools: writeTools,
+          tool_config: { function_calling_config: { mode: 'ANY' } },
+        }
+        const rescueStartMs = Date.now()
+        const rescueRes = await callModel(rescueBody, {
+          stream: false,
+          timeoutMs: SECONDARY_HARD_TIMEOUT_MS,
+        })
+        const rescueElapsedMs = Date.now() - rescueStartMs
+        console.log(`[ai-assistant][${cid}] stage=llm_write_tool_rescue ms=${rescueElapsedMs} status=${rescueRes.status}`)
+        if (!rescueRes.ok) {
+          recordLlmCall('llm_write_tool_rescue', rescueElapsedMs, rescueRes.status)
+          appendServerTrace('server_ai_assistant_write_tool_rescue_failed', `reason=${reason} status=${rescueRes.status}`, {
+            reason,
+            status: rescueRes.status,
+            request_elapsed_ms: Date.now() - requestStartMs,
+          })
+          return null
+        }
+        const rescueData = rescueRes.data
+        recordLlmCall('llm_write_tool_rescue', rescueElapsedMs, rescueRes.status, rescueData)
+        appendServerTrace('server_ai_assistant_write_tool_rescue', `reason=${reason} ms=${rescueElapsedMs}`, {
+          reason,
+          request_elapsed_ms: Date.now() - requestStartMs,
+          tool_names: writeToolDeclarations.map((tool) => tool.name),
+        })
+        return rescueData?.candidates?.[0]?.content?.parts ?? null
+      }
 
       const resolveModelParts = async (parts: GeminiPart[], secondaryDepth = 0) => {
         const funcCallPart = parts.find((p: { functionCall?: { name: string; args: Record<string, unknown> } }) => p.functionCall)
@@ -2058,6 +2120,13 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           .flatMap((p) => 'text' in p && typeof p.text === 'string' && p.text.trim() ? [p.text.trim()] : [])
 
         if (!funcCallPart && textParts.length > 0) {
+          if (userLikelyRequestedWrite && secondaryDepth === 0) {
+            const rescueParts = await runWriteToolRescue('text_without_tool', contents, secondaryDepth)
+            if (rescueParts) {
+              const rescueResolved = await resolveModelParts(rescueParts, secondaryDepth + 1)
+              if (rescueResolved) return rescueResolved
+            }
+          }
           const userText = latestUserText ?? ''
           const homeCity = String(context.homeCity ?? 'West Palm Beach').toLowerCase()
           const weatherLocRaw = userText.match(/\b(?:weather|forecast)\s+(?:in|for)\s+([a-zA-Z][a-zA-Z\s,'-]{1,80})/i)?.[1] ?? ''
@@ -2112,7 +2181,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           const userAsksSynthesis = /\b(how busy|compare|any.*overlap|conflict|double[- ]?book|together)\b/i
             .test(latestUserText ?? '')
           const shouldRunSecondary = secondaryDepth === 0 && remainingRequestBudgetMs() >= 1000 && (
-            (name === 'search_events' && resultFound && (userLikelyRequestedWrite || userAsksSynthesis)) ||
+            (name === 'search_events' && (userLikelyRequestedWrite || (resultFound && userAsksSynthesis))) ||
             (name === 'search_web' && isMathQuery) ||
             (name === 'get_weather_forecast' && resultFound)
           )
@@ -2124,6 +2193,18 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
                 secondary_depth: secondaryDepth,
                 request_elapsed_ms: Date.now() - requestStartMs,
               })
+            }
+            if (name === 'search_events' && userLikelyRequestedWrite && secondaryDepth === 0) {
+              const rescueContents: GeminiContent[] = [
+                ...contents,
+                { role: 'model', parts: [funcCallPart as GeminiPart] },
+                { role: 'user', parts: [{ functionResponse: { name, response: toolResult } } as GeminiPart] },
+              ]
+              const rescueParts = await runWriteToolRescue('search_events_no_secondary', rescueContents, secondaryDepth)
+              if (rescueParts) {
+                const rescueResolved = await resolveModelParts(rescueParts, secondaryDepth + 1)
+                if (rescueResolved) return rescueResolved
+              }
             }
             return { type: 'text', text: summarizeReadTool(name, toolResult) }
           }

@@ -85,6 +85,9 @@ test('assistant model calls have hard budgets and only one secondary synthesis r
   assert.match(assistantFunction, /server_ai_assistant_secondary_cap/)
   assert.match(assistantFunction, /runCompactFallback\('primary_timeout'\)/)
   assert.match(assistantFunction, /server_ai_assistant_fallback_recovered/)
+  assert.match(assistantFunction, /server_ai_assistant_write_tool_rescue/)
+  assert.match(assistantFunction, /WRITE TOOL RESCUE/)
+  assert.match(assistantFunction, /llm_write_tool_rescue/)
   assert.doesNotMatch(assistantFunction, /stage=llm_retry/)
 })
 
