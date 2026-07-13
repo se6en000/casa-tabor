@@ -79,9 +79,12 @@ test('AI forensics reports the new client pipeline stages', () => {
 test('assistant model calls have hard budgets and only one secondary synthesis round', () => {
   assert.match(assistantFunction, /setTimeout\(\(\) => controller\.abort\(\), timeoutMs\)/)
   assert.match(assistantFunction, /clearTimeout\(timeoutId\)/)
+  assert.match(assistantFunction, /PRIMARY_HARD_TIMEOUT_MS = 6800/)
   assert.match(assistantFunction, /secondaryDepth === 0 && remainingRequestBudgetMs\(\) >= 1000/)
   assert.match(assistantFunction, /resolveModelParts\(secondaryParts, secondaryDepth \+ 1\)/)
   assert.match(assistantFunction, /server_ai_assistant_secondary_cap/)
+  assert.match(assistantFunction, /runCompactFallback\('primary_timeout'\)/)
+  assert.match(assistantFunction, /server_ai_assistant_fallback_recovered/)
   assert.doesNotMatch(assistantFunction, /stage=llm_retry/)
 })
 
@@ -146,6 +149,11 @@ test('confirmation state is atomic, self-clearing, and fully traced', () => {
   ]) {
     assert.match(drawer, new RegExp(`emitAssistantTrace\\('${event}'`))
   }
+})
+
+test('voice confirmation closes the drawer without clearing saved conversation history', () => {
+  assert.doesNotMatch(drawer, /onConfirm:[\s\S]{0,320}startFresh\(\)/)
+  assert.doesNotMatch(drawer, /onCancel:[\s\S]{0,320}startFresh\(\)/)
 })
 
 test('confirmed actions preserve client trace provenance on the server', () => {

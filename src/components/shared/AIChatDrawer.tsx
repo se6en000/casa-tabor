@@ -434,7 +434,6 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
       pending.state = 'executing'
       void Promise.resolve(pending.confirm()).then((confirmed) => {
         if (!confirmed) return
-        startFresh()
         setTimeout(onClose, 350)
       })
     },
@@ -455,7 +454,6 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
       pending.state = 'executing'
       void Promise.resolve(pending.cancel()).then((cancelled) => {
         if (!cancelled) return
-        startFresh()
         setTimeout(onClose, 350)
       })
     },

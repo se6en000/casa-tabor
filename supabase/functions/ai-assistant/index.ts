@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
     : inferredClientTracePresent
   const requestStartMs = Date.now()
   const REQUEST_HARD_TIMEOUT_MS = 9000
-  const PRIMARY_HARD_TIMEOUT_MS = 6000
+  const PRIMARY_HARD_TIMEOUT_MS = 6800
   const SECONDARY_HARD_TIMEOUT_MS = 5000
   const FALLBACK_HARD_TIMEOUT_MS = 2200
   const STAGE_SLO = {
@@ -2368,29 +2368,23 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         }
       }
 
-      const initialParts = candidate.content?.parts ?? []
-      const initialResolved = await resolveModelParts(initialParts)
-      if (initialResolved) return initialResolved
-
-      // Rare provider edge case: use one compact, bounded fallback. Do not retry
-      // the full tool prompt first; that compounds tail latency without new context.
-      console.error('[ai-assistant] Empty Gemini response. finishReason:', finishReason, 'parts:', JSON.stringify(initialParts))
-      const fallbackUserText = [...contents]
+      const latestUserTextForFallback = [...contents]
         .reverse()
         .find((turn) => turn.role === 'user')
         ?.parts.flatMap((part) => 'text' in part && typeof part.text === 'string' ? [part.text.trim()] : [])
         .find((part) => part.length > 0)
 
-      // Last-resort reliability pass: no tools, compact prompt, latest user turn only.
-      // This avoids occasional empty tool-call responses from Gemini under load.
-      if (fallbackUserText && !userLikelyRequestedWrite && remainingRequestBudgetMs() >= 500) {
+      const runCompactFallback = async (reason: 'empty_response' | 'primary_timeout') => {
+        if (!latestUserTextForFallback || userLikelyRequestedWrite || remainingRequestBudgetMs() < 500) {
+          return null
+        }
         const fallbackBody = {
           system_instruction: {
             parts: [{
               text: 'You are the Casa Tabor assistant. Respond helpfully in 1-3 concise sentences. If data is missing, ask one clear follow-up question.',
             }],
           },
-          contents: [{ role: 'user', parts: [{ text: fallbackUserText }] }],
+          contents: [{ role: 'user', parts: [{ text: latestUserTextForFallback }] }],
           generation_config: { temperature: 0.2, max_output_tokens: 320 },
         }
         const fallbackStartMs = Date.now()
@@ -2408,13 +2402,31 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             .flatMap((part: { text?: string }) => typeof part.text === 'string' && part.text.trim() ? [part.text.trim()] : [])
             .join('\n')
           if (fallbackText) {
-            console.log(`[ai-assistant][${cid}] recovered empty response via compact fallback`)
+            appendServerTrace('server_ai_assistant_fallback_recovered', `reason=${reason} ms=${fallbackElapsedMs}`, {
+              reason,
+              fallback_ms: fallbackElapsedMs,
+              request_elapsed_ms: Date.now() - requestStartMs,
+            })
+            console.log(`[ai-assistant][${cid}] recovered ${reason} via compact fallback`)
             return { type: 'text', text: fallbackText }
           }
         } else {
           recordLlmCall('llm_fallback', fallbackElapsedMs, fallbackRes.status)
           console.error(`[ai-assistant][${cid}] compact fallback failed status=${fallbackRes.status} body=${fallbackRes.errText.slice(0, 180)}`)
         }
+        return null
+      }
+
+      const initialParts = candidate.content?.parts ?? []
+      const initialResolved = await resolveModelParts(initialParts)
+      if (initialResolved) return initialResolved
+
+      // Rare provider edge case: use one compact, bounded fallback. Do not retry
+      // the full tool prompt first; that compounds tail latency without new context.
+      console.error('[ai-assistant] Empty Gemini response. finishReason:', finishReason, 'parts:', JSON.stringify(initialParts))
+      const emptyResponseRecovered = await runCompactFallback('empty_response')
+      if (emptyResponseRecovered) {
+        return emptyResponseRecovered
       }
 
       return {
@@ -2430,6 +2442,12 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const errText = res.errText
       const isQuota = res.status === 429 || errText.includes('RESOURCE_EXHAUSTED')
       const isTimeout = res.status === 504 || errText.startsWith('model_timeout_')
+      if (isTimeout) {
+        const timeoutRecovered = await runCompactFallback('primary_timeout')
+        if (timeoutRecovered) {
+          return timeoutRecovered
+        }
+      }
       return {
         type: 'error',
         code: isQuota ? 'quota_exceeded' : isTimeout ? 'model_timeout' : 'llm_error',
