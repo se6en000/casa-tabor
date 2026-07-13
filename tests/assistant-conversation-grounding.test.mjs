@@ -62,6 +62,10 @@ test('output safety rejects pseudo-tools and unsupported write claims', () => {
     secureAssistantResult({ type: 'text', text: "Okay, I'll update the address." }, { userRequestedWrite: true }).safety_rejection,
     'unsupported_write_claim',
   )
+  assert.equal(
+    secureAssistantResult({ type: 'text', text: "I've scheduled that trip for you." }, { userRequestedWrite: true }).safety_rejection,
+    'unsupported_write_claim',
+  )
   assert.equal(secureAssistantResult({ type: 'tool_action', tool: 'update_event' }).type, 'tool_action')
   assert.equal(
     secureAssistantResult({ type: 'text', text: 'Confirmed—I created it.', write_verified: true }, { userRequestedWrite: true }).safety_rejection,

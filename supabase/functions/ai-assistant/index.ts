@@ -2114,16 +2114,16 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         return rescueData?.candidates?.[0]?.content?.parts ?? null
       }
 
-      const resolveModelParts = async (parts: GeminiPart[], secondaryDepth = 0) => {
+      const resolveModelParts = async (parts: GeminiPart[], secondaryDepth = 0, writeRescueUsed = false) => {
         const funcCallPart = parts.find((p: { functionCall?: { name: string; args: Record<string, unknown> } }) => p.functionCall)
         const textParts = parts
           .flatMap((p) => 'text' in p && typeof p.text === 'string' && p.text.trim() ? [p.text.trim()] : [])
 
         if (!funcCallPart && textParts.length > 0) {
-          if (userLikelyRequestedWrite && secondaryDepth === 0) {
+          if (userLikelyRequestedWrite && !writeRescueUsed) {
             const rescueParts = await runWriteToolRescue('text_without_tool', contents, secondaryDepth)
             if (rescueParts) {
-              const rescueResolved = await resolveModelParts(rescueParts, secondaryDepth + 1)
+              const rescueResolved = await resolveModelParts(rescueParts, secondaryDepth + 1, true)
               if (rescueResolved) return rescueResolved
             }
           }
@@ -2194,7 +2194,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
                 request_elapsed_ms: Date.now() - requestStartMs,
               })
             }
-            if (name === 'search_events' && userLikelyRequestedWrite && secondaryDepth === 0) {
+            if (name === 'search_events' && userLikelyRequestedWrite && !writeRescueUsed) {
               const rescueContents: GeminiContent[] = [
                 ...contents,
                 { role: 'model', parts: [funcCallPart as GeminiPart] },
@@ -2202,7 +2202,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
               ]
               const rescueParts = await runWriteToolRescue('search_events_no_secondary', rescueContents, secondaryDepth)
               if (rescueParts) {
-                const rescueResolved = await resolveModelParts(rescueParts, secondaryDepth + 1)
+                const rescueResolved = await resolveModelParts(rescueParts, secondaryDepth + 1, true)
                 if (rescueResolved) return rescueResolved
               }
             }
@@ -2263,7 +2263,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             `[ai-assistant][${cid}] secondary_parts_count=${secondaryParts.length} has_func_call=${secondaryParts.some((p: { functionCall?: unknown }) => Boolean(p.functionCall))} has_text=${secondaryParts.some((p: { text?: unknown }) => Boolean(p.text))}`,
           )
           // Recursively resolve secondary response in case it contains a tool call (e.g., update_event after search_events)
-          const secondaryResolved = await resolveModelParts(secondaryParts, secondaryDepth + 1)
+          const secondaryResolved = await resolveModelParts(secondaryParts, secondaryDepth + 1, writeRescueUsed)
           console.log(`[ai-assistant][${cid}] secondary_resolved type=${secondaryResolved?.type ?? 'null'}`)
           if (secondaryResolved) return secondaryResolved
           // Fallback to text if no tool was called

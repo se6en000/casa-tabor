@@ -177,7 +177,7 @@ function buildCases(fixtures, familyNames) {
     cases.push({ kind: 'create', text: createPhrases[i % createPhrases.length], expectTool: 'create_event', confirm: true })
     cases.push({
       kind: 'create-reject',
-      text: `Please draft an appointment called "${scenarioTag} Rejected Draft" tomorrow at ${6 + (i % 5)} PM at Greenacres Bowl with notes "bring uniforms and water", but do not finalize until I confirm.`,
+      text: `Please create an appointment called "${scenarioTag} Rejected Draft" on July ${24 + (i % 4)} at ${6 + (i % 5)} PM at Greenacres Bowl with notes "bring uniforms and water".`,
       expectTool: 'create_event',
       confirm: false,
     })
