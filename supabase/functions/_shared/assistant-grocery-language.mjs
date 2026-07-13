@@ -1,4 +1,12 @@
-const ITEMS = ['milk', 'eggs', 'bananas', 'bread', 'coffee']
+import { normalizeAssistantLanguage } from './assistant-language-normalization.mjs'
+
+const ITEMS = ['milk', 'eggs', 'bananas', 'bread', 'coffee', 'rice', 'apples', 'dish soap']
+const LIST_NAMES = ['grocery list', 'shopping list']
+const LIST_OPENERS = [
+  'what is on my', 'read my', 'show me the', 'run through my',
+  'walk me through the', 'what is left on the', 'what do we still need on the',
+]
+const ADD_OPENERS = ['add', 'put', 'throw', 'toss']
 const QUANTITY_WORDS = Object.freeze({
   one: '1',
   two: '2',
@@ -16,6 +24,7 @@ const QUANTITY_WORDS = Object.freeze({
 
 export const GROCERY_INTENTS = Object.freeze([
   'grocery.list',
+  'grocery.count',
   'grocery.contains',
   'grocery.add',
   'grocery.check',
@@ -25,34 +34,37 @@ export const GROCERY_INTENTS = Object.freeze([
 ])
 
 export const GROCERY_UTTERANCE_CORPUS = Object.freeze([
-  ...['what is on my grocery list', 'read my shopping list', 'show me the grocery list', 'what do we need from the store']
+  ...LIST_OPENERS.flatMap((opener) => LIST_NAMES.map((list) => ({ text: `${opener} ${list}`, intent: 'grocery.list' }))),
+  ...['what do we need from the store', "what's left to buy", 'what do we still need to get', 'read off the shopping list']
     .map((text) => ({ text, intent: 'grocery.list' })),
+  ...['how many things are on the grocery list', 'how many items do we need', 'count the shopping list']
+    .map((text) => ({ text, intent: 'grocery.count' })),
   ...ITEMS.flatMap((item) => [
     { text: `is ${item} on the grocery list`, intent: 'grocery.contains' },
     { text: `do we already have ${item} on the shopping list`, intent: 'grocery.contains' },
-    { text: `add ${item} to the grocery list`, intent: 'grocery.add' },
-    { text: `put ${item} on the shopping list`, intent: 'grocery.add' },
+    { text: `did i put ${item} on the grocery list`, intent: 'grocery.contains' },
+    ...ADD_OPENERS.map((opener) => ({ text: `${opener} ${item} to the grocery list`, intent: 'grocery.add' })),
     { text: `we need ${item}`, intent: 'grocery.add' },
+    { text: `we are out of ${item}`, intent: 'grocery.add' },
+    { text: `do not let me forget ${item}`, intent: 'grocery.add' },
     { text: `buy ${item}`, intent: 'grocery.add' },
+    { text: `grab ${item}`, intent: 'grocery.add' },
     { text: `check off ${item}`, intent: 'grocery.check' },
     { text: `mark ${item} as bought`, intent: 'grocery.check' },
+    { text: `cross ${item} off`, intent: 'grocery.check' },
     { text: `remove ${item} from the grocery list`, intent: 'grocery.remove' },
     { text: `take ${item} off the shopping list`, intent: 'grocery.remove' },
+    { text: `drop ${item} from the grocery list`, intent: 'grocery.remove' },
     { text: `change ${item} to two`, intent: 'grocery.quantity' },
     { text: `make ${item} quantity 2`, intent: 'grocery.quantity' },
+    { text: `bump ${item} up to 3`, intent: 'grocery.quantity' },
   ]),
   ...['clear checked groceries', 'remove completed shopping items', 'clear bought items']
     .map((text) => ({ text, intent: 'grocery.clear_checked' })),
 ])
 
 function normalize(value) {
-  return String(value ?? '')
-    .toLowerCase()
-    .replace(/^(?:alexa|casa)[,\s]+/, '')
-    .replace(/[’']/g, "'")
-    .replace(/[?!]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+  return normalizeAssistantLanguage(value, { preserveCommas: true })
 }
 
 function cleanItem(value) {
@@ -108,9 +120,15 @@ export function parseGroceryLanguage(text, options = {}) {
   if (!input) return null
   const activeItem = options.activeEntityType === 'grocery_item'
 
-  if (/^(?:what(?:'s| is) on|read|show|list|tell me)(?: me)?\s+(?:what(?:'s| is) on\s+)?(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/.test(input) ||
-      /^what do we need (?:from|at) the (?:store|grocery store)$/.test(input)) {
+  if (/^(?:what(?:'s| is) on|read(?: off)?|show|list|tell me|run through|walk me through)(?: me)?\s+(?:what(?:'s| is) on\s+)?(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/.test(input) ||
+      /^(?:what do we need (?:from|at) the (?:store|grocery store)|what(?:'s| is) left to buy|what do we still need to get)$/.test(input) ||
+      /^what (?:is left|do we still need)\s+on\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/.test(input)) {
     return frame('grocery.list', 0.99)
+  }
+  if (/^how many (?:things|items|groceries)(?: (?:are on|do we need on) (?:my|the|our)?\s*(?:grocery|shopping)(?: list)?)?$/.test(input) ||
+      /^how many items do we need$/.test(input) ||
+      /^count (?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/.test(input)) {
+    return frame('grocery.count', 0.99)
   }
   if (/^(?:clear|remove|delete)\s+(?:all\s+)?(?:the\s+)?(?:checked|completed|bought|done)\s+(?:grocery|groceries|shopping items?|items?)$/.test(input) ||
       /^clear\s+(?:the\s+)?(?:checked|completed)\s+(?:grocery|shopping)\s+items?$/.test(input)) {
@@ -118,17 +136,19 @@ export function parseGroceryLanguage(text, options = {}) {
   }
 
   const contains = input.match(/^(?:is|are)\s+(.+?)\s+(?:already\s+)?on\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/) ||
-    input.match(/^do we (?:already )?have\s+(.+?)(?:\s+on\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?)?$/)
+    input.match(/^do we (?:already )?have\s+(.+?)(?:\s+on\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?)?$/) ||
+    input.match(/^did i (?:put|add)\s+(.+?)\s+(?:to|on)\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/)
   if (contains) return frame('grocery.contains', 0.99, { items: splitItems(contains[1]) })
 
-  const check = input.match(/^(?:check off|mark|cross off)\s+(.+?)(?:\s+as\s+(?:bought|done|complete|completed))?$/) ||
+  const check = input.match(/^(?:check off|mark|cross)\s+(.+?)(?:\s+(?:off|as\s+(?:bought|done|complete|completed)))?$/) ||
     input.match(/^(?:i|we)\s+(?:bought|got|picked up)\s+(.+)$/)
   if (check) return frame('grocery.check', 0.97, { item: cleanItem(check[1]) })
 
-  const remove = input.match(/^(?:remove|delete|take)\s+(.+?)\s+(?:from|off)\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/)
+  const remove = input.match(/^(?:remove|delete|take|drop)\s+(.+?)\s+(?:from|off)\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/)
   if (remove) return frame('grocery.remove', 0.99, { item: cleanItem(remove[1]) })
 
   const quantity = input.match(/^(?:change|update|set|make)\s+(.+?)\s+(?:(?:quantity\s+)?(?:to|is)\s+|quantity\s+)(\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)$/)
+    || input.match(/^bump\s+(.+?)\s+(?:up\s+)?to\s+(\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)$/)
   if (quantity) {
     return frame('grocery.quantity', 0.98, {
       item: cleanItem(quantity[1]),
@@ -140,9 +160,11 @@ export function parseGroceryLanguage(text, options = {}) {
     return frame('grocery.quantity', 0.98, { quantity: quantityValue(activeQuantity[1]) }, true)
   }
 
-  const add = input.match(/^(?:add|put)\s+(.+?)(?:\s+(?:to|on)\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?)$/) ||
-    input.match(/^(?:buy|get|pick up|restock)\s+(.+)$/) ||
-    input.match(/^(?:i|we)\s+need\s+(.+)$/)
+  const add = input.match(/^(?:add|put|throw|toss)\s+(.+?)(?:\s+(?:to|on)\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?)$/) ||
+    input.match(/^(?:buy|get|grab|pick up|restock)\s+(.+)$/) ||
+    input.match(/^(?:i|we)\s+need\s+(.+)$/) ||
+    input.match(/^(?:i am|we are|i'm|we're)\s+out of\s+(.+)$/) ||
+    input.match(/^(?:do not|don't)\s+let me forget\s+(.+)$/)
   if (add) return frame('grocery.add', 0.97, { items: splitAddItems(add[1]) })
 
   return null

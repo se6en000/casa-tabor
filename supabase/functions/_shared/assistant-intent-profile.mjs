@@ -1,3 +1,5 @@
+import { parseCookingLanguage } from './assistant-cooking-language.mjs'
+
 const EVENT_TERMS = /\b(calendar|event|events|appointment|appointments|appt|apt|reminder|reminders|schedule|scheduled|therapy|practice|birthday|party|trip|vacation|double[- ]?book|conflict|busy|free)\b/i
 const EVENT_TIME_QUERY = /\b(what(?:'s| is| do we have| have we got)?|anything|who)\b.*\b(today|tomorrow|tonight|week|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next)\b/i
 const EVENT_CREATE = /\b(create|add|book|set up|plan|schedule)\b.*\b(event|appointment|appt|apt|reminder|calendar|trip|vacation|meeting)\b|\b(?:schedule|book|plan)\s+(?:an?\s+)?(?:event|appointment|appt|apt|reminder|meeting|trip|vacation)\b/i
@@ -22,7 +24,9 @@ export function classifyAssistantIntent(text, options = {}) {
   const hasTravelIntent = /\b(traffic|commute|drive time|travel time|leave by|when should (?:i|we) leave|eta|route)\b/i.test(input)
   const groceryFollowUp = activeGroceryItem && /^(?:make|change|update|set)\s+(?:that|it)\b/i.test(input)
   const hasGroceryIntent = groceryFollowUp || /\b(grocer(?:y|ies)|shopping list|buy|bought|picked up|pantry|restock|food shop|check off)\b/i.test(input)
-  const hasRecipeIntent = assistantMode === 'chef' || /\b(recipe|cook|meal|dinner|lunch|breakfast|ingredient|servings?)\b/i.test(input)
+  const hasRecipeIntent = assistantMode === 'chef' ||
+    Boolean(parseCookingLanguage(input, { assistantMode })) ||
+    /\b(recipe|cook|meal|dinner|lunch|breakfast|ingredient|servings?)\b/i.test(input)
   const hasPlaceIntent = /\b(address|phone number|where is|find (?:a|an|the)?\s*(?:restaurant|store|business|place)|nearby)\b/i.test(input)
   const hasWebIntent = /\b(latest|news|score|stock price|current price|recent review|look it up|search the web)\b/i.test(input)
   const matchedDomains = [

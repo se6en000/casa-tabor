@@ -143,3 +143,11 @@ test('non-calendar language remains outside the deterministic contract', () => {
   assert.equal(isCalendarLikeLanguage('Can you show my schedule later?'), true)
   assert.equal(isCalendarLikeLanguage('Explain photosynthesis'), false)
 })
+
+test('calendar concepts tolerate common typed and STT forms', () => {
+  assert.equal(parseCalendarLanguage('alexa whats on my calender tomoro')?.intent, 'calendar.list')
+  assert.deepEqual(
+    parseCalendarLanguage('hows thurs day looking')?.slots.temporalScope,
+    { kind: 'weekday', weekday: 'thursday' },
+  )
+})

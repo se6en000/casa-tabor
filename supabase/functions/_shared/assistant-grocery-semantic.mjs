@@ -46,6 +46,15 @@ export function resolveGrocerySemantic(frame, items, options = {}) {
       items: rows,
     }
   }
+  if (frame.intent === 'grocery.count') {
+    return {
+      type: 'text',
+      text: rows.length === 0
+        ? 'Your grocery list is empty.'
+        : `You have ${rows.length} ${rows.length === 1 ? 'item' : 'items'} left on your grocery list.`,
+      items: rows,
+    }
+  }
   if (frame.intent === 'grocery.contains') {
     const requested = frame.slots?.items ?? []
     const found = requested.filter((name) => findGroceryItem(rows, name).item)

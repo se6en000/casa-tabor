@@ -49,6 +49,9 @@ test('grocery semantic reads use authoritative active rows', () => {
 
   const contains = resolveGrocerySemantic(parseGroceryLanguage('Is eggs on the grocery list?'), items)
   assert.match(contains.text, /eggs is on/i)
+
+  const count = resolveGrocerySemantic(parseGroceryLanguage('How many items do we need?'), items)
+  assert.match(count.text, /2 items left/i)
 })
 
 test('grocery semantic mutations target exact authoritative rows', () => {
@@ -69,4 +72,10 @@ test('non-grocery language stays outside the contract', () => {
   }
   assert.equal(isGroceryLikeLanguage('Please restock coffee'), true)
   assert.equal(isGroceryLikeLanguage('Explain photosynthesis'), false)
+})
+
+test('grocery concepts tolerate common typed and STT forms', () => {
+  assert.equal(parseGroceryLanguage('casa whats on the grossery list')?.intent, 'grocery.list')
+  assert.equal(parseGroceryLanguage('put milk on the shoping list')?.intent, 'grocery.add')
+  assert.equal(parseGroceryLanguage('dont let me forget eggs')?.intent, 'grocery.add')
 })

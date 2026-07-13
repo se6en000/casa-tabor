@@ -94,6 +94,18 @@ test('common assistant domains select narrow profiles', () => {
   assert.equal(classifyAssistantIntent('Explain photosynthesis').profile, 'general')
 })
 
+test('natural cooking concepts select the bounded recipe profile', () => {
+  for (const input of [
+    'What can I use instead of buttermilk?',
+    'My sauce is too thin, how do I save it?',
+    'How should I reheat leftover pizza?',
+    'Convert 350 Fahrenheit to Celsius',
+    'Is this chicken still safe to eat?',
+  ]) {
+    assert.equal(classifyAssistantIntent(input).profile, 'recipe', input)
+  }
+})
+
 test('event mutations with calendar context stay on event lane', () => {
   assert.deepEqual(
     classifyAssistantIntent('move soccer practice to next friday at 7 pm'),

@@ -1,3 +1,5 @@
+import { normalizeAssistantLanguage } from './assistant-language-normalization.mjs'
+
 const CALENDAR_NOUNS = /\b(calendar|schedule|agenda|events?|appointments?|meetings?|plans?)\b/i
 const TEMPORAL_WORDS = /\b(today|tomorrow|tonight|morning|afternoon|evening|night|week|weekend|month|sunday|monday|tuesday|wednesday|thursday|friday|saturday|next|later|after|january|february|march|april|may|june|july|august|september|october|november|december)\b/i
 const ACTIVE_REFERENCE = /\b(it|that|this|there|the event|the appointment|the party)\b/i
@@ -5,10 +7,17 @@ const ACTIVE_REFERENCE = /\b(it|that|this|there|the event|the appointment|the pa
 const LIST_OPENERS = [
   "what's on", 'what is on', 'what do i have', 'what do we have',
   "what's going on", 'what is going on', "what's happening",
-  'what are we doing', 'show me', 'tell me', 'give me', 'run through', 'rundown',
+  'what is happening', 'what are we doing', 'what have i got', 'what have we got',
+  'anything happening', 'anything planned', 'anything scheduled', 'show me',
+  'tell me', 'give me', 'run through', 'walk me through', 'catch me up on',
+  'lay out', 'fill me in on',
 ]
 const CALENDAR_OBJECTS = ['my calendar', 'the calendar', 'my schedule', 'the schedule', 'my agenda', 'the agenda']
-const DAY_SCOPES = ['today', 'tomorrow', 'tonight', 'this week', 'this weekend', 'next week']
+const DAY_SCOPES = [
+  'today', 'tomorrow', 'tomorrow morning', 'tomorrow afternoon', 'tonight',
+  'monday', 'tuesday morning', 'wednesday afternoon', 'thursday evening',
+  'friday', 'this week', 'this weekend', 'next week', 'this month', 'next month',
+]
 const MONTHS = Object.freeze({
   january: 1,
   february: 2,
@@ -52,6 +61,11 @@ export const CALENDAR_UTTERANCE_CORPUS = Object.freeze([
     text: `show me ${object} ${scope}`,
     intent: 'calendar.list',
   }))),
+  ...DAY_SCOPES.flatMap((scope) => [
+    { text: `how is ${scope} looking`, intent: 'calendar.list' },
+    { text: `how does ${scope} look`, intent: 'calendar.list' },
+    { text: `anything going on ${scope}`, intent: 'calendar.list' },
+  ]),
   ...DAY_SCOPES.map((scope) => ({ text: `how many appointments do we have ${scope}`, intent: 'calendar.count' })),
   ...DAY_SCOPES.map((scope) => ({ text: `are we free ${scope}`, intent: 'calendar.availability' })),
   ...DAY_SCOPES.map((scope) => ({ text: `where do I need to go ${scope}`, intent: 'calendar.destinations' })),
@@ -95,15 +109,14 @@ export const CALENDAR_UTTERANCE_CORPUS = Object.freeze([
     intent: 'event.travel',
     requiresActiveEvent: true,
   })),
+  { text: 'find details for the birthday event', intent: 'event.select' },
+  { text: 'create a calendar event tomorrow', intent: 'event.create' },
+  { text: 'move the appointment to friday', intent: 'event.move' },
+  { text: 'delete the calendar event', intent: 'event.delete' },
 ])
 
 function normalize(value) {
-  return String(value ?? '')
-    .toLowerCase()
-    .replace(/[’']/g, "'")
-    .replace(/[?!.,]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+  return normalizeAssistantLanguage(value)
 }
 
 function isValidDateParts(month, day, year = 2000) {
@@ -286,7 +299,8 @@ export function parseCalendarLanguage(text, options = {}) {
   if (scope && /\bwhere\b.*\b(?:need to|have to|should|am i|are we)\s+go\b|\bwhat (?:places?|locations?|addresses?)\b.*\b(?:going|visiting|have)\b/.test(input)) {
     return frame('calendar.destinations', 0.98, { temporalScope: scope })
   }
-  const listLanguage = /\b(?:what(?:'s| is) (?:on|going on|happening)|what (?:are we doing|do (?:i|we) have)|show me|tell me|give me|run through|rundown|anything on|anything happening)\b/.test(input)
+  const listLanguage = /\b(?:what(?:'s| is) (?:on|going on|happening|planned|scheduled)|what (?:are we doing|do (?:i|we) have|have (?:i|we) got)|show me|tell me|give me|run through|walk me through|catch me up on|lay out|fill me in on|rundown|anything (?:on|happening|going on|planned|scheduled))\b/.test(input) ||
+    /\bhow (?:is|does)\b.*\b(?:look|looking)\b/.test(input)
   if ((CALENDAR_NOUNS.test(input) || scope) && listLanguage && !mutationLanguage) {
     return frame('calendar.list', 0.96, { temporalScope: scope ?? { kind: 'today' } })
   }

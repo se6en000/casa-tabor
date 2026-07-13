@@ -31,6 +31,10 @@ import {
 } from '../_shared/assistant-calendar-language.mjs'
 import { resolveCalendarSemanticRead } from '../_shared/assistant-calendar-semantic-read.mjs'
 import {
+  isCookingLikeLanguage,
+  parseCookingLanguage,
+} from '../_shared/assistant-cooking-language.mjs'
+import {
   isGroceryLikeLanguage,
   parseGroceryLanguage,
 } from '../_shared/assistant-grocery-language.mjs'
@@ -194,6 +198,10 @@ Deno.serve(async (req) => {
   const groceryFrame = parseGroceryLanguage(latestUserText, {
     activeEntityType: incomingConversationState?.activeEntityType,
   })
+  const cookingFrame = parseCookingLanguage(latestUserText, {
+    assistantMode: context?.assistant_mode,
+    activeEntityType: incomingConversationState?.activeEntityType,
+  })
   const classifiedIntentRouting = classifyAssistantIntent(latestUserText, {
     focusedEvent: Boolean(context?.focusedEvent),
     assistantMode: context?.assistant_mode,
@@ -217,7 +225,9 @@ Deno.serve(async (req) => {
     ? { profile: 'event', forceEventSearch: calendarFrameNeedsSearch }
     : groceryFrame
       ? { profile: 'grocery', forceEventSearch: false }
-    : classifiedIntentRouting
+      : cookingFrame
+        ? { profile: 'recipe', forceEventSearch: false }
+        : classifiedIntentRouting
   appendServerTrace('server_ai_assistant_start', `messages=${Array.isArray(messages) ? messages.length : 0}`, {
     message_count: Array.isArray(messages) ? messages.length : 0,
     has_image: Boolean(image),
@@ -233,6 +243,8 @@ Deno.serve(async (req) => {
     calendar_semantic_confidence: calendarFrame?.confidence ?? null,
     grocery_semantic_intent: groceryFrame?.intent ?? null,
     grocery_semantic_confidence: groceryFrame?.confidence ?? null,
+    cooking_semantic_intent: cookingFrame?.intent ?? null,
+    cooking_semantic_confidence: cookingFrame?.confidence ?? null,
   })
   if (calendarFrame) {
     appendServerTrace('server_ai_assistant_calendar_language_match', `intent=${calendarFrame.intent}`, {
@@ -260,6 +272,19 @@ Deno.serve(async (req) => {
     appendServerTrace('server_ai_assistant_grocery_language_unmatched', latestUserText.slice(0, 300), {
       user_text: latestUserText,
       active_entity_type: incomingConversationState?.activeEntityType ?? null,
+    })
+  }
+  if (cookingFrame) {
+    appendServerTrace('server_ai_assistant_cooking_language_match', `intent=${cookingFrame.intent}`, {
+      intent: cookingFrame.intent,
+      confidence: cookingFrame.confidence,
+      source: cookingFrame.source,
+      slots: cookingFrame.slots,
+    })
+  } else if (latestUserText && isCookingLikeLanguage(latestUserText)) {
+    appendServerTrace('server_ai_assistant_cooking_language_unmatched', latestUserText.slice(0, 300), {
+      user_text: latestUserText,
+      assistant_mode: context?.assistant_mode ?? null,
     })
   }
   if (latestUserText) {
@@ -1382,6 +1407,7 @@ ${includeEventContext ? `UPCOMING EVENTS SNAPSHOT (next ${PROMPT_EVENT_WINDOW_DA
 ${includeGroceryContext ? `\nGROCERY LIST (unchecked items):\n${groceryText}\n${defaultListId ? `Default list ID: ${defaultListId}` : ''}` : ''}
 ${includeRecipeContext ? `\nRECIPE LIBRARY SNAPSHOT (recent):\n${recipesText || 'No recipes saved yet.'}` : ''}
 ${includeRecipeContext && foodProfileText ? `\nFOOD PROFILE (household dietary needs & preferences — honor for all meal/grocery/recipe suggestions):\n${foodProfileText}` : ''}
+${cookingFrame ? `\nCOOKING SEMANTIC FRAME (Casa's normalized interpretation; answer the concept, not the wording):\nIntent: ${cookingFrame.intent}\nSlots: ${JSON.stringify(cookingFrame.slots)}` : ''}
 ${includeAvailabilityContext && availabilityText ? `\nMEMBER AVAILABILITY (recurring rules + upcoming overrides — use to warn about conflicts and pick times people are free):\n${availabilityText}` : ''}
 
 INSTRUCTIONS:

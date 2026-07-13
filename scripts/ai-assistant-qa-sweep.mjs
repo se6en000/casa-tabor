@@ -411,6 +411,38 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames) {
         { text: 'add bananas for smoothies to my grocery list.', expect: { type: 'write', tool: 'add_grocery_items' } },
       ],
     },
+    {
+      key: 'semantic-calendar-variance',
+      page: 'calendar',
+      assistantMode: 'general',
+      steps: [
+        { text: 'how does tomorrow afternoon look?', expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 0 } },
+        { text: 'anything planned for the next 3 days?', expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 0 } },
+        { text: 'walk me through next week.', expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 0 } },
+        { text: 'alexa whats on my calender tomoro?', expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 0 } },
+      ],
+    },
+    {
+      key: 'semantic-grocery-variance',
+      page: 'grocery',
+      assistantMode: 'general',
+      steps: [
+        { text: 'what do we still need to get?', expect: { type: 'text', semanticIntent: 'grocery.list', maxLlmCalls: 0 } },
+        { text: 'how many items do we need?', expect: { type: 'text', semanticIntent: 'grocery.count', maxLlmCalls: 0 } },
+        { text: 'casa whats on the grossery list?', expect: { type: 'text', semanticIntent: 'grocery.list', maxLlmCalls: 0 } },
+      ],
+    },
+    {
+      key: 'semantic-cooking-variance',
+      page: 'cooking',
+      assistantMode: 'chef',
+      steps: [
+        { text: 'I have chicken rice and broccoli, what can I cook?', expect: { type: 'text' } },
+        { text: 'my sauce is too thin and dinner is in twenty minutes, how do I save it?', expect: { type: 'text' } },
+        { text: 'what can I use instead of buttermilk?', expect: { type: 'text' } },
+        { text: 'how should I store leftover rice safely?', expect: { type: 'text' } },
+      ],
+    },
   ]
 }
 
