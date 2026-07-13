@@ -36,6 +36,16 @@ test('generated calendar corpus maps equivalent phrases to semantic frames', () 
 
 test('calendar parser supports ordinary flexible read language', () => {
   assert.deepEqual(parseCalendarLanguage('Could you run through my agenda this weekend?')?.slots.temporalScope, { kind: 'weekend' })
+  for (const text of [
+    "What's going on on Thursday?",
+    'What is going on Thursday',
+    "What's happening Thursday?",
+    'What are we doing Thursday?',
+  ]) {
+    const frame = parseCalendarLanguage(text)
+    assert.equal(frame?.intent, 'calendar.list', text)
+    assert.deepEqual(frame?.slots.temporalScope, { kind: 'weekday', weekday: 'thursday' }, text)
+  }
   assert.equal(parseCalendarLanguage('Do we have any conflicts on Monday?')?.intent, 'calendar.availability')
   assert.equal(parseCalendarLanguage('How many meetings are there next week?')?.intent, 'calendar.count')
   assert.equal(parseCalendarLanguage('What do I have coming up?')?.intent, 'calendar.next')
@@ -64,6 +74,14 @@ test('semantic reads execute against authoritative calendar rows', () => {
 
   const destinations = resolveCalendarSemanticRead(parseCalendarLanguage('Where do I need to go tomorrow?'), events, options)
   assert.match(destinations.text, /1826 4th Place/)
+
+  const thursdayEvents = [
+    ...events,
+    { id: 'thursday', title: 'Dentist', start_time: '2026-07-16T14:00:00Z', end_time: '2026-07-16T15:00:00Z' },
+  ]
+  const thursday = resolveCalendarSemanticRead(parseCalendarLanguage("What's going on on Thursday?"), thursdayEvents, options)
+  assert.deepEqual(thursday.events.map((event) => event.id), ['thursday'])
+  assert.match(thursday.text, /Dentist/)
 })
 
 test('non-calendar language remains outside the deterministic contract', () => {

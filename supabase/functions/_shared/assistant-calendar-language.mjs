@@ -4,7 +4,8 @@ const ACTIVE_REFERENCE = /\b(it|that|this|there|the event|the appointment|the pa
 
 const LIST_OPENERS = [
   "what's on", 'what is on', 'what do i have', 'what do we have',
-  'show me', 'tell me', 'give me', 'run through', 'rundown',
+  "what's going on", 'what is going on', "what's happening",
+  'what are we doing', 'show me', 'tell me', 'give me', 'run through', 'rundown',
 ]
 const CALENDAR_OBJECTS = ['my calendar', 'the calendar', 'my schedule', 'the schedule', 'my agenda', 'the agenda']
 const DAY_SCOPES = ['today', 'tomorrow', 'tonight', 'this week', 'this weekend', 'next week']
@@ -162,7 +163,7 @@ export function parseCalendarLanguage(text, options = {}) {
   if (scope && /\bwhere\b.*\b(?:need to|have to|should|am i|are we)\s+go\b|\bwhat (?:places?|locations?|addresses?)\b.*\b(?:going|visiting|have)\b/.test(input)) {
     return frame('calendar.destinations', 0.98, { temporalScope: scope })
   }
-  const listLanguage = /\b(?:what(?:'s| is) on|what do (?:i|we) have|show me|tell me|give me|run through|rundown|anything on|anything happening)\b/.test(input)
+  const listLanguage = /\b(?:what(?:'s| is) (?:on|going on|happening)|what (?:are we doing|do (?:i|we) have)|show me|tell me|give me|run through|rundown|anything on|anything happening)\b/.test(input)
   if ((CALENDAR_NOUNS.test(input) || scope) && listLanguage && !mutationLanguage) {
     return frame('calendar.list', 0.96, { temporalScope: scope ?? { kind: 'today' } })
   }
