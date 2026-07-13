@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   buildCreatePreviewCopy,
+  buildDeleteManyPreviewCopy,
   buildDeletePreviewCopy,
   buildUpdatePreviewCopy,
 } from '../src/utils/aiConfirmPreview.ts'
@@ -26,6 +27,22 @@ test('delete preview names the event and says what happens', () => {
   assert.equal(preview.heading, 'Delete "Dentist appointment"')
   assert.match(preview.when ?? '', /8:00 PM/)
   assert.match(preview.note, /removes it from your calendar/)
+})
+
+test('bulk delete preview lists the actual matching events', () => {
+  const preview = buildDeleteManyPreviewCopy([
+    { id: 'a', title: 'Dentist appointment', start_time: '2026-07-14T20:00:00-04:00', end_time: '2026-07-14T21:00:00-04:00', all_day: false },
+    { id: 'b', title: 'Dentist appointment', start_time: '2026-07-15T11:00:00-04:00', end_time: '2026-07-15T12:00:00-04:00', all_day: false },
+    { id: 'c', title: 'Dentist appointment', start_time: '2026-07-16T09:00:00-04:00', end_time: '2026-07-16T10:00:00-04:00', all_day: false },
+  ], {
+    ids: ['a', 'b', 'c'],
+    title_query: 'Dentist appointment',
+    count: 3,
+  })
+  assert.equal(preview.heading, 'Delete 3 matching events?')
+  assert.match(preview.note, /remove 3 events/)
+  assert.equal(preview.matches.length, 3)
+  assert.match(preview.matches[0], /Dentist appointment —/)
 })
 
 test('create preview names the new event and date', () => {

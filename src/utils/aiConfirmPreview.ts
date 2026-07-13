@@ -6,6 +6,9 @@ type ConfirmEvent = {
   start_time: string
   end_time: string
   all_day?: boolean
+  location_name?: string | null
+  address?: string | null
+  id?: string
 }
 
 function parseDate(value: string): Date {
@@ -84,5 +87,34 @@ export function buildDeletePreviewCopy(
     heading: `Delete "${title}"`,
     when: event ? formatEventSpan(event) : null,
     note: 'This removes it from your calendar.',
+  }
+}
+
+function summarizeDeleteEvent(event: Pick<ConfirmEvent, 'title' | 'start_time' | 'end_time' | 'all_day' | 'location_name' | 'address'>): string {
+  const span = formatEventSpan(event)
+  const place = event.location_name || event.address ? ` · ${event.location_name ?? event.address}` : ''
+  return `${event.title} — ${span}${place}`
+}
+
+export function buildDeleteManyPreviewCopy(
+  events: Array<Pick<ConfirmEvent, 'id' | 'title' | 'start_time' | 'end_time' | 'all_day' | 'location_name' | 'address'>>,
+  args: Record<string, unknown>,
+): { heading: string; note: string; matches: string[]; count: number } {
+  const titleQuery = String(args.title_query ?? '').trim()
+  const ids = Array.isArray(args.ids) ? args.ids.map((id) => String(id)) : []
+  const matched = ids.length > 0
+    ? events.filter((event) => event.id && ids.includes(event.id))
+    : titleQuery
+      ? events.filter((event) => event.title.toLowerCase().includes(titleQuery.toLowerCase()))
+      : []
+  const count = Number.isFinite(Number(args.count)) ? Number(args.count) : matched.length
+  const matches = matched.slice(0, 4).map(summarizeDeleteEvent)
+  return {
+    heading: count === 1 ? `Delete 1 matching event?` : `Delete ${count} matching events?`,
+    note: titleQuery
+      ? `Matches "${titleQuery}" and will remove ${count} event${count === 1 ? '' : 's'}.`
+      : `This will remove ${count} event${count === 1 ? '' : 's'} from your calendar.`,
+    matches,
+    count,
   }
 }

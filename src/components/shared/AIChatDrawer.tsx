@@ -19,7 +19,7 @@ import BounceScroll from '../shared/BounceScroll'
 import { Button, LiveTranscript } from '../ui'
 import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId } from '../../lib/assistantTelemetry'
 import { classifyPendingConfirmation } from '../../lib/assistantConfirmation.mjs'
-import { buildCreatePreviewCopy, buildDeletePreviewCopy, buildUpdatePreviewCopy } from '../../utils/aiConfirmPreview'
+import { buildCreatePreviewCopy, buildDeleteManyPreviewCopy, buildDeletePreviewCopy, buildUpdatePreviewCopy } from '../../utils/aiConfirmPreview'
 
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
 const LOW_CONFIDENCE_REJECT_PHRASES = /\b(no|nope|try again|wrong|not that|cancel)\b/i
@@ -1752,16 +1752,21 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
     )
   }
   if (tool === 'delete_events_by_title') {
-    const titleQuery = String(args.title_query ?? '').trim()
-    const count = Number.isFinite(Number(args.count))
-      ? Number(args.count)
-      : (Array.isArray(args.ids) ? args.ids.length : 0)
+    const preview = buildDeleteManyPreviewCopy(events, args)
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2">
-        <p className="text-caption text-red-700 font-semibold">Delete all matching events?</p>
-        <p className="text-caption text-red-600 mt-0.5">
-          {count} event{count === 1 ? '' : 's'} matching "{titleQuery || 'selected title'}" will be removed and synced deletion will follow.
-        </p>
+      <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 space-y-1.5">
+        <p className="font-semibold text-red-700 text-body-sm">{preview.heading}</p>
+        <p className="text-caption text-red-600">{preview.note}</p>
+        {preview.matches.length > 0 && (
+          <div className="space-y-1 rounded-lg border border-red-200 bg-white/70 px-2.5 py-2 text-caption text-red-700">
+            {preview.matches.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+            {preview.count > preview.matches.length && (
+              <p>+ {preview.count - preview.matches.length} more</p>
+            )}
+          </div>
+        )}
       </div>
     )
   }
