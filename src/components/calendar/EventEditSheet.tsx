@@ -31,6 +31,7 @@ import {
   Switch,
   Textarea,
 } from '../ui'
+import { formatAllDayRangeLabel, normalizeAllDayEventRange } from '../../utils/allDayEventRange'
 
 const ALL_CATEGORIES = Object.keys(CATEGORY_LABEL) as string[]
 
@@ -306,8 +307,8 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     const start = new Date(startDT)
     const end = new Date(endDT)
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 'Choose a date and time'
+    if (isAllDay) return formatAllDayRangeLabel(startDT, endDT)
     const day = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).format(start)
-    if (isAllDay) return `${day} · All day`
     const time = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' })
     return `${day} · ${time.format(start)}–${time.format(end)}`
   })()
@@ -552,8 +553,9 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
       const d = new Date(dtLocal)
       return isNaN(d.getTime()) ? fallbackISO : d.toISOString()
     }
-    const allDayStart = isAllDay ? `${startDT.slice(0,10)}T00:00:00.000Z` : null
-    const allDayEnd = isAllDay ? `${startDT.slice(0,10)}T23:59:59.000Z` : null
+    const allDayRange = isAllDay ? normalizeAllDayEventRange(startDT, endDT) : null
+    const allDayStart = allDayRange?.start ?? null
+    const allDayEnd = allDayRange?.end ?? null
     const masterStart = allDayStart ?? parseDateTime(startDT, event.start_time)
     const masterEnd   = allDayEnd   ?? parseDateTime(endDT, event.end_time)
     const rruleStr = buildRrule()
@@ -1031,13 +1033,33 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
 
                 {/* Date/time dials — collapse time when all-day */}
                 {isAllDay ? (
-                  <div>
-                    <p className="text-caption text-casa-muted mb-1">Date</p>
-                    <Input
-                      type="date"
-                      value={startDT.slice(0, 10)}
-                      onChange={e => { setStartDT(`${e.target.value}T00:00`); setEndDT(`${e.target.value}T23:59`); markDirty() }}
-                    />
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-caption text-casa-muted mb-1">Start date</p>
+                      <Input
+                        type="date"
+                        value={startDT.slice(0, 10)}
+                        onChange={e => {
+                          const next = e.target.value
+                          setStartDT(`${next}T00:00`)
+                          if (endDT.slice(0, 10) < next) setEndDT(`${next}T23:59`)
+                          markDirty()
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-caption text-casa-muted mb-1">End date</p>
+                      <Input
+                        type="date"
+                        value={endDT.slice(0, 10)}
+                        onChange={e => {
+                          const next = e.target.value
+                          setEndDT(`${next}T23:59`)
+                          if (next < startDT.slice(0, 10)) setStartDT(`${next}T00:00`)
+                          markDirty()
+                        }}
+                      />
+                    </div>
                   </div>
                 ) : (
                   <DateTimeDial
