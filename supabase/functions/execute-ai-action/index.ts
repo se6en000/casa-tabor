@@ -23,6 +23,13 @@ function normalizeOptionalText(value: unknown, maxLen = 300): string | null {
   return trimmed.slice(0, maxLen)
 }
 
+function normalizeCreateEventType(value: unknown): 'event' | 'reminder' {
+  const normalized = normalizeOptionalText(value, 32)?.toLowerCase()
+  if (!normalized) return 'event'
+  if (['reminder', 'task', 'todo'].includes(normalized)) return 'reminder'
+  return 'event'
+}
+
 function toIngredientRawText(input: {
   rawText: string | null
   quantity: string | null
@@ -285,6 +292,7 @@ Deno.serve(async (req) => {
 
   try {
     if (tool === 'create_event') {
+      const normalizedEventType = normalizeCreateEventType(args.event_type)
       const { data: event, error } = await sb.from('events').insert({
         title: args.title,
         start_time: args.start,
@@ -294,7 +302,7 @@ Deno.serve(async (req) => {
         description: args.notes ?? null,
         status: 'confirmed',
         is_enriched: false,
-        event_type: args.event_type ?? 'event',
+        event_type: normalizedEventType,
       }).select().single()
 
       if (error) throw new Error(error.message)

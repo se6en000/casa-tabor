@@ -170,3 +170,9 @@ test('confirmed actions preserve client trace provenance on the server', () => {
   assert.match(actionFunction, /server_ai_action_started/)
   assert.match(actionFunction, /server_ai_action_failed/)
 })
+
+test('create_event action normalizes unsupported event_type values before insert', () => {
+  assert.match(actionFunction, /function normalizeCreateEventType\(value: unknown\)/)
+  assert.match(actionFunction, /event_type: normalizedEventType/)
+  assert.match(actionFunction, /\\['reminder', 'task', 'todo'\\]/)
+})
