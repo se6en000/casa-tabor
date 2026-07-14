@@ -2,10 +2,12 @@ export function findAgentCalendarDuplicates(events, args) {
   if (!Array.isArray(events) || !args || typeof args !== 'object') return []
   const title = normalizeTitle(args.title)
   const start = Date.parse(String(args.start ?? ''))
+  const eventType = args.event_type === 'reminder' ? 'reminder' : 'event'
   if (!title || !Number.isFinite(start)) return []
   return events.filter((event) =>
     normalizeTitle(event?.title) === title &&
-    Date.parse(String(event?.start_time ?? '')) === start
+    Date.parse(String(event?.start_time ?? '')) === start &&
+    (event?.event_type === 'reminder' ? 'reminder' : 'event') === eventType
   )
 }
 

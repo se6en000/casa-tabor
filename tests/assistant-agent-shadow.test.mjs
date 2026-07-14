@@ -131,6 +131,31 @@ test('shadow response parser maps provider function names to capability names', 
     }],
   })
 
+  test('semantic planner preserves reminder type and relative-minute intent', () => {
+    const result = parseAgentShadowResponse({
+      candidates: [{
+        content: {
+          parts: [{
+            functionCall: {
+              name: 'calendar_interpret_turn',
+              args: {
+                action: 'create',
+                patch: {
+                  title: 'Switch the laundry',
+                  event_type: 'reminder',
+                  relative_minutes: 20,
+                },
+              },
+            },
+          }],
+        },
+      }],
+    })
+    assert.equal(result.kind, 'calendar_semantic')
+    assert.equal(result.turn.patch.event_type, 'reminder')
+    assert.equal(result.turn.patch.relative_minutes, 20)
+  })
+
   test('calendar write planning returns semantic deltas instead of model-authored timestamps', () => {
     const request = buildAgentShadowRequest({
       messages: [{ role: 'user', content: 'Actually make it Saturday at ten.' }],

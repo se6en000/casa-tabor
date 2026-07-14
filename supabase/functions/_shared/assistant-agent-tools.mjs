@@ -40,6 +40,7 @@ export const AGENT_TOOL_DEFINITIONS = Object.freeze([
       start: string('Optional inclusive ISO range start with UTC offset.'),
       end: string('Optional exclusive ISO range end with UTC offset.'),
       member_name: string('Optional family member filter.'),
+      event_type: string('Optional exact type filter: event or reminder.'),
     },
   }),
   tool({
@@ -116,6 +117,19 @@ export const AGENT_TOOL_DEFINITIONS = Object.freeze([
       id: string('Exact event UUID returned by a calendar read tool.'),
       expected_updated_at: string('Authoritative version timestamp used for stale-write protection.'),
       title: string('Authoritative event title shown during confirmation.'),
+    },
+    required: ['id', 'expected_updated_at', 'title'],
+  }),
+  tool({
+    name: 'calendar.complete_reminder',
+    domain: 'calendar',
+    effect: 'write',
+    legacyTool: 'complete_reminder',
+    description: 'Mark one exact authoritative reminder complete. This capability is not valid for appointments.',
+    properties: {
+      id: string('Exact reminder UUID returned by a calendar read tool.'),
+      expected_updated_at: string('Authoritative version timestamp used for stale-write protection.'),
+      title: string('Authoritative reminder title shown during confirmation.'),
     },
     required: ['id', 'expected_updated_at', 'title'],
   }),

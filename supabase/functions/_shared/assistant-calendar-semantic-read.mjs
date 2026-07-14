@@ -240,7 +240,7 @@ export function resolveCalendarSemanticRead(frame, events, options = {}) {
   }
   if (frame.intent === 'calendar.availability') {
     const overlaps = []
-    const timedRows = rows.filter((event) => !event.all_day)
+    const timedRows = rows.filter((event) => !event.all_day && event.event_type !== 'reminder')
     for (let i = 0; i < timedRows.length; i += 1) {
       for (let j = i + 1; j < timedRows.length; j += 1) {
         if (Date.parse(timedRows[j].start_time) < Date.parse(timedRows[i].end_time)) {

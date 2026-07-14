@@ -3304,6 +3304,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       return `Update ${count} event${count === 1 ? '' : 's'} matching **${label}**`
     }
     if (name === 'delete_event') return `Delete: **${args.title}**`
+    if (name === 'complete_reminder') return `Mark done: **${args.title}**`
     if (name === 'delete_events_by_title') {
       const ids = Array.isArray(args.ids) ? args.ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0) : []
       const titleQuery = String(args.title_query ?? '').trim()

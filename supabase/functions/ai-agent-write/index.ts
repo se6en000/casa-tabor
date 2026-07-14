@@ -25,6 +25,7 @@ const ALLOWED_TOOLS = new Set([
   'calendar.create',
   'calendar.update',
   'calendar.delete',
+  'calendar.complete_reminder',
   'grocery.add_items',
   'grocery.update_item',
   'grocery.remove_item',
@@ -56,6 +57,7 @@ Deno.serve(async (req) => {
         start_time?: string
         end_time?: string
         all_day?: boolean
+        event_type?: string
         recurrence_master_id?: string | null
         rrule?: string | null
       }) => ({
@@ -66,6 +68,7 @@ Deno.serve(async (req) => {
         start: event.start_time,
         end: event.end_time,
         allDay: event.all_day === true,
+        eventType: event.event_type === 'reminder' ? 'reminder' : 'event',
         recurring: Boolean(event.recurrence_master_id || event.rrule),
       })),
       ...groceryItems.map((item: {
@@ -190,9 +193,11 @@ Deno.serve(async (req) => {
             )
           : []
       const ambiguousCandidates = candidateEntities(ambiguousCandidateIds, authoritativeEntities)
-      const inferredAmbiguousTool = /\b(?:delete|remove|cancel)\b/i.test(latestUserText)
-        ? 'delete_event'
-        : null
+      const inferredAmbiguousTool = /\b(?:mark|check)\b.*\b(?:done|complete|off)\b|\bcomplete\b/i.test(latestUserText)
+        ? 'complete_reminder'
+        : /\b(?:delete|remove|cancel)\b/i.test(latestUserText)
+          ? 'delete_event'
+          : null
       const clarification = ambiguousCandidates.length > 1
         ? ambiguityClarification(ambiguousCandidateIds, authoritativeEntities, body?.context?.utcOffset)
         : plan?.kind === 'clarify'
@@ -295,6 +300,7 @@ Deno.serve(async (req) => {
     const acceptedDecision = [
       'calendar.update',
       'calendar.delete',
+      'calendar.complete_reminder',
       'grocery.update_item',
       'grocery.remove_item',
     ].includes(plan.toolName)

@@ -6,7 +6,7 @@ export function resolveCalendarSemanticTurn(turn, context = {}) {
   if (!turn || turn.version !== CALENDAR_SEMANTIC_TURN_VERSION) {
     return reject('invalid_calendar_semantic_turn')
   }
-  if (!['create', 'revise', 'update', 'delete'].includes(turn.action)) {
+  if (!['create', 'revise', 'update', 'delete', 'complete'].includes(turn.action)) {
     return reject('unsupported_calendar_action')
   }
 
@@ -32,10 +32,13 @@ export function resolveCalendarSemanticTurn(turn, context = {}) {
 
   const target = resolveTarget(turn, activeEntity, entities, context)
   if (target.kind !== 'target') return target
-  if (action === 'delete') {
+  if (action === 'delete' || action === 'complete') {
+    if (action === 'complete' && target.entity.eventType !== 'reminder') {
+      return reject('calendar_reminder_required')
+    }
     return {
       kind: 'tool',
-      toolName: 'calendar.delete',
+      toolName: action === 'complete' ? 'calendar.complete_reminder' : 'calendar.delete',
       args: {
         id: target.entity.id,
         expected_updated_at: target.entity.version,
@@ -48,10 +51,14 @@ export function resolveCalendarSemanticTurn(turn, context = {}) {
 
 function resolveCreate(turn, baseArgs, context) {
   const patch = normalizePatch(turn.patch)
+  const eventType = patch.eventType ?? normalizeEventType(baseArgs?.event_type)
   const title = patch.title ?? optionalText(baseArgs?.title)
-  if (!title) return clarify('What should I call the event?', 'title')
+  if (!title) return clarify(`What should I call the ${eventType}?`, 'title')
 
-  const range = resolveRange(patch, baseArgs, context, { requireTime: true })
+  const range = resolveRange(patch, baseArgs, context, {
+    requireTime: eventType !== 'reminder',
+    defaultDurationMinutes: eventType === 'reminder' ? 30 : 60,
+  })
   if (range.kind !== 'range') return range
 
   const members = mergeNames(
@@ -67,6 +74,7 @@ function resolveCreate(turn, baseArgs, context) {
       title,
       start: range.start,
       end: range.end,
+      ...(eventType === 'reminder' ? { event_type: 'reminder' } : {}),
       ...(members.length > 0 ? { members } : {}),
       ...(patch.location !== undefined ? { location: patch.location } : {}),
       ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
@@ -84,7 +92,7 @@ function resolveUpdate(turn, target, context) {
     start: target.start,
     end: target.end,
     all_day: target.allDay,
-  }, context, { requireTime: false })
+  }, context, { requireTime: false, defaultDurationMinutes: 60 })
   if (range.kind !== 'range') return range
 
   const args = {
@@ -109,6 +117,21 @@ function resolveUpdate(turn, target, context) {
 function resolveRange(patch, baseArgs, context, options) {
   const offset = validOffset(context.utcOffset)
   if (!offset) return reject('valid_household_utc_offset_required')
+  if (patch.relativeMinutes) {
+    const current = Date.parse(String(context.currentDate ?? ''))
+    if (!Number.isFinite(current)) return reject('valid_current_date_required')
+    const startMs = current + patch.relativeMinutes * 60000
+    const durationMinutes = patch.durationMinutes ?? options.defaultDurationMinutes
+    if (!Number.isSafeInteger(durationMinutes) || durationMinutes <= 0 || durationMinutes > 366 * 24 * 60) {
+      return reject('invalid_calendar_duration')
+    }
+    return {
+      kind: 'range',
+      start: formatAtOffset(startMs, offset),
+      end: formatAtOffset(startMs + durationMinutes * 60000, offset),
+      changed: true,
+    }
+  }
   const baseStart = parseLocalDateTime(baseArgs?.start, offset)
   const baseEnd = parseLocalDateTime(baseArgs?.end, offset)
   const date = patch.dateReference
@@ -154,7 +177,7 @@ function resolveRange(patch, baseArgs, context, options) {
   } else if (!durationMinutes && baseDurationMinutes) {
     durationMinutes = baseDurationMinutes
   }
-  if (!durationMinutes) durationMinutes = allDay ? 24 * 60 : 60
+  if (!durationMinutes) durationMinutes = allDay ? 24 * 60 : options.defaultDurationMinutes
   if (!Number.isSafeInteger(durationMinutes) || durationMinutes <= 0 || durationMinutes > 366 * 24 * 60) {
     return reject('invalid_calendar_duration')
   }
@@ -166,6 +189,7 @@ function resolveRange(patch, baseArgs, context, options) {
     patch.durationMinutes ||
     patch.durationDays ||
     patch.shiftDays ||
+    patch.relativeMinutes ||
     patch.allDay !== undefined
   )
   return {
@@ -275,12 +299,18 @@ function normalizePatch(value) {
     durationMinutes: positiveInteger(patch.duration_minutes),
     durationDays: positiveInteger(patch.duration_days),
     shiftDays: safeInteger(patch.shift_days),
+    relativeMinutes: boundedPositiveInteger(patch.relative_minutes, 366 * 24 * 60),
     membersAdd: stringList(patch.members_add),
     membersRemove: stringList(patch.members_remove),
     location: optionalPatchText(patch, 'location'),
     notes: optionalPatchText(patch, 'notes'),
     allDay: typeof patch.all_day === 'boolean' ? patch.all_day : undefined,
+    eventType: normalizeEventType(patch.event_type, undefined),
   }
+}
+
+function normalizeEventType(value, fallback = 'event') {
+  return value === 'reminder' || value === 'event' ? value : fallback
 }
 
 function normalizeDateReference(value) {
@@ -439,6 +469,11 @@ function stringList(value) {
 function positiveInteger(value) {
   const number = Number(value)
   return Number.isSafeInteger(number) && number > 0 ? number : null
+}
+
+function boundedPositiveInteger(value, maximum) {
+  const number = positiveInteger(value)
+  return number && number <= maximum ? number : null
 }
 
 function optionalText(value) {

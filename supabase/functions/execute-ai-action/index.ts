@@ -749,6 +749,24 @@ Deno.serve(async (req) => {
       })
     }
 
+    if (tool === 'complete_reminder') {
+      const { data: reminder, error: reminderError } = await sb
+        .from('events')
+        .select('id, event_type, updated_at')
+        .eq('id', args.id)
+        .maybeSingle()
+      if (reminderError || !reminder) throw new Error(reminderError?.message ?? 'Reminder not found')
+      if (reminder.event_type !== 'reminder') throw new Error('Only reminders can be completed')
+      if (args.expected_updated_at && reminder.updated_at !== args.expected_updated_at) {
+        throw new Error('Reminder changed before completion. Please review it again.')
+      }
+      const { error } = await sb.from('events').update({ status: 'cancelled' }).eq('id', args.id)
+      if (error) throw new Error(error.message)
+      return new Response(JSON.stringify({ success: true, completed: true, event_id: args.id, correlation_id: cid }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
     if (tool === 'delete_events_by_title') {
       const ids = Array.isArray(args?.ids)
         ? (args.ids as unknown[])

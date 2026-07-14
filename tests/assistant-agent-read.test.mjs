@@ -152,6 +152,28 @@ test('all-day context does not create a clock-time conflict', () => {
       all_day: true,
     }],
   })
+
+  test('reminders are searchable but never create appointment conflicts', () => {
+    const reminder = {
+      id: 'reminder-1',
+      title: 'Call the dentist',
+      start_time: '2026-07-16T14:00:00.000Z',
+      end_time: '2026-07-16T14:30:00.000Z',
+      event_type: 'reminder',
+      all_day: false,
+    }
+    const search = executeAgentReadTool('calendar.search', {
+      query: 'dentist',
+      event_type: 'reminder',
+    }, { events: [events[0], reminder] })
+    assert.deepEqual(search.events.map((event) => event.id), ['reminder-1'])
+
+    const conflicts = executeAgentReadTool('calendar.check_conflicts', {
+      start: '2026-07-16T10:00:00-04:00',
+      end: '2026-07-16T10:30:00-04:00',
+    }, { events: [reminder] })
+    assert.deepEqual(conflicts.events, [])
+  })
   assert.deepEqual(result.events, [])
 })
 

@@ -65,10 +65,12 @@ function searchCalendar(args, rawEvents) {
   const events = normalizeEvents(rawEvents)
   const query = normalizeText(args?.query)
   const memberName = normalizeText(args?.member_name)
+  const eventType = normalizeText(args?.event_type)
   const range = parseRange(args?.start, args?.end)
   const filtered = events.filter((event) => {
     if (query && !event.title.toLowerCase().includes(query)) return false
     if (memberName && !event.members.some((member) => member.toLowerCase() === memberName)) return false
+    if (eventType && event.event_type !== eventType) return false
     if (range && !overlaps(event, range, args?.utc_offset)) return false
     return true
   })
@@ -119,6 +121,7 @@ function checkCalendarConflicts(args, rawEvents) {
   const ignoredId = normalizeText(args?.ignore_event_id)
   const events = normalizeEvents(rawEvents).filter((event) =>
     !event.all_day &&
+    event.event_type !== 'reminder' &&
     event.id.toLowerCase() !== ignoredId &&
     overlaps(event, range, args?.utc_offset),
   )
@@ -168,6 +171,7 @@ function normalizeEvents(rawEvents) {
       start_time: event.start_time,
       end_time: event.end_time,
       all_day: event.all_day === true,
+      event_type: event.event_type === 'reminder' ? 'reminder' : 'event',
       location_name: typeof event.location_name === 'string' ? event.location_name : null,
       address: typeof event.address === 'string' ? event.address : null,
       updated_at: typeof event.updated_at === 'string' ? event.updated_at : null,

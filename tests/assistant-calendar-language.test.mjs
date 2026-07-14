@@ -294,6 +294,32 @@ test('all-day context is listed but does not become a clock conflict or next eve
   assert.deepEqual(next.events.map((event) => event.id), ['timed'])
 })
 
+test('timed reminders stay visible but do not affect calendar availability', () => {
+  const reminder = {
+    id: 'reminder',
+    title: 'Call the dentist',
+    start_time: '2026-07-13T15:00:00Z',
+    end_time: '2026-07-13T15:30:00Z',
+    all_day: false,
+    event_type: 'reminder',
+  }
+  const appointment = {
+    id: 'appointment',
+    title: 'Dentist appointment',
+    start_time: '2026-07-13T15:00:00Z',
+    end_time: '2026-07-13T16:00:00Z',
+    all_day: false,
+    event_type: 'event',
+  }
+  const result = resolveCalendarSemanticRead(
+    parseCalendarLanguage('Do we have any conflicts on Monday?'),
+    [reminder, appointment],
+    options,
+  )
+  assert.deepEqual(result.events.map((event) => event.id), ['reminder', 'appointment'])
+  assert.deepEqual(result.conflicts, [])
+})
+
 test('calendar time-frame reads filter by day part, date, month, and overlap', () => {
   const expandedEvents = [
     ...events,

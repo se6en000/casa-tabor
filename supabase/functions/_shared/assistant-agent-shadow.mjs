@@ -81,7 +81,7 @@ export function parseAgentShadowResponse(payload) {
         : {}
       if (
         args.requested_domain === 'calendar' &&
-        ['create', 'revise', 'update', 'delete'].includes(args.requested_outcome) &&
+        ['create', 'revise', 'update', 'delete', 'complete'].includes(args.requested_outcome) &&
         args.calendar_turn &&
         typeof args.calendar_turn === 'object'
       ) {
@@ -257,11 +257,13 @@ function normalizeCalendarSemanticPatch(value) {
       'duration_minutes',
       'duration_days',
       'shift_days',
+      'relative_minutes',
       'members_add',
       'members_remove',
       'location',
       'notes',
       'all_day',
+      'event_type',
     ].includes(key)),
   )
   if (value.time && typeof value.time === 'object') {
@@ -386,7 +388,11 @@ AUTHORITATIVE READ MODE:
 ${additiveWriteMode ? `
 BOUNDED WRITE MODE:
 - Call assistant_interpret_write exactly once. First classify the requested domain and outcome, then fill only that domain's semantic payload.
-- For every calendar create, pending correction, update, or delete, set requested_domain=calendar and provide calendar_turn. Describe only the semantic change the user expressed.
+- For every calendar create, pending correction, update, delete, or reminder completion, set requested_domain=calendar and provide calendar_turn. Describe only the semantic change the user expressed.
+- Reminders are non-blocking nudges, not appointments. For "remind me", task, to-do, or nudge requests, set patch.event_type=reminder. Never request a conflict check for a reminder.
+- For relative reminders such as "in 20 minutes", set patch.relative_minutes to the exact positive minute count. Casa resolves the timestamp from CURRENT LOCAL DATE/TIME.
+- For a date-only reminder with no clock time, set patch.all_day=true.
+- Use action complete only when the person marks one exact authoritative reminder done. Never use complete for an appointment.
 - Calendar update and delete proposals always require explicit confirmation; never claim they already happened.
 - Never calculate or emit calendar timestamps. Extract date references, clock components, duration, member changes, and authoritative target identity; Casa resolves the final range deterministically.
 - Use action revise when the user corrects a pending calendar create. Omitted patch fields mean preserve the pending value.
@@ -547,8 +553,8 @@ function buildCalendarTurnDeclaration() {
       properties: {
         action: {
           type: 'string',
-          enum: ['create', 'revise', 'update', 'delete'],
-          description: 'Create a new event, revise a pending create, update a stored event, or delete a stored event.',
+          enum: ['create', 'revise', 'update', 'delete', 'complete'],
+          description: 'Create, revise, update, delete, or complete one exact reminder.',
         },
         target_entity_id: {
           type: 'string',
@@ -647,11 +653,13 @@ function buildCalendarTurnDeclaration() {
             duration_minutes: { type: 'number', description: 'Only when the user explicitly gives or changes duration.' },
             duration_days: { type: 'number', description: 'Inclusive calendar-day count for an all-day event, only when explicitly given or clearly requested.' },
             shift_days: { type: 'number', description: 'Signed number of calendar days to move the entire existing event range while preserving its duration.' },
+            relative_minutes: { type: 'number', description: 'Positive minutes from now for a relative reminder such as "in 20 minutes".' },
             members_add: { type: 'array', items: { type: 'string' } },
             members_remove: { type: 'array', items: { type: 'string' } },
             location: { type: 'string' },
             notes: { type: 'string' },
             all_day: { type: 'boolean' },
+            event_type: { type: 'string', enum: ['event', 'reminder'] },
           },
         },
       },
@@ -683,7 +691,7 @@ function buildSemanticWriteDeclaration() {
         },
         requested_outcome: {
           type: 'string',
-          enum: ['create', 'revise', 'update', 'delete', 'add_items', 'update_item', 'remove_item', 'read', 'compound', 'unsupported'],
+          enum: ['create', 'revise', 'update', 'delete', 'complete', 'add_items', 'update_item', 'remove_item', 'read', 'compound', 'unsupported'],
         },
         calendar_turn: calendarSchema,
         grocery_tool_name: {

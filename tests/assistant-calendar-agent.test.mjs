@@ -57,6 +57,90 @@ test('semantic calendar create resolves an inclusive all-day date range', () => 
       all_day: true,
     },
   })
+
+  test('semantic reminder create preserves reminder type and never becomes an appointment', () => {
+    const result = resolveCalendarSemanticTurn(turn('create', {
+      title: 'Call the dentist',
+      event_type: 'reminder',
+      date_reference: { kind: 'weekday', weekday: 'thursday' },
+      time: { hour: 8, period: 'am' },
+    }), context)
+
+    assert.deepEqual(result, {
+      kind: 'tool',
+      toolName: 'calendar.create',
+      args: {
+        title: 'Call the dentist',
+        start: '2026-07-16T08:00:00-04:00',
+        end: '2026-07-16T08:30:00-04:00',
+        event_type: 'reminder',
+      },
+    })
+  })
+
+  test('relative reminder time is resolved from the authoritative local instant', () => {
+    const result = resolveCalendarSemanticTurn(turn('create', {
+      title: 'Switch the laundry',
+      event_type: 'reminder',
+      relative_minutes: 20,
+    }), context)
+
+    assert.equal(result.kind, 'tool')
+    assert.equal(result.args.start, '2026-07-14T17:05:00-04:00')
+    assert.equal(result.args.end, '2026-07-14T17:35:00-04:00')
+    assert.equal(result.args.event_type, 'reminder')
+  })
+
+  test('pending reminder correction preserves reminder type and storage duration', () => {
+    const result = resolveCalendarSemanticTurn(turn('revise', {
+      time: { hour: 9, period: 'am' },
+    }), {
+      ...context,
+      pendingAction: {
+        toolName: 'calendar.create',
+        args: {
+          title: 'Call the dentist',
+          start: '2026-07-16T08:00:00-04:00',
+          end: '2026-07-16T08:30:00-04:00',
+          event_type: 'reminder',
+        },
+      },
+    })
+
+    assert.equal(result.args.start, '2026-07-16T09:00:00-04:00')
+    assert.equal(result.args.end, '2026-07-16T09:30:00-04:00')
+    assert.equal(result.args.event_type, 'reminder')
+  })
+
+  test('only an authoritative reminder can be completed', () => {
+    const reminder = {
+      type: 'event',
+      id: 'reminder-1',
+      title: 'Call the dentist',
+      version: 'v1',
+      start: '2026-07-16T08:00:00-04:00',
+      end: '2026-07-16T08:30:00-04:00',
+      eventType: 'reminder',
+    }
+    const result = resolveCalendarSemanticTurn(turn('complete', {}, {
+      targetEntityId: reminder.id,
+    }), {
+      ...context,
+      authoritativeEntities: [reminder],
+    })
+    assert.deepEqual(result, {
+      kind: 'tool',
+      toolName: 'calendar.complete_reminder',
+      args: { id: reminder.id, expected_updated_at: 'v1', title: reminder.title },
+    })
+
+    assert.equal(resolveCalendarSemanticTurn(turn('complete', {}, {
+      targetEntityId: 'appointment-1',
+    }), {
+      ...context,
+      authoritativeEntities: [{ ...reminder, id: 'appointment-1', eventType: 'event' }],
+    }).code, 'calendar_reminder_required')
+  })
 })
 
 test('semantic calendar create infers the next valid year for an omitted spoken year', () => {

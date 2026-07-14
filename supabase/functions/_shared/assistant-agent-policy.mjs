@@ -5,6 +5,7 @@ import { normalizeAgentConversationState } from './assistant-agent-state.mjs'
 const ALWAYS_CONFIRM = new Set([
   'calendar.update',
   'calendar.delete',
+  'calendar.complete_reminder',
   'grocery.update_item',
   'grocery.remove_item',
 ])
@@ -85,7 +86,7 @@ function evaluateDomainPolicy(tool, request) {
     const memberDecision = validateCalendarMembers(tool.name, request.args, request.authorizedMemberNames)
     if (memberDecision) return memberDecision
 
-    if (['calendar.update', 'calendar.delete'].includes(tool.name)) {
+    if (['calendar.update', 'calendar.delete', 'calendar.complete_reminder'].includes(tool.name)) {
       const target = findEntity(request.authoritativeEntities, 'event', request.args.id)
       if (!target) return clarify('authoritative_target_required', tool)
       if (hasAmbiguousLabel(request, 'event', target, 'title')) {
@@ -99,6 +100,9 @@ function evaluateDomainPolicy(tool, request) {
       }
 
       if (target.recurring === true) return reject('recurring_scope_unsupported')
+      if (tool.name === 'calendar.complete_reminder' && target.eventType !== 'reminder') {
+        return reject('calendar_reminder_required')
+      }
     }
 
     if (

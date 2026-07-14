@@ -88,6 +88,32 @@ test('destructive tools never execute without matching confirmation', () => {
   assert.equal(evaluate({ ...request, confirmedActionId: 'delete-1' }).decision, 'execute')
 })
 
+test('reminder completion is exact, confirmation-gated, and appointment-safe', () => {
+  const request = {
+    toolName: 'calendar.complete_reminder',
+    actionId: 'complete-1',
+    idempotencyKey: 'turn-1:complete-1',
+    args: { id: 'reminder-1', expected_updated_at: 'v1', title: 'Call dentist' },
+    authoritativeEntities: [{
+      type: 'event',
+      id: 'reminder-1',
+      version: 'v1',
+      eventType: 'reminder',
+    }],
+  }
+  assert.equal(evaluate(request).decision, 'confirm')
+  assert.equal(evaluate({ ...request, confirmedActionId: 'complete-1' }).decision, 'execute')
+  assert.equal(evaluate({
+    ...request,
+    authoritativeEntities: [{
+      type: 'event',
+      id: 'reminder-1',
+      version: 'v1',
+      eventType: 'event',
+    }],
+  }).code, 'calendar_reminder_required')
+})
+
 test('write retries are idempotent and pending actions cannot be crossed', () => {
   const base = {
     toolName: 'grocery.add_items',

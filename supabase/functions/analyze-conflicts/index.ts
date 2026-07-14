@@ -158,7 +158,7 @@ Deno.serve(async (req) => {
   // ── Load all events + members in range ──
   const { data: events, error: evErr } = await sb
     .from('events')
-    .select('id, title, start_time, end_time, event_members(family_member_id, role)')
+    .select('id, title, start_time, end_time, event_type, event_members(family_member_id, role)')
     .gte('start_time', rangeStart.toISOString())
     .lte('start_time', rangeEnd.toISOString())
     .neq('status', 'cancelled')
@@ -168,8 +168,11 @@ Deno.serve(async (req) => {
 
   type EventRow = {
     id: string; title: string; start_time: string; end_time: string;
+    event_type: 'event' | 'reminder';
     event_members: { family_member_id: string; role: string }[]
   }
+  const rangeEvents = events as EventRow[]
+  const conflictEligibleEvents = rangeEvents.filter((event) => event.event_type !== 'reminder')
 
   type DriverRow = {
     id: string
@@ -211,13 +214,13 @@ Deno.serve(async (req) => {
   }[] = []
 
   // ── 1. TIME CONFLICT: same person on two overlapping events ──
-  for (const ev of events as EventRow[]) {
+  for (const ev of conflictEligibleEvents) {
     const startA = new Date(ev.start_time).getTime()
     // Guard: if end_time is missing, assume 1-hour duration
     const endA = ev.end_time ? new Date(ev.end_time).getTime() : startA + 60 * 60 * 1000
     const memberIds = (ev.event_members ?? []).map((m) => m.family_member_id)
 
-    for (const other of events as EventRow[]) {
+    for (const other of conflictEligibleEvents) {
       if (other.id <= ev.id) continue // avoid duplicates
       const startB = new Date(other.start_time).getTime()
       const endB = other.end_time ? new Date(other.end_time).getTime() : startB + 60 * 60 * 1000
@@ -243,7 +246,7 @@ Deno.serve(async (req) => {
   }
 
   // ── 2. TRANSPORT GAP: child has event, no free driver at that time ──
-  for (const ev of events as EventRow[]) {
+  for (const ev of conflictEligibleEvents) {
     const memberIds = (ev.event_members ?? []).map((m) => m.family_member_id)
     const childrenOnEvent = children.filter((c: { id: string }) => memberIds.includes(c.id))
     if (childrenOnEvent.length === 0) continue
@@ -253,7 +256,7 @@ Deno.serve(async (req) => {
 
     // Check if all potential drivers are busy or unavailable during this event's time.
     const freeDrivers = (drivers as DriverRow[]).filter((driver) => {
-      const parentBusy = (events as EventRow[]).some((other) => {
+      const parentBusy = conflictEligibleEvents.some((other) => {
         if (other.id === ev.id) return false
         const startB = new Date(other.start_time).getTime()
         const endB = other.end_time ? new Date(other.end_time).getTime() : startB + 60 * 60 * 1000
@@ -284,7 +287,7 @@ Deno.serve(async (req) => {
   }
 
   // ── Find already-resolved conflicts for these events (don't resurrect dismissed ones) ──
-  const eventIds = (events as EventRow[]).map((e) => e.id)
+  const eventIds = rangeEvents.map((e) => e.id)
   const { data: existingResolved } = await sb
     .from('conflicts')
     .select('event_a_id, event_b_id, conflict_type')
