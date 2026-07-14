@@ -703,6 +703,7 @@ Deno.serve(async (req) => {
       elapsed_ms?: number
       code?: string
       planKind?: string
+      planReason?: string | null
       toolName?: string
       plan?: { toolName?: string }
       clarification?: {
@@ -820,7 +821,7 @@ Deno.serve(async (req) => {
     })
     if (
       context?.pendingAction ||
-      activeConversationEvent ||
+      (activeConversationEvent && agentWriteData?.planReason !== 'read') ||
       ['event.create', 'event.move', 'event.delete', 'event.edit'].includes(calendarFrame?.intent ?? '')
     ) {
       return {

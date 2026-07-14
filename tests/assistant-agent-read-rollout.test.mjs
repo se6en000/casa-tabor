@@ -34,3 +34,8 @@ test('agent read failures retain the current authoritative fallback path', () =>
   assert.match(assistant, /agent_read_timeout/)
   assert.match(assistant, /shouldRunAgentShadow = !shouldRunAgentWrite && !shouldRunAgentRead/)
 })
+
+test('write-lane read deferrals continue to authoritative active-event reads', () => {
+  assert.match(assistant, /activeConversationEvent && agentWriteData\?\.planReason !== 'read'/)
+  assert.match(assistant, /planReason\?: string \| null/)
+})
