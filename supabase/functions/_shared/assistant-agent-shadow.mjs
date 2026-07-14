@@ -251,7 +251,10 @@ function normalizeCalendarSemanticPatch(value) {
     Object.entries(value).filter(([key]) => [
       'title',
       'date_reference',
+      'end_date_reference',
       'duration_minutes',
+      'duration_days',
+      'shift_days',
       'members_add',
       'members_remove',
       'location',
@@ -400,6 +403,8 @@ BOUNDED WRITE MODE:
 - If multiple grocery items could match and ACTIVE ENTITY does not identify one exact item, call assistant_write_defer with reason ambiguous.
 - Before any grocery update, compare every authoritative grocery item. When two or more share the requested name and ACTIVE ENTITY does not identify one of them, you MUST defer as ambiguous; never choose the first row.
 - For calendar updates and deletes, always provide target with the title/date/time clues the person used. Select target_entity_id only for one exact target from AUTHORITATIVE ENTITIES. If multiple remain plausible, preserve the requested semantic patch, put every plausible ID in candidate_entity_ids, and omit target_entity_id so Casa can deterministically narrow the choices or ask without losing the requested change.
+- For an all-day range such as "Friday through Monday", put Friday in patch.date_reference and the inclusive Monday in patch.end_date_reference. Do not convert the range to one date or ask for a time.
+- For "move the whole trip one week later" or similar shifts of an existing event, set patch.shift_days to the signed calendar-day offset and omit replacement dates so Casa preserves the complete duration.
 - Normalize obvious speech-to-text spelling into the intended common calendar title or grocery item name without adding unstated items.
 - Do not invent missing titles, items, people, dates, times, quantities, or locations.
 ` : ''}
@@ -572,6 +577,23 @@ function buildCalendarTurnDeclaration() {
               },
               required: ['kind'],
             },
+            end_date_reference: {
+              type: 'object',
+              additionalProperties: false,
+              description: 'Inclusive final calendar date when the person gives a multi-day range such as Friday through Monday.',
+              properties: {
+                kind: {
+                  type: 'string',
+                  enum: ['absolute', 'weekday', 'today', 'tomorrow', 'day_after_tomorrow', 'relative_days'],
+                },
+                year: { type: 'number' },
+                month: { type: 'number' },
+                day: { type: 'number' },
+                weekday: { type: 'string', enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] },
+                offset_days: { type: 'number' },
+              },
+              required: ['kind'],
+            },
             time: {
               type: 'object',
               additionalProperties: false,
@@ -620,6 +642,8 @@ function buildCalendarTurnDeclaration() {
               required: ['hour', 'period'],
             },
             duration_minutes: { type: 'number', description: 'Only when the user explicitly gives or changes duration.' },
+            duration_days: { type: 'number', description: 'Inclusive calendar-day count for an all-day event, only when explicitly given or clearly requested.' },
+            shift_days: { type: 'number', description: 'Signed number of calendar days to move the entire existing event range while preserving its duration.' },
             members_add: { type: 'array', items: { type: 'string' } },
             members_remove: { type: 'array', items: { type: 'string' } },
             location: { type: 'string' },

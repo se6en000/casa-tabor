@@ -132,20 +132,40 @@ function resolveRange(patch, baseArgs, context, options) {
     return clarify('What time should I use?', 'time')
   }
 
-  const startMs = timestampForLocal(date, startHour, startMinute, offset.minutes)
+  const baseDurationMinutes = baseStart && baseEnd
+    ? Math.round((baseEnd.timestamp - baseStart.timestamp) / 60000)
+    : null
+  const startMs = timestampForLocal(date, startHour, startMinute, offset.minutes) +
+    (patch.shiftDays && !patch.dateReference ? patch.shiftDays * 24 * 60 * 60000 : 0)
   let durationMinutes = patch.durationMinutes
-  if (!durationMinutes && baseStart && baseEnd) {
-    durationMinutes = Math.round((baseEnd.timestamp - baseStart.timestamp) / 60000)
+  if (patch.endDateReference) {
+    if (!allDay) return reject('multi_day_range_requires_all_day')
+    const inclusiveEndDate = resolveDateReference(
+      patch.endDateReference,
+      context.currentDate,
+      offset.minutes,
+    )
+    if (!inclusiveEndDate) return clarify('What is the last day of the event?', 'end_date')
+    const exclusiveEndMs = timestampForLocal(inclusiveEndDate, 0, 0, offset.minutes) + 24 * 60 * 60000
+    durationMinutes = Math.round((exclusiveEndMs - startMs) / 60000)
+  } else if (patch.durationDays) {
+    if (!allDay) return reject('calendar_day_duration_requires_all_day')
+    durationMinutes = patch.durationDays * 24 * 60
+  } else if (!durationMinutes && baseDurationMinutes) {
+    durationMinutes = baseDurationMinutes
   }
   if (!durationMinutes) durationMinutes = allDay ? 24 * 60 : 60
-  if (!Number.isSafeInteger(durationMinutes) || durationMinutes <= 0 || durationMinutes > 14 * 24 * 60) {
+  if (!Number.isSafeInteger(durationMinutes) || durationMinutes <= 0 || durationMinutes > 366 * 24 * 60) {
     return reject('invalid_calendar_duration')
   }
 
   const changed = Boolean(
     patch.dateReference ||
+    patch.endDateReference ||
     patch.time ||
     patch.durationMinutes ||
+    patch.durationDays ||
+    patch.shiftDays ||
     patch.allDay !== undefined
   )
   return {
@@ -250,8 +270,11 @@ function normalizePatch(value) {
   return {
     title: optionalText(patch.title),
     dateReference: normalizeDateReference(patch.date_reference),
+    endDateReference: normalizeDateReference(patch.end_date_reference),
     time: normalizeTime(patch.time),
     durationMinutes: positiveInteger(patch.duration_minutes),
+    durationDays: positiveInteger(patch.duration_days),
+    shiftDays: safeInteger(patch.shift_days),
     membersAdd: stringList(patch.members_add),
     membersRemove: stringList(patch.members_remove),
     location: optionalPatchText(patch, 'location'),
@@ -269,6 +292,7 @@ function normalizeDateReference(value) {
     const day = positiveInteger(value.day)
     return year && month && day ? { kind, year, month, day } : null
   }
+
   if (kind === 'weekday' && WEEKDAYS.includes(value.weekday)) {
     return { kind, weekday: value.weekday }
   }
@@ -277,6 +301,10 @@ function normalizeDateReference(value) {
     return { kind, offsetDays: value.offset_days }
   }
   return null
+}
+
+function safeInteger(value) {
+  return Number.isSafeInteger(value) && Math.abs(value) <= 366 ? value : null
 }
 
 function normalizeTime(value) {
