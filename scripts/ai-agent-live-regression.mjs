@@ -225,8 +225,30 @@ async function run() {
   expect(durationMinutes(dinner.response.args) === 90, 'Dinner duration was not 90 minutes')
   pass('03-dinner-create', `${dinner.response.args.start} for 90 minutes`)
 
+      const clarifiedDinner = await callAssistant({
+        key: '04-dinner-member-clarification',
+        text: 'Mom is Kelly and make it for an hour and a half.',
+        family,
+        history: [
+          ...dinner.messages,
+          { role: 'assistant', content: dinner.response.display_text },
+        ],
+        pendingAction: {
+          actionId: dinner.response.action_id,
+          tool: dinner.response.tool,
+          args: dinner.response.args,
+        },
+      })
+      expect(clarifiedDinner.response.type === 'tool_action' && clarifiedDinner.response.tool === 'create_event', 'Dinner member clarification did not revise create_event')
+      expect(durationMinutes(clarifiedDinner.response.args) === 90, 'Dinner member clarification lost the requested duration')
+      expect(
+        clarifiedDinner.response.args.members?.some((name) => name.toLowerCase() === 'kelly'),
+        'Dinner member clarification did not resolve Mom to Kelly',
+      )
+      pass('04-dinner-member-clarification', 'Mom resolved to Kelly with 90-minute duration')
+
     const correctedDinner = await callAssistant({
-    key: '04-dinner-correction',
+      key: '05-dinner-correction',
     text: 'Actually, make that Saturday at ten.',
     family,
     history: [
@@ -242,7 +264,7 @@ async function run() {
   expect(correctedDinner.response.type === 'tool_action' && correctedDinner.response.tool === 'create_event', 'Pending dinner correction did not revise create_event')
   expect(durationMinutes(correctedDinner.response.args) === 90, 'Pending dinner correction lost duration')
   expect(new Date(correctedDinner.response.args.start).getDay() === 6, 'Pending dinner correction did not move to Saturday')
-  pass('04-dinner-correction', `${correctedDinner.response.args.start} with duration preserved`)
+  pass('05-dinner-correction', `${correctedDinner.response.args.start} with duration preserved`)
 
     const soccerRead = await callAssistant({
     key: '05-soccer-read',
