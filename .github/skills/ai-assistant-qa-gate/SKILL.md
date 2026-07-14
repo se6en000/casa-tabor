@@ -17,7 +17,8 @@ conversations.
   only launches the deterministic script and summarizes structured output;
   reserve a heavier reasoning model for investigating actual failures.
 - Default to the **smoke** gate. It runs 12 representative steps.
-- Use `gemini-2.5-flash-lite`, the least expensive supported production model.
+- Use `gemini-2.5-flash` for every routine and release QA run so tests match
+  Casa's selected production conversation model.
 - Run **full** only before deployment, after assistant-routing changes, or for
   periodic deeper validation.
 - Most covered calendar/grocery paths are deterministic and consume no model
@@ -46,6 +47,15 @@ Acceptance:
 npm run qa:ai-assistant:full
 ```
 
+### Calendar and grocery core gate
+
+```bash
+npm run qa:ai-assistant:core
+```
+
+Use this while cooking is deferred. It runs the full calendar and grocery
+portion without treating later cooking work as a current release blocker.
+
 ### Calendar management edge gate
 
 ```bash
@@ -64,7 +74,7 @@ tool safety, execution, and readback—not exact assistant wording.
 node scripts/ai-assistant-qa-sweep.mjs \
   --mode=full \
   --count=20 \
-  --model=gemini-2.5-flash-lite
+  --model=gemini-2.5-flash
 ```
 
 ## Procedure

@@ -14,7 +14,7 @@ const env = Object.fromEntries(
 
 const SUPABASE_URL = env.VITE_SUPABASE_URL
 const SERVICE_KEY = env.SUPABASE_SERVICE_ROLE_KEY
-const MODEL = process.argv.find((arg) => arg.startsWith('--model='))?.split('=')[1] ?? 'gemini-2.5-flash-lite'
+const MODEL = process.argv.find((arg) => arg.startsWith('--model='))?.split('=')[1] ?? 'gemini-2.5-flash'
 const runId = `agent-shadow-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
 if (!SUPABASE_URL || !SERVICE_KEY) throw new Error('Missing Supabase QA credentials')
 

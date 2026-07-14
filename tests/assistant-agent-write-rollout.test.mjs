@@ -33,10 +33,10 @@ test('write rollout forwards exact active grocery context and versions', () => {
   assert.match(assistant, /notes, updated_at/)
 })
 
-test('write rollout retains legacy fallback and isolates read sampling', () => {
+test('write rollout falls through to authoritative reads after non-write plans', () => {
   assert.match(assistant, /server_agent_write_fallback/)
   assert.match(assistant, /agentWriteData\?\.code/)
   assert.match(assistant, /agent_write_timeout/)
-  assert.match(assistant, /shouldRunAgentRead = !shouldRunAgentWrite/)
+  assert.match(assistant, /shouldRunAgentRead = !dryRun/)
   assert.match(assistant, /shouldRunAgentShadow = !shouldRunAgentWrite && !shouldRunAgentRead/)
 })

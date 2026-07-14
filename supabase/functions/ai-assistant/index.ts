@@ -608,7 +608,7 @@ Deno.serve(async (req) => {
       failure: agentWriteFallback,
     })
   }
-  const shouldRunAgentRead = !shouldRunAgentWrite && !dryRun &&
+  const shouldRunAgentRead = !dryRun &&
     agentReadConfig?.enabled === true &&
     agentReadRate > 0 &&
     ['calendar', 'grocery'].includes(String(context?.page ?? '')) &&

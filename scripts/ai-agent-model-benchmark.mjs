@@ -19,7 +19,7 @@ const env = Object.fromEntries(
 
 const SUPABASE_URL = env.VITE_SUPABASE_URL
 const SERVICE_KEY = env.SUPABASE_SERVICE_ROLE_KEY
-const DEFAULT_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.5-flash']
+const DEFAULT_MODELS = ['gemini-2.5-flash']
 const MODEL_PRICES = {
   'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
   'gemini-2.5-flash': { input: 0.30, output: 2.50 },

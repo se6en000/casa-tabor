@@ -26,7 +26,7 @@ const runId = `ai-qa-${now.toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
 const traceBase = crypto.randomUUID()
 const DEFAULT_LIMIT = Number(process.argv.find((arg) => arg.startsWith('--count='))?.split('=')[1] ?? '0')
 const MODE = process.argv.find((arg) => arg.startsWith('--mode='))?.split('=')[1] ?? 'full'
-const MODEL = process.argv.find((arg) => arg.startsWith('--model='))?.split('=')[1] ?? 'gemini-2.5-flash-lite'
+const MODEL = process.argv.find((arg) => arg.startsWith('--model='))?.split('=')[1] ?? 'gemini-2.5-flash'
 const SUPPORTED_MODES = new Set(['smoke', 'full', 'showcase', 'calendar-edge'])
 const SUPPORTED_MODELS = new Set(['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.5-flash'])
 if (!SUPPORTED_MODES.has(MODE)) throw new Error(`Unsupported QA mode: ${MODE}`)
