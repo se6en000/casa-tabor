@@ -17,10 +17,30 @@ export function hardenExplicitReminderTurn(turn, text) {
   patch.event_type = 'reminder'
 
   const relativeMinutes = parseRelativeMinutes(text)
-  if (relativeMinutes) patch.relative_minutes = relativeMinutes
+  if (relativeMinutes) {
+    patch.relative_minutes = relativeMinutes
+    delete patch.duration_minutes
+  }
   if (patch.date_reference && !patch.time && !relativeMinutes) patch.all_day = true
 
   return { ...turn, patch }
+}
+
+export function fallbackExplicitRelativeReminderTurn(text) {
+  if (!isExplicitReminder(text)) return null
+  const relativeMinutes = parseRelativeMinutes(text)
+  if (!relativeMinutes) return null
+  const title = String(text ?? '').match(/\bto\s+(.+?)[.!?]*$/i)?.[1]?.trim()
+  if (!title) return null
+  return {
+    version: 'calendar-semantic-turn-v1',
+    action: 'create',
+    patch: {
+      title,
+      event_type: 'reminder',
+      relative_minutes: relativeMinutes,
+    },
+  }
 }
 
 function isExplicitReminder(text) {

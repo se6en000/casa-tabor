@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { hardenExplicitReminderTurn } from '../supabase/functions/_shared/assistant-reminder-intent.mjs'
+import {
+  fallbackExplicitRelativeReminderTurn,
+  hardenExplicitReminderTurn,
+} from '../supabase/functions/_shared/assistant-reminder-intent.mjs'
 
 test('explicit reminder language cannot be downgraded to an appointment', () => {
   const turn = hardenExplicitReminderTurn({
@@ -22,12 +25,29 @@ test('relative reminder minutes are recovered deterministically from natural lan
     patch: { title: 'Switch the laundry' },
   }, 'Remind me in 20 minutes to switch the laundry.')
   assert.equal(numeric.patch.relative_minutes, 20)
+  assert.equal(numeric.patch.duration_minutes, undefined)
 
   const spoken = hardenExplicitReminderTurn({
     action: 'create',
     patch: { title: 'Check the oven' },
   }, 'Set a reminder in twenty five minutes to check the oven.')
   assert.equal(spoken.patch.relative_minutes, 25)
+})
+
+test('relative reminders have a bounded deterministic fallback when planning is unavailable', () => {
+  assert.deepEqual(
+    fallbackExplicitRelativeReminderTurn('Remind me in 20 minutes to switch the laundry.'),
+    {
+      version: 'calendar-semantic-turn-v1',
+      action: 'create',
+      patch: {
+        title: 'switch the laundry',
+        event_type: 'reminder',
+        relative_minutes: 20,
+      },
+    },
+  )
+  assert.equal(fallbackExplicitRelativeReminderTurn('Schedule laundry tomorrow.'), null)
 })
 
 test('date-only reminder language becomes all-day without affecting ordinary events', () => {

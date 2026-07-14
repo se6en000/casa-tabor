@@ -15,7 +15,10 @@ import {
   getAgentToolByLegacyName,
   legacyToolNameFor,
 } from '../_shared/assistant-agent-tools.mjs'
-import { hardenExplicitReminderTurn } from '../_shared/assistant-reminder-intent.mjs'
+import {
+  fallbackExplicitRelativeReminderTurn,
+  hardenExplicitReminderTurn,
+} from '../_shared/assistant-reminder-intent.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -132,9 +135,15 @@ Deno.serve(async (req) => {
         action_id: actionId,
       },
     })
-    if (plannerResult.error) return result({ supported: false, code: 'planner_error' }, 503)
-
-    let plan = plannerResult.data?.plan
+    const fallbackReminderTurn = plannerResult.error
+      ? fallbackExplicitRelativeReminderTurn(latestUserText)
+      : null
+    let plan = plannerResult.error
+      ? fallbackReminderTurn
+        ? { kind: 'calendar_semantic', turn: fallbackReminderTurn }
+        : null
+      : plannerResult.data?.plan
+    if (plannerResult.error && !plan) return result({ supported: false, code: 'planner_error' }, 503)
     if (plan?.kind === 'calendar_semantic') {
       plan.turn = hardenExplicitReminderTurn(plan.turn, latestUserText)
       const resolved = resolveCalendarSemanticTurn(plan.turn, {
