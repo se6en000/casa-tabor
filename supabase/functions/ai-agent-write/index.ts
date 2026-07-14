@@ -15,6 +15,7 @@ import {
   getAgentToolByLegacyName,
   legacyToolNameFor,
 } from '../_shared/assistant-agent-tools.mjs'
+import { hardenExplicitReminderTurn } from '../_shared/assistant-reminder-intent.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -135,6 +136,7 @@ Deno.serve(async (req) => {
 
     let plan = plannerResult.data?.plan
     if (plan?.kind === 'calendar_semantic') {
+      plan.turn = hardenExplicitReminderTurn(plan.turn, latestUserText)
       const resolved = resolveCalendarSemanticTurn(plan.turn, {
         currentDate: body?.context?.currentDate,
         utcOffset: body?.context?.utcOffset,
