@@ -37,55 +37,68 @@ test('semantic calendar create resolves local date, time, and explicit duration 
     start: '2026-07-19T18:00:00-04:00',
     end: '2026-07-19T19:30:00-04:00',
   })
+})
 
-  test('semantic calendar create resolves an inclusive all-day date range', () => {
-    const result = resolveCalendarSemanticTurn(turn('create', {
+test('semantic calendar create resolves an inclusive all-day date range', () => {
+  const result = resolveCalendarSemanticTurn(turn('create', {
+    title: 'Family Staycation',
+    date_reference: { kind: 'absolute', year: 2026, month: 8, day: 3 },
+    end_date_reference: { kind: 'absolute', year: 2026, month: 8, day: 7 },
+    all_day: true,
+  }), context)
+
+  assert.deepEqual(result, {
+    kind: 'tool',
+    toolName: 'calendar.create',
+    args: {
       title: 'Family Staycation',
-      date_reference: { kind: 'absolute', year: 2026, month: 8, day: 3 },
-      end_date_reference: { kind: 'absolute', year: 2026, month: 8, day: 7 },
-      all_day: true,
-    }), context)
-
-    assert.deepEqual(result, {
-      kind: 'tool',
-      toolName: 'calendar.create',
-      args: {
-        title: 'Family Staycation',
-        start: '2026-08-03T00:00:00-04:00',
-        end: '2026-08-08T00:00:00-04:00',
-        all_day: true,
-      },
-    })
-  })
-
-  test('whole-range shift preserves a multi-day all-day event duration', () => {
-    const event = {
-      type: 'event',
-      id: 'staycation',
-      title: 'Family Staycation',
-      version: 'v1',
       start: '2026-08-03T00:00:00-04:00',
       end: '2026-08-08T00:00:00-04:00',
-      allDay: true,
-    }
-    const result = resolveCalendarSemanticTurn(turn('update', {
-      shift_days: 7,
-    }), {
-      ...context,
-      authoritativeEntities: [event],
-      activeEntity: { type: 'event', id: event.id },
-    })
+      all_day: true,
+    },
+  })
+})
 
-    assert.deepEqual(result, {
-      kind: 'tool',
-      toolName: 'calendar.update',
-      args: {
-        id: event.id,
-        expected_updated_at: event.version,
-        start: '2026-08-10T00:00:00-04:00',
-        end: '2026-08-15T00:00:00-04:00',
-      },
-    })
+test('semantic calendar create infers the next valid year for an omitted spoken year', () => {
+  const result = resolveCalendarSemanticTurn(turn('create', {
+    title: 'Family Staycation',
+    date_reference: { kind: 'absolute', month: 8, day: 3 },
+    duration_days: 5,
+    all_day: true,
+  }), context)
+
+  assert.equal(result.kind, 'tool')
+  assert.equal(result.args.start, '2026-08-03T00:00:00-04:00')
+  assert.equal(result.args.end, '2026-08-08T00:00:00-04:00')
+})
+
+test('whole-range shift preserves a multi-day all-day event duration', () => {
+  const event = {
+    type: 'event',
+    id: 'staycation',
+    title: 'Family Staycation',
+    version: 'v1',
+    start: '2026-08-03T00:00:00-04:00',
+    end: '2026-08-08T00:00:00-04:00',
+    allDay: true,
+  }
+  const result = resolveCalendarSemanticTurn(turn('update', {
+    shift_days: 7,
+  }), {
+    ...context,
+    authoritativeEntities: [event],
+    activeEntity: { type: 'event', id: event.id },
+  })
+
+  assert.deepEqual(result, {
+    kind: 'tool',
+    toolName: 'calendar.update',
+    args: {
+      id: event.id,
+      expected_updated_at: event.version,
+      start: '2026-08-10T00:00:00-04:00',
+      end: '2026-08-15T00:00:00-04:00',
+    },
   })
 })
 

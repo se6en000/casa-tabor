@@ -290,7 +290,7 @@ function normalizeDateReference(value) {
     const year = positiveInteger(value.year)
     const month = positiveInteger(value.month)
     const day = positiveInteger(value.day)
-    return year && month && day ? { kind, year, month, day } : null
+    return month && day ? { kind, ...(year ? { year } : {}), month, day } : null
   }
 
   if (kind === 'weekday' && WEEKDAYS.includes(value.weekday)) {
@@ -339,9 +339,20 @@ function resolveClock(time, baseStart) {
 
 function resolveDateReference(reference, currentDate, offsetMinutes) {
   if (reference.kind === 'absolute') {
-    const value = new Date(Date.UTC(reference.year, reference.month - 1, reference.day, 12))
+    const current = new Date(currentDate)
+    if (!Number.isFinite(current.getTime())) return null
+    const currentLocal = new Date(current.getTime() + offsetMinutes * 60000)
+    let year = reference.year ?? currentLocal.getUTCFullYear()
+    let value = new Date(Date.UTC(year, reference.month - 1, reference.day, 12))
     if (
-      value.getUTCFullYear() !== reference.year ||
+      reference.year === undefined &&
+      formatDate(value) < formatDate(currentLocal)
+    ) {
+      year += 1
+      value = new Date(Date.UTC(year, reference.month - 1, reference.day, 12))
+    }
+    if (
+      value.getUTCFullYear() !== year ||
       value.getUTCMonth() !== reference.month - 1 ||
       value.getUTCDate() !== reference.day
     ) return null
