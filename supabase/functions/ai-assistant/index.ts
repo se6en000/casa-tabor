@@ -55,6 +55,7 @@ import { shouldRetryTransientLlmStatus } from '../_shared/assistant-llm-retry.mj
 import { resolveGrocerySemantic } from '../_shared/assistant-grocery-semantic.mjs'
 import { classifyAssistantAmbiguity, safeFullProfileToolNames } from '../_shared/assistant-request-safety.mjs'
 import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
+import { getAgentToolByLegacyName } from '../_shared/assistant-agent-tools.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -357,6 +358,7 @@ Deno.serve(async (req) => {
   const contextLoadStartMs = Date.now()
   const [
     { data: cfgRow },
+    agentShadowConfigResult,
     homeConfigResult,
     { data: savedPlaces },
     savedContactsResult,
@@ -369,6 +371,8 @@ Deno.serve(async (req) => {
     availabilityExceptionsResult,
   ] = await Promise.all([
     sb.from('settings').select('value').eq('key', 'llm_config').limit(1),
+    sb.from('settings').select('value').eq('key', 'agent_shadow_config').maybeSingle()
+      .then(r => r).catch(() => ({ data: null, error: null })),
     needsPlaceData
       ? sb.from('settings').select('value').eq('key', 'home_config').maybeSingle()
       : skippedRow,
@@ -454,6 +458,100 @@ Deno.serve(async (req) => {
     input_tokens: 0,
     output_tokens: 0,
     total_tokens: 0,
+  }
+  const agentShadowConfig = agentShadowConfigResult?.data?.value as {
+    enabled?: boolean
+    sample_rate?: number
+    model?: string
+  } | null
+  const agentShadowRate = typeof agentShadowConfig?.sample_rate === 'number'
+    ? Math.max(0, Math.min(1, agentShadowConfig.sample_rate))
+    : 0
+  const shouldRunAgentShadow = !dryRun &&
+    agentShadowConfig?.enabled === true &&
+    agentShadowRate > 0 &&
+    Math.random() < agentShadowRate
+  if (shouldRunAgentShadow) {
+    const authoritativeEntities = [
+      ...(allEvents ?? []).slice(0, 30).map((event: {
+        id: string
+        updated_at?: string
+        title?: string
+        start_time?: string
+        end_time?: string
+        recurrence_master_id?: string | null
+        rrule?: string | null
+      }) => ({
+        type: 'event',
+        id: event.id,
+        version: event.updated_at ?? null,
+        title: event.title ?? null,
+        start: event.start_time ?? null,
+        end: event.end_time ?? null,
+        recurring: Boolean(event.recurrence_master_id || event.rrule),
+      })),
+      ...(groceryItems ?? []).slice(0, 30).map((item: { id: string; name?: string; quantity?: string; unit?: string }) => ({
+        type: 'grocery_item',
+        id: item.id,
+        name: item.name ?? null,
+        quantity: item.quantity ?? null,
+        unit: item.unit ?? null,
+      })),
+      ...(recipes ?? []).slice(0, 20).map((recipe: { id: string; name?: string }) => ({
+        type: 'recipe',
+        id: recipe.id,
+        name: recipe.name ?? null,
+      })),
+    ]
+    const activeEntity = incomingConversationState?.activeEntityType === 'event'
+      ? authoritativeEntities.find((entity) => entity.type === 'event' && entity.id === incomingConversationState.activeEventId) ?? null
+      : incomingConversationState?.activeEntityType === 'grocery_item'
+        ? authoritativeEntities.find((entity) => entity.type === 'grocery_item' && entity.id === incomingConversationState.activeGroceryItemId) ?? null
+        : null
+    const pendingLegacyTool = getAgentToolByLegacyName(context?.pendingAction?.tool)
+    const shadowPromise = sb.functions.invoke('ai-agent-shadow', {
+      body: {
+        messages,
+        context: {
+          page: context?.page,
+          assistant_mode: context?.assistant_mode,
+          currentDate: context?.currentDate,
+          utcOffset: context?.utcOffset,
+          family: context?.family,
+          authoritativeEntities,
+          activeEntity,
+          pendingAction: context?.pendingAction ? {
+            actionId: `${cid}:pending`,
+            toolName: pendingLegacyTool?.name ?? context.pendingAction.tool,
+            args: context.pendingAction.args ?? {},
+          } : null,
+        },
+        trace_id: traceId,
+        turn_id: turnId,
+        correlation_id: `${cid}:shadow`,
+        household_id: 'default',
+        model_override: agentShadowConfig?.model ?? DEFAULT_GEMINI_MODEL,
+      },
+    }).then(({ error }) => {
+      if (error) {
+        console.warn(`[ai-assistant][${cid}] agent_shadow_error=${error.message}`)
+      }
+    }).catch((error) => {
+      console.warn(`[ai-assistant][${cid}] agent_shadow_error=${String(error)}`)
+    })
+    const edgeRuntime = globalThis as unknown as {
+      EdgeRuntime?: { waitUntil(promise: Promise<unknown>): void }
+    }
+    if (edgeRuntime.EdgeRuntime?.waitUntil) {
+      edgeRuntime.EdgeRuntime.waitUntil(shadowPromise)
+    } else {
+      void shadowPromise
+    }
+    appendServerTrace('server_agent_shadow_scheduled', `sample_rate=${agentShadowRate}`, {
+      shadow_model: agentShadowConfig?.model ?? DEFAULT_GEMINI_MODEL,
+      sample_rate: agentShadowRate,
+      authoritative_entity_count: authoritativeEntities.length,
+    })
   }
   if (requestAmbiguity) {
     const requestTotalMs = Date.now() - requestStartMs
