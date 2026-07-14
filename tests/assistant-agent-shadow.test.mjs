@@ -106,7 +106,7 @@ test('completed clear conflict checks cannot loop', () => {
       kind: 'tool',
       toolName: 'grocery.remove_item',
       args: {},
-    }, writeRequest), false)
+    }, writeRequest), true)
   })
   const names = request.tools[0].function_declarations.map((tool) => tool.name)
   assert.ok(!names.includes('calendar_check_conflicts'))
@@ -262,7 +262,7 @@ test('authoritative read planning exposes only reads and typed deferral', () => 
   })
 })
 
-test('write proposal planning exposes additive and exact updates but no destructive tools', () => {
+test('write proposal planning exposes confirmed destructive tools without direct execution', () => {
   const request = buildAgentShadowRequest({
     messages: [{ role: 'user', content: 'Move the dentist appointment to Friday' }],
     plannerMode: 'additive_write',
@@ -271,7 +271,9 @@ test('write proposal planning exposes additive and exact updates but no destruct
   assert.equal(request.tool_config.function_calling_config.mode, 'ANY')
   assert.deepEqual(declarations.map((declaration) => declaration.name), [
     'calendar_update',
+    'calendar_delete',
     'grocery_update_item',
+    'grocery_remove_item',
     'assistant_add_request',
     'assistant_write_defer',
   ])
@@ -279,6 +281,8 @@ test('write proposal planning exposes additive and exact updates but no destruct
     request.system_instruction.parts[0].text,
     /ACTIVE ENTITY grocery_item is an exact authoritative target/,
   )
+  assert.match(request.system_instruction.parts[0].text, /always require explicit confirmation/)
+  assert.ok(declarations.at(-1).parameters.properties.candidate_entity_ids)
 
   assert.deepEqual(parseAgentShadowResponse({
     candidates: [{
@@ -286,12 +290,44 @@ test('write proposal planning exposes additive and exact updates but no destruct
         parts: [{
           functionCall: {
             name: 'assistant_write_defer',
-            args: { reason: 'destructive' },
+            args: {
+              reason: 'ambiguous',
+              candidate_entity_ids: ['event-1', 'event-2'],
+            },
           },
         }],
       },
     }],
-  }), { kind: 'defer', reason: 'destructive' })
+  }), {
+    kind: 'defer',
+    reason: 'ambiguous',
+    candidateEntityIds: ['event-1', 'event-2'],
+  })
+
+  assert.deepEqual(parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'calendar_delete',
+            args: {
+              id: 'event-1',
+              expected_updated_at: '2026-07-14T16:00:00Z',
+              title: 'Birthday dinner',
+            },
+          },
+        }],
+      },
+    }],
+  }), {
+    kind: 'tool',
+    toolName: 'calendar.delete',
+    args: {
+      id: 'event-1',
+      expected_updated_at: '2026-07-14T16:00:00Z',
+      title: 'Birthday dinner',
+    },
+  })
 
   assert.deepEqual(parseAgentShadowResponse({
     candidates: [{

@@ -13,6 +13,7 @@ test('live agent regression covers natural calendar and grocery conversations', 
     "Is that the only thing that's happening Thursday afternoon?",
     "There's no softball practice as well",
     'what does thirty afternoon thursday afternoon look like',
+    'Delete the late Thursday pickup at 9:15 PM.',
     'Schedule dinner with Mom Sunday around six for an hour and a half.',
     'Mom is Kelly and make it for an hour and a half.',
     'Actually, make that Saturday at ten.',
@@ -21,6 +22,7 @@ test('live agent regression covers natural calendar and grocery conversations', 
     'Make that two.',
     'Check them off.',
     'Check off sparkling water.',
+    'Remove quail eggs from the grocery list.',
   ]) {
     assert.match(script, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }

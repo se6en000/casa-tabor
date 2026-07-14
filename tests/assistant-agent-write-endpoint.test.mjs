@@ -7,22 +7,24 @@ const endpoint = readFileSync(
   'utf8',
 )
 
-test('agent write endpoint proposes additive and exact updates through policy', () => {
+test('agent write endpoint proposes additive, exact update, and destructive confirmations through policy', () => {
   assert.match(endpoint, /planner_mode: 'additive_write'/)
   assert.match(endpoint, /evaluateAgentToolCall/)
   assert.match(endpoint, /calendar\.create/)
   assert.match(endpoint, /calendar\.update/)
   assert.match(endpoint, /grocery\.add_items/)
   assert.match(endpoint, /grocery\.update_item/)
+  assert.match(endpoint, /calendar\.delete/)
+  assert.match(endpoint, /grocery\.remove_item/)
   assert.match(endpoint, /acceptedDecision/)
   assert.match(endpoint, /type: 'tool_action'/)
 })
 
-test('agent write endpoint never executes or exposes destructive capabilities', () => {
+test('agent write endpoint never directly executes mutations', () => {
   assert.doesNotMatch(endpoint, /execute-ai-action/)
   assert.doesNotMatch(endpoint, /\.from\(['"](?:events|grocery_items)['"]\)\.(?:insert|update|delete)/)
-  assert.doesNotMatch(endpoint, /calendar\.delete/)
-  assert.doesNotMatch(endpoint, /grocery\.remove_item/)
+  assert.match(endpoint, /acceptedDecision/)
+  assert.match(endpoint, /\? 'confirm'/)
 })
 
 test('agent write endpoint checks duplicates and emits proposal telemetry', () => {
@@ -63,4 +65,6 @@ test('planner clarification and ambiguity remain in the bounded lane', () => {
   assert.match(endpoint, /plan\?\.kind === 'clarify'/)
   assert.match(endpoint, /plan\?\.reason === 'ambiguous'/)
   assert.match(endpoint, /I found more than one possible match/)
+  assert.match(endpoint, /candidateEntityIds/)
+  assert.match(endpoint, /ambiguityClarification/)
 })

@@ -47,4 +47,5 @@ test('semantic calendar scope retrieves broad context while preserving the prima
   assert.match(endpoint, /primary_end: calendarReadContext\.end/)
   assert.match(endpoint, /trustedReadOverride/)
   assert.match(endpoint, /trusted_semantic_read/)
+  assert.match(endpoint, /planner\?\.policy\?\.decision !== 'execute'/)
 })

@@ -22,8 +22,10 @@ const CORS = {
 const ALLOWED_TOOLS = new Set([
   'calendar.create',
   'calendar.update',
+  'calendar.delete',
   'grocery.add_items',
   'grocery.update_item',
+  'grocery.remove_item',
 ])
 
 Deno.serve(async (req) => {
@@ -126,7 +128,7 @@ Deno.serve(async (req) => {
       const clarification = plan?.kind === 'clarify'
         ? optionalText(plan.text, 500)
         : plan?.kind === 'defer' && plan?.reason === 'ambiguous'
-          ? 'I found more than one possible match. Tell me which one you mean. Nothing was changed.'
+          ? ambiguityClarification(plan.candidateEntityIds, authoritativeEntities, body?.context?.utcOffset)
           : null
       return result({
         supported: false,
@@ -207,7 +209,12 @@ Deno.serve(async (req) => {
           )
         : [],
     })
-    const acceptedDecision = ['calendar.update', 'grocery.update_item'].includes(plan.toolName)
+    const acceptedDecision = [
+      'calendar.update',
+      'calendar.delete',
+      'grocery.update_item',
+      'grocery.remove_item',
+    ].includes(plan.toolName)
       ? 'confirm'
       : 'execute'
     if (policy.decision !== acceptedDecision || policy.allowed !== true) {
@@ -316,4 +323,40 @@ function writeRejectionText(code: unknown, detail?: Record<string, unknown>) {
 function planName(payload: Record<string, unknown>) {
   const plan = payload.plan as { toolName?: unknown } | undefined
   return typeof plan?.toolName === 'string' ? plan.toolName : null
+}
+
+function ambiguityClarification(
+  candidateIds: unknown,
+  entities: Array<Record<string, unknown>>,
+  utcOffset: unknown,
+) {
+  const ids = new Set(Array.isArray(candidateIds)
+    ? candidateIds.filter((id): id is string => typeof id === 'string').slice(0, 6)
+    : [])
+  const candidates = entities.filter((entity) => ids.has(String(entity.id ?? ''))).slice(0, 4)
+  if (candidates.length === 0) {
+    return 'I found more than one possible match. Tell me which one you mean. Nothing was changed.'
+  }
+  const choices = candidates.map((entity) => {
+    const label = optionalText(entity.title ?? entity.name, 120) ?? 'Unnamed item'
+    const when = formatEntityTime(entity.start, utcOffset)
+    return `- **${label}**${when ? ` — ${when}` : ''}`
+  }).join('\n')
+  return `I found more than one possible match. Which one do you mean?\n${choices}\nNothing was changed.`
+}
+
+function formatEntityTime(value: unknown, utcOffset: unknown) {
+  if (typeof value !== 'string') return null
+  const timestamp = Date.parse(value)
+  const match = String(utcOffset ?? '').match(/^([+-])(\d{2}):(\d{2})$/)
+  if (!Number.isFinite(timestamp) || !match) return null
+  const minutes = (match[1] === '+' ? 1 : -1) * (Number(match[2]) * 60 + Number(match[3]))
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  }).format(new Date(timestamp + minutes * 60000))
 }

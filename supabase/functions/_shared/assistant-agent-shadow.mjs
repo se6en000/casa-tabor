@@ -34,7 +34,12 @@ export function buildAgentShadowRequest(input) {
     : additiveWriteMode
       ? [
           ...AGENT_TOOL_DEFINITIONS
-            .filter((tool) => ['calendar.update', 'grocery.update_item'].includes(tool.name))
+            .filter((tool) => [
+              'calendar.update',
+              'calendar.delete',
+              'grocery.update_item',
+              'grocery.remove_item',
+            ].includes(tool.name))
             .map(toGeminiFunctionDeclaration),
           buildAddRouteDeclaration(),
           buildWriteDeferDeclaration(),
@@ -80,11 +85,15 @@ export function parseAgentShadowResponse(payload) {
   const functionCall = parts.find((part) => part?.functionCall)?.functionCall
   if (functionCall) {
     if (functionCall.name === WRITE_DEFER_FUNCTION) {
+      const candidateEntityIds = Array.isArray(functionCall.args?.candidate_entity_ids)
+        ? functionCall.args.candidate_entity_ids.filter((id) => typeof id === 'string').slice(0, 6)
+        : []
       return {
         kind: 'defer',
         reason: typeof functionCall.args?.reason === 'string'
           ? functionCall.args.reason
           : 'unsupported_write',
+        ...(candidateEntityIds.length > 0 ? { candidateEntityIds } : {}),
       }
     }
     if (functionCall.name === ADD_ROUTE_FUNCTION) {
@@ -257,7 +266,8 @@ BOUNDED WRITE MODE:
 - Call exactly one declared function.
 - Call assistant_add_request only for creating one event or adding explicit grocery items.
 - Call calendar.update or grocery.update_item only for one exact authoritative update.
-- Call assistant_write_defer for reads, destructive or multi-item changes, ambiguous targets, compound requests with multiple outcomes, cooking, or unsupported domains.
+- Call calendar.delete or grocery.remove_item when the user wants one exact authoritative item removed. These are proposals that always require explicit confirmation; never claim they already happened.
+- Call assistant_write_defer for reads, multi-item destructive changes, ambiguous targets, compound requests with multiple outcomes, cooking, or unsupported domains.
 - Never convert an update or destructive request into a create/add action.
 - Supply only the arguments declared by the selected capability.
 - For exact updates, copy the exact ID and version from AUTHORITATIVE ENTITIES.
@@ -270,6 +280,7 @@ BOUNDED WRITE MODE:
 - Do not classify an exact quantity change or exact check-off as other_write. other_write is only for unsupported mutations or missing/ambiguous targets.
 - If multiple events or grocery items could match and ACTIVE ENTITY does not identify one exact entity, call assistant_write_defer with reason ambiguous.
 - Before any exact update, compare every authoritative entity. When two or more share the requested event title or grocery name and ACTIVE ENTITY does not identify one of them, you MUST defer as ambiguous; never choose the first row, ID, or time automatically.
+- Apply the same exact-target rule to deletions. Use title, date, time, recent conversation, and ACTIVE ENTITY to resolve the user's intended record. If one exact authoritative target remains, propose its deletion with its exact ID/version/title. If multiple remain plausible, defer as ambiguous and include their exact IDs in candidate_entity_ids so Casa can ask a useful question.
 - Normalize obvious speech-to-text spelling into the intended common calendar title or grocery item name without adding unstated items.
 - Do not invent missing titles, items, people, dates, times, quantities, or locations.
 ` : ''}
@@ -353,6 +364,11 @@ function buildWriteDeferDeclaration() {
           type: 'string',
           enum: ['read', 'destructive', 'ambiguous', 'compound', 'unsupported'],
           description: 'Why no bounded write capability can be proposed safely.',
+        },
+        candidate_entity_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'For ambiguous exact-target requests, the authoritative IDs of the plausible records Casa should offer to the user.',
         },
       },
       required: ['reason'],

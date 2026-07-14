@@ -585,9 +585,11 @@ Deno.serve(async (req) => {
       [
         'create_event',
         'update_event',
+        'delete_event',
         'add_grocery_items',
         'check_grocery_item',
         'update_grocery_item_quantity',
+        'remove_grocery_item',
       ].includes(String(agentWriteData.tool ?? '')) &&
       agentWriteData.args &&
       typeof agentWriteData.args === 'object'
@@ -610,10 +612,14 @@ Deno.serve(async (req) => {
           conversation_state: responseConversationState,
           semantic_intent: [
             'update_event',
+            'delete_event',
             'check_grocery_item',
             'update_grocery_item_quantity',
+            'remove_grocery_item',
           ].includes(agentWriteData.tool)
-            ? 'agent.write.update'
+            ? ['delete_event', 'remove_grocery_item'].includes(agentWriteData.tool)
+              ? 'agent.write.destructive'
+              : 'agent.write.update'
             : 'agent.write.additive',
           correlation_id: cid,
           telemetry: {

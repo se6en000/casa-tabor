@@ -140,6 +140,11 @@ function durationMinutes(args) {
   return (Date.parse(args.end) - Date.parse(args.start)) / 60000
 }
 
+function isCalendarReadResponse(response) {
+  return response?.type === 'text' &&
+    ['agent.read', 'calendar.list'].includes(response.semantic_intent)
+}
+
 async function verifyNoProposalsPersisted(baselineDinnerIds, baselineGroceryIds) {
   const dinner = await fetchJson(
     '/rest/v1/events?select=id&title=ilike.*Dinner*Mom*',
@@ -228,7 +233,7 @@ async function run() {
     text: 'What does Thursday afternoon look like?',
     family,
   })
-  expect(turn.response.type === 'text' && turn.response.semantic_intent === 'agent.read', 'Clean Thursday read did not use agent.read')
+  expect(isCalendarReadResponse(turn.response), 'Clean Thursday read did not use an authoritative read')
   expect(
     turn.response.text.includes('[Agent QA] Thursday softball practice'),
     'Clean Thursday read omitted the 6:30 PM softball event',
@@ -249,7 +254,7 @@ async function run() {
     ],
     conversationState: turn.response.conversation_state,
   })
-  expect(turn.response.type === 'text' && turn.response.semantic_intent === 'agent.read', 'Thursday follow-up did not use agent.read')
+  expect(isCalendarReadResponse(turn.response), 'Thursday follow-up did not use an authoritative read')
   expect(
     turn.response.text.includes('[Agent QA] Thursday softball practice'),
     'Thursday follow-up omitted the 6:30 PM softball event',
@@ -272,7 +277,7 @@ async function run() {
     ],
     conversationState: turn.response.conversation_state,
   })
-  expect(turn.response.type === 'text' && turn.response.semantic_intent === 'agent.read', 'Thursday omission challenge did not use agent.read')
+  expect(isCalendarReadResponse(turn.response), 'Thursday omission challenge did not use an authoritative read')
   expect(
     turn.response.text.includes('[Agent QA] Thursday softball practice'),
     'Thursday omission challenge omitted the 6:30 PM softball event',
@@ -288,7 +293,7 @@ async function run() {
     text: 'what does thirty afternoon thursday afternoon look like',
     family,
   })
-  expect(turn.response.type === 'text' && turn.response.semantic_intent === 'agent.read', 'STT Thursday read did not use agent.read')
+  expect(isCalendarReadResponse(turn.response), 'STT Thursday read did not use an authoritative read')
   expect(
     turn.response.text.includes('[Agent QA] Thursday softball practice'),
     'STT Thursday read omitted the 6:30 PM softball event',
@@ -298,6 +303,27 @@ async function run() {
     'STT Thursday read omitted helpful later-evening context',
   )
   pass('04-thursday-stt', turn.response.text.split('\n')[0])
+
+    const deleteProposal = await callAssistant({
+      key: '05-calendar-delete-proposal',
+      text: 'Delete the late Thursday pickup at 9:15 PM.',
+      family,
+    })
+    expect(
+      deleteProposal.response.type === 'tool_action' &&
+        deleteProposal.response.tool === 'delete_event',
+      'Exact calendar delete did not produce a confirmation proposal',
+    )
+    expect(
+      deleteProposal.response.args.id === thursdayLate.id,
+      'Exact calendar delete targeted the wrong authoritative event',
+    )
+    const proposedDeleteRows = await fetchJson(
+      `/rest/v1/events?select=id&id=eq.${thursdayLate.id}`,
+      { headers },
+    )
+    expect(proposedDeleteRows.length === 1, 'Calendar delete proposal executed before confirmation')
+    pass('05-calendar-delete-proposal', `event=${thursdayLate.id} remained pending confirmation`)
 
     const dinner = await callAssistant({
     key: '03-dinner-create',
@@ -428,15 +454,34 @@ async function run() {
   expect(eggUpdate.response.args.item_id === quailEggs.id, 'Egg follow-up targeted the wrong item')
   pass('11-egg-check', `item=${eggUpdate.response.args.item_id}`)
 
+    const groceryRemove = await callAssistant({
+    key: '12-grocery-remove-proposal',
+    text: 'Remove quail eggs from the grocery list.',
+    family,
+    page: 'grocery',
+  })
+  expect(
+    groceryRemove.response.type === 'tool_action' &&
+      groceryRemove.response.tool === 'remove_grocery_item',
+    'Exact grocery removal did not produce a confirmation proposal',
+  )
+  expect(groceryRemove.response.args.id === quailEggs.id, 'Exact grocery removal targeted the wrong item')
+  const proposedRemoveRows = await fetchJson(
+    `/rest/v1/grocery_items?select=id&id=eq.${quailEggs.id}&deleted_at=is.null`,
+    { headers },
+  )
+  expect(proposedRemoveRows.length === 1, 'Grocery removal proposal executed before confirmation')
+  pass('12-grocery-remove-proposal', `item=${quailEggs.id} remained pending confirmation`)
+
     const duplicate = await callAssistant({
-    key: '12-duplicate-clarification',
+    key: '13-duplicate-clarification',
     text: 'Check off sparkling water.',
     family,
     page: 'grocery',
   })
   expect(duplicate.response.type === 'text', 'Duplicate grocery target did not return text clarification')
   expect(/more than one|which one/i.test(duplicate.response.text), 'Duplicate grocery target did not ask which item')
-  pass('12-duplicate-clarification', duplicate.response.text)
+  pass('13-duplicate-clarification', duplicate.response.text)
 
     await verifyNoProposalsPersisted(baselineDinnerIds, baselineGroceryIds)
   } finally {

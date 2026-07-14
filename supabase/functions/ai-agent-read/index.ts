@@ -82,7 +82,8 @@ Deno.serve(async (req) => {
     const trustedReadOverride = trustedCalendarRead && (
       plan?.kind !== 'tool' ||
       plan?.toolName !== 'calendar.get_range' ||
-      planner?.telemetry?.tool_effect !== 'read'
+      planner?.telemetry?.tool_effect !== 'read' ||
+      planner?.policy?.decision !== 'execute'
     )
     if (trustedReadOverride) {
       plan = {
