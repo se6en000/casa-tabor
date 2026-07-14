@@ -26,6 +26,7 @@ export const GROCERY_INTENTS = Object.freeze([
   'grocery.list',
   'grocery.count',
   'grocery.contains',
+  'grocery.quantity_read',
   'grocery.add',
   'grocery.check',
   'grocery.remove',
@@ -43,6 +44,8 @@ export const GROCERY_UTTERANCE_CORPUS = Object.freeze([
     { text: `is ${item} on the grocery list`, intent: 'grocery.contains' },
     { text: `do we already have ${item} on the shopping list`, intent: 'grocery.contains' },
     { text: `did i put ${item} on the grocery list`, intent: 'grocery.contains' },
+    { text: `what quantity does ${item} show`, intent: 'grocery.quantity_read' },
+    { text: `how much ${item} is on the grocery list`, intent: 'grocery.quantity_read' },
     ...ADD_OPENERS.map((opener) => ({ text: `${opener} ${item} to the grocery list`, intent: 'grocery.add' })),
     { text: `we need ${item}`, intent: 'grocery.add' },
     { text: `we are out of ${item}`, intent: 'grocery.add' },
@@ -122,7 +125,7 @@ export function parseGroceryLanguage(text, options = {}) {
 
   if (/^(?:what(?:'s| is) on|read(?: off)?|show|list|tell me|run through|walk me through)(?: me)?\s+(?:what(?:'s| is) on\s+)?(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/.test(input) ||
       /^(?:what do we need (?:from|at) the (?:store|grocery store)|what(?:'s| is) left to buy|what do we still need to get)$/.test(input) ||
-      /^what (?:is left|do we still need)\s+on\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/.test(input)) {
+      /^what (?:else )?(?:is left|do we still need)\s+on\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/.test(input)) {
     return frame('grocery.list', 0.99)
   }
   if (/^how many (?:things|items|groceries)(?: (?:are on|do we need on) (?:my|the|our)?\s*(?:grocery|shopping)(?: list)?)?$/.test(input) ||
@@ -139,6 +142,10 @@ export function parseGroceryLanguage(text, options = {}) {
     input.match(/^do we (?:already )?have\s+(.+?)(?:\s+on\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?)?$/) ||
     input.match(/^did i (?:put|add)\s+(.+?)\s+(?:to|on)\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/)
   if (contains) return frame('grocery.contains', 0.99, { items: splitItems(contains[1]) })
+
+  const quantityRead = input.match(/^what quantity does\s+(.+?)\s+(?:show|have)$/) ||
+    input.match(/^how much\s+(.+?)\s+is on\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/)
+  if (quantityRead) return frame('grocery.quantity_read', 0.98, { item: cleanItem(quantityRead[1]) })
 
   const check = input.match(/^(?:check off|mark|cross)\s+(.+?)(?:\s+(?:off|as\s+(?:bought|done|complete|completed)))?$/) ||
     input.match(/^(?:i|we)\s+(?:bought|got|picked up)\s+(.+)$/)

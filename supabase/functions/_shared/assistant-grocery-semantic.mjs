@@ -65,6 +65,23 @@ export function resolveGrocerySemantic(frame, items, options = {}) {
     ].filter(Boolean)
     return { type: 'text', text: parts.join(' '), items: found.map((name) => findGroceryItem(rows, name).item) }
   }
+  if (frame.intent === 'grocery.quantity_read') {
+    const match = findGroceryItem(rows, frame.slots?.item, options.activeItemId)
+    if (match.ambiguous) {
+      return { type: 'text', text: `I found more than one match for "${frame.slots?.item}". Please use the exact grocery item name.`, items: [] }
+    }
+    if (!match.item) {
+      return { type: 'text', text: `I could not find "${frame.slots?.item ?? 'that item'}" on the active grocery list.`, items: [] }
+    }
+    const amount = [match.item.quantity, match.item.unit].filter(Boolean).join(' ')
+    return {
+      type: 'text',
+      text: amount
+        ? `${match.item.name} shows ${amount} on the grocery list.`
+        : `${match.item.name} does not have a quantity set.`,
+      items: [match.item],
+    }
+  }
   if (frame.intent === 'grocery.add') {
     const requested = frame.slots?.items ?? []
     if (requested.length === 0) return { type: 'text', text: 'Which item should I add to the grocery list?', items: [] }

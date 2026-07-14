@@ -36,6 +36,8 @@ test('grocery parser handles reads, multi-item adds, and bounded follow-ups', ()
   ])
   assert.equal(parseGroceryLanguage('Is coffee on the shopping list?')?.intent, 'grocery.contains')
   assert.equal(parseGroceryLanguage('Do we have coffee?')?.intent, 'grocery.contains')
+  assert.equal(parseGroceryLanguage('What else is left on the grocery list?')?.intent, 'grocery.list')
+  assert.deepEqual(parseGroceryLanguage('What quantity does oat milk show?')?.slots, { item: 'oat milk' })
   assert.deepEqual(
     parseGroceryLanguage('Make that two', { activeEntityType: 'grocery_item' })?.slots,
     { quantity: '2' },
@@ -52,6 +54,9 @@ test('grocery semantic reads use authoritative active rows', () => {
 
   const count = resolveGrocerySemantic(parseGroceryLanguage('How many items do we need?'), items)
   assert.match(count.text, /2 items left/i)
+
+  const quantity = resolveGrocerySemantic(parseGroceryLanguage('What quantity does whole milk show?'), items)
+  assert.match(quantity.text, /1 gallon/i)
 })
 
 test('grocery semantic mutations target exact authoritative rows', () => {

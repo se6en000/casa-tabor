@@ -39,6 +39,7 @@ import {
   parseGroceryLanguage,
 } from '../_shared/assistant-grocery-language.mjs'
 import { resolveGrocerySemantic } from '../_shared/assistant-grocery-semantic.mjs'
+import { classifyAssistantAmbiguity } from '../_shared/assistant-request-safety.mjs'
 import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
 
 const CORS = {
@@ -202,6 +203,9 @@ Deno.serve(async (req) => {
     assistantMode: context?.assistant_mode,
     activeEntityType: incomingConversationState?.activeEntityType,
   })
+  const requestAmbiguity = classifyAssistantAmbiguity(latestUserText, {
+    hasActiveEntity: Boolean(incomingConversationState?.activeEntityType || context?.focusedEvent),
+  })
   const classifiedIntentRouting = classifyAssistantIntent(latestUserText, {
     focusedEvent: Boolean(context?.focusedEvent),
     assistantMode: context?.assistant_mode,
@@ -311,12 +315,12 @@ Deno.serve(async (req) => {
   // Start from 24h ago so in-progress events (started earlier today) are visible
   const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000)
   const yearEnd = new Date(); yearEnd.setFullYear(yearEnd.getFullYear() + 1, 11, 31); yearEnd.setHours(23,59,59,999)
-  const needsEventData = ['event', 'full', 'travel'].includes(intentRouting.profile)
-  const needsPlaceData = ['event', 'full', 'travel', 'places'].includes(intentRouting.profile)
-  const needsContactData = ['event', 'full', 'places'].includes(intentRouting.profile)
-  const needsGroceryData = ['grocery', 'recipe', 'full'].includes(intentRouting.profile)
-  const needsRecipeData = ['recipe', 'full'].includes(intentRouting.profile)
-  const needsAvailabilityData = ['event', 'full'].includes(intentRouting.profile)
+  const needsEventData = !requestAmbiguity && ['event', 'full', 'travel'].includes(intentRouting.profile)
+  const needsPlaceData = !requestAmbiguity && ['event', 'full', 'travel', 'places'].includes(intentRouting.profile)
+  const needsContactData = !requestAmbiguity && ['event', 'full', 'places'].includes(intentRouting.profile)
+  const needsGroceryData = !requestAmbiguity && ['grocery', 'recipe', 'full'].includes(intentRouting.profile)
+  const needsRecipeData = !requestAmbiguity && ['recipe', 'full'].includes(intentRouting.profile)
+  const needsAvailabilityData = !requestAmbiguity && ['event', 'full'].includes(intentRouting.profile)
   const skippedRows = Promise.resolve({ data: [], error: null })
   const skippedRow = Promise.resolve({ data: null, error: null })
 
@@ -420,6 +424,29 @@ Deno.serve(async (req) => {
     input_tokens: 0,
     output_tokens: 0,
     total_tokens: 0,
+  }
+  if (requestAmbiguity) {
+    const requestTotalMs = Date.now() - requestStartMs
+    appendServerTrace('server_ai_assistant_ambiguity_clarification', requestAmbiguity.kind, {
+      ambiguity_kind: requestAmbiguity.kind,
+      request_ms: requestTotalMs,
+      llm_calls: 0,
+    })
+    appendServerTrace('server_ai_assistant_result', `type=text ms=${requestTotalMs}`, {
+      result_type: 'text',
+      request_ms: requestTotalMs,
+      llm_calls: 0,
+      response_text: requestAmbiguity.text,
+    })
+    return {
+      status: 200,
+      payload: {
+        type: 'text',
+        text: requestAmbiguity.text,
+        correlation_id: cid,
+        telemetry: { ...llmTelemetry, request_ms: requestTotalMs },
+      },
+    }
   }
   const recordLlmCall = (stage: string, elapsedMs: number, status: number, payload?: unknown) => {
     const usage = extractGeminiUsage(payload)
@@ -1273,6 +1300,7 @@ Deno.serve(async (req) => {
     ],
   }]
 
+  const recipeToolNames = cookingFrame?.intent === 'recipe.save' ? ['create_recipe'] : []
   const toolNamesByProfile: Record<string, string[]> = {
     event: ['search_events', 'create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title'],
     grocery: ['add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items'],
@@ -1280,7 +1308,7 @@ Deno.serve(async (req) => {
     travel: ['get_travel_eta'],
     places: ['search_places'],
     web: ['search_web'],
-    recipe: ['create_recipe', 'add_grocery_items'],
+    recipe: recipeToolNames,
     general: [],
   }
   const selectedToolNames = intentRouting.profile === 'full'
