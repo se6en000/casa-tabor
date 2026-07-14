@@ -15,6 +15,9 @@ verify_jwt = false
 [functions.ai-agent-shadow]
 verify_jwt = true
 
+[functions.ai-agent-read]
+verify_jwt = true
+
 [functions.place-search]
 verify_jwt = false
 

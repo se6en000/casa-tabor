@@ -1,0 +1,187 @@
+const SUPPORTED_READ_TOOLS = new Set([
+  'calendar.search',
+  'calendar.get_range',
+  'calendar.check_conflicts',
+  'grocery.get_list',
+])
+
+export function executeAgentReadTool(toolName, args, data = {}) {
+  if (!SUPPORTED_READ_TOOLS.has(toolName)) {
+    return { supported: false, code: 'unsupported_read_tool' }
+  }
+  if (toolName === 'calendar.search') return searchCalendar(args, data.events)
+  if (toolName === 'calendar.get_range') return getCalendarRange(args, data.events)
+  if (toolName === 'calendar.check_conflicts') return checkCalendarConflicts(args, data.events)
+  return getGroceryList(args, data.groceryItems)
+}
+
+export function formatAgentReadResult(toolName, result, options = {}) {
+  if (!result?.supported) return null
+  if (toolName.startsWith('calendar.')) {
+    const events = Array.isArray(result.events) ? result.events : []
+    if (toolName === 'calendar.check_conflicts') {
+      if (events.length === 0) return 'That time is open—no calendar conflicts found.'
+      return `That time overlaps:\n${events.map((event) => `- **${event.title}** — ${formatRange(event, options.utcOffset)}`).join('\n')}`
+    }
+    if (events.length === 0) return 'Nothing is on the calendar for that request.'
+    if (events.length === 1) {
+      return `**${events[0].title}** — ${formatRange(events[0], options.utcOffset)}${formatLocation(events[0])}`
+    }
+    return `${events.length} events:\n${events.map((event) =>
+      `- **${event.title}** — ${formatRange(event, options.utcOffset)}${formatLocation(event)}`,
+    ).join('\n')}`
+  }
+
+  const items = Array.isArray(result.items) ? result.items : []
+  if (items.length === 0) return 'The grocery list is empty.'
+  return `${items.length} grocery item${items.length === 1 ? '' : 's'}:\n${items.map((item) => {
+    const quantity = [item.quantity, item.unit].filter(Boolean).join(' ')
+    return `- **${item.name}**${quantity ? ` — ${quantity}` : ''}${item.checked ? ' ✓' : ''}`
+  }).join('\n')}`
+}
+
+function searchCalendar(args, rawEvents) {
+  const events = normalizeEvents(rawEvents)
+  const query = normalizeText(args?.query)
+  const memberName = normalizeText(args?.member_name)
+  const range = parseRange(args?.start, args?.end)
+  const filtered = events.filter((event) => {
+    if (query && !event.title.toLowerCase().includes(query)) return false
+    if (memberName && !event.members.some((member) => member.toLowerCase() === memberName)) return false
+    if (range && !overlaps(event, range)) return false
+    return true
+  })
+  return { supported: true, events: filtered, count: filtered.length }
+}
+
+function getCalendarRange(args, rawEvents) {
+  const range = parseRange(args?.start, args?.end)
+  if (!range) return { supported: false, code: 'invalid_range' }
+  const memberNames = Array.isArray(args?.member_names)
+    ? args.member_names.map(normalizeText).filter(Boolean)
+    : []
+  const events = normalizeEvents(rawEvents).filter((event) => {
+    if (!overlaps(event, range)) return false
+    return memberNames.length === 0 ||
+      memberNames.some((name) => event.members.some((member) => member.toLowerCase() === name))
+  })
+  return { supported: true, events, count: events.length }
+}
+
+function checkCalendarConflicts(args, rawEvents) {
+  const range = parseRange(args?.start, args?.end)
+  if (!range) return { supported: false, code: 'invalid_range' }
+  const ignoredId = normalizeText(args?.ignore_event_id)
+  const events = normalizeEvents(rawEvents).filter((event) =>
+    event.id.toLowerCase() !== ignoredId && overlaps(event, range),
+  )
+  return { supported: true, events, count: events.length }
+}
+
+function getGroceryList(args, rawItems) {
+  const includeChecked = args?.include_checked === true
+  const listId = normalizeText(args?.list_id)
+  const items = (Array.isArray(rawItems) ? rawItems : [])
+    .flatMap((item) => {
+      if (!item || typeof item !== 'object') return []
+      if (typeof item.id !== 'string' || typeof item.name !== 'string') return []
+      return [{
+        id: item.id,
+        list_id: typeof item.list_id === 'string' ? item.list_id : null,
+        name: item.name,
+        quantity: typeof item.quantity === 'string' ? item.quantity : null,
+        unit: typeof item.unit === 'string' ? item.unit : null,
+        checked: item.checked === true,
+      }]
+    })
+    .filter((item) => (!listId || item.list_id?.toLowerCase() === listId) && (includeChecked || !item.checked))
+  return { supported: true, items, count: items.length }
+}
+
+function normalizeEvents(rawEvents) {
+  return (Array.isArray(rawEvents) ? rawEvents : []).flatMap((event) => {
+    if (!event || typeof event !== 'object') return []
+    if (
+      typeof event.id !== 'string' ||
+      typeof event.title !== 'string' ||
+      typeof event.start_time !== 'string' ||
+      typeof event.end_time !== 'string'
+    ) return []
+    return [{
+      id: event.id,
+      title: event.title,
+      start_time: event.start_time,
+      end_time: event.end_time,
+      all_day: event.all_day === true,
+      location_name: typeof event.location_name === 'string' ? event.location_name : null,
+      address: typeof event.address === 'string' ? event.address : null,
+      updated_at: typeof event.updated_at === 'string' ? event.updated_at : null,
+      members: Array.isArray(event.members)
+        ? event.members.filter((member) => typeof member === 'string')
+        : Array.isArray(event.event_members)
+          ? event.event_members.flatMap((entry) =>
+              typeof entry?.family_members?.name === 'string' ? [entry.family_members.name] : [],
+            )
+          : [],
+    }]
+  })
+}
+
+function parseRange(startValue, endValue) {
+  const start = Date.parse(typeof startValue === 'string' ? startValue : '')
+  const end = Date.parse(typeof endValue === 'string' ? endValue : '')
+  return Number.isFinite(start) && Number.isFinite(end) && end > start ? { start, end } : null
+}
+
+function overlaps(event, range) {
+  const start = Date.parse(event.start_time)
+  const end = Date.parse(event.end_time)
+  return Number.isFinite(start) && Number.isFinite(end) && start < range.end && end > range.start
+}
+
+function normalizeText(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : ''
+}
+
+function formatRange(event, utcOffset) {
+  const start = formatDate(event.start_time, utcOffset, event.all_day)
+  if (event.all_day) return `${start}, all day`
+  const end = formatTime(event.end_time, utcOffset)
+  return `${start}–${end}`
+}
+
+function formatDate(value, utcOffset, allDay) {
+  const shifted = shiftToOffset(value, utcOffset)
+  if (!shifted) return value
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    ...(allDay ? {} : { hour: 'numeric', minute: '2-digit' }),
+    timeZone: 'UTC',
+  }).format(shifted)
+}
+
+function formatTime(value, utcOffset) {
+  const shifted = shiftToOffset(value, utcOffset)
+  if (!shifted) return value
+  return new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  }).format(shifted)
+}
+
+function shiftToOffset(value, utcOffset) {
+  const timestamp = Date.parse(value)
+  const match = String(utcOffset ?? '').match(/^([+-])(\d{2}):(\d{2})$/)
+  if (!Number.isFinite(timestamp) || !match) return null
+  const minutes = (match[1] === '+' ? 1 : -1) * (Number(match[2]) * 60 + Number(match[3]))
+  return new Date(timestamp + minutes * 60000)
+}
+
+function formatLocation(event) {
+  const location = event.address ?? event.location_name
+  return location ? ` at ${location}` : ''
+}
+

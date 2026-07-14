@@ -359,6 +359,7 @@ Deno.serve(async (req) => {
   const [
     { data: cfgRow },
     agentShadowConfigResult,
+    agentReadConfigResult,
     homeConfigResult,
     { data: savedPlaces },
     savedContactsResult,
@@ -372,6 +373,8 @@ Deno.serve(async (req) => {
   ] = await Promise.all([
     sb.from('settings').select('value').eq('key', 'llm_config').limit(1),
     sb.from('settings').select('value').eq('key', 'agent_shadow_config').maybeSingle()
+      .then(r => r).catch(() => ({ data: null, error: null })),
+    sb.from('settings').select('value').eq('key', 'agent_read_config').maybeSingle()
       .then(r => r).catch(() => ({ data: null, error: null })),
     needsPlaceData
       ? sb.from('settings').select('value').eq('key', 'home_config').maybeSingle()
@@ -467,7 +470,90 @@ Deno.serve(async (req) => {
   const agentShadowRate = typeof agentShadowConfig?.sample_rate === 'number'
     ? Math.max(0, Math.min(1, agentShadowConfig.sample_rate))
     : 0
-  const shouldRunAgentShadow = !dryRun &&
+  const agentReadConfig = agentReadConfigResult?.data?.value as {
+    enabled?: boolean
+    sample_rate?: number
+    model?: string
+  } | null
+  const agentReadRate = typeof agentReadConfig?.sample_rate === 'number'
+    ? Math.max(0, Math.min(1, agentReadConfig.sample_rate))
+    : 0
+  const shouldRunAgentRead = !dryRun &&
+    agentReadConfig?.enabled === true &&
+    agentReadRate > 0 &&
+    ['calendar', 'grocery'].includes(String(context?.page ?? '')) &&
+    !context?.pendingAction &&
+    !image &&
+    Math.random() < agentReadRate
+  if (shouldRunAgentRead) {
+    const agentReadRequest = sb.functions.invoke('ai-agent-read', {
+      body: {
+        messages,
+        context: {
+          page: context?.page,
+          assistant_mode: context?.assistant_mode,
+          currentDate: context?.currentDate,
+          utcOffset: context?.utcOffset,
+          family: context?.family,
+        },
+        authoritative_data: {
+          events: allEvents ?? [],
+          groceryItems: groceryItems ?? [],
+        },
+        trace_id: traceId,
+        turn_id: turnId,
+        correlation_id: `${cid}:agent-read`,
+        household_id: 'default',
+        model_override: agentReadConfig?.model ?? DEFAULT_GEMINI_MODEL,
+      },
+    })
+    const timeout = new Promise<{ data: null; error: { message: string } }>((resolve) => {
+      setTimeout(() => resolve({ data: null, error: { message: 'agent_read_timeout' } }), 4500)
+    })
+    const agentReadResult = await Promise.race([agentReadRequest, timeout])
+    const agentReadData = agentReadResult.data as {
+      supported?: boolean
+      type?: string
+      text?: string
+      activeEntity?: Record<string, unknown> | null
+      elapsed_ms?: number
+      plan?: { toolName?: string }
+    } | null
+    if (
+      !agentReadResult.error &&
+      agentReadData?.supported === true &&
+      agentReadData.type === 'text' &&
+      typeof agentReadData.text === 'string'
+    ) {
+      appendServerTrace('server_agent_read_adopted', `tool=${agentReadData.plan?.toolName ?? 'clarify'}`, {
+        tool_name: agentReadData.plan?.toolName ?? null,
+        agent_read_ms: agentReadData.elapsed_ms ?? null,
+        rollout_rate: agentReadRate,
+      })
+      return {
+        status: 200,
+        payload: {
+          type: 'text',
+          text: agentReadData.text,
+          conversation_state: agentReadData.activeEntity ?? undefined,
+          semantic_intent: 'agent.read',
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            agentic: true,
+            agent_read_ms: agentReadData.elapsed_ms ?? null,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+    appendServerTrace('server_agent_read_fallback', agentReadResult.error?.message ?? 'unsupported_plan', {
+      rollout_rate: agentReadRate,
+      failure: agentReadResult.error?.message ?? 'unsupported_plan',
+    })
+  }
+  const shouldRunAgentShadow = !shouldRunAgentRead && !dryRun &&
     agentShadowConfig?.enabled === true &&
     agentShadowRate > 0 &&
     Math.random() < agentShadowRate

@@ -39,6 +39,19 @@ test('policy rejects unauthorized households and schema drift', () => {
   assert.deepEqual(invalid.errors, ['args.invented_field:unexpected'])
 })
 
+test('policy tolerates provider nulls only for optional tool arguments', () => {
+  const optionalNulls = evaluate({
+    args: { query: null, start: null, end: null, member_name: null },
+  })
+  assert.equal(optionalNulls.decision, 'execute')
+
+  const requiredNull = evaluate({
+    toolName: 'calendar.get_range',
+    args: { start: null, end: '2026-07-17T00:00:00-04:00' },
+  })
+  assert.equal(requiredNull.code, 'invalid_tool_arguments')
+})
+
 test('calendar updates require authoritative exact versions and confirmation', () => {
   const request = {
     toolName: 'calendar.update',

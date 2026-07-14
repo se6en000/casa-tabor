@@ -25,8 +25,28 @@ test('shadow planner request exposes capability tools without phrase routing', (
   assert.match(instruction, /PENDING ACTION/)
   assert.match(instruction, /MUST call the same pending capability/)
   assert.match(instruction, /COMPLETED TOOL CALLS/)
+  assert.match(instruction, /count 0 means the proposed time is clear/)
   assert.ok(request.tools[0].function_declarations.some((tool) => tool.name === 'calendar_create'))
   assert.equal(request.tool_config.function_calling_config.mode, 'AUTO')
+})
+
+test('completed clear conflict checks cannot loop', () => {
+  const request = buildAgentShadowRequest({
+    messages: [{ role: 'user', content: 'Schedule swim practice Friday at 4 PM.' }],
+    context: {
+      completedToolCalls: [{
+        toolName: 'calendar.check_conflicts',
+        args: {
+          start: '2026-07-17T16:00:00-04:00',
+          end: '2026-07-17T17:00:00-04:00',
+        },
+        result: { conflicts: [], count: 0 },
+      }],
+    },
+  })
+  const names = request.tools[0].function_declarations.map((tool) => tool.name)
+  assert.ok(!names.includes('calendar_check_conflicts'))
+  assert.ok(names.includes('calendar_create'))
 })
 
 test('shadow response parser maps provider function names to capability names', () => {
@@ -57,6 +77,56 @@ test('shadow response parser preserves clarification without treating it as exec
   assert.deepEqual(result, {
     kind: 'clarify',
     text: 'Which dentist appointment do you mean?',
+  })
+})
+
+test('authoritative read planning exposes only reads and typed deferral', () => {
+  const request = buildAgentShadowRequest({
+    messages: [{ role: 'user', content: 'Delete every event Thursday' }],
+    plannerMode: 'authoritative_read',
+  })
+  const declarations = request.tools[0].function_declarations
+  assert.equal(request.tool_config.function_calling_config.mode, 'ANY')
+  assert.deepEqual(declarations.map((declaration) => declaration.name), ['assistant_read_request'])
+
+  assert.deepEqual(parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'assistant_read_request',
+            args: { requested_effect: 'mutation' },
+          },
+        }],
+      },
+    }],
+  }), { kind: 'defer', reason: 'mutation' })
+
+  assert.deepEqual(parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'assistant_read_request',
+            args: {
+              requested_effect: 'read',
+              tool_name: 'calendar.get_range',
+              tool_args: {
+                start: '2026-07-16T00:00:00-04:00',
+                end: '2026-07-17T00:00:00-04:00',
+              },
+            },
+          },
+        }],
+      },
+    }],
+  }), {
+    kind: 'tool',
+    toolName: 'calendar.get_range',
+    args: {
+      start: '2026-07-16T00:00:00-04:00',
+      end: '2026-07-17T00:00:00-04:00',
+    },
   })
 })
 

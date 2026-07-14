@@ -27,7 +27,8 @@ export const AGENT_TOOL_DEFINITIONS = Object.freeze([
     description: 'Find authoritative calendar events before answering or proposing a mutation.',
     properties: {
       query: string('Optional title or description search text.'),
-      date_hint: string('Optional natural-language date range.'),
+      start: string('Optional inclusive ISO range start with UTC offset.'),
+      end: string('Optional exclusive ISO range end with UTC offset.'),
       member_name: string('Optional family member filter.'),
     },
   }),

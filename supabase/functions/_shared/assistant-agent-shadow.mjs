@@ -5,16 +5,26 @@ import {
 } from './assistant-agent-tools.mjs'
 
 export const AGENT_SHADOW_VERSION = 'agent-shadow-v1'
+const READ_ROUTE_FUNCTION = 'assistant_read_request'
 
 export function buildAgentShadowRequest(input) {
   const messages = normalizeMessages(input?.messages)
   if (messages.length === 0) throw new Error('At least one conversation message is required')
   const context = normalizeContext(input?.context)
-  const declarations = AGENT_TOOL_DEFINITIONS.map(toGeminiFunctionDeclaration)
+  const authoritativeReadMode = input?.plannerMode === 'authoritative_read'
+  const conflictCheckComplete = context.completedToolCalls.some((call) =>
+    call?.toolName === 'calendar.check_conflicts' &&
+    call?.result?.count === 0
+  )
+  const declarations = authoritativeReadMode
+    ? [buildReadRouteDeclaration()]
+    : AGENT_TOOL_DEFINITIONS
+        .filter((tool) => !(conflictCheckComplete && tool.name === 'calendar.check_conflicts'))
+        .map(toGeminiFunctionDeclaration)
   return {
     system_instruction: {
       parts: [{
-        text: buildAgentShadowInstruction(context),
+        text: buildAgentShadowInstruction(context, authoritativeReadMode),
       }],
     },
     contents: messages.map((message) => ({
@@ -27,7 +37,7 @@ export function buildAgentShadowRequest(input) {
     },
     tools: [{ function_declarations: declarations }],
     tool_config: {
-      function_calling_config: { mode: 'AUTO' },
+      function_calling_config: { mode: authoritativeReadMode ? 'ANY' : 'AUTO' },
     },
   }
 }
@@ -44,6 +54,25 @@ export function parseAgentShadowResponse(payload) {
   }
   const functionCall = parts.find((part) => part?.functionCall)?.functionCall
   if (functionCall) {
+    if (functionCall.name === READ_ROUTE_FUNCTION) {
+      const requestedEffect = functionCall.args?.requested_effect
+      const tool = getAgentToolByGeminiName(
+        String(functionCall.args?.tool_name ?? '').replace('.', '_'),
+      )
+      if (requestedEffect !== 'read' || tool?.effect !== 'read') {
+        return {
+          kind: 'defer',
+          reason: requestedEffect === 'mutation' ? 'mutation' : 'unsupported_domain',
+        }
+      }
+      return {
+        kind: 'tool',
+        toolName: tool.name,
+        args: functionCall.args?.tool_args && typeof functionCall.args.tool_args === 'object'
+          ? functionCall.args.tool_args
+          : {},
+      }
+    }
     const definition = getAgentToolByGeminiName(functionCall.name)
     if (!definition) {
       return {
@@ -88,7 +117,7 @@ export function agentShadowTelemetry(plan, metadata = {}) {
   }
 }
 
-function buildAgentShadowInstruction(context) {
+function buildAgentShadowInstruction(context, authoritativeReadMode) {
   return `You are Casa's bounded conversation planner. Interpret natural household requests and choose capabilities.
 
 You may understand any natural wording, corrections, pronouns, and follow-up turns. Do not depend on exact phrases.
@@ -102,6 +131,16 @@ PLANNING RULES:
 - If a PENDING ACTION exists and the user corrects it, call the same capability with revised arguments rather than creating a second action.
 - Treat the latest user turn as authoritative when it corrects earlier details.
 - Do not invent people, IDs, dates, times, quantities, or event facts.
+${authoritativeReadMode ? `
+AUTHORITATIVE READ MODE:
+- Decide whether the user's requested outcome is purely read-only.
+- Call assistant_read_request exactly once and always set requested_effect first.
+- Set requested_effect to mutation for every request whose ultimate outcome would create, add, update, move, check off, clear, remove, or delete data.
+- Classify the ultimate requested outcome, not the first tool step: a mutation remains mutation even when a read would first locate or validate its target.
+- Never substitute a read result for a requested mutation or confirmation flow.
+- Set requested_effect to unsupported for unsupported domains or when a safe read cannot be selected.
+- Only when requested_effect is read, select one read tool and supply its arguments.
+` : ''}
 
 CURRENT LOCAL DATE/TIME: ${context.currentDate}
 UTC OFFSET: ${context.utcOffset}
@@ -119,7 +158,44 @@ STATE RULES:
 - If multiple authoritative entities plausibly match a destructive request, ask which one; never choose.
 - PENDING ACTION is a proposal, not a stored entity. A correction to it MUST call the same pending capability with revised arguments. For example, revise calendar.create with calendar.create, never calendar.update.
 - COMPLETED TOOL CALLS contain authoritative results already gathered during this turn. Continue the original user goal without repeating those reads.
+- A completed calendar.check_conflicts result with count 0 means the proposed time is clear; proceed to calendar.create or calendar.update and never check the same range again.
 `
+}
+
+function buildReadRouteDeclaration() {
+  const readTools = AGENT_TOOL_DEFINITIONS.filter((tool) => tool.effect === 'read')
+  const toolArgProperties = Object.assign(
+    {},
+    ...readTools.map((tool) => tool.inputSchema.properties ?? {}),
+  )
+  return toGeminiFunctionDeclaration({
+    name: 'assistant.read_request',
+    description: 'Classify the ultimate requested effect, then optionally select one authoritative read.',
+    effect: 'read',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        requested_effect: {
+          type: 'string',
+          enum: ['read', 'mutation', 'unsupported'],
+          description: 'The effect of the user outcome, regardless of prerequisite lookup steps.',
+        },
+        tool_name: {
+          type: 'string',
+          enum: readTools.map((tool) => tool.name),
+          description: 'Required only when requested_effect is read.',
+        },
+        tool_args: {
+          type: 'object',
+          additionalProperties: false,
+          properties: toolArgProperties,
+          description: 'Arguments for tool_name when requested_effect is read.',
+        },
+      },
+      required: ['requested_effect'],
+    },
+  })
 }
 
 function normalizeMessages(value) {

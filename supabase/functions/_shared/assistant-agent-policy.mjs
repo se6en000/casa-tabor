@@ -136,7 +136,10 @@ function validateSchema(schema, value, path) {
       }
     }
     for (const [key, child] of Object.entries(schema.properties ?? {})) {
-      if (key in value) errors.push(...validateSchema(child, value[key], `${path}.${key}`))
+      if (key in value) {
+        if (value[key] === null && !(schema.required ?? []).includes(key)) continue
+        errors.push(...validateSchema(child, value[key], `${path}.${key}`))
+      }
     }
   }
   if (schema.type === 'array') {

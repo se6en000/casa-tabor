@@ -51,6 +51,7 @@ Deno.serve(async (req) => {
     const requestBody = buildAgentShadowRequest({
       messages,
       context: body?.context,
+      plannerMode: body?.planner_mode,
     })
     let response = await callGemini(model, apiKey, requestBody)
     let providerCalls = 1
