@@ -8,6 +8,7 @@ import {
   isCalendarMutationDisambiguationFollowUp,
   resolveCalendarDeleteDisambiguation,
   resolveClarifiedCalendarCreate,
+  resolvePendingCalendarCorrection,
   resolveActiveCalendarMutation,
   singularBulkDeleteClarification,
 } from '../supabase/functions/_shared/assistant-calendar-mutation-edge.mjs'
@@ -127,4 +128,32 @@ test('ambiguous times and singular bulk deletes clarify safely', () => {
     }),
     'school pickup would remain on the calendar.',
   )
+})
+
+test('corrections replace pending create details without creating a duplicate', () => {
+  for (const text of [
+    'Actually, make that Saturday at 10 in the morning.',
+    'Wait—change that to Saturday at 10 AM.',
+    'Saturday at 10 AM instead.',
+    'No, move that to Saturday at 10 in the morning.',
+  ]) {
+    const corrected = resolvePendingCalendarCorrection(
+      text,
+      {
+        tool: 'create_event',
+        args: {
+          title: 'Swim practice',
+          start: '2026-07-17T20:00:00.000Z',
+          end: '2026-07-17T21:00:00.000Z',
+          members: [],
+          event_type: 'event',
+        },
+      },
+      { now: new Date('2026-07-14T10:00:00-04:00'), utcOffset: '-04:00' },
+    )
+    assert.equal(corrected.tool, 'create_event', text)
+    assert.equal(corrected.args.title, 'Swim practice', text)
+    assert.equal(corrected.args.start, '2026-07-18T14:00:00.000Z', text)
+    assert.equal(Date.parse(corrected.args.end) - Date.parse(corrected.args.start), 60 * 60000, text)
+  }
 })

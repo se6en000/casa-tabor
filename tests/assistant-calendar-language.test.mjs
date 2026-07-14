@@ -67,6 +67,16 @@ test('calendar parser supports ordinary flexible read language', () => {
   assert.equal(parseCalendarLanguage('Where do I need to go tomorrow?')?.intent, 'calendar.destinations')
 })
 
+test('natural activity scheduling maps to event creation', () => {
+  for (const text of [
+    'Schedule swim practice Friday at 4 PM.',
+    'Schedule a swim practice Friday at 4 PM.',
+    'Schedule tutoring next Saturday at 8 AM.',
+  ]) {
+    assert.equal(parseCalendarLanguage(text)?.intent, 'event.create', text)
+  }
+})
+
 test('going-on language composes with natural calendar time frames', () => {
   const samples = [
     ['What is going on tomorrow morning?', { kind: 'tomorrow', dayPart: 'morning' }],

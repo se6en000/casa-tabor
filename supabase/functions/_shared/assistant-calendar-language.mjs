@@ -256,8 +256,10 @@ export function parseCalendarLanguage(text, options = {}) {
   if (!input) return null
   const activeEvent = options.activeEntityType === 'event' || options.focusedEvent === true
   const scope = temporalScope(input)
+  const naturalScheduleCreate = /^schedule\s+.+\b(?:today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b.*\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/.test(input)
   const mutationLanguage = /\b(add|create|book|move|reschedule|shift|push|change|update|edit|delete|remove|cancel)\b/.test(input) ||
-    /\bschedule\s+(?:an?\s+)?(?:event|appointment|meeting|reminder)\b/.test(input)
+    /\bschedule\s+(?:an?\s+)?(?:event|appointment|meeting|reminder)\b/.test(input) ||
+    naturalScheduleCreate
 
   if (mutationLanguage && (activeEvent || CALENDAR_NOUNS.test(input))) {
     if (/\b(delete|remove|cancel)\b/.test(input)) return frame('event.delete', 0.98, { temporalScope: scope })

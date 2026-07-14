@@ -131,10 +131,16 @@ export function resolveDeterministicEventMutation(text, events, options = {}) {
   const dateHint = extractDateHint(input)
   const quotedTitle = input.match(/["“](.+?)["”]/)?.[1]?.trim() ?? null
 
-  const createPrefix = /^(?:create|add|book|schedule)\s+(?:an?\s+)?(?:calendar\s+)?(?:event|appointment|apt|reminder)\b/i
+  const createPrefix = /^(?:create|add|book|schedule)\b/i
   if (createPrefix.test(input)) {
-    const titleMatch = input.match(/\b(?:called|named)\s+(.+?)(?=\s+(?:on\s+)?(?:20\d{2}-\d{2}-\d{2}|today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b|\s+at\s+\d|$)/i)
-    const title = titleMatch?.[1]?.trim()
+    const namedTitle = input.match(/\b(?:called|named)\s+(.+?)(?=\s+(?:on\s+)?(?:20\d{2}-\d{2}-\d{2}|today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b|\s+at\s+\d|$)/i)?.[1]
+    const naturalTitle = input.match(
+      /^(?:create|add|book|schedule)\s+(?:an?\s+)?(.+?)(?=\s+(?:on\s+)?(?:20\d{2}-\d{2}-\d{2}|today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b|\s+at\s+\d)/i,
+    )?.[1]?.replace(/^(?:calendar\s+)?(?:event|appointment|apt|reminder)\s+(?:called|named)\s+/i, '')
+    const candidateTitle = (namedTitle ?? naturalTitle)?.trim()
+    const title = candidateTitle && !/^(?:calendar\s+)?(?:event|appointment|apt|reminder)$/i.test(candidateTitle)
+      ? candidateTitle
+      : null
     const timeRange = input.match(/\bfrom\s+(\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?))\s+until\s+(\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?))(?:\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday))?/i)
     if (title && timeRange) {
       const requestedStart = parseRequestedTime(timeRange[1])

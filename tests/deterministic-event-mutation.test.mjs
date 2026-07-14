@@ -113,6 +113,18 @@ test('creates an explicit named event with bounded defaults', () => {
     event: null,
   })
 
+  test('creates naturally named scheduled activities without synthetic event wording', () => {
+    for (const input of [
+      'Schedule swim practice Friday at 4 PM.',
+      'Book tutoring Friday at 4 PM.',
+      'Add piano lesson Friday at 4 PM.',
+    ]) {
+      const result = resolveDeterministicEventMutation(input, events, options)
+      assert.equal(result?.tool, 'create_event', input)
+      assert.ok(result?.args.title, input)
+    }
+  })
+
   test('creates cross-midnight ranges without collapsing their duration', () => {
     const result = resolveDeterministicEventMutation(
       'Add an event called Late airport pickup Friday from 11:30 PM until 1 AM Saturday.',

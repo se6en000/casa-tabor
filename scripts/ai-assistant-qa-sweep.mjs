@@ -604,8 +604,8 @@ function calendarEdgeScenarioGroups(fixtures) {
       page: 'calendar',
       assistantMode: 'general',
       steps: [
-        { text: 'Schedule an event called Swim practice Friday at 4 PM.', expect: { type: 'write', tool: 'create_event' } },
-        { text: 'Actually, make that Saturday at 10 in the morning.', expect: { type: 'write', tool: 'update_event' } },
+        { text: 'Schedule swim practice Friday at 4 PM.', deferAction: true, expect: { type: 'write', tool: 'create_event' } },
+        { text: 'Actually, make that Saturday at 10 in the morning.', expect: { type: 'write', tool: 'create_event' } },
         { text: 'What time is it now?', expect: { type: 'text', containsAny: ['10:00', '10 am', '10:00 am'] } },
       ],
     },
@@ -892,6 +892,7 @@ async function run() {
           pendingActions.set(step.groupKey, { tool: response.tool, args: response.args ?? {} })
           output.action_result = 'deferred'
         } else {
+          pendingActions.delete(step.groupKey)
           const actionResult = await executeAction({
             tool: response.tool,
             args: response.args ?? {},

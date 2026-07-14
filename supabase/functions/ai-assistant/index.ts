@@ -17,6 +17,7 @@ import {
   resolveActiveCalendarMutation,
   resolveCalendarDeleteDisambiguation,
   resolveClarifiedCalendarCreate,
+  resolvePendingCalendarCorrection,
   singularBulkDeleteClarification,
 } from '../_shared/assistant-calendar-mutation-edge.mjs'
 import {
@@ -2747,6 +2748,28 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         payload: {
           type: 'text',
           text: deleteAmbiguity,
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+    const pendingCalendarCorrection = resolvePendingCalendarCorrection(
+      latestUserText,
+      context?.pendingAction,
+      { now, utcOffset },
+    )
+    if (pendingCalendarCorrection) {
+      return {
+        status: 200,
+        payload: {
+          type: 'tool_action',
+          tool: pendingCalendarCorrection.tool,
+          args: pendingCalendarCorrection.args,
+          display_text: buildDisplayText(pendingCalendarCorrection.tool, pendingCalendarCorrection.args),
           correlation_id: cid,
           telemetry: {
             ...llmTelemetry,

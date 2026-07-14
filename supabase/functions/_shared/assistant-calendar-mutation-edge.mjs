@@ -210,6 +210,54 @@ export function resolveClarifiedCalendarCreate(previousText, text, options = {})
   }
 }
 
+export function resolvePendingCalendarCorrection(text, pendingAction, options = {}) {
+  if (pendingAction?.tool !== 'create_event') return null
+  const input = String(text ?? '').replace(/\s+/g, ' ').trim()
+  if (!/(?:\b(?:actually|instead|rather|make that|change that|move that)\b|^(?:no|wait)\b)/i.test(input)) return null
+  const weekdayMatch = input.match(/\b(sun(?:day)?|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?)\b/i)
+  const timeMatch = input.match(/\b(\d{1,2})(?::(\d{2}))?\s*(?:(am|pm)|(?:in\s+the\s+)?(morning|afternoon|evening|night))\b/i)
+  if (!weekdayMatch || !timeMatch) return null
+  let hour = Number(timeMatch[1])
+  const minute = Number(timeMatch[2] ?? 0)
+  const period = String(timeMatch[3] ?? timeMatch[4]).toLowerCase()
+  const isPm = period === 'pm' || ['afternoon', 'evening', 'night'].includes(period)
+  if (isPm && hour !== 12) hour += 12
+  if (!isPm && hour === 12) hour = 0
+  if (hour > 23 || minute > 59) return null
+
+  const now = options.now instanceof Date ? options.now : new Date()
+  const offsetMatch = String(options.utcOffset ?? '').match(/^([+-])(\d{2}):(\d{2})$/)
+  const offset = offsetMatch
+    ? (offsetMatch[1] === '+' ? 1 : -1) * (Number(offsetMatch[2]) * 60 + Number(offsetMatch[3]))
+    : 0
+  const localNow = new Date(now.getTime() + offset * 60000)
+  const weekday = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].indexOf(weekdayMatch[1].toLowerCase().slice(0, 3))
+  let daysAhead = weekday - localNow.getUTCDay()
+  if (daysAhead < 0) daysAhead += 7
+  const start = new Date(Date.UTC(
+    localNow.getUTCFullYear(),
+    localNow.getUTCMonth(),
+    localNow.getUTCDate() + daysAhead,
+    hour,
+    minute,
+  ) - offset * 60000)
+  if (start.getTime() <= now.getTime()) start.setUTCDate(start.getUTCDate() + 7)
+
+  const oldStart = Date.parse(pendingAction.args?.start)
+  const oldEnd = Date.parse(pendingAction.args?.end)
+  const duration = Number.isFinite(oldStart) && Number.isFinite(oldEnd) && oldEnd > oldStart
+    ? oldEnd - oldStart
+    : 60 * 60000
+  return {
+    tool: 'create_event',
+    args: {
+      ...pendingAction.args,
+      start: start.toISOString(),
+      end: new Date(start.getTime() + duration).toISOString(),
+    },
+  }
+}
+
 export function singularBulkDeleteClarification(text, tool, args, events, formatTime = (value) => value) {
   if (
     tool !== 'delete_events_by_title'
