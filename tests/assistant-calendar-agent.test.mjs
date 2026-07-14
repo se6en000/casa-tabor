@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   CALENDAR_SEMANTIC_TURN_VERSION,
   resolveCalendarSemanticTurn,
+  shouldPreferActiveCalendarEntity,
 } from '../supabase/functions/_shared/assistant-calendar-agent.mjs'
 
 const context = {
@@ -157,11 +158,34 @@ test('active conversation identity outranks a model-nominated duplicate for pron
       ...context,
       authoritativeEntities: [active, olderDuplicate],
       activeEntity: { type: 'event', id: active.id },
+      preferActiveEntity: true,
     })
 
     assert.equal(result.kind, 'tool')
     assert.equal(result.args.id, active.id)
     assert.equal(result.args.expected_updated_at, active.version)
+})
+
+test('pronoun correction prefers active identity unless another event is named', () => {
+  const active = { type: 'event', id: 'dinner', title: 'Jake | Dinner With Kelly' }
+  const dentist = { type: 'event', id: 'dentist', title: 'Jake | Dentist Appointment' }
+
+  assert.equal(
+    shouldPreferActiveCalendarEntity(
+      'Actually, make that Saturday at seven.',
+      active,
+      [active, dentist],
+    ),
+    true,
+  )
+  assert.equal(
+    shouldPreferActiveCalendarEntity(
+      'Actually, make that dentist appointment Saturday at seven.',
+      active,
+      [active, dentist],
+    ),
+    false,
+  )
 })
 
 test('explicit target clues may switch away from the active conversation event', () => {

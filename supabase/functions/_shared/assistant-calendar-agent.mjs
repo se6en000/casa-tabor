@@ -157,13 +157,16 @@ function resolveRange(patch, baseArgs, context, options) {
 }
 
 function resolveTarget(turn, activeEntity, entities, context) {
-  if (activeEntity && !hasTargetClues(turn.target)) {
+  if (activeEntity && context.preferActiveEntity === true) {
     return { kind: 'target', entity: activeEntity }
   }
   const requestedId = optionalText(turn.targetEntityId)
   if (requestedId) {
     const target = entities.find((entity) => entity.id === requestedId)
     return target ? { kind: 'target', entity: target } : reject('unknown_authoritative_event')
+  }
+  if (activeEntity && !hasTargetClues(turn.target)) {
+    return { kind: 'target', entity: activeEntity }
   }
 
   const candidateIds = Array.isArray(turn.candidateEntityIds)
@@ -214,6 +217,23 @@ function resolveTarget(turn, activeEntity, entities, context) {
     }
   }
   return clarify('Which calendar event do you mean?', 'event_id')
+}
+
+export function shouldPreferActiveCalendarEntity(text, activeEntity, entities = []) {
+  if (
+    activeEntity?.type !== 'event' ||
+    typeof activeEntity.id !== 'string' ||
+    !/\b(?:it|that|this|same one)\b/i.test(String(text ?? ''))
+  ) {
+    return false
+  }
+
+  const normalizedText = normalizeSearchText(text)
+  return !entities.some((entity) => {
+    if (entity?.type !== 'event' || entity.id === activeEntity.id) return false
+    const title = normalizeSearchText(String(entity.title ?? '').replace(/^[^|]{1,40}\|\s*/, ''))
+    return title.length >= 4 && normalizedText.includes(title)
+  })
 }
 
 function hasTargetClues(value) {

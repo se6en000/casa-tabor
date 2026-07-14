@@ -1,7 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.mjs'
 import { evaluateAgentToolCall } from '../_shared/assistant-agent-policy.mjs'
-import { resolveCalendarSemanticTurn } from '../_shared/assistant-calendar-agent.mjs'
+import {
+  resolveCalendarSemanticTurn,
+  shouldPreferActiveCalendarEntity,
+} from '../_shared/assistant-calendar-agent.mjs'
 import {
   adaptAgentGroceryUpdate,
   findAgentCalendarDuplicates,
@@ -135,6 +138,11 @@ Deno.serve(async (req) => {
         pendingAction: normalizedPendingAction,
         activeEntity,
         authoritativeEntities,
+        preferActiveEntity: shouldPreferActiveCalendarEntity(
+          latestUserText,
+          activeAuthoritativeEntity,
+          authoritativeEntities,
+        ),
       })
       if (resolved.kind === 'clarify') {
         const candidates = Array.isArray(resolved.candidates) ? resolved.candidates : []
