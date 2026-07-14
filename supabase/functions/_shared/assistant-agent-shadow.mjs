@@ -117,7 +117,9 @@ export function parseAgentShadowResponse(payload) {
       }
       return {
         kind: 'defer',
-        reason: typeof args.reason === 'string' ? args.reason : 'unsupported',
+        reason: ['read', 'compound', 'unsupported'].includes(args.requested_outcome)
+          ? args.requested_outcome
+          : 'unsupported',
       }
     }
     if (functionCall.name === CALENDAR_TURN_FUNCTION) {

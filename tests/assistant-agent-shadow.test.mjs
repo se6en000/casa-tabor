@@ -245,6 +245,26 @@ test('shadow response parser preserves clarification without treating it as exec
   const result = parseAgentShadowResponse({
     candidates: [{ content: { parts: [{ text: 'Which dentist appointment do you mean?' }] } }],
   })
+
+  test('semantic write parser preserves structured read deferrals', () => {
+    const result = parseAgentShadowResponse({
+      candidates: [{
+        content: {
+          parts: [{
+            functionCall: {
+              name: 'assistant_interpret_write',
+              args: {
+                requested_domain: 'calendar',
+                requested_outcome: 'read',
+                reason: 'The user asked a question about an event.',
+              },
+            },
+          }],
+        },
+      }],
+    })
+    assert.deepEqual(result, { kind: 'defer', reason: 'read' })
+  })
   assert.deepEqual(result, {
     kind: 'clarify',
     text: 'Which dentist appointment do you mean?',
