@@ -157,12 +157,14 @@ function resolveRange(patch, baseArgs, context, options) {
 }
 
 function resolveTarget(turn, activeEntity, entities, context) {
+  if (activeEntity && !hasTargetClues(turn.target)) {
+    return { kind: 'target', entity: activeEntity }
+  }
   const requestedId = optionalText(turn.targetEntityId)
   if (requestedId) {
     const target = entities.find((entity) => entity.id === requestedId)
     return target ? { kind: 'target', entity: target } : reject('unknown_authoritative_event')
   }
-  if (activeEntity) return { kind: 'target', entity: activeEntity }
 
   const candidateIds = Array.isArray(turn.candidateEntityIds)
     ? [...new Set(turn.candidateEntityIds.filter((id) => typeof id === 'string'))]
@@ -181,6 +183,7 @@ function resolveTarget(turn, activeEntity, entities, context) {
         return label.includes(hint) || hint.includes(label)
       })
     }
+
     const offset = validOffset(context.utcOffset)
     const date = target.dateReference && offset
       ? resolveDateReference(target.dateReference, context.currentDate, offset.minutes)
@@ -211,6 +214,15 @@ function resolveTarget(turn, activeEntity, entities, context) {
     }
   }
   return clarify('Which calendar event do you mean?', 'event_id')
+}
+
+function hasTargetClues(value) {
+  if (!value || typeof value !== 'object') return false
+  return Boolean(
+    optionalText(value.title) ||
+    normalizeDateReference(value.date_reference) ||
+    normalizeTime(value.time),
+  )
 }
 
 function normalizePatch(value) {

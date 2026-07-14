@@ -98,7 +98,19 @@ test('active event updates use authoritative identity and preserve duration unle
     activeEntity: { type: 'event', id: event.id },
   })
 
-  test('conversation state converts provider revise into update after confirmation', () => {
+  assert.deepEqual(result, {
+    kind: 'tool',
+    toolName: 'calendar.update',
+    args: {
+      id: 'dinner-1',
+      expected_updated_at: 'v1',
+      start: '2026-07-18T23:00:00-04:00',
+      end: '2026-07-19T01:00:00-04:00',
+    },
+  })
+})
+
+test('conversation state converts provider revise into update after confirmation', () => {
     const event = {
       type: 'event',
       id: 'dinner-1',
@@ -120,18 +132,66 @@ test('active event updates use authoritative identity and preserve duration unle
     assert.equal(result.kind, 'tool')
     assert.equal(result.toolName, 'calendar.update')
     assert.equal(result.args.id, event.id)
-  })
+})
 
-  assert.deepEqual(result, {
-    kind: 'tool',
-    toolName: 'calendar.update',
-    args: {
-      id: 'dinner-1',
-      expected_updated_at: 'v1',
-      start: '2026-07-18T23:00:00-04:00',
-      end: '2026-07-19T01:00:00-04:00',
-    },
-  })
+test('active conversation identity outranks a model-nominated duplicate for pronoun corrections', () => {
+    const active = {
+      type: 'event',
+      id: 'new-dinner',
+      title: 'Dinner with Kelly',
+      version: 'new-v1',
+      start: '2026-07-19T18:00:00-04:00',
+      end: '2026-07-19T19:30:00-04:00',
+    }
+    const olderDuplicate = {
+      ...active,
+      id: 'old-dinner',
+      version: 'old-v1',
+    }
+    const result = resolveCalendarSemanticTurn(turn('update', {
+      date_reference: { kind: 'weekday', weekday: 'saturday' },
+      time: { hour: 7, period: 'ambiguous' },
+    }, {
+      targetEntityId: olderDuplicate.id,
+    }), {
+      ...context,
+      authoritativeEntities: [active, olderDuplicate],
+      activeEntity: { type: 'event', id: active.id },
+    })
+
+    assert.equal(result.kind, 'tool')
+    assert.equal(result.args.id, active.id)
+    assert.equal(result.args.expected_updated_at, active.version)
+})
+
+test('explicit target clues may switch away from the active conversation event', () => {
+    const active = {
+      type: 'event',
+      id: 'dinner',
+      title: 'Dinner with Kelly',
+      version: 'dinner-v1',
+      start: '2026-07-19T18:00:00-04:00',
+      end: '2026-07-19T19:30:00-04:00',
+    }
+    const dentist = {
+      type: 'event',
+      id: 'dentist',
+      title: 'Dentist appointment',
+      version: 'dentist-v1',
+      start: '2026-07-20T09:00:00-04:00',
+      end: '2026-07-20T09:45:00-04:00',
+    }
+    const result = resolveCalendarSemanticTurn(turn('delete', {}, {
+      targetEntityId: dentist.id,
+      target: { title: 'Dentist appointment' },
+    }), {
+      ...context,
+      authoritativeEntities: [active, dentist],
+      activeEntity: { type: 'event', id: active.id },
+    })
+
+    assert.equal(result.kind, 'tool')
+    assert.equal(result.args.id, dentist.id)
 })
 
 test('ambiguous destructive targets remain a named clarification instead of selecting a row', () => {
