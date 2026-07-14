@@ -571,6 +571,7 @@ Deno.serve(async (req) => {
         payload: {
           type: 'text',
           text: selection.text,
+          conversation_state: incomingConversationState,
           correlation_id: cid,
           telemetry: {
             ...llmTelemetry,

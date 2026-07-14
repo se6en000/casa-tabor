@@ -68,6 +68,56 @@ test('calendar clarification state preserves choices and resolves ordinal follow
   assert.deepEqual(resolved.args.members_add, ['Owen'])
 })
 
+test('calendar clarification lists numbered choices and resolves spoken time or weekday', () => {
+  const saturday = {
+    ...event,
+    id: 'saturday-dinner',
+    title: 'Dinner With Kelly',
+    updated_at: 'sat-v1',
+    start_time: '2026-07-18T23:00:00Z',
+  }
+  const sunday = {
+    ...event,
+    id: 'sunday-dinner',
+    title: 'Dinner With Kelly',
+    updated_at: 'sun-v1',
+    start_time: '2026-07-19T22:00:00Z',
+  }
+  const state = calendarClarificationConversationState(
+    [saturday, sunday],
+    { tool: 'delete_event', args: {} },
+    new Date('2026-07-14T13:00:00Z'),
+  )
+  const options = { utcOffset: '-04:00' }
+
+  const choices = resolveCalendarClarificationSelection(
+    'what are my choices number them',
+    state,
+    [saturday, sunday],
+    options,
+  )
+  assert.match(choices.text, /1\. Dinner With Kelly — Sat, Jul 18 at 7:00 PM/)
+  assert.match(choices.text, /2\. Dinner With Kelly — Sun, Jul 19 at 6:00 PM/)
+  assert.equal(
+    resolveCalendarClarificationSelection(
+      'delete the one starting at 7',
+      state,
+      [saturday, sunday],
+      options,
+    ).args.id,
+    saturday.id,
+  )
+  assert.equal(
+    resolveCalendarClarificationSelection(
+      'delete the Sunday one',
+      state,
+      [saturday, sunday],
+      options,
+    ).args.id,
+    sunday.id,
+  )
+})
+
 test('calendar clarification preserves and applies the semantic mutation after selection', () => {
   const now = new Date('2026-07-14T13:00:00Z')
   const secondEvent = {

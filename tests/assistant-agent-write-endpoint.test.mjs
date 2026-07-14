@@ -48,6 +48,11 @@ test('active exact updates use semantic resolution without weakening policy cont
   assert.doesNotMatch(endpoint, /calendarRequestedTime/)
 })
 
+test('agent writes retain the authoritative annual event window for target resolution', () => {
+  assert.match(endpoint, /body\.authoritative_data\.events\.slice\(0, 500\)/)
+  assert.doesNotMatch(endpoint, /body\.authoritative_data\.events\.slice\(0, 100\)/)
+})
+
 test('pending legacy confirmation cards are normalized for agent corrections', () => {
   assert.match(endpoint, /getAgentToolByLegacyName/)
   assert.match(endpoint, /normalizedPendingAction/)

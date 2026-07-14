@@ -114,6 +114,13 @@ export function resolveCalendarClarificationSelection(text, state, events, optio
   if (candidates.length === 0) {
     return { text: 'Those calendar choices are no longer available. Please name the event again.' }
   }
+  if (/\b(?:choices|options|list|number)\b/.test(input)) {
+    return {
+      text: `Here are the choices:\n${candidates.map((event, index) =>
+        `${index + 1}. ${event.title} — ${formatClarificationStart(event.start_time, options.utcOffset)}`
+      ).join('\n')}`,
+    }
+  }
 
   let selectedIndex = null
   if (/\b(?:first|1st)\b/.test(input)) selectedIndex = 0
@@ -122,6 +129,12 @@ export function resolveCalendarClarificationSelection(text, state, events, optio
   else if (/\b(?:last|latest)\b/.test(input)) selectedIndex = candidates.length - 1
   else if (/\b(?:earlier|morning)\b/.test(input)) selectedIndex = 0
   else if (/\b(?:later|afternoon|evening|night)\b/.test(input)) selectedIndex = candidates.length - 1
+  if (selectedIndex == null) {
+    selectedIndex = candidateIndexBySpokenTime(input, candidates, options.utcOffset)
+  }
+  if (selectedIndex == null) {
+    selectedIndex = candidateIndexByWeekday(input, candidates, options.utcOffset)
+  }
 
   const selected = selectedIndex == null ? null : candidates[selectedIndex]
   if (!selected) return null
@@ -148,6 +161,7 @@ export function resolveCalendarClarificationSelection(text, state, events, optio
     if (result.kind !== 'tool') {
       return { text: 'I could not safely prepare that change. Please describe it again.' }
     }
+
     return {
       tool: result.toolName === 'calendar.delete' ? 'delete_event' : 'update_event',
       args: result.args,
@@ -169,6 +183,70 @@ export function resolveCalendarClarificationSelection(text, state, events, optio
       expected_updated_at: selected.updated_at,
     },
     event: selected,
+  }
+}
+
+function candidateIndexBySpokenTime(input, candidates, utcOffset) {
+  const hourWords = {
+    one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+    seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+  }
+  const match = input.match(/\b(?:at|starting at|starts? at)\s+(?:(\d{1,2})(?::(\d{2}))?|([a-z]+))\s*(a\.?m\.?|p\.?m\.?)?\b/i)
+  if (!match) return null
+  const hour12 = match[1] ? Number(match[1]) : hourWords[match[3]]
+  const minute = match[2] ? Number(match[2]) : 0
+  if (!Number.isInteger(hour12) || hour12 < 1 || hour12 > 12 || minute > 59) return null
+  const period = match[4]?.toLowerCase().startsWith('p') ? 'pm'
+    : match[4]?.toLowerCase().startsWith('a') ? 'am'
+      : null
+  const matches = candidates.flatMap((event, index) => {
+    const local = localDateParts(event.start_time, utcOffset)
+    if (!local || local.minute !== minute || local.hour % 12 !== hour12 % 12) return []
+    if (period && (local.hour >= 12 ? 'pm' : 'am') !== period) return []
+    return [index]
+  })
+  return matches.length === 1 ? matches[0] : null
+}
+
+function candidateIndexByWeekday(input, candidates, utcOffset) {
+  const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+  const requested = weekdays.find((weekday) => new RegExp(`\\b${weekday}\\b`).test(input))
+  if (!requested) return null
+  const matches = candidates.flatMap((event, index) => {
+    const local = localDateParts(event.start_time, utcOffset)
+    return local?.weekday === requested ? [index] : []
+  })
+  return matches.length === 1 ? matches[0] : null
+}
+
+function formatClarificationStart(value, utcOffset) {
+  const local = localDateParts(value, utcOffset)
+  if (!local) return String(value ?? 'unknown time')
+  const date = new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(local.date)
+  const time = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  }).format(local.date)
+  return `${date} at ${time}`
+}
+
+function localDateParts(value, utcOffset) {
+  const timestamp = Date.parse(String(value ?? ''))
+  const match = String(utcOffset ?? '').match(/^([+-])(\d{2}):(\d{2})$/)
+  if (!Number.isFinite(timestamp) || !match) return null
+  const offset = (match[1] === '+' ? 1 : -1) * (Number(match[2]) * 60 + Number(match[3]))
+  const date = new Date(timestamp + offset * 60000)
+  return {
+    date,
+    hour: date.getUTCHours(),
+    minute: date.getUTCMinutes(),
+    weekday: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][date.getUTCDay()],
   }
 }
 
