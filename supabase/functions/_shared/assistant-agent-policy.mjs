@@ -79,7 +79,7 @@ export function evaluateAgentToolCall(request) {
 
 function evaluateDomainPolicy(tool, request) {
   if (tool.domain === 'calendar') {
-    const timeDecision = validateCalendarTimes(request.args)
+    const timeDecision = validateCalendarTimes(request.args, request.expectedUtcOffset)
     if (timeDecision) return timeDecision
     const memberDecision = validateCalendarMembers(tool.name, request.args, request.authorizedMemberNames)
     if (memberDecision) return memberDecision
@@ -135,7 +135,7 @@ function validateCalendarMembers(toolName, args, authorizedMemberNames) {
     : null
 }
 
-function validateCalendarTimes(args) {
+function validateCalendarTimes(args, expectedUtcOffset) {
   const hasStart = typeof args.start === 'string'
   const hasEnd = typeof args.end === 'string'
   if (!hasStart && !hasEnd) return null
@@ -144,6 +144,13 @@ function validateCalendarTimes(args) {
   const end = Date.parse(args.end)
   if (!Number.isFinite(start) || !Number.isFinite(end)) return reject('invalid_calendar_time')
   if (end <= start) return reject('invalid_calendar_duration')
+  if (
+    typeof expectedUtcOffset === 'string' &&
+    expectedUtcOffset.trim() &&
+    (!args.start.endsWith(expectedUtcOffset) || !args.end.endsWith(expectedUtcOffset))
+  ) {
+    return reject('unexpected_calendar_utc_offset')
+  }
   return null
 }
 

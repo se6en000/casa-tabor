@@ -7,7 +7,7 @@ import {
 export const AGENT_SHADOW_VERSION = 'agent-shadow-v1'
 const READ_ROUTE_FUNCTION = 'assistant_read_request'
 const WRITE_ROUTE_FUNCTION = 'assistant_write_request'
-const ADDITIVE_WRITE_TOOLS = new Set(['calendar.create', 'grocery.add_items'])
+const PROPOSAL_WRITE_TOOLS = new Set(['calendar.create', 'calendar.update', 'grocery.add_items'])
 
 export function buildAgentShadowRequest(input) {
   const messages = normalizeMessages(input?.messages)
@@ -83,7 +83,12 @@ export function parseAgentShadowResponse(payload) {
       const tool = getAgentToolByGeminiName(
           String(functionCall.args?.tool_name ?? '').replace('.', '_'),
       )
-      if (requestedEffect !== 'additive_write' || !ADDITIVE_WRITE_TOOLS.has(tool?.name)) {
+      const validPair = requestedEffect === 'additive_write'
+          ? ['calendar.create', 'grocery.add_items'].includes(tool?.name)
+          : requestedEffect === 'exact_update'
+            ? tool?.name === 'calendar.update'
+            : false
+      if (!validPair) {
           return {
             kind: 'defer',
             reason: requestedEffect === 'other_write' ? 'unsupported_write' : requestedEffect ?? 'unsupported_domain',
@@ -169,11 +174,16 @@ ${additiveWriteMode ? `
 ADDITIVE WRITE MODE:
 - Call assistant_write_request exactly once and classify the user's ultimate requested outcome.
 - Set requested_effect to additive_write only for creating one calendar event or adding explicit grocery items.
-- Set requested_effect to other_write for every update, move, rename, check-off, clear, remove, or delete request.
+- Set requested_effect to exact_update only for changing one exact authoritative non-recurring calendar event.
+- Set requested_effect to other_write for grocery updates, check-offs, clears, removals, deletes, bulk changes, or any calendar update without one exact authoritative target.
 - Set requested_effect to read for questions that do not change data.
 - Set requested_effect to unsupported for cooking actions or any capability outside this rollout.
 - Never convert an update or destructive request into a create/add action.
 - Only when requested_effect is additive_write, select calendar.create or grocery.add_items and supply grounded arguments.
+- Only when requested_effect is exact_update, select calendar.update and copy the exact ID and version from AUTHORITATIVE ENTITIES.
+- For a calendar move, preserve the authoritative duration and include both replacement start and end.
+- Calendar start and end MUST use CURRENT UTC OFFSET exactly; never return Z/UTC timestamps for local household times.
+- If multiple events could match and ACTIVE ENTITY does not identify one exact event, classify as other_write so Casa can clarify.
 - Do not invent missing titles, items, people, dates, times, quantities, or locations.
 ` : ''}
 
@@ -234,7 +244,7 @@ function buildReadRouteDeclaration() {
 }
 
 function buildAdditiveWriteRouteDeclaration() {
-  const additiveTools = AGENT_TOOL_DEFINITIONS.filter((tool) => ADDITIVE_WRITE_TOOLS.has(tool.name))
+  const additiveTools = AGENT_TOOL_DEFINITIONS.filter((tool) => PROPOSAL_WRITE_TOOLS.has(tool.name))
   const toolArgProperties = Object.assign(
     {},
     ...additiveTools.map((tool) => tool.inputSchema.properties ?? {}),
@@ -249,7 +259,7 @@ function buildAdditiveWriteRouteDeclaration() {
       properties: {
         requested_effect: {
           type: 'string',
-          enum: ['additive_write', 'other_write', 'read', 'unsupported'],
+          enum: ['additive_write', 'exact_update', 'other_write', 'read', 'unsupported'],
           description: 'The effect of the user outcome, regardless of prerequisite lookup steps.',
         },
         tool_name: {

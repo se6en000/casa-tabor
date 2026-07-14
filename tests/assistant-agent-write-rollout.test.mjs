@@ -18,8 +18,9 @@ test('additive agent writes are feature flagged and sampled', () => {
 test('write rollout adopts only allowlisted proposal actions', () => {
   assert.match(assistant, /agentWriteData\?\.supported === true/)
   assert.match(assistant, /agentWriteData\.type === 'tool_action'/)
-  assert.match(assistant, /\['create_event', 'add_grocery_items'\]\.includes/)
-  assert.match(assistant, /semantic_intent: 'agent\.write\.additive'/)
+  assert.match(assistant, /\['create_event', 'update_event', 'add_grocery_items'\]\.includes/)
+  assert.match(assistant, /'agent\.write\.update'/)
+  assert.match(assistant, /'agent\.write\.additive'/)
   assert.match(assistant, /server_agent_write_adopted/)
 })
 

@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   findAgentCalendarDuplicates,
+  isAgentCalendarUpdateTargetUnambiguous,
 } from '../supabase/functions/_shared/assistant-agent-write.mjs'
 
 test('calendar duplicate matching ignores model-derived duration differences', () => {
@@ -43,4 +44,32 @@ test('calendar duplicate matching preserves distinct starts and titles', () => {
 test('calendar duplicate matching rejects malformed inputs safely', () => {
   assert.deepEqual(findAgentCalendarDuplicates(null, {}), [])
   assert.deepEqual(findAgentCalendarDuplicates([], { title: 'Swim practice', start: 'Friday' }), [])
+})
+
+test('calendar updates require an active target or one unique authoritative title', () => {
+  const entities = [
+    { type: 'event', id: 'dentist-1', title: 'Dentist appointment' },
+    { type: 'event', id: 'dentist-2', title: 'Dentist appointment' },
+    { type: 'event', id: 'piano-1', title: 'Piano recital' },
+  ]
+  assert.equal(isAgentCalendarUpdateTargetUnambiguous(
+    entities,
+    { id: 'dentist-1' },
+    null,
+  ), false)
+  assert.equal(isAgentCalendarUpdateTargetUnambiguous(
+    entities,
+    { id: 'dentist-1' },
+    { type: 'event', id: 'dentist-1' },
+  ), true)
+  assert.equal(isAgentCalendarUpdateTargetUnambiguous(
+    entities,
+    { id: 'piano-1' },
+    null,
+  ), true)
+  assert.equal(isAgentCalendarUpdateTargetUnambiguous(
+    entities,
+    { id: 'missing' },
+    null,
+  ), false)
 })

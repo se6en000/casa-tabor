@@ -149,6 +149,7 @@ test('calendar writes reject family members not present in authoritative context
     },
     authorizedMemberNames: ['Jake', 'Liv'],
   })
+
   assert.equal(inventedMember.code, 'unknown_calendar_member')
   assert.deepEqual(inventedMember.unknownMembers, ['Family Planning Meeting'])
 
@@ -165,4 +166,32 @@ test('calendar writes reject family members not present in authoritative context
     authorizedMemberNames: ['Jake', 'Liv'],
   })
   assert.equal(knownMembers.decision, 'execute')
+})
+
+test('calendar writes reject model timestamps that ignore household UTC offset', () => {
+  const wrongOffset = evaluate({
+    toolName: 'calendar.create',
+    actionId: 'create-wrong-offset',
+    idempotencyKey: 'create-wrong-offset-key',
+    expectedUtcOffset: '-04:00',
+    args: {
+      title: 'Dentist appointment',
+      start: '2026-07-17T14:00:00.000Z',
+      end: '2026-07-17T15:00:00.000Z',
+    },
+  })
+  assert.equal(wrongOffset.code, 'unexpected_calendar_utc_offset')
+
+  const householdOffset = evaluate({
+    toolName: 'calendar.create',
+    actionId: 'create-correct-offset',
+    idempotencyKey: 'create-correct-offset-key',
+    expectedUtcOffset: '-04:00',
+    args: {
+      title: 'Dentist appointment',
+      start: '2026-07-17T14:00:00-04:00',
+      end: '2026-07-17T15:00:00-04:00',
+    },
+  })
+  assert.equal(householdOffset.decision, 'execute')
 })

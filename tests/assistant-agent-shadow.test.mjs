@@ -131,7 +131,7 @@ test('authoritative read planning exposes only reads and typed deferral', () => 
   })
 })
 
-test('additive write planning cannot select updates or destructive tools', () => {
+test('write proposal planning exposes additive and exact updates but no destructive tools', () => {
   const request = buildAgentShadowRequest({
     messages: [{ role: 'user', content: 'Move the dentist appointment to Friday' }],
     plannerMode: 'additive_write',
@@ -179,6 +179,37 @@ test('additive write planning cannot select updates or destructive tools', () =>
       title: 'Swim practice',
       start: '2026-07-17T16:00:00-04:00',
       end: '2026-07-17T17:00:00-04:00',
+    },
+  })
+
+  assert.deepEqual(parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'assistant_write_request',
+            args: {
+              requested_effect: 'exact_update',
+              tool_name: 'calendar.update',
+              tool_args: {
+                id: 'event-1',
+                expected_updated_at: 'v1',
+                start: '2026-07-17T14:00:00-04:00',
+                end: '2026-07-17T15:00:00-04:00',
+              },
+            },
+          },
+        }],
+      },
+    }],
+  }), {
+    kind: 'tool',
+    toolName: 'calendar.update',
+    args: {
+      id: 'event-1',
+      expected_updated_at: 'v1',
+      start: '2026-07-17T14:00:00-04:00',
+      end: '2026-07-17T15:00:00-04:00',
     },
   })
 })

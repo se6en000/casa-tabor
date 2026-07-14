@@ -506,6 +506,14 @@ Deno.serve(async (req) => {
           currentDate: context?.currentDate,
           utcOffset: context?.utcOffset,
           family: context?.family,
+          activeEntity: activeConversationEvent
+            ? {
+                type: 'event',
+                id: activeConversationEvent.id,
+                version: activeConversationEvent.updated_at,
+                title: activeConversationEvent.title,
+              }
+            : null,
         },
         authoritative_data: {
           events: allEvents ?? [],
@@ -536,7 +544,7 @@ Deno.serve(async (req) => {
       !agentWriteResult.error &&
       agentWriteData?.supported === true &&
       agentWriteData.type === 'tool_action' &&
-      ['create_event', 'add_grocery_items'].includes(String(agentWriteData.tool ?? '')) &&
+      ['create_event', 'update_event', 'add_grocery_items'].includes(String(agentWriteData.tool ?? '')) &&
       agentWriteData.args &&
       typeof agentWriteData.args === 'object'
     ) {
@@ -556,7 +564,9 @@ Deno.serve(async (req) => {
           display_text: buildDisplayText(agentWriteData.tool, agentWriteData.args),
           action_id: agentWriteData.action_id,
           conversation_state: responseConversationState,
-          semantic_intent: 'agent.write.additive',
+          semantic_intent: agentWriteData.tool === 'update_event'
+            ? 'agent.write.update'
+            : 'agent.write.additive',
           correlation_id: cid,
           telemetry: {
             ...llmTelemetry,

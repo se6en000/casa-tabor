@@ -1,7 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.mjs'
 import { evaluateAgentToolCall } from '../_shared/assistant-agent-policy.mjs'
-import { findAgentCalendarDuplicates } from '../_shared/assistant-agent-write.mjs'
+import {
+  findAgentCalendarDuplicates,
+  isAgentCalendarUpdateTargetUnambiguous,
+} from '../_shared/assistant-agent-write.mjs'
 import { legacyToolNameFor } from '../_shared/assistant-agent-tools.mjs'
 
 const CORS = {
@@ -9,7 +12,7 @@ const CORS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
-const ALLOWED_TOOLS = new Set(['calendar.create', 'grocery.add_items'])
+const ALLOWED_TOOLS = new Set(['calendar.create', 'calendar.update', 'grocery.add_items'])
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
@@ -53,13 +56,22 @@ Deno.serve(async (req) => {
         name: item.name,
       })),
     ].filter((entity) => typeof entity.id === 'string')
+    const activeEntity = body?.context?.activeEntity
+    const activeAuthoritativeEntity = activeEntity?.type === 'event'
+      ? authoritativeEntities.find((entity) =>
+          entity.type === 'event' && entity.id === activeEntity.id
+        )
+      : null
+    const planningEntities = activeAuthoritativeEntity
+      ? [activeAuthoritativeEntity]
+      : authoritativeEntities
 
     const plannerResult = await sb.functions.invoke('ai-agent-shadow', {
       body: {
         messages: body?.messages,
         context: {
           ...body?.context,
-          authoritativeEntities,
+          authoritativeEntities: planningEntities,
         },
         trace_id: traceId,
         turn_id: turnId,
@@ -85,6 +97,21 @@ Deno.serve(async (req) => {
     const duplicateCandidates = plan.toolName === 'calendar.create'
       ? findAgentCalendarDuplicates(events, plan.args)
       : []
+    if (
+      plan.toolName === 'calendar.update' &&
+      !isAgentCalendarUpdateTargetUnambiguous(
+        authoritativeEntities,
+        plan.args,
+        activeEntity,
+      )
+    ) {
+      return result({
+        supported: false,
+        code: 'ambiguous_update_target',
+        planKind: plan.kind,
+        toolName: plan.toolName,
+      })
+    }
     const policy = evaluateAgentToolCall({
       toolName: plan.toolName,
       args: plan.args,
@@ -100,13 +127,15 @@ Deno.serve(async (req) => {
       agentState: body?.agent_state,
       authoritativeEntities,
       duplicateCandidates,
+      expectedUtcOffset: optionalText(body?.context?.utcOffset, 12),
       authorizedMemberNames: Array.isArray(body?.context?.family)
         ? body.context.family.flatMap((member: { name?: unknown }) =>
             typeof member?.name === 'string' ? [member.name] : []
           )
         : [],
     })
-    if (policy.decision !== 'execute' || policy.allowed !== true) {
+    const acceptedDecision = plan.toolName === 'calendar.update' ? 'confirm' : 'execute'
+    if (policy.decision !== acceptedDecision || policy.allowed !== true) {
       return result({
         supported: false,
         code: policy.code,

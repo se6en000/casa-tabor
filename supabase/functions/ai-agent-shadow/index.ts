@@ -79,6 +79,7 @@ Deno.serve(async (req) => {
           agentState: body?.agent_state,
           authoritativeEntities: body?.context?.authoritativeEntities,
           duplicateCandidates: body?.context?.duplicateCandidates,
+          expectedUtcOffset: text(body?.context?.utcOffset, 12),
           authorizedMemberNames: Array.isArray(body?.context?.family)
             ? body.context.family.flatMap((member: { name?: unknown }) =>
                 typeof member?.name === 'string' ? [member.name] : []
