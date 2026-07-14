@@ -26,6 +26,8 @@ test('shadow planner request exposes capability tools without phrase routing', (
   assert.match(instruction, /understand any natural wording/)
   assert.match(instruction, /PENDING ACTION/)
   assert.match(instruction, /MUST call the same pending capability/)
+  assert.match(instruction, /keep relationship or contact phrases in the title/)
+  assert.match(instruction, /Never turn Mom, Dad, Grandma/)
   assert.match(instruction, /COMPLETED TOOL CALLS/)
   assert.match(instruction, /count 0 means the proposed time is clear/)
   assert.ok(request.tools[0].function_declarations.some((tool) => tool.name === 'calendar_create'))

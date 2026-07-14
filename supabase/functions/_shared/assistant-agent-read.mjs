@@ -81,6 +81,7 @@ function checkCalendarConflicts(args, rawEvents) {
 function getGroceryList(args, rawItems) {
   const includeChecked = args?.include_checked === true
   const listId = normalizeText(args?.list_id)
+  const query = normalizeText(args?.query)
   const items = (Array.isArray(rawItems) ? rawItems : [])
     .flatMap((item) => {
       if (!item || typeof item !== 'object') return []
@@ -92,9 +93,14 @@ function getGroceryList(args, rawItems) {
         quantity: typeof item.quantity === 'string' ? item.quantity : null,
         unit: typeof item.unit === 'string' ? item.unit : null,
         checked: item.checked === true,
+        updated_at: typeof item.updated_at === 'string' ? item.updated_at : null,
       }]
     })
-    .filter((item) => (!listId || item.list_id?.toLowerCase() === listId) && (includeChecked || !item.checked))
+    .filter((item) =>
+      (!listId || item.list_id?.toLowerCase() === listId) &&
+      (!query || item.name.toLowerCase().includes(query)) &&
+      (includeChecked || !item.checked)
+    )
   return { supported: true, items, count: items.length }
 }
 
@@ -184,4 +190,3 @@ function formatLocation(event) {
   const location = event.address ?? event.location_name
   return location ? ` at ${location}` : ''
 }
-

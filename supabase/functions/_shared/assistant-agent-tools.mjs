@@ -68,7 +68,7 @@ export const AGENT_TOOL_DEFINITIONS = Object.freeze([
       start: string('ISO start with UTC offset.'),
       end: string('ISO end with UTC offset.'),
       location: string('Optional place name or address.'),
-      members: stringArray('Family member names to include.'),
+      members: stringArray('Exact names from FAMILY to assign. Do not use relationship or contact words from the event title.'),
       notes: string('Optional user-provided notes.'),
       all_day: boolean('Whether the event is all day.'),
       event_type: string('One of event or reminder.'),
@@ -116,6 +116,7 @@ export const AGENT_TOOL_DEFINITIONS = Object.freeze([
     description: 'Read authoritative grocery list items and their checked state.',
     properties: {
       list_id: string('Optional grocery list UUID; omit to use the household default.'),
+      query: string('Optional grocery item name search text.'),
       include_checked: boolean('Whether checked items should be returned.'),
     },
   }),

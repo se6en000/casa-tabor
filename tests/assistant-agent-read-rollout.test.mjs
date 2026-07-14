@@ -11,8 +11,15 @@ test('agent reads are feature flagged, sampled, and limited to read surfaces', (
   assert.match(assistant, /agent_read_config/)
   assert.match(assistant, /agentReadConfig\?\.enabled === true/)
   assert.match(assistant, /Math\.random\(\) < agentReadRate/)
-  assert.match(assistant, /\['calendar', 'grocery'\]\.includes/)
+  assert.match(assistant, /AGENT_GENERAL_PAGES\.has/)
+  assert.match(assistant, /context\?\.assistant_mode !== 'chef'/)
   assert.match(assistant, /!context\?\.pendingAction/)
+})
+
+test('mutation deferrals from the read planner fail closed', () => {
+  assert.match(assistant, /agentReadData\?\.handled === true/)
+  assert.match(assistant, /server_agent_mutation_blocked/)
+  assert.match(assistant, /'agent\.write\.blocked'/)
 })
 
 test('agent read rollout adopts only explicit supported text results', () => {

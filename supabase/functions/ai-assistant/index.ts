@@ -79,7 +79,8 @@ type LlmTelemetry = {
   total_tokens: number
 }
 
-const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash-lite'
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
+const AGENT_GENERAL_PAGES = new Set(['app', 'briefing', 'calendar', 'grocery', 'home'])
 const SUPPORTED_GEMINI_MODELS = new Set([
   'gemini-2.5-flash-lite',
   'gemini-2.5-flash',
@@ -498,8 +499,8 @@ Deno.serve(async (req) => {
   const shouldRunAgentWrite = !dryRun &&
     agentWriteConfig?.enabled === true &&
     agentWriteRate > 0 &&
-    ['calendar', 'grocery'].includes(String(context?.page ?? '')) &&
-    !context?.pendingAction &&
+    AGENT_GENERAL_PAGES.has(String(context?.page ?? '')) &&
+    context?.assistant_mode !== 'chef' &&
     !image &&
     Math.random() < agentWriteRate
   if (shouldRunAgentWrite) {
@@ -512,6 +513,9 @@ Deno.serve(async (req) => {
           currentDate: context?.currentDate,
           utcOffset: context?.utcOffset,
           family: context?.family,
+          calendarRequestedTime: calendarFrame?.intent === 'event.move'
+            ? calendarFrame.slots?.requestedTime
+            : null,
           activeEntity: activeConversationEvent
             ? {
                 type: 'event',
@@ -527,6 +531,7 @@ Deno.serve(async (req) => {
                   name: activeConversationGroceryItem.name,
                 }
               : null,
+          pendingAction: context?.pendingAction,
         },
         authoritative_data: {
           events: allEvents ?? [],
@@ -541,16 +546,21 @@ Deno.serve(async (req) => {
       },
     })
     const timeout = new Promise<{ data: null; error: { message: string } }>((resolve) => {
-      setTimeout(() => resolve({ data: null, error: { message: 'agent_write_timeout' } }), 4500)
+      setTimeout(() => resolve({ data: null, error: { message: 'agent_write_timeout' } }), 6500)
     })
     const agentWriteResult = await Promise.race([agentWriteRequest, timeout])
     const agentWriteData = agentWriteResult.data as {
       supported?: boolean
+      handled?: boolean
       type?: string
       tool?: string
+      text?: string
       args?: Record<string, unknown>
       action_id?: string
       elapsed_ms?: number
+      code?: string
+      planKind?: string
+      toolName?: string
       plan?: { toolName?: string }
     } | null
     if (
@@ -601,6 +611,34 @@ Deno.serve(async (req) => {
         },
       }
     }
+    if (
+      !agentWriteResult.error &&
+      agentWriteData?.handled === true &&
+      typeof agentWriteData.text === 'string'
+    ) {
+      appendServerTrace('server_agent_write_blocked', agentWriteData.code ?? 'write_rejected', {
+        code: agentWriteData.code ?? null,
+        tool_name: agentWriteData.toolName ?? agentWriteData.plan?.toolName ?? null,
+        rollout_rate: agentWriteRate,
+      })
+      return {
+        status: 200,
+        payload: {
+          type: 'text',
+          text: agentWriteData.text,
+          conversation_state: responseConversationState,
+          semantic_intent: 'agent.write.blocked',
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            agentic: true,
+            agent_write_ms: agentWriteData.elapsed_ms ?? null,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
     const agentWriteFallback = agentWriteResult.error?.message ??
       (typeof agentWriteData?.code === 'string' ? agentWriteData.code : 'unsupported_plan')
     appendServerTrace('server_agent_write_fallback', agentWriteFallback, {
@@ -611,7 +649,8 @@ Deno.serve(async (req) => {
   const shouldRunAgentRead = !dryRun &&
     agentReadConfig?.enabled === true &&
     agentReadRate > 0 &&
-    ['calendar', 'grocery'].includes(String(context?.page ?? '')) &&
+    AGENT_GENERAL_PAGES.has(String(context?.page ?? '')) &&
+    context?.assistant_mode !== 'chef' &&
     !context?.pendingAction &&
     !image &&
     Math.random() < agentReadRate
@@ -625,6 +664,7 @@ Deno.serve(async (req) => {
           currentDate: context?.currentDate,
           utcOffset: context?.utcOffset,
           family: context?.family,
+          groceryQuery: groceryFrame?.slots?.item ?? null,
         },
         authoritative_data: {
           events: allEvents ?? [],
@@ -643,8 +683,10 @@ Deno.serve(async (req) => {
     const agentReadResult = await Promise.race([agentReadRequest, timeout])
     const agentReadData = agentReadResult.data as {
       supported?: boolean
+      handled?: boolean
       type?: string
       text?: string
+      code?: string
       activeEntity?: Record<string, unknown> | null
       elapsed_ms?: number
       plan?: { toolName?: string }
@@ -667,6 +709,33 @@ Deno.serve(async (req) => {
           text: agentReadData.text,
           conversation_state: agentReadData.activeEntity ?? undefined,
           semantic_intent: 'agent.read',
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            agentic: true,
+            agent_read_ms: agentReadData.elapsed_ms ?? null,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+    if (
+      !agentReadResult.error &&
+      agentReadData?.handled === true &&
+      typeof agentReadData.text === 'string'
+    ) {
+      appendServerTrace('server_agent_mutation_blocked', agentReadData.code ?? 'mutation_unavailable', {
+        code: agentReadData.code ?? null,
+        rollout_rate: agentReadRate,
+      })
+      return {
+        status: 200,
+        payload: {
+          type: 'text',
+          text: agentReadData.text,
+          conversation_state: responseConversationState,
+          semantic_intent: 'agent.write.blocked',
           correlation_id: cid,
           telemetry: {
             ...llmTelemetry,

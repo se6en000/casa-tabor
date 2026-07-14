@@ -229,6 +229,7 @@ PLANNING RULES:
 - If a PENDING ACTION exists and the user corrects it, call the same capability with revised arguments rather than creating a second action.
 - Treat the latest user turn as authoritative when it corrects earlier details.
 - Do not invent people, IDs, dates, times, quantities, or event facts.
+- For calendar.create, keep relationship or contact phrases in the title, such as "Dinner with Mom". Set members only when the user assigns the event to a person whose name exactly matches FAMILY. Never turn Mom, Dad, Grandma, or another relationship word into a member unless that exact word is listed in FAMILY.
 ${authoritativeReadMode ? `
 AUTHORITATIVE READ MODE:
 - Decide whether the user's requested outcome is purely read-only.

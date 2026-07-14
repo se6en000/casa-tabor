@@ -2,10 +2,12 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  alignCalendarMoveToRequestedTime,
   adaptAgentGroceryUpdate,
   findAgentCalendarDuplicates,
   isAgentCalendarUpdateTargetUnambiguous,
   isAgentGroceryUpdateTargetUnambiguous,
+  repairInvalidCalendarMoveDuration,
 } from '../supabase/functions/_shared/assistant-agent-write.mjs'
 
 test('calendar duplicate matching ignores model-derived duration differences', () => {
@@ -131,4 +133,57 @@ test('grocery updates adapt to trusted legacy quantity and check actions', () =>
     checked: true,
     quantity: '2',
   }), null)
+})
+
+test('invalid calendar move ends are repaired from authoritative duration', () => {
+  const repaired = repairInvalidCalendarMoveDuration({
+    id: 'soccer',
+    start: '2026-07-17T18:30:00-04:00',
+    end: '2026-07-17T17:30:00-04:00',
+  }, [{
+    type: 'event',
+    id: 'soccer',
+    start: '2026-07-17T16:00:00-04:00',
+    end: '2026-07-17T17:30:00-04:00',
+  }])
+  assert.equal(repaired.end, '2026-07-17T20:00:00-04:00')
+})
+
+test('valid calendar duration changes are not rewritten', () => {
+  const args = {
+    id: 'soccer',
+    start: '2026-07-17T18:30:00-04:00',
+    end: '2026-07-17T19:30:00-04:00',
+  }
+  assert.equal(repairInvalidCalendarMoveDuration(args, []), args)
+})
+
+test('calendar moves align model timestamps to the requested local clock time', () => {
+  const aligned = alignCalendarMoveToRequestedTime({
+    id: 'soccer',
+    start: '2026-07-17T22:30:00-04:00',
+    end: '2026-07-18T00:00:00-04:00',
+  }, [{
+    type: 'event',
+    id: 'soccer',
+    start: '2026-07-17T16:00:00-04:00',
+    end: '2026-07-17T17:30:00-04:00',
+  }], { hour: 18, minute: 30 }, '-04:00')
+  assert.equal(aligned.start, '2026-07-17T18:30:00-04:00')
+  assert.equal(aligned.end, '2026-07-17T20:00:00-04:00')
+})
+
+test('calendar move alignment replaces provider UTC timestamps with household offset', () => {
+  const aligned = alignCalendarMoveToRequestedTime({
+    id: 'soccer',
+    start: '2026-07-17T22:30:00Z',
+    end: '2026-07-18T00:00:00Z',
+  }, [{
+    type: 'event',
+    id: 'soccer',
+    start: '2026-07-17T16:00:00-04:00',
+    end: '2026-07-17T17:30:00-04:00',
+  }], { hour: 18, minute: 30 }, '-04:00')
+  assert.equal(aligned.start, '2026-07-17T18:30:00-04:00')
+  assert.equal(aligned.end, '2026-07-17T20:00:00-04:00')
 })

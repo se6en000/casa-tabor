@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import test from 'node:test'
+
+const script = readFileSync(
+  new URL('../scripts/ai-agent-live-regression.mjs', import.meta.url),
+  'utf8',
+)
+
+test('live agent regression covers natural calendar and grocery conversations', () => {
+  for (const phrase of [
+    'What does Thursday afternoon look like?',
+    'what does thirty afternoon thursday afternoon look like',
+    'Schedule dinner with Mom Sunday around six for an hour and a half.',
+    'Actually, make that Saturday at ten.',
+    'Move it to 6:30 PM that same day.',
+    'Add pears, pita chips, and ricotta to the grocery list.',
+    'Make that two.',
+    'Check them off.',
+    'Check off sparkling water.',
+  ]) {
+    assert.match(script, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  }
+})
+
+test('live agent regression is non-dry-run, proposal-only, and cleanup verified', () => {
+  assert.match(script, /dry_run: false/)
+  assert.doesNotMatch(script, /execute-ai-action/)
+  assert.match(script, /last_modified_source: 'ios'/)
+  assert.doesNotMatch(script, /last_modified_source: 'casa'/)
+  assert.match(script, /verifyNoProposalsPersisted/)
+  assert.match(script, /groceryItemsRemaining/)
+  assert.match(script, /cleanup\.verified/)
+})

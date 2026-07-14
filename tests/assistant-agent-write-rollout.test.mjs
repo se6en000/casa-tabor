@@ -11,8 +11,23 @@ test('additive agent writes are feature flagged and sampled', () => {
   assert.match(assistant, /agent_write_config/)
   assert.match(assistant, /agentWriteConfig\?\.enabled === true/)
   assert.match(assistant, /Math\.random\(\) < agentWriteRate/)
-  assert.match(assistant, /\['calendar', 'grocery'\]\.includes/)
-  assert.match(assistant, /!context\?\.pendingAction/)
+  assert.match(assistant, /AGENT_GENERAL_PAGES\.has/)
+  assert.match(assistant, /context\?\.assistant_mode !== 'chef'/)
+})
+
+test('write rollout supports global drawer pages and pending-action corrections', () => {
+  assert.match(assistant, /new Set\(\['app', 'briefing', 'calendar', 'grocery', 'home'\]\)/)
+  assert.doesNotMatch(
+    assistant.match(/const shouldRunAgentWrite[\s\S]*?if \(shouldRunAgentWrite\)/)?.[0] ?? '',
+    /!context\?\.pendingAction/,
+  )
+  assert.match(assistant, /pendingAction: context\?\.pendingAction/)
+})
+
+test('bounded write rejections cannot fall through to legacy execution', () => {
+  assert.match(assistant, /agentWriteData\?\.handled === true/)
+  assert.match(assistant, /server_agent_write_blocked/)
+  assert.match(assistant, /'agent\.write\.blocked'/)
 })
 
 test('write rollout adopts only allowlisted proposal actions', () => {
@@ -33,10 +48,19 @@ test('write rollout forwards exact active grocery context and versions', () => {
   assert.match(assistant, /notes, updated_at/)
 })
 
+test('agent routing forwards trusted semantic slots for exact reads and moves', () => {
+  assert.match(assistant, /calendarRequestedTime: calendarFrame\?\.intent === 'event\.move'/)
+  assert.match(assistant, /groceryQuery: groceryFrame\?\.slots\?\.item/)
+})
+
 test('write rollout falls through to authoritative reads after non-write plans', () => {
   assert.match(assistant, /server_agent_write_fallback/)
   assert.match(assistant, /agentWriteData\?\.code/)
   assert.match(assistant, /agent_write_timeout/)
   assert.match(assistant, /shouldRunAgentRead = !dryRun/)
   assert.match(assistant, /shouldRunAgentShadow = !shouldRunAgentWrite && !shouldRunAgentRead/)
+})
+
+test('write planner budget accommodates nested cold starts within the request budget', () => {
+  assert.match(assistant, /agent_write_timeout[\s\S]{0,100}6500/)
 })

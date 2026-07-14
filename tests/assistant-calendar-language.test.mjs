@@ -77,6 +77,14 @@ test('natural activity scheduling maps to event creation', () => {
   }
 })
 
+test('calendar moves expose explicit requested local clock time', () => {
+  const frame = parseCalendarLanguage('Move it to 6:30 PM that same day.', {
+    activeEntityType: 'event',
+  })
+  assert.equal(frame?.intent, 'event.move')
+  assert.deepEqual(frame?.slots.requestedTime, { hour: 18, minute: 30 })
+})
+
 test('going-on language composes with natural calendar time frames', () => {
   const samples = [
     ['What is going on tomorrow morning?', { kind: 'tomorrow', dayPart: 'morning' }],

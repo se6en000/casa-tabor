@@ -26,3 +26,16 @@ test('agent read endpoint emits explicit success and fallback telemetry', () => 
   assert.match(endpoint, /server_agent_read_fallback/)
   assert.match(endpoint, /lane: 'agent_read'/)
 })
+
+test('agent read endpoint marks mutation deferrals as safely handled', () => {
+  assert.match(endpoint, /handledMutation/)
+  assert.match(endpoint, /plan\?\.reason === 'mutation'/)
+  assert.match(endpoint, /Nothing was saved/)
+})
+
+test('single grocery reads establish authoritative follow-up state', () => {
+  assert.match(endpoint, /body\?\.context\?\.groceryQuery/)
+  assert.match(endpoint, /toolResult\.items\?\.length === 1/)
+  assert.match(endpoint, /activeEntityType: 'grocery_item'/)
+  assert.match(endpoint, /activeGroceryItemId: toolResult\.items\[0\]\.id/)
+})

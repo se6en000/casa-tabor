@@ -89,13 +89,27 @@ Deno.serve(async (req) => {
       planner?.policy?.decision !== 'execute' ||
       planner?.telemetry?.tool_effect !== 'read'
     ) {
+      const handledMutation = plan?.kind === 'defer' && plan?.reason === 'mutation'
       return result({
         supported: false,
+        handled: handledMutation,
+        text: handledMutation
+          ? `I understood this as a change, but I couldn't prepare it safely. Nothing was saved.`
+          : null,
         code: 'non_read_or_unapproved_plan',
         planKind: plan?.kind ?? 'error',
+        planReason: plan?.reason ?? null,
         toolName: plan?.toolName ?? null,
         policyCode: planner?.policy?.code ?? null,
       })
+    }
+    if (
+      plan.toolName === 'grocery.get_list' &&
+      typeof body?.context?.groceryQuery === 'string' &&
+      body.context.groceryQuery.trim() &&
+      typeof plan.args?.query !== 'string'
+    ) {
+      plan.args = { ...plan.args, query: body.context.groceryQuery.trim() }
     }
 
     const toolResult = executeAgentReadTool(plan.toolName, plan.args, { events, groceryItems })
@@ -117,7 +131,14 @@ Deno.serve(async (req) => {
           expectedFollowUp: 'event_follow_up',
           establishedAt: new Date().toISOString(),
         }
-      : null
+      : toolResult.items?.length === 1
+        ? {
+            activeEntityType: 'grocery_item',
+            activeGroceryItemId: toolResult.items[0].id,
+            expectedFollowUp: 'grocery_follow_up',
+            establishedAt: new Date().toISOString(),
+          }
+        : null
     return result({
       supported: true,
       type: 'text',

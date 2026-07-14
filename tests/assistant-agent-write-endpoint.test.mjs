@@ -40,4 +40,27 @@ test('active exact updates narrow planner context without weakening policy conte
   assert.match(endpoint, /planningEntities/)
   assert.match(endpoint, /authoritativeEntities: planningEntities/)
   assert.match(endpoint, /authoritativeEntities,\n\s+duplicateCandidates/)
+  assert.match(endpoint, /repairInvalidCalendarMoveDuration/)
+  assert.match(endpoint, /alignCalendarMoveToRequestedTime/)
+  assert.match(endpoint, /calendarRequestedTime/)
+})
+
+test('pending legacy confirmation cards are normalized for agent corrections', () => {
+  assert.match(endpoint, /getAgentToolByLegacyName/)
+  assert.match(endpoint, /normalizedPendingAction/)
+  assert.match(endpoint, /toolName: pendingTool\.name/)
+  assert.match(endpoint, /pendingAction: normalizedPendingAction/)
+})
+
+test('rejected bounded writes are handled without legacy mutation fallthrough', () => {
+  assert.match(endpoint, /handled: true/)
+  assert.match(endpoint, /writeRejectionText/)
+  assert.match(endpoint, /Nothing was saved/)
+  assert.match(endpoint, /unknown_calendar_member/)
+})
+
+test('planner clarification and ambiguity remain in the bounded lane', () => {
+  assert.match(endpoint, /plan\?\.kind === 'clarify'/)
+  assert.match(endpoint, /plan\?\.reason === 'ambiguous'/)
+  assert.match(endpoint, /I found more than one possible match/)
 })

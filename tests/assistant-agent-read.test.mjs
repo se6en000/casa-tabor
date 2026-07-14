@@ -71,6 +71,21 @@ test('grocery reads honor checked and list filters', () => {
   )
 })
 
+test('grocery reads can select one authoritative item for follow-up grounding', () => {
+  const result = executeAgentReadTool('grocery.get_list', {
+    query: 'barista oat milk',
+    include_checked: true,
+  }, {
+    groceryItems: [
+      { id: 'oat', name: 'Barista oat milk', quantity: '1', updated_at: 'v1', checked: false },
+      { id: 'eggs', name: 'Quail eggs', checked: false },
+    ],
+  })
+  assert.equal(result.count, 1)
+  assert.equal(result.items[0].id, 'oat')
+  assert.equal(result.items[0].updated_at, 'v1')
+})
+
 test('read results format as concise readable Markdown in local time', () => {
   const result = executeAgentReadTool('calendar.search', { query: 'dentist' }, { events })
   const text = formatAgentReadResult('calendar.search', result, { utcOffset: '-04:00' })

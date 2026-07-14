@@ -2,12 +2,17 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.mjs'
 import { evaluateAgentToolCall } from '../_shared/assistant-agent-policy.mjs'
 import {
+  alignCalendarMoveToRequestedTime,
   adaptAgentGroceryUpdate,
   findAgentCalendarDuplicates,
   isAgentCalendarUpdateTargetUnambiguous,
   isAgentGroceryUpdateTargetUnambiguous,
+  repairInvalidCalendarMoveDuration,
 } from '../_shared/assistant-agent-write.mjs'
-import { legacyToolNameFor } from '../_shared/assistant-agent-tools.mjs'
+import {
+  getAgentToolByLegacyName,
+  legacyToolNameFor,
+} from '../_shared/assistant-agent-tools.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -83,6 +88,19 @@ Deno.serve(async (req) => {
     const planningEntities = activeAuthoritativeEntity
       ? [activeAuthoritativeEntity]
       : authoritativeEntities
+    const pendingAction = body?.context?.pendingAction
+    const pendingTool = getAgentToolByLegacyName(pendingAction?.tool)
+    const normalizedPendingAction = pendingTool && ALLOWED_TOOLS.has(pendingTool.name)
+      ? {
+          actionId: optionalText(pendingAction?.actionId, 120) ?? `${correlationId}:pending`,
+          toolName: pendingTool.name,
+          args: pendingAction?.args && typeof pendingAction.args === 'object'
+            ? pendingAction.args
+            : {},
+        }
+      : pendingAction?.toolName && ALLOWED_TOOLS.has(pendingAction.toolName)
+        ? pendingAction
+        : null
 
     const plannerResult = await sb.functions.invoke('ai-agent-shadow', {
       body: {
@@ -90,6 +108,7 @@ Deno.serve(async (req) => {
         context: {
           ...body?.context,
           authoritativeEntities: planningEntities,
+          pendingAction: normalizedPendingAction,
         },
         trace_id: traceId,
         turn_id: turnId,
@@ -104,12 +123,29 @@ Deno.serve(async (req) => {
 
     const plan = plannerResult.data?.plan
     if (plan?.kind !== 'tool' || !ALLOWED_TOOLS.has(plan.toolName)) {
+      const clarification = plan?.kind === 'clarify'
+        ? optionalText(plan.text, 500)
+        : plan?.kind === 'defer' && plan?.reason === 'ambiguous'
+          ? 'I found more than one possible match. Tell me which one you mean. Nothing was changed.'
+          : null
       return result({
         supported: false,
+        handled: Boolean(clarification),
+        text: clarification,
         code: 'unsupported_write_plan',
         planKind: plan?.kind ?? 'error',
+        planReason: plan?.reason ?? null,
         toolName: plan?.toolName ?? null,
       })
+    }
+    if (plan.toolName === 'calendar.update') {
+      plan.args = repairInvalidCalendarMoveDuration(plan.args, authoritativeEntities)
+      plan.args = alignCalendarMoveToRequestedTime(
+        plan.args,
+        authoritativeEntities,
+        body?.context?.calendarRequestedTime,
+        body?.context?.utcOffset,
+      )
     }
 
     const duplicateCandidates = plan.toolName === 'calendar.create'
@@ -125,6 +161,8 @@ Deno.serve(async (req) => {
     ) {
       return result({
         supported: false,
+        handled: true,
+        text: writeRejectionText('ambiguous_update_target'),
         code: 'ambiguous_update_target',
         planKind: plan.kind,
         toolName: plan.toolName,
@@ -140,6 +178,8 @@ Deno.serve(async (req) => {
     ) {
       return result({
         supported: false,
+        handled: true,
+        text: writeRejectionText('ambiguous_update_target'),
         code: 'ambiguous_update_target',
         planKind: plan.kind,
         toolName: plan.toolName,
@@ -173,6 +213,8 @@ Deno.serve(async (req) => {
     if (policy.decision !== acceptedDecision || policy.allowed !== true) {
       return result({
         supported: false,
+        handled: true,
+        text: writeRejectionText(policy.code, policy),
         code: policy.code,
         planKind: plan.kind,
         toolName: plan.toolName,
@@ -186,7 +228,16 @@ Deno.serve(async (req) => {
           tool: legacyToolNameFor(plan.toolName),
           args: plan.args,
         }
-    if (!legacyAction?.tool) return result({ supported: false, code: 'legacy_adapter_missing' })
+    if (!legacyAction?.tool) {
+      return result({
+        supported: false,
+        handled: true,
+        text: writeRejectionText('legacy_adapter_missing'),
+        code: 'legacy_adapter_missing',
+        planKind: plan.kind,
+        toolName: plan.toolName,
+      })
+    }
     return result({
       supported: true,
       type: 'tool_action',
@@ -239,6 +290,27 @@ function optionalText(value: unknown, maxLength: number) {
   if (typeof value !== 'string') return null
   const normalized = value.trim()
   return normalized ? normalized.slice(0, maxLength) : null
+}
+
+function writeRejectionText(code: unknown, detail?: Record<string, unknown>) {
+  if (code === 'unknown_calendar_member') {
+    const names = Array.isArray(detail?.unknownMembers)
+      ? detail.unknownMembers.filter((name) => typeof name === 'string').join(', ')
+      : ''
+    return names
+      ? `I don't know which Casa family member ${names} means. Tell me the person's Casa name. Nothing was saved.`
+      : `I don't know which Casa family member you mean. Tell me the person's Casa name. Nothing was saved.`
+  }
+  if (code === 'ambiguous_update_target' || code === 'ambiguous_authoritative_target') {
+    return 'I found more than one possible match. Tell me which one you mean. Nothing was changed.'
+  }
+  if (code === 'duplicate_calendar_start') {
+    return 'There is already an event at that time. Tell me whether you want a different time. Nothing was saved.'
+  }
+  if (code === 'stale_authoritative_target') {
+    return 'That item changed before I could prepare the update. Please try again with the latest version. Nothing was changed.'
+  }
+  return `I understood this as a change, but I couldn't prepare it safely. Nothing was saved.`
 }
 
 function planName(payload: Record<string, unknown>) {

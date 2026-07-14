@@ -134,6 +134,11 @@ function parseClockHour(hourText, minuteText, meridiem) {
   }
 }
 
+function requestedMoveTime(input) {
+  const clock = input.match(/\b(?:at|to)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/)
+  return clock ? parseClockHour(clock[1], clock[2], clock[3]) : null
+}
+
 function temporalScope(input) {
   const dayPart = input.match(/\b(morning|afternoon|evening|night)\b/)?.[1] ?? null
   const clock = input.match(/\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/)
@@ -263,7 +268,12 @@ export function parseCalendarLanguage(text, options = {}) {
 
   if (mutationLanguage && (activeEvent || CALENDAR_NOUNS.test(input))) {
     if (/\b(delete|remove|cancel)\b/.test(input)) return frame('event.delete', 0.98, { temporalScope: scope })
-    if (/\b(move|reschedule|shift|push)\b/.test(input)) return frame('event.move', 0.98, { temporalScope: scope })
+    if (/\b(move|reschedule|shift|push)\b/.test(input)) {
+      return frame('event.move', 0.98, {
+        temporalScope: scope,
+        requestedTime: requestedMoveTime(input),
+      })
+    }
     if (/\b(add|create|book|schedule)\b/.test(input)) return frame('event.create', 0.96, { temporalScope: scope })
     if (activeEvent && /\b(change|update|edit)\b/.test(input)) {
       return frame('event.edit', 0.94, { temporalScope: scope }, true)
