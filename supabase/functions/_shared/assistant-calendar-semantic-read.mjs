@@ -237,7 +237,7 @@ export function resolveCalendarSemanticRead(frame, events, options = {}) {
         : `${localTime(event.start_time, offset)} — ${event.title}: no destination is saved`
     })
     return {
-      text: `${rows.length === 1 ? 'One destination' : `${rows.length} destinations`} ${range.label}:\n${lines.join('\n')}`,
+      text: `${rows.length === 1 ? 'One destination' : `${rows.length} destinations`} ${range.label}:\n${lines.map((line) => `- ${line}`).join('\n')}`,
       events: rows,
       intent: frame.intent,
       scope: range.label,
@@ -249,7 +249,7 @@ export function resolveCalendarSemanticRead(frame, events, options = {}) {
     ? `One thing is on your calendar ${range.label}:`
     : `${rows.length} things are on your calendar ${range.label}:`
   return {
-    text: `${header}\n${rows.map((event) => eventLine(event, offset)).join('\n')}`,
+    text: `${header}\n${rows.map((event) => `- ${eventLine(event, offset)}`).join('\n')}`,
     events: rows,
     intent: frame.intent,
     scope: range.label,

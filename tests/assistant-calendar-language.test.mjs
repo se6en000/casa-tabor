@@ -90,6 +90,7 @@ test('semantic reads execute against authoritative calendar rows', () => {
   const tomorrow = parseCalendarLanguage("What's on my calendar tomorrow?")
   const result = resolveCalendarSemanticRead(tomorrow, events, options)
   assert.deepEqual(result.events.map((event) => event.id), ['pool'])
+  assert.match(result.text, /\n- \d{1,2}:\d{2} [AP]M — Pool Party/)
 
   const next = resolveCalendarSemanticRead(parseCalendarLanguage("What's next?"), events, options)
   assert.deepEqual(next.events.map((event) => event.id), ['party'])
@@ -100,6 +101,7 @@ test('semantic reads execute against authoritative calendar rows', () => {
 
   const destinations = resolveCalendarSemanticRead(parseCalendarLanguage('Where do I need to go tomorrow?'), events, options)
   assert.match(destinations.text, /1826 4th Place/)
+  assert.match(destinations.text, /\n- \d{1,2}:\d{2} [AP]M — Pool Party/)
 
   const thursdayEvents = [
     ...events,

@@ -48,6 +48,7 @@ test('grocery semantic reads use authoritative active rows', () => {
   const list = resolveGrocerySemantic(parseGroceryLanguage('Read my shopping list'), items)
   assert.match(list.text, /Whole Milk/)
   assert.doesNotMatch(list.text, /Bread/)
+  assert.match(list.text, /\n- Whole Milk/)
 
   const contains = resolveGrocerySemantic(parseGroceryLanguage('Is eggs on the grocery list?'), items)
   assert.match(contains.text, /eggs is on/i)

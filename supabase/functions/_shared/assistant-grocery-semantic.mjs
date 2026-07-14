@@ -42,7 +42,7 @@ export function resolveGrocerySemantic(frame, items, options = {}) {
     if (rows.length === 0) return { type: 'text', text: 'Your grocery list is empty.', items: [] }
     return {
       type: 'text',
-      text: `${rows.length} ${rows.length === 1 ? 'item' : 'items'} on your grocery list: ${rows.map(describeItem).join(', ')}.`,
+      text: `${rows.length} ${rows.length === 1 ? 'item' : 'items'} on your grocery list:\n${rows.map((item) => `- ${describeItem(item)}`).join('\n')}`,
       items: rows,
     }
   }

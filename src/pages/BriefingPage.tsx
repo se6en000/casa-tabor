@@ -11,7 +11,8 @@ import {
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import BounceScroll from '../components/shared/BounceScroll'
-import MarkdownContent, { formatTextForMarkdown } from '../components/shared/MarkdownContent'
+import MarkdownContent from '../components/shared/MarkdownContent'
+import { formatTextForMarkdown } from '../lib/assistantMarkdown.mjs'
 import {
   Alert,
   Button,

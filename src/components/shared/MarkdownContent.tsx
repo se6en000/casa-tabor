@@ -1,30 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '../../utils/cn'
 
-const MARKDOWN_HINT = /(^|\n)\s{0,3}(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|```|\|.+\|)|\*\*|`|\[[^\]]+\]\((https?:\/\/[^)\s]+)\)/
-
-export function formatTextForMarkdown(input: string): string {
-  const normalized = input.replace(/\r\n/g, '\n').trim()
-  if (!normalized) return ''
-  if (MARKDOWN_HINT.test(normalized)) return normalized
-
-  const existingParagraphs = normalized.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean)
-  if (existingParagraphs.length > 1) return existingParagraphs.join('\n\n')
-
-  const sentences = normalized
-    .match(/[^.!?]+[.!?]+(?:["'”)]|\])?\s*|[^.!?]+$/g)
-    ?.map((part) => part.trim())
-    .filter(Boolean) ?? [normalized]
-
-  if (sentences.length < 3) return normalized
-
-  const grouped: string[] = []
-  for (let index = 0; index < sentences.length; index += 2) {
-    grouped.push(sentences.slice(index, index + 2).join(' '))
-  }
-  return grouped.join('\n\n')
-}
-
 function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
   const tokenRegex = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\((https?:\/\/[^)\s]+)\))/g
   const nodes: ReactNode[] = []
