@@ -4,6 +4,7 @@ import {
 } from './assistant-event-range.mjs'
 
 const SUPPORTED_READ_TOOLS = new Set([
+  'calendar.get_event',
   'calendar.search',
   'calendar.get_range',
   'calendar.check_conflicts',
@@ -14,6 +15,7 @@ export function executeAgentReadTool(toolName, args, data = {}) {
   if (!SUPPORTED_READ_TOOLS.has(toolName)) {
     return { supported: false, code: 'unsupported_read_tool' }
   }
+  if (toolName === 'calendar.get_event') return getCalendarEvent(args, data.events)
   if (toolName === 'calendar.search') return searchCalendar(args, data.events)
   if (toolName === 'calendar.get_range') return getCalendarRange(args, data.events)
   if (toolName === 'calendar.check_conflicts') return checkCalendarConflicts(args, data.events)
@@ -72,6 +74,13 @@ function searchCalendar(args, rawEvents) {
   })
   filtered.sort((a, b) => compareCalendarEvents(a, b, args?.utc_offset))
   return { supported: true, events: filtered, count: filtered.length }
+}
+
+function getCalendarEvent(args, rawEvents) {
+  const id = normalizeText(args?.id)
+  if (!id) return { supported: false, code: 'event_id_required' }
+  const event = normalizeEvents(rawEvents).find((candidate) => candidate.id.toLowerCase() === id)
+  return { supported: true, events: event ? [event] : [], count: event ? 1 : 0 }
 }
 
 function getCalendarRange(args, rawEvents) {
@@ -189,7 +198,21 @@ function normalizeText(value) {
 
 function formatRange(event, utcOffset) {
   const start = formatDate(event.start_time, utcOffset, event.all_day)
-  if (event.all_day) return `${start}, all day`
+  if (event.all_day) {
+    const endExclusive = shiftToOffset(event.end_time, utcOffset)
+    const startDate = shiftToOffset(event.start_time, utcOffset)
+    if (startDate && endExclusive) {
+      const inclusiveEnd = new Date(endExclusive.getTime() - 1)
+      if (
+        inclusiveEnd.getUTCFullYear() !== startDate.getUTCFullYear() ||
+        inclusiveEnd.getUTCMonth() !== startDate.getUTCMonth() ||
+        inclusiveEnd.getUTCDate() !== startDate.getUTCDate()
+      ) {
+        return `${start} through ${formatDate(inclusiveEnd.toISOString(), '+00:00', true)}, all day`
+      }
+    }
+    return `${start}, all day`
+  }
   const end = formatTime(event.end_time, utcOffset)
   return `${start}–${end}`
 }

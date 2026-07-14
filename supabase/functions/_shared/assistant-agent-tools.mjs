@@ -20,6 +20,16 @@ function tool({ name, domain, effect, description, properties, required = [], le
 
 export const AGENT_TOOL_DEFINITIONS = Object.freeze([
   tool({
+    name: 'calendar.get_event',
+    domain: 'calendar',
+    effect: 'read',
+    description: 'Read one exact authoritative calendar event by ID, especially for follow-up questions about the active event.',
+    properties: {
+      id: string('Exact authoritative event ID from ACTIVE ENTITY or AUTHORITATIVE ENTITIES.'),
+    },
+    required: ['id'],
+  }),
+  tool({
     name: 'calendar.search',
     domain: 'calendar',
     effect: 'read',

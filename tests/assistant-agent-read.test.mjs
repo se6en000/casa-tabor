@@ -106,6 +106,29 @@ test('calendar searches filter title, member, and optional explicit range', () =
   assert.deepEqual(result.events.map((event) => event.id), ['event-1'])
 })
 
+test('calendar exact reads use authoritative active identity', () => {
+  const result = executeAgentReadTool('calendar.get_event', {
+    id: 'event-1',
+  }, { events })
+  assert.deepEqual(result.events.map((event) => event.id), ['event-1'])
+})
+
+test('multi-day all-day reads describe the complete inclusive date range', () => {
+  const result = executeAgentReadTool('calendar.get_event', {
+    id: 'staycation',
+  }, {
+    events: [{
+      id: 'staycation',
+      title: 'Family Staycation',
+      start_time: '2026-08-10T00:00:00-04:00',
+      end_time: '2026-08-15T00:00:00-04:00',
+      all_day: true,
+    }],
+  })
+  const text = formatAgentReadResult('calendar.get_event', result, { utcOffset: '-04:00' })
+  assert.match(text, /Mon, Aug 10 through Fri, Aug 14, all day/)
+})
+
 test('conflict checks ignore the event currently being moved', () => {
   const result = executeAgentReadTool('calendar.check_conflicts', {
     start: '2026-07-16T10:30:00-04:00',

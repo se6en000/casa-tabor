@@ -421,6 +421,7 @@ COMPLETED TOOL CALLS: ${JSON.stringify(context.completedToolCalls)}
 
 STATE RULES:
 - ACTIVE ENTITY is the exact target of pronouns such as "it", "that", and "that one" unless the user switches targets.
+- For a question about the dates, duration, location, or details of ACTIVE ENTITY, call calendar.get_event with its exact ID. Never call calendar.get_range with an event ID.
 - If AUTHORITATIVE ENTITIES contains exactly one matching target, use its exact ID and version without searching again.
 - If multiple authoritative entities plausibly match a destructive request, ask which one; never choose.
 - PENDING ACTION is a proposal, not a stored entity. A correction to it MUST call the same pending capability with revised arguments. For example, revise calendar.create with calendar.create, never calendar.update.

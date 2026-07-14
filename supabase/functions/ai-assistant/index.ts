@@ -860,6 +860,14 @@ Deno.serve(async (req) => {
           currentDate: context?.currentDate,
           utcOffset: context?.utcOffset,
           family: context?.family,
+          activeEntity: activeConversationEvent
+            ? {
+                type: 'event',
+                id: activeConversationEvent.id,
+                version: activeConversationEvent.updated_at,
+                title: activeConversationEvent.title,
+              }
+            : null,
           groceryQuery: groceryFrame?.slots?.item ?? null,
           calendarReadContext,
         },
