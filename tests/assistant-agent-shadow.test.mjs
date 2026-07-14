@@ -130,6 +130,113 @@ test('shadow response parser maps provider function names to capability names', 
       },
     }],
   })
+
+  test('calendar write planning returns semantic deltas instead of model-authored timestamps', () => {
+    const request = buildAgentShadowRequest({
+      messages: [{ role: 'user', content: 'Actually make it Saturday at ten.' }],
+      context: {
+        pendingAction: {
+          toolName: 'calendar.create',
+          args: {
+            title: 'Dinner with Mom',
+            start: '2026-07-19T18:00:00-04:00',
+            end: '2026-07-19T19:30:00-04:00',
+          },
+        },
+      },
+      plannerMode: 'additive_write',
+    })
+
+    test('calendar semantic parsing normalizes provider clock aliases at the boundary', () => {
+      const result = parseAgentShadowResponse({
+        candidates: [{
+          content: {
+            parts: [{
+              functionCall: {
+                name: 'calendar_interpret_turn',
+                args: {
+                  action: 'create',
+                  patch: {
+                    title: 'Dinner with Mom',
+                    time: { hour: 6, day_part: 'evening' },
+                  },
+                },
+              },
+            }],
+          },
+        }],
+      })
+      assert.deepEqual(result.turn.patch, {
+        title: 'Dinner with Mom',
+        time: { hour: 6, period: 'pm' },
+      })
+    })
+    const declarations = request.tools[0].function_declarations
+    assert.deepEqual(declarations.map((declaration) => declaration.name), ['assistant_interpret_write'])
+    assert.ok(!declarations.some((declaration) => declaration.name === 'calendar_update'))
+    assert.match(request.system_instruction.parts[0].text, /Never calculate or emit calendar timestamps/)
+    assert.match(request.system_instruction.parts[0].text, /Resolve conversational identity clarifications/)
+
+    assert.deepEqual(parseAgentShadowResponse({
+      candidates: [{
+        content: {
+          parts: [{
+            functionCall: {
+              name: 'calendar_interpret_turn',
+              args: {
+                action: 'revise',
+                patch: {
+                  date_reference: { kind: 'weekday', weekday: 'saturday' },
+                  time: { hour: 10, period: 'ambiguous' },
+                },
+              },
+            },
+          }],
+        },
+      }],
+    }), {
+      kind: 'calendar_semantic',
+      turn: {
+        version: 'calendar-semantic-turn-v1',
+        action: 'revise',
+        patch: {
+          date_reference: { kind: 'weekday', weekday: 'saturday' },
+          time: { hour: 10, period: 'ambiguous' },
+        },
+      },
+    })
+
+    assert.deepEqual(parseAgentShadowResponse({
+      candidates: [{
+        content: {
+          parts: [{
+            functionCall: {
+              name: 'assistant_interpret_write',
+              args: {
+                requested_domain: 'grocery',
+                requested_outcome: 'update_item',
+                grocery_tool_name: 'grocery.update_item',
+                grocery_tool_args: {
+                  id: 'milk-1',
+                  expected_updated_at: 'v1',
+                  quantity: '2',
+                  name: 'Barista oat milk',
+                },
+              },
+            },
+          }],
+        },
+      }],
+    }), {
+      kind: 'tool',
+      toolName: 'grocery.update_item',
+      args: {
+        id: 'milk-1',
+        expected_updated_at: 'v1',
+        quantity: '2',
+      },
+    })
+  })
   assert.equal(result.kind, 'tool')
   assert.equal(result.toolName, 'calendar.create')
 })
@@ -269,20 +376,44 @@ test('write proposal planning exposes confirmed destructive tools without direct
   })
   const declarations = request.tools[0].function_declarations
   assert.equal(request.tool_config.function_calling_config.mode, 'ANY')
-  assert.deepEqual(declarations.map((declaration) => declaration.name), [
-    'calendar_update',
-    'calendar_delete',
-    'grocery_update_item',
-    'grocery_remove_item',
-    'assistant_add_request',
-    'assistant_write_defer',
-  ])
+  assert.deepEqual(declarations.map((declaration) => declaration.name), ['assistant_interpret_write'])
   assert.match(
     request.system_instruction.parts[0].text,
     /ACTIVE ENTITY grocery_item is an exact authoritative target/,
   )
   assert.match(request.system_instruction.parts[0].text, /always require explicit confirmation/)
-  assert.ok(declarations.at(-1).parameters.properties.candidate_entity_ids)
+  assert.match(request.system_instruction.parts[0].text, /preserve the requested semantic patch/)
+  assert.ok(
+    declarations[0].parameters.properties.calendar_turn.properties.candidate_entity_ids,
+  )
+
+  assert.deepEqual(parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'assistant_interpret_write',
+            args: {
+              requested_domain: 'calendar',
+              requested_outcome: 'update',
+              calendar_turn: {
+                candidate_entity_ids: ['event-1', 'event-2'],
+                patch: { members_add: ['Owen'] },
+              },
+            },
+          },
+        }],
+      },
+    }],
+  }), {
+    kind: 'calendar_semantic',
+    turn: {
+      version: 'calendar-semantic-turn-v1',
+      action: 'update',
+      candidateEntityIds: ['event-1', 'event-2'],
+      patch: { members_add: ['Owen'] },
+    },
+  })
 
   assert.deepEqual(parseAgentShadowResponse({
     candidates: [{

@@ -9,6 +9,8 @@ const READ_ROUTE_FUNCTION = 'assistant_read_request'
 const WRITE_ROUTE_FUNCTION = 'assistant_write_request'
 const ADD_ROUTE_FUNCTION = 'assistant_add_request'
 const WRITE_DEFER_FUNCTION = 'assistant_write_defer'
+const CALENDAR_TURN_FUNCTION = 'calendar_interpret_turn'
+const SEMANTIC_WRITE_FUNCTION = 'assistant_interpret_write'
 const PROPOSAL_WRITE_TOOLS = new Set([
   'calendar.create',
   'calendar.update',
@@ -32,18 +34,7 @@ export function buildAgentShadowRequest(input) {
   const declarations = authoritativeReadMode
     ? [buildReadRouteDeclaration()]
     : additiveWriteMode
-      ? [
-          ...AGENT_TOOL_DEFINITIONS
-            .filter((tool) => [
-              'calendar.update',
-              'calendar.delete',
-              'grocery.update_item',
-              'grocery.remove_item',
-            ].includes(tool.name))
-            .map(toGeminiFunctionDeclaration),
-          buildAddRouteDeclaration(),
-          buildWriteDeferDeclaration(),
-        ]
+      ? [buildSemanticWriteDeclaration()]
     : AGENT_TOOL_DEFINITIONS
         .filter((tool) => !pendingToolName || tool.effect === 'read' || tool.name === pendingToolName)
         .filter((tool) => !(conflictCheckComplete && tool.name === 'calendar.check_conflicts'))
@@ -84,6 +75,74 @@ export function parseAgentShadowResponse(payload) {
   }
   const functionCall = parts.find((part) => part?.functionCall)?.functionCall
   if (functionCall) {
+    if (functionCall.name === SEMANTIC_WRITE_FUNCTION) {
+      const args = functionCall.args && typeof functionCall.args === 'object'
+        ? functionCall.args
+        : {}
+      if (
+        args.requested_domain === 'calendar' &&
+        ['create', 'revise', 'update', 'delete'].includes(args.requested_outcome) &&
+        args.calendar_turn &&
+        typeof args.calendar_turn === 'object'
+      ) {
+        return {
+          kind: 'calendar_semantic',
+          turn: {
+            version: 'calendar-semantic-turn-v1',
+            action: args.requested_outcome,
+            ...(typeof args.calendar_turn.target_entity_id === 'string'
+              ? { targetEntityId: args.calendar_turn.target_entity_id }
+              : {}),
+            ...(Array.isArray(args.calendar_turn.candidate_entity_ids)
+              ? { candidateEntityIds: args.calendar_turn.candidate_entity_ids }
+              : {}),
+            ...(args.calendar_turn.target && typeof args.calendar_turn.target === 'object'
+              ? { target: normalizeCalendarSemanticPatch(args.calendar_turn.target) }
+              : {}),
+            patch: normalizeCalendarSemanticPatch(args.calendar_turn.patch),
+          },
+        }
+      }
+      if (args.requested_domain === 'grocery') {
+        const tool = getAgentToolByGeminiName(
+          String(args.grocery_tool_name ?? '').replace('.', '_'),
+        )
+        if (['grocery.add_items', 'grocery.update_item', 'grocery.remove_item'].includes(tool?.name)) {
+          return {
+            kind: 'tool',
+            toolName: tool.name,
+            args: sanitizeToolArgs(tool, args.grocery_tool_args),
+          }
+        }
+      }
+      return {
+        kind: 'defer',
+        reason: typeof args.reason === 'string' ? args.reason : 'unsupported',
+      }
+    }
+    if (functionCall.name === CALENDAR_TURN_FUNCTION) {
+      const args = functionCall.args && typeof functionCall.args === 'object'
+        ? functionCall.args
+        : {}
+      return {
+        kind: 'calendar_semantic',
+        turn: {
+          version: 'calendar-semantic-turn-v1',
+          action: args.action,
+          ...(typeof args.target_entity_id === 'string'
+            ? { targetEntityId: args.target_entity_id }
+            : {}),
+          ...(Array.isArray(args.candidate_entity_ids)
+            ? { candidateEntityIds: args.candidate_entity_ids }
+            : {}),
+          ...(args.target && typeof args.target === 'object'
+            ? { target: normalizeCalendarSemanticPatch(args.target) }
+            : {}),
+          patch: normalizeCalendarSemanticPatch(args.patch),
+        },
+      }
+
+    }
     if (functionCall.name === WRITE_DEFER_FUNCTION) {
       const candidateEntityIds = Array.isArray(functionCall.args?.candidate_entity_ids)
         ? functionCall.args.candidate_entity_ids.filter((id) => typeof id === 'string').slice(0, 6)
@@ -186,6 +245,51 @@ export function parseAgentShadowResponse(payload) {
     : { kind: 'error', code: 'empty_response', finishReason: candidate?.finishReason ?? null }
 }
 
+function normalizeCalendarSemanticPatch(value) {
+  if (!value || typeof value !== 'object') return {}
+  const patch = Object.fromEntries(
+    Object.entries(value).filter(([key]) => [
+      'title',
+      'date_reference',
+      'duration_minutes',
+      'members_add',
+      'members_remove',
+      'location',
+      'notes',
+      'all_day',
+    ].includes(key)),
+  )
+  if (value.time && typeof value.time === 'object') {
+    const dayPart = value.time.day_part
+    const providerPeriod = value.time.period ?? value.time.meridiem
+    const period = ['am', 'pm', 'ambiguous'].includes(providerPeriod)
+      ? providerPeriod
+      : ['afternoon', 'evening', 'night'].includes(dayPart)
+        ? 'pm'
+        : dayPart === 'morning'
+          ? 'am'
+          : 'ambiguous'
+    patch.time = {
+      hour: value.time.hour,
+      ...(value.time.minute !== undefined ? { minute: value.time.minute } : {}),
+      period,
+    }
+
+  }
+  return patch
+}
+
+function sanitizeToolArgs(tool, value) {
+  if (!tool?.inputSchema?.properties || !value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+  return Object.fromEntries(
+    Object.keys(tool.inputSchema.properties)
+      .filter((key) => key in value)
+      .map((key) => [key, value[key]]),
+  )
+}
+
 export function shouldRetryAgentShadowPlan(plan, request) {
   if (request?.tool_config?.function_calling_config?.mode !== 'ANY') return false
   if (plan?.kind !== 'error') return false
@@ -198,6 +302,11 @@ export function isAgentPlanAllowedByRequest(plan, request) {
   const declarations = request?.tools?.[0]?.function_declarations
   if (!Array.isArray(declarations)) return false
   for (const declaration of declarations) {
+    if (declaration?.name === SEMANTIC_WRITE_FUNCTION) {
+      const toolNames = declaration?.parameters?.properties?.grocery_tool_name?.enum
+      if (Array.isArray(toolNames) && toolNames.includes(plan.toolName)) return true
+      continue
+    }
     if ([READ_ROUTE_FUNCTION, WRITE_ROUTE_FUNCTION, ADD_ROUTE_FUNCTION].includes(declaration?.name)) {
       const toolNames = declaration?.parameters?.properties?.tool_name?.enum
       if (Array.isArray(toolNames) && toolNames.includes(plan.toolName)) return true
@@ -216,8 +325,16 @@ export function agentShadowTelemetry(plan, metadata = {}) {
     plan_kind: plan?.kind ?? 'error',
     plan_code: plan?.kind === 'error' ? plan.code ?? null : null,
     finish_reason: plan?.kind === 'error' ? plan.finishReason ?? null : null,
-    tool_name: plan?.kind === 'tool' ? plan.toolName : null,
-    tool_domain: plan?.kind === 'tool' ? plan.toolName.split('.')[0] : null,
+    tool_name: plan?.kind === 'tool'
+      ? plan.toolName
+      : plan?.kind === 'calendar_semantic'
+        ? 'calendar.interpret_turn'
+        : null,
+    tool_domain: plan?.kind === 'tool'
+      ? plan.toolName.split('.')[0]
+      : plan?.kind === 'calendar_semantic'
+        ? 'calendar'
+        : null,
     tool_effect: metadata.toolEffect ?? null,
     policy_decision: metadata.policyDecision ?? null,
     policy_code: metadata.policyCode ?? null,
@@ -263,24 +380,26 @@ AUTHORITATIVE READ MODE:
 ` : ''}
 ${additiveWriteMode ? `
 BOUNDED WRITE MODE:
-- Call exactly one declared function.
-- Call assistant_add_request only for creating one event or adding explicit grocery items.
-- Call calendar.update or grocery.update_item only for one exact authoritative update.
-- Call calendar.delete or grocery.remove_item when the user wants one exact authoritative item removed. These are proposals that always require explicit confirmation; never claim they already happened.
-- Call assistant_write_defer for reads, multi-item destructive changes, ambiguous targets, compound requests with multiple outcomes, cooking, or unsupported domains.
+- Call assistant_interpret_write exactly once. First classify the requested domain and outcome, then fill only that domain's semantic payload.
+- For every calendar create, pending correction, update, or delete, set requested_domain=calendar and provide calendar_turn. Describe only the semantic change the user expressed.
+- Calendar update and delete proposals always require explicit confirmation; never claim they already happened.
+- Never calculate or emit calendar timestamps. Extract date references, clock components, duration, member changes, and authoritative target identity; Casa resolves the final range deterministically.
+- Use action revise when the user corrects a pending calendar create. Omitted patch fields mean preserve the pending value.
+- Resolve conversational identity clarifications against FAMILY. When the user explains that a relationship label refers to an exact family member (for example, that Mom is Kelly), include that exact family name in members_add while preserving the pending title and every unrelated field.
+- Every spoken clock time must include period=am, period=pm, or period=ambiguous. Use ordinary human context such as breakfast, school morning, lunch, dinner, or tonight when it clearly implies a period. Use ambiguous for a bare follow-up time when the active/pending event context should decide.
+- For grocery writes, set requested_domain=grocery and provide one declared grocery capability and its arguments.
+- Set requested_domain=other with a reason for reads, compound requests, cooking, or unsupported domains.
 - Never convert an update or destructive request into a create/add action.
 - Supply only the arguments declared by the selected capability.
 - For exact updates, copy the exact ID and version from AUTHORITATIVE ENTITIES.
-- For a calendar move, preserve the authoritative duration and include both replacement start and end.
 - Interpret scheduling direction semantically: moving or bumping an event back means later; moving it up means earlier.
-- Calendar start and end MUST use CURRENT UTC OFFSET exactly; never return Z/UTC timestamps for local household times.
 - For grocery.update_item, change exactly one dimension: either quantity (with optional unit) or checked=true. Never combine both in one proposal.
 - An ACTIVE ENTITY grocery_item is an exact authoritative target. Requests such as changing "it/that" to a quantity or checking "it/that" off MUST call grocery.update_item with that entity's exact ID and version.
 - A named grocery item is also exact when AUTHORITATIVE ENTITIES contains only one item with that name.
 - Do not classify an exact quantity change or exact check-off as other_write. other_write is only for unsupported mutations or missing/ambiguous targets.
-- If multiple events or grocery items could match and ACTIVE ENTITY does not identify one exact entity, call assistant_write_defer with reason ambiguous.
-- Before any exact update, compare every authoritative entity. When two or more share the requested event title or grocery name and ACTIVE ENTITY does not identify one of them, you MUST defer as ambiguous; never choose the first row, ID, or time automatically.
-- Apply the same exact-target rule to deletions. Use title, date, time, recent conversation, and ACTIVE ENTITY to resolve the user's intended record. If one exact authoritative target remains, propose its deletion with its exact ID/version/title. If multiple remain plausible, defer as ambiguous and include their exact IDs in candidate_entity_ids so Casa can ask a useful question.
+- If multiple grocery items could match and ACTIVE ENTITY does not identify one exact item, call assistant_write_defer with reason ambiguous.
+- Before any grocery update, compare every authoritative grocery item. When two or more share the requested name and ACTIVE ENTITY does not identify one of them, you MUST defer as ambiguous; never choose the first row.
+- For calendar updates and deletes, always provide target with the title/date/time clues the person used. Select target_entity_id only for one exact target from AUTHORITATIVE ENTITIES. If multiple remain plausible, preserve the requested semantic patch, put every plausible ID in candidate_entity_ids, and omit target_entity_id so Casa can deterministically narrow the choices or ask without losing the requested change.
 - Normalize obvious speech-to-text spelling into the intended common calendar title or grocery item name without adding unstated items.
 - Do not invent missing titles, items, people, dates, times, quantities, or locations.
 ` : ''}
@@ -378,7 +497,7 @@ function buildWriteDeferDeclaration() {
 
 function buildAddRouteDeclaration() {
   const additiveTools = AGENT_TOOL_DEFINITIONS.filter((tool) =>
-    ['calendar.create', 'grocery.add_items'].includes(tool.name)
+    tool.name === 'grocery.add_items'
   )
   const toolArgProperties = Object.assign(
     {},
@@ -386,7 +505,7 @@ function buildAddRouteDeclaration() {
   )
   return toGeminiFunctionDeclaration({
     name: 'assistant.add_request',
-    description: 'Propose one additive calendar create or grocery add operation.',
+    description: 'Propose one additive grocery operation.',
     effect: 'write',
     inputSchema: {
       type: 'object',
@@ -405,6 +524,156 @@ function buildAddRouteDeclaration() {
         },
       },
       required: ['tool_name', 'tool_args'],
+    },
+  })
+}
+
+function buildCalendarTurnDeclaration() {
+  return toGeminiFunctionDeclaration({
+    name: 'calendar.interpret_turn',
+    description: 'Interpret a calendar mutation as a semantic delta. Casa resolves authoritative identity and local timestamps.',
+    effect: 'write',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['create', 'revise', 'update', 'delete'],
+          description: 'Create a new event, revise a pending create, update a stored event, or delete a stored event.',
+        },
+        target_entity_id: {
+          type: 'string',
+          description: 'Exact authoritative event ID for an unambiguous update/delete. Omit for create/revise or ambiguity.',
+        },
+        candidate_entity_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Plausible authoritative event IDs when an update/delete target is ambiguous.',
+        },
+        target: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            title: { type: 'string' },
+            date_reference: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                kind: {
+                  type: 'string',
+                  enum: ['absolute', 'weekday', 'today', 'tomorrow', 'day_after_tomorrow', 'relative_days'],
+                },
+                year: { type: 'number' },
+                month: { type: 'number' },
+                day: { type: 'number' },
+                weekday: { type: 'string', enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] },
+                offset_days: { type: 'number' },
+              },
+              required: ['kind'],
+            },
+            time: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                hour: { type: 'number' },
+                minute: { type: 'number' },
+                period: { type: 'string', enum: ['am', 'pm', 'ambiguous'] },
+              },
+              required: ['hour', 'period'],
+            },
+          },
+        },
+        patch: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            title: { type: 'string', description: 'Explicit replacement or new title.' },
+            date_reference: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                kind: {
+                  type: 'string',
+                  enum: ['absolute', 'weekday', 'today', 'tomorrow', 'day_after_tomorrow', 'relative_days'],
+                },
+                year: { type: 'number' },
+                month: { type: 'number' },
+                day: { type: 'number' },
+                weekday: { type: 'string', enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] },
+                offset_days: { type: 'number' },
+              },
+              required: ['kind'],
+            },
+            time: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                hour: { type: 'number', description: 'Spoken clock hour.' },
+                minute: { type: 'number' },
+                period: {
+                  type: 'string',
+                  enum: ['am', 'pm', 'ambiguous'],
+                  description: 'Human-context interpretation of the spoken clock period. Use ambiguous when context does not establish AM or PM.',
+                },
+              },
+              required: ['hour', 'period'],
+            },
+            duration_minutes: { type: 'number', description: 'Only when the user explicitly gives or changes duration.' },
+            members_add: { type: 'array', items: { type: 'string' } },
+            members_remove: { type: 'array', items: { type: 'string' } },
+            location: { type: 'string' },
+            notes: { type: 'string' },
+            all_day: { type: 'boolean' },
+          },
+        },
+      },
+      required: ['action', 'patch'],
+    },
+  })
+}
+
+function buildSemanticWriteDeclaration() {
+  const groceryTools = AGENT_TOOL_DEFINITIONS.filter((tool) =>
+    ['grocery.add_items', 'grocery.update_item', 'grocery.remove_item'].includes(tool.name)
+  )
+  const groceryArgProperties = Object.assign(
+    {},
+    ...groceryTools.map((tool) => tool.inputSchema.properties ?? {}),
+  )
+  const calendarSchema = buildCalendarTurnDeclaration().parameters
+  return toGeminiFunctionDeclaration({
+    name: 'assistant.interpret_write',
+    description: 'Interpret one requested outcome into a semantic calendar turn, bounded grocery proposal, or explicit deferral.',
+    effect: 'write',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        requested_domain: {
+          type: 'string',
+          enum: ['calendar', 'grocery', 'other'],
+        },
+        requested_outcome: {
+          type: 'string',
+          enum: ['create', 'revise', 'update', 'delete', 'add_items', 'update_item', 'remove_item', 'read', 'compound', 'unsupported'],
+        },
+        calendar_turn: calendarSchema,
+        grocery_tool_name: {
+          type: 'string',
+          enum: groceryTools.map((tool) => tool.name),
+        },
+        grocery_tool_args: {
+          type: 'object',
+          additionalProperties: false,
+          properties: groceryArgProperties,
+        },
+        reason: {
+          type: 'string',
+          description: 'Short reason when the requested domain is other.',
+        },
+      },
+      required: ['requested_domain', 'requested_outcome'],
     },
   })
 }

@@ -23,11 +23,13 @@ const executorSource = readFileSync(
 )
 
 test('bounded agent contract separates probabilistic planning from trusted execution', () => {
-  assert.equal(AGENT_CONTRACT_VERSION, 'bounded-agent-v1')
+  assert.equal(AGENT_CONTRACT_VERSION, 'bounded-agent-v2')
   assert.ok(AGENT_RESPONSIBILITIES.planner.includes('interpret_language'))
+  assert.ok(AGENT_RESPONSIBILITIES.planner.includes('emit_semantic_deltas'))
   assert.ok(AGENT_RESPONSIBILITIES.planner.includes('choose_tools'))
   assert.ok(!AGENT_RESPONSIBILITIES.planner.includes('apply_idempotent_writes'))
   assert.ok(AGENT_RESPONSIBILITIES.policy.includes('enforce_confirmation'))
+  assert.ok(AGENT_RESPONSIBILITIES.policy.includes('resolve_calendar_time_and_identity'))
   assert.ok(AGENT_RESPONSIBILITIES.executor.includes('report_verified_results'))
 })
 
@@ -39,6 +41,7 @@ test('agent budgets and acceptance thresholds protect Alexa-grade behavior', () 
   assert.equal(AGENT_ACCEPTANCE_THRESHOLDS.unauthorizedExecutionRate, 0)
   assert.equal(AGENT_ACCEPTANCE_THRESHOLDS.duplicateWriteRate, 0)
   assert.equal(AGENT_ACCEPTANCE_THRESHOLDS.unverifiedSuccessClaimRate, 0)
+  assert.equal(AGENT_ACCEPTANCE_THRESHOLDS.consecutiveProductionPasses, 10)
   assert.equal(AGENT_CONFIRMATION_POLICY.destructive, 'always')
 })
 

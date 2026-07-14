@@ -23,9 +23,11 @@ import {
 import {
   answerGroundedEventFollowUp,
   answerGroundedEventSemanticFrame,
+  calendarClarificationConversationState,
   eventConversationState,
   groceryConversationState,
   normalizeConversationState,
+  resolveCalendarClarificationSelection,
 } from '../_shared/assistant-conversation-grounding.mjs'
 import { secureAssistantResult } from '../_shared/assistant-output-safety.mjs'
 import { resolveCalendarDayRead } from '../_shared/assistant-calendar-read.mjs'
@@ -265,7 +267,9 @@ Deno.serve(async (req) => {
     calendarFrame.intent !== 'event.create' &&
     !calendarFrame.requiresActiveEvent
   )
-  const intentRouting = calendarMutationDisambiguationFollowUp
+  const intentRouting = incomingConversationState?.activeEntityType === 'calendar_clarification'
+    ? { profile: 'event', forceEventSearch: false }
+    : calendarMutationDisambiguationFollowUp
     ? { profile: 'event', forceEventSearch: false }
     : calendarFrame
     ? { profile: 'event', forceEventSearch: calendarFrameNeedsSearch }
@@ -510,6 +514,11 @@ Deno.serve(async (req) => {
     calendarFrame &&
     !['event.create', 'event.move', 'event.delete', 'event.edit'].includes(calendarFrame.intent),
   )
+  const authorizedFamilyNames = Array.isArray(context?.family)
+    ? context.family.flatMap((member: { name?: unknown }) =>
+        typeof member?.name === 'string' ? [member.name] : []
+      )
+    : []
   const shouldRunAgentWrite = !dryRun &&
     agentWriteConfig?.enabled === true &&
     agentWriteRate > 0 &&
@@ -518,6 +527,128 @@ Deno.serve(async (req) => {
     context?.assistant_mode !== 'chef' &&
     !image &&
     Math.random() < agentWriteRate
+  if (!shouldRunAgentWrite && latestUserText && context?.pendingAction) {
+    const pendingCalendarCorrection = resolvePendingCalendarCorrection(
+      latestUserText,
+      context.pendingAction,
+      {
+        now,
+        utcOffset: context?.utcOffset,
+        familyNames: authorizedFamilyNames,
+      },
+    )
+    if (pendingCalendarCorrection) {
+      appendServerTrace('server_ai_assistant_pending_calendar_correction', `tool=${pendingCalendarCorrection.tool}`, {
+        tool: pendingCalendarCorrection.tool,
+      })
+      return {
+        status: 200,
+        payload: {
+          type: 'tool_action',
+          tool: pendingCalendarCorrection.tool,
+          args: pendingCalendarCorrection.args,
+          display_text: buildDisplayText(pendingCalendarCorrection.tool, pendingCalendarCorrection.args),
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+  }
+  if (latestUserText && incomingConversationState?.activeEntityType === 'calendar_clarification') {
+    const selection = resolveCalendarClarificationSelection(
+      latestUserText,
+      incomingConversationState,
+      allEvents ?? [],
+      { currentDate: now.toISOString(), utcOffset: context?.utcOffset },
+    )
+    if (selection?.text) {
+      return {
+        status: 200,
+        payload: {
+          type: 'text',
+          text: selection.text,
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+    if (selection?.tool) {
+      appendServerTrace('server_ai_assistant_calendar_clarification_resolved', `tool=${selection.tool}`, {
+        tool: selection.tool,
+        event_id: selection.event?.id ?? null,
+      })
+      return {
+        status: 200,
+        payload: {
+          type: 'tool_action',
+          tool: selection.tool,
+          args: selection.args,
+          display_text: buildDisplayText(selection.tool, selection.args),
+          conversation_state: eventConversationState(selection.event, now),
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+  }
+  if (!shouldRunAgentWrite && intentRouting.profile === 'event' && latestUserText && activeConversationEvent) {
+    const activeMutation = resolveActiveCalendarMutation(
+      latestUserText,
+      activeConversationEvent,
+      allEvents ?? [],
+      {
+        now,
+        utcOffset: context?.utcOffset,
+        familyNames: authorizedFamilyNames,
+      },
+    )
+    if (activeMutation?.text || activeMutation?.tool) {
+      appendServerTrace('server_ai_assistant_active_calendar_mutation', activeMutation.tool ?? 'clarify', {
+        tool: activeMutation.tool ?? null,
+        event_id: activeConversationEvent.id,
+      })
+      return {
+        status: 200,
+        payload: activeMutation.tool
+          ? {
+              type: 'tool_action',
+              tool: activeMutation.tool,
+              args: activeMutation.args,
+              display_text: buildDisplayText(activeMutation.tool, activeMutation.args),
+              conversation_state: eventConversationState(activeConversationEvent, now),
+              correlation_id: cid,
+              telemetry: {
+                ...llmTelemetry,
+                request_total_ms: Date.now() - requestStartMs,
+                context_load_ms: contextLoadMs,
+              },
+            }
+          : {
+              type: 'text',
+              text: activeMutation.text,
+              conversation_state: eventConversationState(activeConversationEvent, now),
+              correlation_id: cid,
+              telemetry: {
+                ...llmTelemetry,
+                request_total_ms: Date.now() - requestStartMs,
+                context_load_ms: contextLoadMs,
+              },
+            },
+      }
+    }
+  }
   if (shouldRunAgentWrite) {
     const agentWriteRequest = sb.functions.invoke('ai-agent-write', {
       body: {
@@ -525,12 +656,9 @@ Deno.serve(async (req) => {
         context: {
           page: context?.page,
           assistant_mode: context?.assistant_mode,
-          currentDate: context?.currentDate,
+          currentDate: now.toISOString(),
           utcOffset: context?.utcOffset,
           family: context?.family,
-          calendarRequestedTime: calendarFrame?.intent === 'event.move'
-            ? calendarFrame.slots?.requestedTime
-            : null,
           activeEntity: activeConversationEvent
             ? {
                 type: 'event',
@@ -577,6 +705,19 @@ Deno.serve(async (req) => {
       planKind?: string
       toolName?: string
       plan?: { toolName?: string }
+      clarification?: {
+        candidates?: Array<{
+          id?: string
+          title?: string
+          start?: string | null
+          version?: string | null
+        }>
+        pendingMutation?: {
+          tool?: string
+          args?: Record<string, unknown>
+          semanticTurn?: Record<string, unknown>
+        }
+      }
     } | null
     if (
       !agentWriteResult.error &&
@@ -637,6 +778,17 @@ Deno.serve(async (req) => {
       agentWriteData?.handled === true &&
       typeof agentWriteData.text === 'string'
     ) {
+      const clarification = agentWriteData.clarification
+      const clarificationState = Array.isArray(clarification?.candidates) &&
+          clarification.candidates.length > 1 &&
+          ['update_event', 'delete_event'].includes(String(clarification.pendingMutation?.tool ?? '')) &&
+          clarification.pendingMutation?.args
+        ? calendarClarificationConversationState(
+            clarification.candidates,
+            clarification.pendingMutation,
+            now,
+          )
+        : responseConversationState
       appendServerTrace('server_agent_write_blocked', agentWriteData.code ?? 'write_rejected', {
         code: agentWriteData.code ?? null,
         tool_name: agentWriteData.toolName ?? agentWriteData.plan?.toolName ?? null,
@@ -647,7 +799,7 @@ Deno.serve(async (req) => {
         payload: {
           type: 'text',
           text: agentWriteData.text,
-          conversation_state: responseConversationState,
+          conversation_state: clarificationState,
           semantic_intent: 'agent.write.blocked',
           correlation_id: cid,
           telemetry: {
@@ -666,6 +818,29 @@ Deno.serve(async (req) => {
       rollout_rate: agentWriteRate,
       failure: agentWriteFallback,
     })
+    if (
+      context?.pendingAction ||
+      activeConversationEvent ||
+      ['event.create', 'event.move', 'event.delete', 'event.edit'].includes(calendarFrame?.intent ?? '')
+    ) {
+      return {
+        status: 200,
+        payload: {
+          type: 'text',
+          text: 'I could not prepare that calendar change reliably, so I did not change anything. Please try again.',
+          conversation_state: responseConversationState,
+          semantic_intent: 'agent.write.failed',
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            agentic: true,
+            agent_write_ms: agentWriteData?.elapsed_ms ?? null,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
   }
   const shouldRunAgentRead = !dryRun &&
     agentReadConfig?.enabled === true &&
@@ -2501,6 +2676,55 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       llmPrimaryMs = Date.now() - retryStartMs
     }
     console.log(`[ai-assistant][${cid}] stage=llm_primary ms=${llmPrimaryMs} status=${res.status}`)
+    const latestUserTextForFallback = [...contents]
+      .reverse()
+      .find((turn) => turn.role === 'user')
+      ?.parts.flatMap((part) => 'text' in part && typeof part.text === 'string' ? [part.text.trim()] : [])
+      .find((part) => part.length > 0)
+
+    const runCompactFallback = async (reason: 'empty_response' | 'primary_timeout') => {
+      if (!latestUserTextForFallback || userLikelyRequestedWrite || remainingRequestBudgetMs() < 500) {
+        return null
+      }
+      const fallbackBody = {
+        system_instruction: {
+          parts: [{
+            text: 'You are the Casa Tabor assistant. Respond helpfully in 1-3 concise sentences. If data is missing, ask one clear follow-up question.',
+          }],
+        },
+        contents: [{ role: 'user', parts: [{ text: latestUserTextForFallback }] }],
+        generation_config: { temperature: 0.2, max_output_tokens: 320 },
+      }
+      const fallbackStartMs = Date.now()
+      const fallbackRes = await callModel(fallbackBody, {
+        stream: false,
+        timeoutMs: FALLBACK_HARD_TIMEOUT_MS,
+      })
+      const fallbackElapsedMs = Date.now() - fallbackStartMs
+      console.log(`[ai-assistant][${cid}] stage=llm_fallback ms=${fallbackElapsedMs} status=${fallbackRes.status}`)
+      if (fallbackRes.ok && fallbackRes.data) {
+        const fallbackData = fallbackRes.data
+        recordLlmCall('llm_fallback', fallbackElapsedMs, fallbackRes.status, fallbackData)
+        const fallbackParts = fallbackData.candidates?.[0]?.content?.parts ?? []
+        const fallbackText = fallbackParts
+          .flatMap((part: { text?: string }) => typeof part.text === 'string' && part.text.trim() ? [part.text.trim()] : [])
+          .join('\n')
+        if (fallbackText) {
+          appendServerTrace('server_ai_assistant_fallback_recovered', `reason=${reason} ms=${fallbackElapsedMs}`, {
+            reason,
+            fallback_ms: fallbackElapsedMs,
+            request_elapsed_ms: Date.now() - requestStartMs,
+          })
+          console.log(`[ai-assistant][${cid}] recovered ${reason} via compact fallback`)
+          return { type: 'text', text: fallbackText }
+        }
+      } else {
+        recordLlmCall('llm_fallback', fallbackElapsedMs, fallbackRes.status)
+        console.error(`[ai-assistant][${cid}] compact fallback failed status=${fallbackRes.status} body=${fallbackRes.errText.slice(0, 180)}`)
+      }
+      return null
+    }
+
     if (res.ok) {
       const data = res.data
       recordLlmCall('llm_primary', llmPrimaryMs, res.status, data)
@@ -2986,55 +3210,6 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         }
       }
 
-      const latestUserTextForFallback = [...contents]
-        .reverse()
-        .find((turn) => turn.role === 'user')
-        ?.parts.flatMap((part) => 'text' in part && typeof part.text === 'string' ? [part.text.trim()] : [])
-        .find((part) => part.length > 0)
-
-      const runCompactFallback = async (reason: 'empty_response' | 'primary_timeout') => {
-        if (!latestUserTextForFallback || userLikelyRequestedWrite || remainingRequestBudgetMs() < 500) {
-          return null
-        }
-        const fallbackBody = {
-          system_instruction: {
-            parts: [{
-              text: 'You are the Casa Tabor assistant. Respond helpfully in 1-3 concise sentences. If data is missing, ask one clear follow-up question.',
-            }],
-          },
-          contents: [{ role: 'user', parts: [{ text: latestUserTextForFallback }] }],
-          generation_config: { temperature: 0.2, max_output_tokens: 320 },
-        }
-        const fallbackStartMs = Date.now()
-        const fallbackRes = await callModel(fallbackBody, {
-          stream: false,
-          timeoutMs: FALLBACK_HARD_TIMEOUT_MS,
-        })
-        const fallbackElapsedMs = Date.now() - fallbackStartMs
-        console.log(`[ai-assistant][${cid}] stage=llm_fallback ms=${fallbackElapsedMs} status=${fallbackRes.status}`)
-        if (fallbackRes.ok && fallbackRes.data) {
-          const fallbackData = fallbackRes.data
-          recordLlmCall('llm_fallback', fallbackElapsedMs, fallbackRes.status, fallbackData)
-          const fallbackParts = fallbackData.candidates?.[0]?.content?.parts ?? []
-          const fallbackText = fallbackParts
-            .flatMap((part: { text?: string }) => typeof part.text === 'string' && part.text.trim() ? [part.text.trim()] : [])
-            .join('\n')
-          if (fallbackText) {
-            appendServerTrace('server_ai_assistant_fallback_recovered', `reason=${reason} ms=${fallbackElapsedMs}`, {
-              reason,
-              fallback_ms: fallbackElapsedMs,
-              request_elapsed_ms: Date.now() - requestStartMs,
-            })
-            console.log(`[ai-assistant][${cid}] recovered ${reason} via compact fallback`)
-            return { type: 'text', text: fallbackText }
-          }
-        } else {
-          recordLlmCall('llm_fallback', fallbackElapsedMs, fallbackRes.status)
-          console.error(`[ai-assistant][${cid}] compact fallback failed status=${fallbackRes.status} body=${fallbackRes.errText.slice(0, 180)}`)
-        }
-        return null
-      }
-
       const initialParts = candidate.content?.parts ?? []
       const initialResolved = await resolveModelParts(initialParts)
       if (initialResolved) return initialResolved
@@ -3156,7 +3331,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     const deleteAmbiguity = calendarDeleteAmbiguityClarification(
       latestUserText,
       allEvents ?? [],
-      { utcOffset },
+      { now, utcOffset },
       toLocal,
     )
     if (intentRouting.profile === 'event' && deleteAmbiguity) {
@@ -3174,29 +3349,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         },
       }
     }
-    const pendingCalendarCorrection = resolvePendingCalendarCorrection(
-      latestUserText,
-      context?.pendingAction,
-      { now, utcOffset },
-    )
-    if (pendingCalendarCorrection) {
-      return {
-        status: 200,
-        payload: {
-          type: 'tool_action',
-          tool: pendingCalendarCorrection.tool,
-          args: pendingCalendarCorrection.args,
-          display_text: buildDisplayText(pendingCalendarCorrection.tool, pendingCalendarCorrection.args),
-          correlation_id: cid,
-          telemetry: {
-            ...llmTelemetry,
-            request_total_ms: Date.now() - requestStartMs,
-            context_load_ms: contextLoadMs,
-          },
-        },
-      }
-    }
-    const clarifiedCreate = resolveClarifiedCalendarCreate(previousUserText, latestUserText, { now })
+    const clarifiedCreate = !shouldRunAgentWrite
+      ? resolveClarifiedCalendarCreate(previousUserText, latestUserText, { now })
+      : null
     if (clarifiedCreate) {
       return {
         status: 200,
@@ -3268,53 +3423,6 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             context_load_ms: contextLoadMs,
           },
         },
-      }
-    }
-    if (intentRouting.profile === 'event' && latestUserText && activeConversationEvent) {
-      const activeMutation = resolveActiveCalendarMutation(
-        latestUserText,
-        activeConversationEvent,
-        allEvents ?? [],
-        { utcOffset },
-      )
-      if (activeMutation?.text) {
-        return {
-          status: 200,
-          payload: {
-            type: 'text',
-            text: activeMutation.text,
-            conversation_state: eventConversationState(activeConversationEvent, now),
-            authoritative_provenance: {
-              source: 'events',
-              event_id: activeConversationEvent.id,
-              updated_at: activeConversationEvent.updated_at,
-            },
-            correlation_id: cid,
-            telemetry: {
-              ...llmTelemetry,
-              request_total_ms: Date.now() - requestStartMs,
-              context_load_ms: contextLoadMs,
-            },
-          },
-        }
-      }
-      if (activeMutation?.tool) {
-        return {
-          status: 200,
-          payload: {
-            type: 'tool_action',
-            tool: activeMutation.tool,
-            args: activeMutation.args,
-            display_text: buildDisplayText(activeMutation.tool, activeMutation.args),
-            conversation_state: eventConversationState(activeConversationEvent, now),
-            correlation_id: cid,
-            telemetry: {
-              ...llmTelemetry,
-              request_total_ms: Date.now() - requestStartMs,
-              context_load_ms: contextLoadMs,
-            },
-          },
-        }
       }
     }
     if (intentRouting.profile === 'event' && latestUserText) {

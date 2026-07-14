@@ -270,13 +270,40 @@ export function resolveCalendarSemanticRead(frame, events, options = {}) {
     }
   }
 
-  if (rows.length === 0) return { text: `Nothing is on your calendar ${range.label}.`, events: [], intent: frame.intent, scope: range.label }
+  const usesPartialDay = Boolean(scope?.dayPart || scope?.time || scope?.timeRange)
+  const requestedIds = new Set(rows.map((event) => event.id))
+  const laterRows = usesPartialDay
+    ? eventsInRange(
+        events,
+        {
+          start: range.end,
+          end: localDayStartMs(new Date(range.start), offset) + 86400000,
+          label: range.label,
+        },
+        now,
+        offset,
+      ).filter((event) => !event.all_day && !requestedIds.has(event.id))
+    : []
+  if (rows.length === 0 && laterRows.length === 0) {
+    return { text: `Nothing is on your calendar ${range.label}.`, events: [], intent: frame.intent, scope: range.label }
+  }
+  const laterText = laterRows.length > 0
+    ? `\nLater that day:\n${laterRows.map((event) => `- ${eventLine(event, offset)}`).join('\n')}`
+    : ''
+  if (rows.length === 0) {
+    return {
+      text: `Nothing is on your calendar ${range.label}.${laterText}`,
+      events: laterRows,
+      intent: frame.intent,
+      scope: range.label,
+    }
+  }
   const header = rows.length === 1
     ? `One thing is on your calendar ${range.label}:`
     : `${rows.length} things are on your calendar ${range.label}:`
   return {
-    text: `${header}\n${rows.map((event) => `- ${eventLine(event, offset)}`).join('\n')}`,
-    events: rows,
+    text: `${header}\n${rows.map((event) => `- ${eventLine(event, offset)}`).join('\n')}${laterText}`,
+    events: [...rows, ...laterRows],
     intent: frame.intent,
     scope: range.label,
   }

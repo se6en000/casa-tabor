@@ -15,7 +15,7 @@ const CORS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
-const DEFAULT_MODEL = 'gemini-2.5-flash-lite'
+const DEFAULT_MODEL = 'gemini-2.5-flash'
 const SUPPORTED_MODELS = new Set(['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.5-flash'])
 
 Deno.serve(async (req) => {
@@ -55,10 +55,21 @@ Deno.serve(async (req) => {
       context: body?.context,
       plannerMode: body?.planner_mode,
     })
-    let response = await callGemini(model, apiKey, requestBody)
+    let response: Response
     let providerCalls = 1
+    try {
+      response = await callGemini(model, apiKey, requestBody)
+    } catch (error) {
+      const retryableTransportFailure =
+        (error instanceof DOMException && error.name === 'AbortError') ||
+        error instanceof TypeError
+      if (!retryableTransportFailure) throw error
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      response = await callGemini(model, apiKey, requestBody)
+      providerCalls += 1
+    }
     const usageTotals = { input: 0, output: 0, total: 0 }
-    if ([429, 500, 502, 503, 504].includes(response.status)) {
+    if (providerCalls === 1 && [429, 500, 502, 503, 504].includes(response.status)) {
       await new Promise((resolve) => setTimeout(resolve, 100))
       response = await callGemini(model, apiKey, requestBody)
       providerCalls += 1
@@ -170,7 +181,7 @@ function integer(value: unknown) {
 
 async function callGemini(model: string, apiKey: string, requestBody: unknown) {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 5000)
+  const timeout = setTimeout(() => controller.abort(), 2500)
   try {
     return await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,

@@ -28,9 +28,11 @@ test('live agent regression covers natural calendar and grocery conversations', 
   }
 })
 
-test('live agent regression is non-dry-run, proposal-only, and cleanup verified', () => {
+test('live agent regression executes confirmed calendar continuity while keeping grocery proposals dry', () => {
   assert.match(script, /dry_run: false/)
-  assert.doesNotMatch(script, /execute-ai-action/)
+  assert.match(script, /execute-ai-action/)
+  assert.match(script, /confirmedCreate\.response\.tool/)
+  assert.match(script, /confirmedCorrection\.response\.tool/)
   assert.match(script, /last_modified_source: 'ios'/)
   assert.doesNotMatch(script, /last_modified_source: 'casa'/)
   assert.match(script, /verifyNoProposalsPersisted/)

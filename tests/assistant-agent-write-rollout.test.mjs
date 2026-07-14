@@ -51,8 +51,9 @@ test('write rollout forwards exact active grocery context and versions', () => {
   assert.match(assistant, /notes, updated_at/)
 })
 
-test('agent routing forwards trusted semantic slots for exact reads and moves', () => {
-  assert.match(assistant, /calendarRequestedTime: calendarFrame\?\.intent === 'event\.move'/)
+test('agent routing keeps model-authored move timestamps out of the write contract', () => {
+  assert.doesNotMatch(assistant, /calendarRequestedTime/)
+  assert.match(assistant, /currentDate: now\.toISOString\(\)/)
   assert.match(assistant, /groceryQuery: groceryFrame\?\.slots\?\.item/)
   assert.match(assistant, /calendarReadContext/)
   assert.match(assistant, /calendarRangeForScope/)

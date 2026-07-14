@@ -134,6 +134,26 @@ async function callAssistant({
   return { response, messages }
 }
 
+async function executeAction(tool, args, key) {
+  return fetchJson('/functions/v1/execute-ai-action', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      tool,
+      args,
+      action_id: `${runId}-${key}`,
+      session_id: runId,
+      correlation_id: `${runId}-${key}:execute`,
+      trace_id: `${runId}-${key}`,
+      turn_id: crypto.randomUUID(),
+      lane: 'regression',
+      client_trace_present: true,
+      client_build: 'ai-agent-live-regression',
+      client_trace_source: 'ai-agent-live-regression',
+    }),
+  })
+}
+
 function pass(key, detail) {
   results.push({ key, ok: true, detail })
   console.log(`PASS ${key}: ${detail}`)
@@ -443,7 +463,149 @@ async function run() {
   expect(new Date(correctedDinner.response.args.start).getDay() === 6, 'Pending dinner correction did not move to Saturday')
   pass('05-dinner-correction', `${correctedDinner.response.args.start} with duration preserved`)
 
-    const soccerRead = await callAssistant({
+  const confirmedCreate = await callAssistant({
+    key: '05a-confirmed-dinner-create',
+    text: 'Schedule Agent QA Kelly dinner Sunday around six.',
+    family,
+  })
+  expect(
+    confirmedCreate.response.type === 'tool_action' &&
+      confirmedCreate.response.tool === 'create_event',
+    'Confirmed-flow dinner did not produce create_event',
+  )
+  const createResult = await executeAction(
+    confirmedCreate.response.tool,
+    confirmedCreate.response.args,
+    '05a-confirmed-dinner-create',
+  )
+  expect(createResult.success === true && createResult.event_id, 'Confirmed-flow dinner did not persist')
+  createdEventIds.push(createResult.event_id)
+  const confirmedState = {
+    activeEntityType: 'event',
+    activeEventId: createResult.event_id,
+    activeEventUpdatedAt: createResult.event_updated_at,
+    expectedFollowUp: 'event_follow_up',
+    establishedAt: new Date().toISOString(),
+  }
+  const confirmedCorrection = await callAssistant({
+    key: '05b-confirmed-dinner-correction',
+    text: 'Actually, make it Saturday at eleven PM for two hours.',
+    family,
+    history: [
+      ...confirmedCreate.messages,
+      { role: 'assistant', content: confirmedCreate.response.display_text },
+    ],
+    conversationState: confirmedState,
+  })
+  expect(
+    confirmedCorrection.response.type === 'tool_action' &&
+      confirmedCorrection.response.tool === 'update_event',
+    'Post-confirmation correction created a duplicate instead of updating the active event',
+  )
+  expect(
+    confirmedCorrection.response.args.id === createResult.event_id,
+    'Post-confirmation correction targeted the wrong event',
+  )
+  expect(
+    durationMinutes(confirmedCorrection.response.args) === 120,
+    'Post-confirmation correction did not apply the requested two-hour duration',
+  )
+  const updateResult = await executeAction(
+    confirmedCorrection.response.tool,
+    confirmedCorrection.response.args,
+    '05b-confirmed-dinner-correction',
+  )
+  const attendeeUpdate = await callAssistant({
+    key: '05c-confirmed-dinner-attendee',
+    text: 'Add Owen too.',
+    family,
+    history: [
+      ...confirmedCreate.messages,
+      { role: 'assistant', content: confirmedCreate.response.display_text },
+      { role: 'user', content: 'Actually, make it Saturday at eleven PM for two hours.' },
+      { role: 'assistant', content: confirmedCorrection.response.display_text },
+    ],
+    conversationState: {
+      ...confirmedState,
+      activeEventUpdatedAt: updateResult.event_updated_at,
+      establishedAt: new Date().toISOString(),
+    },
+  })
+  expect(
+    attendeeUpdate.response.type === 'tool_action' &&
+      attendeeUpdate.response.tool === 'update_event',
+    'Active-event attendee follow-up did not produce update_event',
+  )
+  expect(
+    attendeeUpdate.response.args.id === createResult.event_id &&
+      attendeeUpdate.response.args.members_add?.includes('Owen'),
+    'Active-event attendee follow-up lost the target or family member',
+  )
+  const confirmedRows = await fetchJson(
+    `/rest/v1/events?select=id,title,start_time,end_time&id=eq.${createResult.event_id}`,
+    { headers },
+  )
+  expect(confirmedRows.length === 1, 'Confirmed correction produced a duplicate event')
+  pass('05abc-confirmed-calendar-continuity', 'create → confirm → correct → attendee follow-up stayed on one event')
+
+  const duplicateDinnerStart = nextWeekday(6, 10)
+  const [duplicateDinnerA, duplicateDinnerB] = await insert('events', [
+    {
+      title: '[Agent QA] Duplicate dinner',
+      start_time: duplicateDinnerStart.toISOString(),
+      end_time: new Date(duplicateDinnerStart.getTime() + 60 * 60000).toISOString(),
+      status: 'confirmed',
+      all_day: false,
+      event_type: 'event',
+      is_enriched: false,
+      description: runId,
+    },
+    {
+      title: '[Agent QA] Duplicate dinner',
+      start_time: new Date(duplicateDinnerStart.getTime() + 2 * 60 * 60000).toISOString(),
+      end_time: new Date(duplicateDinnerStart.getTime() + 3 * 60 * 60000).toISOString(),
+      status: 'confirmed',
+      all_day: false,
+      event_type: 'event',
+      is_enriched: false,
+      description: runId,
+    },
+  ])
+  createdEventIds.push(duplicateDinnerA.id, duplicateDinnerB.id)
+  const ambiguousDinner = await callAssistant({
+    key: '05d-calendar-ambiguity',
+    text: 'Add Owen to the Agent QA duplicate dinner event.',
+    family,
+  })
+  expect(
+    ambiguousDinner.response.type === 'text' &&
+      ambiguousDinner.response.conversation_state?.activeEntityType === 'calendar_clarification',
+    'Ambiguous calendar update did not preserve named authoritative choices',
+  )
+  const firstCandidateId = ambiguousDinner.response.conversation_state.candidateEvents[0]?.id
+  const selectedDinner = await callAssistant({
+    key: '05e-calendar-ambiguity-selection',
+    text: 'The first one.',
+    family,
+    history: [
+      ...ambiguousDinner.messages,
+      { role: 'assistant', content: ambiguousDinner.response.text },
+    ],
+    conversationState: ambiguousDinner.response.conversation_state,
+  })
+  expect(
+    selectedDinner.response.type === 'tool_action' &&
+      selectedDinner.response.tool === 'update_event',
+    'Ordinal calendar clarification did not resume the pending update',
+  )
+  expect(
+    selectedDinner.response.args.id === firstCandidateId &&
+      selectedDinner.response.args.members_add?.includes('Owen'),
+    'Ordinal calendar clarification lost the selected event or requested attendee',
+  )
+  pass('05de-calendar-ambiguity-selection', `first candidate=${firstCandidateId}`)
+
+  const soccerRead = await callAssistant({
     key: '05-soccer-read',
     text: 'When is Riverside soccer practice?',
     family,
@@ -462,7 +624,12 @@ async function run() {
   })
   expect(soccerUpdate.response.type === 'tool_action' && soccerUpdate.response.tool === 'update_event', 'Soccer follow-up did not produce update_event')
   expect(soccerUpdate.response.args.id === soccer.id, 'Soccer update targeted the wrong event')
-  expect(soccerUpdate.response.args.start.includes('T18:30:00'), 'Soccer update did not use the requested local 6:30 PM time')
+  const expectedSoccerStart = new Date(soccerStart)
+  expectedSoccerStart.setHours(18, 30, 0, 0)
+  expect(
+    Date.parse(soccerUpdate.response.args.start) === expectedSoccerStart.getTime(),
+    'Soccer update did not use the requested local 6:30 PM time',
+  )
   expect(durationMinutes(soccerUpdate.response.args) === 90, 'Soccer update did not preserve duration')
   pass('06-soccer-update', `${soccerUpdate.response.args.start} with 90-minute duration`)
 

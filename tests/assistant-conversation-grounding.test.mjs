@@ -4,9 +4,11 @@ import test from 'node:test'
 import {
   answerGroundedEventFollowUp,
   answerGroundedEventSemanticFrame,
+  calendarClarificationConversationState,
   eventConversationState,
   groceryConversationState,
   normalizeConversationState,
+  resolveCalendarClarificationSelection,
 } from '../supabase/functions/_shared/assistant-conversation-grounding.mjs'
 import { secureAssistantResult } from '../supabase/functions/_shared/assistant-output-safety.mjs'
 import { isIncompleteVoiceFragment } from '../src/lib/voiceTurnTaking.mjs'
@@ -35,6 +37,69 @@ test('conversation state retains an authoritative grocery item identity', () => 
   const now = new Date('2026-07-11T13:00:00Z')
   const state = groceryConversationState({ id: 'milk' }, now)
   assert.equal(normalizeConversationState(state, now.getTime() + 1000)?.activeGroceryItemId, 'milk')
+})
+
+test('calendar clarification state preserves choices and resolves ordinal follow-ups', () => {
+  const now = new Date('2026-07-14T13:00:00Z')
+  const secondEvent = {
+    ...event,
+    id: 'event-2',
+    updated_at: 'v2',
+    start_time: '2026-07-18T23:00:00Z',
+  }
+  const state = calendarClarificationConversationState(
+    [event, secondEvent],
+    {
+      tool: 'update_event',
+      args: { id: event.id, expected_updated_at: event.updated_at, members_add: ['Owen'] },
+    },
+    now,
+  )
+  const normalized = normalizeConversationState(state, now.getTime() + 1000)
+  assert.equal(normalized.candidateEvents.length, 2)
+  const resolved = resolveCalendarClarificationSelection(
+    'the second one',
+    normalized,
+    [event, secondEvent],
+  )
+  assert.equal(resolved.tool, 'update_event')
+  assert.equal(resolved.args.id, 'event-2')
+  assert.equal(resolved.args.expected_updated_at, 'v2')
+  assert.deepEqual(resolved.args.members_add, ['Owen'])
+})
+
+test('calendar clarification preserves and applies the semantic mutation after selection', () => {
+  const now = new Date('2026-07-14T13:00:00Z')
+  const secondEvent = {
+    ...event,
+    id: 'event-2',
+    updated_at: 'v2',
+    start_time: '2026-07-18T23:00:00Z',
+  }
+  const state = calendarClarificationConversationState(
+    [event, secondEvent],
+    {
+      tool: 'update_event',
+      args: {},
+      semanticTurn: {
+        version: 'calendar-semantic-turn-v1',
+        action: 'update',
+        candidateEntityIds: [event.id, secondEvent.id],
+        patch: { members_add: ['Owen'] },
+      },
+    },
+    now,
+  )
+  const normalized = normalizeConversationState(state, now.getTime() + 1000)
+  const resolved = resolveCalendarClarificationSelection(
+    'the first one',
+    normalized,
+    [event, secondEvent],
+    { currentDate: now.toISOString(), utcOffset: '+00:00' },
+  )
+  assert.equal(resolved.tool, 'update_event')
+  assert.equal(resolved.args.id, event.id)
+  assert.deepEqual(resolved.args.members_add, ['Owen'])
 })
 
 test('event follow-ups answer only from authoritative fields', () => {

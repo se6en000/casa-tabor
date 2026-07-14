@@ -21,6 +21,7 @@ import { Button, LiveTranscript } from '../ui'
 import { formatTextForMarkdown } from '../../lib/assistantMarkdown.mjs'
 import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId } from '../../lib/assistantTelemetry'
 import { classifyPendingConfirmation } from '../../lib/assistantConfirmation.mjs'
+import { conversationStateAfterCalendarAction } from '../../lib/assistantConversationState.mjs'
 import { buildCreatePreviewCopy, buildDeleteManyPreviewCopy, buildDeletePreviewCopy, buildUpdatePreviewCopy } from '../../utils/aiConfirmPreview'
 
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
@@ -954,6 +955,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                       updateMessageToolStatus(messageId, 'done', {
                         actionId: data?.action_id,
                         resultEventId: data?.event_id,
+                        conversationState: conversationStateAfterCalendarAction(tool, requestArgs, data),
                         syncWarning: data?.sync_warning,
                         syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
                         undoStatus: 'idle',

@@ -325,7 +325,12 @@ Deno.serve(async (req) => {
       // Await Google sync — fire-and-forget can be killed before completion in Deno Deploy
       await sb.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {})
 
-      return new Response(JSON.stringify({ success: true, event_id: event.id, correlation_id: cid }), {
+      return new Response(JSON.stringify({
+        success: true,
+        event_id: event.id,
+        event_updated_at: event.updated_at,
+        correlation_id: cid,
+      }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }
@@ -521,6 +526,13 @@ Deno.serve(async (req) => {
 
       await applyMemberRoleOverrides(sb, normalized.eventId, membersPrimary, membersAttendees)
 
+      const { data: updatedEvent, error: updatedEventError } = await sb
+        .from('events')
+        .select('updated_at')
+        .eq('id', normalized.eventId)
+        .single()
+      if (updatedEventError) throw new Error(updatedEventError.message)
+
       if (targetFields.length > 0) {
         sb.functions.invoke('enrich-event', {
           body: {
@@ -552,6 +564,7 @@ Deno.serve(async (req) => {
       const baseResponse = {
         success: true,
         event_id: normalized.eventId,
+        event_updated_at: updatedEvent.updated_at,
         action_id: actionId ?? null,
       }
       const responsePayload = await finalizeEventSync(sb, normalized.eventId, historyRow?.[0]?.id, baseResponse)

@@ -49,6 +49,7 @@ export const CALENDAR_INTENTS = Object.freeze([
   'event.travel',
   'event.create',
   'event.move',
+  'event.edit',
   'event.delete',
 ])
 
@@ -112,6 +113,7 @@ export const CALENDAR_UTTERANCE_CORPUS = Object.freeze([
   { text: 'find details for the birthday event', intent: 'event.select' },
   { text: 'create a calendar event tomorrow', intent: 'event.create' },
   { text: 'move the appointment to friday', intent: 'event.move' },
+  { text: 'add Owen to the calendar event', intent: 'event.edit' },
   { text: 'delete the calendar event', intent: 'event.delete' },
 ])
 
@@ -261,12 +263,13 @@ export function parseCalendarLanguage(text, options = {}) {
   if (!input) return null
   const activeEvent = options.activeEntityType === 'event' || options.focusedEvent === true
   const scope = temporalScope(input)
-  const naturalScheduleCreate = /^schedule\s+.+\b(?:today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b.*\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/.test(input)
+  const naturalScheduleCreate = /^schedule\s+.+\b(?:today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b.*\b(?:around|at)?\s*(?:\d{1,2}(?::\d{2})?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?:\s*(?:am|pm))?\b/.test(input)
+  const attendeeUpdate = /\badd\s+[\w'-]+(?:\s+too|\s+to\s+(?:the\s+)?(?:calendar\s+)?(?:event|appointment|meeting|dinner|party|practice))\b/.test(input)
   const mutationLanguage = /\b(add|create|book|move|reschedule|shift|push|change|update|edit|delete|remove|cancel)\b/.test(input) ||
     /\bschedule\s+(?:an?\s+)?(?:event|appointment|meeting|reminder)\b/.test(input) ||
     naturalScheduleCreate
 
-  if (mutationLanguage && (activeEvent || CALENDAR_NOUNS.test(input))) {
+  if (mutationLanguage && (activeEvent || naturalScheduleCreate || CALENDAR_NOUNS.test(input))) {
     if (/\b(delete|remove|cancel)\b/.test(input)) return frame('event.delete', 0.98, { temporalScope: scope })
     if (/\b(move|reschedule|shift|push)\b/.test(input)) {
       return frame('event.move', 0.98, {
@@ -274,6 +277,7 @@ export function parseCalendarLanguage(text, options = {}) {
         requestedTime: requestedMoveTime(input),
       })
     }
+    if (attendeeUpdate) return frame('event.edit', 0.99, { temporalScope: scope })
     if (/\b(add|create|book|schedule)\b/.test(input)) return frame('event.create', 0.96, { temporalScope: scope })
     if (activeEvent && /\b(change|update|edit)\b/.test(input)) {
       return frame('event.edit', 0.94, { temporalScope: scope }, true)
@@ -315,7 +319,7 @@ export function parseCalendarLanguage(text, options = {}) {
     /\b(?:is(?:n't| not) there|there(?:'s| is) no)\b.+\b(?:too|also|as well)\b/.test(input) ||
     /\bare you sure\b.*\b(?:nothing|anything|everything)\b/.test(input) ||
     /\b(?:didn't|did not) mention\b|\b(?:missed|left out|omitted)\b/.test(input)
-  const listLanguage = /\b(?:what(?:'s| is) (?:on|going on|happening|planned|scheduled)|what (?:are we doing|do (?:i|we) have|have (?:i|we) got)|show me|tell me|give me|run through|walk me through|catch me up on|lay out|fill me in on|rundown|anything (?:on|happening|going on|planned|scheduled))\b/.test(input) ||
+  const listLanguage = /\b(?:what(?:'s| is) (?:on|going on|happening|planned|scheduled)|what (?:are we doing|do (?:i|we) (?:have|got(?: going on)?)|have (?:i|we) got)|show me|tell me|give me|run through|walk me through|catch me up on|lay out|fill me in on|rundown|anything (?:on|happening|going on|planned|scheduled))\b/.test(input) ||
     /\bwhat (?:events?|appointments?|meetings?|plans?) (?:are )?(?:on|happening|going on|planned|scheduled)\b/.test(input) ||
     Boolean(scope && /^(?:how|what) about\b/.test(input)) ||
     /\b(?:how (?:is|does)|what does)\b.*\b(?:look|looking)\b/.test(input) ||

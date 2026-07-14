@@ -1,13 +1,12 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.mjs'
 import { evaluateAgentToolCall } from '../_shared/assistant-agent-policy.mjs'
+import { resolveCalendarSemanticTurn } from '../_shared/assistant-calendar-agent.mjs'
 import {
-  alignCalendarMoveToRequestedTime,
   adaptAgentGroceryUpdate,
   findAgentCalendarDuplicates,
   isAgentCalendarUpdateTargetUnambiguous,
   isAgentGroceryUpdateTargetUnambiguous,
-  repairInvalidCalendarMoveDuration,
 } from '../_shared/assistant-agent-write.mjs'
 import {
   getAgentToolByLegacyName,
@@ -53,6 +52,7 @@ Deno.serve(async (req) => {
         updated_at?: string
         start_time?: string
         end_time?: string
+        all_day?: boolean
         recurrence_master_id?: string | null
         rrule?: string | null
       }) => ({
@@ -62,6 +62,7 @@ Deno.serve(async (req) => {
         version: event.updated_at ?? null,
         start: event.start_time,
         end: event.end_time,
+        allDay: event.all_day === true,
         recurring: Boolean(event.recurrence_master_id || event.rrule),
       })),
       ...groceryItems.map((item: {
@@ -91,6 +92,9 @@ Deno.serve(async (req) => {
       ? [activeAuthoritativeEntity]
       : authoritativeEntities
     const pendingAction = body?.context?.pendingAction
+    const latestUserText = Array.isArray(body?.messages)
+      ? [...body.messages].reverse().find((message) => message?.role === 'user' && typeof message?.content === 'string')?.content ?? ''
+      : ''
     const pendingTool = getAgentToolByLegacyName(pendingAction?.tool)
     const normalizedPendingAction = pendingTool && ALLOWED_TOOLS.has(pendingTool.name)
       ? {
@@ -123,8 +127,57 @@ Deno.serve(async (req) => {
     })
     if (plannerResult.error) return result({ supported: false, code: 'planner_error' }, 503)
 
-    const plan = plannerResult.data?.plan
+    let plan = plannerResult.data?.plan
+    if (plan?.kind === 'calendar_semantic') {
+      const resolved = resolveCalendarSemanticTurn(plan.turn, {
+        currentDate: body?.context?.currentDate,
+        utcOffset: body?.context?.utcOffset,
+        pendingAction: normalizedPendingAction,
+        activeEntity,
+        authoritativeEntities,
+      })
+      if (resolved.kind === 'clarify') {
+        const candidates = Array.isArray(resolved.candidates) ? resolved.candidates : []
+        return result({
+          supported: false,
+          handled: true,
+          text: resolved.text,
+          code: resolved.code,
+          planKind: plan.kind,
+          toolName: null,
+          ...(candidates.length > 1
+            ? {
+                clarification: {
+                  candidates,
+                  pendingMutation: {
+                    tool: plan.turn?.action === 'delete' ? 'delete_event' : 'update_event',
+                    args: {},
+                    semanticTurn: plan.turn,
+                  },
+                },
+              }
+            : {}),
+        })
+      }
+      if (resolved.kind !== 'tool') {
+        return result({
+          supported: false,
+          handled: true,
+          text: writeRejectionText(resolved.code),
+          code: resolved.code,
+          planKind: plan.kind,
+          toolName: null,
+        })
+      }
+      plan = resolved
+    }
     if (plan?.kind !== 'tool' || !ALLOWED_TOOLS.has(plan.toolName)) {
+      const ambiguousCandidates = plan?.kind === 'defer' && plan?.reason === 'ambiguous'
+        ? candidateEntities(plan.candidateEntityIds, authoritativeEntities)
+        : []
+      const inferredAmbiguousTool = /\b(?:delete|remove|cancel)\b/i.test(latestUserText)
+        ? 'delete_event'
+        : null
       const clarification = plan?.kind === 'clarify'
         ? optionalText(plan.text, 500)
         : plan?.kind === 'defer' && plan?.reason === 'ambiguous'
@@ -138,18 +191,16 @@ Deno.serve(async (req) => {
         planKind: plan?.kind ?? 'error',
         planReason: plan?.reason ?? null,
         toolName: plan?.toolName ?? null,
+        ...(clarification && inferredAmbiguousTool && ambiguousCandidates.length > 1
+          ? {
+              clarification: {
+                candidates: ambiguousCandidates,
+                pendingMutation: { tool: inferredAmbiguousTool, args: {} },
+              },
+            }
+          : {}),
       })
     }
-    if (plan.toolName === 'calendar.update') {
-      plan.args = repairInvalidCalendarMoveDuration(plan.args, authoritativeEntities)
-      plan.args = alignCalendarMoveToRequestedTime(
-        plan.args,
-        authoritativeEntities,
-        body?.context?.calendarRequestedTime,
-        body?.context?.utcOffset,
-      )
-    }
-
     const duplicateCandidates = plan.toolName === 'calendar.create'
       ? findAgentCalendarDuplicates(events, plan.args)
       : []
@@ -161,13 +212,27 @@ Deno.serve(async (req) => {
         activeEntity,
       )
     ) {
+      const candidates = duplicateLabelCandidates(authoritativeEntities, plan.args?.id, 'event', 'title')
       return result({
         supported: false,
         handled: true,
-        text: writeRejectionText('ambiguous_update_target'),
+        text: candidates.length > 1
+          ? ambiguityClarification(candidates.map((candidate) => candidate.id), authoritativeEntities, body?.context?.utcOffset)
+          : writeRejectionText('ambiguous_update_target'),
         code: 'ambiguous_update_target',
         planKind: plan.kind,
         toolName: plan.toolName,
+        ...(candidates.length > 1
+          ? {
+              clarification: {
+                candidates,
+                pendingMutation: {
+                  tool: 'update_event',
+                  args: plan.args,
+                },
+              },
+            }
+          : {}),
       })
     }
     if (
@@ -343,6 +408,43 @@ function ambiguityClarification(
     return `- **${label}**${when ? ` — ${when}` : ''}`
   }).join('\n')
   return `I found more than one possible match. Which one do you mean?\n${choices}\nNothing was changed.`
+}
+
+function candidateEntities(candidateIds: unknown, entities: Array<Record<string, unknown>>) {
+  const ids = new Set(Array.isArray(candidateIds)
+    ? candidateIds.filter((id): id is string => typeof id === 'string').slice(0, 6)
+    : [])
+  return entities
+    .filter((entity) => ids.has(String(entity.id ?? '')))
+    .slice(0, 6)
+    .map(calendarCandidate)
+}
+
+function duplicateLabelCandidates(
+  entities: Array<Record<string, unknown>>,
+  targetId: unknown,
+  type: string,
+  labelKey: string,
+) {
+  const target = entities.find((entity) => entity.type === type && entity.id === targetId)
+  const label = optionalText(target?.[labelKey], 180)?.toLocaleLowerCase()
+  if (!label) return []
+  return entities
+    .filter((entity) =>
+      entity.type === type &&
+      optionalText(entity[labelKey], 180)?.toLocaleLowerCase() === label
+    )
+    .slice(0, 6)
+    .map(calendarCandidate)
+}
+
+function calendarCandidate(entity: Record<string, unknown>) {
+  return {
+    id: entity.id,
+    title: optionalText(entity.title, 180) ?? 'Calendar event',
+    start: optionalText(entity.start, 80),
+    version: optionalText(entity.version, 80),
+  }
 }
 
 function formatEntityTime(value: unknown, utcOffset: unknown) {

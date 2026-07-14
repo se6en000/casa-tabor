@@ -99,6 +99,20 @@ test('production-style day questions and omission challenges stay deterministic'
   assert.equal(omission?.slots.temporalScope?.weekday, 'sunday')
 })
 
+test('natural scheduling, attendee edits, and STT weekdays route to calendar intent', () => {
+  assert.equal(
+    parseCalendarLanguage('Schedule dinner with Kelly Sunday around six')?.intent,
+    'event.create',
+  )
+  assert.equal(
+    parseCalendarLanguage('Add Owen to the dinner event')?.intent,
+    'event.edit',
+  )
+  const sttRead = parseCalendarLanguage('What do we got going on fry day after lunch?')
+  assert.equal(sttRead?.intent, 'calendar.list')
+  assert.equal(sttRead?.slots.temporalScope?.weekday, 'friday')
+})
+
 test('household afternoon agenda scope includes early-evening activities', () => {
   const range = calendarRangeForScope({
     kind: 'weekday',
@@ -223,6 +237,34 @@ test('semantic day reads include all-day spans anchored by nominal dates', () =>
   )
   assert.deepEqual(result.events.map((event) => event.id), ['all-day-sunday'])
   assert.match(result.text, /All day — Family beach weekend/)
+})
+
+test('semantic partial-day fallback includes useful later same-day context', () => {
+  const result = resolveCalendarSemanticRead(
+    parseCalendarLanguage('What does Thursday afternoon look like?'),
+    [
+      {
+        id: 'afternoon',
+        title: 'Softball practice',
+        start_time: '2026-07-16T22:30:00.000Z',
+        end_time: '2026-07-17T00:00:00.000Z',
+      },
+      {
+        id: 'late',
+        title: 'Late pickup',
+        start_time: '2026-07-17T01:15:00.000Z',
+        end_time: '2026-07-17T01:45:00.000Z',
+      },
+    ],
+    {
+      now: new Date('2026-07-14T16:00:00.000Z'),
+      utcOffset: '-04:00',
+    },
+  )
+  assert.deepEqual(result.events.map((event) => event.id), ['afternoon', 'late'])
+  assert.match(result.text, /Softball practice/)
+  assert.match(result.text, /Later that day:/)
+  assert.match(result.text, /Late pickup/)
 })
 
 test('all-day context is listed but does not become a clock conflict or next event', () => {

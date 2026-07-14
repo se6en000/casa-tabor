@@ -157,3 +157,91 @@ test('corrections replace pending create details without creating a duplicate', 
     assert.equal(Date.parse(corrected.args.end) - Date.parse(corrected.args.start), 60 * 60000, text)
   }
 })
+
+test('pending create member clarification stays a create revision', () => {
+  const corrected = resolvePendingCalendarCorrection(
+    'Mom is Kelly and make it for an hour and a half.',
+    {
+      tool: 'create_event',
+      args: {
+        title: 'Dinner with Mom',
+        start: '2026-07-19T22:00:00.000Z',
+        end: '2026-07-19T23:00:00.000Z',
+        members: [],
+      },
+    },
+    {
+      now: new Date('2026-07-14T14:00:00.000Z'),
+      utcOffset: '-04:00',
+      familyNames: ['Jake', 'Kelly', 'Owen'],
+    },
+  )
+  assert.equal(corrected.tool, 'create_event')
+  assert.deepEqual(corrected.args.members, ['Kelly'])
+  assert.equal(Date.parse(corrected.args.end) - Date.parse(corrected.args.start), 90 * 60000)
+})
+
+test('confirmed-event corrections infer the existing period and honor a new duration', () => {
+  const dinner = {
+    ...event,
+    id: 'dinner',
+    title: 'Dinner with Kelly',
+    start_time: '2026-07-19T22:00:00.000Z',
+    end_time: '2026-07-19T23:00:00.000Z',
+  }
+  const corrected = resolveActiveCalendarMutation(
+    'Actually, make it Saturday at seven for two hours.',
+    dinner,
+    [dinner],
+    {
+      now: new Date('2026-07-14T14:00:00.000Z'),
+      utcOffset: '-04:00',
+      familyNames: ['Jake', 'Owen'],
+    },
+  )
+  assert.equal(corrected.tool, 'update_event')
+  assert.equal(corrected.args.start, '2026-07-18T23:00:00.000Z')
+  assert.equal(corrected.args.end, '2026-07-19T01:00:00.000Z')
+})
+
+test('all-day context does not block a timed confirmed-event correction', () => {
+  const dinner = {
+    ...event,
+    id: 'dinner',
+    title: 'Dinner with Kelly',
+    start_time: '2026-07-19T22:00:00.000Z',
+    end_time: '2026-07-19T23:00:00.000Z',
+  }
+  const allDay = {
+    ...event,
+    id: 'all-day',
+    title: 'Sunday marker',
+    all_day: true,
+    start_time: '2026-07-19T04:00:00.000Z',
+    end_time: '2026-07-20T03:59:59.000Z',
+  }
+  const corrected = resolveActiveCalendarMutation(
+    'Actually, make it Saturday at eleven PM for two hours.',
+    dinner,
+    [dinner, allDay],
+    {
+      now: new Date('2026-07-14T14:00:00.000Z'),
+      utcOffset: '-04:00',
+      familyNames: ['Jake', 'Owen'],
+    },
+  )
+  assert.equal(corrected.tool, 'update_event')
+  assert.equal(corrected.args.start, '2026-07-19T03:00:00.000Z')
+})
+
+test('active-event attendee follow-ups become exact confirmation-gated updates', () => {
+  const update = resolveActiveCalendarMutation(
+    'Add Owen too.',
+    event,
+    [event],
+    { utcOffset: '-04:00', familyNames: ['Jake', 'Owen'] },
+  )
+  assert.equal(update.tool, 'update_event')
+  assert.equal(update.args.id, event.id)
+  assert.deepEqual(update.args.members_add, ['Owen'])
+})

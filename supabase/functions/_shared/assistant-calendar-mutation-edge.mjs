@@ -6,6 +6,11 @@ const NUMBER_WORDS = new Map([
   ['five', 5],
   ['six', 6],
   ['seven', 7],
+  ['eight', 8],
+  ['nine', 9],
+  ['ten', 10],
+  ['eleven', 11],
+  ['twelve', 12],
 ])
 
 function durationMs(event) {
@@ -51,6 +56,7 @@ function overlaps(candidate, events, ignoredId) {
   const end = Date.parse(candidate.end)
   return events.filter((event) => (
     event.id !== ignoredId
+    && event.all_day !== true
     && Date.parse(event.start_time) < end
     && Date.parse(event.end_time) > start
   ))
@@ -99,6 +105,22 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
     }
   }
 
+  const requestedMember = input.match(/\badd\s+([a-z][a-z'-]*)(?:\s+too|\s+to\s+(?:the\s+)?(?:calendar\s+)?(?:event|appointment|meeting|dinner|party|practice))\b/i)?.[1]
+  if (requestedMember && Array.isArray(options.familyNames)) {
+    const member = options.familyNames.find((name) => name.toLowerCase() === requestedMember.toLowerCase())
+    if (member) {
+      return {
+        tool: 'update_event',
+        args: {
+          id: event.id,
+          expected_updated_at: event.updated_at,
+          members_add: [member],
+        },
+        event,
+      }
+    }
+  }
+
   const relativeDays = input.match(/\b(?:back|earlier)\s+(one|two|three|four|five|six|seven|\d+)\s+days?\b/i)
   if (relativeDays && /\b(?:move|shift|push|reschedule)\b/i.test(input)) {
     const amount = NUMBER_WORDS.get(relativeDays[1].toLowerCase()) ?? Number(relativeDays[1])
@@ -126,17 +148,24 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
     }
   }
 
-  const requestedTime = input.match(/\b(?:to|at)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i)
-  if (requestedTime && /\b(?:move|make|change|reschedule|shift)\b/i.test(input)) {
-    let hour = Number(requestedTime[1])
+  const requestedTime = input.match(/\b(?:to|at)\s+(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?::(\d{2}))?\s*(am|pm|morning|afternoon|evening|night)?\b/i)
+  if (requestedTime && /\b(?:actually|instead|move|make|change|reschedule|shift)\b/i.test(input)) {
+    let hour = NUMBER_WORDS.get(requestedTime[1].toLowerCase()) ?? Number(requestedTime[1])
     const minute = Number(requestedTime[2] ?? 0)
-    if (requestedTime[3].toLowerCase() === 'pm' && hour !== 12) hour += 12
-    if (requestedTime[3].toLowerCase() === 'am' && hour === 12) hour = 0
+    const period = requestedTime[3]?.toLowerCase()
+    const originalLocalHour = localHour(event.start_time, options.utcOffset)
+    const inferredPm = !period && originalLocalHour >= 12
+    if ((period === 'pm' || ['afternoon', 'evening', 'night'].includes(period) || inferredPm) && hour !== 12) hour += 12
+    if ((period === 'am' || period === 'morning') && hour === 12) hour = 0
     const weekdayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
     const requestedWeekday = weekdayNames.findIndex((day) => new RegExp(`\\b${day}\\b`, 'i').test(input))
     const start = new Date(event.start_time)
     if (requestedWeekday >= 0) {
-      let daysAhead = requestedWeekday - localWeekday(event.start_time, options.utcOffset)
+      const correctionReference = options.now instanceof Date && /\b(?:actually|instead)\b/i.test(input)
+        ? options.now
+        : start
+      start.setTime(correctionReference.getTime())
+      let daysAhead = requestedWeekday - localWeekday(correctionReference.toISOString(), options.utcOffset)
       if (daysAhead < 0 || (daysAhead === 0 && /\bnext\s+(?:sun|mon|tue|wed|thu|fri|sat)/i.test(input))) daysAhead += 7
       start.setUTCDate(start.getUTCDate() + daysAhead)
     }
@@ -152,7 +181,14 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
       hour,
       minute,
     ) - offset * 60000)
-    const duration = durationMs(event)
+    const durationMatch = input.match(/\bfor\s+(\d+|one|two|three|four|five|six|seven|eight|nine)\s+(hours?|minutes?)\b/i)
+    const durationAmount = durationMatch
+      ? NUMBER_WORDS.get(durationMatch[1].toLowerCase()) ?? Number(durationMatch[1])
+      : null
+    const requestedDuration = durationMatch && Number.isFinite(durationAmount)
+      ? durationAmount * (/^hour/i.test(durationMatch[2]) ? 60 * 60000 : 60000)
+      : null
+    const duration = requestedDuration ?? durationMs(event)
     if (duration == null) return null
     const candidate = { start: movedStart.toISOString(), end: new Date(movedStart.getTime() + duration).toISOString() }
     const conflicts = overlaps(candidate, events, event.id)
@@ -213,6 +249,31 @@ export function resolveClarifiedCalendarCreate(previousText, text, options = {})
 export function resolvePendingCalendarCorrection(text, pendingAction, options = {}) {
   if (pendingAction?.tool !== 'create_event') return null
   const input = String(text ?? '').replace(/\s+/g, ' ').trim()
+  const clarifiedMemberName = input.match(/\b(?:mom|mother|dad|father|grandma|grandmother|grandpa|grandfather)\s+is\s+([a-z][a-z'-]*)\b/i)?.[1]
+  const clarifiedMember = clarifiedMemberName && Array.isArray(options.familyNames)
+    ? options.familyNames.find((name) => name.toLowerCase() === clarifiedMemberName.toLowerCase())
+    : null
+  if (clarifiedMember) {
+    const oldStart = Date.parse(pendingAction.args?.start)
+    const oldEnd = Date.parse(pendingAction.args?.end)
+    const requestedDuration = /\b(?:an?\s+)?hour and a half\b/i.test(input)
+      ? 90 * 60000
+      : null
+    const duration = requestedDuration ??
+      (Number.isFinite(oldStart) && Number.isFinite(oldEnd) && oldEnd > oldStart
+        ? oldEnd - oldStart
+        : 60 * 60000)
+    return {
+      tool: 'create_event',
+      args: {
+        ...pendingAction.args,
+        members: [...new Set([...(pendingAction.args?.members ?? []), clarifiedMember])],
+        ...(Number.isFinite(oldStart)
+          ? { end: new Date(oldStart + duration).toISOString() }
+          : {}),
+      },
+    }
+  }
   if (!/(?:\b(?:actually|instead|rather|make that|change that|move that)\b|^(?:no|wait)\b)/i.test(input)) return null
   const weekdayMatch = input.match(/\b(sun(?:day)?|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?)\b/i)
   const timeMatch = input.match(/\b(\d{1,2})(?::(\d{2}))?\s*(?:(am|pm)|(?:in\s+the\s+)?(morning|afternoon|evening|night))\b/i)

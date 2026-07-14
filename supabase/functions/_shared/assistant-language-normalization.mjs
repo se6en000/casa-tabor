@@ -6,6 +6,7 @@ const COMMON_SPEECH_FORMS = Object.freeze([
   [/\bcalender\b|\bcalandar\b/g, 'calendar'],
   [/\btomoro\b|\btommorow\b/g, 'tomorrow'],
   [/\bthurs day\b/g, 'thursday'],
+  [/\bfry day\b/g, 'friday'],
   [/\bgrosery\b|\bgrossery\b/g, 'grocery'],
   [/\bshoping\b/g, 'shopping'],
   [/\breceipe\b|\brecipie\b/g, 'recipe'],

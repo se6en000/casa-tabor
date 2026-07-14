@@ -37,14 +37,15 @@ test('agent write endpoint checks duplicates and emits proposal telemetry', () =
   assert.match(endpoint, /lane: 'agent_write'/)
 })
 
-test('active exact updates narrow planner context without weakening policy context', () => {
+test('active exact updates use semantic resolution without weakening policy context', () => {
   assert.match(endpoint, /activeAuthoritativeEntity/)
   assert.match(endpoint, /planningEntities/)
   assert.match(endpoint, /authoritativeEntities: planningEntities/)
   assert.match(endpoint, /authoritativeEntities,\n\s+duplicateCandidates/)
-  assert.match(endpoint, /repairInvalidCalendarMoveDuration/)
-  assert.match(endpoint, /alignCalendarMoveToRequestedTime/)
-  assert.match(endpoint, /calendarRequestedTime/)
+  assert.match(endpoint, /resolveCalendarSemanticTurn/)
+  assert.doesNotMatch(endpoint, /repairInvalidCalendarMoveDuration/)
+  assert.doesNotMatch(endpoint, /alignCalendarMoveToRequestedTime/)
+  assert.doesNotMatch(endpoint, /calendarRequestedTime/)
 })
 
 test('pending legacy confirmation cards are normalized for agent corrections', () => {

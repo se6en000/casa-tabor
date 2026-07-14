@@ -1,3 +1,5 @@
+import { resolveCalendarSemanticTurn } from './assistant-calendar-agent.mjs'
+
 const STATE_TTL_MS = 30 * 60 * 1000
 
 export function normalizeConversationState(value, now = Date.now()) {
@@ -13,6 +15,41 @@ export function normalizeConversationState(value, now = Date.now()) {
       activeEntityType: 'grocery_item',
       activeGroceryItemId,
       expectedFollowUp: 'grocery_follow_up',
+      establishedAt: new Date(establishedAt).toISOString(),
+    }
+  }
+  if (value.activeEntityType === 'calendar_clarification') {
+    const candidates = Array.isArray(value.candidateEvents)
+      ? value.candidateEvents.slice(0, 6).flatMap((candidate) => {
+          const id = typeof candidate?.id === 'string' ? candidate.id.trim() : ''
+          if (!id) return []
+          return [{
+            id,
+            title: typeof candidate.title === 'string' ? candidate.title : 'Calendar event',
+            start: typeof candidate.start === 'string' ? candidate.start : null,
+            version: typeof candidate.version === 'string' ? candidate.version : null,
+          }]
+        })
+      : []
+    const pendingMutation = value.pendingMutation
+    if (
+      candidates.length < 2 ||
+      !['update_event', 'delete_event'].includes(pendingMutation?.tool) ||
+      !pendingMutation.args ||
+      typeof pendingMutation.args !== 'object' ||
+      Array.isArray(pendingMutation.args)
+    ) return null
+    return {
+      activeEntityType: 'calendar_clarification',
+      candidateEvents: candidates,
+      pendingMutation: {
+        tool: pendingMutation.tool,
+        args: structuredClone(pendingMutation.args),
+        ...(pendingMutation.semanticTurn
+          ? { semanticTurn: structuredClone(pendingMutation.semanticTurn) }
+          : {}),
+      },
+      expectedFollowUp: 'calendar_clarification',
       establishedAt: new Date(establishedAt).toISOString(),
     }
   }
@@ -44,6 +81,94 @@ export function eventConversationState(event, now = new Date()) {
     activeEventUpdatedAt: event.updated_at ?? null,
     expectedFollowUp: 'event_follow_up',
     establishedAt: now.toISOString(),
+  }
+}
+
+export function calendarClarificationConversationState(candidates, pendingMutation, now = new Date()) {
+  return {
+    activeEntityType: 'calendar_clarification',
+    candidateEvents: candidates.slice(0, 6).map((candidate) => ({
+      id: candidate.id,
+      title: candidate.title ?? 'Calendar event',
+      start: candidate.start ?? candidate.start_time ?? null,
+      version: candidate.version ?? candidate.updated_at ?? null,
+    })),
+    pendingMutation: {
+      tool: pendingMutation.tool,
+      args: structuredClone(pendingMutation.args ?? {}),
+      ...(pendingMutation.semanticTurn
+        ? { semanticTurn: structuredClone(pendingMutation.semanticTurn) }
+        : {}),
+    },
+    expectedFollowUp: 'calendar_clarification',
+    establishedAt: now.toISOString(),
+  }
+}
+
+export function resolveCalendarClarificationSelection(text, state, events, options = {}) {
+  if (state?.activeEntityType !== 'calendar_clarification') return null
+  const input = String(text ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
+  const candidates = state.candidateEvents
+    .map((candidate) => events.find((event) => event.id === candidate.id))
+    .filter(Boolean)
+  if (candidates.length === 0) {
+    return { text: 'Those calendar choices are no longer available. Please name the event again.' }
+  }
+
+  let selectedIndex = null
+  if (/\b(?:first|1st)\b/.test(input)) selectedIndex = 0
+  else if (/\b(?:second|2nd)\b/.test(input)) selectedIndex = 1
+  else if (/\b(?:third|3rd)\b/.test(input)) selectedIndex = 2
+  else if (/\b(?:last|latest)\b/.test(input)) selectedIndex = candidates.length - 1
+  else if (/\b(?:earlier|morning)\b/.test(input)) selectedIndex = 0
+  else if (/\b(?:later|afternoon|evening|night)\b/.test(input)) selectedIndex = candidates.length - 1
+
+  const selected = selectedIndex == null ? null : candidates[selectedIndex]
+  if (!selected) return null
+  const pending = state.pendingMutation
+  if (pending.semanticTurn) {
+    const result = resolveCalendarSemanticTurn({
+      ...pending.semanticTurn,
+      targetEntityId: selected.id,
+      candidateEntityIds: [],
+    }, {
+      currentDate: options.currentDate ?? new Date().toISOString(),
+      utcOffset: options.utcOffset,
+      activeEntity: { type: 'event', id: selected.id },
+      authoritativeEntities: events.map((event) => ({
+        type: 'event',
+        id: event.id,
+        title: event.title,
+        version: event.updated_at,
+        start: event.start_time,
+        end: event.end_time,
+        allDay: event.all_day === true,
+      })),
+    })
+    if (result.kind !== 'tool') {
+      return { text: 'I could not safely prepare that change. Please describe it again.' }
+    }
+    return {
+      tool: result.toolName === 'calendar.delete' ? 'delete_event' : 'update_event',
+      args: result.args,
+      event: selected,
+    }
+  }
+  if (pending.tool === 'delete_event') {
+    return {
+      tool: 'delete_event',
+      args: { id: selected.id, title: selected.title },
+      event: selected,
+    }
+  }
+  return {
+    tool: 'update_event',
+    args: {
+      ...pending.args,
+      id: selected.id,
+      expected_updated_at: selected.updated_at,
+    },
+    event: selected,
   }
 }
 

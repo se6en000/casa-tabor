@@ -483,12 +483,18 @@ export function useAIAssistant(ctx: AssistantContext) {
       syncStatus?: NonNullable<AIMessage['toolAction']>['syncStatus']
       undoStatus?: NonNullable<AIMessage['toolAction']>['undoStatus']
       undoErrorMsg?: string
+      conversationState?: AIMessage['conversationState']
     }
   ) => {
+    const { conversationState, ...toolActionExtra } = extra ?? {}
     setMessages(prev => {
       const updated = prev.map(m =>
         m.id === messageId && m.toolAction
-          ? { ...m, toolAction: { ...m.toolAction, status, ...extra } }
+          ? {
+              ...m,
+              conversationState: conversationState ?? m.conversationState,
+              toolAction: { ...m.toolAction, status, ...toolActionExtra },
+            }
           : m
       )
       if (sessionRef.current) saveMessages(sessionRef.current.id, updated)

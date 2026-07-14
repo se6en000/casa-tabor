@@ -1,10 +1,11 @@
 import { AGENT_TOOL_DEFINITIONS } from './assistant-agent-tools.mjs'
 
-export const AGENT_CONTRACT_VERSION = 'bounded-agent-v1'
+export const AGENT_CONTRACT_VERSION = 'bounded-agent-v2'
 
 export const AGENT_RESPONSIBILITIES = Object.freeze({
   planner: Object.freeze([
     'interpret_language',
+    'emit_semantic_deltas',
     'resolve_conversation_references',
     'choose_tools',
     'propose_tool_arguments',
@@ -14,6 +15,7 @@ export const AGENT_RESPONSIBILITIES = Object.freeze({
   policy: Object.freeze([
     'authorize_household_scope',
     'validate_tool_arguments',
+    'resolve_calendar_time_and_identity',
     'enforce_confirmation',
     'prevent_duplicates',
     'protect_stale_writes',
@@ -45,6 +47,7 @@ export const AGENT_ACCEPTANCE_THRESHOLDS = Object.freeze({
   duplicateWriteRate: 0,
   unverifiedSuccessClaimRate: 0,
   fixtureCleanupRate: 1,
+  consecutiveProductionPasses: 10,
 })
 
 export const TARGET_AGENT_TOOLS = Object.freeze(

@@ -20,6 +20,27 @@ export interface AIMessage {
         expectedFollowUp: 'grocery_follow_up'
         establishedAt: string
       }
+    | {
+        activeEntityType: 'calendar_clarification'
+        candidateEvents: Array<{
+          id: string
+          title: string
+          start: string | null
+          version: string | null
+        }>
+        pendingMutation: {
+          tool: 'update_event' | 'delete_event'
+          args: Record<string, unknown>
+          semanticTurn?: Record<string, unknown>
+        }
+        expectedFollowUp: 'calendar_clarification'
+        establishedAt: string
+      }
+    | {
+        activeEntityType: 'none'
+        expectedFollowUp: 'none'
+        establishedAt: string
+      }
   toolAction?: {
     tool: string
     args: Record<string, unknown>
