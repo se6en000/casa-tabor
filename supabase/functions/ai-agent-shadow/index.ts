@@ -4,6 +4,7 @@ import { evaluateAgentToolCall } from '../_shared/assistant-agent-policy.mjs'
 import {
   agentShadowTelemetry,
   buildAgentShadowRequest,
+  isAgentPlanAllowedByRequest,
   parseAgentShadowResponse,
 } from '../_shared/assistant-agent-shadow.mjs'
 import { getAgentTool } from '../_shared/assistant-agent-tools.mjs'
@@ -64,7 +65,10 @@ Deno.serve(async (req) => {
       throw new Error(`Gemini shadow planner failed with status ${response.status}`)
     }
     const providerPayload = await response.json()
-    const plan = parseAgentShadowResponse(providerPayload)
+    const parsedPlan = parseAgentShadowResponse(providerPayload)
+    const plan = isAgentPlanAllowedByRequest(parsedPlan, requestBody)
+      ? parsedPlan
+      : { kind: 'error', code: 'undeclared_tool' }
     const tool = plan.kind === 'tool' ? getAgentTool(plan.toolName) : null
     const policy = plan.kind === 'tool'
       ? evaluateAgentToolCall({
@@ -93,6 +97,7 @@ Deno.serve(async (req) => {
       toolEffect: tool?.effect ?? null,
       policyDecision: policy?.decision ?? null,
       policyCode: policy?.code ?? null,
+      policyErrors: Array.isArray(policy?.errors) ? policy.errors : [],
       elapsedMs: Date.now() - startedAt,
       inputTokens: integer(usage.promptTokenCount),
       outputTokens: integer(usage.candidatesTokenCount),

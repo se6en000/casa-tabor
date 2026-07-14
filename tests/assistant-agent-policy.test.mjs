@@ -195,3 +195,97 @@ test('calendar writes reject model timestamps that ignore household UTC offset',
   })
   assert.equal(householdOffset.decision, 'execute')
 })
+
+test('grocery updates require one exact versioned change and confirmation', () => {
+  const target = {
+    type: 'grocery_item',
+    id: 'milk-1',
+    version: 'v1',
+    name: 'Milk',
+    quantity: '1',
+    unit: 'gallon',
+    checked: false,
+  }
+  const quantityUpdate = {
+    toolName: 'grocery.update_item',
+    actionId: 'grocery-update-1',
+    idempotencyKey: 'turn-1:grocery-update-1',
+    args: {
+      id: 'milk-1',
+      expected_updated_at: 'v1',
+      quantity: '2',
+      unit: 'gallons',
+    },
+    authoritativeEntities: [target],
+  }
+  assert.equal(evaluate(quantityUpdate).decision, 'confirm')
+  assert.equal(evaluate({
+    ...quantityUpdate,
+    confirmedActionId: 'grocery-update-1',
+  }).decision, 'execute')
+  assert.equal(evaluate({
+    ...quantityUpdate,
+    authoritativeEntities: [{ ...target, version: 'v2' }],
+  }).code, 'stale_authoritative_target')
+
+  const checkUpdate = evaluate({
+    ...quantityUpdate,
+    args: {
+      id: 'milk-1',
+      expected_updated_at: 'v1',
+      checked: true,
+    },
+  })
+  assert.equal(checkUpdate.decision, 'confirm')
+})
+
+test('grocery update policy rejects mixed, empty, and no-op changes', () => {
+  const target = {
+    type: 'grocery_item',
+    id: 'milk-1',
+    version: 'v1',
+    quantity: '1',
+    unit: 'gallon',
+    checked: false,
+  }
+  const base = {
+    toolName: 'grocery.update_item',
+    actionId: 'grocery-update-1',
+    idempotencyKey: 'turn-1:grocery-update-1',
+    authoritativeEntities: [target],
+  }
+  assert.equal(evaluate({
+    ...base,
+    args: { id: 'milk-1', expected_updated_at: 'v1' },
+  }).code, 'grocery_update_requires_one_change')
+  assert.equal(evaluate({
+    ...base,
+    args: {
+      id: 'milk-1',
+      expected_updated_at: 'v1',
+      quantity: '2',
+      checked: true,
+    },
+  }).code, 'grocery_update_requires_one_change')
+  assert.equal(evaluate({
+    ...base,
+    args: { id: 'milk-1', expected_updated_at: 'v1', quantity: '   ' },
+  }).code, 'invalid_grocery_quantity')
+  assert.equal(evaluate({
+    ...base,
+    args: { id: 'milk-1', expected_updated_at: 'v1', unit: 'gallons' },
+  }).code, 'grocery_unit_requires_quantity')
+  assert.equal(evaluate({
+    ...base,
+    args: { id: 'milk-1', expected_updated_at: 'v1', checked: false },
+  }).code, 'grocery_update_no_change')
+  assert.equal(evaluate({
+    ...base,
+    args: {
+      id: 'milk-1',
+      expected_updated_at: 'v1',
+      quantity: '1',
+      unit: 'gallon',
+    },
+  }).code, 'grocery_update_no_change')
+})

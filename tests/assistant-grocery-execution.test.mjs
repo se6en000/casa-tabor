@@ -13,6 +13,13 @@ test('grocery mutations mark Casa as source and preserve iOS deletion tombstones
   assert.doesNotMatch(executeSource, /from\('grocery_items'\)\.delete\(\)\.eq\('checked', true\)/)
 })
 
+test('agent grocery updates enforce proposed versions and preserve structured units', () => {
+  assert.match(executeSource, /expected_updated_at/)
+  assert.match(executeSource, /query = query\.eq\('updated_at', expectedUpdatedAt\)/)
+  assert.match(executeSource, /\.\.\.\(hasUnit \? \{ unit \} : \{\}\)/)
+  assert.match(executeSource, /Grocery item changed since this action was proposed/)
+})
+
 test('grocery semantic dispatch precedes model prompt execution', () => {
   const dispatch = assistantSource.indexOf("server_ai_assistant_grocery_semantic_dispatch")
   const modelCall = assistantSource.indexOf('const rawResult = await callGeminiWithTools(history)')

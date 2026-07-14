@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   agentShadowTelemetry,
   buildAgentShadowRequest,
+  isAgentPlanAllowedByRequest,
   parseAgentShadowResponse,
 } from '../supabase/functions/_shared/assistant-agent-shadow.mjs'
 
@@ -43,6 +44,65 @@ test('completed clear conflict checks cannot loop', () => {
         result: { conflicts: [], count: 0 },
       }],
     },
+  })
+
+  test('pending actions expose reads and only the same mutation capability', () => {
+    const request = buildAgentShadowRequest({
+      messages: [{ role: 'user', content: 'Actually, Saturday morning instead.' }],
+      context: {
+        pendingAction: {
+          actionId: 'pending-create-1',
+          toolName: 'calendar.create',
+          args: {
+            title: 'Swim practice',
+            start: '2026-07-17T16:00:00-04:00',
+            end: '2026-07-17T17:00:00-04:00',
+          },
+        },
+      },
+    })
+    const names = request.tools[0].function_declarations.map((tool) => tool.name)
+    assert.ok(names.includes('calendar_create'))
+    assert.ok(names.includes('calendar_check_conflicts'))
+    assert.ok(!names.includes('calendar_update'))
+    assert.ok(!names.includes('grocery_add_items'))
+  })
+
+  test('plans cannot invoke capabilities omitted from the current request', () => {
+    const request = buildAgentShadowRequest({
+      messages: [{ role: 'user', content: 'Schedule swim practice Friday at 4 PM.' }],
+      context: {
+        completedToolCalls: [{
+          toolName: 'calendar.check_conflicts',
+          result: { conflicts: [], count: 0 },
+        }],
+      },
+    })
+    assert.equal(isAgentPlanAllowedByRequest({
+      kind: 'tool',
+      toolName: 'calendar.check_conflicts',
+      args: {},
+    }, request), false)
+    assert.equal(isAgentPlanAllowedByRequest({
+      kind: 'tool',
+      toolName: 'calendar.create',
+      args: {},
+    }, request), true)
+
+    const writeRequest = buildAgentShadowRequest({
+      messages: [{ role: 'user', content: 'Check off milk.' }],
+      plannerMode: 'additive_write',
+    })
+    assert.equal(isAgentPlanAllowedByRequest({
+      kind: 'tool',
+      toolName: 'grocery.update_item',
+      args: {},
+    }, writeRequest), true)
+    assert.equal(isAgentPlanAllowedByRequest({
+      kind: 'tool',
+      toolName: 'grocery.remove_item',
+      args: {},
+    }, writeRequest), false)
   })
   const names = request.tools[0].function_declarations.map((tool) => tool.name)
   assert.ok(!names.includes('calendar_check_conflicts'))
@@ -129,6 +189,35 @@ test('authoritative read planning exposes only reads and typed deferral', () => 
       end: '2026-07-17T00:00:00-04:00',
     },
   })
+
+  assert.deepEqual(parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'assistant_write_request',
+            args: {
+              requested_effect: 'exact_update',
+              tool_name: 'grocery.update_item',
+              tool_args: {
+                id: 'milk-1',
+                expected_updated_at: 'v1',
+                checked: true,
+              },
+            },
+          },
+        }],
+      },
+    }],
+  }), {
+    kind: 'tool',
+    toolName: 'grocery.update_item',
+    args: {
+      id: 'milk-1',
+      expected_updated_at: 'v1',
+      checked: true,
+    },
+  })
 })
 
 test('write proposal planning exposes additive and exact updates but no destructive tools', () => {
@@ -139,6 +228,13 @@ test('write proposal planning exposes additive and exact updates but no destruct
   const declarations = request.tools[0].function_declarations
   assert.equal(request.tool_config.function_calling_config.mode, 'ANY')
   assert.deepEqual(declarations.map((declaration) => declaration.name), ['assistant_write_request'])
+  assert.ok(
+    declarations[0].parameters.properties.tool_name.enum.includes('grocery.update_item'),
+  )
+  assert.match(
+    request.system_instruction.parts[0].text,
+    /ACTIVE ENTITY grocery_item is an exact authoritative target/,
+  )
 
   assert.deepEqual(parseAgentShadowResponse({
     candidates: [{
@@ -222,6 +318,7 @@ test('shadow telemetry contains no raw conversation text or tool arguments', () 
       toolEffect: 'write',
       policyDecision: 'execute',
       policyCode: 'policy_approved',
+      policyErrors: ['args.quantity:expected_string'],
       elapsedMs: 321,
       userTextHash: 'abc123',
     },
@@ -229,5 +326,6 @@ test('shadow telemetry contains no raw conversation text or tool arguments', () 
   const serialized = JSON.stringify(telemetry)
   assert.doesNotMatch(serialized, /Private title/)
   assert.ok(!('args' in telemetry))
+  assert.deepEqual(telemetry.policy_errors, ['args.quantity:expected_string'])
   assert.equal(telemetry.user_text_hash, 'abc123')
 })

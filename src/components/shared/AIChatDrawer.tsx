@@ -1604,7 +1604,10 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
     )
   }
   if (tool === 'update_grocery_item_quantity') {
-    return <p className="text-caption text-casa-muted">Set quantity to {String(args.quantity ?? '')}</p>
+    const amount = [args.quantity, args.unit].filter((value) =>
+      typeof value === 'string' && value.trim().length > 0
+    ).join(' ')
+    return <p className="text-caption text-casa-muted">Set quantity to {amount}</p>
   }
   if (tool === 'clear_checked_grocery_items') {
     return (

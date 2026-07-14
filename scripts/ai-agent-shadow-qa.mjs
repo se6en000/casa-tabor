@@ -36,7 +36,11 @@ const afternoonEvent = {
 const groceryItem = {
   type: 'grocery_item',
   id: '33333333-3333-4333-8333-333333333333',
+  version: '2026-07-14T10:00:00.000Z',
   name: 'Milk',
+  quantity: '1',
+  unit: 'gallon',
+  checked: false,
 }
 const recipe = {
   type: 'recipe',

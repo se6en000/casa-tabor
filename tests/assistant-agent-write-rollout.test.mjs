@@ -18,14 +18,24 @@ test('additive agent writes are feature flagged and sampled', () => {
 test('write rollout adopts only allowlisted proposal actions', () => {
   assert.match(assistant, /agentWriteData\?\.supported === true/)
   assert.match(assistant, /agentWriteData\.type === 'tool_action'/)
-  assert.match(assistant, /\['create_event', 'update_event', 'add_grocery_items'\]\.includes/)
+  assert.match(assistant, /'check_grocery_item'/)
+  assert.match(assistant, /'update_grocery_item_quantity'/)
   assert.match(assistant, /'agent\.write\.update'/)
   assert.match(assistant, /'agent\.write\.additive'/)
   assert.match(assistant, /server_agent_write_adopted/)
 })
 
+test('write rollout forwards exact active grocery context and versions', () => {
+  assert.match(assistant, /context\?\.page === 'grocery'/)
+  assert.match(assistant, /activeConversationGroceryItem/)
+  assert.match(assistant, /activeGroceryItemId/)
+  assert.match(assistant, /version: activeConversationGroceryItem\.updated_at/)
+  assert.match(assistant, /notes, updated_at/)
+})
+
 test('write rollout retains legacy fallback and isolates read sampling', () => {
   assert.match(assistant, /server_agent_write_fallback/)
+  assert.match(assistant, /agentWriteData\?\.code/)
   assert.match(assistant, /agent_write_timeout/)
   assert.match(assistant, /shouldRunAgentRead = !shouldRunAgentWrite/)
   assert.match(assistant, /shouldRunAgentShadow = !shouldRunAgentWrite && !shouldRunAgentRead/)

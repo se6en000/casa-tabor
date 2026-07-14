@@ -50,5 +50,6 @@ test('Gemini declarations are generated from provider-neutral schemas', () => {
 test('mutation capabilities require authoritative identifiers and versions where available', () => {
   assert.deepEqual(getAgentTool('calendar.update').inputSchema.required, ['id', 'expected_updated_at'])
   assert.deepEqual(getAgentTool('calendar.delete').inputSchema.required, ['id', 'expected_updated_at', 'title'])
+  assert.deepEqual(getAgentTool('grocery.update_item').inputSchema.required, ['id', 'expected_updated_at'])
   assert.deepEqual(getAgentTool('grocery.remove_item').inputSchema.required, ['id', 'name'])
 })

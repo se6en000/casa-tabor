@@ -788,15 +788,18 @@ Deno.serve(async (req) => {
     }
 
     if (tool === 'check_grocery_item') {
-      const { data, error } = await sb
+      const expectedUpdatedAt = normalizeOptionalText(args.expected_updated_at, 80)
+      let query = sb
         .from('grocery_items')
         .update({ checked: args.checked, last_modified_source: 'casa' })
         .eq('id', args.item_id)
         .is('deleted_at', null)
-        .select('id, name')
+      if (expectedUpdatedAt) query = query.eq('updated_at', expectedUpdatedAt)
+      const { data, error } = await query
+        .select('id, name, updated_at')
         .maybeSingle()
       if (error) throw new Error(error.message)
-      if (!data) throw new Error('Grocery item not found')
+      if (!data) throw new Error(expectedUpdatedAt ? 'Grocery item changed since this action was proposed' : 'Grocery item not found')
       return new Response(JSON.stringify({ success: true, item: data, external_sync_status: 'asynchronous', correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
@@ -820,16 +823,25 @@ Deno.serve(async (req) => {
     if (tool === 'update_grocery_item_quantity') {
       const quantity = normalizeOptionalText(args.quantity, 60)
       if (!quantity) throw new Error('Grocery quantity is required')
-      const { data, error } = await sb
+      const expectedUpdatedAt = normalizeOptionalText(args.expected_updated_at, 80)
+      const hasUnit = Object.prototype.hasOwnProperty.call(args, 'unit')
+      const unit = normalizeOptionalText(args.unit, 60)
+      let query = sb
         .from('grocery_items')
-        .update({ quantity, last_modified_source: 'casa' })
+        .update({
+          quantity,
+          ...(hasUnit ? { unit } : {}),
+          last_modified_source: 'casa',
+        })
         .eq('id', args.item_id)
         .eq('checked', false)
         .is('deleted_at', null)
-        .select('id, name, quantity')
+      if (expectedUpdatedAt) query = query.eq('updated_at', expectedUpdatedAt)
+      const { data, error } = await query
+        .select('id, name, quantity, unit, updated_at')
         .maybeSingle()
       if (error) throw new Error(error.message)
-      if (!data) throw new Error('Grocery item not found')
+      if (!data) throw new Error(expectedUpdatedAt ? 'Grocery item changed since this action was proposed' : 'Grocery item not found')
       return new Response(JSON.stringify({ success: true, item: data, external_sync_status: 'asynchronous', correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })

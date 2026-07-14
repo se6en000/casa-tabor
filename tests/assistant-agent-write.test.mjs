@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  adaptAgentGroceryUpdate,
   findAgentCalendarDuplicates,
   isAgentCalendarUpdateTargetUnambiguous,
+  isAgentGroceryUpdateTargetUnambiguous,
 } from '../supabase/functions/_shared/assistant-agent-write.mjs'
 
 test('calendar duplicate matching ignores model-derived duration differences', () => {
@@ -72,4 +74,61 @@ test('calendar updates require an active target or one unique authoritative titl
     { id: 'missing' },
     null,
   ), false)
+})
+
+test('grocery updates require an active target or one unique authoritative name', () => {
+  const entities = [
+    { type: 'grocery_item', id: 'milk-1', name: 'Milk' },
+    { type: 'grocery_item', id: 'milk-2', name: ' milk ' },
+    { type: 'grocery_item', id: 'eggs-1', name: 'Eggs' },
+  ]
+  assert.equal(isAgentGroceryUpdateTargetUnambiguous(
+    entities,
+    { id: 'milk-1' },
+    null,
+  ), false)
+  assert.equal(isAgentGroceryUpdateTargetUnambiguous(
+    entities,
+    { id: 'milk-1' },
+    { type: 'grocery_item', id: 'milk-1' },
+  ), true)
+  assert.equal(isAgentGroceryUpdateTargetUnambiguous(
+    entities,
+    { id: 'eggs-1' },
+    null,
+  ), true)
+})
+
+test('grocery updates adapt to trusted legacy quantity and check actions', () => {
+  assert.deepEqual(adaptAgentGroceryUpdate({
+    id: 'milk-1',
+    expected_updated_at: 'v1',
+    checked: true,
+  }), {
+    tool: 'check_grocery_item',
+    args: {
+      item_id: 'milk-1',
+      expected_updated_at: 'v1',
+      checked: true,
+    },
+  })
+  assert.deepEqual(adaptAgentGroceryUpdate({
+    id: 'milk-1',
+    expected_updated_at: 'v1',
+    quantity: '2',
+    unit: 'gallons',
+  }), {
+    tool: 'update_grocery_item_quantity',
+    args: {
+      item_id: 'milk-1',
+      expected_updated_at: 'v1',
+      quantity: '2',
+      unit: 'gallons',
+    },
+  })
+  assert.equal(adaptAgentGroceryUpdate({
+    id: 'milk-1',
+    checked: true,
+    quantity: '2',
+  }), null)
 })

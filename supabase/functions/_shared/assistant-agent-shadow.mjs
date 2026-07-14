@@ -7,7 +7,12 @@ import {
 export const AGENT_SHADOW_VERSION = 'agent-shadow-v1'
 const READ_ROUTE_FUNCTION = 'assistant_read_request'
 const WRITE_ROUTE_FUNCTION = 'assistant_write_request'
-const PROPOSAL_WRITE_TOOLS = new Set(['calendar.create', 'calendar.update', 'grocery.add_items'])
+const PROPOSAL_WRITE_TOOLS = new Set([
+  'calendar.create',
+  'calendar.update',
+  'grocery.add_items',
+  'grocery.update_item',
+])
 
 export function buildAgentShadowRequest(input) {
   const messages = normalizeMessages(input?.messages)
@@ -15,6 +20,9 @@ export function buildAgentShadowRequest(input) {
   const context = normalizeContext(input?.context)
   const authoritativeReadMode = input?.plannerMode === 'authoritative_read'
   const additiveWriteMode = input?.plannerMode === 'additive_write'
+  const pendingToolName = typeof context.pendingAction?.toolName === 'string'
+    ? context.pendingAction.toolName
+    : null
   const conflictCheckComplete = context.completedToolCalls.some((call) =>
     call?.toolName === 'calendar.check_conflicts' &&
     call?.result?.count === 0
@@ -24,6 +32,7 @@ export function buildAgentShadowRequest(input) {
     : additiveWriteMode
       ? [buildAdditiveWriteRouteDeclaration()]
     : AGENT_TOOL_DEFINITIONS
+        .filter((tool) => !pendingToolName || tool.effect === 'read' || tool.name === pendingToolName)
         .filter((tool) => !(conflictCheckComplete && tool.name === 'calendar.check_conflicts'))
         .map(toGeminiFunctionDeclaration)
   return {
@@ -86,7 +95,7 @@ export function parseAgentShadowResponse(payload) {
       const validPair = requestedEffect === 'additive_write'
           ? ['calendar.create', 'grocery.add_items'].includes(tool?.name)
           : requestedEffect === 'exact_update'
-            ? tool?.name === 'calendar.update'
+            ? ['calendar.update', 'grocery.update_item'].includes(tool?.name)
             : false
       if (!validPair) {
           return {
@@ -126,6 +135,22 @@ export function parseAgentShadowResponse(payload) {
     : { kind: 'error', code: 'empty_response', finishReason: candidate?.finishReason ?? null }
 }
 
+export function isAgentPlanAllowedByRequest(plan, request) {
+  if (plan?.kind !== 'tool') return true
+  const declarations = request?.tools?.[0]?.function_declarations
+  if (!Array.isArray(declarations)) return false
+  for (const declaration of declarations) {
+    if ([READ_ROUTE_FUNCTION, WRITE_ROUTE_FUNCTION].includes(declaration?.name)) {
+      const toolNames = declaration?.parameters?.properties?.tool_name?.enum
+      if (Array.isArray(toolNames) && toolNames.includes(plan.toolName)) return true
+      continue
+    }
+    const definition = getAgentToolByGeminiName(declaration?.name)
+    if (definition?.name === plan.toolName) return true
+  }
+  return false
+}
+
 export function agentShadowTelemetry(plan, metadata = {}) {
   return {
     shadow_version: AGENT_SHADOW_VERSION,
@@ -136,6 +161,7 @@ export function agentShadowTelemetry(plan, metadata = {}) {
     tool_effect: metadata.toolEffect ?? null,
     policy_decision: metadata.policyDecision ?? null,
     policy_code: metadata.policyCode ?? null,
+    policy_errors: Array.isArray(metadata.policyErrors) ? metadata.policyErrors.slice(0, 8) : [],
     elapsed_ms: metadata.elapsedMs ?? null,
     input_tokens: metadata.inputTokens ?? 0,
     output_tokens: metadata.outputTokens ?? 0,
@@ -171,19 +197,23 @@ AUTHORITATIVE READ MODE:
 - Only when requested_effect is read, select one read tool and supply its arguments.
 ` : ''}
 ${additiveWriteMode ? `
-ADDITIVE WRITE MODE:
+BOUNDED WRITE MODE:
 - Call assistant_write_request exactly once and classify the user's ultimate requested outcome.
 - Set requested_effect to additive_write only for creating one calendar event or adding explicit grocery items.
-- Set requested_effect to exact_update only for changing one exact authoritative non-recurring calendar event.
-- Set requested_effect to other_write for grocery updates, check-offs, clears, removals, deletes, bulk changes, or any calendar update without one exact authoritative target.
+- Set requested_effect to exact_update only for changing one exact authoritative non-recurring calendar event, changing one exact grocery quantity, or checking off one exact grocery item.
+- Set requested_effect to other_write for grocery removals, clears, multi-item changes, unchecks, or any update without one exact authoritative target.
 - Set requested_effect to read for questions that do not change data.
 - Set requested_effect to unsupported for cooking actions or any capability outside this rollout.
 - Never convert an update or destructive request into a create/add action.
 - Only when requested_effect is additive_write, select calendar.create or grocery.add_items and supply grounded arguments.
-- Only when requested_effect is exact_update, select calendar.update and copy the exact ID and version from AUTHORITATIVE ENTITIES.
+- Only when requested_effect is exact_update, select calendar.update or grocery.update_item and copy the exact ID and version from AUTHORITATIVE ENTITIES.
 - For a calendar move, preserve the authoritative duration and include both replacement start and end.
 - Calendar start and end MUST use CURRENT UTC OFFSET exactly; never return Z/UTC timestamps for local household times.
-- If multiple events could match and ACTIVE ENTITY does not identify one exact event, classify as other_write so Casa can clarify.
+- For grocery.update_item, change exactly one dimension: either quantity (with optional unit) or checked=true. Never combine both in one proposal.
+- An ACTIVE ENTITY grocery_item is an exact authoritative target. Requests such as changing "it/that" to a quantity or checking "it/that" off MUST use requested_effect=exact_update and grocery.update_item with that entity's exact ID and version.
+- A named grocery item is also exact when AUTHORITATIVE ENTITIES contains only one item with that name.
+- Do not classify an exact quantity change or exact check-off as other_write. other_write is only for unsupported mutations or missing/ambiguous targets.
+- If multiple events or grocery items could match and ACTIVE ENTITY does not identify one exact entity, classify as other_write so Casa can clarify.
 - Do not invent missing titles, items, people, dates, times, quantities, or locations.
 ` : ''}
 
@@ -204,6 +234,7 @@ STATE RULES:
 - PENDING ACTION is a proposal, not a stored entity. A correction to it MUST call the same pending capability with revised arguments. For example, revise calendar.create with calendar.create, never calendar.update.
 - COMPLETED TOOL CALLS contain authoritative results already gathered during this turn. Continue the original user goal without repeating those reads.
 - A completed calendar.check_conflicts result with count 0 means the proposed time is clear; proceed to calendar.create or calendar.update and never check the same range again.
+- When that completed conflict result has count 0, calling calendar.check_conflicts again is forbidden and the function is no longer available. Continue to the requested calendar write.
 `
 }
 
@@ -251,7 +282,7 @@ function buildAdditiveWriteRouteDeclaration() {
   )
   return toGeminiFunctionDeclaration({
     name: 'assistant.write_request',
-    description: 'Classify the ultimate requested effect, then optionally propose one additive write.',
+    description: 'Classify the ultimate requested effect, then optionally propose one bounded write.',
     effect: 'write',
     inputSchema: {
       type: 'object',
@@ -265,13 +296,13 @@ function buildAdditiveWriteRouteDeclaration() {
         tool_name: {
           type: 'string',
           enum: additiveTools.map((tool) => tool.name),
-          description: 'Required only when requested_effect is additive_write.',
+          description: 'Required only when requested_effect is additive_write or exact_update.',
         },
         tool_args: {
           type: 'object',
           additionalProperties: false,
           properties: toolArgProperties,
-          description: 'Arguments for tool_name when requested_effect is additive_write.',
+          description: 'Arguments for tool_name when requested_effect is additive_write or exact_update.',
         },
       },
       required: ['requested_effect'],

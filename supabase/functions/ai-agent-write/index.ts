@@ -2,8 +2,10 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.mjs'
 import { evaluateAgentToolCall } from '../_shared/assistant-agent-policy.mjs'
 import {
+  adaptAgentGroceryUpdate,
   findAgentCalendarDuplicates,
   isAgentCalendarUpdateTargetUnambiguous,
+  isAgentGroceryUpdateTargetUnambiguous,
 } from '../_shared/assistant-agent-write.mjs'
 import { legacyToolNameFor } from '../_shared/assistant-agent-tools.mjs'
 
@@ -12,7 +14,12 @@ const CORS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
-const ALLOWED_TOOLS = new Set(['calendar.create', 'calendar.update', 'grocery.add_items'])
+const ALLOWED_TOOLS = new Set([
+  'calendar.create',
+  'calendar.update',
+  'grocery.add_items',
+  'grocery.update_item',
+])
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
@@ -50,16 +57,27 @@ Deno.serve(async (req) => {
         end: event.end_time,
         recurring: Boolean(event.recurrence_master_id || event.rrule),
       })),
-      ...groceryItems.map((item: { id?: string; name?: string }) => ({
+      ...groceryItems.map((item: {
+        id?: string
+        name?: string
+        updated_at?: string
+        quantity?: string
+        unit?: string
+        checked?: boolean
+      }) => ({
         type: 'grocery_item',
         id: item.id,
         name: item.name,
+        version: item.updated_at ?? null,
+        quantity: item.quantity ?? null,
+        unit: item.unit ?? null,
+        checked: item.checked ?? null,
       })),
     ].filter((entity) => typeof entity.id === 'string')
     const activeEntity = body?.context?.activeEntity
-    const activeAuthoritativeEntity = activeEntity?.type === 'event'
+    const activeAuthoritativeEntity = ['event', 'grocery_item'].includes(activeEntity?.type)
       ? authoritativeEntities.find((entity) =>
-          entity.type === 'event' && entity.id === activeEntity.id
+          entity.type === activeEntity.type && entity.id === activeEntity.id
         )
       : null
     const planningEntities = activeAuthoritativeEntity
@@ -88,7 +106,7 @@ Deno.serve(async (req) => {
     if (plan?.kind !== 'tool' || !ALLOWED_TOOLS.has(plan.toolName)) {
       return result({
         supported: false,
-        code: 'non_additive_write_plan',
+        code: 'unsupported_write_plan',
         planKind: plan?.kind ?? 'error',
         toolName: plan?.toolName ?? null,
       })
@@ -100,6 +118,21 @@ Deno.serve(async (req) => {
     if (
       plan.toolName === 'calendar.update' &&
       !isAgentCalendarUpdateTargetUnambiguous(
+        authoritativeEntities,
+        plan.args,
+        activeEntity,
+      )
+    ) {
+      return result({
+        supported: false,
+        code: 'ambiguous_update_target',
+        planKind: plan.kind,
+        toolName: plan.toolName,
+      })
+    }
+    if (
+      plan.toolName === 'grocery.update_item' &&
+      !isAgentGroceryUpdateTargetUnambiguous(
         authoritativeEntities,
         plan.args,
         activeEntity,
@@ -134,7 +167,9 @@ Deno.serve(async (req) => {
           )
         : [],
     })
-    const acceptedDecision = plan.toolName === 'calendar.update' ? 'confirm' : 'execute'
+    const acceptedDecision = ['calendar.update', 'grocery.update_item'].includes(plan.toolName)
+      ? 'confirm'
+      : 'execute'
     if (policy.decision !== acceptedDecision || policy.allowed !== true) {
       return result({
         supported: false,
@@ -145,13 +180,18 @@ Deno.serve(async (req) => {
       })
     }
 
-    const legacyTool = legacyToolNameFor(plan.toolName)
-    if (!legacyTool) return result({ supported: false, code: 'legacy_adapter_missing' })
+    const legacyAction = plan.toolName === 'grocery.update_item'
+      ? adaptAgentGroceryUpdate(plan.args)
+      : {
+          tool: legacyToolNameFor(plan.toolName),
+          args: plan.args,
+        }
+    if (!legacyAction?.tool) return result({ supported: false, code: 'legacy_adapter_missing' })
     return result({
       supported: true,
       type: 'tool_action',
-      tool: legacyTool,
-      args: plan.args,
+      tool: legacyAction.tool,
+      args: legacyAction.args,
       action_id: actionId,
       idempotency_key: `${correlationId}:${actionId}`,
       plan,

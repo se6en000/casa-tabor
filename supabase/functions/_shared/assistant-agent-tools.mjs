@@ -153,11 +153,12 @@ export const AGENT_TOOL_DEFINITIONS = Object.freeze([
     description: 'Update one exact grocery item quantity or checked state.',
     properties: {
       id: string('Exact grocery item UUID returned by grocery.get_list.'),
+      expected_updated_at: string('Authoritative version timestamp used for stale-write protection.'),
       quantity: string('Replacement quantity text.'),
-      unit: string('Replacement unit text.'),
+      unit: string('Replacement unit text; empty string clears it.'),
       checked: boolean('Replacement checked state.'),
     },
-    required: ['id'],
+    required: ['id', 'expected_updated_at'],
   }),
   tool({
     name: 'grocery.remove_item',

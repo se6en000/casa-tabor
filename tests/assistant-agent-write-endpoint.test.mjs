@@ -7,12 +7,13 @@ const endpoint = readFileSync(
   'utf8',
 )
 
-test('agent write endpoint proposes additive and exact calendar updates through policy', () => {
+test('agent write endpoint proposes additive and exact updates through policy', () => {
   assert.match(endpoint, /planner_mode: 'additive_write'/)
   assert.match(endpoint, /evaluateAgentToolCall/)
   assert.match(endpoint, /calendar\.create/)
   assert.match(endpoint, /calendar\.update/)
   assert.match(endpoint, /grocery\.add_items/)
+  assert.match(endpoint, /grocery\.update_item/)
   assert.match(endpoint, /acceptedDecision/)
   assert.match(endpoint, /type: 'tool_action'/)
 })
@@ -27,12 +28,14 @@ test('agent write endpoint never executes or exposes destructive capabilities', 
 test('agent write endpoint checks duplicates and emits proposal telemetry', () => {
   assert.match(endpoint, /findAgentCalendarDuplicates/)
   assert.match(endpoint, /isAgentCalendarUpdateTargetUnambiguous/)
+  assert.match(endpoint, /isAgentGroceryUpdateTargetUnambiguous/)
+  assert.match(endpoint, /adaptAgentGroceryUpdate/)
   assert.match(endpoint, /server_agent_write_proposal/)
   assert.match(endpoint, /server_agent_write_fallback/)
   assert.match(endpoint, /lane: 'agent_write'/)
 })
 
-test('active event updates narrow planner context without weakening policy context', () => {
+test('active exact updates narrow planner context without weakening policy context', () => {
   assert.match(endpoint, /activeAuthoritativeEntity/)
   assert.match(endpoint, /planningEntities/)
   assert.match(endpoint, /authoritativeEntities: planningEntities/)

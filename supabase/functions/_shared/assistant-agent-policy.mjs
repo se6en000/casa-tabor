@@ -5,6 +5,7 @@ import { normalizeAgentConversationState } from './assistant-agent-state.mjs'
 const ALWAYS_CONFIRM = new Set([
   'calendar.update',
   'calendar.delete',
+  'grocery.update_item',
   'grocery.remove_item',
 ])
 
@@ -109,8 +110,37 @@ function evaluateDomainPolicy(tool, request) {
   if (['grocery.update_item', 'grocery.remove_item'].includes(tool.name)) {
     const target = findEntity(request.authoritativeEntities, 'grocery_item', request.args.id)
     if (!target) return clarify('authoritative_target_required', tool)
+    if (tool.name === 'grocery.update_item') {
+      if (
+        typeof target.version !== 'string' ||
+        target.version !== request.args.expected_updated_at
+      ) {
+        return reject('stale_authoritative_target')
+      }
+      const updateDecision = validateGroceryUpdate(request.args, target)
+      if (updateDecision) return updateDecision
+    }
   }
 
+  return null
+}
+
+function validateGroceryUpdate(args, target) {
+  const hasQuantity = typeof args.quantity === 'string'
+  const hasUnit = typeof args.unit === 'string'
+  const hasChecked = typeof args.checked === 'boolean'
+  if (hasUnit && !hasQuantity) return reject('grocery_unit_requires_quantity')
+  if (hasQuantity === hasChecked) return reject('grocery_update_requires_one_change')
+  if (hasQuantity && !args.quantity.trim()) return reject('invalid_grocery_quantity')
+  if (hasChecked && target.checked === args.checked) return reject('grocery_update_no_change')
+  if (
+    hasQuantity &&
+    typeof target.quantity === 'string' &&
+    target.quantity.trim() === args.quantity.trim() &&
+    (!hasUnit || String(target.unit ?? '').trim() === args.unit.trim())
+  ) {
+    return reject('grocery_update_no_change')
+  }
   return null
 }
 

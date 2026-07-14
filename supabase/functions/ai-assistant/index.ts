@@ -349,7 +349,10 @@ Deno.serve(async (req) => {
   const needsEventData = !requestAmbiguity && ['event', 'full', 'travel'].includes(intentRouting.profile)
   const needsPlaceData = !requestAmbiguity && ['event', 'full', 'travel', 'places'].includes(intentRouting.profile)
   const needsContactData = !requestAmbiguity && ['event', 'full', 'places'].includes(intentRouting.profile)
-  const needsGroceryData = !requestAmbiguity && ['grocery', 'recipe', 'full'].includes(intentRouting.profile)
+  const needsGroceryData = !requestAmbiguity && (
+    context?.page === 'grocery' ||
+    ['grocery', 'recipe', 'full'].includes(intentRouting.profile)
+  )
   const needsRecipeData = !requestAmbiguity && ['recipe', 'full'].includes(intentRouting.profile)
   const needsAvailabilityData = !requestAmbiguity && ['event', 'full'].includes(intentRouting.profile)
   const skippedRows = Promise.resolve({ data: [], error: null })
@@ -401,7 +404,7 @@ Deno.serve(async (req) => {
       : skippedRows,
     needsGroceryData
       ? sb.from('grocery_items')
-      .select('id, list_id, name, quantity, unit, category, checked, notes')
+      .select('id, list_id, name, quantity, unit, category, checked, notes, updated_at')
       .eq('checked', false)
       .is('deleted_at', null)
       .order('category')
@@ -434,6 +437,9 @@ Deno.serve(async (req) => {
   const allEvents = eventsResult.data
   const activeConversationEvent = incomingConversationState
     ? allEvents?.find((event: { id: string }) => event.id === incomingConversationState.activeEventId) ?? null
+    : null
+  const activeConversationGroceryItem = incomingConversationState?.activeEntityType === 'grocery_item'
+    ? groceryItems?.find((item: { id: string }) => item.id === incomingConversationState.activeGroceryItemId) ?? null
     : null
   let responseConversationState = activeConversationEvent
     ? eventConversationState(activeConversationEvent, now)
@@ -513,7 +519,14 @@ Deno.serve(async (req) => {
                 version: activeConversationEvent.updated_at,
                 title: activeConversationEvent.title,
               }
-            : null,
+            : activeConversationGroceryItem
+              ? {
+                  type: 'grocery_item',
+                  id: activeConversationGroceryItem.id,
+                  version: activeConversationGroceryItem.updated_at,
+                  name: activeConversationGroceryItem.name,
+                }
+              : null,
         },
         authoritative_data: {
           events: allEvents ?? [],
@@ -544,7 +557,13 @@ Deno.serve(async (req) => {
       !agentWriteResult.error &&
       agentWriteData?.supported === true &&
       agentWriteData.type === 'tool_action' &&
-      ['create_event', 'update_event', 'add_grocery_items'].includes(String(agentWriteData.tool ?? '')) &&
+      [
+        'create_event',
+        'update_event',
+        'add_grocery_items',
+        'check_grocery_item',
+        'update_grocery_item_quantity',
+      ].includes(String(agentWriteData.tool ?? '')) &&
       agentWriteData.args &&
       typeof agentWriteData.args === 'object'
     ) {
@@ -564,7 +583,11 @@ Deno.serve(async (req) => {
           display_text: buildDisplayText(agentWriteData.tool, agentWriteData.args),
           action_id: agentWriteData.action_id,
           conversation_state: responseConversationState,
-          semantic_intent: agentWriteData.tool === 'update_event'
+          semantic_intent: [
+            'update_event',
+            'check_grocery_item',
+            'update_grocery_item_quantity',
+          ].includes(agentWriteData.tool)
             ? 'agent.write.update'
             : 'agent.write.additive',
           correlation_id: cid,
@@ -578,9 +601,11 @@ Deno.serve(async (req) => {
         },
       }
     }
-    appendServerTrace('server_agent_write_fallback', agentWriteResult.error?.message ?? 'unsupported_plan', {
+    const agentWriteFallback = agentWriteResult.error?.message ??
+      (typeof agentWriteData?.code === 'string' ? agentWriteData.code : 'unsupported_plan')
+    appendServerTrace('server_agent_write_fallback', agentWriteFallback, {
       rollout_rate: agentWriteRate,
-      failure: agentWriteResult.error?.message ?? 'unsupported_plan',
+      failure: agentWriteFallback,
     })
   }
   const shouldRunAgentRead = !shouldRunAgentWrite && !dryRun &&
@@ -681,12 +706,21 @@ Deno.serve(async (req) => {
         end: event.end_time ?? null,
         recurring: Boolean(event.recurrence_master_id || event.rrule),
       })),
-      ...(groceryItems ?? []).slice(0, 30).map((item: { id: string; name?: string; quantity?: string; unit?: string }) => ({
+      ...(groceryItems ?? []).slice(0, 30).map((item: {
+        id: string
+        name?: string
+        updated_at?: string
+        quantity?: string
+        unit?: string
+        checked?: boolean
+      }) => ({
         type: 'grocery_item',
         id: item.id,
+        version: item.updated_at ?? null,
         name: item.name ?? null,
         quantity: item.quantity ?? null,
         unit: item.unit ?? null,
+        checked: item.checked ?? null,
       })),
       ...(recipes ?? []).slice(0, 20).map((recipe: { id: string; name?: string }) => ({
         type: 'recipe',
@@ -3008,7 +3042,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     }
     if (name === 'check_grocery_item') return `Mark grocery item as ${args.checked ? 'done' : 'undone'}`
     if (name === 'remove_grocery_item') return 'Remove this grocery item'
-    if (name === 'update_grocery_item_quantity') return `Change grocery quantity to ${args.quantity}`
+    if (name === 'update_grocery_item_quantity') {
+      return `Change grocery quantity to ${[args.quantity, args.unit].filter(Boolean).join(' ')}`
+    }
     if (name === 'clear_checked_grocery_items') return 'Clear all checked grocery items'
     return `Action: ${name}`
   }
