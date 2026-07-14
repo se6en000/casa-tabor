@@ -135,15 +135,16 @@ Deno.serve(async (req) => {
         action_id: actionId,
       },
     })
-    const fallbackReminderTurn = plannerResult.error
-      ? fallbackExplicitRelativeReminderTurn(latestUserText)
-      : null
+    const fallbackReminderTurn = fallbackExplicitRelativeReminderTurn(latestUserText)
     let plan = plannerResult.error
       ? fallbackReminderTurn
         ? { kind: 'calendar_semantic', turn: fallbackReminderTurn }
         : null
       : plannerResult.data?.plan
     if (plannerResult.error && !plan) return result({ supported: false, code: 'planner_error' }, 503)
+    if (fallbackReminderTurn && (!plan || ['defer', 'error'].includes(plan.kind))) {
+      plan = { kind: 'calendar_semantic', turn: fallbackReminderTurn }
+    }
     if (plan?.kind === 'calendar_semantic') {
       plan.turn = hardenExplicitReminderTurn(plan.turn, latestUserText)
       const resolved = resolveCalendarSemanticTurn(plan.turn, {
