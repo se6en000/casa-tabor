@@ -360,6 +360,7 @@ Deno.serve(async (req) => {
     { data: cfgRow },
     agentShadowConfigResult,
     agentReadConfigResult,
+    agentWriteConfigResult,
     homeConfigResult,
     { data: savedPlaces },
     savedContactsResult,
@@ -375,6 +376,8 @@ Deno.serve(async (req) => {
     sb.from('settings').select('value').eq('key', 'agent_shadow_config').maybeSingle()
       .then(r => r).catch(() => ({ data: null, error: null })),
     sb.from('settings').select('value').eq('key', 'agent_read_config').maybeSingle()
+      .then(r => r).catch(() => ({ data: null, error: null })),
+    sb.from('settings').select('value').eq('key', 'agent_write_config').maybeSingle()
       .then(r => r).catch(() => ({ data: null, error: null })),
     needsPlaceData
       ? sb.from('settings').select('value').eq('key', 'home_config').maybeSingle()
@@ -478,7 +481,99 @@ Deno.serve(async (req) => {
   const agentReadRate = typeof agentReadConfig?.sample_rate === 'number'
     ? Math.max(0, Math.min(1, agentReadConfig.sample_rate))
     : 0
-  const shouldRunAgentRead = !dryRun &&
+  const agentWriteConfig = agentWriteConfigResult?.data?.value as {
+    enabled?: boolean
+    sample_rate?: number
+    model?: string
+  } | null
+  const agentWriteRate = typeof agentWriteConfig?.sample_rate === 'number'
+    ? Math.max(0, Math.min(1, agentWriteConfig.sample_rate))
+    : 0
+  const shouldRunAgentWrite = !dryRun &&
+    agentWriteConfig?.enabled === true &&
+    agentWriteRate > 0 &&
+    ['calendar', 'grocery'].includes(String(context?.page ?? '')) &&
+    !context?.pendingAction &&
+    !image &&
+    Math.random() < agentWriteRate
+  if (shouldRunAgentWrite) {
+    const agentWriteRequest = sb.functions.invoke('ai-agent-write', {
+      body: {
+        messages,
+        context: {
+          page: context?.page,
+          assistant_mode: context?.assistant_mode,
+          currentDate: context?.currentDate,
+          utcOffset: context?.utcOffset,
+          family: context?.family,
+        },
+        authoritative_data: {
+          events: allEvents ?? [],
+          groceryItems: groceryItems ?? [],
+        },
+        trace_id: traceId,
+        turn_id: turnId,
+        correlation_id: `${cid}:agent-write`,
+        action_id: `${cid}:agent-write-proposal`,
+        household_id: 'default',
+        model_override: agentWriteConfig?.model ?? DEFAULT_GEMINI_MODEL,
+      },
+    })
+    const timeout = new Promise<{ data: null; error: { message: string } }>((resolve) => {
+      setTimeout(() => resolve({ data: null, error: { message: 'agent_write_timeout' } }), 4500)
+    })
+    const agentWriteResult = await Promise.race([agentWriteRequest, timeout])
+    const agentWriteData = agentWriteResult.data as {
+      supported?: boolean
+      type?: string
+      tool?: string
+      args?: Record<string, unknown>
+      action_id?: string
+      elapsed_ms?: number
+      plan?: { toolName?: string }
+    } | null
+    if (
+      !agentWriteResult.error &&
+      agentWriteData?.supported === true &&
+      agentWriteData.type === 'tool_action' &&
+      ['create_event', 'add_grocery_items'].includes(String(agentWriteData.tool ?? '')) &&
+      agentWriteData.args &&
+      typeof agentWriteData.args === 'object'
+    ) {
+      appendServerTrace('server_agent_write_adopted', `tool=${agentWriteData.plan?.toolName ?? agentWriteData.tool}`, {
+        tool_name: agentWriteData.plan?.toolName ?? null,
+        legacy_tool_name: agentWriteData.tool,
+        action_id: agentWriteData.action_id ?? null,
+        agent_write_ms: agentWriteData.elapsed_ms ?? null,
+        rollout_rate: agentWriteRate,
+      })
+      return {
+        status: 200,
+        payload: {
+          type: 'tool_action',
+          tool: agentWriteData.tool,
+          args: agentWriteData.args,
+          display_text: buildDisplayText(agentWriteData.tool, agentWriteData.args),
+          action_id: agentWriteData.action_id,
+          conversation_state: responseConversationState,
+          semantic_intent: 'agent.write.additive',
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            agentic: true,
+            agent_write_ms: agentWriteData.elapsed_ms ?? null,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+    appendServerTrace('server_agent_write_fallback', agentWriteResult.error?.message ?? 'unsupported_plan', {
+      rollout_rate: agentWriteRate,
+      failure: agentWriteResult.error?.message ?? 'unsupported_plan',
+    })
+  }
+  const shouldRunAgentRead = !shouldRunAgentWrite && !dryRun &&
     agentReadConfig?.enabled === true &&
     agentReadRate > 0 &&
     ['calendar', 'grocery'].includes(String(context?.page ?? '')) &&
@@ -553,7 +648,7 @@ Deno.serve(async (req) => {
       failure: agentReadResult.error?.message ?? 'unsupported_plan',
     })
   }
-  const shouldRunAgentShadow = !shouldRunAgentRead && !dryRun &&
+  const shouldRunAgentShadow = !shouldRunAgentWrite && !shouldRunAgentRead && !dryRun &&
     agentShadowConfig?.enabled === true &&
     agentShadowRate > 0 &&
     Math.random() < agentShadowRate

@@ -85,6 +85,7 @@ test('authoritative read planning exposes only reads and typed deferral', () => 
     messages: [{ role: 'user', content: 'Delete every event Thursday' }],
     plannerMode: 'authoritative_read',
   })
+
   const declarations = request.tools[0].function_declarations
   assert.equal(request.tool_config.function_calling_config.mode, 'ANY')
   assert.deepEqual(declarations.map((declaration) => declaration.name), ['assistant_read_request'])
@@ -126,6 +127,58 @@ test('authoritative read planning exposes only reads and typed deferral', () => 
     args: {
       start: '2026-07-16T00:00:00-04:00',
       end: '2026-07-17T00:00:00-04:00',
+    },
+  })
+})
+
+test('additive write planning cannot select updates or destructive tools', () => {
+  const request = buildAgentShadowRequest({
+    messages: [{ role: 'user', content: 'Move the dentist appointment to Friday' }],
+    plannerMode: 'additive_write',
+  })
+  const declarations = request.tools[0].function_declarations
+  assert.equal(request.tool_config.function_calling_config.mode, 'ANY')
+  assert.deepEqual(declarations.map((declaration) => declaration.name), ['assistant_write_request'])
+
+  assert.deepEqual(parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'assistant_write_request',
+            args: { requested_effect: 'other_write' },
+          },
+        }],
+      },
+    }],
+  }), { kind: 'defer', reason: 'unsupported_write' })
+
+  assert.deepEqual(parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'assistant_write_request',
+            args: {
+              requested_effect: 'additive_write',
+              tool_name: 'calendar.create',
+              tool_args: {
+                title: 'Swim practice',
+                start: '2026-07-17T16:00:00-04:00',
+                end: '2026-07-17T17:00:00-04:00',
+              },
+            },
+          },
+        }],
+      },
+    }],
+  }), {
+    kind: 'tool',
+    toolName: 'calendar.create',
+    args: {
+      title: 'Swim practice',
+      start: '2026-07-17T16:00:00-04:00',
+      end: '2026-07-17T17:00:00-04:00',
     },
   })
 })

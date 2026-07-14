@@ -6,25 +6,30 @@ import {
 
 export const AGENT_SHADOW_VERSION = 'agent-shadow-v1'
 const READ_ROUTE_FUNCTION = 'assistant_read_request'
+const WRITE_ROUTE_FUNCTION = 'assistant_write_request'
+const ADDITIVE_WRITE_TOOLS = new Set(['calendar.create', 'grocery.add_items'])
 
 export function buildAgentShadowRequest(input) {
   const messages = normalizeMessages(input?.messages)
   if (messages.length === 0) throw new Error('At least one conversation message is required')
   const context = normalizeContext(input?.context)
   const authoritativeReadMode = input?.plannerMode === 'authoritative_read'
+  const additiveWriteMode = input?.plannerMode === 'additive_write'
   const conflictCheckComplete = context.completedToolCalls.some((call) =>
     call?.toolName === 'calendar.check_conflicts' &&
     call?.result?.count === 0
   )
   const declarations = authoritativeReadMode
     ? [buildReadRouteDeclaration()]
+    : additiveWriteMode
+      ? [buildAdditiveWriteRouteDeclaration()]
     : AGENT_TOOL_DEFINITIONS
         .filter((tool) => !(conflictCheckComplete && tool.name === 'calendar.check_conflicts'))
         .map(toGeminiFunctionDeclaration)
   return {
     system_instruction: {
       parts: [{
-        text: buildAgentShadowInstruction(context, authoritativeReadMode),
+        text: buildAgentShadowInstruction(context, authoritativeReadMode, additiveWriteMode),
       }],
     },
     contents: messages.map((message) => ({
@@ -37,7 +42,7 @@ export function buildAgentShadowRequest(input) {
     },
     tools: [{ function_declarations: declarations }],
     tool_config: {
-      function_calling_config: { mode: authoritativeReadMode ? 'ANY' : 'AUTO' },
+      function_calling_config: { mode: authoritativeReadMode || additiveWriteMode ? 'ANY' : 'AUTO' },
     },
   }
 }
@@ -71,6 +76,25 @@ export function parseAgentShadowResponse(payload) {
         args: functionCall.args?.tool_args && typeof functionCall.args.tool_args === 'object'
           ? functionCall.args.tool_args
           : {},
+      }
+    }
+    if (functionCall.name === WRITE_ROUTE_FUNCTION) {
+      const requestedEffect = functionCall.args?.requested_effect
+      const tool = getAgentToolByGeminiName(
+          String(functionCall.args?.tool_name ?? '').replace('.', '_'),
+      )
+      if (requestedEffect !== 'additive_write' || !ADDITIVE_WRITE_TOOLS.has(tool?.name)) {
+          return {
+            kind: 'defer',
+            reason: requestedEffect === 'other_write' ? 'unsupported_write' : requestedEffect ?? 'unsupported_domain',
+          }
+      }
+      return {
+          kind: 'tool',
+          toolName: tool.name,
+          args: functionCall.args?.tool_args && typeof functionCall.args.tool_args === 'object'
+            ? functionCall.args.tool_args
+            : {},
       }
     }
     const definition = getAgentToolByGeminiName(functionCall.name)
@@ -117,7 +141,7 @@ export function agentShadowTelemetry(plan, metadata = {}) {
   }
 }
 
-function buildAgentShadowInstruction(context, authoritativeReadMode) {
+function buildAgentShadowInstruction(context, authoritativeReadMode, additiveWriteMode) {
   return `You are Casa's bounded conversation planner. Interpret natural household requests and choose capabilities.
 
 You may understand any natural wording, corrections, pronouns, and follow-up turns. Do not depend on exact phrases.
@@ -140,6 +164,17 @@ AUTHORITATIVE READ MODE:
 - Never substitute a read result for a requested mutation or confirmation flow.
 - Set requested_effect to unsupported for unsupported domains or when a safe read cannot be selected.
 - Only when requested_effect is read, select one read tool and supply its arguments.
+` : ''}
+${additiveWriteMode ? `
+ADDITIVE WRITE MODE:
+- Call assistant_write_request exactly once and classify the user's ultimate requested outcome.
+- Set requested_effect to additive_write only for creating one calendar event or adding explicit grocery items.
+- Set requested_effect to other_write for every update, move, rename, check-off, clear, remove, or delete request.
+- Set requested_effect to read for questions that do not change data.
+- Set requested_effect to unsupported for cooking actions or any capability outside this rollout.
+- Never convert an update or destructive request into a create/add action.
+- Only when requested_effect is additive_write, select calendar.create or grocery.add_items and supply grounded arguments.
+- Do not invent missing titles, items, people, dates, times, quantities, or locations.
 ` : ''}
 
 CURRENT LOCAL DATE/TIME: ${context.currentDate}
@@ -191,6 +226,42 @@ function buildReadRouteDeclaration() {
           additionalProperties: false,
           properties: toolArgProperties,
           description: 'Arguments for tool_name when requested_effect is read.',
+        },
+      },
+      required: ['requested_effect'],
+    },
+  })
+}
+
+function buildAdditiveWriteRouteDeclaration() {
+  const additiveTools = AGENT_TOOL_DEFINITIONS.filter((tool) => ADDITIVE_WRITE_TOOLS.has(tool.name))
+  const toolArgProperties = Object.assign(
+    {},
+    ...additiveTools.map((tool) => tool.inputSchema.properties ?? {}),
+  )
+  return toGeminiFunctionDeclaration({
+    name: 'assistant.write_request',
+    description: 'Classify the ultimate requested effect, then optionally propose one additive write.',
+    effect: 'write',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        requested_effect: {
+          type: 'string',
+          enum: ['additive_write', 'other_write', 'read', 'unsupported'],
+          description: 'The effect of the user outcome, regardless of prerequisite lookup steps.',
+        },
+        tool_name: {
+          type: 'string',
+          enum: additiveTools.map((tool) => tool.name),
+          description: 'Required only when requested_effect is additive_write.',
+        },
+        tool_args: {
+          type: 'object',
+          additionalProperties: false,
+          properties: toolArgProperties,
+          description: 'Arguments for tool_name when requested_effect is additive_write.',
         },
       },
       required: ['requested_effect'],

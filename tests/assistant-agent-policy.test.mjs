@@ -137,3 +137,32 @@ test('calendar safety catches malformed ranges, duplicates, and recurrence scope
     authoritativeEntities: [{ type: 'event', id: 'event-1', version: 'v1', recurring: true }],
   }).code, 'recurring_scope_unsupported')
 })
+
+test('calendar writes reject family members not present in authoritative context', () => {
+  const inventedMember = evaluate({
+    toolName: 'calendar.create',
+    args: {
+      title: 'Family planning meeting',
+      start: '2026-07-17T16:00:00-04:00',
+      end: '2026-07-17T17:00:00-04:00',
+      members: ['Family Planning Meeting'],
+    },
+    authorizedMemberNames: ['Jake', 'Liv'],
+  })
+  assert.equal(inventedMember.code, 'unknown_calendar_member')
+  assert.deepEqual(inventedMember.unknownMembers, ['Family Planning Meeting'])
+
+  const knownMembers = evaluate({
+    toolName: 'calendar.create',
+    actionId: 'create-known-members',
+    idempotencyKey: 'create-known-members-key',
+    args: {
+      title: 'Swim practice',
+      start: '2026-07-17T16:00:00-04:00',
+      end: '2026-07-17T17:00:00-04:00',
+      members: ['jake', 'LIV'],
+    },
+    authorizedMemberNames: ['Jake', 'Liv'],
+  })
+  assert.equal(knownMembers.decision, 'execute')
+})

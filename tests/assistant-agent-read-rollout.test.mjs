@@ -25,5 +25,5 @@ test('agent read rollout adopts only explicit supported text results', () => {
 test('agent read failures retain the current authoritative fallback path', () => {
   assert.match(assistant, /server_agent_read_fallback/)
   assert.match(assistant, /agent_read_timeout/)
-  assert.match(assistant, /shouldRunAgentShadow = !shouldRunAgentRead/)
+  assert.match(assistant, /shouldRunAgentShadow = !shouldRunAgentWrite && !shouldRunAgentRead/)
 })

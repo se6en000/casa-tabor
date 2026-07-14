@@ -81,6 +81,8 @@ function evaluateDomainPolicy(tool, request) {
   if (tool.domain === 'calendar') {
     const timeDecision = validateCalendarTimes(request.args)
     if (timeDecision) return timeDecision
+    const memberDecision = validateCalendarMembers(tool.name, request.args, request.authorizedMemberNames)
+    if (memberDecision) return memberDecision
 
     if (['calendar.update', 'calendar.delete'].includes(tool.name)) {
       const target = findEntity(request.authoritativeEntities, 'event', request.args.id)
@@ -91,6 +93,7 @@ function evaluateDomainPolicy(tool, request) {
       ) {
         return reject('stale_authoritative_target')
       }
+
       if (target.recurring === true) return reject('recurring_scope_unsupported')
     }
 
@@ -109,6 +112,27 @@ function evaluateDomainPolicy(tool, request) {
   }
 
   return null
+}
+
+function validateCalendarMembers(toolName, args, authorizedMemberNames) {
+  const requestedNames = toolName === 'calendar.create'
+    ? args.members
+    : toolName === 'calendar.update'
+      ? [...(args.members_add ?? []), ...(args.members_remove ?? [])]
+      : []
+  if (!Array.isArray(requestedNames) || requestedNames.length === 0) return null
+  const authorized = new Set(
+    (Array.isArray(authorizedMemberNames) ? authorizedMemberNames : [])
+      .filter((name) => typeof name === 'string')
+      .map((name) => name.trim().toLocaleLowerCase())
+      .filter(Boolean),
+  )
+  const unknown = requestedNames.filter((name) =>
+    typeof name !== 'string' || !authorized.has(name.trim().toLocaleLowerCase())
+  )
+  return unknown.length > 0
+    ? reject('unknown_calendar_member', { unknownMembers: unknown })
+    : null
 }
 
 function validateCalendarTimes(args) {
