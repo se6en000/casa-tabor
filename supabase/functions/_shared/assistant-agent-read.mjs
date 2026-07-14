@@ -1,3 +1,8 @@
+import {
+  compareCalendarEvents,
+  eventOverlapsCalendarRange,
+} from './assistant-event-range.mjs'
+
 const SUPPORTED_READ_TOOLS = new Set([
   'calendar.search',
   'calendar.get_range',
@@ -62,9 +67,10 @@ function searchCalendar(args, rawEvents) {
   const filtered = events.filter((event) => {
     if (query && !event.title.toLowerCase().includes(query)) return false
     if (memberName && !event.members.some((member) => member.toLowerCase() === memberName)) return false
-    if (range && !overlaps(event, range)) return false
+    if (range && !overlaps(event, range, args?.utc_offset)) return false
     return true
   })
+  filtered.sort((a, b) => compareCalendarEvents(a, b, args?.utc_offset))
   return { supported: true, events: filtered, count: filtered.length }
 }
 
@@ -76,11 +82,12 @@ function getCalendarRange(args, rawEvents) {
     ? args.member_names.map(normalizeText).filter(Boolean)
     : []
   const events = normalizeEvents(rawEvents).filter((event) => {
-    if (!overlaps(event, range)) return false
+    if (!overlaps(event, range, args?.utc_offset)) return false
     return memberNames.length === 0 ||
       memberNames.some((name) => event.members.some((member) => member.toLowerCase() === name))
   })
-  const primaryEvents = events.filter((event) => overlaps(event, primaryRange))
+  events.sort((a, b) => compareCalendarEvents(a, b, args?.utc_offset))
+  const primaryEvents = events.filter((event) => overlaps(event, primaryRange, args?.utc_offset))
   const primaryIds = new Set(primaryEvents.map((event) => event.id))
   const contextEvents = events.filter((event) => !primaryIds.has(event.id))
   const laterContextEventIds = contextEvents
@@ -102,7 +109,9 @@ function checkCalendarConflicts(args, rawEvents) {
   if (!range) return { supported: false, code: 'invalid_range' }
   const ignoredId = normalizeText(args?.ignore_event_id)
   const events = normalizeEvents(rawEvents).filter((event) =>
-    event.id.toLowerCase() !== ignoredId && overlaps(event, range),
+    !event.all_day &&
+    event.id.toLowerCase() !== ignoredId &&
+    overlaps(event, range, args?.utc_offset),
   )
   return { supported: true, events, count: events.length }
 }
@@ -170,10 +179,8 @@ function parseRange(startValue, endValue) {
   return Number.isFinite(start) && Number.isFinite(end) && end > start ? { start, end } : null
 }
 
-function overlaps(event, range) {
-  const start = Date.parse(event.start_time)
-  const end = Date.parse(event.end_time)
-  return Number.isFinite(start) && Number.isFinite(end) && start < range.end && end > range.start
+function overlaps(event, range, utcOffset) {
+  return eventOverlapsCalendarRange(event, range, utcOffset)
 }
 
 function normalizeText(value) {

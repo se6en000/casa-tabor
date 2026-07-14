@@ -148,7 +148,11 @@ Deno.serve(async (req) => {
           : calendarReadContext.end,
         primary_start: calendarReadContext.start,
         primary_end: calendarReadContext.end,
+        utc_offset: body?.context?.utcOffset,
       }
+    }
+    if (plan.toolName.startsWith('calendar.')) {
+      plan.args = { ...plan.args, utc_offset: body?.context?.utcOffset }
     }
 
     const toolResult = executeAgentReadTool(plan.toolName, plan.args, { events, groceryItems })

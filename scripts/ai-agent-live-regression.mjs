@@ -75,6 +75,13 @@ function utcOffset(date = new Date()) {
   return `${sign}${String(Math.floor(absolute / 60)).padStart(2, '0')}:${String(absolute % 60).padStart(2, '0')}`
 }
 
+function isoDate(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 async function loadFamily() {
   return fetchJson('/rest/v1/family_members?select=id,name&order=name.asc', { headers })
 }
@@ -205,6 +212,32 @@ async function run() {
       description: runId,
     }])
     createdEventIds.push(thursdayLate.id)
+    const sunday = nextWeekday(0, 0)
+    const saturday = new Date(sunday)
+    saturday.setDate(saturday.getDate() - 1)
+    const [sundayAllDay, weekendAllDay] = await insert('events', [
+      {
+        title: '[Agent QA] Sunday all-day picnic',
+        start_time: `${isoDate(sunday)}T00:00:00.000Z`,
+        end_time: `${isoDate(sunday)}T23:59:59.000Z`,
+        status: 'confirmed',
+        all_day: true,
+        event_type: 'event',
+        is_enriched: false,
+        description: runId,
+      },
+      {
+        title: '[Agent QA] Family weekend marker',
+        start_time: saturday.toISOString(),
+        end_time: new Date(sunday.getTime() - 1).toISOString(),
+        status: 'confirmed',
+        all_day: true,
+        event_type: 'event',
+        is_enriched: false,
+        description: runId,
+      },
+    ])
+    createdEventIds.push(sundayAllDay.id, weekendAllDay.id)
 
     const lists = await insert('grocery_lists', [
       { name: `[Agent QA A] ${runId}` },
@@ -304,8 +337,42 @@ async function run() {
   )
   pass('04-thursday-stt', turn.response.text.split('\n')[0])
 
+    turn = await callAssistant({
+      key: '05-sunday-all-day-read',
+      text: 'What appointments are happening on Sunday?',
+      family,
+    })
+    expect(isCalendarReadResponse(turn.response), 'Sunday read did not use an authoritative read')
+    expect(
+      turn.response.text.includes('[Agent QA] Sunday all-day picnic'),
+      'Sunday read omitted the single-day all-day event',
+    )
+    expect(
+      turn.response.text.includes('[Agent QA] Family weekend marker'),
+      'Sunday read omitted the nominal multi-day all-day event',
+    )
+    pass('05-sunday-all-day-read', turn.response.text.split('\n')[0])
+
+    turn = await callAssistant({
+      key: '06-sunday-all-day-follow-up',
+      text: "Are you sure that's everything on Sunday, including all-day appointments?",
+      family,
+      history: [
+        { role: 'user', content: 'What appointments are happening on Sunday?' },
+        { role: 'assistant', content: turn.response.text },
+      ],
+      conversationState: turn.response.conversation_state,
+    })
+    expect(isCalendarReadResponse(turn.response), 'Sunday follow-up did not use an authoritative read')
+    expect(
+      turn.response.text.includes('[Agent QA] Sunday all-day picnic') &&
+        turn.response.text.includes('[Agent QA] Family weekend marker'),
+      'Sunday follow-up omitted one or more all-day events',
+    )
+    pass('06-sunday-all-day-follow-up', turn.response.text.split('\n')[0])
+
     const deleteProposal = await callAssistant({
-      key: '05-calendar-delete-proposal',
+      key: '07-calendar-delete-proposal',
       text: 'Delete the late Thursday pickup at 9:15 PM.',
       family,
     })
@@ -323,7 +390,7 @@ async function run() {
       { headers },
     )
     expect(proposedDeleteRows.length === 1, 'Calendar delete proposal executed before confirmation')
-    pass('05-calendar-delete-proposal', `event=${thursdayLate.id} remained pending confirmation`)
+    pass('07-calendar-delete-proposal', `event=${thursdayLate.id} remained pending confirmation`)
 
     const dinner = await callAssistant({
     key: '03-dinner-create',

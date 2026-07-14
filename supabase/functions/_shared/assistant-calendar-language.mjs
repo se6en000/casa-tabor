@@ -312,8 +312,12 @@ export function parseCalendarLanguage(text, options = {}) {
     return frame('calendar.destinations', 0.98, { temporalScope: scope })
   }
   const listFollowUpLanguage = /\b(?:is that the only thing|anything else|what else)\b/.test(input) ||
-    /\b(?:is(?:n't| not) there|there(?:'s| is) no)\b.+\b(?:too|also|as well)\b/.test(input)
+    /\b(?:is(?:n't| not) there|there(?:'s| is) no)\b.+\b(?:too|also|as well)\b/.test(input) ||
+    /\bare you sure\b.*\b(?:nothing|anything|everything)\b/.test(input) ||
+    /\b(?:didn't|did not) mention\b|\b(?:missed|left out|omitted)\b/.test(input)
   const listLanguage = /\b(?:what(?:'s| is) (?:on|going on|happening|planned|scheduled)|what (?:are we doing|do (?:i|we) have|have (?:i|we) got)|show me|tell me|give me|run through|walk me through|catch me up on|lay out|fill me in on|rundown|anything (?:on|happening|going on|planned|scheduled))\b/.test(input) ||
+    /\bwhat (?:events?|appointments?|meetings?|plans?) (?:are )?(?:on|happening|going on|planned|scheduled)\b/.test(input) ||
+    Boolean(scope && /^(?:how|what) about\b/.test(input)) ||
     /\b(?:how (?:is|does)|what does)\b.*\b(?:look|looking)\b/.test(input) ||
     listFollowUpLanguage
   if ((CALENDAR_NOUNS.test(input) || scope || listFollowUpLanguage) && listLanguage && !mutationLanguage) {

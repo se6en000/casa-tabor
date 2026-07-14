@@ -6,6 +6,12 @@ function offsetMinutes(value) {
   return (match[1] === '+' ? 1 : -1) * (Number(match[2]) * 60 + Number(match[3]))
 }
 
+function formatOffset(offset) {
+  const sign = offset >= 0 ? '+' : '-'
+  const absolute = Math.abs(offset)
+  return `${sign}${String(Math.floor(absolute / 60)).padStart(2, '0')}:${String(absolute % 60).padStart(2, '0')}`
+}
+
 function localDayStartMs(date, offset) {
   const shifted = new Date(date.getTime() + offset * 60000)
   return Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate()) - offset * 60000
@@ -168,16 +174,16 @@ function rangeForScope(scope, now, offset) {
   return range
 }
 
-function eventsInRange(events, range, now, includePast = false) {
+function eventsInRange(events, range, now, offset, includePast = false) {
   return (events ?? [])
     .filter((event) => {
       const start = Date.parse(event?.start_time)
       const parsedEnd = Date.parse(event?.end_time)
       const end = Number.isFinite(parsedEnd) ? parsedEnd : start + 1
-      return Number.isFinite(start) && start < range.end && end > range.start &&
+      return eventOverlapsCalendarRange(event, range, formatOffset(offset)) &&
         (includePast || event.all_day || !Number.isFinite(end) || end > now.getTime())
     })
-    .sort((a, b) => Date.parse(a.start_time) - Date.parse(b.start_time))
+    .sort((a, b) => compareCalendarEvents(a, b, formatOffset(offset)))
 }
 
 function eventLine(event, offset) {
@@ -214,7 +220,9 @@ export function resolveCalendarSemanticRead(frame, events, options = {}) {
       const end = Date.parse(event?.end_time)
       return !event?.all_day && start <= nowMs && end > nowMs
     }).sort((a, b) => Date.parse(a.end_time) - Date.parse(b.end_time))[0]
-    const upcoming = (events ?? []).filter((event) => Date.parse(event?.start_time) > nowMs)
+    const upcoming = (events ?? []).filter((event) =>
+      !event?.all_day && Date.parse(event?.start_time) > nowMs
+    )
       .sort((a, b) => Date.parse(a.start_time) - Date.parse(b.start_time))[0]
     const selected = inProgress ?? upcoming
     if (!selected) return { text: 'Nothing else is coming up on your calendar.', events: [], intent: frame.intent }
@@ -223,7 +231,7 @@ export function resolveCalendarSemanticRead(frame, events, options = {}) {
   }
 
   const range = rangeForScope(scope, now, offset)
-  const rows = eventsInRange(events, range, now)
+  const rows = eventsInRange(events, range, now, offset)
   if (frame.intent === 'calendar.count') {
     const text = rows.length === 0
       ? `You have no calendar events ${range.label}.`
@@ -232,9 +240,12 @@ export function resolveCalendarSemanticRead(frame, events, options = {}) {
   }
   if (frame.intent === 'calendar.availability') {
     const overlaps = []
-    for (let i = 0; i < rows.length; i += 1) {
-      for (let j = i + 1; j < rows.length; j += 1) {
-        if (Date.parse(rows[j].start_time) < Date.parse(rows[i].end_time)) overlaps.push([rows[i], rows[j]])
+    const timedRows = rows.filter((event) => !event.all_day)
+    for (let i = 0; i < timedRows.length; i += 1) {
+      for (let j = i + 1; j < timedRows.length; j += 1) {
+        if (Date.parse(timedRows[j].start_time) < Date.parse(timedRows[i].end_time)) {
+          overlaps.push([timedRows[i], timedRows[j]])
+        }
       }
     }
     const text = overlaps.length
@@ -270,3 +281,7 @@ export function resolveCalendarSemanticRead(frame, events, options = {}) {
     scope: range.label,
   }
 }
+import {
+  compareCalendarEvents,
+  eventOverlapsCalendarRange,
+} from './assistant-event-range.mjs'

@@ -36,10 +36,9 @@ export function resolveCalendarDayRead(text, events, options = {}) {
   const end = start + 86400000
   const rows = (events ?? [])
     .filter((event) => {
-      const eventStart = Date.parse(event?.start_time)
-      return Number.isFinite(eventStart) && eventStart >= start && eventStart < end
+      return eventOverlapsCalendarRange(event, { start, end }, options.utcOffset)
     })
-    .sort((a, b) => Date.parse(a.start_time) - Date.parse(b.start_time))
+    .sort((a, b) => compareCalendarEvents(a, b, options.utcOffset))
 
   const label = day === 'tomorrow' ? 'tomorrow' : day === 'tonight' ? 'tonight' : 'today'
   if (rows.length === 0) return { text: `Nothing is on your calendar ${label}.`, events: [], day: label }
@@ -54,3 +53,7 @@ export function resolveCalendarDayRead(text, events, options = {}) {
     : `${rows.length} things are on your calendar ${label}:`
   return { text: `${header}\n${lines.join('\n')}`, events: rows, day: label }
 }
+import {
+  compareCalendarEvents,
+  eventOverlapsCalendarRange,
+} from './assistant-event-range.mjs'

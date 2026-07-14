@@ -78,6 +78,27 @@ test('calendar parser supports ordinary flexible read language', () => {
   assert.equal(parseCalendarLanguage("Is that the only thing that's happening Thursday afternoon?")?.intent, 'calendar.list')
 })
 
+test('production-style day questions and omission challenges stay deterministic', () => {
+  const initial = parseCalendarLanguage('what appointments are happening on sunday')
+  assert.equal(initial?.intent, 'calendar.list')
+  assert.equal(initial?.slots.temporalScope?.weekday, 'sunday')
+
+  const shortFollowUp = parseCalendarLanguage('how about sunday')
+  assert.equal(shortFollowUp?.intent, 'calendar.list')
+  assert.equal(shortFollowUp?.slots.temporalScope?.weekday, 'sunday')
+
+  const challenge = parseCalendarLanguage("are you sure there's nothing on the calendar on sunday")
+  assert.equal(challenge?.intent, 'calendar.list')
+  assert.equal(challenge?.slots.temporalScope?.weekday, 'sunday')
+
+  const omission = inheritCalendarReadScope(
+    parseCalendarLanguage("there's also some all day appointments that you didn't mention"),
+    challenge,
+  )
+  assert.equal(omission?.intent, 'calendar.list')
+  assert.equal(omission?.slots.temporalScope?.weekday, 'sunday')
+})
+
 test('household afternoon agenda scope includes early-evening activities', () => {
   const range = calendarRangeForScope({
     kind: 'weekday',
@@ -183,6 +204,52 @@ test('semantic reads execute against authoritative calendar rows', () => {
   const thursday = resolveCalendarSemanticRead(parseCalendarLanguage("What's going on on Thursday?"), thursdayEvents, options)
   assert.deepEqual(thursday.events.map((event) => event.id), ['thursday'])
   assert.match(thursday.text, /Dentist/)
+})
+
+test('semantic day reads include all-day spans anchored by nominal dates', () => {
+  const result = resolveCalendarSemanticRead(
+    parseCalendarLanguage("What's going on on Sunday?"),
+    [{
+      id: 'all-day-sunday',
+      title: 'Family beach weekend',
+      start_time: '2026-07-18T04:00:00.000Z',
+      end_time: '2026-07-19T03:59:59.000Z',
+      all_day: true,
+    }],
+    {
+      now: new Date('2026-07-14T16:00:00.000Z'),
+      utcOffset: '-04:00',
+    },
+  )
+  assert.deepEqual(result.events.map((event) => event.id), ['all-day-sunday'])
+  assert.match(result.text, /All day — Family beach weekend/)
+})
+
+test('all-day context is listed but does not become a clock conflict or next event', () => {
+  const allDay = {
+    id: 'all-day',
+    title: 'Family beach day',
+    start_time: '2026-07-13T00:00:00Z',
+    end_time: '2026-07-13T23:59:59Z',
+    all_day: true,
+  }
+  const timed = {
+    id: 'timed',
+    title: 'Dentist',
+    start_time: '2026-07-13T15:00:00Z',
+    end_time: '2026-07-13T16:00:00Z',
+    all_day: false,
+  }
+  const availability = resolveCalendarSemanticRead(
+    parseCalendarLanguage('Do we have any conflicts on Monday?'),
+    [allDay, timed],
+    options,
+  )
+  assert.deepEqual(availability.conflicts, [])
+  assert.deepEqual(availability.events.map((event) => event.id), ['all-day', 'timed'])
+
+  const next = resolveCalendarSemanticRead(parseCalendarLanguage("What's next?"), [allDay, timed], options)
+  assert.deepEqual(next.events.map((event) => event.id), ['timed'])
 })
 
 test('calendar time-frame reads filter by day part, date, month, and overlap', () => {

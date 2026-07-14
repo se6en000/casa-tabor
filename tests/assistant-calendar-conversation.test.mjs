@@ -32,11 +32,28 @@ test('tomorrow schedule reads are deterministic and local-date correct', () => {
     now: new Date('2026-07-11T13:30:00Z'),
     utcOffset: '-04:00',
   })
+
   assert.equal(result?.events.length, 1)
   assert.equal(result?.events[0].id, 'pool')
   assert.match(result?.text, /One thing.*tomorrow/)
   assert.match(result?.text, /2:00 PM/)
   assert.doesNotMatch(result?.text, /Soccer Practice|Yoga Class/)
+})
+
+test('today and tomorrow reads include nominal all-day spans already in progress', () => {
+  const allDay = {
+    id: 'weekend',
+    title: 'Family weekend marker',
+    start_time: '2026-07-11T04:00:00Z',
+    end_time: '2026-07-12T03:59:59Z',
+    all_day: true,
+  }
+  const result = resolveCalendarDayRead("what's on the schedule for tomorrow", [allDay], {
+    now: new Date('2026-07-11T13:30:00Z'),
+    utcOffset: '-04:00',
+  })
+  assert.deepEqual(result?.events.map((event) => event.id), ['weekend'])
+  assert.match(result?.text, /All day/)
 })
 
 test('active event bring-list edits preserve and extend the complete list', () => {

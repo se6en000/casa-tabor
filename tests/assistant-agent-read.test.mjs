@@ -36,6 +36,29 @@ test('calendar range reads use authoritative overlap semantics', () => {
   assert.deepEqual(result.events.map((event) => event.id), ['event-1'])
 })
 
+test('calendar range and search reads include nominal all-day spans', () => {
+  const allDay = {
+    id: 'all-day-sunday',
+    title: 'Family beach weekend',
+    start_time: '2026-07-18T04:00:00.000Z',
+    end_time: '2026-07-19T03:59:59.000Z',
+    all_day: true,
+  }
+  const args = {
+    start: '2026-07-19T00:00:00-04:00',
+    end: '2026-07-20T00:00:00-04:00',
+    utc_offset: '-04:00',
+  }
+  assert.deepEqual(
+    executeAgentReadTool('calendar.get_range', args, { events: [allDay] }).events.map((event) => event.id),
+    ['all-day-sunday'],
+  )
+  assert.deepEqual(
+    executeAgentReadTool('calendar.search', { ...args, query: 'beach' }, { events: [allDay] }).events.map((event) => event.id),
+    ['all-day-sunday'],
+  )
+})
+
 test('calendar reads separate direct results from helpful same-day context', () => {
   const result = executeAgentReadTool('calendar.get_range', {
     start: '2026-07-16T00:00:00-04:00',
@@ -90,6 +113,23 @@ test('conflict checks ignore the event currently being moved', () => {
     ignore_event_id: 'event-1',
   }, { events })
   assert.equal(result.count, 0)
+})
+
+test('all-day context does not create a clock-time conflict', () => {
+  const result = executeAgentReadTool('calendar.check_conflicts', {
+    start: '2026-07-19T15:00:00-04:00',
+    end: '2026-07-19T16:00:00-04:00',
+    utc_offset: '-04:00',
+  }, {
+    events: [{
+      id: 'all-day',
+      title: 'Family beach day',
+      start_time: '2026-07-19T00:00:00Z',
+      end_time: '2026-07-19T23:59:59Z',
+      all_day: true,
+    }],
+  })
+  assert.deepEqual(result.events, [])
 })
 
 test('grocery reads honor checked and list filters', () => {
