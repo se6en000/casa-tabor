@@ -61,6 +61,7 @@ import { resolveGrocerySemantic } from '../_shared/assistant-grocery-semantic.mj
 import { classifyAssistantAmbiguity, safeFullProfileToolNames } from '../_shared/assistant-request-safety.mjs'
 import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
 import { getAgentToolByLegacyName } from '../_shared/assistant-agent-tools.mjs'
+import { isAgentWriteCompatible } from '../_shared/assistant-agent-write-compatibility.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -729,11 +730,16 @@ Deno.serve(async (req) => {
         'create_event',
         'update_event',
         'delete_event',
+        'complete_reminder',
         'add_grocery_items',
         'check_grocery_item',
         'update_grocery_item_quantity',
         'remove_grocery_item',
       ].includes(String(agentWriteData.tool ?? '')) &&
+      isAgentWriteCompatible(String(agentWriteData.tool ?? ''), {
+        calendarIntent: calendarFrame?.intent,
+        groceryIntent: groceryFrame?.intent,
+      }) &&
       agentWriteData.args &&
       typeof agentWriteData.args === 'object'
     ) {
@@ -756,6 +762,7 @@ Deno.serve(async (req) => {
           semantic_intent: [
             'update_event',
             'delete_event',
+            'complete_reminder',
             'check_grocery_item',
             'update_grocery_item_quantity',
             'remove_grocery_item',
@@ -783,7 +790,7 @@ Deno.serve(async (req) => {
       const clarification = agentWriteData.clarification
       const clarificationState = Array.isArray(clarification?.candidates) &&
           clarification.candidates.length > 1 &&
-          ['update_event', 'delete_event'].includes(String(clarification.pendingMutation?.tool ?? '')) &&
+          ['update_event', 'delete_event', 'complete_reminder'].includes(String(clarification.pendingMutation?.tool ?? '')) &&
           clarification.pendingMutation?.args
         ? calendarClarificationConversationState(
             clarification.candidates,
