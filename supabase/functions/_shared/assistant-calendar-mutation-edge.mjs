@@ -56,6 +56,33 @@ function overlaps(candidate, events, ignoredId) {
   ))
 }
 
+function parseDeleteSelectionRequest(value) {
+  const input = String(value ?? '').replace(/\s+/g, ' ').trim()
+  const match = input.match(
+    /^(?:delete|cancel|remove)\s+(?:the\s+)?(.+?)(?:\s+(?:on\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday))?[.!]?$/i,
+  )
+  if (!match) return null
+  const queryTokens = match[1]
+    .toLowerCase()
+    .replace(/\bapts?\b/g, 'appointment')
+    .split(/\s+/)
+    .filter((token) => token.length > 2 && !['the', 'event', 'appointment', 'calendar'].includes(token))
+  if (queryTokens.length === 0) return null
+  return {
+    queryTokens,
+    weekday: match[2]
+      ? ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].indexOf(match[2].toLowerCase())
+      : null,
+  }
+}
+
+function deleteSelectionMatches(request, events, utcOffset) {
+  return events.filter((event) => (
+    (request.weekday == null || localWeekday(event.start_time, utcOffset) === request.weekday)
+    && request.queryTokens.every((token) => String(event.title ?? '').toLowerCase().includes(token))
+  ))
+}
+
 export function resolveActiveCalendarMutation(text, event, events, options = {}) {
   if (!event?.id) return null
   const input = String(text ?? '').replace(/\s+/g, ' ').trim()
@@ -197,17 +224,11 @@ export function singularBulkDeleteClarification(text, tool, args, events, format
 }
 
 export function resolveCalendarDeleteDisambiguation(previousText, text, events, options = {}) {
-  const previous = String(previousText ?? '').replace(/\s+/g, ' ').trim()
   const current = String(text ?? '').replace(/\s+/g, ' ').trim()
-  const request = previous.match(/^(?:delete|cancel|remove)\s+(?:the\s+)?(.+?)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)[.!]?$/i)
+  const request = parseDeleteSelectionRequest(previousText)
   const dayPart = /\bafternoon\b/i.test(current) ? 'afternoon' : /\bmorning\b/i.test(current) ? 'morning' : null
   if (!request || !dayPart) return null
-  const queryTokens = request[1].toLowerCase().split(/\s+/).filter((token) => token.length > 2 && !['the', 'event', 'appointment'].includes(token))
-  const weekday = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].indexOf(request[2].toLowerCase())
-  const matches = events.filter((event) => {
-    const title = String(event.title ?? '').toLowerCase()
-    if (!queryTokens.every((token) => title.includes(token))) return false
-    if (localWeekday(event.start_time, options.utcOffset) !== weekday) return false
+  const matches = deleteSelectionMatches(request, events, options.utcOffset).filter((event) => {
     const hour = localHour(event.start_time, options.utcOffset)
     return dayPart === 'afternoon' ? hour >= 12 : hour < 12
   })
@@ -229,14 +250,9 @@ export function isCalendarMutationDisambiguationFollowUp(previousText, text) {
 export function calendarDeleteAmbiguityClarification(text, events, options = {}, formatTime = (value) => value) {
   const input = String(text ?? '').replace(/\s+/g, ' ').trim()
   if (/\b(?:all|every|both|each)\b/i.test(input)) return null
-  const request = input.match(/^(?:delete|cancel|remove)\s+(?:the\s+)?(.+?)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)[.!]?$/i)
+  const request = parseDeleteSelectionRequest(input)
   if (!request) return null
-  const queryTokens = request[1].toLowerCase().split(/\s+/).filter((token) => token.length > 2 && !['the', 'event', 'appointment'].includes(token))
-  const weekday = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].indexOf(request[2].toLowerCase())
-  const matches = events.filter((event) => (
-    localWeekday(event.start_time, options.utcOffset) === weekday
-    && queryTokens.every((token) => String(event.title ?? '').toLowerCase().includes(token))
-  ))
+  const matches = deleteSelectionMatches(request, events, options.utcOffset)
   if (matches.length < 2) return null
   const choices = matches.map((event) => `${event.title} at ${formatTime(event.start_time)}`)
   return `I found ${matches.length} matching events. Which one should I delete: ${choices.join('; ')}?`

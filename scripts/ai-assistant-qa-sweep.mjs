@@ -584,13 +584,18 @@ function hasReadableStructure(text) {
 
 function calendarEdgeScenarioGroups(fixtures) {
   const eventBySuffix = (title) => fixtures.find((event) => event.title.endsWith(title))
+  const weekdayFor = (event) => new Date(event.start_time).toLocaleDateString('en-US', { weekday: 'long' })
+  const dentistDay = weekdayFor(eventBySuffix('Edge dentist appointment'))
+  const birthdayDay = weekdayFor(eventBySuffix('Birthday dinner'))
+  const recurringDay = weekdayFor(eventBySuffix('Recurring softball practice'))
+  const schoolPickupDay = weekdayFor(eventBySuffix('School pickup'))
   return [
     {
       key: 'edge-duplicate-delete',
       page: 'calendar',
       assistantMode: 'general',
       steps: [
-        { text: 'Delete the edge dentist appointment Thursday.', expect: { type: 'clarify', containsAny: ['which', '10:00', '3:00'] } },
+        { text: `Delete the edge dentist appointment ${dentistDay}.`, expect: { type: 'clarify', containsAny: ['which', '10:00', '3:00'] } },
         { text: 'The afternoon one.', expect: { type: 'write', tool: 'delete_event' } },
       ],
     },
@@ -639,7 +644,7 @@ function calendarEdgeScenarioGroups(fixtures) {
       assistantMode: 'general',
       conversationState: eventConversationState(eventBySuffix('Dentist appointment'), now),
       steps: [
-        { text: 'Move the dentist appointment to 3 PM Thursday.', expect: { type: 'clarify', containsAny: ['conflict', 'overlap', 'school meeting'] } },
+        { text: `Move the dentist appointment to 3 PM ${dentistDay}.`, expect: { type: 'clarify', containsAny: ['conflict', 'overlap', 'school meeting'] } },
         { text: 'Put it immediately after the meeting instead.', expect: { type: 'write', tool: 'update_event' } },
       ],
     },
@@ -658,7 +663,7 @@ function calendarEdgeScenarioGroups(fixtures) {
       assistantMode: 'general',
       conversationState: eventConversationState(eventBySuffix('Recurring softball practice'), now),
       steps: [
-        { text: 'Move softball practice next Tuesday to 6 PM.', expect: { type: 'clarify', containsAny: ['one', 'occurrence', 'series'] } },
+        { text: `Move softball practice next ${recurringDay} to 6 PM.`, expect: { type: 'clarify', containsAny: ['one', 'occurrence', 'series'] } },
         { text: 'Just that one.', expect: { type: 'text', containsAny: ['event editor', 'cannot safely', 'not supported'] } },
       ],
     },
@@ -668,7 +673,7 @@ function calendarEdgeScenarioGroups(fixtures) {
       assistantMode: 'general',
       conversationState: eventConversationState(eventBySuffix('Birthday dinner'), now),
       steps: [
-        { text: 'Delete the birthday dinner.', deferAction: true, expect: { type: 'write', tool: 'delete_event' } },
+        { text: `Delete the birthday dinner ${birthdayDay}.`, deferAction: true, expect: { type: 'write', tool: 'delete_event' } },
         { text: "What's happening Saturday?", expect: { type: 'text', semanticIntent: 'calendar.list' } },
         { text: 'Yes.', expect: { type: 'limit', notContainsAny: ['deleted', 'cancelled'] } },
       ],
@@ -678,7 +683,7 @@ function calendarEdgeScenarioGroups(fixtures) {
       page: 'calendar',
       assistantMode: 'general',
       steps: [
-        { text: 'Clear my calendar Thursday except school pickup.', deferAction: true, expect: { type: 'write', tool: 'delete_events_by_title' } },
+        { text: `Clear my calendar ${schoolPickupDay} except school pickup.`, deferAction: true, expect: { type: 'write', tool: 'delete_events_by_title' } },
         { text: 'What exactly would remain?', expect: { type: 'text', containsAny: ['school pickup'] } },
       ],
     },

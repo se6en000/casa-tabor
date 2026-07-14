@@ -53,6 +53,34 @@ test('ambiguous times and singular bulk deletes clarify safely', () => {
     ),
     /Which one should I delete/,
   )
+  for (const phrase of [
+    'Delete the dentist apt on Thursday.',
+    'Delete the dentist apt.',
+    'Remove dentist appointment Thursday.',
+  ]) {
+    assert.match(
+      calendarDeleteAmbiguityClarification(
+        phrase,
+        [
+          { ...event, id: 'am', title: 'Jake | Family Dentist Appointment', start_time: '2026-07-16T10:00:00-04:00' },
+          { ...event, id: 'pm', title: 'Jake | Dentist Appointment', start_time: '2026-07-16T15:00:00-04:00' },
+        ],
+        { utcOffset: '-04:00' },
+      ),
+      /Which one should I delete/,
+      phrase,
+    )
+  }
+  const shortenedFollowUp = resolveCalendarDeleteDisambiguation(
+    'delete the dentist apt',
+    'the afternoon one',
+    [
+      { ...event, id: 'am', title: 'Jake | Family Dentist Appointment', start_time: '2026-07-16T10:00:00-04:00' },
+      { ...event, id: 'pm', title: 'Jake | Dentist Appointment', start_time: '2026-07-16T15:00:00-04:00' },
+    ],
+    { utcOffset: '-04:00' },
+  )
+  assert.equal(shortenedFollowUp.args.id, 'pm')
   assert.equal(
     singularBulkDeleteClarification('Delete all dentist appointments.', 'delete_events_by_title', { ids: ['a', 'b'] }, [],),
     null,
