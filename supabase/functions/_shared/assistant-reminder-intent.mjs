@@ -50,6 +50,36 @@ export function isExplicitReminderCompletion(text) {
   return /\b(?:mark|check)\b.*\breminder\b.*\b(?:done|complete|off)\b|\bcomplete\b.*\breminder\b/i.test(value)
 }
 
+export function explicitReminderSearchOverride(text) {
+  const value = String(text ?? '').toLowerCase()
+  if (
+    !/\breminders?\b/.test(value) ||
+    !/\b(?:find|look|search|show|what|where|which)\b/.test(value) ||
+    isExplicitReminder(value) ||
+    isExplicitReminderCompletion(value)
+  ) return null
+
+  const ignored = new Set([
+    'a', 'an', 'calendar', 'can', 'could', 'do', 'event', 'events', 'find',
+    'for', 'i', 'is', 'look', 'me', 'my', 'on', 'please', 'reminder',
+    'reminders', 'search', 'show', 'the', 'what', 'where', 'which', 'you',
+  ])
+  const temporal = new Set([
+    'today', 'tomorrow', 'yesterday', 'sunday', 'monday', 'tuesday',
+    'wednesday', 'thursday', 'friday', 'saturday', 'week', 'month', 'year',
+  ])
+  const words = value.replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean)
+  const hasTemporalReference = words.some((word) => temporal.has(word)) ||
+    /\b(?:next|this|last)\s+(?:week|month|year|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/.test(value) ||
+    /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/.test(value)
+  const query = words.filter((word) => !ignored.has(word) && !temporal.has(word)).join(' ')
+  return {
+    event_type: 'reminder',
+    query: query || undefined,
+    clear_range: !hasTemporalReference,
+  }
+}
+
 function isExplicitReminder(text) {
   return /\bremind\s+me\b|\bset\s+(?:me\s+)?(?:a\s+)?reminder\b|\bcreate\s+(?:a\s+)?reminder\b/i.test(String(text ?? ''))
 }

@@ -5,6 +5,7 @@ import {
   fallbackExplicitRelativeReminderTurn,
   hardenExplicitReminderTurn,
   isExplicitReminderCompletion,
+  explicitReminderSearchOverride,
 } from '../supabase/functions/_shared/assistant-reminder-intent.mjs'
 
 test('explicit reminder language cannot be downgraded to an appointment', () => {
@@ -74,4 +75,23 @@ test('explicit reminder completion cannot be mistaken for grocery check-off', ()
     }, 'Mark that reminder done.').action,
     'complete',
   )
+})
+
+test('explicit reminder searches deterministically preserve type and user scope', () => {
+  assert.deepEqual(explicitReminderSearchOverride('Find my dentist reminder'), {
+    event_type: 'reminder',
+    query: 'dentist',
+    clear_range: true,
+  })
+  assert.deepEqual(explicitReminderSearchOverride('show my reminders'), {
+    event_type: 'reminder',
+    query: undefined,
+    clear_range: true,
+  })
+  assert.deepEqual(explicitReminderSearchOverride('find my dentist reminder tomorrow'), {
+    event_type: 'reminder',
+    query: 'dentist',
+    clear_range: false,
+  })
+  assert.equal(explicitReminderSearchOverride('Remind me tomorrow to call the dentist'), null)
 })

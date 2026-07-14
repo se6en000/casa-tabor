@@ -4,6 +4,7 @@ import {
   executeAgentReadTool,
   formatAgentReadResult,
 } from '../_shared/assistant-agent-read.mjs'
+import { explicitReminderSearchOverride } from '../_shared/assistant-reminder-intent.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -28,6 +29,11 @@ Deno.serve(async (req) => {
     const groceryItems = Array.isArray(body?.authoritative_data?.groceryItems)
       ? body.authoritative_data.groceryItems.slice(0, 150)
       : []
+    const latestUserText = Array.isArray(body?.messages)
+      ? [...body.messages].reverse().find((message) =>
+          message?.role === 'user' && typeof message?.content === 'string'
+        )?.content ?? ''
+      : ''
     const authoritativeEntities = [
       ...events.map((event: {
         id?: string
@@ -131,6 +137,21 @@ Deno.serve(async (req) => {
       typeof plan.args?.query !== 'string'
     ) {
       plan.args = { ...plan.args, query: body.context.groceryQuery.trim() }
+    }
+    const reminderSearch = plan.toolName === 'calendar.search'
+      ? explicitReminderSearchOverride(latestUserText)
+      : null
+    if (reminderSearch) {
+      plan.args = {
+        ...plan.args,
+        event_type: reminderSearch.event_type,
+        ...(reminderSearch.query ? { query: reminderSearch.query } : {}),
+      }
+      if (!reminderSearch.query) delete plan.args.query
+      if (reminderSearch.clear_range) {
+        delete plan.args.start
+        delete plan.args.end
+      }
     }
     if (
       plan.toolName === 'calendar.get_range' &&
