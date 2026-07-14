@@ -361,7 +361,7 @@ Deno.serve(async (req) => {
   // Start from 24h ago so in-progress events (started earlier today) are visible
   const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000)
   const yearEnd = new Date(); yearEnd.setFullYear(yearEnd.getFullYear() + 1, 11, 31); yearEnd.setHours(23,59,59,999)
-  const needsEventData = !requestAmbiguity && ['event', 'full', 'travel'].includes(intentRouting.profile)
+  const needsEventData = !requestAmbiguity && ['event', 'full', 'travel', 'general'].includes(intentRouting.profile)
   const needsPlaceData = !requestAmbiguity && ['event', 'full', 'travel', 'places'].includes(intentRouting.profile)
   const needsContactData = !requestAmbiguity && ['event', 'full', 'places'].includes(intentRouting.profile)
   const needsGroceryData = !requestAmbiguity && (

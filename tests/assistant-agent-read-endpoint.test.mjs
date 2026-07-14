@@ -6,6 +6,10 @@ const endpoint = readFileSync(
   new URL('../supabase/functions/ai-agent-read/index.ts', import.meta.url),
   'utf8',
 )
+const assistantEndpoint = readFileSync(
+  new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url),
+  'utf8',
+)
 
 test('agent read endpoint delegates language planning and executes only approved reads', () => {
   assert.match(endpoint, /functions\.invoke\('ai-agent-shadow'/)
@@ -14,6 +18,12 @@ test('agent read endpoint delegates language planning and executes only approved
   assert.match(endpoint, /planner\?\.telemetry\?\.tool_effect !== 'read'/)
   assert.match(endpoint, /executeAgentReadTool/)
   assert.match(endpoint, /formatAgentReadResult/)
+})
+
+test('agent read endpoint keeps the authoritative annual event window available to search', () => {
+  assert.match(endpoint, /body\.authoritative_data\.events\.slice\(0, 500\)/)
+  assert.doesNotMatch(endpoint, /body\.authoritative_data\.events\.slice\(0, 100\)/)
+  assert.match(assistantEndpoint, /\['event', 'full', 'travel', 'general'\]\.includes\(intentRouting\.profile\)/)
 })
 
 test('agent read endpoint cannot invoke the write executor', () => {

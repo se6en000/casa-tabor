@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
     const turnId = optionalText(body?.turn_id, 120)
     const correlationId = optionalText(body?.correlation_id, 120) ?? `${traceId}:${turnId ?? crypto.randomUUID()}`
     const events = Array.isArray(body?.authoritative_data?.events)
-      ? body.authoritative_data.events.slice(0, 100)
+      ? body.authoritative_data.events.slice(0, 500)
       : []
     const groceryItems = Array.isArray(body?.authoritative_data?.groceryItems)
       ? body.authoritative_data.groceryItems.slice(0, 150)
