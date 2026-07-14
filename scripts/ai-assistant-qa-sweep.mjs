@@ -66,17 +66,6 @@ async function loadFamily() {
   return Array.isArray(rows) ? rows : []
 }
 
-async function loadDefaultGroceryListId() {
-  const url = new URL('/rest/v1/grocery_lists', SUPABASE_URL)
-  url.searchParams.set('select', 'id')
-  url.searchParams.set('order', 'created_at.asc')
-  url.searchParams.set('limit', '1')
-  const rows = await fetchJson(url, { headers })
-  const listId = rows?.[0]?.id ?? null
-  if (!listId) throw new Error('No grocery list found')
-  return listId
-}
-
 function buildContext({ family, page, assistantMode, conversationState }) {
   const current = new Date()
   return {
@@ -142,10 +131,10 @@ async function executeAction({ tool, args, actionId, conversationId, turnId }) {
   })
 }
 
-async function seedCalendarFixtures() {
+async function seedCalendarFixtures(created = []) {
   const items = [
     {
-      title: 'Soccer practice',
+      title: '[QA] Soccer practice',
       daysFromNow: 2,
       hour: 17,
       minutes: 30,
@@ -153,10 +142,10 @@ async function seedCalendarFixtures() {
       locationName: 'Sunrise Community Center',
       address: '123 Sunrise Way, West Palm Beach, FL 33401',
     },
-    { title: 'Dentist appointment', daysFromNow: 3, hour: 10, minutes: 0, durationMins: 60 },
-    { title: 'Birthday dinner', daysFromNow: 4, hour: 18, minutes: 0, durationMins: 120 },
+    { title: '[QA] Dentist appointment', daysFromNow: 3, hour: 10, minutes: 0, durationMins: 60 },
+    { title: '[QA] Birthday dinner', daysFromNow: 4, hour: 18, minutes: 0, durationMins: 120 },
     {
-      title: 'Airport pickup',
+      title: '[QA] Airport pickup',
       daysFromNow: 5,
       hour: 21,
       minutes: 15,
@@ -164,13 +153,12 @@ async function seedCalendarFixtures() {
       locationName: 'Palm Beach International Airport',
       address: '1000 James L Turnage Blvd, West Palm Beach, FL 33415',
     },
-    { title: 'Library story time', daysFromNow: 6, hour: 9, minutes: 30, durationMins: 45 },
-    { title: 'Weekend trip to Maine', daysFromNow: 12, hour: 0, minutes: 0, durationMins: 4 * 24 * 60, allDay: true },
-    { title: 'Piano recital', daysFromNow: 8, hour: 16, minutes: 0, durationMins: 90 },
-    { title: 'PTA meeting', daysFromNow: 9, hour: 19, minutes: 0, durationMins: 60 },
+    { title: '[QA] Library story time', daysFromNow: 6, hour: 9, minutes: 30, durationMins: 45 },
+    { title: '[QA] Weekend trip to Maine', daysFromNow: 12, hour: 0, minutes: 0, durationMins: 4 * 24 * 60, allDay: true },
+    { title: '[QA] Piano recital', daysFromNow: 8, hour: 16, minutes: 0, durationMins: 90 },
+    { title: '[QA] PTA meeting', daysFromNow: 9, hour: 19, minutes: 0, durationMins: 60 },
   ]
 
-  const created = []
   for (const spec of items) {
     const start = new Date(now)
     start.setDate(start.getDate() + spec.daysFromNow)
@@ -187,6 +175,7 @@ async function seedCalendarFixtures() {
       all_day: Boolean(spec.allDay),
       event_type: spec.allDay ? 'event' : 'event',
       is_enriched: false,
+      description: runId,
     }]
     const inserted = await fetchJson(url, {
       method: 'POST',
@@ -198,7 +187,19 @@ async function seedCalendarFixtures() {
   return created
 }
 
-async function seedGroceryFixtures(listId) {
+async function createQaGroceryList() {
+  const url = new URL('/rest/v1/grocery_lists', SUPABASE_URL)
+  const inserted = await fetchJson(url, {
+    method: 'POST',
+    headers: { ...headers, prefer: 'return=representation' },
+    body: JSON.stringify([{ name: `[QA] ${runId}` }]),
+  })
+  const listId = inserted?.[0]?.id ?? null
+  if (!listId) throw new Error('Failed to create isolated QA grocery list')
+  return listId
+}
+
+async function seedGroceryFixtures(listId, created = []) {
   const items = [
     { name: 'milk for pancakes', quantity: '1', unit: 'gallon' },
     { name: 'eggs for omelets', quantity: '1', unit: 'dozen' },
@@ -208,7 +209,6 @@ async function seedGroceryFixtures(listId) {
     { name: 'bread for sandwiches', quantity: null, unit: null },
   ]
 
-  const created = []
   for (const spec of items) {
     const url = new URL('/rest/v1/grocery_items', SUPABASE_URL)
     const payload = [{
@@ -254,6 +254,17 @@ async function cleanupGroceryItems(ids) {
   return ids.length
 }
 
+async function cleanupQaGroceryList(listId) {
+  if (!listId) return 0
+  const url = new URL('/rest/v1/grocery_lists', SUPABASE_URL)
+  url.searchParams.set('id', `eq.${listId}`)
+  await fetchJson(url, {
+    method: 'DELETE',
+    headers: { ...headers, prefer: 'return=minimal' },
+  })
+  return 1
+}
+
 async function countRowsByIds(table, ids, extraParams = {}) {
   if (!ids.length) return 0
   const url = new URL(`/rest/v1/${table}`, SUPABASE_URL)
@@ -266,7 +277,7 @@ async function countRowsByIds(table, ids, extraParams = {}) {
 
 function scenarioGroups(fixtures, grocerySeeds, familyNames) {
   const [firstName = 'Alex', secondName = firstName] = familyNames
-  const events = Object.fromEntries(fixtures.map((event) => [event.title, event]))
+  const eventBySuffix = (title) => fixtures.find((event) => event.title.endsWith(title))
   const groceries = Object.fromEntries(grocerySeeds.map((item) => [item.name, item]))
 
   return [
@@ -297,7 +308,7 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames) {
       key: 'calendar-update',
       page: 'calendar',
       assistantMode: 'general',
-      conversationState: eventConversationState(events['Soccer practice'], now),
+      conversationState: eventConversationState(eventBySuffix('Soccer practice'), now),
       steps: [
         { text: 'move it to next friday at 7pm.', expect: { type: 'write', tool: 'update_event' } },
         { text: 'where is it located again?', expect: { type: 'text' } },
@@ -307,7 +318,7 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames) {
       key: 'calendar-delete',
       page: 'calendar',
       assistantMode: 'general',
-      conversationState: eventConversationState(events['Birthday dinner'], now),
+      conversationState: eventConversationState(eventBySuffix('Birthday dinner'), now),
       steps: [
         { text: 'delete that one.', expect: { type: 'write', tool: 'delete_event' } },
         { text: 'what time was birthday dinner again?', expect: { type: 'text' } },
@@ -317,7 +328,7 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames) {
       key: 'calendar-followups',
       page: 'calendar',
       assistantMode: 'general',
-      conversationState: eventConversationState(events['Airport pickup'], now),
+      conversationState: eventConversationState(eventBySuffix('Airport pickup'), now),
       steps: [
         { text: 'where is it?', expect: { type: 'text' } },
         { text: 'how long will it take?', expect: { type: 'text' } },
@@ -393,7 +404,7 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames) {
       key: 'calendar-multiturn-create',
       page: 'calendar',
       assistantMode: 'general',
-      conversationState: eventConversationState(events['PTA meeting'], now),
+      conversationState: eventConversationState(eventBySuffix('PTA meeting'), now),
       steps: [
         { text: 'where is it held?', expect: { type: 'text' } },
         { text: 'what time is it now?', expect: { type: 'text' } },
@@ -461,26 +472,28 @@ function isClarifyingResponse(response) {
 async function run() {
   const family = await loadFamily()
   const familyNames = family.map((member) => member.name)
-  const calendarFixtures = await seedCalendarFixtures()
-  const groceryListId = await loadDefaultGroceryListId()
-  const groceryFixtures = await seedGroceryFixtures(groceryListId)
-  const groups = scenarioGroups(calendarFixtures, groceryFixtures, familyNames)
-
-  const flatSteps = groups.flatMap((group) => group.steps.map((step, index) => ({
-    ...step,
-    groupKey: group.key,
-    page: group.page,
-    assistantMode: group.assistantMode,
-    initialConversationState: index === 0 ? group.conversationState ?? null : undefined,
-  })))
-  const steps = STEP_LIMIT ? flatSteps.slice(0, STEP_LIMIT) : flatSteps
-
+  let calendarFixtures = []
+  let groceryFixtures = []
+  let qaGroceryListId = null
   const results = []
   const conversationStates = new Map()
   const createdEventIds = new Set()
   const createdGroceryIds = new Set()
 
   try {
+    await seedCalendarFixtures(calendarFixtures)
+    qaGroceryListId = await createQaGroceryList()
+    await seedGroceryFixtures(qaGroceryListId, groceryFixtures)
+    const groups = scenarioGroups(calendarFixtures, groceryFixtures, familyNames)
+    const flatSteps = groups.flatMap((group) => group.steps.map((step, index) => ({
+      ...step,
+      groupKey: group.key,
+      page: group.page,
+      assistantMode: group.assistantMode,
+      initialConversationState: index === 0 ? group.conversationState ?? null : undefined,
+    })))
+    const steps = STEP_LIMIT ? flatSteps.slice(0, STEP_LIMIT) : flatSteps
+
     for (let index = 0; index < steps.length; index += 1) {
       const step = steps[index]
       const conversationId = `${runId}-${step.groupKey}`
@@ -635,16 +648,23 @@ async function run() {
     }
   } finally {
     const eventIds = [...calendarFixtures.map((event) => event.id).filter(Boolean), ...createdEventIds]
-    const groceryIds = [...groceryFixtures.map((item) => item.id).filter(Boolean), ...createdGroceryIds]
+    const fixtureGroceryIds = groceryFixtures.map((item) => item.id).filter(Boolean)
+    const createdGroceryItemIds = [...createdGroceryIds]
     const cleanup = {
       events_deleted: await cleanupEvents(eventIds),
-      grocery_items_deleted: await cleanupGroceryItems(groceryIds),
+      grocery_items_deleted: fixtureGroceryIds.length + await cleanupGroceryItems(createdGroceryItemIds),
+      grocery_lists_deleted: await cleanupQaGroceryList(qaGroceryListId),
     }
     cleanup.events_remaining = await countRowsByIds('events', eventIds)
-    cleanup.active_grocery_items_remaining = await countRowsByIds('grocery_items', groceryIds, {
+    cleanup.fixture_grocery_items_remaining = await countRowsByIds('grocery_items', fixtureGroceryIds)
+    cleanup.active_grocery_items_remaining = await countRowsByIds('grocery_items', createdGroceryItemIds, {
       deleted_at: 'is.null',
     })
-    cleanup.verified = cleanup.events_remaining === 0 && cleanup.active_grocery_items_remaining === 0
+    cleanup.qa_grocery_lists_remaining = await countRowsByIds('grocery_lists', qaGroceryListId ? [qaGroceryListId] : [])
+    cleanup.verified = cleanup.events_remaining === 0 &&
+      cleanup.fixture_grocery_items_remaining === 0 &&
+      cleanup.active_grocery_items_remaining === 0 &&
+      cleanup.qa_grocery_lists_remaining === 0
     const totals = {
       total: results.length,
       passed: results.filter((result) => result.ok).length,
