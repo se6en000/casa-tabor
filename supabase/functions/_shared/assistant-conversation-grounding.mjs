@@ -34,7 +34,7 @@ export function normalizeConversationState(value, now = Date.now()) {
     const pendingMutation = value.pendingMutation
     if (
       candidates.length < 2 ||
-      !['update_event', 'delete_event'].includes(pendingMutation?.tool) ||
+      !['select_event', 'update_event', 'delete_event'].includes(pendingMutation?.tool) ||
       !pendingMutation.args ||
       typeof pendingMutation.args !== 'object' ||
       Array.isArray(pendingMutation.args)
@@ -173,6 +173,19 @@ export function resolveCalendarClarificationSelection(text, state, events, optio
       tool: 'delete_event',
       args: { id: selected.id, title: selected.title },
       event: selected,
+    }
+  }
+  if (pending.tool === 'select_event') {
+    if (/\b(?:delete|remove|cancel)\b/.test(input)) {
+      return {
+        tool: 'delete_event',
+        args: { id: selected.id, title: selected.title },
+        event: selected,
+      }
+    }
+    return {
+      text: `I selected ${selected.title}. What would you like to change?`,
+      conversationState: eventConversationState(selected),
     }
   }
   return {

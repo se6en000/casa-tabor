@@ -50,6 +50,13 @@ test('single grocery reads establish authoritative follow-up state', () => {
   assert.match(endpoint, /activeGroceryItemId: toolResult\.items\[0\]\.id/)
 })
 
+test('multi-event searches retain authoritative candidates for follow-up selection', () => {
+  assert.match(endpoint, /plan\.toolName === 'calendar\.search' && activeEvents\?\.length > 1/)
+  assert.match(endpoint, /activeEntityType: 'calendar_clarification'/)
+  assert.match(endpoint, /pendingMutation: \{ tool: 'select_event', args: \{\} \}/)
+  assert.match(assistantEndpoint, /selection\.conversationState \?\? incomingConversationState/)
+})
+
 test('semantic calendar scope retrieves broad context while preserving the primary range', () => {
   assert.match(endpoint, /body\?\.context\?\.calendarReadContext\?\.start/)
   assert.match(endpoint, /calendarReadContext\.contextStart/)

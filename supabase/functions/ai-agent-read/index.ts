@@ -179,6 +179,19 @@ Deno.serve(async (req) => {
           expectedFollowUp: 'event_follow_up',
           establishedAt: new Date().toISOString(),
         }
+      : plan.toolName === 'calendar.search' && activeEvents?.length > 1
+        ? {
+            activeEntityType: 'calendar_clarification',
+            candidateEvents: activeEvents.slice(0, 6).map((event) => ({
+              id: event.id,
+              title: event.title,
+              start: event.start_time,
+              version: event.updated_at,
+            })),
+            pendingMutation: { tool: 'select_event', args: {} },
+            expectedFollowUp: 'calendar_clarification',
+            establishedAt: new Date().toISOString(),
+          }
       : toolResult.items?.length === 1
         ? {
             activeEntityType: 'grocery_item',

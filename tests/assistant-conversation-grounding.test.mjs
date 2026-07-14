@@ -118,6 +118,49 @@ test('calendar clarification lists numbered choices and resolves spoken time or 
   )
 })
 
+test('calendar search candidates ground explicit ordinal and weekday deletes', () => {
+  const saturday = {
+    ...event,
+    id: 'saturday-dinner',
+    title: 'Dinner With Kelly',
+    updated_at: 'sat-v1',
+    start_time: '2026-07-18T23:00:00Z',
+  }
+  const sunday = {
+    ...event,
+    id: 'sunday-dinner',
+    title: 'Dinner With Kelly',
+    updated_at: 'sun-v1',
+    start_time: '2026-07-19T22:00:00Z',
+  }
+  const state = calendarClarificationConversationState(
+    [saturday, sunday],
+    { tool: 'select_event', args: {} },
+    new Date('2026-07-14T13:00:00Z'),
+  )
+  const normalized = normalizeConversationState(state, Date.parse('2026-07-14T13:00:01Z'))
+  const options = { utcOffset: '-04:00' }
+
+  assert.equal(
+    resolveCalendarClarificationSelection(
+      'delete the first one please',
+      normalized,
+      [saturday, sunday],
+      options,
+    ).args.id,
+    saturday.id,
+  )
+  assert.equal(
+    resolveCalendarClarificationSelection(
+      'delete the one on Sunday',
+      normalized,
+      [saturday, sunday],
+      options,
+    ).args.id,
+    sunday.id,
+  )
+})
+
 test('calendar clarification preserves and applies the semantic mutation after selection', () => {
   const now = new Date('2026-07-14T13:00:00Z')
   const secondEvent = {
