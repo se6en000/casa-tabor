@@ -94,6 +94,17 @@ test('common assistant domains select narrow profiles', () => {
   assert.equal(classifyAssistantIntent('Explain photosynthesis').profile, 'general')
 })
 
+test('recipe words do not hide ambiguous calendar mutation targets', () => {
+  assert.deepEqual(
+    classifyAssistantIntent('delete dinner with kelly'),
+    { profile: 'full', forceEventSearch: false },
+  )
+  assert.deepEqual(
+    classifyAssistantIntent('remove the lunch recipe'),
+    { profile: 'full', forceEventSearch: false },
+  )
+})
+
 test('natural cooking concepts select the bounded recipe profile', () => {
   for (const input of [
     'What can I use instead of buttermilk?',

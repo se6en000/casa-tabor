@@ -39,6 +39,9 @@ export function classifyAssistantIntent(text, options = {}) {
     hasWebIntent,
   ].filter(Boolean).length
 
+  if (hasRecipeIntent && EVENT_MUTATION.test(input)) {
+    return { profile: 'full', forceEventSearch: false }
+  }
   if (hasEventIntent) {
     const hasAuthoritativeEvent = focusedEvent || eventFollowUp
     const createIntent = !hasAuthoritativeEvent && EVENT_CREATE.test(input) && !EVENT_MUTATION.test(input)

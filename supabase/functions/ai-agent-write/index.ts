@@ -180,17 +180,26 @@ Deno.serve(async (req) => {
       plan = resolved
     }
     if (plan?.kind !== 'tool' || !ALLOWED_TOOLS.has(plan.toolName)) {
-      const ambiguousCandidates = plan?.kind === 'defer' && plan?.reason === 'ambiguous'
-        ? candidateEntities(plan.candidateEntityIds, authoritativeEntities)
-        : []
+      const ambiguousCandidateIds = plan?.kind === 'defer' && plan?.reason === 'ambiguous'
+        ? plan.candidateEntityIds
+        : plan?.kind === 'clarify' &&
+            plan?.code === 'ambiguous_authoritative_target' &&
+            Array.isArray(plan.candidates)
+          ? plan.candidates.flatMap((candidate) =>
+              typeof candidate?.id === 'string' ? [candidate.id] : []
+            )
+          : []
+      const ambiguousCandidates = candidateEntities(ambiguousCandidateIds, authoritativeEntities)
       const inferredAmbiguousTool = /\b(?:delete|remove|cancel)\b/i.test(latestUserText)
         ? 'delete_event'
         : null
-      const clarification = plan?.kind === 'clarify'
-        ? optionalText(plan.text, 500)
-        : plan?.kind === 'defer' && plan?.reason === 'ambiguous'
-          ? ambiguityClarification(plan.candidateEntityIds, authoritativeEntities, body?.context?.utcOffset)
-          : null
+      const clarification = ambiguousCandidates.length > 1
+        ? ambiguityClarification(ambiguousCandidateIds, authoritativeEntities, body?.context?.utcOffset)
+        : plan?.kind === 'clarify'
+          ? optionalText(plan.text, 500)
+          : plan?.kind === 'defer' && plan?.reason === 'ambiguous'
+            ? ambiguityClarification(plan.candidateEntityIds, authoritativeEntities, body?.context?.utcOffset)
+            : null
       return result({
         supported: false,
         handled: Boolean(clarification),

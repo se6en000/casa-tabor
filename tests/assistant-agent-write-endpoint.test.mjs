@@ -69,6 +69,8 @@ test('rejected bounded writes are handled without legacy mutation fallthrough', 
 
 test('planner clarification and ambiguity remain in the bounded lane', () => {
   assert.match(endpoint, /plan\?\.kind === 'clarify'/)
+  assert.match(endpoint, /ambiguous_authoritative_target/)
+  assert.match(endpoint, /plan\.candidates\.flatMap/)
   assert.match(endpoint, /plan\?\.reason === 'ambiguous'/)
   assert.match(endpoint, /I found more than one possible match/)
   assert.match(endpoint, /candidateEntityIds/)
