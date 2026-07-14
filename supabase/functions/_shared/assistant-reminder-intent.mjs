@@ -10,7 +10,9 @@ const TENS = new Map([
 ])
 
 export function hardenExplicitReminderTurn(turn, text) {
-  if (!turn || typeof turn !== 'object' || !isExplicitReminder(text)) return turn
+  if (!turn || typeof turn !== 'object') return turn
+  if (isExplicitReminderCompletion(text)) return { ...turn, action: 'complete' }
+  if (!isExplicitReminder(text)) return turn
   if (!['create', 'revise'].includes(turn.action)) return turn
 
   const patch = turn.patch && typeof turn.patch === 'object' ? { ...turn.patch } : {}

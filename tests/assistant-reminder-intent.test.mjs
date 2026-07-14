@@ -66,4 +66,12 @@ test('explicit reminder completion cannot be mistaken for grocery check-off', ()
   assert.equal(isExplicitReminderCompletion('Mark that reminder done.'), true)
   assert.equal(isExplicitReminderCompletion('Check the reminder off.'), true)
   assert.equal(isExplicitReminderCompletion('Mark milk done.'), false)
+  assert.equal(
+    hardenExplicitReminderTurn({
+      action: 'delete',
+      targetEntityId: 'reminder-1',
+      patch: {},
+    }, 'Mark that reminder done.').action,
+    'complete',
+  )
 })
