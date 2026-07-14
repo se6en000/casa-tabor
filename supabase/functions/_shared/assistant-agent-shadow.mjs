@@ -119,6 +119,14 @@ export function parseAgentShadowResponse(payload) {
         args: functionCall.args?.tool_args && typeof functionCall.args.tool_args === 'object'
           ? functionCall.args.tool_args
           : {},
+        responsePlan: {
+          userGoal: typeof functionCall.args?.user_goal === 'string'
+            ? functionCall.args.user_goal.slice(0, 240)
+            : null,
+          helpfulEntityIds: Array.isArray(functionCall.args?.helpful_entity_ids)
+            ? functionCall.args.helpful_entity_ids.filter((id) => typeof id === 'string').slice(0, 8)
+            : [],
+        },
       }
     }
     if (functionCall.name === WRITE_ROUTE_FUNCTION) {
@@ -239,6 +247,10 @@ AUTHORITATIVE READ MODE:
 - Never substitute a read result for a requested mutation or confirmation flow.
 - Set requested_effect to unsupported for unsupported domains or when a safe read cannot be selected.
 - Only when requested_effect is read, select one read tool and supply its arguments.
+- Reason from the human's likely goal, not a rigid literal cutoff. Use the authoritative entities to notice nearby or related facts that would materially help.
+- Keep the direct answer first. Put optional context second and only select helpful_entity_ids that are genuinely useful now.
+- Calendar requests for part of a day may benefit from later same-day events, conflicts, travel, or transitions. Grocery item requests may benefit from duplicate, quantity, checked-state, or closely related list context.
+- Never select an entity merely to be chatty. Never invent an ID or fact.
 ` : ''}
 ${additiveWriteMode ? `
 BOUNDED WRITE MODE:
@@ -312,6 +324,15 @@ function buildReadRouteDeclaration() {
           additionalProperties: false,
           properties: toolArgProperties,
           description: 'Arguments for tool_name when requested_effect is read.',
+        },
+        user_goal: {
+          type: 'string',
+          description: 'A concise statement of what the person is practically trying to learn or accomplish.',
+        },
+        helpful_entity_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional authoritative entity IDs worth mentioning after the direct answer because they are materially helpful.',
         },
       },
       required: ['requested_effect'],

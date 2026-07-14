@@ -51,12 +51,16 @@ test('write rollout forwards exact active grocery context and versions', () => {
 test('agent routing forwards trusted semantic slots for exact reads and moves', () => {
   assert.match(assistant, /calendarRequestedTime: calendarFrame\?\.intent === 'event\.move'/)
   assert.match(assistant, /groceryQuery: groceryFrame\?\.slots\?\.item/)
+  assert.match(assistant, /calendarReadContext/)
+  assert.match(assistant, /calendarRangeForScope/)
 })
 
 test('write rollout falls through to authoritative reads after non-write plans', () => {
   assert.match(assistant, /server_agent_write_fallback/)
   assert.match(assistant, /agentWriteData\?\.code/)
   assert.match(assistant, /agent_write_timeout/)
+  assert.match(assistant, /!isCalendarSemanticRead/)
+  assert.match(assistant, /isCalendarSemanticRead \|\| Math\.random\(\) < agentReadRate/)
   assert.match(assistant, /shouldRunAgentRead = !dryRun/)
   assert.match(assistant, /shouldRunAgentShadow = !shouldRunAgentWrite && !shouldRunAgentRead/)
 })

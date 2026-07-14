@@ -176,6 +176,30 @@ async function run() {
       description: runId,
     }])
     createdEventIds.push(soccer.id)
+    const thursdaySoftballStart = nextWeekday(4, 18, 30)
+    const [thursdaySoftball] = await insert('events', [{
+      title: '[Agent QA] Thursday softball practice',
+      start_time: thursdaySoftballStart.toISOString(),
+      end_time: new Date(thursdaySoftballStart.getTime() + 90 * 60000).toISOString(),
+      status: 'confirmed',
+      all_day: false,
+      event_type: 'event',
+      is_enriched: false,
+      description: runId,
+    }])
+    createdEventIds.push(thursdaySoftball.id)
+    const thursdayLateStart = nextWeekday(4, 21, 15)
+    const [thursdayLate] = await insert('events', [{
+      title: '[Agent QA] Late Thursday pickup',
+      start_time: thursdayLateStart.toISOString(),
+      end_time: new Date(thursdayLateStart.getTime() + 30 * 60000).toISOString(),
+      status: 'confirmed',
+      all_day: false,
+      event_type: 'event',
+      is_enriched: false,
+      description: runId,
+    }])
+    createdEventIds.push(thursdayLate.id)
 
     const lists = await insert('grocery_lists', [
       { name: `[Agent QA A] ${runId}` },
@@ -205,15 +229,75 @@ async function run() {
     family,
   })
   expect(turn.response.type === 'text' && turn.response.semantic_intent === 'agent.read', 'Clean Thursday read did not use agent.read')
+  expect(
+    turn.response.text.includes('[Agent QA] Thursday softball practice'),
+    'Clean Thursday read omitted the 6:30 PM softball event',
+  )
+  expect(
+    turn.response.text.includes('[Agent QA] Late Thursday pickup'),
+    'Clean Thursday read omitted helpful later-evening context',
+  )
   pass('01-thursday-read', turn.response.text.split('\n')[0])
 
     turn = await callAssistant({
-    key: '02-thursday-stt',
+    key: '02-thursday-follow-up',
+    text: "Is that the only thing that's happening Thursday afternoon?",
+    family,
+    history: [
+      { role: 'user', content: 'What does Thursday afternoon look like?' },
+      { role: 'assistant', content: turn.response.text },
+    ],
+    conversationState: turn.response.conversation_state,
+  })
+  expect(turn.response.type === 'text' && turn.response.semantic_intent === 'agent.read', 'Thursday follow-up did not use agent.read')
+  expect(
+    turn.response.text.includes('[Agent QA] Thursday softball practice'),
+    'Thursday follow-up omitted the 6:30 PM softball event',
+  )
+  expect(
+    turn.response.text.includes('[Agent QA] Late Thursday pickup'),
+    'Thursday follow-up omitted helpful later-evening context',
+  )
+  pass('02-thursday-follow-up', turn.response.text.split('\n')[0])
+
+    turn = await callAssistant({
+    key: '03-thursday-omission-challenge',
+    text: "There's no softball practice as well",
+    family,
+    history: [
+      { role: 'user', content: 'What does Thursday afternoon look like?' },
+      { role: 'assistant', content: turn.response.text },
+      { role: 'user', content: "Is that the only thing that's happening Thursday afternoon?" },
+      { role: 'assistant', content: turn.response.text },
+    ],
+    conversationState: turn.response.conversation_state,
+  })
+  expect(turn.response.type === 'text' && turn.response.semantic_intent === 'agent.read', 'Thursday omission challenge did not use agent.read')
+  expect(
+    turn.response.text.includes('[Agent QA] Thursday softball practice'),
+    'Thursday omission challenge omitted the 6:30 PM softball event',
+  )
+  expect(
+    turn.response.text.includes('[Agent QA] Late Thursday pickup'),
+    'Thursday omission challenge omitted helpful later-evening context',
+  )
+  pass('03-thursday-omission-challenge', turn.response.text.split('\n')[0])
+
+    turn = await callAssistant({
+    key: '04-thursday-stt',
     text: 'what does thirty afternoon thursday afternoon look like',
     family,
   })
   expect(turn.response.type === 'text' && turn.response.semantic_intent === 'agent.read', 'STT Thursday read did not use agent.read')
-  pass('02-thursday-stt', turn.response.text.split('\n')[0])
+  expect(
+    turn.response.text.includes('[Agent QA] Thursday softball practice'),
+    'STT Thursday read omitted the 6:30 PM softball event',
+  )
+  expect(
+    turn.response.text.includes('[Agent QA] Late Thursday pickup'),
+    'STT Thursday read omitted helpful later-evening context',
+  )
+  pass('04-thursday-stt', turn.response.text.split('\n')[0])
 
     const dinner = await callAssistant({
     key: '03-dinner-create',

@@ -36,6 +36,43 @@ test('calendar range reads use authoritative overlap semantics', () => {
   assert.deepEqual(result.events.map((event) => event.id), ['event-1'])
 })
 
+test('calendar reads separate direct results from helpful same-day context', () => {
+  const result = executeAgentReadTool('calendar.get_range', {
+    start: '2026-07-16T00:00:00-04:00',
+    end: '2026-07-17T00:00:00-04:00',
+    primary_start: '2026-07-16T12:00:00-04:00',
+    primary_end: '2026-07-16T20:00:00-04:00',
+  }, {
+    events: [
+      ...events,
+      {
+        id: 'event-afternoon',
+        title: 'Afternoon appointment',
+        start_time: '2026-07-16T18:00:00.000Z',
+        end_time: '2026-07-16T19:00:00.000Z',
+        all_day: false,
+      },
+      {
+        id: 'event-late',
+        title: 'Late pickup',
+        start_time: '2026-07-17T01:00:00.000Z',
+        end_time: '2026-07-17T02:00:00.000Z',
+        all_day: false,
+      },
+    ],
+  })
+  assert.deepEqual(result.primaryEvents.map((event) => event.id), ['event-afternoon'])
+  assert.deepEqual(result.contextEvents.map((event) => event.id), ['event-1', 'event-late'])
+  const text = formatAgentReadResult('calendar.get_range', result, {
+    utcOffset: '-04:00',
+    scopeLabel: 'Thursday afternoon',
+  })
+  assert.match(text, /Afternoon appointment/)
+  assert.match(text, /Also on that day/)
+  assert.match(text, /Late pickup/)
+  assert.doesNotMatch(text, /Dentist appointment/)
+})
+
 test('calendar searches filter title, member, and optional explicit range', () => {
   const result = executeAgentReadTool('calendar.search', {
     query: 'dentist',

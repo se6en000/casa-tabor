@@ -153,7 +153,7 @@ function rangeForScope(scope, now, offset) {
   }
   const dayParts = {
     morning: [5, 12],
-    afternoon: [12, 17],
+    afternoon: [12, 20],
     evening: [17, 21],
     night: [17, 24],
   }
@@ -183,6 +183,22 @@ function eventsInRange(events, range, now, includePast = false) {
 function eventLine(event, offset) {
   const when = event.all_day ? 'All day' : localTime(event.start_time, offset)
   return `${when} — ${event.title}${event.location_name ? ` at ${event.location_name}` : ''}`
+}
+
+export function calendarRangeForScope(scope, options = {}) {
+  const now = options.now instanceof Date ? options.now : new Date(options.now ?? Date.now())
+  const offset = offsetMinutes(options.utcOffset)
+  const range = rangeForScope(scope, now, offset)
+  const usesPartialDay = Boolean(scope?.dayPart || scope?.time || scope?.timeRange)
+  const contextStart = usesPartialDay ? localDayStartMs(new Date(range.start), offset) : range.start
+  const contextEnd = usesPartialDay ? contextStart + 86400000 : range.end
+  return {
+    start: new Date(range.start).toISOString(),
+    end: new Date(range.end).toISOString(),
+    contextStart: new Date(contextStart).toISOString(),
+    contextEnd: new Date(contextEnd).toISOString(),
+    label: range.label,
+  }
 }
 
 export function resolveCalendarSemanticRead(frame, events, options = {}) {

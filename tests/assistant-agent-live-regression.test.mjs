@@ -10,6 +10,8 @@ const script = readFileSync(
 test('live agent regression covers natural calendar and grocery conversations', () => {
   for (const phrase of [
     'What does Thursday afternoon look like?',
+    "Is that the only thing that's happening Thursday afternoon?",
+    "There's no softball practice as well",
     'what does thirty afternoon thursday afternoon look like',
     'Schedule dinner with Mom Sunday around six for an hour and a half.',
     'Mom is Kelly and make it for an hour and a half.',
@@ -32,4 +34,6 @@ test('live agent regression is non-dry-run, proposal-only, and cleanup verified'
   assert.match(script, /verifyNoProposalsPersisted/)
   assert.match(script, /groceryItemsRemaining/)
   assert.match(script, /cleanup\.verified/)
+  assert.match(script, /Late Thursday pickup/)
+  assert.match(script, /helpful later-evening context/)
 })

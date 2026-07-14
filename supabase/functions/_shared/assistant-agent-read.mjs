@@ -23,21 +23,35 @@ export function formatAgentReadResult(toolName, result, options = {}) {
       if (events.length === 0) return 'That time is open—no calendar conflicts found.'
       return `That time overlaps:\n${events.map((event) => `- **${event.title}** — ${formatRange(event, options.utcOffset)}`).join('\n')}`
     }
-    if (events.length === 0) return 'Nothing is on the calendar for that request.'
-    if (events.length === 1) {
-      return `**${events[0].title}** — ${formatRange(events[0], options.utcOffset)}${formatLocation(events[0])}`
+    const primaryEvents = Array.isArray(result.primaryEvents) ? result.primaryEvents : events
+    const helpfulIds = new Set(Array.isArray(options.helpfulEntityIds) ? options.helpfulEntityIds : [])
+    const contextEvents = (Array.isArray(result.contextEvents) ? result.contextEvents : [])
+      .filter((event) => result.laterContextEventIds?.includes(event.id) || helpfulIds.has(event.id))
+    if (primaryEvents.length === 0 && contextEvents.length === 0) return 'Nothing is on the calendar for that request.'
+    const primaryText = primaryEvents.length === 0
+      ? `Nothing falls directly in ${options.scopeLabel ?? 'that requested time'}.`
+      : primaryEvents.length === 1
+        ? `**${primaryEvents[0].title}** — ${formatRange(primaryEvents[0], options.utcOffset)}${formatLocation(primaryEvents[0])}`
+        : `${primaryEvents.length} events in ${options.scopeLabel ?? 'that time'}:\n${eventLines(primaryEvents, options.utcOffset)}`
+    if (contextEvents.length > 0) {
+      return `${primaryText}\n\nAlso on that day:\n${eventLines(contextEvents, options.utcOffset)}`
     }
-    return `${events.length} events:\n${events.map((event) =>
-      `- **${event.title}** — ${formatRange(event, options.utcOffset)}${formatLocation(event)}`,
-    ).join('\n')}`
+    return primaryText
   }
 
   const items = Array.isArray(result.items) ? result.items : []
   if (items.length === 0) return 'The grocery list is empty.'
-  return `${items.length} grocery item${items.length === 1 ? '' : 's'}:\n${items.map((item) => {
+  const direct = `${items.length} grocery item${items.length === 1 ? '' : 's'}:\n${items.map((item) => {
     const quantity = [item.quantity, item.unit].filter(Boolean).join(' ')
     return `- **${item.name}**${quantity ? ` — ${quantity}` : ''}${item.checked ? ' ✓' : ''}`
   }).join('\n')}`
+  const helpfulIds = new Set(Array.isArray(options.helpfulEntityIds) ? options.helpfulEntityIds : [])
+  const helpfulItems = (Array.isArray(result.contextItems) ? result.contextItems : [])
+    .filter((item) => helpfulIds.has(item.id))
+    .slice(0, 3)
+  return helpfulItems.length === 0
+    ? direct
+    : `${direct}\n\nAlso useful:\n${helpfulItems.map((item) => `- **${item.name}**${item.checked ? ' ✓' : ''}`).join('\n')}`
 }
 
 function searchCalendar(args, rawEvents) {
@@ -57,6 +71,7 @@ function searchCalendar(args, rawEvents) {
 function getCalendarRange(args, rawEvents) {
   const range = parseRange(args?.start, args?.end)
   if (!range) return { supported: false, code: 'invalid_range' }
+  const primaryRange = parseRange(args?.primary_start, args?.primary_end) ?? range
   const memberNames = Array.isArray(args?.member_names)
     ? args.member_names.map(normalizeText).filter(Boolean)
     : []
@@ -65,7 +80,21 @@ function getCalendarRange(args, rawEvents) {
     return memberNames.length === 0 ||
       memberNames.some((name) => event.members.some((member) => member.toLowerCase() === name))
   })
-  return { supported: true, events, count: events.length }
+  const primaryEvents = events.filter((event) => overlaps(event, primaryRange))
+  const primaryIds = new Set(primaryEvents.map((event) => event.id))
+  const contextEvents = events.filter((event) => !primaryIds.has(event.id))
+  const laterContextEventIds = contextEvents
+    .filter((event) => Date.parse(event.start_time) >= primaryRange.end)
+    .map((event) => event.id)
+  return {
+    supported: true,
+    events,
+    primaryEvents,
+    contextEvents,
+    laterContextEventIds,
+    count: primaryEvents.length,
+    contextCount: contextEvents.length,
+  }
 }
 
 function checkCalendarConflicts(args, rawEvents) {
@@ -82,7 +111,7 @@ function getGroceryList(args, rawItems) {
   const includeChecked = args?.include_checked === true
   const listId = normalizeText(args?.list_id)
   const query = normalizeText(args?.query)
-  const items = (Array.isArray(rawItems) ? rawItems : [])
+  const eligibleItems = (Array.isArray(rawItems) ? rawItems : [])
     .flatMap((item) => {
       if (!item || typeof item !== 'object') return []
       if (typeof item.id !== 'string' || typeof item.name !== 'string') return []
@@ -98,10 +127,12 @@ function getGroceryList(args, rawItems) {
     })
     .filter((item) =>
       (!listId || item.list_id?.toLowerCase() === listId) &&
-      (!query || item.name.toLowerCase().includes(query)) &&
       (includeChecked || !item.checked)
     )
-  return { supported: true, items, count: items.length }
+  const items = eligibleItems.filter((item) => !query || item.name.toLowerCase().includes(query))
+  const itemIds = new Set(items.map((item) => item.id))
+  const contextItems = query ? eligibleItems.filter((item) => !itemIds.has(item.id)) : []
+  return { supported: true, items, contextItems, count: items.length, contextCount: contextItems.length }
 }
 
 function normalizeEvents(rawEvents) {
@@ -189,4 +220,10 @@ function shiftToOffset(value, utcOffset) {
 function formatLocation(event) {
   const location = event.address ?? event.location_name
   return location ? ` at ${location}` : ''
+}
+
+function eventLines(events, utcOffset) {
+  return events.map((event) =>
+    `- **${event.title}** — ${formatRange(event, utcOffset)}${formatLocation(event)}`,
+  ).join('\n')
 }

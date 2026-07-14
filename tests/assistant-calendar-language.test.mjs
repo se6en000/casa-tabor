@@ -8,7 +8,10 @@ import {
   isCalendarLikeLanguage,
   parseCalendarLanguage,
 } from '../supabase/functions/_shared/assistant-calendar-language.mjs'
-import { resolveCalendarSemanticRead } from '../supabase/functions/_shared/assistant-calendar-semantic-read.mjs'
+import {
+  calendarRangeForScope,
+  resolveCalendarSemanticRead,
+} from '../supabase/functions/_shared/assistant-calendar-semantic-read.mjs'
 
 const NOW = new Date('2026-07-11T15:00:00Z')
 const options = { now: NOW, utcOffset: '-04:00' }
@@ -35,6 +38,12 @@ test('scope-free calendar read follow-ups inherit the prior time frame', () => {
   assert.deepEqual(
     inheritCalendarReadScope(explicit, previous)?.slots.temporalScope,
     { kind: 'weekday', weekday: 'monday' },
+  )
+  const omittedEventChallenge = parseCalendarLanguage("There's no softball practice as well")
+  assert.equal(omittedEventChallenge?.intent, 'calendar.list')
+  assert.deepEqual(
+    inheritCalendarReadScope(omittedEventChallenge, previous)?.slots.temporalScope,
+    { kind: 'tomorrow', dayPart: 'afternoon' },
   )
 })
 
@@ -65,6 +74,23 @@ test('calendar parser supports ordinary flexible read language', () => {
   assert.equal(parseCalendarLanguage('How many meetings are there next week?')?.intent, 'calendar.count')
   assert.equal(parseCalendarLanguage('What do I have coming up?')?.intent, 'calendar.next')
   assert.equal(parseCalendarLanguage('Where do I need to go tomorrow?')?.intent, 'calendar.destinations')
+  assert.equal(parseCalendarLanguage('What does Thursday afternoon look like?')?.intent, 'calendar.list')
+  assert.equal(parseCalendarLanguage("Is that the only thing that's happening Thursday afternoon?")?.intent, 'calendar.list')
+})
+
+test('household afternoon agenda scope includes early-evening activities', () => {
+  const range = calendarRangeForScope({
+    kind: 'weekday',
+    weekday: 'thursday',
+    dayPart: 'afternoon',
+  }, {
+    now: new Date('2026-07-14T16:00:00Z'),
+    utcOffset: '-04:00',
+  })
+  assert.equal(range.start, '2026-07-16T16:00:00.000Z')
+  assert.equal(range.end, '2026-07-17T00:00:00.000Z')
+  assert.equal(range.contextStart, '2026-07-16T04:00:00.000Z')
+  assert.equal(range.contextEnd, '2026-07-17T04:00:00.000Z')
 })
 
 test('natural activity scheduling maps to event creation', () => {

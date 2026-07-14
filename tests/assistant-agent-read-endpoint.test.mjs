@@ -39,3 +39,12 @@ test('single grocery reads establish authoritative follow-up state', () => {
   assert.match(endpoint, /activeEntityType: 'grocery_item'/)
   assert.match(endpoint, /activeGroceryItemId: toolResult\.items\[0\]\.id/)
 })
+
+test('semantic calendar scope retrieves broad context while preserving the primary range', () => {
+  assert.match(endpoint, /body\?\.context\?\.calendarReadContext\?\.start/)
+  assert.match(endpoint, /calendarReadContext\.contextStart/)
+  assert.match(endpoint, /primary_start: calendarReadContext\.start/)
+  assert.match(endpoint, /primary_end: calendarReadContext\.end/)
+  assert.match(endpoint, /trustedReadOverride/)
+  assert.match(endpoint, /trusted_semantic_read/)
+})

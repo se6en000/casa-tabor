@@ -41,7 +41,10 @@ import {
   isCalendarLikeLanguage,
   parseCalendarLanguage,
 } from '../_shared/assistant-calendar-language.mjs'
-import { resolveCalendarSemanticRead } from '../_shared/assistant-calendar-semantic-read.mjs'
+import {
+  calendarRangeForScope,
+  resolveCalendarSemanticRead,
+} from '../_shared/assistant-calendar-semantic-read.mjs'
 import {
   cookingFrameGuidance,
   isCookingLikeLanguage,
@@ -220,6 +223,13 @@ Deno.serve(async (req) => {
     })
     : null
   const calendarFrame = inheritCalendarReadScope(parsedCalendarFrame, previousCalendarFrame)
+  const calendarReadContext = calendarFrame?.intent === 'calendar.list' &&
+      calendarFrame.slots?.temporalScope
+    ? calendarRangeForScope(calendarFrame.slots.temporalScope, {
+        now: new Date(),
+        utcOffset: context?.utcOffset,
+      })
+    : null
   const groceryFrame = parseGroceryLanguage(latestUserText, {
     activeEntityType: incomingConversationState?.activeEntityType,
     page: context?.page,
@@ -496,9 +506,14 @@ Deno.serve(async (req) => {
   const agentWriteRate = typeof agentWriteConfig?.sample_rate === 'number'
     ? Math.max(0, Math.min(1, agentWriteConfig.sample_rate))
     : 0
+  const isCalendarSemanticRead = Boolean(
+    calendarFrame &&
+    !['event.create', 'event.move', 'event.delete', 'event.edit'].includes(calendarFrame.intent),
+  )
   const shouldRunAgentWrite = !dryRun &&
     agentWriteConfig?.enabled === true &&
     agentWriteRate > 0 &&
+    !isCalendarSemanticRead &&
     AGENT_GENERAL_PAGES.has(String(context?.page ?? '')) &&
     context?.assistant_mode !== 'chef' &&
     !image &&
@@ -653,7 +668,7 @@ Deno.serve(async (req) => {
     context?.assistant_mode !== 'chef' &&
     !context?.pendingAction &&
     !image &&
-    Math.random() < agentReadRate
+    (isCalendarSemanticRead || Math.random() < agentReadRate)
   if (shouldRunAgentRead) {
     const agentReadRequest = sb.functions.invoke('ai-agent-read', {
       body: {
@@ -665,6 +680,7 @@ Deno.serve(async (req) => {
           utcOffset: context?.utcOffset,
           family: context?.family,
           groceryQuery: groceryFrame?.slots?.item ?? null,
+          calendarReadContext,
         },
         authoritative_data: {
           events: allEvents ?? [],
@@ -1044,6 +1060,7 @@ Deno.serve(async (req) => {
         payload: {
           type: 'text',
           text: semanticRead.text,
+          semantic_intent: calendarFrame.intent,
           correlation_id: cid,
           authoritative_provenance: {
             source: 'events',

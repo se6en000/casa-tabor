@@ -311,10 +311,13 @@ export function parseCalendarLanguage(text, options = {}) {
   if (scope && /\bwhere\b.*\b(?:need to|have to|should|am i|are we)\s+go\b|\bwhat (?:places?|locations?|addresses?)\b.*\b(?:going|visiting|have)\b/.test(input)) {
     return frame('calendar.destinations', 0.98, { temporalScope: scope })
   }
+  const listFollowUpLanguage = /\b(?:is that the only thing|anything else|what else)\b/.test(input) ||
+    /\b(?:is(?:n't| not) there|there(?:'s| is) no)\b.+\b(?:too|also|as well)\b/.test(input)
   const listLanguage = /\b(?:what(?:'s| is) (?:on|going on|happening|planned|scheduled)|what (?:are we doing|do (?:i|we) have|have (?:i|we) got)|show me|tell me|give me|run through|walk me through|catch me up on|lay out|fill me in on|rundown|anything (?:on|happening|going on|planned|scheduled))\b/.test(input) ||
-    /\bhow (?:is|does)\b.*\b(?:look|looking)\b/.test(input)
-  if ((CALENDAR_NOUNS.test(input) || scope) && listLanguage && !mutationLanguage) {
-    return frame('calendar.list', 0.96, { temporalScope: scope ?? { kind: 'today' } })
+    /\b(?:how (?:is|does)|what does)\b.*\b(?:look|looking)\b/.test(input) ||
+    listFollowUpLanguage
+  if ((CALENDAR_NOUNS.test(input) || scope || listFollowUpLanguage) && listLanguage && !mutationLanguage) {
+    return frame('calendar.list', 0.96, { temporalScope: scope })
   }
   if (/\b(?:prepare|prep|find|look up|talk about|details? (?:for|on|about))\b/.test(input) && CALENDAR_NOUNS.test(input)) {
     return frame('event.select', 0.9, { temporalScope: scope })

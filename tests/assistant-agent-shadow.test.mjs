@@ -210,6 +210,8 @@ test('authoritative read planning exposes only reads and typed deferral', () => 
                 start: '2026-07-16T00:00:00-04:00',
                 end: '2026-07-17T00:00:00-04:00',
               },
+              user_goal: 'Understand the whole Thursday schedule.',
+              helpful_entity_ids: ['late-event'],
             },
           },
         }],
@@ -222,7 +224,13 @@ test('authoritative read planning exposes only reads and typed deferral', () => 
       start: '2026-07-16T00:00:00-04:00',
       end: '2026-07-17T00:00:00-04:00',
     },
+    responsePlan: {
+      userGoal: 'Understand the whole Thursday schedule.',
+      helpfulEntityIds: ['late-event'],
+    },
   })
+  assert.match(request.system_instruction.parts[0].text, /human's likely goal/)
+  assert.ok(declarations[0].parameters.properties.helpful_entity_ids)
 
   assert.deepEqual(parseAgentShadowResponse({
     candidates: [{

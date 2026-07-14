@@ -74,7 +74,27 @@ Deno.serve(async (req) => {
       return result({ supported: false, code: 'planner_error' }, 503)
     }
     const planner = plannerResult.data
-    const plan = planner?.plan
+    let plan = planner?.plan
+    const trustedCalendarRead = (
+      typeof body?.context?.calendarReadContext?.start === 'string' &&
+      typeof body?.context?.calendarReadContext?.end === 'string'
+    )
+    const trustedReadOverride = trustedCalendarRead && (
+      plan?.kind !== 'tool' ||
+      plan?.toolName !== 'calendar.get_range' ||
+      planner?.telemetry?.tool_effect !== 'read'
+    )
+    if (trustedReadOverride) {
+      plan = {
+        kind: 'tool',
+        toolName: 'calendar.get_range',
+        args: {},
+        responsePlan: plan?.responsePlan ?? {
+          userGoal: 'Review the requested calendar period with useful same-day context.',
+          helpfulEntityIds: [],
+        },
+      }
+    }
     if (plan?.kind === 'clarify') {
       return result({
         supported: true,
@@ -86,8 +106,8 @@ Deno.serve(async (req) => {
     }
     if (
       plan?.kind !== 'tool' ||
-      planner?.policy?.decision !== 'execute' ||
-      planner?.telemetry?.tool_effect !== 'read'
+      (!trustedReadOverride && planner?.policy?.decision !== 'execute') ||
+      (!trustedReadOverride && planner?.telemetry?.tool_effect !== 'read')
     ) {
       const handledMutation = plan?.kind === 'defer' && plan?.reason === 'mutation'
       return result({
@@ -111,10 +131,32 @@ Deno.serve(async (req) => {
     ) {
       plan.args = { ...plan.args, query: body.context.groceryQuery.trim() }
     }
+    if (
+      plan.toolName === 'calendar.get_range' &&
+      typeof body?.context?.calendarReadContext?.start === 'string' &&
+      typeof body?.context?.calendarReadContext?.end === 'string'
+    ) {
+      const calendarReadContext = body.context.calendarReadContext
+      plan.args = {
+        ...plan.args,
+        start: typeof calendarReadContext.contextStart === 'string'
+          ? calendarReadContext.contextStart
+          : calendarReadContext.start,
+        end: typeof calendarReadContext.contextEnd === 'string'
+          ? calendarReadContext.contextEnd
+          : calendarReadContext.end,
+        primary_start: calendarReadContext.start,
+        primary_end: calendarReadContext.end,
+      }
+    }
 
     const toolResult = executeAgentReadTool(plan.toolName, plan.args, { events, groceryItems })
+    const helpfulEntityIds = validatedHelpfulEntityIds(plan.responsePlan?.helpfulEntityIds, toolResult)
     const text = formatAgentReadResult(plan.toolName, toolResult, {
       utcOffset: body?.context?.utcOffset,
+      scopeLabel: body?.context?.calendarReadContext?.label,
+      userGoal: plan.responsePlan?.userGoal,
+      helpfulEntityIds,
     })
     if (!toolResult.supported || !text) {
       return result({
@@ -123,11 +165,12 @@ Deno.serve(async (req) => {
         toolName: plan.toolName,
       })
     }
-    const activeEntity = toolResult.events?.length === 1
+    const activeEvents = toolResult.primaryEvents ?? toolResult.events
+    const activeEntity = activeEvents?.length === 1
       ? {
           activeEntityType: 'event',
-          activeEventId: toolResult.events[0].id,
-          activeEventUpdatedAt: toolResult.events[0].updated_at ?? null,
+          activeEventId: activeEvents[0].id,
+          activeEventUpdatedAt: activeEvents[0].updated_at ?? null,
           expectedFollowUp: 'event_follow_up',
           establishedAt: new Date().toISOString(),
         }
@@ -144,9 +187,12 @@ Deno.serve(async (req) => {
       type: 'text',
       text,
       plan,
-      policy: planner.policy,
+      policy: trustedReadOverride
+        ? { decision: 'execute', code: 'trusted_semantic_read' }
+        : planner.policy,
       activeEntity,
       count: toolResult.count,
+      contextCount: toolResult.contextCount,
     })
 
     function result(payload: Record<string, unknown>, status = 200) {
@@ -166,12 +212,15 @@ Deno.serve(async (req) => {
           tool_name: planName(payload),
           elapsed_ms: elapsedMs,
           count: payload.count ?? null,
+          context_count: payload.contextCount ?? null,
+          trusted_read_override: trustedReadOverride,
         },
         page: optionalText(body?.context?.page, 64),
         source_component: 'server:ai-agent-read',
         source_origin: 'agent-read',
         dedupe_key: `${correlationId}|agent-read|${turnId ?? 'no-turn'}`,
       })
+
       return json({ agentic: true, elapsed_ms: elapsedMs, ...payload }, status)
     }
   } catch (error) {
@@ -196,4 +245,19 @@ function optionalText(value: unknown, maxLength: number) {
 function planName(payload: Record<string, unknown>) {
   const plan = payload.plan as { toolName?: unknown } | undefined
   return typeof plan?.toolName === 'string' ? plan.toolName : null
+}
+
+function validatedHelpfulEntityIds(value: unknown, result: Record<string, unknown>) {
+  const requested = Array.isArray(value)
+    ? value.filter((id): id is string => typeof id === 'string')
+    : []
+  const entities = [
+    ...(Array.isArray(result.events) ? result.events : []),
+    ...(Array.isArray(result.items) ? result.items : []),
+    ...(Array.isArray(result.contextItems) ? result.contextItems : []),
+  ] as Array<{ id?: unknown }>
+  const authoritativeIds = new Set(
+    entities.flatMap((entity) => typeof entity?.id === 'string' ? [entity.id] : []),
+  )
+  return requested.filter((id) => authoritativeIds.has(id)).slice(0, 8)
 }
