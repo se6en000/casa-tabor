@@ -27,7 +27,7 @@ const traceBase = crypto.randomUUID()
 const DEFAULT_LIMIT = Number(process.argv.find((arg) => arg.startsWith('--count='))?.split('=')[1] ?? '0')
 const MODE = process.argv.find((arg) => arg.startsWith('--mode='))?.split('=')[1] ?? 'full'
 const MODEL = process.argv.find((arg) => arg.startsWith('--model='))?.split('=')[1] ?? 'gemini-2.5-flash-lite'
-const SUPPORTED_MODES = new Set(['smoke', 'full', 'showcase'])
+const SUPPORTED_MODES = new Set(['smoke', 'full', 'showcase', 'calendar-edge'])
 const SUPPORTED_MODELS = new Set(['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.5-flash'])
 if (!SUPPORTED_MODES.has(MODE)) throw new Error(`Unsupported QA mode: ${MODE}`)
 if (!SUPPORTED_MODELS.has(MODEL)) throw new Error(`Unsupported QA model: ${MODEL}`)
@@ -67,7 +67,7 @@ async function loadFamily() {
   return Array.isArray(rows) ? rows : []
 }
 
-function buildContext({ family, page, assistantMode, conversationState }) {
+function buildContext({ family, page, assistantMode, conversationState, pendingAction }) {
   const current = new Date()
   return {
     page,
@@ -85,17 +85,18 @@ function buildContext({ family, page, assistantMode, conversationState }) {
     family: family.map((member) => ({ id: member.id, name: member.name })),
     homeCity: 'West Palm Beach',
     conversationState: conversationState ?? null,
+    pendingAction: pendingAction ?? undefined,
   }
 }
 
-async function callAssistant({ messages, family, page, assistantMode, conversationState, conversationId, turnId }) {
+async function callAssistant({ messages, family, page, assistantMode, conversationState, pendingAction, conversationId, turnId }) {
   const url = `${SUPABASE_URL}/functions/v1/ai-assistant`
   return fetchJson(url, {
     method: 'POST',
     headers,
     body: JSON.stringify({
       messages,
-      context: buildContext({ family, page, assistantMode, conversationState }),
+      context: buildContext({ family, page, assistantMode, conversationState, pendingAction }),
       session_id: conversationId,
       correlation_id: `${conversationId}:${turnId}`,
       trace_id: traceBase,
@@ -159,6 +160,15 @@ async function seedCalendarFixtures(created = []) {
     { title: '[QA] Piano recital', daysFromNow: 8, hour: 16, minutes: 0, durationMins: 90 },
     { title: '[QA] PTA meeting', daysFromNow: 9, hour: 19, minutes: 0, durationMins: 60 },
   ]
+  if (MODE === 'calendar-edge') {
+    items.push(
+      { title: '[QA] Edge dentist appointment', daysFromNow: 3, hour: 10, minutes: 0, durationMins: 60 },
+      { title: '[QA] Edge dentist appointment', daysFromNow: 3, hour: 15, minutes: 0, durationMins: 60 },
+      { title: '[QA] School meeting', daysFromNow: 3, hour: 14, minutes: 30, durationMins: 60 },
+      { title: '[QA] School pickup', daysFromNow: 3, hour: 16, minutes: 30, durationMins: 30 },
+      { title: '[QA] Recurring softball practice', daysFromNow: 8, hour: 17, minutes: 0, durationMins: 90, rrule: 'FREQ=WEEKLY' },
+    )
+  }
 
   for (const spec of items) {
     const start = new Date(now)
@@ -177,6 +187,7 @@ async function seedCalendarFixtures(created = []) {
       event_type: spec.allDay ? 'event' : 'event',
       is_enriched: false,
       description: runId,
+      rrule: spec.rrule ?? null,
     }]
     const inserted = await fetchJson(url, {
       method: 'POST',
@@ -311,7 +322,7 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames) {
       assistantMode: 'general',
       conversationState: eventConversationState(eventBySuffix('Soccer practice'), now),
       steps: [
-        { text: 'move it to next friday at 7pm.', expect: { type: 'write', tool: 'update_event' } },
+        { text: 'move it to next friday at 7pm.', expect: { type: 'writeOrClarify', tool: 'update_event' } },
         { text: 'where is it located again?', expect: { type: 'text' } },
       ],
     },
@@ -350,9 +361,9 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames) {
       assistantMode: 'general',
       conversationState: groceryConversationState(groceries['oat milk for coffee'], now),
       steps: [
-        { text: 'check off the eggs for omelets.', expect: { type: 'write', tool: 'check_grocery_item' } },
+        { text: 'check off the eggs for omelets.', expect: { type: 'writeOrClarify', tool: 'check_grocery_item' } },
         { text: 'what else is still on the list?', expect: { type: 'text' } },
-        { text: 'remove tortillas for tacos from my grocery list.', expect: { type: 'write', tool: 'remove_grocery_item' } },
+        { text: 'remove tortillas for tacos from my grocery list.', expect: { type: 'writeOrClarify', tool: 'remove_grocery_item' } },
       ],
     },
     {
@@ -571,6 +582,109 @@ function hasReadableStructure(text) {
   return /\n\n|(?:^|\n)(?:[-*]|\d+\.)\s+|(?:^|\n)#{1,6}\s+/m.test(formatted)
 }
 
+function calendarEdgeScenarioGroups(fixtures) {
+  const eventBySuffix = (title) => fixtures.find((event) => event.title.endsWith(title))
+  return [
+    {
+      key: 'edge-duplicate-delete',
+      page: 'calendar',
+      assistantMode: 'general',
+      steps: [
+        { text: 'Delete the edge dentist appointment Thursday.', expect: { type: 'clarify', containsAny: ['which', '10:00', '3:00'] } },
+        { text: 'The afternoon one.', expect: { type: 'write', tool: 'delete_event' } },
+      ],
+    },
+    {
+      key: 'edge-correct-create',
+      page: 'calendar',
+      assistantMode: 'general',
+      steps: [
+        { text: 'Schedule an event called Swim practice Friday at 4 PM.', expect: { type: 'write', tool: 'create_event' } },
+        { text: 'Actually, make that Saturday at 10 in the morning.', expect: { type: 'write', tool: 'update_event' } },
+        { text: 'What time is it now?', expect: { type: 'text', containsAny: ['10:00', '10 am', '10:00 am'] } },
+      ],
+    },
+    {
+      key: 'edge-cancel-delete-pivot',
+      page: 'calendar',
+      assistantMode: 'general',
+      conversationState: eventConversationState(eventBySuffix('Soccer practice'), now),
+      steps: [
+        { text: 'Delete soccer practice.', deferAction: true, expect: { type: 'write', tool: 'delete_event' } },
+        { text: 'Never mind—when does it start?', expect: { type: 'text', containsAny: ['5:30', '17:30'], notContainsAny: ['deleted', 'cancelled'] } },
+      ],
+    },
+    {
+      key: 'edge-cross-midnight',
+      page: 'calendar',
+      assistantMode: 'general',
+      steps: [
+        { text: 'Add an event called Late airport pickup Friday from 11:30 PM until 1 AM Saturday.', expect: { type: 'write', tool: 'create_event' } },
+        { text: 'How long does it last?', expect: { type: 'text', containsAny: ['1 hour 30', '90 minutes'] } },
+      ],
+    },
+    {
+      key: 'edge-multiday-shift',
+      page: 'calendar',
+      assistantMode: 'general',
+      steps: [
+        { text: 'Add a trip called Mountain getaway from August 7 through August 10.', expect: { type: 'write', tool: 'create_event' } },
+        { text: 'Move that trip back two days.', expect: { type: 'write', tool: 'update_event' } },
+        { text: 'How long is it now?', expect: { type: 'text', containsAny: ['hours', 'days'] } },
+      ],
+    },
+    {
+      key: 'edge-conflicting-move',
+      page: 'calendar',
+      assistantMode: 'general',
+      conversationState: eventConversationState(eventBySuffix('Dentist appointment'), now),
+      steps: [
+        { text: 'Move the dentist appointment to 3 PM Thursday.', expect: { type: 'clarify', containsAny: ['conflict', 'overlap', 'school meeting'] } },
+        { text: 'Put it immediately after the meeting instead.', expect: { type: 'write', tool: 'update_event' } },
+      ],
+    },
+    {
+      key: 'edge-ambiguous-stt-time',
+      page: 'calendar',
+      assistantMode: 'general',
+      steps: [
+        { text: 'Schedule tutoring next sat at ate.', expect: { type: 'clarify', containsAny: ['8 am', '8 pm', 'morning', 'evening'] } },
+        { text: 'Eight in the morning.', expect: { type: 'write', tool: 'create_event' } },
+      ],
+    },
+    {
+      key: 'edge-recurring-scope',
+      page: 'calendar',
+      assistantMode: 'general',
+      conversationState: eventConversationState(eventBySuffix('Recurring softball practice'), now),
+      steps: [
+        { text: 'Move softball practice next Tuesday to 6 PM.', expect: { type: 'clarify', containsAny: ['one', 'occurrence', 'series'] } },
+        { text: 'Just that one.', expect: { type: 'text', containsAny: ['event editor', 'cannot safely', 'not supported'] } },
+      ],
+    },
+    {
+      key: 'edge-stale-confirmation',
+      page: 'calendar',
+      assistantMode: 'general',
+      conversationState: eventConversationState(eventBySuffix('Birthday dinner'), now),
+      steps: [
+        { text: 'Delete the birthday dinner.', deferAction: true, expect: { type: 'write', tool: 'delete_event' } },
+        { text: "What's happening Saturday?", expect: { type: 'text', semanticIntent: 'calendar.list' } },
+        { text: 'Yes.', expect: { type: 'limit', notContainsAny: ['deleted', 'cancelled'] } },
+      ],
+    },
+    {
+      key: 'edge-selective-bulk-delete',
+      page: 'calendar',
+      assistantMode: 'general',
+      steps: [
+        { text: 'Clear my calendar Thursday except school pickup.', deferAction: true, expect: { type: 'write', tool: 'delete_events_by_title' } },
+        { text: 'What exactly would remain?', expect: { type: 'text', containsAny: ['school pickup'] } },
+      ],
+    },
+  ]
+}
+
 function stepSummary(response) {
   if (!response) return 'no-response'
   if (response.type === 'tool_action') return `tool_action:${response.tool}`
@@ -592,6 +706,7 @@ async function run() {
   const results = []
   const conversationStates = new Map()
   const conversationHistories = new Map()
+  const pendingActions = new Map()
   const createdEventIds = new Set()
   const createdGroceryIds = new Set()
 
@@ -601,7 +716,9 @@ async function run() {
     await seedGroceryFixtures(qaGroceryListId, groceryFixtures)
     const groups = MODE === 'showcase'
       ? showcaseScenarioGroups()
-      : scenarioGroups(calendarFixtures, groceryFixtures, familyNames)
+      : MODE === 'calendar-edge'
+        ? calendarEdgeScenarioGroups(calendarFixtures)
+        : scenarioGroups(calendarFixtures, groceryFixtures, familyNames)
     const flatSteps = groups.flatMap((group) => group.steps.map((step, index) => ({
       ...step,
       groupKey: group.key,
@@ -657,6 +774,7 @@ async function run() {
         page: step.page,
         assistantMode: step.assistantMode,
         conversationState: currentState,
+        pendingAction: pendingActions.get(step.groupKey) ?? null,
         conversationId,
         turnId,
       })
@@ -667,6 +785,7 @@ async function run() {
         ? formatTextForMarkdown(String(output.assistant_text ?? ''))
         : null
       output.tool = response?.tool ?? null
+      output.args = response?.args ?? null
       output.semantic_intent = response?.authoritative_provenance?.semantic_intent ?? null
       output.llm_calls = response?.telemetry?.llm_calls ?? null
 
@@ -684,11 +803,23 @@ async function run() {
         if (!(isClarifyingResponse(response) || (response?.type === 'text' && !response?.tool))) {
           output.ok = false
           output.note = `expected_clarification:got_${stepSummary(response)}`
+        } else if (
+          Array.isArray(step.expect.containsAny)
+          && !step.expect.containsAny.some((term) => String(output.assistant_text ?? '').toLowerCase().includes(term))
+        ) {
+          output.ok = false
+          output.note = `clarification_content_missing:expected_any_${step.expect.containsAny.join('_')}`
         }
       } else if (step.expect.type === 'limit') {
         if (response?.type !== 'text' || response?.tool) {
           output.ok = false
           output.note = `unsafe_boundary_execution:got_${stepSummary(response)}`
+        } else if (
+          Array.isArray(step.expect.notContainsAny)
+          && step.expect.notContainsAny.some((term) => String(output.assistant_text ?? '').toLowerCase().includes(term))
+        ) {
+          output.ok = false
+          output.note = `unsafe_boundary_claim:unexpected_${step.expect.notContainsAny.join('_')}`
         } else {
           output.note = stepSummary(response)
         }
@@ -736,7 +867,14 @@ async function run() {
           output.ok = false
           output.note = 'response_not_readable'
         }
-      } else if (step.expect.type === 'write') {
+      } else if (
+        step.expect.type === 'writeOrClarify'
+        && response?.type === 'text'
+        && !response?.tool
+        && /(which|conflict|overlap|more than one|multiple match|exact .*name)/i.test(String(output.assistant_text ?? ''))
+      ) {
+        output.note = 'safe_clarification'
+      } else if (step.expect.type === 'write' || step.expect.type === 'writeOrClarify') {
         if (response?.type === 'text' && response?.write_verified === true) {
           output.action_result = 'auto_executed_verified'
         } else if (response?.type !== 'tool_action') {
@@ -745,6 +883,9 @@ async function run() {
         } else if (response?.tool !== step.expect.tool) {
           output.ok = false
           output.note = `tool_mismatch:expected_${step.expect.tool}:got_${response?.tool}`
+        } else if (step.deferAction) {
+          pendingActions.set(step.groupKey, { tool: response.tool, args: response.args ?? {} })
+          output.action_result = 'deferred'
         } else {
           const actionResult = await executeAction({
             tool: response.tool,
@@ -769,11 +910,11 @@ async function run() {
           if (step.groupKey.startsWith('calendar-') && typeof currentState === 'object' && currentState) {
             conversationStates.set(step.groupKey, currentState)
           }
-          if (step.groupKey === 'calendar-create' || step.groupKey === 'calendar-multiturn-create') {
-            const eventId = actionResult?.event_id
+          if (step.page === 'calendar' && ['create_event', 'update_event'].includes(response.tool)) {
+            const eventId = actionResult?.event_id ?? response.args?.id
             if (typeof eventId === 'string' && eventId.length > 0) {
               const eventUrl = new URL('/rest/v1/events', SUPABASE_URL)
-              eventUrl.searchParams.set('select', 'id,title,updated_at')
+              eventUrl.searchParams.set('select', 'id,title,start_time,end_time,updated_at,all_day,location_name,address,description')
               eventUrl.searchParams.set('id', `eq.${eventId}`)
               const eventRows = await fetchJson(eventUrl, { headers })
               const event = Array.isArray(eventRows) ? eventRows[0] : null
@@ -847,6 +988,16 @@ async function run() {
           user: result.text,
           assistant: result.assistant_text,
           formatted: result.formatted_text,
+          ok: result.ok,
+        }))
+        : undefined,
+      calendar_edge: MODE === 'calendar-edge'
+        ? results.map((result) => ({
+          conversation: result.group,
+          user: result.text,
+          assistant: result.assistant_text,
+          tool: result.tool,
+          action_result: result.action_result,
           ok: result.ok,
         }))
         : undefined,

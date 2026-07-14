@@ -133,9 +133,38 @@ export function resolveDeterministicEventMutation(text, events, options = {}) {
 
   const createPrefix = /^(?:create|add|book|schedule)\s+(?:an?\s+)?(?:calendar\s+)?(?:event|appointment|apt|reminder)\b/i
   if (createPrefix.test(input)) {
-    const requestedTime = parseRequestedTime(input)
     const titleMatch = input.match(/\b(?:called|named)\s+(.+?)(?=\s+(?:on\s+)?(?:20\d{2}-\d{2}-\d{2}|today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b|\s+at\s+\d|$)/i)
     const title = titleMatch?.[1]?.trim()
+    const timeRange = input.match(/\bfrom\s+(\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?))\s+until\s+(\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?))(?:\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday))?/i)
+    if (title && timeRange) {
+      const requestedStart = parseRequestedTime(timeRange[1])
+      const requestedEnd = parseRequestedTime(timeRange[2])
+      const startText = input.slice(0, input.indexOf(timeRange[0])) + ` at ${timeRange[1]}`
+      const start = requestedStart ? createStartIso(startText, requestedStart, now, offsetMinutes) : null
+      if (start && requestedEnd) {
+        const startLocal = new Date(Date.parse(start) + offsetMinutes * 60000)
+        let end = new Date(Date.UTC(
+          startLocal.getUTCFullYear(),
+          startLocal.getUTCMonth(),
+          startLocal.getUTCDate(),
+          requestedEnd.hour,
+          requestedEnd.minute,
+        ) - offsetMinutes * 60000)
+        if (end.getTime() <= Date.parse(start)) end = new Date(end.getTime() + 86400000)
+        return {
+          tool: 'create_event',
+          args: {
+            title,
+            start,
+            end: end.toISOString(),
+            members: [],
+            event_type: 'event',
+          },
+          event: null,
+        }
+      }
+    }
+    const requestedTime = parseRequestedTime(input)
     const start = requestedTime ? createStartIso(input, requestedTime, now, offsetMinutes) : null
     if (title && title.length >= 3 && start) {
       const durationMatch = input.match(/\bfor\s+(\d{1,3})\s*(minutes?|mins?|hours?|hrs?)\b/i)
@@ -158,6 +187,27 @@ export function resolveDeterministicEventMutation(text, events, options = {}) {
           },
           event: null,
         }
+      }
+    }
+  }
+
+  const selectiveClear = input.match(/^clear\s+(?:my\s+)?calendar\s+(today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\s+except\s+(.+?)[.!]?$/i)
+  if (selectiveClear) {
+    const scopedEvents = events.filter((event) => matchesDateHint(event, selectiveClear[1].toLowerCase(), now, offsetMinutes))
+    const preservedTokens = titleTokens(selectiveClear[2])
+    const ids = scopedEvents
+      .filter((event) => !preservedTokens.every((token) => normalize(event.title).includes(token)))
+      .map((event) => event.id)
+      .filter(Boolean)
+    if (ids.length > 0 && ids.length < scopedEvents.length) {
+      return {
+        tool: 'delete_events_by_title',
+        args: {
+          ids,
+          title_query: `${selectiveClear[1]} except ${selectiveClear[2].trim()}`,
+          count: ids.length,
+        },
+        event: null,
       }
     }
   }

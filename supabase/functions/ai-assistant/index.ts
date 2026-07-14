@@ -10,6 +10,16 @@ import { computeTravelEta } from '../_shared/travel-eta.mjs'
 import { classifyAssistantIntent } from '../_shared/assistant-intent-profile.mjs'
 import { resolveDeterministicEventMutation } from '../_shared/deterministic-event-mutation.mjs'
 import {
+  answerPendingSelectiveClear,
+  calendarDeleteAmbiguityClarification,
+  isCalendarMutationDisambiguationFollowUp,
+  calendarMutationClarification,
+  resolveActiveCalendarMutation,
+  resolveCalendarDeleteDisambiguation,
+  resolveClarifiedCalendarCreate,
+  singularBulkDeleteClarification,
+} from '../_shared/assistant-calendar-mutation-edge.mjs'
+import {
   answerGroundedEventFollowUp,
   answerGroundedEventSemanticFrame,
   eventConversationState,
@@ -231,6 +241,10 @@ Deno.serve(async (req) => {
       'delete_events_by_title',
     ].includes(String(context?.pendingAction?.tool ?? '')),
   })
+  const calendarMutationDisambiguationFollowUp = isCalendarMutationDisambiguationFollowUp(
+    previousUserText,
+    latestUserText,
+  )
   const calendarFrameNeedsSearch = Boolean(
     calendarFrame &&
     !incomingConversationState &&
@@ -238,7 +252,9 @@ Deno.serve(async (req) => {
     calendarFrame.intent !== 'event.create' &&
     !calendarFrame.requiresActiveEvent
   )
-  const intentRouting = calendarFrame
+  const intentRouting = calendarMutationDisambiguationFollowUp
+    ? { profile: 'event', forceEventSearch: false }
+    : calendarFrame
     ? { profile: 'event', forceEventSearch: calendarFrameNeedsSearch }
     : groceryFrame
       ? { profile: 'grocery', forceEventSearch: false }
@@ -363,7 +379,7 @@ Deno.serve(async (req) => {
       : skippedRows,
     needsEventData
       ? sb.from('events')
-      .select('id, title, start_time, end_time, updated_at, location_name, address, all_day, event_type, description, event_enrichments(prep_notes, category, what_to_bring, outfit_suggestion, parking_notes, contact_name, contact_phone, cost_estimate, dietary_notes, meal_impact), event_checklist_items(id, label, note, checked, category, sort_order, created_at), event_action_items(id, title, description, due_date, is_urgent, completed, assigned_to, created_at), event_members(family_members(id, name))')
+      .select('id, title, start_time, end_time, updated_at, location_name, address, all_day, event_type, description, recurrence_master_id, rrule, event_enrichments(prep_notes, category, what_to_bring, outfit_suggestion, parking_notes, contact_name, contact_phone, cost_estimate, dietary_notes, meal_impact), event_checklist_items(id, label, note, checked, category, sort_order, created_at), event_action_items(id, title, description, due_date, is_urgent, completed, assigned_to, created_at), event_members(family_members(id, name))')
       .eq('status', 'confirmed')
       .or(`start_time.gte.${windowStart.toISOString()},end_time.gte.${windowStart.toISOString()}`)
       .lte('start_time', yearEnd.toISOString())
@@ -903,6 +919,8 @@ Deno.serve(async (req) => {
       created_at?: string | null;
     }[] | null;
     event_members: { family_members: { id: string; name: string } | null }[];
+    recurrence_master_id?: string | null;
+    rrule?: string | null;
   }
 
   const PROMPT_EVENT_WINDOW_DAYS = 14
@@ -2534,6 +2552,16 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         }
 
         // Write tools: return to frontend for confirmation
+        const singularDeleteClarification = singularBulkDeleteClarification(
+          latestUserText,
+          name,
+          args,
+          allEvents ?? [],
+          toLocal,
+        )
+        if (singularDeleteClarification) {
+          return { type: 'text', text: singularDeleteClarification }
+        }
         return {
           type: 'tool_action',
           tool: name,
@@ -2679,6 +2707,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const ids = Array.isArray(args.ids) ? args.ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0) : []
       const titleQuery = String(args.title_query ?? '').trim()
       const count = Number.isFinite(Number(args.count)) ? Number(args.count) : ids.length
+      const exclusion = titleQuery.match(/\bexcept\s+(.+)$/i)?.[1]?.trim()
+      if (exclusion) return `Delete ${count} calendar event${count === 1 ? '' : 's'}, preserving **${exclusion}**`
       const label = titleQuery.length > 0 ? titleQuery : 'matching appointments'
       return `Delete ${count} event${count === 1 ? '' : 's'} named **${label}**`
     }
@@ -2705,6 +2735,148 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   }
 
   try {
+    const deleteAmbiguity = calendarDeleteAmbiguityClarification(
+      latestUserText,
+      allEvents ?? [],
+      { utcOffset },
+      toLocal,
+    )
+    if (intentRouting.profile === 'event' && deleteAmbiguity) {
+      return {
+        status: 200,
+        payload: {
+          type: 'text',
+          text: deleteAmbiguity,
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+    const clarifiedCreate = resolveClarifiedCalendarCreate(previousUserText, latestUserText, { now })
+    if (clarifiedCreate) {
+      return {
+        status: 200,
+        payload: {
+          type: 'tool_action',
+          tool: clarifiedCreate.tool,
+          args: clarifiedCreate.args,
+          display_text: buildDisplayText(clarifiedCreate.tool, clarifiedCreate.args),
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+    const disambiguatedDelete = resolveCalendarDeleteDisambiguation(
+      previousUserText,
+      latestUserText,
+      allEvents ?? [],
+      { utcOffset },
+    )
+    if (disambiguatedDelete) {
+      return {
+        status: 200,
+        payload: {
+          type: 'tool_action',
+          tool: disambiguatedDelete.tool,
+          args: disambiguatedDelete.args,
+          display_text: buildDisplayText(disambiguatedDelete.tool, disambiguatedDelete.args),
+          conversation_state: eventConversationState(disambiguatedDelete.event, now),
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+    const pendingSelectiveAnswer = answerPendingSelectiveClear(latestUserText, context?.pendingAction)
+    if (pendingSelectiveAnswer) {
+      return {
+        status: 200,
+        payload: {
+          type: 'text',
+          text: pendingSelectiveAnswer,
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+    const mutationClarification = latestUserText ? calendarMutationClarification(latestUserText) : null
+    if (intentRouting.profile === 'event' && mutationClarification) {
+      return {
+        status: 200,
+        payload: {
+          type: 'text',
+          text: mutationClarification,
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+    if (intentRouting.profile === 'event' && latestUserText && activeConversationEvent) {
+      const activeMutation = resolveActiveCalendarMutation(
+        latestUserText,
+        activeConversationEvent,
+        allEvents ?? [],
+        { utcOffset },
+      )
+      if (activeMutation?.text) {
+        return {
+          status: 200,
+          payload: {
+            type: 'text',
+            text: activeMutation.text,
+            conversation_state: eventConversationState(activeConversationEvent, now),
+            authoritative_provenance: {
+              source: 'events',
+              event_id: activeConversationEvent.id,
+              updated_at: activeConversationEvent.updated_at,
+            },
+            correlation_id: cid,
+            telemetry: {
+              ...llmTelemetry,
+              request_total_ms: Date.now() - requestStartMs,
+              context_load_ms: contextLoadMs,
+            },
+          },
+        }
+      }
+      if (activeMutation?.tool) {
+        return {
+          status: 200,
+          payload: {
+            type: 'tool_action',
+            tool: activeMutation.tool,
+            args: activeMutation.args,
+            display_text: buildDisplayText(activeMutation.tool, activeMutation.args),
+            conversation_state: eventConversationState(activeConversationEvent, now),
+            correlation_id: cid,
+            telemetry: {
+              ...llmTelemetry,
+              request_total_ms: Date.now() - requestStartMs,
+              context_load_ms: contextLoadMs,
+            },
+          },
+        }
+      }
+    }
     if (intentRouting.profile === 'event' && latestUserText) {
       const dayRead = resolveCalendarDayRead(latestUserText, allEvents ?? [], { now, utcOffset })
       if (dayRead) {

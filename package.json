@@ -16,6 +16,7 @@
     "qa:ai-calendar-conversations": "node scripts/ai-calendar-conversation-stress.mjs --count=100",
     "qa:ai-assistant": "node scripts/ai-assistant-qa-sweep.mjs --mode=smoke --model=gemini-2.5-flash-lite",
     "qa:ai-assistant:full": "node scripts/ai-assistant-qa-sweep.mjs --mode=full --model=gemini-2.5-flash-lite",
+    "qa:ai-assistant:calendar-edge": "node scripts/ai-assistant-qa-sweep.mjs --mode=calendar-edge --model=gemini-2.5-flash-lite",
     "design-system:export": "node scripts/export-design-system.mjs",
     "style:audit": "node scripts/style-audit.mjs",
     "style:report": "node scripts/style-audit.mjs --json",

@@ -46,6 +46,18 @@ Acceptance:
 npm run qa:ai-assistant:full
 ```
 
+### Calendar management edge gate
+
+```bash
+npm run qa:ai-assistant:calendar-edge
+```
+
+This runs ten multi-turn calendar-management conversations covering ambiguous
+selection, correction, cancellation, midnight rollover, multi-day shifts,
+conflicts, STT ambiguity, recurring-event safety, stale confirmations, and
+selective bulk deletion. Assertions target semantic intent, selected entities,
+tool safety, execution, and readback—not exact assistant wording.
+
 ### Targeted diagnostic sample
 
 ```bash
