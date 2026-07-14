@@ -41,7 +41,7 @@ test('active exact updates use semantic resolution without weakening policy cont
   assert.match(endpoint, /activeAuthoritativeEntity/)
   assert.match(endpoint, /planningEntities/)
   assert.match(endpoint, /authoritativeEntities: planningEntities/)
-  assert.match(endpoint, /authoritativeEntities,\n\s+duplicateCandidates/)
+  assert.match(endpoint, /authoritativeEntities,\n\s+activeEntity: activeAuthoritativeEntity,\n\s+duplicateCandidates/)
   assert.match(endpoint, /resolveCalendarSemanticTurn/)
   assert.doesNotMatch(endpoint, /repairInvalidCalendarMoveDuration/)
   assert.doesNotMatch(endpoint, /alignCalendarMoveToRequestedTime/)

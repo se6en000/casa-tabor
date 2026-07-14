@@ -274,6 +274,7 @@ Deno.serve(async (req) => {
       idempotencyKey: `${correlationId}:${actionId}`,
       agentState: body?.agent_state,
       authoritativeEntities,
+      activeEntity: activeAuthoritativeEntity,
       duplicateCandidates,
       expectedUtcOffset: optionalText(body?.context?.utcOffset, 12),
       authorizedMemberNames: Array.isArray(body?.context?.family)
