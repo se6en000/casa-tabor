@@ -26,11 +26,13 @@ import {
   formatEventTravelAnswer,
 } from '../_shared/assistant-event-travel.mjs'
 import {
+  inheritCalendarReadScope,
   isCalendarLikeLanguage,
   parseCalendarLanguage,
 } from '../_shared/assistant-calendar-language.mjs'
 import { resolveCalendarSemanticRead } from '../_shared/assistant-calendar-semantic-read.mjs'
 import {
+  cookingFrameGuidance,
   isCookingLikeLanguage,
   parseCookingLanguage,
 } from '../_shared/assistant-cooking-language.mjs'
@@ -38,8 +40,9 @@ import {
   isGroceryLikeLanguage,
   parseGroceryLanguage,
 } from '../_shared/assistant-grocery-language.mjs'
+import { shouldRetryTransientLlmStatus } from '../_shared/assistant-llm-retry.mjs'
 import { resolveGrocerySemantic } from '../_shared/assistant-grocery-semantic.mjs'
-import { classifyAssistantAmbiguity } from '../_shared/assistant-request-safety.mjs'
+import { classifyAssistantAmbiguity, safeFullProfileToolNames } from '../_shared/assistant-request-safety.mjs'
 import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
 
 const CORS = {
@@ -183,26 +186,36 @@ Deno.serve(async (req) => {
     }).then(() => {}).catch(() => {})
   }
   console.log(`[ai-assistant][${cid}] request messages=${Array.isArray(messages) ? messages.length : 0}`)
-  const latestUserText = Array.isArray(messages)
-    ? sanitizeIngressText(
-      [...messages].reverse().find((msg) =>
-        msg && typeof msg === 'object' && msg.role === 'user' && typeof msg.content === 'string'
-      )?.content,
-      2000,
-    )
-    : null
+  const userMessageTexts = Array.isArray(messages)
+    ? messages.flatMap((msg) =>
+      msg && typeof msg === 'object' && msg.role === 'user' && typeof msg.content === 'string'
+        ? [sanitizeIngressText(msg.content, 2000)]
+        : []
+    ).filter((text): text is string => Boolean(text))
+    : []
+  const latestUserText = userMessageTexts.at(-1) ?? null
+  const previousUserText = userMessageTexts.at(-2) ?? null
   const incomingConversationState = normalizeConversationState(context?.conversationState)
-  const calendarFrame = parseCalendarLanguage(latestUserText, {
+  const parsedCalendarFrame = parseCalendarLanguage(latestUserText, {
     focusedEvent: Boolean(context?.focusedEvent),
     activeEntityType: incomingConversationState?.activeEntityType,
   })
+  const previousCalendarFrame = previousUserText
+    ? parseCalendarLanguage(previousUserText, {
+      focusedEvent: Boolean(context?.focusedEvent),
+      activeEntityType: incomingConversationState?.activeEntityType,
+    })
+    : null
+  const calendarFrame = inheritCalendarReadScope(parsedCalendarFrame, previousCalendarFrame)
   const groceryFrame = parseGroceryLanguage(latestUserText, {
     activeEntityType: incomingConversationState?.activeEntityType,
+    page: context?.page,
   })
   const cookingFrame = parseCookingLanguage(latestUserText, {
     assistantMode: context?.assistant_mode,
     activeEntityType: incomingConversationState?.activeEntityType,
   })
+  const cookingGuidance = cookingFrameGuidance(cookingFrame)
   const requestAmbiguity = classifyAssistantAmbiguity(latestUserText, {
     hasActiveEntity: Boolean(incomingConversationState?.activeEntityType || context?.focusedEvent),
   })
@@ -1312,7 +1325,7 @@ Deno.serve(async (req) => {
     general: [],
   }
   const selectedToolNames = intentRouting.profile === 'full'
-    ? new Set(tools[0].function_declarations.map((tool) => tool.name))
+    ? new Set(safeFullProfileToolNames(tools[0].function_declarations.map((tool) => tool.name)))
     : new Set(toolNamesByProfile[intentRouting.profile] ?? [])
   const selectedToolDeclarations = tools[0].function_declarations
     .filter((tool) => selectedToolNames.has(tool.name))
@@ -1435,7 +1448,7 @@ ${includeEventContext ? `UPCOMING EVENTS SNAPSHOT (next ${PROMPT_EVENT_WINDOW_DA
 ${includeGroceryContext ? `\nGROCERY LIST (unchecked items):\n${groceryText}\n${defaultListId ? `Default list ID: ${defaultListId}` : ''}` : ''}
 ${includeRecipeContext ? `\nRECIPE LIBRARY SNAPSHOT (recent):\n${recipesText || 'No recipes saved yet.'}` : ''}
 ${includeRecipeContext && foodProfileText ? `\nFOOD PROFILE (household dietary needs & preferences — honor for all meal/grocery/recipe suggestions):\n${foodProfileText}` : ''}
-${cookingFrame ? `\nCOOKING SEMANTIC FRAME (Casa's normalized interpretation; answer the concept, not the wording):\nIntent: ${cookingFrame.intent}\nSlots: ${JSON.stringify(cookingFrame.slots)}` : ''}
+${cookingFrame ? `\nCOOKING SEMANTIC FRAME (Casa's normalized interpretation; answer the concept, not the wording):\nIntent: ${cookingFrame.intent}\nSlots: ${JSON.stringify(cookingFrame.slots)}${cookingGuidance ? `\nRequired handling: ${cookingGuidance}` : ''}` : ''}
 ${includeAvailabilityContext && availabilityText ? `\nMEMBER AVAILABILITY (recurring rules + upcoming overrides — use to warn about conflicts and pick times people are free):\n${availabilityText}` : ''}
 
 INSTRUCTIONS:
@@ -1502,9 +1515,13 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
   const history: GeminiContent[] = []
   const msgList = messages as { role: 'user' | 'assistant'; content: string }[]
+  const latestUserMessageIndex = msgList.findLastIndex((message) => message.role === 'user')
 
-  for (const m of msgList) {
-    const text = (m.content ?? '').trim()
+  for (const [index, m] of msgList.entries()) {
+    const rawText = (m.content ?? '').trim()
+    const text = index === latestUserMessageIndex && cookingGuidance
+      ? `${rawText}\n\nCasa semantic requirement: ${cookingGuidance}`
+      : rawText
     if (!text) continue  // skip empty messages — Gemini rejects them silently
     const role = m.role === 'user' ? 'user' : 'model'
     // Enforce strict alternation — merge consecutive same-role messages
@@ -2034,8 +2051,21 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       },
     )
 
-    const res = await callModel(body, { stream: wantStream, timeoutMs: PRIMARY_HARD_TIMEOUT_MS })
-    const llmPrimaryMs = Date.now() - llmStartMs
+    let res = await callModel(body, { stream: wantStream, timeoutMs: PRIMARY_HARD_TIMEOUT_MS })
+    let llmPrimaryMs = Date.now() - llmStartMs
+    if (shouldRetryTransientLlmStatus(res.status, remainingRequestBudgetMs())) {
+      recordLlmCall('llm_primary_transient', llmPrimaryMs, res.status)
+      appendServerTrace('server_ai_assistant_llm_retry', `status=${res.status}`, {
+        retry_reason: 'transient_provider_status',
+        first_status: res.status,
+        first_attempt_ms: llmPrimaryMs,
+        remaining_budget_ms: remainingRequestBudgetMs(),
+      })
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      const retryStartMs = Date.now()
+      res = await callModel(body, { stream: wantStream, timeoutMs: PRIMARY_HARD_TIMEOUT_MS })
+      llmPrimaryMs = Date.now() - retryStartMs
+    }
     console.log(`[ai-assistant][${cid}] stage=llm_primary ms=${llmPrimaryMs} status=${res.status}`)
     if (res.ok) {
       const data = res.data

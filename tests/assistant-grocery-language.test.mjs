@@ -37,6 +37,13 @@ test('grocery parser handles reads, multi-item adds, and bounded follow-ups', ()
   assert.equal(parseGroceryLanguage('Is coffee on the shopping list?')?.intent, 'grocery.contains')
   assert.equal(parseGroceryLanguage('Do we have coffee?')?.intent, 'grocery.contains')
   assert.equal(parseGroceryLanguage('What else is left on the grocery list?')?.intent, 'grocery.list')
+  assert.equal(parseGroceryLanguage("What's left on the grocery list?")?.intent, 'grocery.list')
+  assert.equal(parseGroceryLanguage("What's on the list now?", { page: 'grocery' })?.intent, 'grocery.list')
+  assert.equal(parseGroceryLanguage("What's on the list now?"), null)
+  assert.deepEqual(
+    parseGroceryLanguage('Do we already have milk on there?', { page: 'grocery' })?.slots,
+    { items: ['milk'] },
+  )
   assert.deepEqual(parseGroceryLanguage('What quantity does oat milk show?')?.slots, { item: 'oat milk' })
   assert.deepEqual(
     parseGroceryLanguage('Make that two', { activeEntityType: 'grocery_item' })?.slots,

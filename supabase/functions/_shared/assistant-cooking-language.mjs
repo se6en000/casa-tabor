@@ -169,14 +169,18 @@ export function parseCookingLanguage(text, options = {}) {
   if (/\b(?:save|keep|store|add)\b.*\b(?:this|that|the)?\s*recipe\b|\badd this to my recipe library\b/.test(input)) {
     return frame('recipe.save', 0.98)
   }
+  if (cookingContext && /^(?:make|give|create)(?: me)? (?:one )?(?:combined )?grocery list$/.test(input)) {
+    return frame('cooking.missing_ingredients', 0.97, { source: 'conversation_plan' })
+  }
   if (/\b(?:what ingredients? am i missing|what do i need to buy for (?:this|the) recipe|compare (?:this|the) recipe to my grocery list)\b/.test(input)) {
     return frame('cooking.missing_ingredients', 0.96)
   }
   if (/\b(?:calories?|protein|carbs?|carbohydrates?|fat|sodium|fiber|nutrition)\b/.test(input)) {
     return frame('cooking.nutrition', 0.93)
   }
-  if (/\b(?:meal plan|plan (?:our|my|the family)?\s*(?:meals|dinners)|weeknight meals)\b/.test(input)) {
-    return frame('cooking.meal_plan', 0.96)
+  if (/\b(?:meal plan|plan (?:(?:one|two|three|four|five|six|\d+)\s+)?(?:our|my|the family)?\s*(?:meals|dinners)|weeknight meals)\b/.test(input)) {
+    const ingredients = extractAfter(input, /\busing\s+(.+?)(?:\.\s*keep|\s+keep|$)/)
+    return frame('cooking.meal_plan', 0.96, ingredients ? { ingredients } : {})
   }
   if (/\b(?:dairy free|gluten free|vegetarian|vegan|nut free|low carb|keto)\b/.test(input)) {
     return frame('cooking.dietary', 0.94)
@@ -213,6 +217,9 @@ export function parseCookingLanguage(text, options = {}) {
   if (/\b(?:how do i|how to|what does)\b.*\b(?:dice|chop|mince|fold|sear|saute|sauté|roux|blanch|braise|deglaze|knead)\b/.test(input)) {
     return frame('cooking.technique', 0.95)
   }
+  if (/\b(?:explain|show me|tell me|walk me through)?\s*how to\s+(?:cook|prepare|pan sear|grill|roast|bake)\b/.test(input)) {
+    return frame('cooking.technique', 0.95)
+  }
   if (/\b(?:say|tell me|read)\b.*\b(?:step|instruction)\b.*\bagain\b|\brepeat (?:that|the last)\b/.test(input) ||
       (cookingContext && /\bwhat was that again\b/.test(input))) {
     return frame('cooking.repeat_step', 0.96)
@@ -233,6 +240,19 @@ export function parseCookingLanguage(text, options = {}) {
   if (recipe) return frame('cooking.recipe', 0.95, { recipe })
   if (/\b(?:what should i make|dinner idea|lunch idea|breakfast idea|something quick for (?:dinner|lunch|breakfast)|what sounds good)\b/.test(input)) {
     return frame('cooking.suggest', 0.93)
+  }
+  return null
+}
+
+export function cookingFrameGuidance(frameValue) {
+  if (
+    frameValue?.intent === 'cooking.missing_ingredients' &&
+    frameValue.slots?.source === 'conversation_plan'
+  ) {
+    return 'Derive a read-only grocery list only from the immediately preceding meal plan in the conversation. Consolidate the ingredients required for those meals into a Markdown list. Do not copy the existing Casa grocery list. Do not ask the user to repeat ingredients, and do not save anything.'
+  }
+  if (frameValue?.intent === 'cooking.missing_ingredients') {
+    return 'Derive a read-only ingredient or grocery list from the recipe or meal plan in the conversation. Return a consolidated Markdown list. Do not ask the user to repeat ingredients, and do not save anything unless they explicitly ask to add or save the listed items.'
   }
   return null
 }

@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 
 import { eventConversationState, groceryConversationState } from '../supabase/functions/_shared/assistant-conversation-grounding.mjs'
+import { formatTextForMarkdown } from '../src/lib/assistantMarkdown.mjs'
 
 const env = Object.fromEntries(
   fs.readFileSync(new URL('../.env.local', import.meta.url), 'utf8')
@@ -26,7 +27,7 @@ const traceBase = crypto.randomUUID()
 const DEFAULT_LIMIT = Number(process.argv.find((arg) => arg.startsWith('--count='))?.split('=')[1] ?? '0')
 const MODE = process.argv.find((arg) => arg.startsWith('--mode='))?.split('=')[1] ?? 'full'
 const MODEL = process.argv.find((arg) => arg.startsWith('--model='))?.split('=')[1] ?? 'gemini-2.5-flash-lite'
-const SUPPORTED_MODES = new Set(['smoke', 'full'])
+const SUPPORTED_MODES = new Set(['smoke', 'full', 'showcase'])
 const SUPPORTED_MODELS = new Set(['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.5-flash'])
 if (!SUPPORTED_MODES.has(MODE)) throw new Error(`Unsupported QA mode: ${MODE}`)
 if (!SUPPORTED_MODELS.has(MODEL)) throw new Error(`Unsupported QA model: ${MODEL}`)
@@ -457,6 +458,119 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames) {
   ]
 }
 
+function showcaseScenarioGroups() {
+  return [
+    {
+      key: 'showcase-busy-calendar',
+      page: 'calendar',
+      assistantMode: 'general',
+      steps: [
+        { text: "What's going on Thursday?", expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 0, readable: true } },
+        { text: 'Which one is first?', expect: { type: 'text', containsAny: ['first', 'am', 'pm', 'all day'] } },
+      ],
+    },
+    {
+      key: 'showcase-calendar-locations',
+      page: 'calendar',
+      assistantMode: 'general',
+      steps: [
+        { text: 'Where do I need to go this week?', expect: { type: 'text', readable: true } },
+        { text: 'What time is the first one?', expect: { type: 'text', containsAny: ['am', 'pm', 'all day'] } },
+      ],
+    },
+    {
+      key: 'showcase-grocery-read',
+      page: 'grocery',
+      assistantMode: 'general',
+      steps: [
+        { text: "What's left on the grocery list?", expect: { type: 'text', semanticIntent: 'grocery.list', maxLlmCalls: 0, readable: true } },
+        { text: 'Do we already have milk on there?', expect: { type: 'text', containsAny: ['milk', 'list'] } },
+      ],
+    },
+    {
+      key: 'showcase-stt-calendar',
+      page: 'calendar',
+      assistantMode: 'general',
+      steps: [
+        { text: 'Whats happening tomoro afternoon', expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 0 } },
+        { text: 'Any conflicts?', expect: { type: 'text', containsAll: ['tomorrow', 'afternoon'] } },
+      ],
+    },
+    {
+      key: 'showcase-dinner-ideas',
+      page: 'cooking',
+      assistantMode: 'chef',
+      steps: [
+        { text: 'Give me five easy dinner ideas using salmon, but no pasta.', expect: { type: 'text', containsAny: ['salmon'], readable: true } },
+        { text: 'Tell me more about the third one.', expect: { type: 'text', readable: true } },
+      ],
+    },
+    {
+      key: 'showcase-recipe',
+      page: 'cooking',
+      assistantMode: 'chef',
+      steps: [
+        { text: 'How do I make crispy fish tacos? Include ingredients and steps.', expect: { type: 'text', containsAny: ['ingredient', 'step'], readable: true } },
+        { text: 'What can I prep ahead?', expect: { type: 'text', readable: true } },
+      ],
+    },
+    {
+      key: 'showcase-troubleshooting',
+      page: 'cooking',
+      assistantMode: 'chef',
+      steps: [
+        { text: 'My mashed potatoes are gluey. What happened and how can I fix them?', expect: { type: 'text', containsAny: ['starch', 'potato', 'fix'], readable: true } },
+        { text: 'How do I stop that next time?', expect: { type: 'text', readable: true } },
+      ],
+    },
+    {
+      key: 'showcase-meal-plan',
+      page: 'cooking',
+      assistantMode: 'chef',
+      steps: [
+        { text: 'Plan three dinners using salmon, black beans, and leftover rice. Keep them kid friendly.', expect: { type: 'text', containsAny: ['salmon', 'beans', 'rice'], readable: true } },
+        {
+          text: 'Make me one combined grocery list.',
+          expect: {
+            type: 'text',
+            containsAll: ['cheese'],
+            notContainsAny: [
+              'gatorade',
+              'flonase',
+              'cat treats',
+            ],
+            readable: true,
+          },
+        },
+      ],
+    },
+    {
+      key: 'showcase-grocery-mutation',
+      page: 'grocery',
+      assistantMode: 'general',
+      steps: [
+        { text: 'Add milk, bananas, pasta, chicken thighs, and taco shells to the grocery list.', expect: { type: 'write', tool: 'add_grocery_items' } },
+        { text: "What's on the list now?", expect: { type: 'text', semanticIntent: 'grocery.list', maxLlmCalls: 0, containsAny: ['milk', 'banana', 'pasta'], readable: true } },
+      ],
+    },
+    {
+      key: 'showcase-steak',
+      page: 'cooking',
+      assistantMode: 'chef',
+      steps: [
+        { text: 'Explain how to pan sear salmon, including preparation, pan temperature, cooking time, resting, common mistakes, and food safety.', expect: { type: 'text', containsAny: ['temperature', 'rest', 'safety'], readable: true } },
+        { text: 'Summarize that into a checklist.', expect: { type: 'text', readable: true } },
+      ],
+    },
+  ]
+}
+
+function hasReadableStructure(text) {
+  const formatted = formatTextForMarkdown(String(text ?? ''))
+  if (formatted.length < 180) return true
+  return /\n\n|(?:^|\n)(?:[-*]|\d+\.)\s+|(?:^|\n)#{1,6}\s+/m.test(formatted)
+}
+
 function stepSummary(response) {
   if (!response) return 'no-response'
   if (response.type === 'tool_action') return `tool_action:${response.tool}`
@@ -477,6 +591,7 @@ async function run() {
   let qaGroceryListId = null
   const results = []
   const conversationStates = new Map()
+  const conversationHistories = new Map()
   const createdEventIds = new Set()
   const createdGroceryIds = new Set()
 
@@ -484,7 +599,9 @@ async function run() {
     await seedCalendarFixtures(calendarFixtures)
     qaGroceryListId = await createQaGroceryList()
     await seedGroceryFixtures(qaGroceryListId, groceryFixtures)
-    const groups = scenarioGroups(calendarFixtures, groceryFixtures, familyNames)
+    const groups = MODE === 'showcase'
+      ? showcaseScenarioGroups()
+      : scenarioGroups(calendarFixtures, groceryFixtures, familyNames)
     const flatSteps = groups.flatMap((group) => group.steps.map((step, index) => ({
       ...step,
       groupKey: group.key,
@@ -501,7 +618,10 @@ async function run() {
       const currentState = step.initialConversationState !== undefined
         ? step.initialConversationState
         : conversationStates.get(step.groupKey) ?? null
-      const history = [{ role: 'user', content: step.text }]
+      const history = [
+        ...(conversationHistories.get(step.groupKey) ?? []),
+        { role: 'user', content: step.text },
+      ]
 
       console.log(JSON.stringify({
         heartbeat: true,
@@ -543,12 +663,21 @@ async function run() {
 
       output.assistant_type = response?.type ?? 'unknown'
       output.assistant_text = response?.text ?? response?.display_text ?? null
+      output.formatted_text = response?.type === 'text'
+        ? formatTextForMarkdown(String(output.assistant_text ?? ''))
+        : null
       output.tool = response?.tool ?? null
       output.semantic_intent = response?.authoritative_provenance?.semantic_intent ?? null
       output.llm_calls = response?.telemetry?.llm_calls ?? null
 
       if (response?.conversation_state) {
         conversationStates.set(step.groupKey, response.conversation_state)
+      }
+      if (response?.type === 'text' && output.assistant_text) {
+        conversationHistories.set(step.groupKey, [
+          ...history,
+          { role: 'assistant', content: output.assistant_text },
+        ])
       }
 
       if (step.expect.type === 'clarify') {
@@ -585,6 +714,27 @@ async function run() {
         ) {
           output.ok = false
           output.note = `llm_calls_exceeded:max_${step.expect.maxLlmCalls}:got_${response?.telemetry?.llm_calls}`
+        } else if (
+          Array.isArray(step.expect.containsAny)
+          && !step.expect.containsAny.some((term) => String(output.assistant_text ?? '').toLowerCase().includes(term))
+        ) {
+          output.ok = false
+          output.note = `response_content_missing:expected_any_${step.expect.containsAny.join('_')}`
+        } else if (
+          Array.isArray(step.expect.containsAll)
+          && !step.expect.containsAll.every((term) => String(output.assistant_text ?? '').toLowerCase().includes(term))
+        ) {
+          output.ok = false
+          output.note = `response_content_missing:expected_all_${step.expect.containsAll.join('_')}`
+        } else if (
+          Array.isArray(step.expect.notContainsAny)
+          && step.expect.notContainsAny.some((term) => String(output.assistant_text ?? '').toLowerCase().includes(term))
+        ) {
+          output.ok = false
+          output.note = `response_content_leak:unexpected_${step.expect.notContainsAny.join('_')}`
+        } else if (step.expect.readable && !hasReadableStructure(output.assistant_text)) {
+          output.ok = false
+          output.note = 'response_not_readable'
         }
       } else if (step.expect.type === 'write') {
         if (response?.type === 'text' && response?.write_verified === true) {
@@ -691,6 +841,15 @@ async function run() {
         assistant_text: result.assistant_text,
       })),
       cleanup,
+      showcase: MODE === 'showcase'
+        ? results.map((result) => ({
+          conversation: result.group,
+          user: result.text,
+          assistant: result.assistant_text,
+          formatted: result.formatted_text,
+          ok: result.ok,
+        }))
+        : undefined,
       failures: results.filter((result) => !result.ok).slice(0, 20),
     }, null, 2))
     if (totals.failed > 0 || !cleanup.verified) process.exitCode = 1

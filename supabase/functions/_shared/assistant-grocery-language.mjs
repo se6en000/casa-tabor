@@ -122,10 +122,13 @@ export function parseGroceryLanguage(text, options = {}) {
   const input = normalize(text)
   if (!input) return null
   const activeItem = options.activeEntityType === 'grocery_item'
+  const groceryContext = options.page === 'grocery'
 
   if (/^(?:what(?:'s| is) on|read(?: off)?|show|list|tell me|run through|walk me through)(?: me)?\s+(?:what(?:'s| is) on\s+)?(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/.test(input) ||
       /^(?:what do we need (?:from|at) the (?:store|grocery store)|what(?:'s| is) left to buy|what do we still need to get)$/.test(input) ||
-      /^what (?:else )?(?:is left|do we still need)\s+on\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/.test(input)) {
+      /^what(?:'s| is| else is| else's) left\s+on\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/.test(input) ||
+      /^what (?:else )?do we still need\s+on\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/.test(input) ||
+      (groceryContext && /^what(?:'s| is) on (?:the )?list now$/.test(input))) {
     return frame('grocery.list', 0.99)
   }
   if (/^how many (?:things|items|groceries)(?: (?:are on|do we need on) (?:my|the|our)?\s*(?:grocery|shopping)(?: list)?)?$/.test(input) ||
@@ -138,7 +141,11 @@ export function parseGroceryLanguage(text, options = {}) {
     return frame('grocery.clear_checked', 0.99)
   }
 
-  const contains = input.match(/^(?:is|are)\s+(.+?)\s+(?:already\s+)?on\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/) ||
+  const contextualContains = groceryContext
+    ? input.match(/^do we (?:already )?have\s+(.+?)\s+on there$/)
+    : null
+  const contains = contextualContains ||
+    input.match(/^(?:is|are)\s+(.+?)\s+(?:already\s+)?on\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/) ||
     input.match(/^do we (?:already )?have\s+(.+?)(?:\s+on\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?)?$/) ||
     input.match(/^did i (?:put|add)\s+(.+?)\s+(?:to|on)\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/)
   if (contains) return frame('grocery.contains', 0.99, { items: splitItems(contains[1]) })

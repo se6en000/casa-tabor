@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { classifyAssistantAmbiguity } from '../supabase/functions/_shared/assistant-request-safety.mjs'
+import {
+  classifyAssistantAmbiguity,
+  safeFullProfileToolNames,
+} from '../supabase/functions/_shared/assistant-request-safety.mjs'
 
 test('vague write targets clarify instead of guessing across domains', () => {
   for (const text of [
@@ -18,4 +21,11 @@ test('grounded follow-ups and explicit targets remain actionable', () => {
   assert.equal(classifyAssistantAmbiguity('move it to Friday', { hasActiveEntity: true }), null)
   assert.equal(classifyAssistantAmbiguity('move soccer practice to Friday'), null)
   assert.equal(classifyAssistantAmbiguity('add milk to the grocery list'), null)
+})
+
+test('full-profile fallback cannot invent grocery mutations', () => {
+  assert.deepEqual(
+    safeFullProfileToolNames(['search_web', 'add_grocery_items', 'create_event', 'remove_grocery_item']),
+    ['search_web', 'create_event'],
+  )
 })

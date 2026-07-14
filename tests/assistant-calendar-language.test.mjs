@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   CALENDAR_INTENTS,
   CALENDAR_UTTERANCE_CORPUS,
+  inheritCalendarReadScope,
   isCalendarLikeLanguage,
   parseCalendarLanguage,
 } from '../supabase/functions/_shared/assistant-calendar-language.mjs'
@@ -21,6 +22,20 @@ const events = [
 test('calendar language contract publishes a stable intent ontology', () => {
   assert.ok(CALENDAR_INTENTS.length >= 14)
   assert.equal(new Set(CALENDAR_INTENTS).size, CALENDAR_INTENTS.length)
+})
+
+test('scope-free calendar read follow-ups inherit the prior time frame', () => {
+  const previous = parseCalendarLanguage('Whats happening tomoro afternoon')
+  const followUp = parseCalendarLanguage('Any conflicts?')
+  assert.deepEqual(
+    inheritCalendarReadScope(followUp, previous)?.slots.temporalScope,
+    { kind: 'tomorrow', dayPart: 'afternoon' },
+  )
+  const explicit = parseCalendarLanguage('Any conflicts Monday?')
+  assert.deepEqual(
+    inheritCalendarReadScope(explicit, previous)?.slots.temporalScope,
+    { kind: 'weekday', weekday: 'monday' },
+  )
 })
 
 test('generated calendar corpus maps equivalent phrases to semantic frames', () => {
@@ -99,9 +114,23 @@ test('semantic reads execute against authoritative calendar rows', () => {
   assert.equal(conflicts.conflicts.length, 1)
   assert.match(conflicts.text, /Monday/)
 
-  const destinations = resolveCalendarSemanticRead(parseCalendarLanguage('Where do I need to go tomorrow?'), events, options)
+  const destinationEvents = [
+    ...events,
+    { id: 'home', title: 'Movie Night', start_time: '2026-07-12T23:00:00Z', end_time: '2026-07-13T01:00:00Z' },
+  ]
+  const destinations = resolveCalendarSemanticRead(parseCalendarLanguage('Where do I need to go tomorrow?'), destinationEvents, options)
+  assert.deepEqual(destinations.events.map((event) => event.id), ['pool'])
   assert.match(destinations.text, /1826 4th Place/)
   assert.match(destinations.text, /\n- \d{1,2}:\d{2} [AP]M — Pool Party/)
+  assert.doesNotMatch(destinations.text, /Movie Night|no destination is saved/)
+
+  const noDestinations = resolveCalendarSemanticRead(
+    parseCalendarLanguage('Where do I need to go tomorrow?'),
+    destinationEvents.filter((event) => event.id === 'home'),
+    options,
+  )
+  assert.deepEqual(noDestinations.events, [])
+  assert.match(noDestinations.text, /do not have any calendar destinations tomorrow/)
 
   const thursdayEvents = [
     ...events,

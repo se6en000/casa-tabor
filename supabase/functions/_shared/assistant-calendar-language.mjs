@@ -310,6 +310,30 @@ export function parseCalendarLanguage(text, options = {}) {
   return null
 }
 
+export function inheritCalendarReadScope(frameValue, previousFrame) {
+  const inheritableIntents = new Set([
+    'calendar.list',
+    'calendar.count',
+    'calendar.destinations',
+    'calendar.availability',
+  ])
+  if (
+    !frameValue ||
+    !inheritableIntents.has(frameValue.intent) ||
+    frameValue.slots?.temporalScope ||
+    !previousFrame?.slots?.temporalScope
+  ) {
+    return frameValue
+  }
+  return {
+    ...frameValue,
+    slots: {
+      ...frameValue.slots,
+      temporalScope: previousFrame.slots.temporalScope,
+    },
+  }
+}
+
 export function isCalendarLikeLanguage(text) {
   const input = normalize(text)
   return CALENDAR_NOUNS.test(input) || (TEMPORAL_WORDS.test(input) && /\b(?:have|doing|going on|free|busy|next)\b/.test(input))

@@ -229,16 +229,15 @@ export function resolveCalendarSemanticRead(frame, events, options = {}) {
     return { text, events: rows, conflicts: overlaps, intent: frame.intent, scope: range.label }
   }
   if (frame.intent === 'calendar.destinations') {
-    if (rows.length === 0) return { text: `You do not have any calendar destinations ${range.label}.`, events: [], intent: frame.intent, scope: range.label }
-    const lines = rows.map((event) => {
-      const destination = event.address || event.location_name
-      return destination
-        ? `${localTime(event.start_time, offset)} — ${event.title}: ${destination}`
-        : `${localTime(event.start_time, offset)} — ${event.title}: no destination is saved`
+    const destinationRows = rows.filter((event) => String(event.address || event.location_name || '').trim())
+    if (destinationRows.length === 0) return { text: `You do not have any calendar destinations ${range.label}.`, events: [], intent: frame.intent, scope: range.label }
+    const lines = destinationRows.map((event) => {
+      const destination = String(event.address || event.location_name).trim()
+      return `${localTime(event.start_time, offset)} — ${event.title}: ${destination}`
     })
     return {
-      text: `${rows.length === 1 ? 'One destination' : `${rows.length} destinations`} ${range.label}:\n${lines.map((line) => `- ${line}`).join('\n')}`,
-      events: rows,
+      text: `${destinationRows.length === 1 ? 'One destination' : `${destinationRows.length} destinations`} ${range.label}:\n${lines.map((line) => `- ${line}`).join('\n')}`,
+      events: destinationRows,
       intent: frame.intent,
       scope: range.label,
     }
