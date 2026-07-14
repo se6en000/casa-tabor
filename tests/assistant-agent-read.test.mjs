@@ -106,6 +106,38 @@ test('calendar searches filter title, member, and optional explicit range', () =
   assert.deepEqual(result.events.map((event) => event.id), ['event-1'])
 })
 
+test('natural reminder searches match enriched titles without literal phrase overlap', () => {
+  const reminder = {
+    id: 'dentist-reminder',
+    title: 'Tabor Family | Schedule Dentist Appointment',
+    start_time: '2026-07-15T13:00:00.000Z',
+    end_time: '2026-07-15T13:30:00.000Z',
+    event_type: 'reminder',
+    all_day: false,
+  }
+
+  for (const query of ['dentist reminder', 'find my dentist reminder']) {
+    const result = executeAgentReadTool('calendar.search', { query }, { events: [reminder] })
+    assert.deepEqual(result.events.map((event) => event.id), ['dentist-reminder'], query)
+  }
+})
+
+test('type-only reminder searches return reminders without matching the word in the title', () => {
+  const reminder = {
+    id: 'laundry-reminder',
+    title: 'Switch the laundry',
+    start_time: '2026-07-15T13:00:00.000Z',
+    end_time: '2026-07-15T13:30:00.000Z',
+    event_type: 'reminder',
+    all_day: false,
+  }
+  const appointment = { ...reminder, id: 'laundry-event', event_type: 'event' }
+  const result = executeAgentReadTool('calendar.search', {
+    query: 'show my reminders',
+  }, { events: [appointment, reminder] })
+  assert.deepEqual(result.events.map((event) => event.id), ['laundry-reminder'])
+})
+
 test('calendar exact reads use authoritative active identity', () => {
   const result = executeAgentReadTool('calendar.get_event', {
     id: 'event-1',

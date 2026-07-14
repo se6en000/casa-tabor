@@ -63,19 +63,46 @@ export function formatAgentReadResult(toolName, result, options = {}) {
 
 function searchCalendar(args, rawEvents) {
   const events = normalizeEvents(rawEvents)
-  const query = normalizeText(args?.query)
+  const search = normalizeCalendarSearch(args?.query, args?.event_type)
   const memberName = normalizeText(args?.member_name)
-  const eventType = normalizeText(args?.event_type)
   const range = parseRange(args?.start, args?.end)
   const filtered = events.filter((event) => {
-    if (query && !event.title.toLowerCase().includes(query)) return false
+    const title = searchableText(event.title)
+    if (search.terms.length > 0 && !search.terms.every((term) => title.includes(term))) return false
     if (memberName && !event.members.some((member) => member.toLowerCase() === memberName)) return false
-    if (eventType && event.event_type !== eventType) return false
+    if (search.eventType && event.event_type !== search.eventType) return false
     if (range && !overlaps(event, range, args?.utc_offset)) return false
     return true
   })
   filtered.sort((a, b) => compareCalendarEvents(a, b, args?.utc_offset))
   return { supported: true, events: filtered, count: filtered.length }
+}
+
+function normalizeCalendarSearch(queryValue, eventTypeValue) {
+  const query = searchableText(queryValue)
+  const explicitType = normalizeText(eventTypeValue)
+  const mentionsReminder = /\breminders?\b/.test(query)
+  const mentionsEvent = /\b(?:appointments?|events?)\b/.test(query)
+  const eventType = ['event', 'reminder'].includes(explicitType)
+    ? explicitType
+    : mentionsReminder
+      ? 'reminder'
+      : mentionsEvent
+        ? 'event'
+        : ''
+  const ignored = new Set([
+    'a', 'an', 'calendar', 'event', 'events', 'find', 'for', 'me', 'my',
+    'appointment', 'appointments', 'please', 'reminder', 'reminders', 'show', 'the',
+  ])
+  const terms = query.split(' ').filter((term) => term && !ignored.has(term))
+  return { eventType, terms }
+}
+
+function searchableText(value) {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
 }
 
 function getCalendarEvent(args, rawEvents) {
