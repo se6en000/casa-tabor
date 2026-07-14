@@ -62,6 +62,7 @@ import { classifyAssistantAmbiguity, safeFullProfileToolNames } from '../_shared
 import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
 import { getAgentToolByLegacyName } from '../_shared/assistant-agent-tools.mjs'
 import { isAgentWriteCompatible } from '../_shared/assistant-agent-write-compatibility.mjs'
+import { isExplicitReminderCompletion } from '../_shared/assistant-reminder-intent.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -233,10 +234,12 @@ Deno.serve(async (req) => {
         utcOffset: context?.utcOffset,
       })
     : null
-  const groceryFrame = parseGroceryLanguage(latestUserText, {
+  const groceryFrame = isExplicitReminderCompletion(latestUserText)
+    ? null
+    : parseGroceryLanguage(latestUserText, {
     activeEntityType: incomingConversationState?.activeEntityType,
     page: context?.page,
-  })
+      })
   const cookingFrame = parseCookingLanguage(latestUserText, {
     assistantMode: context?.assistant_mode,
     activeEntityType: incomingConversationState?.activeEntityType,

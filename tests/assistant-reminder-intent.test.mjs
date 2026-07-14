@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   fallbackExplicitRelativeReminderTurn,
   hardenExplicitReminderTurn,
+  isExplicitReminderCompletion,
 } from '../supabase/functions/_shared/assistant-reminder-intent.mjs'
 
 test('explicit reminder language cannot be downgraded to an appointment', () => {
@@ -59,4 +60,10 @@ test('date-only reminder language becomes all-day without affecting ordinary eve
 
   const event = { action: 'create', patch: { title: 'Dinner' } }
   assert.equal(hardenExplicitReminderTurn(event, 'Schedule dinner tomorrow.'), event)
+})
+
+test('explicit reminder completion cannot be mistaken for grocery check-off', () => {
+  assert.equal(isExplicitReminderCompletion('Mark that reminder done.'), true)
+  assert.equal(isExplicitReminderCompletion('Check the reminder off.'), true)
+  assert.equal(isExplicitReminderCompletion('Mark milk done.'), false)
 })

@@ -43,6 +43,11 @@ export function fallbackExplicitRelativeReminderTurn(text) {
   }
 }
 
+export function isExplicitReminderCompletion(text) {
+  const value = String(text ?? '')
+  return /\b(?:mark|check)\b.*\breminder\b.*\b(?:done|complete|off)\b|\bcomplete\b.*\breminder\b/i.test(value)
+}
+
 function isExplicitReminder(text) {
   return /\bremind\s+me\b|\bset\s+(?:me\s+)?(?:a\s+)?reminder\b|\bcreate\s+(?:a\s+)?reminder\b/i.test(String(text ?? ''))
 }
