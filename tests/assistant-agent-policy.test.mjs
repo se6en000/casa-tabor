@@ -236,6 +236,34 @@ test('grocery updates require one exact versioned change and confirmation', () =
       checked: true,
     },
   })
+
+  test('exact updates reject duplicate labels unless an active entity disambiguates', () => {
+    const target = {
+      type: 'grocery_item',
+      id: 'milk-1',
+      version: 'v1',
+      name: 'Oat milk',
+      quantity: '1',
+      checked: false,
+    }
+    const duplicate = { ...target, id: 'milk-2' }
+    const request = {
+      toolName: 'grocery.update_item',
+      actionId: 'duplicate-update',
+      idempotencyKey: 'duplicate-update-key',
+      args: {
+        id: target.id,
+        expected_updated_at: target.version,
+        quantity: '2',
+      },
+      authoritativeEntities: [target, duplicate],
+    }
+    assert.equal(evaluate(request).code, 'ambiguous_authoritative_target')
+    assert.equal(evaluate({
+      ...request,
+      activeEntity: target,
+    }).decision, 'confirm')
+  })
   assert.equal(checkUpdate.decision, 'confirm')
 })
 

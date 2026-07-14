@@ -19,6 +19,7 @@
     "qa:ai-assistant:calendar-edge": "node scripts/ai-assistant-qa-sweep.mjs --mode=calendar-edge --model=gemini-2.5-flash-lite",
     "qa:ai-agent:shadow": "node scripts/ai-agent-shadow-qa.mjs --model=gemini-2.5-flash-lite",
     "qa:ai-agent:benchmark": "node scripts/ai-agent-model-benchmark.mjs",
+    "qa:ai-agent:benchmark:core": "node scripts/ai-agent-model-benchmark.mjs --scope=core --models=gemini-2.5-flash --trials=3",
     "qa:ai-agent:benchmark:list": "node scripts/ai-agent-model-benchmark.mjs --list",
     "design-system:export": "node scripts/export-design-system.mjs",
     "style:audit": "node scripts/style-audit.mjs",

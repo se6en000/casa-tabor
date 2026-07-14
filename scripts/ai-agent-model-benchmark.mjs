@@ -28,15 +28,21 @@ const MODEL_PRICES = {
 const models = argument('--models')?.split(',').map((value) => value.trim()).filter(Boolean) ?? DEFAULT_MODELS
 const trials = positiveInteger(argument('--trials') ?? '2')
 const requestedKeys = argument('--keys')?.split(',').map((value) => value.trim()).filter(Boolean) ?? []
-const scenarios = requestedKeys.length > 0
-  ? MODEL_BENCHMARK_SCENARIOS.filter((item) => requestedKeys.includes(item.key))
+const scope = argument('--scope') ?? 'all'
+if (!['all', 'core'].includes(scope)) throw new Error(`Unsupported benchmark scope: ${scope}`)
+const scopedScenarios = scope === 'core'
+  ? MODEL_BENCHMARK_SCENARIOS.filter((item) => item.category !== 'cooking')
   : MODEL_BENCHMARK_SCENARIOS
+const scenarios = requestedKeys.length > 0
+  ? scopedScenarios.filter((item) => requestedKeys.includes(item.key))
+  : scopedScenarios
 const listOnly = process.argv.includes('--list')
 const runId = `agent-model-benchmark-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
 
 if (listOnly) {
   console.log(JSON.stringify({
     corpus_version: MODEL_BENCHMARK_CORPUS_VERSION,
+    scope,
     scenario_count: scenarios.length,
     scenarios: scenarios.map(publicScenario),
   }, null, 2))
@@ -82,6 +88,7 @@ const summaries = models.map((model) => summarizeModel(model, results.filter((re
 console.log(JSON.stringify({
   run_id: runId,
   corpus_version: MODEL_BENCHMARK_CORPUS_VERSION,
+  scope,
   trials,
   scenario_count: scenarios.length,
   total_requests: results.length,
@@ -182,6 +189,7 @@ async function callShadow(item, model, scenarioIndex, trial, step, completedTool
       correlation_id: `${runId}:${turnId}`,
       household_id: 'benchmark-household',
       model_override: model,
+      planner_mode: scope === 'core' ? plannerModeFor(item) : undefined,
       action_id: crypto.randomUUID(),
     }),
   })
@@ -294,6 +302,7 @@ function publicScenario(item) {
     key: item.key,
     category: item.category,
     page: item.page,
+    planner_mode: scope === 'core' ? plannerModeFor(item) : 'general',
     transcript: item.messages,
     authoritative_entities: item.context.authoritativeEntities ?? [],
     active_entity: item.context.activeEntity ?? null,
@@ -302,6 +311,12 @@ function publicScenario(item) {
     expected_tools: item.expectedTools,
     scoring_expectation: item.expectation,
   }
+}
+
+function plannerModeFor(item) {
+  return ['read', 'context'].includes(item.category)
+    ? 'authoritative_read'
+    : 'additive_write'
 }
 
 function simulatedReadResult(toolName, item) {

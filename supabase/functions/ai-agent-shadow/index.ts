@@ -6,6 +6,7 @@ import {
   buildAgentShadowRequest,
   isAgentPlanAllowedByRequest,
   parseAgentShadowResponse,
+  shouldRetryAgentShadowPlan,
 } from '../_shared/assistant-agent-shadow.mjs'
 import { getAgentTool } from '../_shared/assistant-agent-tools.mjs'
 
@@ -56,6 +57,7 @@ Deno.serve(async (req) => {
     })
     let response = await callGemini(model, apiKey, requestBody)
     let providerCalls = 1
+    const usageTotals = { input: 0, output: 0, total: 0 }
     if ([429, 500, 502, 503, 504].includes(response.status)) {
       await new Promise((resolve) => setTimeout(resolve, 100))
       response = await callGemini(model, apiKey, requestBody)
@@ -64,8 +66,19 @@ Deno.serve(async (req) => {
     if (!response.ok) {
       throw new Error(`Gemini shadow planner failed with status ${response.status}`)
     }
-    const providerPayload = await response.json()
-    const parsedPlan = parseAgentShadowResponse(providerPayload)
+    let providerPayload = await response.json()
+    addUsage(usageTotals, providerPayload?.usageMetadata)
+    let parsedPlan = parseAgentShadowResponse(providerPayload)
+    if (providerCalls === 1 && shouldRetryAgentShadowPlan(parsedPlan, requestBody)) {
+      response = await callGemini(model, apiKey, requestBody)
+      providerCalls += 1
+      if (!response.ok) {
+        throw new Error(`Gemini shadow planner retry failed with status ${response.status}`)
+      }
+      providerPayload = await response.json()
+      addUsage(usageTotals, providerPayload?.usageMetadata)
+      parsedPlan = parseAgentShadowResponse(providerPayload)
+    }
     const plan = isAgentPlanAllowedByRequest(parsedPlan, requestBody)
       ? parsedPlan
       : { kind: 'error', code: 'undeclared_tool' }
@@ -82,6 +95,7 @@ Deno.serve(async (req) => {
           idempotencyKey: `${correlationId}:${actionId}`,
           agentState: body?.agent_state,
           authoritativeEntities: body?.context?.authoritativeEntities,
+          activeEntity: body?.context?.activeEntity,
           duplicateCandidates: body?.context?.duplicateCandidates,
           expectedUtcOffset: text(body?.context?.utcOffset, 12),
           authorizedMemberNames: Array.isArray(body?.context?.family)
@@ -91,7 +105,6 @@ Deno.serve(async (req) => {
             : [],
         })
       : null
-    const usage = providerPayload?.usageMetadata ?? {}
     const telemetry = agentShadowTelemetry(plan, {
       model,
       toolEffect: tool?.effect ?? null,
@@ -99,9 +112,9 @@ Deno.serve(async (req) => {
       policyCode: policy?.code ?? null,
       policyErrors: Array.isArray(policy?.errors) ? policy.errors : [],
       elapsedMs: Date.now() - startedAt,
-      inputTokens: integer(usage.promptTokenCount),
-      outputTokens: integer(usage.candidatesTokenCount),
-      totalTokens: integer(usage.totalTokenCount),
+      inputTokens: usageTotals.input,
+      outputTokens: usageTotals.output,
+      totalTokens: usageTotals.total,
       providerCalls,
       messageCount: messages.length,
       userTextHash: await sha256(latestUserText),
@@ -140,6 +153,15 @@ function text(value: unknown, maxLength: number) {
   if (typeof value !== 'string') return null
   const normalized = value.trim()
   return normalized ? normalized.slice(0, maxLength) : null
+}
+
+function addUsage(
+  totals: { input: number; output: number; total: number },
+  usage: Record<string, unknown> | null | undefined,
+) {
+  totals.input += integer(usage?.promptTokenCount)
+  totals.output += integer(usage?.candidatesTokenCount)
+  totals.total += integer(usage?.totalTokenCount)
 }
 
 function integer(value: unknown) {

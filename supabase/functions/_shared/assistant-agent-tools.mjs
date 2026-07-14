@@ -134,7 +134,7 @@ export const AGENT_TOOL_DEFINITIONS = Object.freeze([
           type: 'object',
           additionalProperties: false,
           properties: {
-            name: string('Grocery item name.'),
+            name: string('Grocery item name, with obvious speech-to-text spelling normalized.'),
             quantity: string('Optional quantity text.'),
             unit: string('Optional unit text.'),
             category: string('Optional category.'),

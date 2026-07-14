@@ -88,6 +88,9 @@ function evaluateDomainPolicy(tool, request) {
     if (['calendar.update', 'calendar.delete'].includes(tool.name)) {
       const target = findEntity(request.authoritativeEntities, 'event', request.args.id)
       if (!target) return clarify('authoritative_target_required', tool)
+      if (hasAmbiguousLabel(request, 'event', target, 'title')) {
+        return clarify('ambiguous_authoritative_target', tool)
+      }
       if (
         typeof target.version !== 'string' ||
         target.version !== request.args.expected_updated_at
@@ -110,6 +113,9 @@ function evaluateDomainPolicy(tool, request) {
   if (['grocery.update_item', 'grocery.remove_item'].includes(tool.name)) {
     const target = findEntity(request.authoritativeEntities, 'grocery_item', request.args.id)
     if (!target) return clarify('authoritative_target_required', tool)
+    if (hasAmbiguousLabel(request, 'grocery_item', target, 'name')) {
+      return clarify('ambiguous_authoritative_target', tool)
+    }
     if (tool.name === 'grocery.update_item') {
       if (
         typeof target.version !== 'string' ||
@@ -123,6 +129,16 @@ function evaluateDomainPolicy(tool, request) {
   }
 
   return null
+}
+
+function hasAmbiguousLabel(request, type, target, labelKey) {
+  if (request.activeEntity?.type === type && request.activeEntity?.id === target.id) return false
+  const label = String(target?.[labelKey] ?? '').trim().toLocaleLowerCase()
+  if (!label) return false
+  return (request.authoritativeEntities ?? []).filter((entity) =>
+    entity?.type === type &&
+    String(entity?.[labelKey] ?? '').trim().toLocaleLowerCase() === label
+  ).length > 1
 }
 
 function validateGroceryUpdate(args, target) {

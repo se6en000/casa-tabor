@@ -41,3 +41,11 @@ test('exact mutation scenarios ground expected IDs and versions', () => {
     assert.equal(typeof item.validate, 'function', item.key)
   }
 })
+
+test('core benchmark excludes cooking while retaining calendar and grocery safety', () => {
+  const core = MODEL_BENCHMARK_SCENARIOS.filter((item) => item.category !== 'cooking')
+  assert.equal(core.length, 18)
+  assert.ok(core.some((item) => item.key === 'ambiguous-calendar-delete'))
+  assert.ok(core.some((item) => item.key === 'duplicate-grocery-target'))
+  assert.ok(core.every((item) => item.page !== 'cooking'))
+})

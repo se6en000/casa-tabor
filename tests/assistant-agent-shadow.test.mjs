@@ -6,6 +6,7 @@ import {
   buildAgentShadowRequest,
   isAgentPlanAllowedByRequest,
   parseAgentShadowResponse,
+  shouldRetryAgentShadowPlan,
 } from '../supabase/functions/_shared/assistant-agent-shadow.mjs'
 
 test('shadow planner request exposes capability tools without phrase routing', () => {
@@ -29,6 +30,7 @@ test('shadow planner request exposes capability tools without phrase routing', (
   assert.match(instruction, /count 0 means the proposed time is clear/)
   assert.ok(request.tools[0].function_declarations.some((tool) => tool.name === 'calendar_create'))
   assert.equal(request.tool_config.function_calling_config.mode, 'AUTO')
+  assert.equal(request.generation_config.thinking_config.thinking_budget, 0)
 })
 
 test('completed clear conflict checks cannot loop', () => {
@@ -140,6 +142,36 @@ test('shadow response parser preserves clarification without treating it as exec
   })
 })
 
+test('forced structured planning retries only unusable provider output', () => {
+  const forcedRequest = buildAgentShadowRequest({
+    messages: [{ role: 'user', content: 'Add milk.' }],
+    plannerMode: 'additive_write',
+  })
+  assert.equal(shouldRetryAgentShadowPlan({
+    kind: 'error',
+    code: 'missing_candidate',
+    finishReason: 'STOP',
+  }, forcedRequest), true)
+  assert.equal(shouldRetryAgentShadowPlan({
+    kind: 'error',
+    code: 'missing_candidate',
+    finishReason: 'SAFETY',
+  }, forcedRequest), false)
+  assert.equal(shouldRetryAgentShadowPlan({
+    kind: 'clarify',
+    text: 'Which milk?',
+  }, forcedRequest), false)
+
+  const autoRequest = buildAgentShadowRequest({
+    messages: [{ role: 'user', content: 'Add milk.' }],
+  })
+  assert.equal(shouldRetryAgentShadowPlan({
+    kind: 'error',
+    code: 'empty_response',
+    finishReason: 'STOP',
+  }, autoRequest), false)
+})
+
 test('authoritative read planning exposes only reads and typed deferral', () => {
   const request = buildAgentShadowRequest({
     messages: [{ role: 'user', content: 'Delete every event Thursday' }],
@@ -227,10 +259,12 @@ test('write proposal planning exposes additive and exact updates but no destruct
   })
   const declarations = request.tools[0].function_declarations
   assert.equal(request.tool_config.function_calling_config.mode, 'ANY')
-  assert.deepEqual(declarations.map((declaration) => declaration.name), ['assistant_write_request'])
-  assert.ok(
-    declarations[0].parameters.properties.tool_name.enum.includes('grocery.update_item'),
-  )
+  assert.deepEqual(declarations.map((declaration) => declaration.name), [
+    'calendar_update',
+    'grocery_update_item',
+    'assistant_add_request',
+    'assistant_write_defer',
+  ])
   assert.match(
     request.system_instruction.parts[0].text,
     /ACTIVE ENTITY grocery_item is an exact authoritative target/,
@@ -241,13 +275,33 @@ test('write proposal planning exposes additive and exact updates but no destruct
       content: {
         parts: [{
           functionCall: {
-            name: 'assistant_write_request',
-            args: { requested_effect: 'other_write' },
+            name: 'assistant_write_defer',
+            args: { reason: 'destructive' },
           },
         }],
       },
     }],
-  }), { kind: 'defer', reason: 'unsupported_write' })
+  }), { kind: 'defer', reason: 'destructive' })
+
+  assert.deepEqual(parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'assistant_add_request',
+            args: {
+              tool_name: 'grocery.add_items',
+              tool_args: { items: [{ name: 'bread' }] },
+            },
+          },
+        }],
+      },
+    }],
+  }), {
+    kind: 'tool',
+    toolName: 'grocery.add_items',
+    args: { items: [{ name: 'bread' }] },
+  })
 
   assert.deepEqual(parseAgentShadowResponse({
     candidates: [{
@@ -328,4 +382,6 @@ test('shadow telemetry contains no raw conversation text or tool arguments', () 
   assert.ok(!('args' in telemetry))
   assert.deepEqual(telemetry.policy_errors, ['args.quantity:expected_string'])
   assert.equal(telemetry.user_text_hash, 'abc123')
+  assert.equal(telemetry.plan_code, null)
+  assert.equal(telemetry.finish_reason, null)
 })
