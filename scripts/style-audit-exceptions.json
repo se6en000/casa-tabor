@@ -160,6 +160,14 @@
         "reason": "Motion geometry, member/event colors, derived plan tones, map snapshots, and conditional decoration are runtime-derived or composed from semantic theme variables."
       },
       {
+        "path": "src/components/calendar/EventTransportationSection.tsx",
+        "reason": "Driver avatars bind persisted household profile colors.",
+        "snippets": [
+          "style={{ backgroundColor: activeDriver?.color_hex",
+          "style={{ backgroundColor: driver.color_hex"
+        ]
+      },
+      {
         "path": "src/components/calendar/EventEditSheet.tsx",
         "reason": "Family-member color previews are selected from runtime household data."
       },
@@ -170,6 +178,13 @@
       {
         "path": "src/components/calendar/MonthView.tsx",
         "reason": "Event and family-member colors are runtime-derived."
+      },
+      {
+        "path": "src/components/calendar/PassengerChipSelector.tsx",
+        "reason": "Passenger avatars bind persisted household profile colors.",
+        "snippets": [
+          "style={{ backgroundColor: member.color_hex"
+        ]
       },
       {
         "path": "src/components/calendar/StackedView.tsx",

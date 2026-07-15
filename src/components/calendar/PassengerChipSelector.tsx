@@ -34,7 +34,8 @@ export default function PassengerChipSelector({
             onClick={() => onToggle(member, !selected)}
           >
             <span
-              className="flex size-control-sm shrink-0 items-center justify-center rounded-pill bg-casa-navy text-caption font-bold text-white"
+              className="flex size-control-sm shrink-0 items-center justify-center rounded-pill text-caption font-bold text-white"
+              style={{ backgroundColor: member.color_hex ?? 'var(--color-casa-muted)' }}
             >
               {member.name[0]?.toUpperCase()}
             </span>

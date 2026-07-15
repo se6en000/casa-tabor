@@ -27,7 +27,7 @@ import {
   type TransportationLeg,
   type TransportationPlace,
 } from '../../lib/eventTransportation'
-import { Button, Card, Checkbox, Field, IconButton, Input, Select, Sheet } from '../ui'
+import { Button, Card, Checkbox, ConfirmationDialog, Field, IconButton, Input, Select, Sheet } from '../ui'
 import InlinePlaceEditor from './InlinePlaceEditor'
 import SmartPlaceInput from './SmartPlaceInput'
 import PassengerChipSelector from './PassengerChipSelector'
@@ -74,6 +74,8 @@ function QuickDriverPicker({
   const [applyToRemaining, setApplyToRemaining] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const drivers = household.filter((member) => member.can_drive)
+  const activeDriver = household.find((member) => member.id === leg.driverId)
+    ?? household.find((member) => member.name === leg.driverName)
 
   return (
     <div ref={containerRef} className="relative shrink-0">
@@ -88,7 +90,10 @@ function QuickDriverPicker({
           setShowCustom(false)
         }}
       >
-        <span className="flex size-6 items-center justify-center rounded-full bg-casa-navy text-caption font-bold text-white">
+        <span
+          className="flex size-6 items-center justify-center rounded-full text-caption font-bold text-white"
+          style={{ backgroundColor: activeDriver?.color_hex ?? 'var(--color-casa-navy)' }}
+        >
           {leg.driverName?.[0]?.toUpperCase() || '?'}
         </span>
         {leg.driverName || 'Driver'}
@@ -110,7 +115,10 @@ function QuickDriverPicker({
                   setOpen(false)
                 }}
               >
-                <span className="flex size-7 items-center justify-center rounded-full bg-casa-navy text-caption font-bold text-white">
+                <span
+                  className="flex size-7 items-center justify-center rounded-full text-caption font-bold text-white"
+                  style={{ backgroundColor: driver.color_hex ?? 'var(--color-casa-muted)' }}
+                >
                   {driver.name[0]?.toUpperCase()}
                 </span>
                 <span className="flex-1">{driver.name}</span>
@@ -331,6 +339,7 @@ export default function EventTransportationSection({
   suggestedPlan = false,
 }: EventTransportationSectionProps) {
   const [editorOpen, setEditorOpen] = useState(false)
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false)
   const [draft, setDraft] = useState<EventTransportationPlan | null>(null)
   const [savingTrip, setSavingTrip] = useState(false)
   const [tripError, setTripError] = useState<string | null>(null)
@@ -538,9 +547,6 @@ export default function EventTransportationSection({
               <Button variant="secondary" size="sm" onClick={openEditor}>
                 <Plus size={15} /> Add or reorder stops
               </Button>
-              <Button variant="ghost" size="sm" className="text-casa-error" onClick={() => onChange(null)}>
-                No driving logistics
-              </Button>
             </div>
           </div>
         ) : (
@@ -699,12 +705,9 @@ export default function EventTransportationSection({
             <div className="flex flex-col-reverse gap-2 border-t border-casa-border pt-4 sm:flex-row sm:justify-between">
               <Button
                 variant="danger"
-                onClick={() => {
-                  onChange(null)
-                  setEditorOpen(false)
-                }}
+                onClick={() => setRemoveConfirmOpen(true)}
               >
-                No driving logistics
+                Remove driving plan
               </Button>
               <div className="flex gap-2">
                 <Button variant="secondary" onClick={() => setEditorOpen(false)}>Cancel</Button>
@@ -742,6 +745,19 @@ export default function EventTransportationSection({
           </div>
         )}
       </Sheet>
+      <ConfirmationDialog
+        open={removeConfirmOpen}
+        onClose={() => setRemoveConfirmOpen(false)}
+        onConfirm={() => {
+          onChange(null)
+          setRemoveConfirmOpen(false)
+          setEditorOpen(false)
+        }}
+        title="Remove driving plan?"
+        description="This removes every driving leg from this event. The event and its location will stay in Casa."
+        confirmLabel="Remove driving plan"
+        destructive
+      />
     </>
   )
 }

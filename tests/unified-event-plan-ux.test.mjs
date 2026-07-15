@@ -22,6 +22,7 @@ test('transportation passengers use touch chips and synchronize with event atten
   assert.match(passengerChips, /<Chip/)
   assert.match(passengerChips, /selected=\{selected\}/)
   assert.match(passengerChips, /min-h-control-lg/)
+  assert.match(passengerChips, /backgroundColor: member\.color_hex/)
   assert.match(transportation, /\.from\('event_members'\)\.upsert/)
   assert.match(detail, /syncTransportationAttendees/)
 })
@@ -31,6 +32,21 @@ test('The Plan supports quick driver reassignment including external drivers and
   assert.match(transportation, /Someone else/)
   assert.match(transportation, /Use for remaining legs/)
   assert.match(transportation, /updateTransportationDriver/)
+  assert.match(transportation, /backgroundColor: activeDriver\?\.color_hex/)
+  assert.match(transportation, /backgroundColor: driver\.color_hex/)
+})
+
+test('driving plan removal is truthful, editor-only, and confirmed', () => {
+  const summary = transportation.slice(
+    transportation.indexOf('<section aria-label="The Plan">'),
+    transportation.indexOf('<Sheet'),
+  )
+  assert.doesNotMatch(summary, /<Button[\s\S]{0,200}>[\s\S]{0,80}No driving logistics/)
+  assert.doesNotMatch(summary, /onChange\(null\)/)
+  assert.match(transportation, />\s*Remove driving plan\s*</)
+  assert.match(transportation, /<ConfirmationDialog/)
+  assert.match(transportation, /title="Remove driving plan\?"/)
+  assert.match(transportation, /onConfirm=\{\(\) => \{[\s\S]*?onChange\(null\)/)
 })
 
 test('route stops and event Where reuse confirmed inline saved-place editing', () => {
