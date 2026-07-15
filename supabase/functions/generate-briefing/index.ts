@@ -49,6 +49,7 @@ Deno.serve(async (req) => {
   const { data: events, error: evErr } = await sb
     .from('events')
     .select('id, title, start_time, end_time, all_day, location_name, description, event_members(family_member_id, family_members(name, color_hex)), event_enrichments(prep_notes, category, what_to_bring, weather_at_event, outfit_suggestion, cost_estimate, dietary_notes)')
+    .is('deleted_at', null)
     .gte('start_time', dayStartUtc)
     .lte('start_time', dayEndUtc)
     .eq('status', 'confirmed')

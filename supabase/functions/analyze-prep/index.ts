@@ -44,6 +44,7 @@ Deno.serve(async (req) => {
         weather_summary, category
       )
     `)
+    .is('deleted_at', null)
     .gte('start_time', now.toISOString())
     .lte('start_time', windowEnd.toISOString())
     .neq('status', 'cancelled')

@@ -8,6 +8,7 @@ import StackedView from '../components/calendar/StackedView'
 import DayView from '../components/calendar/DayView'
 import MonthView from '../components/calendar/MonthView'
 import { Button, IconButton, SegmentedControl } from '../components/ui'
+import RecurringDeleteUndoHost from '../components/calendar/RecurringDeleteUndoHost'
 
 const CALENDAR_VIEW_OPTIONS = [
   { value: 'today', label: 'Day' },
@@ -155,6 +156,7 @@ export default function CalendarPage() {
         </AnimatePresence>
       </div>
 
+      <RecurringDeleteUndoHost />
     </div>
   )
 }

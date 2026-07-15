@@ -89,6 +89,7 @@ async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDet
     `)
     .lt('start_time', end.toISOString())
     .gt('end_time', start.toISOString())
+    .is('deleted_at', null)
     .neq('status', 'cancelled')
     .order('start_time')
 

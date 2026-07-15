@@ -70,6 +70,7 @@ Deno.serve(async (req) => {
         id, title, start_time, end_time, event_type, all_day, location_name, status,
         members:event_members(family_member:family_members(name))
       `)
+      .is('deleted_at', null)
       .gte('start_time', now.toISOString())
       .lte('start_time', lookAheadEnd.toISOString())
       .or('status.is.null,status.neq.cancelled')

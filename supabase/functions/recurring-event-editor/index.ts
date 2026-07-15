@@ -26,6 +26,22 @@ type SaveBody = {
   series_patch: Record<string, unknown>
 }
 
+type DeleteBody = {
+  action: 'delete'
+  selected_event_id: string
+  action_id: string
+  scope: 'this' | 'future' | 'all'
+  expected_series_revision: number
+  series_patch: Record<string, unknown>
+}
+
+type UndoDeleteBody = {
+  action: 'undo-delete'
+  delete_history_id: string
+  action_id: string
+  expected_series_revision: number
+}
+
 function response(body: unknown, status: number, correlationId: string): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -46,8 +62,9 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return response({ success: false, error: 'POST required.' }, 405, correlationId)
 
   try {
-    const body = await req.json() as LoadBody | SaveBody
-    requireUuid(body.selected_event_id, 'selected_event_id')
+    const body = await req.json() as LoadBody | SaveBody | DeleteBody | UndoDeleteBody
+    if (body.action === 'undo-delete') requireUuid(body.delete_history_id, 'delete_history_id')
+    else requireUuid(body.selected_event_id, 'selected_event_id')
     const supabase = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
     const flags = await loadRecurrenceFeatureFlags(supabase)
 
@@ -63,8 +80,82 @@ Deno.serve(async (req) => {
         success: true,
         enabled: true,
         writable: flags.recurrence_v2_write && data.series.ownership !== 'read_only_import',
+        deletable: flags.recurrence_v2_delete && data.series.ownership !== 'read_only_import',
         context: data,
       }, 200, correlationId)
+    }
+
+    if (body.action === 'delete') {
+      if (!flags.recurrence_v2_delete) {
+        return response({ success: false, error: 'Recurring event deletion is not enabled yet.' }, 200, correlationId)
+      }
+      if (!['this', 'future', 'all'].includes(body.scope)) throw new Error('Unsupported recurrence scope.')
+      if (!Number.isSafeInteger(body.expected_series_revision) || body.expected_series_revision < 1) {
+        throw new Error('expected_series_revision must be a positive integer.')
+      }
+      const { data, error } = await supabase.rpc('recurrence_delete_scoped_core', {
+        p_action_id: body.action_id,
+        p_selected_event_id: body.selected_event_id,
+        p_scope: body.scope,
+        p_expected_series_revision: body.expected_series_revision,
+        p_series_patch: body.series_patch,
+        p_actor: { source: 'event-editor-delete' },
+        p_correlation_id: correlationId,
+      })
+      if (error) {
+        const conflict = error.code === '40001' || error.message.includes('Recurring series changed')
+        return response({
+          success: false,
+          conflict,
+          error: conflict
+            ? 'This recurring event changed on another device. Nothing was deleted; review the latest series and try again.'
+            : error.message,
+        }, 200, correlationId)
+      }
+      if (body.scope !== 'all') {
+        const materialize = await supabase.functions.invoke('materialize-recurring-events', {
+          body: { series_id: data.series_id },
+          headers: { Authorization: 'Bearer ' + requireEnv('SUPABASE_SERVICE_ROLE_KEY') },
+        })
+        if (materialize.error || materialize.data?.success === false) {
+          throw new Error(`Casa deleted the selected events, but occurrence refresh failed: ${materialize.error?.message ?? materialize.data?.error}`)
+        }
+      }
+      return response({ success: true, result: data }, 200, correlationId)
+    }
+
+    if (body.action === 'undo-delete') {
+      if (!flags.recurrence_v2_delete) {
+        return response({ success: false, error: 'Recurring event Undo is not enabled yet.' }, 200, correlationId)
+      }
+      if (!Number.isSafeInteger(body.expected_series_revision) || body.expected_series_revision < 1) {
+        throw new Error('expected_series_revision must be a positive integer.')
+      }
+      const { data, error } = await supabase.rpc('recurrence_undo_delete_core', {
+        p_action_id: body.action_id,
+        p_delete_history_id: body.delete_history_id,
+        p_expected_series_revision: body.expected_series_revision,
+        p_actor: { source: 'calendar-undo' },
+        p_correlation_id: correlationId,
+      })
+      if (error) {
+        const conflict = error.code === '40001' || error.message.includes('Recurring series changed')
+        return response({
+          success: false,
+          conflict,
+          error: conflict
+            ? 'This series changed after deletion, so Casa did not overwrite the newer changes.'
+            : error.message,
+        }, 200, correlationId)
+      }
+      const materialize = await supabase.functions.invoke('materialize-recurring-events', {
+        body: { series_id: data.series_id },
+        headers: { Authorization: 'Bearer ' + requireEnv('SUPABASE_SERVICE_ROLE_KEY') },
+      })
+      if (materialize.error || materialize.data?.success === false) {
+        throw new Error(`Casa restored the series, but occurrence refresh failed: ${materialize.error?.message ?? materialize.data?.error}`)
+      }
+      return response({ success: true, result: data }, 200, correlationId)
     }
 
     if (body.action !== 'save') throw new Error('Unsupported editor action.')

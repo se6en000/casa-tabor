@@ -36,6 +36,8 @@ import type { EventLocationScope } from '../../lib/eventLocation'
 import RecurrenceScopeDialog from './RecurrenceScopeDialog'
 import {
   loadRecurringEditorContext,
+  announceRecurringDelete,
+  deleteRecurringEditorMutation,
   saveRecurringEditorMutation,
   truncateRecurrenceLinesForFuture,
   type RecurringEditorContext,
@@ -124,9 +126,10 @@ interface Props {
   event: EventWithDetails
   open: boolean
   onClose: () => void
+  initialDelete?: boolean
 }
 
-export default function EventEditSheet({ event, open, onClose }: Props) {
+export default function EventEditSheet({ event, open, onClose, initialDelete = false }: Props) {
   const enr = event.enrichment
   const save = useSaveEnrichmentBatch()
   const enrich = useEnrichEvent()
@@ -148,9 +151,12 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   const [recurringContext, setRecurringContext] = useState<RecurringEditorContext | null>(null)
   const [recurringEditorEnabled, setRecurringEditorEnabled] = useState(false)
   const [recurringEditorWritable, setRecurringEditorWritable] = useState(false)
+  const [recurringDeleteEnabled, setRecurringDeleteEnabled] = useState(false)
   const [recurringContextLoading, setRecurringContextLoading] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const recurringActionIdRef = useRef<string | null>(null)
+  const recurringDeleteActionIdRef = useRef<string | null>(null)
+  const initialDeleteOpenedRef = useRef(false)
 
   // Fetch master's rrule + enrichment for instances
   useEffect(() => {
@@ -197,6 +203,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
       setRecurringContext(null)
       setRecurringEditorEnabled(false)
       setRecurringEditorWritable(false)
+      setRecurringDeleteEnabled(false)
       setRecurringContextLoading(false)
       return
     }
@@ -208,6 +215,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
         if (cancelled) return
         setRecurringEditorEnabled(result.enabled)
         setRecurringEditorWritable(Boolean(result.writable))
+        setRecurringDeleteEnabled(Boolean(result.deletable))
         setRecurringContext(result.context ?? null)
       })
       .catch((error: Error) => {
@@ -222,6 +230,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   // Recurring edit scope modal
   type RecurScope = EventLocationScope
   const [showScopeModal, setShowScopeModal] = useState(false)
+  const [showDeleteScopeModal, setShowDeleteScopeModal] = useState(false)
   const [_pendingSave, setPendingSave] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'saving' | 'slow'>('saving')
@@ -245,6 +254,8 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   const [enrichMessage, setEnrichMessage] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteBlocked, setDeleteBlocked] = useState(false)
   const [eventType, setEventType] = useState<'event' | 'reminder'>(event.event_type ?? 'event')
 
   const clearLocation = () => {
@@ -1022,17 +1033,98 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     if (!autoSave) onClose()
   }
 
+  const requestDelete = useCallback(() => {
+    setDeleteError(null)
+    setDeleteBlocked(false)
+    if (isCanonicalOccurrence && recurringEditorEnabled) {
+      if (!recurringDeleteEnabled) {
+        setDeleteError('Recurring event deletion is not enabled for this series yet.')
+        setDeleteBlocked(true)
+        setShowDeleteConfirm(true)
+        return
+      }
+      setShowDeleteScopeModal(true)
+      return
+    }
+    if (isCanonicalOccurrence && saveError) {
+      setDeleteError('Casa could not load the recurring series, so nothing can be safely deleted.')
+      setDeleteBlocked(true)
+      setShowDeleteConfirm(true)
+      return
+    }
+    setShowDeleteConfirm(true)
+  }, [isCanonicalOccurrence, recurringDeleteEnabled, recurringEditorEnabled, saveError])
+
+  useEffect(() => {
+    if (!open || !initialDelete || initialDeleteOpenedRef.current) return
+    if (isCanonicalOccurrence && recurringContextLoading) return
+    initialDeleteOpenedRef.current = true
+    const timer = window.setTimeout(requestDelete, 0)
+    return () => window.clearTimeout(timer)
+  }, [initialDelete, isCanonicalOccurrence, open, recurringContextLoading, requestDelete])
+
+  useEffect(() => {
+    if (open) return
+    initialDeleteOpenedRef.current = false
+  }, [open])
+
   const handleDelete = async () => {
     setDeleting(true)
-    // Remove from Google Calendar first (before DB row is gone)
-    if (event.google_event_id) {
-      await supabase.functions.invoke('delete-google-event', { body: { event_id: event.id } })
-        .catch(() => { /* best-effort */ })
+    setDeleteError(null)
+    try {
+      if (event.google_event_id) {
+        const googleDelete = await supabase.functions.invoke('delete-google-event', { body: { event_id: event.id } })
+        if (googleDelete.error) throw new Error(`Google Calendar deletion failed: ${googleDelete.error.message}`)
+      }
+      const { error } = await supabase.from('events').delete().eq('id', event.id)
+      if (error) throw new Error(`Casa deletion failed: ${error.message}`)
+      await qc.invalidateQueries({ queryKey: ['events'] })
+      onClose()
+    } catch (cause) {
+      setDeleteError(cause instanceof Error ? cause.message : 'Could not delete this event.')
+    } finally {
+      setDeleting(false)
     }
-    await supabase.from('events').delete().eq('id', event.id)
-    qc.invalidateQueries({ queryKey: ['events'] })
-    onClose()
-    setDeleting(false)
+  }
+
+  const handleRecurringDelete = async (scope: EventLocationScope) => {
+    if (!recurringContext) {
+      setDeleteError('Recurring series details are unavailable.')
+      return
+    }
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const seriesPatch: Record<string, unknown> = {}
+      if (scope === 'future') {
+        const originalStart = event.original_start_time ?? (
+          event.original_start_date ? `${event.original_start_date}T00:00:00Z` : event.start_time
+        )
+        seriesPatch.original_recurrence_lines = truncateRecurrenceLinesForFuture(
+          recurringContext.series.recurrence_lines,
+          originalStart,
+        )
+      }
+      const actionId = recurringDeleteActionIdRef.current ?? crypto.randomUUID()
+      recurringDeleteActionIdRef.current = actionId
+      const result = await deleteRecurringEditorMutation({
+        selected_event_id: event.id,
+        action_id: actionId,
+        scope,
+        expected_series_revision: recurringContext.series.revision,
+        series_patch: seriesPatch,
+      })
+      recurringDeleteActionIdRef.current = null
+      await qc.invalidateQueries({ queryKey: ['events'] })
+      await qc.refetchQueries({ queryKey: ['events'], type: 'active' })
+      announceRecurringDelete({ ...result, title: event.title, scope })
+      setShowDeleteScopeModal(false)
+      onClose()
+    } catch (cause) {
+      setDeleteError(cause instanceof Error ? cause.message : 'Could not delete the selected recurring events.')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const scopeImpacts = recurringContext
@@ -1147,7 +1239,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     Type
                   </label>
                   {/* Inline delete */}
-                  <Button variant="ghost" size="sm" onClick={() => setShowDeleteConfirm(true)} leadingIcon={<Trash2 size={14} />} className="text-casa-error">
+                  <Button variant="ghost" size="sm" onClick={requestDelete} leadingIcon={<Trash2 size={14} />} className="text-casa-error">
                     Delete
                   </Button>
                 </div>
@@ -1630,16 +1722,48 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             onClose={() => { setShowScopeModal(false); setPendingSave(false); setSaveError(null) }}
             onSelect={handleScopeChoice}
           />
+          <RecurrenceScopeDialog
+            open={showDeleteScopeModal}
+            operation="delete"
+            selectedStart={event.start_time}
+            impacts={scopeImpacts}
+            loading={deleting}
+            error={deleteError}
+            onClose={() => {
+              setShowDeleteScopeModal(false)
+              setDeleteError(null)
+              recurringDeleteActionIdRef.current = null
+            }}
+            onSelect={(scope) => void handleRecurringDelete(scope)}
+          />
           <Modal
             open={showDeleteConfirm}
-            onClose={() => setShowDeleteConfirm(false)}
-            title="Delete this event?"
+            onClose={() => {
+              if (deleting) return
+              setShowDeleteConfirm(false)
+              setDeleteError(null)
+              setDeleteBlocked(false)
+            }}
+            title={deleteBlocked ? 'Cannot safely delete this event' : 'Delete this event?'}
             size="sm"
           >
-            <p className="text-body-sm text-casa-muted">This removes the event from Casa and its connected Google Calendar.</p>
+            <p className="text-body-sm text-casa-muted">
+              {deleteBlocked
+                ? 'Casa left the event unchanged. Close this message and try again after recurring deletion is available.'
+                : 'This removes the event from Casa and its connected Google Calendar.'}
+            </p>
+            {deleteError && <p role="alert" className="mt-3 text-body-sm text-casa-error">{deleteError}</p>}
             <div className="mt-4 flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
-              <Button variant="danger" loading={deleting} onClick={() => void handleDelete()}>Delete event</Button>
+              <Button variant="secondary" onClick={() => {
+                setShowDeleteConfirm(false)
+                setDeleteError(null)
+                setDeleteBlocked(false)
+              }}>
+                {deleteBlocked ? 'Close' : 'Cancel'}
+              </Button>
+              {!deleteBlocked && (
+                <Button variant="danger" loading={deleting} onClick={() => void handleDelete()}>Delete event</Button>
+              )}
             </div>
           </Modal>
         </>

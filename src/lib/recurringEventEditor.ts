@@ -27,6 +27,7 @@ export interface RecurringEditorContext {
 export interface RecurringEditorLoadResult {
   enabled: boolean
   writable?: boolean
+  deletable?: boolean
   context?: RecurringEditorContext
 }
 
@@ -38,6 +39,28 @@ export interface RecurringEditorMutation {
   changed_paths: string[]
   detail_patch: Record<string, unknown>
   series_patch: Record<string, unknown>
+}
+
+export interface RecurringDeleteMutation {
+  selected_event_id: string
+  action_id: string
+  scope: EventLocationScope
+  expected_series_revision: number
+  series_patch: Record<string, unknown>
+}
+
+export interface RecurringDeleteResult {
+  history_id: string
+  series_id: string
+  series_revision: number
+  affected_occurrences: number
+  undo_until: string
+  google_sync_status: 'pending' | 'not_enabled'
+}
+
+export interface RecurringDeleteReceipt extends RecurringDeleteResult {
+  title: string
+  scope: EventLocationScope
 }
 
 async function invokeEditor(body: Record<string, unknown>) {
@@ -59,4 +82,43 @@ export async function loadRecurringEditorContext(
 
 export async function saveRecurringEditorMutation(mutation: RecurringEditorMutation) {
   return invokeEditor({ action: 'save', ...mutation })
+}
+
+export async function deleteRecurringEditorMutation(
+  mutation: RecurringDeleteMutation,
+): Promise<RecurringDeleteResult> {
+  const response = await invokeEditor({ action: 'delete', ...mutation })
+  return response.result as RecurringDeleteResult
+}
+
+export async function undoRecurringEditorDelete({
+  deleteHistoryId,
+  actionId,
+  expectedSeriesRevision,
+}: {
+  deleteHistoryId: string
+  actionId: string
+  expectedSeriesRevision: number
+}) {
+  const response = await invokeEditor({
+    action: 'undo-delete',
+    delete_history_id: deleteHistoryId,
+    action_id: actionId,
+    expected_series_revision: expectedSeriesRevision,
+  })
+  return response.result as {
+    history_id: string
+    series_id: string
+    series_revision: number
+    restored_occurrences: number
+    google_sync_status: 'pending' | 'not_enabled'
+  }
+}
+
+export const RECURRING_DELETE_EVENT = 'casa:recurring-event-deleted'
+
+export function announceRecurringDelete(receipt: RecurringDeleteReceipt) {
+  window.dispatchEvent(new CustomEvent<RecurringDeleteReceipt>(RECURRING_DELETE_EVENT, {
+    detail: receipt,
+  }))
 }

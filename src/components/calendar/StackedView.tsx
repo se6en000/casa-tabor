@@ -130,6 +130,7 @@ export default function StackedView() {
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [editEventId,     setEditEventId]     = useState<string | null>(null)
+  const [deleteIntentEventId, setDeleteIntentEventId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ event: EventWithDetails; x: number; y: number } | null>(null)
 
   const events = (allEvents ?? []).filter(e =>
@@ -151,11 +152,10 @@ export default function StackedView() {
     qc.invalidateQueries({ queryKey: ['events'] })
   }, [qc])
 
-  const deleteEvent = useCallback(async (ev: EventWithDetails) => {
-    if (!confirm(`Delete "${ev.title}"?`)) return
-    await supabase.from('events').delete().eq('id', ev.id)
-    qc.invalidateQueries({ queryKey: ['events'] })
-  }, [qc])
+  const deleteEvent = useCallback((ev: EventWithDetails) => {
+    setDeleteIntentEventId(ev.id)
+    setEditEventId(ev.id)
+  }, [])
 
   return (
     <BounceScroll
@@ -289,7 +289,11 @@ export default function StackedView() {
         <EventEditSheet
           event={editEvent}
           open={!!editEvent}
-          onClose={() => setEditEventId(null)}
+          initialDelete={deleteIntentEventId === editEvent.id}
+          onClose={() => {
+            setEditEventId(null)
+            setDeleteIntentEventId(null)
+          }}
         />
       )}
 

@@ -132,6 +132,7 @@ async function buildFallbackBriefing(sb: ReturnType<typeof createClient>, today:
   const { data: events } = await sb
     .from('events')
     .select('title, start_time, end_time, all_day, location_name, event_members(family_members(name))')
+    .is('deleted_at', null)
     .gte('start_time', today + 'T00:00:00Z')
     .lte('start_time', today + 'T23:59:59Z')
     .eq('status', 'confirmed')

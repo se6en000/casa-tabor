@@ -103,6 +103,7 @@ Deno.serve(async (req) => {
   const { data: pastEvents } = await sb
     .from('events')
     .select('id')
+    .is('deleted_at', null)
     .lt('start_time', rangeStart.toISOString())
   const pastEventIds = (pastEvents ?? []).map((e: { id: string }) => e.id)
   if (pastEventIds.length > 0) {
@@ -159,6 +160,7 @@ Deno.serve(async (req) => {
   const { data: events, error: evErr } = await sb
     .from('events')
     .select('id, title, start_time, end_time, event_type, event_members(family_member_id, role)')
+    .is('deleted_at', null)
     .gte('start_time', rangeStart.toISOString())
     .lte('start_time', rangeEnd.toISOString())
     .neq('status', 'cancelled')

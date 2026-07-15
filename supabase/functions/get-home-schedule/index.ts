@@ -98,6 +98,7 @@ Deno.serve(async (req) => {
       event_members(family_members(name)),
       event_enrichments(category, prep_notes, what_to_bring, outfit_suggestion)
     `)
+    .is('deleted_at', null)
     .gte('start_time', rangeStart)
     .lte('start_time', rangeEnd)
     .or('status.is.null,status.eq.confirmed,status.neq.cancelled')
@@ -109,6 +110,7 @@ Deno.serve(async (req) => {
   const { data: reminders } = await sb
     .from('events')
     .select('id, title, start_time, end_time, event_type, status, description')
+    .is('deleted_at', null)
     .eq('event_type', 'reminder')
     .gte('start_time', rangeStart)
     .lte('start_time', rangeEnd)
