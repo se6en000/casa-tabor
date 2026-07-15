@@ -1,6 +1,7 @@
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import type { EventMode } from './eventCommandCenter'
 import { inferEventMode } from './eventCommandCenter'
+import { normalizeTransportationPlan, type EventTransportationPlan } from './eventTransportation'
 
 export type PersistedPlanOverrides = {
   verified?: boolean | null
@@ -8,6 +9,7 @@ export type PersistedPlanOverrides = {
   waits?: boolean | null
   driverOverrides?: Record<number, string>
   twoDriverConfirmed?: boolean
+  transportationPlan?: EventTransportationPlan | null
   locationSignature?: string
 }
 
@@ -48,13 +50,14 @@ function normalizePersistedPlanOverrides(
   event: EventWithDetails,
 ): PersistedPlanOverrides | null {
   if (!payload) return null
-  if (payload.locationSignature !== locationSignature(event)) return null
+  const locationMatches = payload.locationSignature === locationSignature(event)
   return {
-    verified: payload.verified ?? null,
-    waits: payload.waits ?? null,
-    driverOverrides: normalizeDriverOverrides(payload.driverOverrides),
-    modeOverride: payload.modeOverride ?? null,
-    twoDriverConfirmed: Boolean(payload.twoDriverConfirmed),
+    verified: locationMatches ? payload.verified ?? null : null,
+    waits: locationMatches ? payload.waits ?? null : null,
+    driverOverrides: locationMatches ? normalizeDriverOverrides(payload.driverOverrides) : {},
+    modeOverride: locationMatches ? payload.modeOverride ?? null : null,
+    twoDriverConfirmed: locationMatches && Boolean(payload.twoDriverConfirmed),
+    transportationPlan: normalizeTransportationPlan(payload.transportationPlan),
     locationSignature: payload.locationSignature,
   }
 }
@@ -69,6 +72,7 @@ function getDbPersistedPlanOverrides(event: EventWithDetails): PersistedPlanOver
       driverOverrides: normalizeDriverOverrides(row.driver_overrides ?? {}),
       modeOverride: row.mode_override ?? null,
       twoDriverConfirmed: Boolean(row.two_driver_confirmed),
+      transportationPlan: normalizeTransportationPlan(row.transportation_plan),
       locationSignature: row.location_signature ?? undefined,
     },
     event,
@@ -107,6 +111,7 @@ export function getPersistedPlanOverrides(event: EventWithDetails): PersistedPla
       driverOverrides: {},
       modeOverride: null,
       twoDriverConfirmed: false,
+      transportationPlan: null,
       locationSignature: undefined,
     }
 }

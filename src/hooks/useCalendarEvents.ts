@@ -9,6 +9,7 @@ import type {
   CalendarEvent, FamilyMember, EventEnrichment,
   EventLogistic, EventChecklistItem, EventActionItem,
 } from '../types'
+import type { EventTransportationPlan } from '../lib/eventTransportation'
 
 export interface EventWithDetails extends Omit<CalendarEvent, 'members' | 'enrichment'> {
   members: {
@@ -30,6 +31,7 @@ export interface EventPlanOverride {
   driver_overrides: Record<string, string> | null
   mode_override: 'appointment' | 'pickup' | 'hosted' | 'trip' | null
   two_driver_confirmed: boolean
+  transportation_plan: EventTransportationPlan | null
   location_signature: string | null
   updated_at: string
 }
@@ -75,6 +77,7 @@ async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDet
         driver_overrides,
         mode_override,
         two_driver_confirmed,
+        transportation_plan,
         location_signature,
         updated_at
       ),

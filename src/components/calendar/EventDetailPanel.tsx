@@ -31,6 +31,8 @@ import { getEventDisplayStartDay } from '../../utils/eventTime'
 import { isBirthdayEvent } from '../../utils/eventTitle'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import { Button, Card, Chip, IconButton, Switch } from '../ui'
+import EventTransportationSection from './EventTransportationSection'
+import type { EventTransportationPlan } from '../../lib/eventTransportation'
 
 // Calendar-specific aliases compose the shared theme contract without creating a parallel palette.
 const S = {
@@ -97,6 +99,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
   const [driverOverrides, setDriverOverrides] = useState<Record<number, string>>({})
   const [modeOverride, setModeOverride] = useState<EventMode | null>(null)
   const [twoDriverConfirmed, setTwoDriverConfirmed] = useState(false)
+  const [transportationPlan, setTransportationPlan] = useState<EventTransportationPlan | null>(null)
   const [overridesHydrated, setOverridesHydrated] = useState(false)
   const { data: savedPlaces = [] } = useSavedPlaces()
   const isMobile = useIsMobile()
@@ -116,12 +119,14 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
       && Object.keys(persisted.driverOverrides ?? {}).length === 0
       && persisted.modeOverride == null
       && !persisted.twoDriverConfirmed
+      && !persisted.transportationPlan
     ) {
       setVerifiedOverride(null)
       setWaitsOverride(null)
       setDriverOverrides({})
       setModeOverride(null)
       setTwoDriverConfirmed(false)
+      setTransportationPlan(null)
       setOverridesHydrated(true)
       return
     }
@@ -131,13 +136,14 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
     const persistedMode = persisted.modeOverride === 'travel' ? 'appointment' : persisted.modeOverride
     setModeOverride(persistedMode ?? null)
     setTwoDriverConfirmed(Boolean(persisted.twoDriverConfirmed))
+    setTransportationPlan(persisted.transportationPlan ?? null)
     setOverridesHydrated(true)
   }, [event?.id])
 
   useEffect(() => {
     if (!event) return
     if (!overridesHydrated) return
-    const hasOverrides = verifiedOverride != null || waitsOverride != null || Object.keys(driverOverrides).length > 0 || modeOverride != null || twoDriverConfirmed
+    const hasOverrides = verifiedOverride != null || waitsOverride != null || Object.keys(driverOverrides).length > 0 || modeOverride != null || twoDriverConfirmed || transportationPlan != null
     const persist = async () => {
       if (!hasOverrides) {
         try {
@@ -162,6 +168,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
         driverOverrides,
         modeOverride,
         twoDriverConfirmed,
+        transportationPlan,
         locationSignature: locationSignature(event),
       }
       try {
@@ -182,6 +189,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
           driver_overrides: driverOverrides,
           mode_override: modeOverride,
           two_driver_confirmed: twoDriverConfirmed,
+          transportation_plan: transportationPlan,
           location_signature: locationSignature(event),
         }, { onConflict: 'event_id' })
       if (error) {
@@ -190,7 +198,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
       window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
     }
     void persist()
-  }, [event?.id, overridesHydrated, verifiedOverride, waitsOverride, driverOverrides, modeOverride, twoDriverConfirmed])
+  }, [event?.id, overridesHydrated, verifiedOverride, waitsOverride, driverOverrides, modeOverride, twoDriverConfirmed, transportationPlan])
 
 
   // Lock body scroll while panel is open so the calendar can't scroll behind it
@@ -291,6 +299,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   waitsOverride={waitsOverride}
                   driverOverrides={driverOverrides}
                   twoDriverConfirmed={twoDriverConfirmed}
+                  transportationPlan={transportationPlan}
                   onSetWaitsOverride={(next) => {
                     setTwoDriverConfirmed(false)
                     setWaitsOverride(next)
@@ -301,6 +310,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   }}
                   onSetModeOverride={setModeOverride}
                   onSetTwoDriverConfirmed={setTwoDriverConfirmed}
+                  onSetTransportationPlan={setTransportationPlan}
                   onSetVerifiedOverride={setVerifiedOverride}
                   onEdit={() => setShowEdit(true)}
                 />
@@ -505,6 +515,7 @@ function PanelHeader({
   const reminder = event.event_type === 'reminder'
   const mode = modeOverride ?? inferEventMode(event)
   const planKind = inferEventPlanKind(event, mode)
+  const hasDestination = Boolean(event.location_name || event.address)
   const hostedAtHome = mode === 'hosted'
   const displayStartDay = getEventDisplayStartDay(event)
   const headerWhen = event.all_day
@@ -569,7 +580,9 @@ function PanelHeader({
               ? 'Going'
               : planKind === 'remote'
                 ? 'Joining'
-                : isBirthday || planKind === 'at_home' || planKind === 'coverage'
+                : planKind === 'coverage' && hasDestination
+                  ? 'Attending'
+                  : isBirthday || planKind === 'at_home' || planKind === 'coverage'
                   ? 'At home'
                   : 'Attending'}
           </div>
@@ -601,10 +614,12 @@ function PanelBody({
   waitsOverride,
   driverOverrides,
   twoDriverConfirmed,
+  transportationPlan,
   onSetWaitsOverride,
   onSetDriverOverride,
   onSetModeOverride,
   onSetTwoDriverConfirmed,
+  onSetTransportationPlan,
   onSetVerifiedOverride,
   onEdit,
 }: {
@@ -614,10 +629,12 @@ function PanelBody({
   waitsOverride: boolean | null
   driverOverrides: Record<number, string>
   twoDriverConfirmed: boolean
+  transportationPlan: EventTransportationPlan | null
   onSetWaitsOverride: (value: boolean | null) => void
   onSetDriverOverride: (legIndex: number, driverId: string) => void
   onSetModeOverride: (mode: EventMode | null) => void
   onSetTwoDriverConfirmed: (value: boolean) => void
+  onSetTransportationPlan: (plan: EventTransportationPlan | null) => void
   onSetVerifiedOverride: (value: boolean | null) => void
   onEdit: () => void
 }) {
@@ -629,10 +646,12 @@ function PanelBody({
       waitsOverride={waitsOverride}
       driverOverrides={driverOverrides}
       twoDriverConfirmed={twoDriverConfirmed}
+      transportationPlan={transportationPlan}
       onSetWaitsOverride={onSetWaitsOverride}
       onSetDriverOverride={onSetDriverOverride}
       onSetModeOverride={onSetModeOverride}
       onSetTwoDriverConfirmed={onSetTwoDriverConfirmed}
+      onSetTransportationPlan={onSetTransportationPlan}
       onSetVerifiedOverride={onSetVerifiedOverride}
       onEdit={onEdit}
     />
@@ -647,10 +666,12 @@ function StandardPanelBody({
   waitsOverride,
   driverOverrides,
   twoDriverConfirmed,
+  transportationPlan,
   onSetWaitsOverride,
   onSetDriverOverride,
   onSetModeOverride,
   onSetTwoDriverConfirmed,
+  onSetTransportationPlan,
   onSetVerifiedOverride,
   onEdit,
 }: {
@@ -660,10 +681,12 @@ function StandardPanelBody({
   waitsOverride: boolean | null
   driverOverrides: Record<number, string>
   twoDriverConfirmed: boolean
+  transportationPlan: EventTransportationPlan | null
   onSetWaitsOverride: (value: boolean | null) => void
   onSetDriverOverride: (legIndex: number, driverId: string) => void
   onSetModeOverride: (mode: EventMode | null) => void
   onSetTwoDriverConfirmed: (value: boolean) => void
+  onSetTransportationPlan: (plan: EventTransportationPlan | null) => void
   onSetVerifiedOverride: (value: boolean | null) => void
   onEdit: () => void
 }) {
@@ -671,7 +694,9 @@ function StandardPanelBody({
   const reminder = event.event_type === 'reminder'
   const mode = modeOverride ?? inferEventMode(event)
   const planKind = inferEventPlanKind(event, mode)
-  const showTravelLocation = planKind === 'travel'
+  const hasDestination = Boolean(event.location_name || event.address)
+  const showLocation = hasDestination || mode === 'hosted'
+  const showSuggestedTravel = planKind === 'travel' && !transportationPlan
   const hasChecklist = event.checklist?.length > 0
   const activeFields = getFieldsForCategory(enr?.category)
   const shows = (field: string) => activeFields.includes(field as ReturnType<typeof getFieldsForCategory>[number])
@@ -697,13 +722,13 @@ function StandardPanelBody({
   const commuteQuery = useTravelEta({
     destination: commuteDestination,
     eventStartIso: event.start_time,
-    enabled: !reminder && showTravelLocation && verified && Boolean(commuteDestination),
+    enabled: !reminder && showSuggestedTravel && verified && Boolean(commuteDestination),
     bufferMins: 10,
     refetchIntervalMs: etaRefetchIntervalMs,
   })
   const liveWeatherQuery = useQuery({
     queryKey: ['event-weather', event.id, verified],
-    enabled: !reminder && showTravelLocation && verified && Boolean(commuteDestination),
+    enabled: !reminder && showLocation && verified && Boolean(commuteDestination),
     staleTime: 15 * 60_000,
     refetchInterval: etaRefetchIntervalMs,
     queryFn: async () => {
@@ -718,8 +743,6 @@ function StandardPanelBody({
   if (liveWeatherQuery.data?.ok && liveWeatherQuery.data.weather) {
     weatherAtVenue = liveWeatherQuery.data.weather
   }
-  const hasDestination = Boolean(event.location_name || event.address)
-
   const plan = reminder ? null : derivePlan(event, mode, {
     household,
     eta: verified ? commuteQuery.data : null,
@@ -844,7 +867,7 @@ function StandardPanelBody({
       {/* ── The Plan ── */}
       {plan && (
         <section>
-          {plan.kind === 'travel' ? (
+          {plan.kind === 'travel' && !transportationPlan ? (
             <PlanBlock
               plan={plan}
               loading={verified && commuteQuery.isLoading && !commuteQuery.data}
@@ -877,17 +900,26 @@ function StandardPanelBody({
               onSetTwoDriverConfirmed={onSetTwoDriverConfirmed}
             />
           ) : (
-            <NonTravelEventBlock event={event} plan={plan} />
+            <NonTravelEventBlock event={event} plan={plan} hasTransportation={Boolean(transportationPlan)} />
           )}
         </section>
       )}
 
-      {!reminder && hasDestination && planKind === 'travel' && (
+      {!reminder && (
+        <EventTransportationSection
+          event={event}
+          plan={transportationPlan}
+          onChange={onSetTransportationPlan}
+          suggestedPlan={planKind === 'travel' && !transportationPlan}
+        />
+      )}
+
+      {!reminder && hasDestination && showSuggestedTravel && (
         <DepartureRiskBanner event={event} travelEta={verified ? commuteQuery.data : null} />
       )}
 
       {/* ── Where (map + weather + verify state) ── */}
-      {!reminder && showTravelLocation && (
+      {!reminder && showLocation && (
         <section>
           <SectionLabel>{mode === 'trip' ? 'Destination' : 'Where'}</SectionLabel>
           <LocationBlock
@@ -907,6 +939,7 @@ function StandardPanelBody({
             onConfirmAddress={() => onSetVerifiedOverride(true)}
             verified={verified}
             mode={mode}
+            transportationNeeded={Boolean(transportationPlan) || planKind === 'travel'}
             accent={eventAccentColor(event)}
           />
         </section>
@@ -959,8 +992,13 @@ function StandardPanelBody({
 
 /* ── Command Center blocks ──────────────────────────────────── */
 
-function NonTravelEventBlock({ event, plan }: { event: EventWithDetails; plan: PlanModel }) {
+function NonTravelEventBlock({ event, plan, hasTransportation }: {
+  event: EventWithDetails
+  plan: PlanModel
+  hasTransportation: boolean
+}) {
   const birthday = isBirthdayEvent(event)
+  const hasLocation = Boolean(event.location_name || event.address)
   const content = {
     at_home: {
       title: birthday ? 'Birthday at home' : 'Happening at home',
@@ -968,8 +1006,12 @@ function NonTravelEventBlock({ event, plan }: { event: EventWithDetails; plan: P
       icon: <House size={20} />,
     },
     coverage: {
-      title: 'At-home coverage',
-      description: 'No driving is needed. Attendees and event notes are the source of truth for coverage.',
+      title: hasLocation ? 'Care coverage' : 'At-home coverage',
+      description: hasLocation
+        ? hasTransportation
+          ? 'The care location and transportation plan are listed below.'
+          : 'The care location is listed below. Add transportation only when a pickup, drop-off, or return needs coordination.'
+        : 'No driving is needed. Attendees and event notes are the source of truth for coverage.',
       icon: <Users size={20} />,
     },
     remote: {
@@ -981,7 +1023,9 @@ function NonTravelEventBlock({ event, plan }: { event: EventWithDetails; plan: P
       title: birthday ? 'Birthday at home' : 'Event details',
       description: birthday
         ? 'A celebration placeholder with no transportation plan.'
-        : 'No location or transportation plan is attached to this event.',
+        : hasLocation
+          ? 'The location is listed below. No driving logistics are attached to this event.'
+          : 'No location or transportation plan is attached to this event.',
       icon: <CalendarDays size={20} />,
     },
     travel: null,
@@ -1761,7 +1805,7 @@ function FallbackBringChecklist({ items, eventId }: { items: string[]; eventId: 
 
 /* ── LocationBlock ──────────────────────────────────────────── */
 
-function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes, contactPhone, weatherAtVenue, onEditAddress, onConfirmAddress, verified, mode, accent }: {
+function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes, contactPhone, weatherAtVenue, onEditAddress, onConfirmAddress, verified, mode, transportationNeeded, accent }: {
   eventId: string
   locationName: string | null
   address: string | null
@@ -1774,6 +1818,7 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
   onConfirmAddress: () => void
   verified: boolean
   mode: EventMode
+  transportationNeeded: boolean
   accent: string
 }) {
   const [savedLocal, setSavedLocal] = useState(false)
@@ -1959,7 +2004,7 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
         )}
         {verified && hasDestination ? (
           <div className="mt-3 text-caption font-semibold flex items-center gap-1.5" style={{ color: S.green }}>
-            <Check size={13} /> Address confirmed · drive times are live
+            <Check size={13} /> Address confirmed{transportationNeeded ? ' · drive times are live' : ''}
           </div>
         ) : !hasDestination && mode !== 'hosted' ? (
           <div className="mt-3 rounded-lg px-3 py-2.5" style={{ background: S.amberBg, border: `1px solid ${S.amberBorder}` }}>
@@ -1974,7 +2019,9 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
         ) : (
           <div className="mt-3 rounded-lg px-3 py-2.5" style={{ background: S.amberBg, border: `1px solid ${S.amberBorder}` }}>
             <div className="text-body-sm font-bold" style={{ color: S.goldText }}>Is this the right place?</div>
-            <div className="text-caption mt-0.5" style={{ color: S.muted }}>Confirm the pin before we trust the drive time.</div>
+            <div className="text-caption mt-0.5" style={{ color: S.muted }}>
+              {transportationNeeded ? 'Confirm the pin before we trust the drive time.' : 'Confirm the pin so everyone can find the event.'}
+            </div>
             <div className="flex gap-2 mt-2.5">
               <Button onClick={onConfirmAddress} variant="primary" size="sm" className="rounded-pill bg-casa-success text-caption font-bold text-white">
                 Yes, confirm

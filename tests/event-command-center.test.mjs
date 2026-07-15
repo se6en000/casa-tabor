@@ -81,6 +81,27 @@ test('remote events never create driving legs', () => {
   assert.deepEqual(plan.legs, [])
 })
 
+test('care coverage and sleepovers keep their location without inventing driving', () => {
+  const coverage = makeEvent({
+    title: 'Giselle Watching Owen',
+    location_name: "Giselle's House",
+    address: '456 Caregiver Lane',
+  })
+  const sleepover = makeEvent({
+    title: "Owen's Sleepover",
+    location_name: 'Smith Residence',
+    address: '789 Friend Street',
+  })
+  for (const event of [coverage, sleepover]) {
+    const mode = inferEventMode(event)
+    const plan = derivePlan(event, mode, { household: [] })
+    assert.notEqual(plan.kind, 'travel')
+    assert.deepEqual(plan.legs, [])
+    assert.ok(event.location_name)
+    assert.ok(event.address)
+  }
+})
+
 test('real destinations retain the travel sequence', () => {
   const event = makeEvent()
   const mode = inferEventMode(event)

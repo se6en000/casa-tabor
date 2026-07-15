@@ -18,29 +18,36 @@ export interface TravelEtaResult {
 }
 
 export function useTravelEta({
+  origin,
   destination,
   eventStartIso,
+  departureTimeIso,
   enabled = true,
   bufferMins = 10,
   refetchIntervalMs = false,
 }: {
+  origin?: string | null
   destination: string | null
   eventStartIso?: string | null
+  departureTimeIso?: string | null
   enabled?: boolean
   bufferMins?: number
   refetchIntervalMs?: number | false
 }) {
   const trimmedDestination = destination?.trim() ?? ''
+  const trimmedOrigin = origin?.trim() ?? ''
   return useQuery({
-    queryKey: ['travel-eta', trimmedDestination, eventStartIso ?? null, bufferMins],
+    queryKey: ['travel-eta', trimmedOrigin, trimmedDestination, eventStartIso ?? null, departureTimeIso ?? null, bufferMins],
     enabled: enabled && trimmedDestination.length > 0,
     staleTime: 5 * 60_000,
     refetchInterval: refetchIntervalMs,
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke('route-eta', {
         body: {
+          origin: trimmedOrigin || null,
           destination: trimmedDestination,
           arrival_time: eventStartIso ?? null,
+          departure_time: departureTimeIso ?? null,
           buffer_mins: bufferMins,
         },
       })
