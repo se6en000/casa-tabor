@@ -15,6 +15,8 @@ interface GooglePlace {
   place_id: string
   name: string
   address: string
+  lat?: number | null
+  lng?: number | null
 }
 
 interface SmartPlaceInputProps {
@@ -71,6 +73,8 @@ export default function SmartPlaceInput({
         address: savedPlaceAddress(place),
         id: place.id,
         source: 'saved' as const,
+        lat: place.lat,
+        lng: place.lng,
         aliases: place.aliases,
       })),
     ]
@@ -129,6 +133,9 @@ export default function SmartPlaceInput({
         name: place.name,
         address: place.address,
         source: 'google' as const,
+        placeId: place.place_id,
+        lat: place.lat ?? null,
+        lng: place.lng ?? null,
       }
       const key = `${suggestion.name.trim().toLowerCase()}|${suggestion.address.trim().toLowerCase()}`
       return seen.has(key) ? [] : [suggestion]
@@ -140,6 +147,10 @@ export default function SmartPlaceInput({
     onChange({
       name: suggestion.name,
       address: suggestion.address,
+      source: suggestion.source,
+      placeId: suggestion.placeId,
+      lat: suggestion.lat,
+      lng: suggestion.lng,
       ...(value.kind ? { kind: value.kind } : {}),
     })
     setFocused(false)
@@ -168,7 +179,14 @@ export default function SmartPlaceInput({
         className="pr-control"
         onFocus={() => setFocused(true)}
         onChange={(event) => {
-          onChange({ ...value, [field]: event.target.value })
+          onChange({
+            ...value,
+            [field]: event.target.value,
+            source: 'manual',
+            placeId: undefined,
+            lat: null,
+            lng: null,
+          })
           setFocused(true)
           setActiveIndex(-1)
         }}

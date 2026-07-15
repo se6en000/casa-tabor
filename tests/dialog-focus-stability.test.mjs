@@ -17,7 +17,7 @@ test('dialog focus lifecycle does not restart when an inline close callback chan
 
 test('typing a custom place name preserves its paired address until a saved place is selected', () => {
   assert.match(editor, /<SmartPlaceInput/)
-  assert.match(smartPlace, /onChange\(\{ \.\.\.value, \[field\]: event\.target\.value \}\)/)
+  assert.match(smartPlace, /onChange\(\{[\s\S]{0,100}\.\.\.value,[\s\S]{0,80}\[field\]: event\.target\.value,/)
   assert.match(smartPlace, /name: suggestion\.name,[\s\S]*address: suggestion\.address/)
 })
 

@@ -32,6 +32,8 @@ import {
   Textarea,
 } from '../ui'
 import { formatAllDayRangeLabel, normalizeAllDayEventRange } from '../../utils/allDayEventRange'
+import type { EventLocationScope } from '../../lib/eventLocation'
+import RecurrenceScopeDialog from './RecurrenceScopeDialog'
 
 const ALL_CATEGORIES = Object.keys(CATEGORY_LABEL) as string[]
 
@@ -178,7 +180,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   }, [open, event.id, event.recurrence_master_id, isInstance])
 
   // Recurring edit scope modal
-  type RecurScope = 'this' | 'future' | 'all'
+  type RecurScope = EventLocationScope
   const [showScopeModal, setShowScopeModal] = useState(false)
   const [_pendingSave, setPendingSave] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -1343,31 +1345,11 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             {/* Footer removed — Save and Close are in the top bar */}
           </motion.div>
 
-          <Modal
+          <RecurrenceScopeDialog
             open={showScopeModal}
             onClose={() => { setShowScopeModal(false); setPendingSave(false) }}
-            title="Edit recurring event"
-            size="md"
-          >
-            <p className="text-body-sm text-casa-muted mb-4">How would you like to apply your changes?</p>
-            <div className="space-y-2">
-              {([
-                { scope: 'this', label: 'This event', desc: 'Only this occurrence will be updated' },
-                { scope: 'future', label: 'This and following events', desc: 'This and all future occurrences' },
-                { scope: 'all', label: 'All events', desc: 'Every occurrence in the series' },
-              ] as { scope: RecurScope; label: string; desc: string }[]).map(({ scope, label, desc }) => (
-                <Button key={scope} variant="secondary" fullWidth className="h-auto justify-start py-3 text-left" onClick={() => handleScopeChoice(scope)}>
-                  <span>
-                    <span className="block text-body-sm font-semibold">{label}</span>
-                    <span className="mt-0.5 block text-caption text-casa-muted">{desc}</span>
-                  </span>
-                </Button>
-              ))}
-            </div>
-            <Button variant="ghost" fullWidth className="mt-4" onClick={() => { setShowScopeModal(false); setPendingSave(false) }}>
-              Cancel
-            </Button>
-          </Modal>
+            onSelect={handleScopeChoice}
+          />
           <Modal
             open={showDeleteConfirm}
             onClose={() => setShowDeleteConfirm(false)}

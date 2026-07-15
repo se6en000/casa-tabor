@@ -7,6 +7,10 @@ export interface TransportationPlace {
   name: string
   address: string
   kind?: 'event'
+  source?: 'manual' | 'saved' | 'google'
+  placeId?: string
+  lat?: number | null
+  lng?: number | null
 }
 
 export interface TransportationLeg {

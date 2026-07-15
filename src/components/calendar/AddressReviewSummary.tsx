@@ -1,6 +1,6 @@
 import { CheckCircle2, CircleAlert, House, Loader2, MapPin, Route } from 'lucide-react'
 import { cn } from '../../utils/cn'
-import { Button, Card, Chip } from '../ui'
+import { Button, Chip } from '../ui'
 
 export type AddressTechnicalStatus = 'checking' | 'ready' | 'unavailable'
 
@@ -19,90 +19,92 @@ export default function AddressReviewSummary({
   address,
   reviewed,
   atHome,
+  loading = false,
+  birthday = false,
+  saveError,
   onConfirm,
   onEdit,
-  loading = false,
-  saveError,
   onRetry,
 }: {
   locationName: string | null
   address: string | null
   reviewed: boolean
   atHome: boolean
+  loading?: boolean
+  birthday?: boolean
+  saveError?: string | null
   onConfirm: () => void
   onEdit: () => void
-  loading?: boolean
-  saveError?: string | null
   onRetry?: () => void
 }) {
   const normalizedName = locationName?.trim() || null
   const normalizedAddress = address?.trim() || null
   const hasDestination = Boolean(normalizedName || normalizedAddress)
-  const headline = normalizedName ?? (atHome ? 'Home' : 'Destination needed')
-  const subline = normalizedAddress ?? (!atHome ? 'Add an address before relying on travel details.' : null)
+  const headline = normalizedName ?? (atHome ? 'Home' : 'Add event location')
   const needsReview = hasDestination && !atHome && !reviewed
-  const missing = !hasDestination && !atHome
+  const foreground = birthday ? 'text-casa-navy' : 'text-white'
+  const secondary = birthday ? 'text-casa-muted' : 'text-white/65'
+  const chipStyle = birthday ? undefined : {
+    background: 'rgba(255,255,255,0.10)',
+    color: 'rgba(255,255,255,0.92)',
+    border: '1px solid rgba(255,255,255,0.18)',
+  }
 
   return (
-    <Card
-      padding="sm"
-      className={cn(
-        'relative mt-4 overflow-hidden border-casa-border bg-casa-surface shadow-none',
-        'flex flex-col gap-3 sm:flex-row sm:items-center',
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          'absolute inset-y-3 left-0 w-1 rounded-r-full',
-          reviewed || atHome ? 'bg-casa-success' : 'bg-casa-warning',
-        )}
-      />
-      <span className="flex size-control-sm flex-none items-center justify-center rounded-button bg-casa-bg text-casa-gold">
-        {atHome ? <House size={16} aria-hidden="true" /> : <MapPin size={16} aria-hidden="true" />}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-caption font-bold uppercase tracking-wide text-casa-muted">Where</p>
-        <p className="mt-0.5 text-body-sm font-bold leading-snug text-casa-navy">{headline}</p>
-        {subline && <p className="mt-0.5 text-caption leading-snug text-casa-muted">{subline}</p>}
-      </div>
-      <div className="flex flex-wrap items-center gap-2 sm:w-1/2 sm:justify-end">
+    <div className="min-w-0 flex-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <Chip size="sm" className="max-w-full" style={chipStyle}>
+          {atHome ? <House size={13} aria-hidden="true" /> : <MapPin size={13} aria-hidden="true" />}
+          <span className="whitespace-normal text-left leading-snug">{headline}</span>
+        </Chip>
         {loading ? (
           <Chip tone="info" size="sm" icon={<Loader2 size={13} className="animate-spin" aria-hidden="true" />}>
             Checking review
           </Chip>
         ) : reviewed ? (
-          <Chip tone="success" size="sm" icon={<CheckCircle2 size={13} aria-hidden="true" />}>
-            Address reviewed
-          </Chip>
+          <Chip tone="success" size="sm" icon={<CheckCircle2 size={13} aria-hidden="true" />}>Confirmed</Chip>
         ) : atHome ? (
           <Chip size="sm" icon={<House size={13} aria-hidden="true" />}>At home</Chip>
         ) : (
           <Chip tone="warning" size="sm" icon={<CircleAlert size={13} aria-hidden="true" />}>
-            {missing ? 'Address missing' : 'Needs review'}
+            {hasDestination ? 'Needs review' : 'Address missing'}
           </Chip>
         )}
-        {!loading && needsReview && (
-          <Button variant="primary" size="sm" onClick={onConfirm}>
-            Confirm address
-          </Button>
-        )}
-        {!loading && (
-          <Button variant="secondary" size="sm" onClick={onEdit}>
-            {missing ? 'Add address' : 'Edit'}
-          </Button>
-        )}
-        {saveError && (
-          <span role="alert" className="w-full text-caption text-casa-error sm:text-right">
-            {saveError}
-            {onRetry && (
-              <Button variant="ghost" size="sm" className="ml-2" onClick={onRetry}>
-                Retry
-              </Button>
-            )}
-          </span>
-        )}
       </div>
-    </Card>
+
+      {normalizedAddress && normalizedAddress !== normalizedName && (
+        <p className={cn('mt-1.5 max-w-[68ch] text-body-sm leading-relaxed', secondary)}>
+          {normalizedAddress}
+        </p>
+      )}
+
+      {!loading && !atHome && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {needsReview && (
+            <Button variant="primary" size="sm" onClick={onConfirm}>Confirm address</Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onEdit}
+            className={cn(birthday ? 'text-casa-navy' : 'text-white/85 hover:bg-white/10 hover:text-white')}
+          >
+            {hasDestination ? 'Change address' : 'Add location'}
+          </Button>
+        </div>
+      )}
+
+      {saveError && (
+        <p role="alert" className={cn('mt-2 text-caption', birthday ? 'text-casa-error' : 'text-red-200')}>
+          {saveError}
+          {onRetry && (
+            <Button variant="ghost" size="sm" className="ml-2" onClick={onRetry}>Retry</Button>
+          )}
+        </p>
+      )}
+      <span className={cn('sr-only', foreground)} aria-live="polite">
+        {reviewed ? 'Address confirmed' : hasDestination ? 'Address needs review' : 'Address missing'}
+      </span>
+    </div>
   )
 }

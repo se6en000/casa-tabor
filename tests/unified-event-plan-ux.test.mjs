@@ -9,6 +9,8 @@ const smartPlace = readFileSync(resolve('src/components/calendar/SmartPlaceInput
 const passengerChips = readFileSync(resolve('src/components/calendar/PassengerChipSelector.tsx'), 'utf8')
 const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
 const addressReview = readFileSync(resolve('src/components/calendar/AddressReviewSummary.tsx'), 'utf8')
+const eventLocation = readFileSync(resolve('src/lib/eventLocation.ts'), 'utf8')
+const recurrenceScope = readFileSync(resolve('src/components/calendar/RecurrenceScopeDialog.tsx'), 'utf8')
 const categoryPicker = detail.slice(detail.indexOf('function CategoryPicker'), detail.indexOf('/* ── Header'))
 const eventEdit = readFileSync(resolve('src/components/calendar/EventEditSheet.tsx'), 'utf8')
 const eventQuery = readFileSync(resolve('src/hooks/useCalendarEvents.ts'), 'utf8')
@@ -73,9 +75,10 @@ test('event detail header uses editorial navy crown with compact avatars', () =>
   assert.match(detail, /casa-heading-on-dark/)
   assert.match(detail, /Meta line: category \+ date \+ duration/)
   assert.match(detail, /<CategoryPicker eventId=\{event\.id\} category=\{category\} accent=\{accent\} dark=\{!isBirthday\} \/>/)
-  // adaptive utility row: travel uses location-first chip
+  // crown owns the location, full address, and review state
   assert.match(detail, /planKind === 'travel'/)
-  assert.match(detail, /event\.location_name \|\| event\.address \|\| 'Location not set'/)
+  assert.match(detail, /<AddressReviewSummary/)
+  assert.match(addressReview, /\{normalizedAddress && normalizedAddress !== normalizedName/)
   // attendee editing is now intentional (toggle) instead of always-on divider row
   assert.match(detail, /Edit attendees/)
   assert.match(detail, /rosterOpen \? 'Done editing' : editPeopleLabel/)
@@ -115,7 +118,7 @@ test('reminder details identify their type and allow assigned people editing', (
 
 test('category popover paints above the later people utility row', () => {
   assert.match(detail, /Meta line: category \+ date \+ duration[\s\S]{0,120}<div className="relative z-10/)
-  assert.match(detail, /\{\(hasPeople \|\| \(!reminder && planKind === 'travel'\)\) && \([\s\S]{0,100}<div className="relative mt-3/)
+  assert.match(detail, /\{\(hasPeople \|\| showAddressSummary\) && \([\s\S]{0,100}<div className="relative mt-3/)
   assert.doesNotMatch(detail, /<div className="relative z-10 mt-3 flex items-center gap-2">/)
   assert.doesNotMatch(categoryPicker, /initial=\{\{ opacity:/)
 })
@@ -142,7 +145,7 @@ test('month view uses shared cleanEventTitle helper for non-holiday non-reminder
   assert.doesNotMatch(month, /event\.title\.includes\(' \| '\) \? event\.title\.split/)
 })
 
-test('route stops and event Where reuse confirmed inline saved-place editing', () => {
+test('route stops and crown address editor reuse saved and Google place entry', () => {
   assert.match(transportation, /<InlinePlaceEditor/)
   assert.match(detail, /<InlinePlaceEditor/)
   assert.match(smartPlace, /Saved/)
@@ -155,10 +158,11 @@ test('route stops and event Where reuse confirmed inline saved-place editing', (
 })
 
 test('event location quick edit persists location fields and invalidates stale coordinates', () => {
-  assert.match(detail, /\.from\('events'\)[\s\S]*?location_name: normalizedName,[\s\S]*?address: normalizedAddress,[\s\S]*?lat: null,[\s\S]*?lng: null/)
-  assert.match(detail, /onLocationChanged\(next\)/)
+  assert.match(eventLocation, /\.from\('events'\)\.update\(payload\)/)
+  assert.match(eventLocation, /lat: trusted \? \(place\.lat \?\? null\) : null/)
+  assert.match(eventLocation, /lng: trusted \? \(place\.lng \?\? null\) : null/)
   assert.match(detail, /invalidateQueries\(\{ queryKey: \['events'\] \}\)/)
-  assert.match(detail, /updateTransportationEventPlace/)
+  assert.match(eventLocation, /updateTransportationEventPlace\(currentPlan, nextPlace\)/)
 })
 
 test('address review means explicit human confirmation rather than automatic route confidence', () => {
@@ -166,27 +170,46 @@ test('address review means explicit human confirmation rather than automatic rou
   assert.doesNotMatch(detail, /verifyFromTrustedSource/)
   assert.doesNotMatch(detail, /findSavedPlace\(savedPlaces.*event\.location_name/)
   assert.match(detail, /onConfirmAddress=\{\(\) => setVerifiedOverride\(true\)\}/)
-  assert.match(detail, /onSetVerifiedOverride\(false\)/)
+  assert.match(eventLocation, /verified: trusted/)
+  assert.match(eventLocation, /place\.source === 'google' \|\| place\.source === 'saved'/)
   assert.match(detail, /locationSignature\(event\)/)
 })
 
-test('address review summary is neutral, explicit, actionable, and does not truncate the address', () => {
-  assert.match(addressReview, /bg-casa-surface/)
-  assert.match(addressReview, /border-casa-border/)
-  assert.match(addressReview, /Address reviewed/)
+test('address review summary lives in the crown with a full address and truthful actions', () => {
+  assert.match(addressReview, /rgba\(255,255,255,0\.10\)/)
+  assert.match(addressReview, />Confirmed</)
   assert.match(addressReview, /Needs review/)
   assert.match(addressReview, /Address missing/)
   assert.match(addressReview, /Checking review/)
   assert.match(addressReview, /Confirm address/)
-  assert.match(addressReview, /\{missing \? 'Add address' : 'Edit'\}/)
+  assert.match(addressReview, /Change address/)
+  assert.match(addressReview, /Add location/)
   assert.match(addressReview, /role="alert"/)
   assert.match(addressReview, />\s*Retry\s*</)
-  assert.match(addressReview, /leading-snug text-casa-muted/)
+  assert.match(addressReview, /max-w-\[68ch\] text-body-sm leading-relaxed/)
   assert.doesNotMatch(addressReview, /truncate/)
-  assert.doesNotMatch(addressReview, /bg-casa-success-soft/)
-  assert.doesNotMatch(addressReview, /bg-casa-warning\/15.*<Card/)
-  assert.match(detail, /const showAddressSummary = !reminder && \(planKind === 'travel' \|\| Boolean\(event\.location_name \|\| event\.address\)\)/)
+  assert.doesNotMatch(addressReview, /<Card/)
+  assert.match(detail, /const showAddressSummary = !reminder && \(planKind === 'travel' \|\| hostedAtHome \|\| Boolean\(event\.location_name \|\| event\.address\)\)/)
   assert.match(detail, /overridesHydratedEventId !== event\.id/)
+})
+
+test('trusted selections preserve provenance and coordinates while typing clears trust', () => {
+  assert.match(smartPlace, /source: suggestion\.source/)
+  assert.match(smartPlace, /placeId: suggestion\.placeId/)
+  assert.match(smartPlace, /lat: suggestion\.lat/)
+  assert.match(smartPlace, /lng: suggestion\.lng/)
+  assert.match(smartPlace, /source: 'manual'[\s\S]{0,120}placeId: undefined,[\s\S]{0,80}lat: null,[\s\S]{0,80}lng: null/)
+  assert.match(placeEditor, /setDraft\(place\)/)
+})
+
+test('recurring quick address saves ask scope and target the selected range', () => {
+  assert.match(detail, /<RecurrenceScopeDialog/)
+  assert.match(recurrenceScope, /This event/)
+  assert.match(recurrenceScope, /This and following events/)
+  assert.match(recurrenceScope, /All events/)
+  assert.match(eventLocation, /scope === 'this'/)
+  assert.match(eventLocation, /scope === 'all'/)
+  assert.match(eventLocation, /start_time\.gte\.\$\{event\.start_time\}/)
 })
 
 test('route and weather readiness no longer depend on human address review', () => {
@@ -206,4 +229,6 @@ test('map area reports technical location state without duplicating review contr
   assert.doesNotMatch(detail, /Yes, confirm/)
   assert.doesNotMatch(detail, /Is this the right place\?/)
   assert.doesNotMatch(detail, /Address confirmed/)
+  const locationBlock = detail.slice(detail.indexOf('function LocationBlock'), detail.indexOf('function PanelFooter'))
+  assert.doesNotMatch(locationBlock, /<InlinePlaceEditor/)
 })

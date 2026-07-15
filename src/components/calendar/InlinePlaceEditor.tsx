@@ -16,6 +16,9 @@ interface InlinePlaceEditorProps {
   extraPlaces?: TransportationPlace[]
   allowEmpty?: boolean
   requireAddress?: boolean
+  editorOnly?: boolean
+  onCancel?: () => void
+  busy?: boolean
   className?: string
 }
 
@@ -26,25 +29,28 @@ export default function InlinePlaceEditor({
   extraPlaces = [],
   allowEmpty = false,
   requireAddress = false,
+  editorOnly = false,
+  onCancel,
+  busy = false,
   className,
 }: InlinePlaceEditorProps) {
-  const [editing, setEditing] = useState(false)
-  const [name, setName] = useState(value.name)
-  const [address, setAddress] = useState(value.address)
+  const [editing, setEditing] = useState(editorOnly)
+  const [draft, setDraft] = useState<TransportationPlace>(value)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { data: savedPlaces = [] } = useSavedPlaces()
   const savePlace = useSavePlace()
 
   const cancel = () => {
-    setName(value.name)
-    setAddress(value.address)
+    setDraft(value)
     setError(null)
     setEditing(false)
+    onCancel?.()
   }
 
   const apply = async () => {
-    const next = { name: name.trim(), address: address.trim() }
+    if (busy) return
+    const next = { ...draft, name: draft.name.trim(), address: draft.address.trim() }
     if (!allowEmpty && !next.name && !next.address) {
       setError('Enter a location name or address.')
       return
@@ -65,13 +71,13 @@ export default function InlinePlaceEditor({
     }
   }
 
-  const exactSavedPlace = findExactSavedPlace(savedPlaces, name, address)
-  const canSavePlace = Boolean(name.trim() && address.trim() && !exactSavedPlace)
+  const exactSavedPlace = findExactSavedPlace(savedPlaces, draft.name, draft.address)
+  const canSavePlace = Boolean(draft.name.trim() && draft.address.trim() && !exactSavedPlace)
   const saveCurrentPlace = () => {
     setError(null)
     savePlace.mutate({
-      name: name.trim(),
-      address: address.trim(),
+      name: draft.name.trim(),
+      address: draft.address.trim(),
       category: 'other',
     }, {
       onError: (cause) => {
@@ -80,7 +86,7 @@ export default function InlinePlaceEditor({
     })
   }
 
-  if (!editing) {
+  if (!editing && !editorOnly) {
     return (
       <Button
         variant="ghost"
@@ -88,8 +94,7 @@ export default function InlinePlaceEditor({
         align="start"
         aria-label={ariaLabel}
         onClick={() => {
-          setName(value.name)
-          setAddress(value.address)
+          setDraft(value)
           setEditing(true)
         }}
         className={`rounded-button px-2 text-left ${className ?? ''}`}
@@ -112,39 +117,52 @@ export default function InlinePlaceEditor({
   }
 
   return (
-    <div className={`relative rounded-card border border-casa-gold bg-casa-surface p-3 shadow-card ${className ?? ''}`}>
+    <div className={`relative rounded-card border border-casa-border bg-casa-surface p-4 shadow-card ${className ?? ''}`}>
+      {editorOnly && (
+        <div className="mb-3">
+          <p className="text-body-sm font-bold text-casa-navy">Change event location</p>
+          <p className="mt-0.5 text-caption text-casa-muted">Choose a saved or Google result to confirm it automatically.</p>
+        </div>
+      )}
       <div className="space-y-2">
+        {!editorOnly && (
+          <SmartPlaceInput
+            value={draft}
+            field="name"
+            label={`${ariaLabel} name`}
+            placeholder="Location name"
+            autoFocus
+            extraPlaces={extraPlaces}
+            onClear={() => {
+              setDraft({ name: '', address: '', source: 'manual', lat: null, lng: null })
+              setError(null)
+            }}
+            onChange={(place) => {
+              setDraft(place)
+              setError(null)
+            }}
+          />
+        )}
         <SmartPlaceInput
-          value={{ name, address }}
-          field="name"
-          label={`${ariaLabel} name`}
-          placeholder="Location name"
-          autoFocus
-          extraPlaces={extraPlaces}
-          onClear={() => {
-            setName('')
-            setAddress('')
-            setError(null)
-          }}
-          onChange={(place) => {
-            setName(place.name)
-            setAddress(place.address)
-            setError(null)
-          }}
-        />
-        <SmartPlaceInput
-          value={{ name, address }}
+          value={draft}
           field="address"
           label={`${ariaLabel} address`}
-          placeholder="Start typing an address"
+          placeholder={editorOnly ? 'Search for a place or address' : 'Start typing an address'}
+          autoFocus={editorOnly}
           extraPlaces={extraPlaces}
           onClear={() => {
-            setAddress('')
+            setDraft((current) => ({
+              ...current,
+              address: '',
+              source: 'manual',
+              placeId: undefined,
+              lat: null,
+              lng: null,
+            }))
             setError(null)
           }}
           onChange={(place) => {
-            setName(place.name)
-            setAddress(place.address)
+            setDraft(place)
             setError(null)
           }}
         />
@@ -163,8 +181,8 @@ export default function InlinePlaceEditor({
             {exactSavedPlace ? 'Saved place' : savePlace.isPending ? 'Saving…' : 'Save place'}
           </Button>
         )}
-        <Button variant="secondary" size="sm" onClick={cancel} disabled={saving}>Cancel</Button>
-        <Button variant="primary" size="sm" onClick={apply} loading={saving}>
+        <Button variant="secondary" size="sm" onClick={cancel} disabled={saving || busy}>Cancel</Button>
+        <Button variant="primary" size="sm" onClick={apply} loading={saving || busy}>
           <Check size={15} /> Apply
         </Button>
       </div>

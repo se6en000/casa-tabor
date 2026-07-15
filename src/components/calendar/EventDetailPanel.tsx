@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { format } from 'date-fns'
 import { motion, AnimatePresence, useDragControls } from 'framer-motion'
 import {
-  X, MapPin, Navigation, ChevronRight, ChevronDown, CalendarDays, House, Users, Video, Bell,
+  X, Navigation, ChevronRight, ChevronDown, CalendarDays, House, Users, Video, Bell,
   Loader2, Crown, Plus, Check, Pencil, Share2, Phone, MessageSquare,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -35,12 +35,12 @@ import { Button, Card, Chip, IconButton, Switch } from '../ui'
 import EventTransportationSection from './EventTransportationSection'
 import InlinePlaceEditor from './InlinePlaceEditor'
 import AddressReviewSummary, { AddressTechnicalStatusChip, type AddressTechnicalStatus } from './AddressReviewSummary'
+import RecurrenceScopeDialog from './RecurrenceScopeDialog'
+import { persistScopedEventLocation, type EventLocationScope } from '../../lib/eventLocation'
 import {
   createDefaultTransportationPlan,
   eventPassengerNames,
-  hydrateTransportationEventPlaces,
   syncTransportationAttendees,
-  updateTransportationEventPlace,
   type EventTransportationPlan,
   type TransportationPlace,
 } from '../../lib/eventTransportation'
@@ -124,6 +124,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
   const [overridesHydratedEventId, setOverridesHydratedEventId] = useState<string | null>(null)
   const [overrideSaveError, setOverrideSaveError] = useState<string | null>(null)
   const [overrideSaveRevision, setOverrideSaveRevision] = useState(0)
+  const queryClient = useQueryClient()
   const isMobile = useIsMobile()
   const panelDragControls = useDragControls()
   const dragDismissOffset = isMobile ? 150 : 180
@@ -164,7 +165,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
         : null,
     )
     setOverridesHydratedEventId(event.id)
-  }, [event?.id])
+  }, [event?.id, event ? locationSignature(event) : null])
 
   useEffect(() => {
     if (!event) return
@@ -329,11 +330,16 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   verified={addressReviewed}
                   modeOverride={modeOverride}
                   onClose={onClose}
-                  onEdit={() => setShowEdit(true)}
                   onConfirmAddress={() => setVerifiedOverride(true)}
                   addressReviewLoading={overridesHydratedEventId !== event.id}
                   addressSaveError={overrideSaveError}
                   onRetryAddressSave={() => setOverrideSaveRevision((revision) => revision + 1)}
+                  onSaveAddress={async (place, scope) => {
+                    setOverridesHydratedEventId(null)
+                    await persistScopedEventLocation({ event, place, scope })
+                    queryClient.removeQueries({ queryKey: ['travel-eta'] })
+                    await queryClient.invalidateQueries({ queryKey: ['events'] })
+                  }}
                   onRosterChange={(names) => {
                     setTransportationPlan((current) => current
                       ? syncTransportationAttendees(current, names)
@@ -358,8 +364,6 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   onSetModeOverride={setModeOverride}
                   onSetTwoDriverConfirmed={setTwoDriverConfirmed}
                   onSetTransportationPlan={setTransportationPlan}
-                  onSetVerifiedOverride={setVerifiedOverride}
-                  onEdit={() => setShowEdit(true)}
                 />
               </div>
               <PanelFooter event={event} modeOverride={modeOverride} onEdit={() => setShowEdit(true)} />
@@ -673,22 +677,22 @@ function PanelHeader({
   verified,
   modeOverride,
   onClose,
-  onEdit,
   onConfirmAddress,
   addressReviewLoading,
   addressSaveError,
   onRetryAddressSave,
+  onSaveAddress,
   onRosterChange,
 }: {
   event: EventWithDetails
   verified: boolean
   modeOverride: EventMode | null
   onClose: () => void
-  onEdit: () => void
   onConfirmAddress: () => void
   addressReviewLoading: boolean
   addressSaveError: string | null
   onRetryAddressSave: () => void
+  onSaveAddress: (place: TransportationPlace, scope: EventLocationScope) => Promise<void>
   onRosterChange: (names: string[]) => void
 }) {
   const category = event.enrichment?.category
@@ -716,11 +720,41 @@ function PanelHeader({
   const attendeeCount = event.members?.length ?? 0
   const hasPeople = attendeeCount > 0
   const [rosterOpen, setRosterOpen] = useState(false)
+  const [addressEditorOpen, setAddressEditorOpen] = useState(false)
+  const [pendingPlace, setPendingPlace] = useState<TransportationPlace | null>(null)
+  const [scopeOpen, setScopeOpen] = useState(false)
+  const [addressEditError, setAddressEditError] = useState<string | null>(null)
+  const [addressSaving, setAddressSaving] = useState(false)
   const peopleCountLabel = reminder ? `${attendeeCount} assigned` : `${attendeeCount} attending`
   const editPeopleLabel = reminder ? 'Edit people' : 'Edit attendees'
   const peopleSectionLabel = reminder ? 'Assigned people' : 'Attendees'
-  const showAddressSummary = !reminder && (planKind === 'travel' || Boolean(event.location_name || event.address))
-  const showLowerSection = (hasPeople && rosterOpen) || showAddressSummary
+  const showAddressSummary = !reminder && (planKind === 'travel' || hostedAtHome || Boolean(event.location_name || event.address))
+  const showLowerSection = (hasPeople && rosterOpen) || addressEditorOpen
+  const recurring = Boolean(event.rrule || event.recurrence_master_id)
+
+  const commitAddress = async (place: TransportationPlace, scope: EventLocationScope) => {
+    setAddressEditError(null)
+    setAddressSaving(true)
+    try {
+      await onSaveAddress(place, scope)
+      setAddressEditorOpen(false)
+      setPendingPlace(null)
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Could not update this address.'
+      setAddressEditError(message)
+    } finally {
+      setAddressSaving(false)
+    }
+  }
+
+  const requestAddressSave = async (place: TransportationPlace) => {
+    if (recurring) {
+      setPendingPlace(place)
+      setScopeOpen(true)
+      return
+    }
+    await commitAddress(place, 'this')
+  }
 
   return (
     <div>
@@ -818,22 +852,26 @@ function PanelHeader({
           )}
         </div>
 
-        {(hasPeople || (!reminder && planKind === 'travel')) && (
-          <div className="relative mt-3 flex items-center gap-2">
-            {!reminder && planKind === 'travel' ? (
-              <Chip
-                size="sm"
-                className="max-w-[70%]"
-                style={{
-                  background: 'rgba(255,255,255,0.10)',
-                  color: 'rgba(255,255,255,0.88)',
-                  border: '1px solid rgba(255,255,255,0.18)',
+        {(hasPeople || showAddressSummary) && (
+          <div className="relative mt-3">
+            {showAddressSummary ? (
+              <AddressReviewSummary
+                locationName={event.location_name}
+                address={event.address}
+                reviewed={verified}
+                atHome={hostedAtHome}
+                loading={addressReviewLoading}
+                birthday={isBirthday}
+                saveError={addressSaveError}
+                onConfirm={onConfirmAddress}
+                onEdit={() => {
+                  setAddressEditError(null)
+                  setAddressEditorOpen((open) => !open)
                 }}
-              >
-                <MapPin size={12} />
-                <span className="truncate">{event.location_name || event.address || 'Location not set'}</span>
-              </Chip>
+                onRetry={onRetryAddressSave}
+              />
             ) : (
+              <div className="flex items-center gap-2">
               <Chip
                 size="sm"
                 className="uppercase"
@@ -846,12 +884,21 @@ function PanelHeader({
               >
                 {peopleCountLabel}
               </Chip>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-white/80 hover:text-white hover:bg-white/10"
+                  onClick={() => setRosterOpen((open) => !open)}
+                >
+                  {rosterOpen ? 'Done editing' : editPeopleLabel}
+                </Button>
+              </div>
             )}
-            {hasPeople && (
+            {showAddressSummary && hasPeople && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-white/80 hover:text-white hover:bg-white/10"
+                className={cn('mt-1', isBirthday ? 'text-casa-navy' : 'text-white/80 hover:bg-white/10 hover:text-white')}
                 onClick={() => setRosterOpen((open) => !open)}
               >
                 {rosterOpen ? 'Done editing' : editPeopleLabel}
@@ -872,21 +919,44 @@ function PanelHeader({
               <MemberEditor event={event} onRosterChange={onRosterChange} />
             </div>
           )}
-          {showAddressSummary && (
-            <DestinationHeaderCard
-              locationName={event.location_name}
-              address={event.address}
-              verified={verified}
-              atHome={hostedAtHome}
-              onConfirmAddress={onConfirmAddress}
-              onEditAddress={onEdit}
-              loading={addressReviewLoading}
-              saveError={addressSaveError}
-              onRetrySave={onRetryAddressSave}
-            />
+          {addressEditorOpen && (
+            <div className="px-6 py-4">
+              <InlinePlaceEditor
+                value={{
+                  name: event.location_name?.trim() || event.address?.trim() || '',
+                  address: event.address?.trim() || '',
+                  kind: 'event',
+                }}
+                ariaLabel="Event location"
+                requireAddress={planKind === 'travel'}
+                editorOnly
+                busy={addressSaving}
+                onCancel={() => {
+                  setAddressEditorOpen(false)
+                  setAddressEditError(null)
+                }}
+                onConfirm={requestAddressSave}
+              />
+              {addressEditError && (
+                <p role="alert" className="mt-2 text-caption text-casa-error">{addressEditError}</p>
+              )}
+            </div>
           )}
         </div>
       )}
+      <RecurrenceScopeDialog
+        open={scopeOpen}
+        title="Change recurring event location"
+        onClose={() => {
+          setScopeOpen(false)
+          setPendingPlace(null)
+        }}
+        onSelect={(scope) => {
+          const place = pendingPlace
+          setScopeOpen(false)
+          if (place) void commitAddress(place, scope)
+        }}
+      />
     </div>
   )
 }
@@ -906,8 +976,6 @@ function PanelBody({
   onSetModeOverride,
   onSetTwoDriverConfirmed,
   onSetTransportationPlan,
-  onSetVerifiedOverride,
-  onEdit,
 }: {
   event: EventWithDetails
   modeOverride: EventMode | null
@@ -920,8 +988,6 @@ function PanelBody({
   onSetModeOverride: (mode: EventMode | null) => void
   onSetTwoDriverConfirmed: (value: boolean) => void
   onSetTransportationPlan: (plan: EventTransportationPlan | null) => void
-  onSetVerifiedOverride: (value: boolean | null) => void
-  onEdit: () => void
 }) {
   return (
     <StandardPanelBody
@@ -936,8 +1002,6 @@ function PanelBody({
       onSetModeOverride={onSetModeOverride}
       onSetTwoDriverConfirmed={onSetTwoDriverConfirmed}
       onSetTransportationPlan={onSetTransportationPlan}
-      onSetVerifiedOverride={onSetVerifiedOverride}
-      onEdit={onEdit}
     />
   )
 }
@@ -955,8 +1019,6 @@ function StandardPanelBody({
   onSetModeOverride,
   onSetTwoDriverConfirmed,
   onSetTransportationPlan,
-  onSetVerifiedOverride,
-  onEdit,
 }: {
   event: EventWithDetails
   modeOverride: EventMode | null
@@ -969,8 +1031,6 @@ function StandardPanelBody({
   onSetModeOverride: (mode: EventMode | null) => void
   onSetTwoDriverConfirmed: (value: boolean) => void
   onSetTransportationPlan: (plan: EventTransportationPlan | null) => void
-  onSetVerifiedOverride: (value: boolean | null) => void
-  onEdit: () => void
 }) {
   const enr = event.enrichment
   const reminder = event.event_type === 'reminder'
@@ -987,7 +1047,6 @@ function StandardPanelBody({
     return value !== null && value !== undefined
   }
   const { data: household = [] } = useFamilyMembers()
-  const queryClient = useQueryClient()
   const { data: homeConfig } = useQuery({
     queryKey: ['home-config'],
     staleTime: 10 * 60_000,
@@ -1230,20 +1289,6 @@ function StandardPanelBody({
             parkingNotes={shows('parking_notes') || hasText(enr?.parking_notes) ? enr?.parking_notes : null}
             contactPhone={shows('contact_phone') || hasText(enr?.contact_phone) ? enr?.contact_phone : null}
             weatherAtVenue={weatherAtVenue}
-            onEditAddress={() => {
-              onSetVerifiedOverride(false)
-              queryClient.removeQueries({ queryKey: ['travel-eta'] })
-              onEdit()
-            }}
-            onLocationChanged={(place) => {
-              onSetVerifiedOverride(false)
-              queryClient.removeQueries({ queryKey: ['travel-eta'] })
-              if (!transportationPlan) return
-              onSetTransportationPlan(updateTransportationEventPlace(
-                hydrateTransportationEventPlaces(transportationPlan, event),
-                place,
-              ))
-            }}
             mode={mode}
             transportationNeeded={Boolean(transportationPlan) || planKind === 'travel'}
             accent={eventAccentColor(event)}
@@ -1351,32 +1396,6 @@ function NonTravelEventBlock({ event, plan, hasTransportation }: {
         <p className="mt-2 text-body-sm text-casa-muted">{content.description}</p>
       </div>
     </Card>
-  )
-}
-
-function DestinationHeaderCard({ locationName, address, verified, atHome, onConfirmAddress, onEditAddress, loading, saveError, onRetrySave }: {
-  locationName: string | null
-  address: string | null
-  verified: boolean
-  atHome: boolean
-  onConfirmAddress: () => void
-  onEditAddress: () => void
-  loading: boolean
-  saveError: string | null
-  onRetrySave: () => void
-}) {
-  return (
-    <AddressReviewSummary
-      locationName={locationName}
-      address={address}
-      reviewed={verified}
-      atHome={atHome}
-      onConfirm={onConfirmAddress}
-      onEdit={onEditAddress}
-      loading={loading}
-      saveError={saveError}
-      onRetry={onRetrySave}
-    />
   )
 }
 
@@ -2095,7 +2114,7 @@ function FallbackBringChecklist({ items, eventId }: { items: string[]; eventId: 
 
 /* ── LocationBlock ──────────────────────────────────────────── */
 
-function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes, contactPhone, weatherAtVenue, onEditAddress, onLocationChanged, mode, transportationNeeded, accent }: {
+function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes, contactPhone, weatherAtVenue, mode, transportationNeeded, accent }: {
   eventId: string
   locationName: string | null
   address: string | null
@@ -2104,8 +2123,6 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
   parkingNotes?: string | null
   contactPhone?: string | null
   weatherAtVenue?: string | null
-  onEditAddress: () => void
-  onLocationChanged: (place: TransportationPlace) => void
   mode: EventMode
   transportationNeeded: boolean
   accent: string
@@ -2114,10 +2131,6 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
   const [saving, setSaving] = useState(false)
   const [geocodeState, setGeocodeState] = useState<'idle' | 'loading' | 'error' | 'done'>('idle')
   const [fallbackCoords, setFallbackCoords] = useState<{ lat: number; lng: number } | null>(null)
-  const [displayPlace, setDisplayPlace] = useState<TransportationPlace>({
-    name: locationName?.trim() || address?.trim() || '',
-    address: address?.trim() || '',
-  })
   const { data: savedPlaces = [] } = useSavedPlaces()
   const savePlace = useSavePlace()
   const queryClient = useQueryClient()
@@ -2132,16 +2145,9 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
   })
 
   const homeAddress = [homeConfig?.address, homeConfig?.city, homeConfig?.state, homeConfig?.zip].filter(Boolean).join(', ').trim() || null
-  const effectiveLocationName = displayPlace.name || (mode === 'hosted' && homeAddress ? 'Home' : null)
-  const effectiveAddress = displayPlace.address || (mode === 'hosted' ? homeAddress : null)
-  const sourceHasDestination = Boolean(displayPlace.name || displayPlace.address)
-
-  useEffect(() => {
-    setDisplayPlace({
-      name: locationName?.trim() || address?.trim() || '',
-      address: address?.trim() || '',
-    })
-  }, [address, locationName])
+  const effectiveLocationName = locationName?.trim() || address?.trim() || (mode === 'hosted' && homeAddress ? 'Home' : null)
+  const effectiveAddress = address?.trim() || (mode === 'hosted' ? homeAddress : null)
+  const sourceHasDestination = Boolean(locationName?.trim() || address?.trim())
 
   const existingPlace = findSavedPlace(savedPlaces, effectiveLocationName, effectiveAddress)
   const isAlreadySaved = Boolean(existingPlace) || savedLocal
@@ -2234,32 +2240,6 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
     setSaving(false)
   }
 
-  async function handleInlineLocationChange(place: TransportationPlace) {
-    const normalizedName = place.name.trim() || null
-    const normalizedAddress = place.address.trim() || null
-    const { error } = await supabase
-      .from('events')
-      .update({
-        location_name: normalizedName,
-        address: normalizedAddress,
-        lat: null,
-        lng: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', eventId)
-    if (error) throw new Error(`Could not update location: ${error.message}`)
-
-    const next = {
-      name: normalizedName ?? normalizedAddress ?? '',
-      address: normalizedAddress ?? '',
-    }
-    setDisplayPlace(next)
-    setFallbackCoords(null)
-    setGeocodeState('idle')
-    onLocationChanged(next)
-    await queryClient.invalidateQueries({ queryKey: ['events'] })
-  }
-
   return (
     <div className="rounded-[14px] overflow-hidden" style={{ border: `1px solid ${S.borderMed}` }}>
       <div
@@ -2307,13 +2287,6 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
         )}
       </div>
       <div className="p-4">
-        <InlinePlaceEditor
-          value={{ name: effectiveLocationName ?? '', address: effectiveAddress ?? '' }}
-          ariaLabel="Event location"
-          extraPlaces={homeAddress ? [{ name: 'Home', address: homeAddress }] : []}
-          allowEmpty
-          onConfirm={handleInlineLocationChange}
-        />
         {parkingNotes && <div className="mt-1 text-body-sm text-casa-muted">{parkingNotes}</div>}
         {needsGeocode && geocodeState === 'error' && (
           <div className="mt-2 rounded-lg px-3 py-2 text-caption" style={{ background: S.amberBg, border: `1px solid ${S.amberBorder}`, color: S.goldText }}>
@@ -2328,17 +2301,7 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
             </Button>
           </div>
         )}
-        {!hasDestination && mode !== 'hosted' ? (
-          <div className="mt-3 rounded-lg px-3 py-2.5" style={{ background: S.amberBg, border: `1px solid ${S.amberBorder}` }}>
-            <div className="text-body-sm font-bold" style={{ color: S.goldText }}>Missing destination</div>
-            <div className="text-caption mt-0.5" style={{ color: S.muted }}>Add an address before we calculate travel and leave times.</div>
-            <div className="flex gap-2 mt-2.5">
-              <Button onClick={onEditAddress} variant="secondary" size="sm" className="rounded-pill text-caption font-bold">
-                Add address
-              </Button>
-            </div>
-          </div>
-        ) : hasDestination ? (
+        {hasDestination ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <AddressTechnicalStatusChip status={technicalStatus} />
             <span className="text-caption text-casa-muted">
@@ -2371,15 +2334,6 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
             >
               Call
             </a>
-          )}
-          {!googleMapsUrl && mode !== 'hosted' && (
-            <Button
-              onClick={onEditAddress}
-              variant="secondary"
-              className="flex-1 text-body-sm font-semibold"
-            >
-              Add destination
-            </Button>
           )}
         </div>
         {hasDestination && (
