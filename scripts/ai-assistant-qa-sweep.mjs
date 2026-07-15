@@ -578,6 +578,15 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames, recipeFixture) {
       assistantMode: 'chef',
       steps: [
         {
+          text: `Do I have a ${recipeFixture.name} recipe?`,
+          expect: {
+            type: 'text',
+            containsAll: [recipeFixture.name.toLowerCase()],
+            semanticIntent: 'recipe.find',
+            maxLlmCalls: 0,
+          },
+        },
+        {
           text: `For my saved recipe "${recipeFixture.name}", list its ingredients and tell me what happens immediately after roasting the salmon.`,
           expect: { type: 'text', containsAll: ['sumac', 'tahini', 'whisk'] },
         },

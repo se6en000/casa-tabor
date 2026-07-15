@@ -17,7 +17,7 @@ import {
 } from '../supabase/functions/_shared/assistant-cooking-policy.mjs'
 
 test('cooking language contract publishes stable concepts and generated coverage', () => {
-  assert.equal(COOKING_INTENTS.length, 23)
+  assert.equal(COOKING_INTENTS.length, 24)
   assert.equal(new Set(COOKING_INTENTS).size, COOKING_INTENTS.length)
   assert.ok(COOKING_UTTERANCE_CORPUS.length >= 80)
   for (const sample of COOKING_UTTERANCE_CORPUS) {
@@ -41,6 +41,18 @@ test('cooking parser extracts useful open-class slots', () => {
   assert.deepEqual(parseCookingLanguage('How do I make chicken tacos?')?.slots, { recipe: 'chicken tacos' })
   assert.deepEqual(parseCookingLanguage('What can I make with salmon and rice?')?.slots, { ingredients: 'salmon and rice' })
   assert.equal(parseCookingLanguage('What can I use instead of buttermilk?')?.slots.ingredient, 'buttermilk')
+})
+
+test('natural saved-recipe questions are authoritative library searches', () => {
+  for (const [text, query] of [
+    ['do i have a salmon bowl recipe?', 'salmon bowl'],
+    ['is there a recipe for salmon bowls', 'salmon bowls'],
+    ['search my recipe library for pasta', 'pasta'],
+  ]) {
+    const frame = parseCookingLanguage(text)
+    assert.equal(frame?.intent, 'recipe.find', text)
+    assert.equal(frame?.slots.query, query, text)
+  }
 })
 
 test('detailed cooking instructions stay on the cooking lane despite temperature language', () => {
@@ -166,6 +178,8 @@ test('cooking authority outranks overlapping grocery parsing only in cooking con
   assert.match(source, /intentRouting\.profile === 'recipe' && referencesSavedRecipe/)
   assert.match(source, /const includeFoodProfileContext = needsFoodProfileData/)
   assert.match(source, /const includeRecipeContext = needsRecipeData/)
+  assert.match(source, /cookingFrame\?\.intent === 'recipe\.find'/)
+  assert.match(source, /server_ai_assistant_recipe_find/)
   assert.match(source, /!authoritativeCookingContext \|\| cookingMutationIntent/)
   assert.match(source, /hasGroundedSemanticIntent: cookingMutationIntent/)
   assert.match(source, /intentRouting\.profile === 'recipe'\s+\? RECIPE_PRIMARY_HARD_TIMEOUT_MS/)
@@ -179,6 +193,19 @@ test('cooking authority outranks overlapping grocery parsing only in cooking con
   )
   assert.match(executeSource, /const recipeInsert = \{\s+name: recipeName,\s+source_type: 'manual',/)
   assert.match(executeSource, /appendActionTrace\('server_ai_action_succeeded', 'create_recipe'/)
+
+  const drawerSource = fs.readFileSync(
+    new URL('../src/components/shared/AIChatDrawer.tsx', import.meta.url),
+    'utf8',
+  )
+  assert.match(drawerSource, /invalidateQueries\(\{ queryKey: \['cook-page-recipes'\] \}\)/)
+  assert.match(drawerSource, /invalidateQueries\(\{ queryKey: \['recipe-library'\] \}\)/)
+
+  const cookPageSource = fs.readFileSync(
+    new URL('../src/pages/CookPage.tsx', import.meta.url),
+    'utf8',
+  )
+  assert.match(cookPageSource, /if \(query\) return haystack\.includes\(query\)/)
 })
 
 test('combined grocery list requests remain read-only cooking follow-ups', () => {

@@ -324,7 +324,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
       recipeExcerpt ? `\nRecipe draft:\n${recipeExcerpt}` : '',
     ].join('\n')
     await sendTraced(prompt)
-  }, [loading, markUserInteraction, sendTraced])
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['cook-page-recipes'] }),
+      qc.invalidateQueries({ queryKey: ['recipe-library'] }),
+    ])
+  }, [loading, markUserInteraction, qc, sendTraced])
 
   useEffect(() => {
     if (!open) {

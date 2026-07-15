@@ -965,7 +965,7 @@ export default function CookPage() {
     const query = recipeSearch.trim().toLowerCase()
     return recipes.filter((recipe) => {
       const haystack = `${recipe.name} ${recipe.cook_time ?? ''} ${recipe.servings ?? ''}`.toLowerCase()
-      if (query && !haystack.includes(query)) return false
+      if (query) return haystack.includes(query)
       if (recipeBrowseFilter === 'quick') {
         const minutes = parseCookMinutes(recipe.cook_time)
         return typeof minutes === 'number' && minutes <= 30

@@ -60,6 +60,7 @@ import {
   formatAuthoritativeRecipes,
   validateCookingGroceryItems,
 } from '../_shared/assistant-cooking-policy.mjs'
+import { findSavedRecipes, formatSavedRecipeMatches } from '../_shared/assistant-recipe-read.mjs'
 import {
   isGroceryLikeLanguage,
   parseGroceryLanguage,
@@ -421,6 +422,7 @@ Deno.serve(async (req) => {
   )
   const referencesSavedRecipe = Boolean(
     incomingConversationState?.activeEntityType === 'recipe' ||
+    cookingFrame?.intent === 'recipe.find' ||
     /\b(?:(?:saved|my)\s+recipes?|recipe library)\b/i.test(latestUserText)
   )
   const needsRecipeData = !requestAmbiguity && (
@@ -543,6 +545,43 @@ Deno.serve(async (req) => {
     input_tokens: 0,
     output_tokens: 0,
     total_tokens: 0,
+  }
+  if (cookingFrame?.intent === 'recipe.find') {
+    const query = String(cookingFrame.slots?.query ?? '').trim()
+    const matches = findSavedRecipes(recipes, query)
+    const text = formatSavedRecipeMatches(matches, query)
+    const requestTotalMs = Date.now() - requestStartMs
+    appendServerTrace('server_ai_assistant_recipe_find', `matches=${matches.length}`, {
+      semantic_intent: cookingFrame.intent,
+      query,
+      match_count: matches.length,
+      recipe_ids: matches.map((recipe: { id?: string }) => recipe.id).filter(Boolean),
+      request_ms: requestTotalMs,
+      llm_calls: 0,
+    })
+    appendServerTrace('server_ai_assistant_result', `type=text ms=${requestTotalMs}`, {
+      result_type: 'text',
+      response_text: text,
+      request_ms: requestTotalMs,
+      llm_calls: 0,
+    })
+    return {
+      status: 200,
+      payload: {
+        type: 'text',
+        text,
+        authoritative_provenance: {
+          source: 'recipe_library',
+          semantic_intent: cookingFrame.intent,
+        },
+        correlation_id: cid,
+        telemetry: {
+          ...llmTelemetry,
+          request_total_ms: requestTotalMs,
+          context_load_ms: contextLoadMs,
+        },
+      },
+    }
   }
   const agentShadowConfig = agentShadowConfigResult?.data?.value as {
     enabled?: boolean

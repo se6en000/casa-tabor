@@ -26,6 +26,7 @@ export const COOKING_INTENTS = Object.freeze([
   'cooking.missing_ingredients',
   'cooking.add_to_grocery',
   'cooking.nutrition',
+  'recipe.find',
   'recipe.save',
 ])
 
@@ -46,6 +47,12 @@ const samples = {
     `give me a recipe for ${recipe}`,
     `walk me through ${recipe}`,
   ]),
+  'recipe.find': [
+    'do i have a salmon bowl recipe',
+    'is there a recipe for salmon bowls',
+    'find my saved tomato soup recipe',
+    'search my recipe library for pasta',
+  ],
   'cooking.substitute': [
     'what can i use instead of buttermilk',
     'i am out of eggs what can i swap in',
@@ -176,6 +183,13 @@ export function parseCookingLanguage(text, options = {}) {
     /\b(?:but\s+)?i (?:still )?need\s+(.+?)(?:\s+what (?:ingredients? )?am i missing|$)/,
   )
 
+  const recipeLookup = input.match(/^is there (?:a |an |any )?recipes? for (.+)$/)?.[1]?.trim() ??
+    input.match(/^(?:do (?:i|we) have|is there) (?:a |an |any )?(.+?) recipes?$/)?.[1]?.trim() ??
+    input.match(/^(?:find|search for|look for)(?: my)?(?: saved)? (.+?) recipes?(?: in (?:my|the) recipe library)?$/)?.[1]?.trim() ??
+    input.match(/^search (?:my|the) recipe library for (.+)$/)?.[1]?.trim()
+  if (recipeLookup) {
+    return frame('recipe.find', 0.99, { query: recipeLookup })
+  }
   if (/\b(?:save|keep|store|add)\b.*\b(?:this|that|the)?\s*recipe\b|\badd this to my recipe library\b/.test(input)) {
     return frame('recipe.save', 0.98)
   }
@@ -273,6 +287,9 @@ export function parseCookingLanguage(text, options = {}) {
 }
 
 export function cookingFrameGuidance(frameValue) {
+  if (frameValue?.intent === 'recipe.find') {
+    return 'Search only the authoritative saved Recipe Library. Report matching saved recipe titles, or clearly say no saved match exists. Do not generate or suggest a new recipe.'
+  }
   if (frameValue?.intent === 'cooking.recipe') {
     return 'Return the proposed recipe as readable Markdown with ingredients and ordered steps. This is a read-only suggestion: do not call create_recipe, emit JSON or tool syntax, or use code fences. Save only after a separate explicit recipe.save request.'
   }
