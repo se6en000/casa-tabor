@@ -185,7 +185,7 @@ async function seedCalendarFixtures(created = []) {
       status: 'confirmed',
       all_day: Boolean(spec.allDay),
       event_type: spec.allDay ? 'event' : 'event',
-      is_enriched: false,
+      is_enriched: true,
       description: runId,
       rrule: spec.rrule ?? null,
     }]
