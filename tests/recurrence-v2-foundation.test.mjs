@@ -9,6 +9,12 @@ import {
   applyReusablePatch,
   resolveEffectiveDetailBundle,
 } from '../supabase/functions/_shared/recurrence-detail-bundle-core.mjs'
+import {
+  buildReusableBundle,
+  classifySeries,
+  detectGoogleException,
+  inferReusableBaseline,
+} from '../scripts/recurrence-v2-migration-inventory-core.mjs'
 
 const migration = readFileSync(
   resolve('supabase/migrations/20260715193000_recurrence_v2_feature_flags.sql'),
@@ -333,4 +339,81 @@ test('materializer extends a guarded rolling horizon on schedule', () => {
   assert.match(materializerCron, /vault\.decrypted_secrets/)
   assert.match(transportationNullNormalization, /new\.transportation_plan = 'null'::jsonb/)
   assert.match(transportationNullNormalization, /before insert or update of transportation_plan/)
+})
+
+test('migration inventory separates reusable divergence from occurrence progress', () => {
+  const baseEvent = {
+    id: 'event-1',
+    google_event_id: 'google-1',
+    title: 'Therapy',
+    description: null,
+    start_time: '2026-08-03T13:00:00Z',
+    end_time: '2026-08-03T14:00:00Z',
+    all_day: false,
+    event_type: 'event',
+    location_name: 'Clinic',
+    address: '1 Main St',
+    lat: null,
+    lng: null,
+  }
+  const first = buildReusableBundle(baseEvent, {
+    checklist: [{ label: 'Form', note: null, checked: true, category: 'gear', sort_order: 0 }],
+    actions: [{ title: 'Call', completed: true, is_urgent: false }],
+  })
+  const second = buildReusableBundle(
+    { ...baseEvent, id: 'event-2', google_event_id: 'google-2', title: 'Therapy moved' },
+    {
+      checklist: [{ label: 'Form', note: null, checked: false, category: 'gear', sort_order: 0 }],
+      actions: [{ title: 'Call', completed: false, is_urgent: false }],
+    },
+  )
+  const analysis = inferReusableBaseline([
+    { ...baseEvent, bundle: first },
+    { ...baseEvent, id: 'event-3', google_event_id: 'google-3', bundle: first },
+    { ...baseEvent, id: 'event-2', google_event_id: 'google-2', bundle: second },
+  ])
+  assert.deepEqual(analysis.occurrences[0].exceptionPaths, [])
+  assert.deepEqual(analysis.occurrences[1].exceptionPaths, [])
+  assert.deepEqual(analysis.occurrences[2].exceptionPaths, ['event.title'])
+})
+
+test('migration inventory reports Google exceptions and ambiguous identities', () => {
+  const master = {
+    id: 'master',
+    summary: 'Therapy',
+    recurrence: ['RRULE:FREQ=WEEKLY'],
+  }
+  const instance = {
+    id: 'instance',
+    summary: 'Therapy moved',
+    start: { dateTime: '2026-08-03T10:00:00-04:00' },
+    originalStartTime: { dateTime: '2026-08-03T09:00:00-04:00' },
+  }
+  assert.deepEqual(detectGoogleException(instance, master), ['moved', 'summary'])
+  const report = classifySeries({
+    account: 'calendar@example.com',
+    master,
+    instances: [instance],
+    casaRows: [
+      {
+        id: 'event-1',
+        google_event_id: 'instance',
+        bundle: { event: { title: 'Therapy' } },
+      },
+      {
+        id: 'event-2',
+        google_event_id: 'instance',
+        bundle: { event: { title: 'Therapy moved' } },
+      },
+    ],
+  })
+  assert.equal(report.migrationDisposition, 'manual_review')
+  assert.deepEqual(report.identityMatches, { instance_id: 2 })
+  assert.equal(report.occurrenceLinks[0].originalStart, '2026-08-03T09:00:00-04:00')
+  assert.equal(report.occurrenceLinks[0].originalStartSource, 'google_original_start')
+  assert.equal(report.proposedTemplateBundle.event.title, 'Therapy moved')
+  assert.deepEqual(report.reviewReasons, [
+    'duplicate_casa_google_links',
+    'ambiguous_reusable_baseline',
+  ])
 })
