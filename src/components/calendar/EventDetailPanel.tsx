@@ -868,6 +868,8 @@ function PanelHeader({
                   setAddressEditError(null)
                   setAddressEditorOpen((open) => !open)
                 }}
+                peopleActionLabel={hasPeople ? (rosterOpen ? 'Done editing' : editPeopleLabel) : undefined}
+                onPeopleAction={hasPeople ? () => setRosterOpen((open) => !open) : undefined}
                 onRetry={onRetryAddressSave}
               />
             ) : (
@@ -893,16 +895,6 @@ function PanelHeader({
                   {rosterOpen ? 'Done editing' : editPeopleLabel}
                 </Button>
               </div>
-            )}
-            {showAddressSummary && hasPeople && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className={cn('mt-1', isBirthday ? 'text-casa-navy' : 'text-white/80 hover:bg-white/10 hover:text-white')}
-                onClick={() => setRosterOpen((open) => !open)}
-              >
-                {rosterOpen ? 'Done editing' : editPeopleLabel}
-              </Button>
             )}
           </div>
         )}
