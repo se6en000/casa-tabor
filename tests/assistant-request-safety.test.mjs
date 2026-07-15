@@ -19,6 +19,13 @@ test('vague write targets clarify instead of guessing across domains', () => {
 
 test('grounded follow-ups and explicit targets remain actionable', () => {
   assert.equal(classifyAssistantAmbiguity('move it to Friday', { hasActiveEntity: true }), null)
+  assert.equal(
+    classifyAssistantAmbiguity(
+      'Save the recipe you just suggested. Recipe draft: Cook it, then add the sauce.',
+      { hasGroundedSemanticIntent: true },
+    ),
+    null,
+  )
   assert.equal(classifyAssistantAmbiguity('move soccer practice to Friday'), null)
   assert.equal(classifyAssistantAmbiguity('add milk to the grocery list'), null)
 })

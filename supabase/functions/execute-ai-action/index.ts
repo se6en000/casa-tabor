@@ -430,6 +430,12 @@ Deno.serve(async (req) => {
         if (imageError && !missingRecipeImagesTable) throw new Error(imageError.message)
       }
 
+      appendActionTrace('server_ai_action_succeeded', 'create_recipe', {
+        recipe_id: recipeId,
+        ingredient_count: ingredientRows.length,
+        step_count: stepRows.length,
+        image_saved: Boolean(selectedImageUrl),
+      })
       return new Response(JSON.stringify({
         success: true,
         recipe_id: recipeId,

@@ -278,8 +278,10 @@ Deno.serve(async (req) => {
     cookingFrame && cookingSurfaceContext
   )
   const cookingGuidance = cookingFrameGuidance(cookingFrame)
+  const cookingMutationIntent = ['recipe.save', 'cooking.add_to_grocery'].includes(cookingFrame?.intent ?? '')
   const requestAmbiguity = classifyAssistantAmbiguity(latestUserText, {
     hasActiveEntity: Boolean(incomingConversationState?.activeEntityType || context?.focusedEvent),
+    hasGroundedSemanticIntent: cookingMutationIntent,
   })
   const classifiedIntentRouting = classifyAssistantIntent(latestUserText, {
     focusedEvent: Boolean(context?.focusedEvent),
@@ -325,7 +327,6 @@ Deno.serve(async (req) => {
       : cookingFrame
         ? { profile: 'recipe', forceEventSearch: false }
         : classifiedIntentRouting
-  const cookingMutationIntent = ['recipe.save', 'cooking.add_to_grocery'].includes(cookingFrame?.intent ?? '')
   const userRequestedWriteIntent = /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push|book|schedule|plan)\b/i
     .test(latestUserText ?? '') && (!authoritativeCookingContext || cookingMutationIntent)
   appendServerTrace('server_ai_assistant_start', `messages=${Array.isArray(messages) ? messages.length : 0}`, {

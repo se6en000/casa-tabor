@@ -167,6 +167,7 @@ test('cooking authority outranks overlapping grocery parsing only in cooking con
   assert.match(source, /const includeFoodProfileContext = needsFoodProfileData/)
   assert.match(source, /const includeRecipeContext = needsRecipeData/)
   assert.match(source, /!authoritativeCookingContext \|\| cookingMutationIntent/)
+  assert.match(source, /hasGroundedSemanticIntent: cookingMutationIntent/)
   assert.match(source, /intentRouting\.profile === 'recipe'\s+\? RECIPE_PRIMARY_HARD_TIMEOUT_MS/)
   assert.match(source, /'create_recipe', 'add_grocery_items'\]\.includes\(tool\.name\)/)
   assert.match(source, /generation_config: \{\s+temperature: 0\.4,\s+max_output_tokens: 2048,/)
@@ -177,6 +178,7 @@ test('cooking authority outranks overlapping grocery parsing only in cooking con
     'utf8',
   )
   assert.match(executeSource, /const recipeInsert = \{\s+name: recipeName,\s+source_type: 'manual',/)
+  assert.match(executeSource, /appendActionTrace\('server_ai_action_succeeded', 'create_recipe'/)
 })
 
 test('combined grocery list requests remain read-only cooking follow-ups', () => {
