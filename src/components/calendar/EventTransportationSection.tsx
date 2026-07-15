@@ -244,8 +244,8 @@ function updateLeg(plan: EventTransportationPlan, legId: string, patch: Partial<
 }
 
 function placeFromName(name: string, options: PlaceOption[], fallback: TransportationPlace): TransportationPlace {
-  const match = options.find((option) => option.name.toLowerCase() === name.trim().toLowerCase())
-  return match ? { ...match } : { name, address: name === fallback.name ? fallback.address : '' }
+  const match = options.find((option) => option.name.toLowerCase() === name.toLowerCase())
+  return match ? { ...match } : { ...fallback, name }
 }
 
 export default function EventTransportationSection({

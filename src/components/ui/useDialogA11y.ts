@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 
 const FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -15,6 +15,11 @@ export function useDialogA11y(
   onClose: () => void,
   closeOnEscape: boolean,
 ) {
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
   useEffect(() => {
     if (!open) return
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -29,7 +34,7 @@ export function useDialogA11y(
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && closeOnEscape) {
         event.preventDefault()
-        onClose()
+        onCloseRef.current()
         return
       }
       if (event.key !== 'Tab' || !panel) return
@@ -56,7 +61,7 @@ export function useDialogA11y(
       document.removeEventListener('keydown', onKeyDown)
       previouslyFocused?.focus()
     }
-  }, [open, panelRef, onClose, closeOnEscape])
+  }, [open, panelRef, closeOnEscape])
 
   useEffect(() => {
     if (!open) return
