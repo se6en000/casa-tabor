@@ -112,6 +112,7 @@ test('importer is service-only, flag-gated, and reconciles expired cursors', () 
   assert.match(importer, /return importConnection\(supabase, resolved, correlationId, true, true\)/)
   assert.match(importer, /recurrence_stage_google_resources_core/)
   assert.match(importer, /recurrence_link_google_occurrences_core/)
+  assert.match(importer, /\.neq\('google_status', 'cancelled'\)/)
 })
 
 test('inbound recurrence import does not overwrite Casa-owned event detail', () => {

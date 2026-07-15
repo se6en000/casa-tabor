@@ -230,7 +230,17 @@ async function importConnection(
         if (stageError) throw new Error(stageError.message)
         staged += Number(stageResult.staged ?? 0)
         if (connection.adoption_policy === 'automatic') {
-          for (const resourceId of stageResult.master_resource_ids ?? []) {
+          const masterResourceIds = stageResult.master_resource_ids ?? []
+          const { data: eligibleMasters, error: eligibilityError } = masterResourceIds.length === 0
+            ? { data: [], error: null }
+            : await supabase
+              .from('google_recurrence_resources')
+              .select('id')
+              .in('id', masterResourceIds)
+              .neq('google_status', 'cancelled')
+              .is('retired_at', null)
+          if (eligibilityError) throw new Error(eligibilityError.message)
+          for (const { id: resourceId } of eligibleMasters ?? []) {
             const { data: adoption, error: adoptionError } = await supabase.rpc(
               'recurrence_adopt_google_master_core',
               { p_resource_id: resourceId, p_explicit: false },
