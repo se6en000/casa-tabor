@@ -59,14 +59,20 @@ test('event detail header uses editorial navy crown with compact avatars', () =>
   // compact avatar circles in eyebrow row
   assert.match(detail, /avatarMembers\.map/)
   assert.match(detail, /avatarOverflow/)
-  // dark variant for CategoryPicker on navy
-  assert.match(detail, /dark=\{!isBirthday\}/)
+  // title-first hero and meta line with category beneath title
+  assert.match(detail, /Title hero/)
+  assert.match(detail, /text-display-md/)
+  assert.match(detail, /Meta line: category \+ date \+ duration/)
+  assert.match(detail, /<CategoryPicker eventId=\{event\.id\} category=\{category\} accent=\{accent\} dark=\{!isBirthday\} \/>/)
+  // adaptive utility row: travel uses location-first chip
+  assert.match(detail, /planKind === 'travel'/)
+  assert.match(detail, /event\.location_name \|\| event\.address \|\| 'Location not set'/)
   // attendee editing is now intentional (toggle) instead of always-on divider row
   assert.match(detail, /Edit attendees/)
   assert.match(detail, /rosterOpen \? 'Done editing' : 'Edit attendees'/)
   assert.match(detail, /showAttendees && rosterOpen[\s\S]{0,300}MemberEditor/)
-  // close button with white ghost class
-  assert.match(detail, /absolute top-3.5 right-3.5/)
+  // close button remains in the top utility rail
+  assert.match(detail, /aria-label="Close event details"/)
 })
 
 test('route stops and event Where reuse confirmed inline saved-place editing', () => {

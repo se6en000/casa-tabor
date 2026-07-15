@@ -287,7 +287,13 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
               onTouchMove={stopTouch}
               onTouchEnd={stopTouch}
             >
-              <div className="flex-shrink-0 px-3 pt-3 pb-1.5">
+              <div
+                className="flex-shrink-0 px-3 pt-3 pb-1.5"
+                style={{
+                  background: 'linear-gradient(to bottom, color-mix(in srgb, var(--color-casa-navy) 7%, var(--color-casa-surface)), var(--color-casa-surface))',
+                  borderBottom: '1px solid color-mix(in srgb, var(--color-casa-navy) 10%, transparent)',
+                }}
+              >
                 <button
                   type="button"
                   className="mx-auto block h-6 w-[86px] cursor-grab active:cursor-grabbing"
@@ -297,7 +303,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   data-ptr-ignore
                   onPointerDown={e => panelDragControls.start(e)}
                 >
-                  <span className="mx-auto mt-1.5 block w-11 h-[5px] rounded-full" style={{ background: 'rgba(27,42,68,0.18)' }} />
+                  <span className="mx-auto mt-1.5 block h-[5px] w-11 rounded-full" style={{ background: 'color-mix(in srgb, var(--color-casa-navy) 22%, white)' }} />
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain" data-native-drag data-ptr-ignore>
@@ -603,7 +609,7 @@ function CategoryPicker({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.97 }}
             transition={{ duration: 0.15 }}
-            className="absolute left-0 top-[calc(100%+6px)] z-popover w-64 rounded-card border border-casa-border bg-casa-surface p-3 shadow-modal"
+            className="absolute left-0 top-[calc(100%+10px)] z-popover w-64 rounded-card border border-casa-border bg-casa-surface p-3 shadow-modal"
           >
             <p className="mb-2 text-caption font-semibold uppercase tracking-wide" style={{ color: S.muted }}>Change category</p>
             <div className="flex flex-wrap gap-1.5">
@@ -689,91 +695,114 @@ function PanelHeader({
           style={{ background: isBirthday ? undefined : 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.18))' }}
         />
 
-        {/* Eyebrow row: category · owner · recurring · avatar dots · close */}
-        <div className="relative z-10 flex items-center gap-2 pr-10">
-          <CategoryPicker eventId={event.id} category={category} accent={accent} dark={!isBirthday} />
-          {eyebrow && (
-            <span
-              className="text-caption font-bold uppercase tracking-widest truncate"
-              style={{ color: isBirthday ? S.eyebrow : 'rgba(255,255,255,0.55)' }}
-            >
-              {eyebrow}
-            </span>
-          )}
-          {isRecurring && (
-            <span className="text-caption font-semibold" style={{ color: isBirthday ? S.muted : 'rgba(255,255,255,0.45)' }}>↻</span>
-          )}
-          <div className="ml-auto flex items-center -space-x-1.5 shrink-0">
-            {avatarMembers.map((m) => (
+        {/* Top row: owner + compact avatars + close */}
+        <div className="relative z-10 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            {eyebrow && (
               <span
-                key={m.id}
-                title={m.family_member?.name}
-                className={cn('flex size-6 shrink-0 items-center justify-center rounded-full text-caption font-bold text-white ring-[2px]', isBirthday ? 'ring-white' : 'ring-casa-navy')}
-                style={{ backgroundColor: m.family_member?.color_hex ?? 'var(--color-casa-muted)' }}
+                className="text-caption font-bold uppercase tracking-widest truncate"
+                style={{ color: isBirthday ? S.eyebrow : 'rgba(255,255,255,0.55)' }}
               >
-                {m.family_member?.name?.[0]}
-              </span>
-            ))}
-            {avatarOverflow > 0 && (
-              <span
-                className="ring-casa-navy flex size-6 shrink-0 items-center justify-center rounded-full text-caption font-bold ring-[2px]"
-                style={{ background: 'rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.85)' }}
-              >
-                +{avatarOverflow}
+                {eyebrow}
               </span>
             )}
           </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="flex items-center -space-x-1.5">
+              {avatarMembers.map((m) => (
+                <span
+                  key={m.id}
+                  title={m.family_member?.name}
+                  className={cn('flex size-6 shrink-0 items-center justify-center rounded-full text-caption font-bold text-white ring-[2px]', isBirthday ? 'ring-white' : 'ring-casa-navy')}
+                  style={{ backgroundColor: m.family_member?.color_hex ?? 'var(--color-casa-muted)' }}
+                >
+                  {m.family_member?.name?.[0]}
+                </span>
+              ))}
+              {avatarOverflow > 0 && (
+                <span
+                  className="ring-casa-navy flex size-6 shrink-0 items-center justify-center rounded-full text-caption font-bold ring-[2px]"
+                  style={{ background: 'rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.85)' }}
+                >
+                  +{avatarOverflow}
+                </span>
+              )}
+            </div>
+            <IconButton
+              onClick={onClose}
+              icon={<X size={18} />}
+              aria-label="Close event details"
+              variant="ghost"
+              size="sm"
+              className={cn(!isBirthday && 'text-white/70 hover:text-white hover:bg-white/10')}
+            />
+          </div>
         </div>
 
-        {/* Title */}
-        <h2 className={cn('relative z-10 mt-2 font-display text-display-sm font-bold leading-tight', isBirthday ? 'text-casa-navy' : 'text-white')}>
+        {/* Title hero */}
+        <h2 className={cn('relative z-10 mt-2 font-display text-display-md font-bold leading-tight', isBirthday ? 'text-casa-navy' : 'text-white')}>
           {isBirthday && <span className="mr-1.5" aria-hidden="true">🎉</span>}
           {event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}
         </h2>
 
-        {/* Date / duration */}
-        <div className="relative z-10 mt-1.5 flex items-center gap-1.5 text-body-sm">
+        {/* Meta line: category + date + duration */}
+        <div className="relative z-10 mt-2 flex flex-wrap items-center gap-2 text-body-sm">
+          <CategoryPicker eventId={event.id} category={category} accent={accent} dark={!isBirthday} />
           <span className={cn('font-semibold', isBirthday ? '' : '')} style={{ color: isBirthday ? S.navy : S.planLabel }}>
             {headerWhen}
           </span>
           <span style={{ color: isBirthday ? S.muted : 'rgba(255,255,255,0.35)' }}>·</span>
           <span style={{ color: isBirthday ? S.muted : 'rgba(255,255,255,0.55)' }}>{headerDuration}</span>
+          {isRecurring && (
+            <>
+              <span style={{ color: isBirthday ? S.muted : 'rgba(255,255,255,0.35)' }}>·</span>
+              <span className="text-caption font-semibold" style={{ color: isBirthday ? S.muted : 'rgba(255,255,255,0.55)' }}>Repeats</span>
+            </>
+          )}
         </div>
 
-        {showAttendees && (
+        {(showAttendees || (!reminder && planKind === 'travel')) && (
           <div className="relative z-10 mt-3 flex items-center gap-2">
-            <Chip
-              size="sm"
-              className="uppercase"
-              style={{
-                letterSpacing: '0.06em',
-                background: 'rgba(255,255,255,0.10)',
-                color: 'rgba(255,255,255,0.82)',
-                border: '1px solid rgba(255,255,255,0.18)',
-              }}
-            >
-              {attendeeCount} attending
-            </Chip>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-white/80 hover:text-white hover:bg-white/10"
-              onClick={() => setRosterOpen((open) => !open)}
-            >
-              {rosterOpen ? 'Done editing' : 'Edit attendees'}
-            </Button>
+            {!reminder && planKind === 'travel' ? (
+              <Chip
+                size="sm"
+                className="max-w-[70%]"
+                style={{
+                  background: 'rgba(255,255,255,0.10)',
+                  color: 'rgba(255,255,255,0.88)',
+                  border: '1px solid rgba(255,255,255,0.18)',
+                }}
+              >
+                <MapPin size={12} />
+                <span className="truncate">{event.location_name || event.address || 'Location not set'}</span>
+                {verified && <span aria-hidden="true">✓</span>}
+              </Chip>
+            ) : (
+              <Chip
+                size="sm"
+                className="uppercase"
+                style={{
+                  letterSpacing: '0.06em',
+                  background: 'rgba(255,255,255,0.10)',
+                  color: 'rgba(255,255,255,0.82)',
+                  border: '1px solid rgba(255,255,255,0.18)',
+                }}
+              >
+                {attendeeCount} attending
+              </Chip>
+            )}
+            {showAttendees && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white/80 hover:text-white hover:bg-white/10"
+                onClick={() => setRosterOpen((open) => !open)}
+              >
+                {rosterOpen ? 'Done editing' : 'Edit attendees'}
+              </Button>
+            )}
           </div>
         )}
-
-        {/* Close button */}
-        <IconButton
-          onClick={onClose}
-          icon={<X size={18} />}
-          aria-label="Close event details"
-          variant="ghost"
-          size="sm"
-          className={cn('absolute top-3.5 right-3.5 z-10', !isBirthday && 'text-white/70 hover:text-white hover:bg-white/10')}
-        />
       </div>
 
       {/* ── White strip: attendee editor + destination ─────────── */}
