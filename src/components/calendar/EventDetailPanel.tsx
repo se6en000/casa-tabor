@@ -290,8 +290,8 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
               <div
                 className="flex-shrink-0 px-3 pt-3 pb-1.5"
                 style={{
-                  background: 'linear-gradient(to bottom, color-mix(in srgb, var(--color-casa-navy) 16%, var(--color-casa-surface)), color-mix(in srgb, var(--color-casa-navy) 9%, var(--color-casa-surface)))',
-                  borderBottom: '1px solid color-mix(in srgb, var(--color-casa-navy) 16%, transparent)',
+                  background: 'linear-gradient(to bottom, color-mix(in srgb, var(--color-casa-navy) 42%, var(--color-casa-surface)), color-mix(in srgb, var(--color-casa-navy) 24%, var(--color-casa-surface)))',
+                  borderBottom: '1px solid color-mix(in srgb, var(--color-casa-navy) 34%, transparent)',
                   boxShadow: 'inset 0 -1px 0 color-mix(in srgb, var(--color-casa-gold) 38%, transparent)',
                 }}
               >
@@ -304,7 +304,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   data-ptr-ignore
                   onPointerDown={e => panelDragControls.start(e)}
                 >
-                  <span className="mx-auto mt-1.5 block h-[5px] w-11 rounded-full" style={{ background: 'color-mix(in srgb, var(--color-casa-navy) 32%, white)' }} />
+                  <span className="mx-auto mt-1.5 block h-[5px] w-11 rounded-full shadow-card" style={{ background: 'color-mix(in srgb, var(--color-casa-on-dark) 72%, var(--color-casa-gold))' }} />
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain" data-native-drag data-ptr-ignore>
