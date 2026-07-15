@@ -691,16 +691,16 @@ function PanelHeader({
               <span
                 key={m.id}
                 title={m.family_member?.name}
-                className="flex size-6 shrink-0 items-center justify-center rounded-full text-caption font-bold text-white ring-[2px]"
-                style={{ backgroundColor: m.family_member?.color_hex ?? 'var(--color-casa-muted)', ringColor: isBirthday ? 'white' : S.navy }}
+                className={cn('flex size-6 shrink-0 items-center justify-center rounded-full text-caption font-bold text-white ring-[2px]', isBirthday ? 'ring-white' : 'ring-casa-navy')}
+                style={{ backgroundColor: m.family_member?.color_hex ?? 'var(--color-casa-muted)' }}
               >
                 {m.family_member?.name?.[0]}
               </span>
             ))}
             {avatarOverflow > 0 && (
               <span
-                className="flex size-6 shrink-0 items-center justify-center rounded-full text-caption font-bold ring-[2px]"
-                style={{ background: 'rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.85)', ringColor: S.navy }}
+                className="ring-casa-navy flex size-6 shrink-0 items-center justify-center rounded-full text-caption font-bold ring-[2px]"
+                style={{ background: 'rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.85)' }}
               >
                 +{avatarOverflow}
               </span>
