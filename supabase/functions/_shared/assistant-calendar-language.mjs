@@ -142,7 +142,8 @@ function requestedMoveTime(input) {
 }
 
 function temporalScope(input) {
-  const dayPart = input.match(/\b(morning|afternoon|evening|night)\b/)?.[1] ?? null
+  const dayPart = input.match(/\b(morning|afternoon|evening|night)\b/)?.[1] ??
+    (/\bafter lunch\b/.test(input) ? 'afternoon' : null)
   const clock = input.match(/\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/)
   const time = clock ? parseClockHour(clock[1], clock[2], clock[3]) : null
   const clockRange = input.match(/\b(?:from|between)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s+(?:to|through|and|-)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/)
@@ -329,6 +330,7 @@ export function parseCalendarLanguage(text, options = {}) {
     /\b(?:didn't|did not) mention\b|\b(?:missed|left out|omitted)\b/.test(input)
   const listLanguage = /\b(?:what(?:'s| is) (?:on|going on|happening|planned|scheduled)|what (?:are we doing|do (?:i|we) (?:have|got(?: going on)?)|have (?:i|we) got)|show me|tell me|give me|run through|walk me through|catch me up on|lay out|fill me in on|rundown|anything (?:on|happening|going on|planned|scheduled))\b/.test(input) ||
     /\bwhat (?:events?|appointments?|meetings?|plans?) (?:are )?(?:on|happening|going on|planned|scheduled)\b/.test(input) ||
+    /\bwhat(?:'s| is)\s+(?:the\s+)?rest of\b.*\blook(?:ing)? like\b/.test(input) ||
     Boolean(scope && /^(?:how|what) about\b/.test(input)) ||
     /\b(?:how (?:is|does)|what does)\b.*\b(?:look|looking)\b/.test(input) ||
     listFollowUpLanguage

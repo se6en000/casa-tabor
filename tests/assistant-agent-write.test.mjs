@@ -6,6 +6,7 @@ import {
   findAgentCalendarDuplicates,
   isAgentCalendarUpdateTargetUnambiguous,
   isAgentGroceryUpdateTargetUnambiguous,
+  normalizeAgentGroceryAddArgs,
 } from '../supabase/functions/_shared/assistant-agent-write.mjs'
 
 test('calendar duplicate matching ignores model-derived duration differences', () => {
@@ -19,6 +20,20 @@ test('calendar duplicate matching ignores model-derived duration differences', (
     title: 'swim practice',
     start: '2026-07-17T16:00:00-04:00',
     end: '2026-07-17T16:30:00-04:00',
+  })
+
+  test('grocery additions normalize spoken counts and discard meal context categories', () => {
+    assert.deepEqual(normalizeAgentGroceryAddArgs({
+      items: [
+        { name: 'bread', category: 'for sandwiches' },
+        { name: 'cream cheese', quantity: 'two', unit: 'things' },
+      ],
+    }), {
+      items: [
+        { name: 'bread' },
+        { name: 'cream cheese', quantity: '2' },
+      ],
+    })
   })
   assert.deepEqual(matches, events)
 })

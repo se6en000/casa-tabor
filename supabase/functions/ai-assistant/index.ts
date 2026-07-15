@@ -439,6 +439,7 @@ Deno.serve(async (req) => {
   const contextLoadStartMs = Date.now()
   const [
     { data: cfgRow },
+    agentRuntimeConfigResult,
     agentShadowConfigResult,
     agentReadConfigResult,
     agentWriteConfigResult,
@@ -454,6 +455,8 @@ Deno.serve(async (req) => {
     availabilityExceptionsResult,
   ] = await Promise.all([
     sb.from('settings').select('value').eq('key', 'llm_config').limit(1),
+    sb.from('settings').select('value').eq('key', 'agent_runtime_config').maybeSingle()
+      .then(r => r).catch(() => ({ data: null, error: null })),
     sb.from('settings').select('value').eq('key', 'agent_shadow_config').maybeSingle()
       .then(r => r).catch(() => ({ data: null, error: null })),
     sb.from('settings').select('value').eq('key', 'agent_read_config').maybeSingle()
@@ -585,6 +588,14 @@ Deno.serve(async (req) => {
       },
     }
   }
+  const agentRuntimeConfig = agentRuntimeConfigResult?.data?.value as {
+    enabled?: boolean
+    kill_switch?: boolean
+    stage?: string
+  } | null
+  const agentRuntimeEnabled = agentRuntimeConfig?.enabled === true &&
+    agentRuntimeConfig?.kill_switch !== true &&
+    agentRuntimeConfig?.stage === 'default_with_kill_switch'
   const agentShadowConfig = agentShadowConfigResult?.data?.value as {
     enabled?: boolean
     sample_rate?: number
@@ -621,6 +632,7 @@ Deno.serve(async (req) => {
       )
     : []
   const shouldRunAgentWrite = !dryRun &&
+    agentRuntimeEnabled &&
     agentWriteConfig?.enabled === true &&
     agentWriteRate > 0 &&
     !isCalendarSemanticRead &&
@@ -1030,6 +1042,7 @@ Deno.serve(async (req) => {
     }
   }
   const shouldRunAgentRead = !dryRun &&
+    agentRuntimeEnabled &&
     agentReadConfig?.enabled === true &&
     agentReadRate > 0 &&
     AGENT_GENERAL_PAGES.has(String(context?.page ?? '')) &&
@@ -1146,6 +1159,7 @@ Deno.serve(async (req) => {
     })
   }
   const shouldRunAgentShadow = !shouldRunAgentWrite && !shouldRunAgentRead && !dryRun &&
+    agentRuntimeEnabled &&
     agentShadowConfig?.enabled === true &&
     agentShadowRate > 0 &&
     Math.random() < agentShadowRate

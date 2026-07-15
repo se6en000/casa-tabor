@@ -105,15 +105,7 @@ async function callAssistant({
       context: {
         page,
         assistant_mode: 'general',
-        currentDate: new Date().toLocaleString('en-US', {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-          timeZoneName: 'short',
-        }),
+        currentDate: new Date().toISOString(),
         utcOffset: utcOffset(),
         family,
         conversationState,

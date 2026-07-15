@@ -141,6 +141,41 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
     return Number.isFinite(amount) && amount > 0 ? shiftDays(event, -amount) : null
   }
 
+  const relativeMinutes = input.match(/\b(?:bump|push|shift)\s+(?:it|that|this)?\s*back\s+(half an hour|(?:one|two|three|four|five|six|seven|\d+)\s+(?:hours?|minutes?))\b/i)
+  if (relativeMinutes) {
+    const amountText = relativeMinutes[1].toLowerCase()
+    const amountMatch = amountText.match(/(one|two|three|four|five|six|seven|\d+)\s+(hours?|minutes?)/)
+    const amount = amountText === 'half an hour'
+      ? 30
+      : amountMatch
+        ? (NUMBER_WORDS.get(amountMatch[1]) ?? Number(amountMatch[1])) *
+          (/^hour/.test(amountMatch[2]) ? 60 : 1)
+        : null
+    const duration = durationMs(event)
+    if (!Number.isFinite(amount) || amount <= 0 || duration == null) return null
+    const start = new Date(Date.parse(event.start_time) + amount * 60000)
+    const candidate = {
+      start: start.toISOString(),
+      end: new Date(start.getTime() + duration).toISOString(),
+    }
+    const conflicts = overlaps(candidate, events, event.id)
+    if (conflicts.length > 0) {
+      return {
+        text: `That time overlaps "${conflicts[0].title}". Would you like a different time?`,
+        event,
+      }
+    }
+    return {
+      tool: 'update_event',
+      args: {
+        id: event.id,
+        expected_updated_at: event.updated_at,
+        ...candidate,
+      },
+      event,
+    }
+  }
+
   if (/\bimmediately after (?:the )?meeting\b/i.test(input)) {
     const candidates = events
       .filter((candidate) => candidate.id !== event.id && /\bmeeting\b/i.test(candidate.title))

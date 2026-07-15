@@ -10,6 +10,7 @@ import {
   findAgentCalendarDuplicates,
   isAgentCalendarUpdateTargetUnambiguous,
   isAgentGroceryUpdateTargetUnambiguous,
+  normalizeAgentGroceryAddArgs,
 } from '../_shared/assistant-agent-write.mjs'
 import {
   getAgentToolByLegacyName,
@@ -19,6 +20,7 @@ import {
   fallbackExplicitRelativeReminderTurn,
   hardenExplicitReminderTurn,
 } from '../_shared/assistant-reminder-intent.mjs'
+import { resolveActiveCalendarMutation } from '../_shared/assistant-calendar-mutation-edge.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -118,30 +120,69 @@ Deno.serve(async (req) => {
         ? pendingAction
         : null
 
-    const plannerResult = await sb.functions.invoke('ai-agent-shadow', {
-      body: {
-        messages: body?.messages,
-        context: {
-          ...body?.context,
-          authoritativeEntities: planningEntities,
-          pendingAction: normalizedPendingAction,
-        },
-        trace_id: traceId,
-        turn_id: turnId,
-        correlation_id: `${correlationId}:planner`,
-        household_id: optionalText(body?.household_id, 120) ?? 'default',
-        planner_mode: 'additive_write',
-        model_override: body?.model_override,
-        action_id: actionId,
-      },
-    })
+    const activeEventRow = activeAuthoritativeEntity?.type === 'event'
+      ? events.find((event: { id?: string }) => event.id === activeAuthoritativeEntity.id) ?? null
+      : null
+    const deterministicActiveMutation = activeEventRow && !normalizedPendingAction
+      ? resolveActiveCalendarMutation(latestUserText, activeEventRow, events, {
+          now: new Date(),
+          utcOffset: body?.context?.utcOffset,
+          familyNames: Array.isArray(body?.context?.family)
+            ? body.context.family.flatMap((member: { name?: unknown }) =>
+                typeof member?.name === 'string' ? [member.name] : []
+              )
+            : [],
+        })
+      : null
+    const deterministicTool = deterministicActiveMutation?.tool
+      ? getAgentToolByLegacyName(deterministicActiveMutation.tool)
+      : null
+    let plan = deterministicTool && ALLOWED_TOOLS.has(deterministicTool.name)
+      ? {
+          kind: 'tool',
+          toolName: deterministicTool.name,
+          args: formatCalendarArgsAtOffset(
+            deterministicActiveMutation?.args ?? {},
+            body?.context?.utcOffset,
+          ),
+        }
+      : null
+    if (deterministicActiveMutation?.text && !plan) {
+      return result({
+        supported: false,
+        handled: true,
+        text: deterministicActiveMutation.text,
+        code: 'active_calendar_clarification',
+        planKind: 'clarify',
+        toolName: null,
+      })
+    }
     const fallbackReminderTurn = fallbackExplicitRelativeReminderTurn(latestUserText)
-    let plan = plannerResult.error
-      ? fallbackReminderTurn
-        ? { kind: 'calendar_semantic', turn: fallbackReminderTurn }
-        : null
-      : plannerResult.data?.plan
-    if (plannerResult.error && !plan) return result({ supported: false, code: 'planner_error' }, 503)
+    if (!plan) {
+      const plannerResult = await sb.functions.invoke('ai-agent-shadow', {
+        body: {
+          messages: body?.messages,
+          context: {
+            ...body?.context,
+            authoritativeEntities: planningEntities,
+            pendingAction: normalizedPendingAction,
+          },
+          trace_id: traceId,
+          turn_id: turnId,
+          correlation_id: `${correlationId}:planner`,
+          household_id: optionalText(body?.household_id, 120) ?? 'default',
+          planner_mode: 'additive_write',
+          model_override: body?.model_override,
+          action_id: actionId,
+        },
+      })
+      plan = plannerResult.error
+        ? fallbackReminderTurn
+          ? { kind: 'calendar_semantic', turn: fallbackReminderTurn }
+          : null
+        : plannerResult.data?.plan
+      if (plannerResult.error && !plan) return result({ supported: false, code: 'planner_error' }, 503)
+    }
     if (fallbackReminderTurn && (!plan || ['defer', 'error'].includes(plan.kind))) {
       plan = { kind: 'calendar_semantic', turn: fallbackReminderTurn }
     }
@@ -193,6 +234,9 @@ Deno.serve(async (req) => {
         })
       }
       plan = resolved
+    }
+    if (plan?.kind === 'tool' && plan.toolName === 'grocery.add_items') {
+      plan = { ...plan, args: normalizeAgentGroceryAddArgs(plan.args) }
     }
     if (plan?.kind !== 'tool' || !ALLOWED_TOOLS.has(plan.toolName)) {
       const ambiguousCandidateIds = plan?.kind === 'defer' && plan?.reason === 'ambiguous'
@@ -497,4 +541,23 @@ function formatEntityTime(value: unknown, utcOffset: unknown) {
     minute: '2-digit',
     timeZone: 'UTC',
   }).format(new Date(timestamp + minutes * 60000))
+}
+
+function formatCalendarArgsAtOffset(
+  args: Record<string, unknown>,
+  utcOffset: unknown,
+): Record<string, unknown> {
+  const match = String(utcOffset ?? '').match(/^([+-])(\d{2}):(\d{2})$/)
+  if (!match) return args
+  const offsetMinutes =
+    (match[1] === '+' ? 1 : -1) * (Number(match[2]) * 60 + Number(match[3]))
+  const format = (value: unknown) => {
+    if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return value
+    return `${new Date(Date.parse(value) + offsetMinutes * 60000).toISOString().slice(0, 19)}${match[0]}`
+  }
+  return {
+    ...args,
+    ...(typeof args.start === 'string' ? { start: format(args.start) } : {}),
+    ...(typeof args.end === 'string' ? { end: format(args.end) } : {}),
+  }
 }

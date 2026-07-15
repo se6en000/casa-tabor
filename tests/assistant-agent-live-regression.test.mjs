@@ -30,6 +30,8 @@ test('live agent regression covers natural calendar and grocery conversations', 
 
 test('live agent regression executes confirmed calendar continuity while keeping grocery proposals dry', () => {
   assert.match(script, /dry_run: false/)
+  assert.match(script, /currentDate: new Date\(\)\.toISOString\(\)/)
+  assert.doesNotMatch(script, /currentDate: new Date\(\)\.toLocaleString/)
   assert.match(script, /execute-ai-action/)
   assert.match(script, /confirmedCreate\.response\.tool/)
   assert.match(script, /confirmedCorrection\.response\.tool/)

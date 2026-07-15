@@ -78,6 +78,13 @@ test('calendar parser supports ordinary flexible read language', () => {
   assert.equal(parseCalendarLanguage("Is that the only thing that's happening Thursday afternoon?")?.intent, 'calendar.list')
 })
 
+test('rest-of-day language maps after lunch to an afternoon agenda', () => {
+  const frame = parseCalendarLanguage("Okay, so what's the rest of Thursday looking like after lunch?")
+  assert.equal(frame?.intent, 'calendar.list')
+  assert.equal(frame?.slots.temporalScope.weekday, 'thursday')
+  assert.equal(frame?.slots.temporalScope.dayPart, 'afternoon')
+})
+
 test('production-style day questions and omission challenges stay deterministic', () => {
   const initial = parseCalendarLanguage('what appointments are happening on sunday')
   assert.equal(initial?.intent, 'calendar.list')

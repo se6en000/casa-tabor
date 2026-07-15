@@ -9,6 +9,9 @@ const assistant = readFileSync(
 
 test('agent reads are feature flagged, sampled, and limited to read surfaces', () => {
   assert.match(assistant, /agent_read_config/)
+  assert.match(assistant, /agent_runtime_config/)
+  assert.match(assistant, /kill_switch/)
+  assert.match(assistant, /default_with_kill_switch/)
   assert.match(assistant, /agentReadConfig\?\.enabled === true/)
   assert.match(assistant, /Math\.random\(\) < agentReadRate/)
   assert.match(assistant, /AGENT_GENERAL_PAGES\.has/)

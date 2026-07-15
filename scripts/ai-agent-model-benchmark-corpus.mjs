@@ -183,8 +183,9 @@ export const MODEL_BENCHMARK_SCENARIOS = Object.freeze([
     category: 'create',
     page: 'calendar',
     messages: user('uh remind me—well make an event—call the vet friday at 2'),
+    expectedKinds: ['clarify'],
     expectedTools: ['calendar.create'],
-    expectation: 'Handle a self-correction from reminder language to an event.',
+    expectation: 'Handle a reminder-to-event self-correction without guessing whether bare 2 means AM or PM.',
     validate(plan) {
       return /vet/i.test(String(plan?.args?.title ?? '')) &&
         plan?.args?.start === '2026-07-17T14:00:00-04:00'
@@ -313,8 +314,8 @@ export const MODEL_BENCHMARK_SCENARIOS = Object.freeze([
       { role: 'user', content: 'Okay, leave that alone. What time is the dentist Thursday?' },
     ],
     context: { authoritativeEntities: [dentistMorning, milk, eggs] },
-    expectedTools: ['calendar.search'],
-    expectation: 'Follow an explicit topic switch without mutating the grocery list.',
+    expectedTools: ['calendar.search', 'calendar.get_event'],
+    expectation: 'Follow an explicit topic switch with an exact authoritative calendar read and no grocery mutation.',
   }),
   scenario({
     key: 'targetless-fragment',

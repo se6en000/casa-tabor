@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -48,4 +49,18 @@ test('core benchmark excludes cooking while retaining calendar and grocery safet
   assert.ok(core.some((item) => item.key === 'ambiguous-calendar-delete'))
   assert.ok(core.some((item) => item.key === 'duplicate-grocery-target'))
   assert.ok(core.every((item) => item.page !== 'cooking'))
+})
+
+test('benchmark gates the production semantic endpoints', () => {
+  const source = readFileSync(
+    new URL('../scripts/ai-agent-model-benchmark.mjs', import.meta.url),
+    'utf8',
+  )
+  assert.match(source, /ai-agent-read/)
+  assert.match(source, /ai-agent-write/)
+  assert.match(source, /production-semantic-endpoints/)
+  assert.match(source, /2026-07-14T13:00:00\.000Z/)
+  assert.match(source, /release_gate_passed/)
+  assert.match(source, /process\.exitCode = 1/)
+  assert.doesNotMatch(source, /functions\/v1\/ai-agent-shadow/)
 })

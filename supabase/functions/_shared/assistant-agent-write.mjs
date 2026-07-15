@@ -25,6 +25,7 @@ export function adaptAgentGroceryUpdate(args) {
     item_id: args.id,
     expected_updated_at: args.expected_updated_at,
   }
+
   if (typeof args.checked === 'boolean' && typeof args.quantity !== 'string') {
     return {
       tool: 'check_grocery_item',
@@ -44,6 +45,31 @@ export function adaptAgentGroceryUpdate(args) {
   return null
 }
 
+export function normalizeAgentGroceryAddArgs(args) {
+  if (!args || typeof args !== 'object' || !Array.isArray(args.items)) return args
+  return {
+    ...args,
+    items: args.items.map((item) => {
+      if (!item || typeof item !== 'object') return item
+      const normalized = { ...item }
+      const quantity = normalizeQuantity(item.quantity)
+      const unit = typeof item.unit === 'string' && !/^(?:thing|things|item|items)$/i.test(item.unit.trim())
+        ? item.unit.trim()
+        : null
+      const category = typeof item.category === 'string' && !/^for\s+/i.test(item.category.trim())
+        ? item.category.trim()
+        : null
+      if (quantity) normalized.quantity = quantity
+      else delete normalized.quantity
+      if (unit) normalized.unit = unit
+      else delete normalized.unit
+      if (category) normalized.category = category
+      else delete normalized.category
+      return normalized
+    }),
+  }
+}
+
 function isExactTargetUnambiguous(entities, args, activeEntity, type, labelKey) {
   if (!Array.isArray(entities) || !args || typeof args !== 'object') return false
   const target = entities.find((entity) => entity?.type === type && entity?.id === args.id)
@@ -60,4 +86,26 @@ function normalizeTitle(value) {
   return typeof value === 'string'
     ? value.trim().replace(/\s+/g, ' ').toLocaleLowerCase()
     : ''
+}
+
+function normalizeQuantity(value) {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().toLowerCase()
+  const numberWords = {
+    one: '1',
+    two: '2',
+    three: '3',
+    four: '4',
+    five: '5',
+    six: '6',
+    seven: '7',
+    eight: '8',
+    nine: '9',
+    ten: '10',
+    eleven: '11',
+    twelve: '12',
+  }
+  const genericCount = normalized.match(/^(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d+(?:\.\d+)?)\s+(?:thing|things|item|items)$/)
+  if (genericCount) return numberWords[genericCount[1]] ?? genericCount[1]
+  return numberWords[normalized] ?? normalized
 }

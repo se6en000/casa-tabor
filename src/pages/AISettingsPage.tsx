@@ -479,7 +479,7 @@ export default function AISettingsPage() {
     const traceId = `regression-${Date.now().toString(36)}`
     const syntheticContext = {
       page: 'app',
-      currentDate: now.toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }),
+      currentDate: now.toISOString(),
       utcOffset: '-04:00',
       homeCity: 'West Palm Beach',
       ambiguousTimeDefaultMeridiem: 'PM',

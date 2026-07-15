@@ -73,7 +73,7 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[]) {
   return {
     page: ctx.page,
     assistant_mode: ctx.assistantMode ?? 'general',
-    currentDate: now.toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }),
+    currentDate: now.toISOString(),
     utcOffset,
     family: ctx.family.map(f => ({ id: f.id, name: f.name })),
     homeCity: ctx.homeCity,

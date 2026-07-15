@@ -30,6 +30,15 @@ test('active event shifts preserve duration and support relational scheduling', 
   const after = resolveActiveCalendarMutation('Put it immediately after the meeting instead.', event, [event, meeting], { utcOffset: '-04:00' })
   assert.equal(after.args.start, meeting.end_time)
   assert.equal(after.args.end, '2026-07-16T20:30:00.000Z')
+
+  const bumped = resolveActiveCalendarMutation(
+    'Can you bump that back half an hour? Same length.',
+    { ...event, start_time: '2026-07-17T21:00:00.000Z', end_time: '2026-07-17T22:30:00.000Z' },
+    [],
+    { utcOffset: '-04:00' },
+  )
+  assert.equal(bumped.args.start, '2026-07-17T21:30:00.000Z')
+  assert.equal(bumped.args.end, '2026-07-17T23:00:00.000Z')
 })
 
 test('active event moves surface conflicts and recurring edit limits', () => {
