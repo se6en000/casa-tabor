@@ -330,7 +330,7 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames) {
       key: 'calendar-delete',
       page: 'calendar',
       assistantMode: 'general',
-      conversationState: eventConversationState(eventBySuffix('Birthday dinner'), now),
+      conversationState: eventConversationState(eventBySuffix('Library story time'), now),
       steps: [
         { text: 'delete that one.', expect: { type: 'write', tool: 'delete_event' } },
         { text: 'what time was birthday dinner again?', expect: { type: 'text' } },
