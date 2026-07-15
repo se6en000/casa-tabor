@@ -12,6 +12,7 @@ import {
 import { cn } from '../utils/cn'
 import BounceScroll from '../components/shared/BounceScroll'
 import { Button, IconButton } from '../components/ui'
+import { RecurrenceOperationsCard } from '../components/settings/RecurrenceOperationsCard'
 
 export default function CalendarsSettingsPage() {
   const { data: members, isLoading, refetch } = useCalendarConnections()
@@ -92,12 +93,13 @@ export default function CalendarsSettingsPage() {
         <Button
           onClick={() => syncNow.mutate(undefined)}
           disabled={syncNow.isPending}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-button border border-casa-border text-body-sm font-semibold text-casa-navy hover:bg-casa-surface disabled:opacity-50 transition-colors"
+          variant="secondary"
         >
           <RefreshCw size={14} className={cn(syncNow.isPending && 'animate-spin')} />
           Sync all now
         </Button>
       </div>
+      <RecurrenceOperationsCard />
     </div>
     </BounceScroll>
   )
