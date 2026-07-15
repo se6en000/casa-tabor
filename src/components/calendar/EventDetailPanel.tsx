@@ -371,7 +371,7 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 relative">
+    <div className={cn('relative flex flex-wrap items-center gap-2', showPicker && 'z-popover')}>
       {sorted.map((m) => {
         const isPrimary = m.role === 'primary'
         const isLoading = saving === m.id || saving === m.family_member?.id
@@ -513,7 +513,7 @@ function PanelHeader({
 
   return (
     <div
-      className={cn('relative overflow-hidden px-7 pb-5 pt-6', isBirthday && 'bg-gradient-to-br from-casa-accent-subtle via-transparent to-casa-bg')}
+      className={cn('relative overflow-visible px-7 pb-5 pt-6', isBirthday && 'bg-gradient-to-br from-casa-accent-subtle via-transparent to-casa-bg')}
       style={{ borderBottom: `1px solid ${S.borderSoft}` }}
     >
       {isBirthday && <BirthdayCardDecoration className="opacity-70" />}
