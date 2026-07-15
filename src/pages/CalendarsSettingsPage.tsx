@@ -139,6 +139,9 @@ function MemberRow({
                 {c.last_sync_error && (
                   <span className="text-casa-error"> · {c.last_sync_error}</span>
                 )}
+                {c.access_mode && (
+                  <span> · {c.access_mode === 'writable' ? 'Casa write target' : 'read-only source'}</span>
+                )}
               </>
             ) : (
               'Not connected'
@@ -148,7 +151,22 @@ function MemberRow({
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
-        {c ? (
+        {c?.reauthorization_required ? (
+          <>
+            <Button variant="strong" size="sm" onClick={onConnect} disabled={isBusy}>
+              Reconnect
+            </Button>
+            <IconButton
+              onClick={onDisconnect}
+              disabled={isBusy}
+              variant="danger"
+              size="sm"
+              icon={<Unlink size={14} />}
+              aria-label="Disconnect"
+              title="Disconnect"
+            />
+          </>
+        ) : c ? (
           <>
             <IconButton
               onClick={onSync}

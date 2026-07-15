@@ -100,13 +100,12 @@ export interface ListEventsResult {
 
 export async function listCalendarEvents(opts: {
   accessToken: string
-  calendarId?: string
+  calendarId: string
   syncToken?: string
   timeMin?: string
   timeMax?: string
   pageToken?: string
 }): Promise<ListEventsResult> {
-  const calendarId = opts.calendarId ?? 'primary'
   const params = new URLSearchParams({ singleEvents: 'true', maxResults: '250' })
   if (opts.syncToken) {
     params.set('syncToken', opts.syncToken)
@@ -118,7 +117,7 @@ export async function listCalendarEvents(opts: {
   if (opts.pageToken) params.set('pageToken', opts.pageToken)
 
   const res = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(opts.calendarId)}/events?${params}`,
     { headers: { authorization: `Bearer ${opts.accessToken}` } },
   )
   if (!res.ok) throw new Error(`Calendar list failed: ${res.status} ${await res.text()}`)

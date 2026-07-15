@@ -1,7 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { refreshAccessToken, patchGoogleEvent, createGoogleEvent } from '../_shared/google.ts'
-
-const TARGET_SYNC_GOOGLE_EMAIL = (Deno.env.get('GOOGLE_SYNC_TARGET_EMAIL') ?? 'jacobrtabor@gmail.com').toLowerCase()
+import { patchGoogleEvent, createGoogleEvent } from '../_shared/google.ts'
+import { loadWritableGoogleConnection, markGoogleConnectionHealthy } from '../_shared/google-connection.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -21,7 +20,7 @@ Deno.serve(async (req) => {
   // Load event + enrichment
   const { data: event, error: evErr } = await sb
     .from('events')
-    .select('id, title, description, start_time, end_time, all_day, location_name, address, google_event_id, google_calendar_id, source_member_id, event_enrichments(*), event_members(role, family_members(name))')
+    .select('id, title, description, start_time, end_time, all_day, event_type, location_name, address, google_event_id, google_calendar_id, google_connection_id, source_member_id, event_enrichments(*), event_members(role, family_members(name))')
     .eq('id', event_id)
     .single()
 
@@ -31,31 +30,10 @@ Deno.serve(async (req) => {
   // Reminders stay in Casa only — never push to Google Calendar
   if (event.event_type === 'reminder') return new Response(JSON.stringify({ ok: true, skipped: 'reminder' }), { headers: { ...CORS, 'content-type': 'application/json' } })
 
-  const { data: tok } = await sb
-    .from('google_tokens')
-    .select('*')
-    .eq('google_email', TARGET_SYNC_GOOGLE_EMAIL)
-    .maybeSingle()
-  if (!tok) {
-    return new Response(JSON.stringify({ error: `no google token for configured sync account: ${TARGET_SYNC_GOOGLE_EMAIL}` }), {
-      status: 500,
-      headers: { ...CORS, 'content-type': 'application/json' },
-    })
-  }
-  const memberId = tok.family_member_id
-
-  // Refresh token if expired
-  let accessToken = tok.access_token
-  if (tok.expires_at && new Date(tok.expires_at) < new Date(Date.now() + 60_000)) {
-    const clientId = Deno.env.get('GOOGLE_CLIENT_ID')!
-    const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')!
-    const t = await refreshAccessToken({ refreshToken: tok.refresh_token, clientId, clientSecret })
-    accessToken = t.access_token
-    await sb.from('google_tokens').update({ access_token: t.access_token, expires_at: new Date(Date.now() + t.expires_in * 1000).toISOString(), updated_at: new Date().toISOString() }).eq('family_member_id', memberId)
-  }
+  const { connection, accessToken } = await loadWritableGoogleConnection(sb)
 
   const enr = Array.isArray(event.event_enrichments) ? event.event_enrichments[0] : event.event_enrichments
-  const calendarId = event.google_calendar_id ?? 'primary'
+  const calendarId = connection.calendar_id
 
   // ── Build Google Calendar patch ──
   // Send all editable fields: title, times, location, description+enrichment
@@ -134,7 +112,8 @@ Deno.serve(async (req) => {
       patch,
     })
     await sb.from('events').update({
-      source_member_id: memberId,
+      google_connection_id: connection.id,
+      source_member_id: connection.family_member_id,
       google_calendar_id: calendarId,
       updated_at: new Date().toISOString(),
     }).eq('id', event_id)
@@ -157,12 +136,14 @@ Deno.serve(async (req) => {
     await sb.from('events').update({
       google_event_id: created.id,
       google_calendar_id: calendarId,
-      source_member_id: memberId,
+      google_connection_id: connection.id,
+      source_member_id: connection.family_member_id,
       updated_at: new Date().toISOString(),
     }).eq('id', event_id)
   }
+  await markGoogleConnectionHealthy(sb, connection.id)
 
-  return new Response(JSON.stringify({ ok: true }), { headers: { ...CORS, 'content-type': 'application/json' } })
+  return new Response(JSON.stringify({ ok: true, connection_id: connection.id }), { headers: { ...CORS, 'content-type': 'application/json' } })
   } catch (err) {
     const msg = (err as Error).message ?? String(err)
     console.error('[push-to-google] error:', msg)

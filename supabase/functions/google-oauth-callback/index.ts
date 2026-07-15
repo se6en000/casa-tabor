@@ -1,4 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { googleConnectionPolicy } from '../_shared/google-connection-core.mjs'
+
+const TARGET_SYNC_GOOGLE_EMAIL = (Deno.env.get('GOOGLE_SYNC_TARGET_EMAIL') ?? 'jacobrtabor@gmail.com').toLowerCase()
 
 Deno.serve(async (req) => {
   const url = new URL(req.url)
@@ -34,8 +37,48 @@ Deno.serve(async (req) => {
     // Enable Gmail scan if gmail scope was granted (either via gmail flow or standard connect)
     const hasGmailScope = (tokens.scope ?? '').includes('gmail') || includesGmail
     if (hasGmailScope) tokenRow.gmail_scan_enabled = true
-    await sb.from('google_tokens').upsert(tokenRow)
-    await sb.from('family_members').update({ email, google_calendar_id: email }).eq('id', familyMemberId)
+    const policy = googleConnectionPolicy(String(email), TARGET_SYNC_GOOGLE_EMAIL)
+    const normalizedEmail = policy.googleEmail
+    const { error: tokenError } = await sb.from('google_tokens').upsert({
+      ...tokenRow,
+      google_email: normalizedEmail,
+    })
+    if (tokenError) throw new Error(`Could not store Google authorization: ${tokenError.message}`)
+
+    const now = new Date().toISOString()
+    const { error: disableError } = await sb
+      .from('calendar_connections')
+      .update({
+        is_enabled: false,
+        health_status: 'disabled',
+        health_checked_at: now,
+      })
+      .eq('family_member_id', familyMemberId)
+      .neq('google_email', normalizedEmail)
+      .eq('is_enabled', true)
+    if (disableError) throw new Error(`Could not replace prior calendar connection: ${disableError.message}`)
+
+    const { error: connectionError } = await sb.from('calendar_connections').upsert({
+      family_member_id: familyMemberId,
+      google_email: normalizedEmail,
+      calendar_id: policy.calendarId,
+      access_mode: policy.accessMode,
+      adoption_policy: policy.adoptionPolicy,
+      is_enabled: true,
+      health_status: 'connected',
+      health_checked_at: now,
+      last_sync_error: null,
+      last_error_at: null,
+      last_error_code: null,
+      updated_at: now,
+    }, { onConflict: 'google_email,calendar_id' })
+    if (connectionError) throw new Error(`Could not normalize calendar connection: ${connectionError.message}`)
+
+    const { error: memberError } = await sb
+      .from('family_members')
+      .update({ email: normalizedEmail, google_calendar_id: normalizedEmail })
+      .eq('id', familyMemberId)
+    if (memberError) throw new Error(`Could not update family member connection: ${memberError.message}`)
     const returnPath = '/settings/google'
     return redir(APP.replace(/\/settings\/[^?]*/, returnPath) + '?connected=' + familyMemberId + (includesGmail ? '&gmail=1' : ''))
   } catch (err) {

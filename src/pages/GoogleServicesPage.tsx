@@ -13,7 +13,7 @@ import {
   RefreshCw, Unlink,
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button } from '../components/ui'
+import { Alert, Button, Chip } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 import { formatDistanceToNow, format } from 'date-fns'
 import { supabase } from '../lib/supabase'
@@ -30,6 +30,13 @@ interface GoogleStatus {
   last_sync_at: string | null
   last_sync_error: string | null
   gmail_scan_enabled: boolean
+  connection_id: string | null
+  calendar_id: string | null
+  access_mode: 'writable' | 'read_only' | null
+  adoption_policy: 'automatic' | 'explicit' | 'none' | null
+  is_enabled: boolean | null
+  health_status: 'connected' | 'healthy' | 'degraded' | 'reauthorization_required' | 'disabled' | null
+  reauthorization_required: boolean
 }
 
 interface MemberWithStatus extends FamilyMember {
@@ -244,7 +251,7 @@ function MemberCard({
 }) {
   const s = member.status
   const isConnected = !!s?.google_email
-  const calendarActive = isConnected
+  const calendarActive = isConnected && s?.is_enabled !== false && !s?.reauthorization_required
   const gmailActive = isConnected && !!s?.gmail_scan_enabled
   const [wantGmail, setWantGmail] = useState(true)
 
@@ -261,10 +268,23 @@ function MemberCard({
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-casa-navy text-body leading-none">{member.name}</p>
           {s?.google_email && (
-            <p className="text-caption text-casa-muted mt-0.5 truncate">{s.google_email}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <p className="text-caption text-casa-muted truncate">{s.google_email}</p>
+              {s.access_mode === 'writable' && <Chip tone="accent">Casa write target</Chip>}
+              {s.access_mode === 'read_only' && <Chip tone="neutral">Read-only source</Chip>}
+            </div>
           )}
         </div>
-        {isConnected && (
+        {isConnected && s?.reauthorization_required ? (
+          <Button
+            variant="strong"
+            size="sm"
+            onClick={() => onConnect(gmailActive)}
+            disabled={isBusy}
+          >
+            Reconnect
+          </Button>
+        ) : isConnected ? (
           <Button
             variant="ghost"
             size="sm"
@@ -276,7 +296,7 @@ function MemberCard({
           >
             Disconnect
           </Button>
-        )}
+        ) : null}
       </div>
 
       {isConnected ? (
@@ -291,14 +311,14 @@ function MemberCard({
               ? (s?.last_sync_at
                   ? `synced ${formatDistanceToNow(new Date(s.last_sync_at))} ago`
                   : `connected ${format(new Date(s!.connected_at), 'MMM d, h:mm a')}`)
-              : 'Not active'}
+              : (s?.reauthorization_required ? 'Reconnect required' : 'Not active')}
             errorText={s?.last_sync_error ?? undefined}
             action={
               <Button
                 variant="subtle"
                 size="sm"
                 onClick={onSyncCalendar}
-                disabled={isBusy}
+                disabled={isBusy || !calendarActive}
                 title="Sync now"
                 leadingIcon={<RefreshCw size={14} className={isBusy ? 'animate-spin' : ''} />}
               >
@@ -306,6 +326,11 @@ function MemberCard({
               </Button>
             }
           />
+          <p className="px-3 text-caption text-casa-muted">
+            {s?.access_mode === 'writable'
+              ? 'Casa-created and adopted events project automatically to this calendar.'
+              : 'Events from this calendar remain read-only until explicitly adopted into Casa.'}
+          </p>
 
           {/* Gmail row */}
           <ServiceRow

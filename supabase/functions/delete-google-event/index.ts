@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { refreshAccessToken, deleteGoogleEvent } from '../_shared/google.ts'
+import { deleteGoogleEvent } from '../_shared/google.ts'
+import { resolveGoogleConnection, markGoogleConnectionHealthy, type CalendarConnection } from '../_shared/google-connection.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -17,7 +18,7 @@ Deno.serve(async (req) => {
   // Load event — only need Google IDs and source member
   const { data: event, error: evErr } = await sb
     .from('events')
-    .select('id, google_event_id, google_calendar_id, source_member_id')
+    .select('id, google_event_id, google_calendar_id, google_connection_id, source_member_id')
     .eq('id', event_id)
     .single()
 
@@ -27,36 +28,24 @@ Deno.serve(async (req) => {
     return ok({ skipped: 'no google_event_id' })
   }
 
-  const memberId = event.source_member_id
-  if (!memberId) return ok({ skipped: 'no source_member_id' })
-
-  const { data: tok } = await sb
-    .from('google_tokens')
+  if (!event.google_connection_id) return ok({ skipped: 'no google_connection_id' })
+  const { data: connection, error: connectionError } = await sb
+    .from('calendar_connections')
     .select('*')
-    .eq('family_member_id', memberId)
-    .single()
-
-  if (!tok) return ok({ skipped: 'no google token for member' })
-
-  // Refresh token if expired
-  let accessToken = tok.access_token
-  if (tok.expires_at && new Date(tok.expires_at) < new Date(Date.now() + 60_000)) {
-    const t = await refreshAccessToken({
-      refreshToken: tok.refresh_token,
-      clientId: Deno.env.get('GOOGLE_CLIENT_ID')!,
-      clientSecret: Deno.env.get('GOOGLE_CLIENT_SECRET')!,
-    })
-    accessToken = t.access_token
-    await sb.from('google_tokens').update({
-      access_token: t.access_token,
-      expires_at: new Date(Date.now() + t.expires_in * 1000).toISOString(),
-      updated_at: new Date().toISOString(),
-    }).eq('family_member_id', memberId)
+    .eq('id', event.google_connection_id)
+    .maybeSingle()
+  if (connectionError) return err(connectionError.message)
+  if (!connection) return ok({ skipped: 'google connection no longer exists' })
+  if (connection.access_mode !== 'writable') {
+    return ok({ skipped: 'read-only Google source is never deleted by Casa' })
   }
-
-  const calendarId = event.google_calendar_id ?? 'primary'
-
-  await deleteGoogleEvent({ accessToken, calendarId, eventId: event.google_event_id })
+  const resolved = await resolveGoogleConnection(sb, connection as CalendarConnection)
+  await deleteGoogleEvent({
+    accessToken: resolved.accessToken,
+    calendarId: resolved.connection.calendar_id,
+    eventId: event.google_event_id,
+  })
+  await markGoogleConnectionHealthy(sb, resolved.connection.id)
 
   return ok({ deleted: event.google_event_id })
 })

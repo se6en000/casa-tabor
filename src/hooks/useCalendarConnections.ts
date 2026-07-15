@@ -8,6 +8,17 @@ export interface ConnectionStatus {
   connected_at: string
   last_sync_at: string | null
   last_sync_error: string | null
+  connection_id: string | null
+  calendar_id: string | null
+  access_mode: 'writable' | 'read_only' | null
+  adoption_policy: 'automatic' | 'explicit' | 'none' | null
+  is_enabled: boolean | null
+  health_status: 'connected' | 'healthy' | 'degraded' | 'reauthorization_required' | 'disabled' | null
+  health_checked_at: string | null
+  last_success_at: string | null
+  last_error_at: string | null
+  last_error_code: string | null
+  reauthorization_required: boolean
 }
 
 export interface MemberWithConnection extends FamilyMember {
@@ -29,7 +40,7 @@ export function useCalendarConnections() {
       if (cErr) throw cErr
 
       const byId = new Map(
-        (connections ?? []).map((c: any) => [c.family_member_id as string, c as ConnectionStatus]),
+        (connections ?? []).map((connection: ConnectionStatus) => [connection.family_member_id, connection]),
       )
       return (members ?? []).map((m: FamilyMember) => ({
         ...m,

@@ -63,6 +63,7 @@ export interface CalendarEvent {
   lng: number | null
   google_event_id: string | null
   google_calendar_id: string | null
+  google_connection_id?: string | null
   source_member_id: string | null
   status: EventStatus
   is_enriched: boolean

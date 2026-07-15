@@ -1,7 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { refreshAccessToken, createGoogleEvent } from '../_shared/google.ts'
-
-const TARGET_SYNC_GOOGLE_EMAIL = (Deno.env.get('GOOGLE_SYNC_TARGET_EMAIL') ?? 'jacobrtabor@gmail.com').toLowerCase()
+import { createGoogleEvent } from '../_shared/google.ts'
+import { loadWritableGoogleConnection, markGoogleConnectionHealthy } from '../_shared/google-connection.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -31,36 +30,8 @@ Deno.serve(async (req) => {
   // Reminders stay in Casa only — never push to Google Calendar
   if (event.event_type === 'reminder') return new Response(JSON.stringify({ ok: true, skipped: 'reminder' }), { headers: { ...CORS, 'content-type': 'application/json' } })
 
-  const { data: tok } = await sb
-    .from('google_tokens')
-    .select('*')
-    .eq('google_email', TARGET_SYNC_GOOGLE_EMAIL)
-    .maybeSingle()
-  if (!tok) {
-    return new Response(JSON.stringify({ error: `no google token for configured sync account: ${TARGET_SYNC_GOOGLE_EMAIL}` }), {
-      status: 500,
-      headers: { ...CORS, 'content-type': 'application/json' },
-    })
-  }
-  const resolvedMemberId = tok.family_member_id
-
-  // Refresh token if needed
-  let accessToken = tok.access_token
-  if (tok.expires_at && new Date(tok.expires_at) < new Date(Date.now() + 60_000)) {
-    const t = await refreshAccessToken({
-      refreshToken: tok.refresh_token,
-      clientId: Deno.env.get('GOOGLE_CLIENT_ID')!,
-      clientSecret: Deno.env.get('GOOGLE_CLIENT_SECRET')!,
-    })
-    accessToken = t.access_token
-    await sb.from('google_tokens').update({
-      access_token: t.access_token,
-      expires_at: new Date(Date.now() + t.expires_in * 1000).toISOString(),
-      updated_at: new Date().toISOString(),
-    }).eq('family_member_id', resolvedMemberId)
-  }
-
-  const calendarId = tok.calendar_id ?? 'primary'
+  const { connection, accessToken } = await loadWritableGoogleConnection(sb)
+  const calendarId = connection.calendar_id
 
   // Build location string
   const locationParts = [event.location_name, event.address].filter((p: string | null, i: number, arr: (string | null)[]) => p && arr.indexOf(p) === i)
@@ -106,11 +77,13 @@ Deno.serve(async (req) => {
   await sb.from('events').update({
     google_event_id: created.id,
     google_calendar_id: calendarId,
-    source_member_id: resolvedMemberId,
+    google_connection_id: connection.id,
+    source_member_id: connection.family_member_id,
     updated_at: new Date().toISOString(),
   }).eq('id', event_id)
+  await markGoogleConnectionHealthy(sb, connection.id)
 
-  return new Response(JSON.stringify({ ok: true, google_event_id: created.id }), {
+  return new Response(JSON.stringify({ ok: true, google_event_id: created.id, connection_id: connection.id }), {
     headers: { ...CORS, 'content-type': 'application/json' },
   })
 })

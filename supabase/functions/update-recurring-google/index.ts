@@ -1,7 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { refreshAccessToken, createGoogleEvent, patchGoogleEvent } from '../_shared/google.ts'
-
-const TARGET_SYNC_GOOGLE_EMAIL = (Deno.env.get('GOOGLE_SYNC_TARGET_EMAIL') ?? 'jacobrtabor@gmail.com').toLowerCase()
+import { createGoogleEvent, patchGoogleEvent } from '../_shared/google.ts'
+import { loadWritableGoogleConnection, markGoogleConnectionHealthy } from '../_shared/google-connection.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -29,37 +28,15 @@ Deno.serve(async (req) => {
     // Load master event
     const { data: master, error: evErr } = await sb
       .from('events')
-      .select('id, title, description, start_time, end_time, all_day, location_name, address, rrule, google_event_id, google_calendar_id, source_member_id, event_type')
+      .select('id, title, description, start_time, end_time, all_day, location_name, address, rrule, google_event_id, google_calendar_id, google_connection_id, source_member_id, event_type')
       .eq('id', master_event_id)
       .single()
 
     if (evErr || !master) return err(evErr?.message ?? 'master event not found', 404)
     if (master.event_type === 'reminder') return ok({ skipped: 'reminder' })
 
-    const { data: tok } = await sb
-      .from('google_tokens')
-      .select('*')
-      .eq('google_email', TARGET_SYNC_GOOGLE_EMAIL)
-      .maybeSingle()
-    if (!tok) return err(`no google token for configured sync account: ${TARGET_SYNC_GOOGLE_EMAIL}`)
-
-    // Refresh if expiring within 60s
-    let accessToken = tok.access_token
-    if (tok.expires_at && new Date(tok.expires_at) < new Date(Date.now() + 60_000)) {
-      const t = await refreshAccessToken({
-        refreshToken: tok.refresh_token,
-        clientId: Deno.env.get('GOOGLE_CLIENT_ID')!,
-        clientSecret: Deno.env.get('GOOGLE_CLIENT_SECRET')!,
-      })
-      accessToken = t.access_token
-      await sb.from('google_tokens').update({
-        access_token: t.access_token,
-        expires_at: new Date(Date.now() + t.expires_in * 1000).toISOString(),
-        updated_at: new Date().toISOString(),
-      }).eq('family_member_id', tok.family_member_id)
-    }
-
-    const calendarId = master.google_calendar_id ?? (tok as Record<string, string>).calendar_id ?? 'primary'
+    const { connection, accessToken } = await loadWritableGoogleConnection(sb)
+    const calendarId = connection.calendar_id
     const isAllDay = master.all_day
 
     // Build start/end for Google
@@ -97,10 +74,12 @@ Deno.serve(async (req) => {
           patch: eventBody,
         })
         await sb.from('events').update({
-          source_member_id: tok.family_member_id,
+          google_connection_id: connection.id,
+          source_member_id: connection.family_member_id,
           google_calendar_id: calendarId,
           updated_at: new Date().toISOString(),
         }).eq('id', master_event_id)
+        await markGoogleConnectionHealthy(sb, connection.id)
         console.log('[update-recurring-google] patched:', master.google_event_id)
         return ok({ patched: master.google_event_id })
       } catch (errPatch) {
@@ -114,9 +93,11 @@ Deno.serve(async (req) => {
         await sb.from('events').update({
           google_event_id: created.id,
           google_calendar_id: calendarId,
-          source_member_id: tok.family_member_id,
+          google_connection_id: connection.id,
+          source_member_id: connection.family_member_id,
           updated_at: new Date().toISOString(),
         }).eq('id', master_event_id)
+        await markGoogleConnectionHealthy(sb, connection.id)
         console.log('[update-recurring-google] recreated on target account:', created.id)
         return ok({ recreated: created.id })
       }
@@ -130,9 +111,11 @@ Deno.serve(async (req) => {
       await sb.from('events').update({
         google_event_id: created.id,
         google_calendar_id: calendarId,
-        source_member_id: tok.family_member_id,
+        google_connection_id: connection.id,
+        source_member_id: connection.family_member_id,
         updated_at: new Date().toISOString(),
       }).eq('id', master_event_id)
+      await markGoogleConnectionHealthy(sb, connection.id)
       console.log('[update-recurring-google] created:', created.id)
       return ok({ created: created.id })
     }
