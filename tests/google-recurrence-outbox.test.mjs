@@ -60,7 +60,7 @@ test('worker is service-only, dark-launch gated, and uses the canonical serializ
   assert.match(worker, /Service-role authorization required/)
   assert.match(worker, /google_sync_v2_disabled/)
   assert.match(worker, /serializeGoogleRecurrenceProjection/)
-  assert.match(worker, /recurrence_event_detail_bundle/)
+  assert.match(worker, /recurrence_build_reusable_patch/)
   assert.match(worker, /Read-only imported series cannot be projected/)
   assert.match(worker, /recurrence_finish_google_sync_operation/)
   assert.match(worker, /markGoogleConnectionFailure/)

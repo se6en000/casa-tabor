@@ -27,7 +27,7 @@ export const RECURRENCE_V2_REGRESSION_MATRIX = [
   {
     area: 'Google contract',
     cases: ['master import', 'exception import', 'full fidelity projection', 'explicit invitations', 'bounded retries', 'split saga', 'echo identity'],
-    evidence: 'tests/google-recurrence-outbox.test.mjs',
+    evidence: 'scripts/google-recurrence-projection-integration.mjs',
   },
   {
     area: 'responsive UX',

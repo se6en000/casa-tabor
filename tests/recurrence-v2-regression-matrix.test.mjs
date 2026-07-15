@@ -46,6 +46,7 @@ test('release gate runs automated tests, production build, and reversible live f
   assert.match(gate, /\['TypeScript and production build', 'npm', \['run', 'build'\]\]/)
   assert.match(gate, /recurrence-v2-command-integration\.mjs/)
   assert.match(gate, /recurrence-v2-materializer-integration\.mjs/)
+  assert.match(gate, /google-recurrence-projection-integration\.mjs/)
   assert.match(gate, /if \(result\.status !== 0\) process\.exit/)
   assert.equal(packageJson.scripts['qa:recurrence-v2'], 'node scripts/recurrence-v2-release-gate.mjs')
 })

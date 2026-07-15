@@ -92,7 +92,7 @@ async function loadProjectionContext(supabase: ReturnType<typeof createClient>, 
     if (error) throw error
     event = data
   }
-  const { data: bundle, error: bundleError } = await supabase.rpc('recurrence_event_detail_bundle', {
+  const { data: bundle, error: bundleError } = await supabase.rpc('recurrence_build_reusable_patch', {
     p_event_id: event.id,
   })
   if (bundleError) throw bundleError
@@ -151,7 +151,7 @@ async function executeOperation(
         .eq('id', parent.template_event_id)
         .single()
       if (parentEventError) throw parentEventError
-      const { data: parentBundle, error: parentBundleError } = await supabase.rpc('recurrence_event_detail_bundle', {
+      const { data: parentBundle, error: parentBundleError } = await supabase.rpc('recurrence_build_reusable_patch', {
         p_event_id: parentEvent.id,
       })
       if (parentBundleError) throw parentBundleError
@@ -254,7 +254,13 @@ Deno.serve(async (req) => {
       await markGoogleConnectionHealthy(supabase, operation.connection_id)
       results.push({ id: operation.id, status: 'succeeded', ...result })
     } catch (cause) {
-      const error = cause instanceof Error ? cause : new Error(String(cause))
+      const error = cause instanceof Error
+        ? cause
+        : new Error(
+            cause && typeof cause === 'object' && 'message' in cause
+              ? String(cause.message)
+              : JSON.stringify(cause),
+          )
       const retryable = error instanceof GoogleApiError && isRetryableGoogleStatus(error.status)
       const { error: finishError } = await supabase.rpc('recurrence_finish_google_sync_operation', {
         p_operation_id: operation.id,
