@@ -2805,7 +2805,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       contents,
       generation_config: {
         temperature: 0.4,
-        max_output_tokens: intentRouting.profile === 'recipe' ? 1024 : 2048,
+        max_output_tokens: 2048,
       },
       ...(primaryTools.length > 0 ? {
         tools: primaryTools,
@@ -2901,6 +2901,12 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
       // Check for safety/finish reason blocks
       const finishReason = candidate.finishReason
+      if (finishReason === 'MAX_TOKENS') {
+        return {
+          type: 'text',
+          text: "I couldn't finish that response within the answer limit, so I left out the partial result. Please try once more.",
+        }
+      }
       if (finishReason && finishReason !== 'STOP' && finishReason !== 'TOOL_USE' && !candidate.content) {
         return { type: 'text', text: `I had trouble processing that (${finishReason}). Could you rephrase?` }
       }

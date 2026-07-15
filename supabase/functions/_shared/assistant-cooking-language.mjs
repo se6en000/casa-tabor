@@ -171,6 +171,10 @@ export function parseCookingLanguage(text, options = {}) {
   const input = normalize(text)
   if (!input) return null
   const cookingContext = options.assistantMode === 'chef' || options.activeEntityType === 'recipe'
+  const explicitMissing = extractAfter(
+    input,
+    /\b(?:but\s+)?i (?:still )?need\s+(.+?)(?:\s+what (?:ingredients? )?am i missing|$)/,
+  )
 
   if (/\b(?:save|keep|store|add)\b.*\b(?:this|that|the)?\s*recipe\b|\badd this to my recipe library\b/.test(input)) {
     return frame('recipe.save', 0.98)
@@ -185,7 +189,13 @@ export function parseCookingLanguage(text, options = {}) {
     return frame('cooking.missing_ingredients', 0.97, { source: 'conversation_plan' })
   }
   if (/\b(?:what ingredients? am i missing|what do i need to buy for (?:this|the) recipe|compare (?:this|the) recipe to my grocery list)\b/.test(input)) {
-    return frame('cooking.missing_ingredients', 0.96)
+    return frame('cooking.missing_ingredients', 0.96, explicitMissing ? { explicitMissing } : {})
+  }
+  if (
+    /\bwhat am i missing\b/.test(input) &&
+    (cookingContext || /\b(?:cook|recipe|meal|dinner|lunch|breakfast|ingredients?|bowl|sauce)\b/.test(input))
+  ) {
+    return frame('cooking.missing_ingredients', 0.96, explicitMissing ? { explicitMissing } : {})
   }
   if (/\b(?:calories?|protein|carbs?|carbohydrates?|fat|sodium|fiber|nutrition)\b/.test(input)) {
     return frame('cooking.nutrition', 0.93)
@@ -276,6 +286,9 @@ export function cookingFrameGuidance(frameValue) {
     return 'Derive a read-only grocery list only from the immediately preceding meal plan in the conversation. Consolidate the ingredients required for those meals into a Markdown list. Do not copy the existing Casa grocery list. Do not ask the user to repeat ingredients, and do not save anything.'
   }
   if (frameValue?.intent === 'cooking.missing_ingredients') {
+    if (frameValue.slots?.explicitMissing) {
+      return `Return a read-only list containing only the explicitly identified missing items: ${frameValue.slots.explicitMissing}. Do not infer or add other recipe ingredients, and do not save anything.`
+    }
     return 'Derive a read-only ingredient or grocery list from the recipe or meal plan in the conversation. Return a consolidated Markdown list. Do not ask the user to repeat ingredients, and do not save anything unless they explicitly ask to add or save the listed items.'
   }
   return null

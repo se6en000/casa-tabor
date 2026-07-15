@@ -549,6 +549,30 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames, recipeFixture) {
       ],
     },
     {
+      key: 'cooking-generated-recipe',
+      page: 'home',
+      assistantMode: 'general',
+      steps: [
+        {
+          text: '“Give me a salmon rice bowl recipe for four.”',
+          expect: {
+            type: 'text',
+            containsAll: ['ingredients'],
+            containsAny: ['instructions', 'directions', 'steps'],
+            readable: true,
+          },
+        },
+        {
+          text: '“I’m making salmon rice bowls. I have salmon and rice, but I need broccoli and soy sauce. What am I missing? Don’t change my grocery list.”',
+          expect: {
+            type: 'text',
+            containsAll: ['broccoli', 'soy sauce'],
+            notContainsAny: ['olive oil', 'avocado', 'sesame oil'],
+          },
+        },
+      ],
+    },
+    {
       key: 'cooking-saved-recipe-grounding',
       page: 'cooking',
       assistantMode: 'chef',

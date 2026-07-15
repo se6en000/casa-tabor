@@ -382,6 +382,7 @@ Deno.serve(async (req) => {
 
       const recipeInsert = {
         name: recipeName,
+        source_type: 'manual',
         source_url: normalizeOptionalText(args?.source_url, 1000),
         image_url: selectedImageUrl,
         servings: normalizeOptionalText(args?.servings, 60),

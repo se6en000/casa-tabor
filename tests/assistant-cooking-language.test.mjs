@@ -78,6 +78,17 @@ test('explicit cooking grocery handoff is narrow and confirmation-safe', () => {
   )
 })
 
+test('copied smart-quoted missing-ingredient requests stay read-only', () => {
+  const frame = parseCookingLanguage(
+    '“I’m making salmon rice bowls. I have salmon and rice, but I need broccoli and soy sauce. What am I missing? Don’t change my grocery list.”',
+  )
+  assert.equal(frame?.intent, 'cooking.missing_ingredients')
+  assert.deepEqual(frame?.slots, { explicitMissing: 'broccoli and soy sauce' })
+  assert.deepEqual(cookingToolNames(frame), [])
+  assert.match(cookingFrameGuidance(frame), /only the explicitly identified missing items/)
+  assert.match(cookingFrameGuidance(frame), /broccoli and soy sauce/)
+})
+
 test('recipe generation guidance is explicitly read-only Markdown', () => {
   const guidance = cookingFrameGuidance(
     parseCookingLanguage('How do I make salmon bowls?', { assistantMode: 'chef' }),
@@ -158,6 +169,14 @@ test('cooking authority outranks overlapping grocery parsing only in cooking con
   assert.match(source, /!authoritativeCookingContext \|\| cookingMutationIntent/)
   assert.match(source, /intentRouting\.profile === 'recipe'\s+\? RECIPE_PRIMARY_HARD_TIMEOUT_MS/)
   assert.match(source, /'create_recipe', 'add_grocery_items'\]\.includes\(tool\.name\)/)
+  assert.match(source, /generation_config: \{\s+temperature: 0\.4,\s+max_output_tokens: 2048,/)
+  assert.match(source, /finishReason === 'MAX_TOKENS'/)
+
+  const executeSource = fs.readFileSync(
+    new URL('../supabase/functions/execute-ai-action/index.ts', import.meta.url),
+    'utf8',
+  )
+  assert.match(executeSource, /const recipeInsert = \{\s+name: recipeName,\s+source_type: 'manual',/)
 })
 
 test('combined grocery list requests remain read-only cooking follow-ups', () => {

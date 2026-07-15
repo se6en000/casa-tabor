@@ -21,6 +21,7 @@ export function normalizeAssistantLanguage(value, options = {}) {
     .toLowerCase()
     .replace(/^(?:alexa|casa)[,\s]+/, '')
     .replace(/[’']/g, "'")
+    .replace(/[“”]/g, '')
 
   for (const [pattern, replacement] of COMMON_SPEECH_FORMS) {
     normalized = normalized.replace(pattern, replacement)
