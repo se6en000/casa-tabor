@@ -54,6 +54,8 @@ test('event detail header uses editorial navy crown with compact avatars', () =>
   assert.match(detail, /aria-label=\{`Category:.*Tap to change`\}/)
   assert.match(detail, /aria-expanded=\{open\}/)
   assert.match(detail, /lockedCategory: cat/)
+  assert.match(detail, /import \{ cleanEventTitle, isBirthdayEvent \} from '\.\.\/\.\.\/utils\/eventTitle'/)
+  assert.match(detail, /const displayTitle = cleanedTitle \|\| rawTitle \|\|/)
   // navy crown background
   assert.match(detail, /background.*S\.navy/)
   // compact avatar circles in eyebrow row
@@ -73,6 +75,13 @@ test('event detail header uses editorial navy crown with compact avatars', () =>
   assert.match(detail, /showAttendees && rosterOpen[\s\S]{0,300}MemberEditor/)
   // close button remains in the top utility rail
   assert.match(detail, /aria-label="Close event details"/)
+})
+
+test('month view uses shared cleanEventTitle helper for non-holiday non-reminder labels', () => {
+  const month = readFileSync(resolve('src/components/calendar/MonthView.tsx'), 'utf8')
+  assert.match(month, /import \{ cleanEventTitle \} from '\.\.\/\.\.\/utils\/eventTitle'/)
+  assert.match(month, /cleanEventTitle\(event\.title\)/)
+  assert.doesNotMatch(month, /event\.title\.includes\(' \| '\) \? event\.title\.split/)
 })
 
 test('route stops and event Where reuse confirmed inline saved-place editing', () => {

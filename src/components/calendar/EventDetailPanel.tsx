@@ -29,7 +29,7 @@ import {
 } from '../../lib/memberAvailability'
 import { getPersistedPlanOverrides, locationSignature, overridesStorageKey } from '../../lib/eventPlanOverrides'
 import { getEventDisplayStartDay } from '../../utils/eventTime'
-import { isBirthdayEvent } from '../../utils/eventTitle'
+import { cleanEventTitle, isBirthdayEvent } from '../../utils/eventTitle'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import { Button, Card, Chip, IconButton, Switch } from '../ui'
 import EventTransportationSection from './EventTransportationSection'
@@ -290,8 +290,9 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
               <div
                 className="flex-shrink-0 px-3 pt-3 pb-1.5"
                 style={{
-                  background: 'linear-gradient(to bottom, color-mix(in srgb, var(--color-casa-navy) 7%, var(--color-casa-surface)), var(--color-casa-surface))',
-                  borderBottom: '1px solid color-mix(in srgb, var(--color-casa-navy) 10%, transparent)',
+                  background: 'linear-gradient(to bottom, color-mix(in srgb, var(--color-casa-navy) 16%, var(--color-casa-surface)), color-mix(in srgb, var(--color-casa-navy) 9%, var(--color-casa-surface)))',
+                  borderBottom: '1px solid color-mix(in srgb, var(--color-casa-navy) 16%, transparent)',
+                  boxShadow: 'inset 0 -1px 0 color-mix(in srgb, var(--color-casa-gold) 38%, transparent)',
                 }}
               >
                 <button
@@ -303,7 +304,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   data-ptr-ignore
                   onPointerDown={e => panelDragControls.start(e)}
                 >
-                  <span className="mx-auto mt-1.5 block h-[5px] w-11 rounded-full" style={{ background: 'color-mix(in srgb, var(--color-casa-navy) 22%, white)' }} />
+                  <span className="mx-auto mt-1.5 block h-[5px] w-11 rounded-full" style={{ background: 'color-mix(in srgb, var(--color-casa-navy) 32%, white)' }} />
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain" data-native-drag data-ptr-ignore>
@@ -665,6 +666,9 @@ function PanelHeader({
     ? format(displayStartDay, 'EEE, MMM d')
     : format(new Date(event.start_time), 'EEE, MMM d · h:mm a')
   const headerDuration = event.all_day ? 'All day' : formatDuration(new Date(event.start_time), new Date(event.end_time))
+  const cleanedTitle = cleanEventTitle(event.title ?? '').trim()
+  const rawTitle = (event.title ?? '').trim()
+  const displayTitle = cleanedTitle || rawTitle || (category ? (CATEGORY_LABEL[category] ?? category) : 'Event details')
   const showAttendees = !reminder && (event.members?.length ?? 0) > 0
   const [rosterOpen, setRosterOpen] = useState(false)
   const avatarMembers = event.members?.slice(0, 5) ?? []
@@ -742,7 +746,7 @@ function PanelHeader({
         {/* Title hero */}
         <h2 className={cn('relative z-10 mt-2 font-display text-display-md font-bold leading-tight', isBirthday ? 'text-casa-navy' : 'text-white')}>
           {isBirthday && <span className="mr-1.5" aria-hidden="true">🎉</span>}
-          {event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}
+          {displayTitle}
         </h2>
 
         {/* Meta line: category + date + duration */}

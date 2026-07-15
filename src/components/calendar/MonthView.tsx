@@ -10,6 +10,7 @@ import { useCalendarStore } from '../../stores/calendarStore'
 import { useMonthEvents } from '../../hooks/useCalendarEvents'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, REMINDER_COLOR } from '../../utils/holidays'
+import { cleanEventTitle } from '../../utils/eventTitle'
 import EventDetailPanel from './EventDetailPanel'
 import QuickCreateSheet from '../shared/QuickCreateSheet'
 import { Button, CalendarPill, IconButton } from '../ui'
@@ -227,7 +228,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
                   className="w-1.5 h-1.5 rounded-full shrink-0"
                   style={{ backgroundColor: color }}
                 />
-                <span className="truncate">{holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}</span>
+                <span className="truncate">{holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : cleanEventTitle(event.title)}</span>
               </div>
             )
           })}
