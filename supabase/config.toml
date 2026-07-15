@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.process-google-sync-jobs]
 verify_jwt = false
+
+[functions.materialize-recurring-events]
+verify_jwt = false

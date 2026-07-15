@@ -23,6 +23,30 @@ const schema = readFileSync(
   resolve('supabase/migrations/20260715194500_recurrence_v2_foundation.sql'),
   'utf8',
 )
+const mutationCommand = readFileSync(
+  resolve('supabase/migrations/20260715203000_recurrence_v2_mutation_command.sql'),
+  'utf8',
+)
+const revisionConflictFix = readFileSync(
+  resolve('supabase/migrations/20260715204500_recurrence_v2_revision_conflict.sql'),
+  'utf8',
+)
+const materializer = readFileSync(
+  resolve('supabase/migrations/20260715210000_recurrence_v2_materializer.sql'),
+  'utf8',
+)
+const materializerFunction = readFileSync(
+  resolve('supabase/functions/materialize-recurring-events/index.ts'),
+  'utf8',
+)
+const materializerCron = readFileSync(
+  resolve('supabase/migrations/20260715211000_recurrence_v2_materializer_cron.sql'),
+  'utf8',
+)
+const transportationNullNormalization = readFileSync(
+  resolve('supabase/migrations/20260715212000_normalize_null_transportation_plan.sql'),
+  'utf8',
+)
 const { rrulestr } = rrulePackage
 const recurrenceEngine = createRecurrenceEngine({ rrulestr, formatInTimeZone, fromZonedTime })
 
@@ -250,4 +274,63 @@ test('series patches update reusable definitions without accepting occurrence-on
     template: { revision: 1, reusable: { sync: { status: 'pending' } } },
     occurrence: { reusable: {}, facts: {}, exceptionPaths: [] },
   }), /Occurrence-only data/)
+})
+
+test('scoped mutation command is atomic, idempotent, revision-guarded, and fail-closed', () => {
+  assert.match(mutationCommand, /create or replace function public\.mutate_recurring_event/)
+  assert.match(mutationCommand, /Recurring event v2 writes are disabled/)
+  assert.match(mutationCommand, /where action_id = p_action_id/)
+  assert.match(mutationCommand, /'idempotent_replay', true/)
+  assert.match(mutationCommand, /expected revision %, current revision %/)
+  assert.match(mutationCommand, /using errcode = '40001'/)
+  assert.match(revisionConflictFix, /RECURRENCE_REVISION_CONFLICT/)
+  assert.match(revisionConflictFix, /errcode = ''P0001''/)
+  assert.match(mutationCommand, /revoke all on function public\.recurrence_apply_scoped_mutation_core/)
+  assert.match(mutationCommand, /grant execute on function public\.recurrence_apply_scoped_mutation_core[\s\S]*to service_role/)
+})
+
+test('scoped mutation command handles this, future, all, tombstones, and exception resets', () => {
+  assert.match(mutationCommand, /if p_scope = 'this'/)
+  assert.match(mutationCommand, /p_series_patch->'original_recurrence_lines'/)
+  assert.match(mutationCommand, /p_series_patch->'future_recurrence_lines'/)
+  assert.match(mutationCommand, /parent_series_id/)
+  assert.match(mutationCommand, /split_occurrence_key/)
+  assert.match(mutationCommand, /purge_after = v_purge_after/)
+  assert.match(mutationCommand, /interval '30 days'/)
+  assert.match(mutationCommand, /'reset_exceptions'\)/)
+  assert.match(mutationCommand, /public\.recurrence_path_is_inherited/)
+})
+
+test('scoped mutation command preserves occurrence facts while copying reusable graphs', () => {
+  assert.match(mutationCommand, /coalesce\(v_existing_checked, false\)/)
+  assert.match(mutationCommand, /completed = v_existing_completed/)
+  assert.match(mutationCommand, /completed_at = v_existing_completed_at/)
+  assert.match(mutationCommand, /due_date = v_existing_due_date/)
+  assert.match(mutationCommand, /rsvp_status[\s\S]*existing\.rsvp_status/)
+  assert.doesNotMatch(mutationCommand, /weather_at_event = excluded\.weather_at_event/)
+  assert.doesNotMatch(mutationCommand, /drive_time_mins = excluded\.drive_time_mins/)
+})
+
+test('materializer reconciles stable occurrences without recreating explicit state', () => {
+  assert.match(materializer, /where series_id = p_series_id[\s\S]*occurrence_key = v_key/)
+  assert.match(materializer, /recurrence_clone_reusable_graph/)
+  assert.match(materializer, /recurrence_apply_reusable_graph/)
+  assert.match(materializer, /not is_exception/)
+  assert.match(materializer, /tombstone_origin = 'recurrence'/)
+  assert.match(materializer, /coalesce\(v_existing\.tombstone_origin, 'user'\) <> 'recurrence'/)
+  assert.match(materializer, /RECURRENCE_REVISION_CONFLICT/)
+  assert.match(materializer, /from public, anon, authenticated/)
+})
+
+test('materializer extends a guarded rolling horizon on schedule', () => {
+  assert.match(materializerFunction, /DEFAULT_PAST_DAYS = 90/)
+  assert.match(materializerFunction, /DEFAULT_FUTURE_MONTHS = 18/)
+  assert.match(materializerFunction, /recurrence_v2_disabled/)
+  assert.match(materializerFunction, /Service-role authorization required/)
+  assert.match(materializerFunction, /recurrenceEngine\.generateOccurrences/)
+  assert.match(materializerCron, /materialize-recurring-events/)
+  assert.match(materializerCron, /'17 3 \* \* \*'/)
+  assert.match(materializerCron, /vault\.decrypted_secrets/)
+  assert.match(transportationNullNormalization, /new\.transportation_plan = 'null'::jsonb/)
+  assert.match(transportationNullNormalization, /before insert or update of transportation_plan/)
 })
