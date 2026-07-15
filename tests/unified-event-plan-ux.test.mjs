@@ -92,7 +92,7 @@ test('event detail header uses editorial navy crown with compact avatars', () =>
   assert.match(detail, /event-command-center-title/)
   assert.match(detail, /casa-heading-on-dark/)
   assert.match(detail, /Meta line: category \+ date \+ duration/)
-  assert.match(detail, /<CategoryPicker eventId=\{event\.id\} category=\{category\} accent=\{accent\} dark=\{!isBirthday\} \/>/)
+  assert.match(detail, /<CategoryPicker event=\{event\} category=\{category\} accent=\{accent\} dark=\{!isBirthday\} onQuickAction=\{onQuickAction\} \/>/)
   // crown owns the location, full address, and review state
   assert.match(detail, /planKind === 'travel'/)
   assert.match(detail, /<AddressReviewSummary/)
@@ -188,7 +188,7 @@ test('address review means explicit human confirmation rather than automatic rou
   assert.doesNotMatch(detail, /verifyFromTrustedSource/)
   assert.doesNotMatch(detail, /findSavedPlace\(savedPlaces.*event\.location_name/)
   assert.match(detail, /onConfirmAddress=\{\(\) => setVerifiedOverride\(true\)\}/)
-  assert.match(eventLocation, /verified: trusted/)
+  assert.match(eventLocation, /verified: false/)
   assert.match(eventLocation, /place\.source === 'google' \|\| place\.source === 'saved'/)
   assert.match(detail, /locationSignature\(event\)/)
 })

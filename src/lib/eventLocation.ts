@@ -82,7 +82,7 @@ export async function persistScopedEventLocation({
     const currentPlan = normalizeTransportationPlan(overridesByEvent.get(row.id)?.transportation_plan)
     return {
       event_id: row.id,
-      verified: trusted,
+      verified: false,
       location_signature: locationSignature(row),
       transportation_plan: currentPlan ? updateTransportationEventPlace(currentPlan, nextPlace) : null,
     }

@@ -16,6 +16,18 @@ const editor = readFileSync(
   resolve('src/components/calendar/EventEditSheet.tsx'),
   'utf8',
 )
+const quickActions = readFileSync(
+  resolve('src/hooks/useRecurringQuickAction.ts'),
+  'utf8',
+)
+const eventDetail = readFileSync(
+  resolve('src/components/calendar/EventDetailPanel.tsx'),
+  'utf8',
+)
+const eventLocation = readFileSync(
+  resolve('src/lib/eventLocation.ts'),
+  'utf8',
+)
 
 test('future split truncates RRULE without discarding companion recurrence lines', () => {
   assert.deepEqual(
@@ -93,4 +105,42 @@ test('advanced and single-event recurrence conversions fail closed', () => {
   assert.match(editor, /advanced recurrence dates/)
   assert.match(editor, /disabled=\{isCanonicalOccurrence && recurringEditorEnabled\}/)
   assert.match(editor, /repeat-pattern change must apply to this and following events/)
+})
+
+test('canonical quick actions share the revision-guarded recurrence command', () => {
+  assert.match(quickActions, /event\?\.series_id && event\.record_kind === 'occurrence'/)
+  assert.match(quickActions, /loadRecurringEditorContext\(eventId\)/)
+  assert.match(quickActions, /saveRecurringEditorMutation/)
+  assert.match(quickActions, /expected_series_revision: context\.series\.revision/)
+  assert.match(quickActions, /await queryClient\.refetchQueries/)
+  assert.match(quickActions, /actionIdRef\.current/)
+  assert.doesNotMatch(quickActions, /sync-event-to-google|update-recurring-google/)
+})
+
+test('address, category, assignments, and transportation use scoped quick actions', () => {
+  for (const path of [
+    'event.locationName',
+    'event.address',
+    'assignments',
+    'enrichment',
+    'transportationPlan',
+  ]) {
+    assert.match(eventDetail, new RegExp(`['"]${path.replace('.', '\\.')}['"]`))
+  }
+  assert.match(eventDetail, /<RecurrenceScopeDialog \{\.\.\.recurringQuickAction\.dialog\} \/>/)
+  assert.match(eventDetail, /assignments:[\s\S]*transportation_plan: nextPlan/)
+  assert.match(eventDetail, /event\.series_id/)
+})
+
+test('occurrence progress remains direct and rolls back failed optimistic state', () => {
+  assert.match(eventDetail, /event_checklist_items[\s\S]*setLocalChecked\(\(prev\) => \(\{ \.\.\.prev, \[item\.id\]: previous \}\)\)/)
+  assert.match(eventDetail, /event_action_items[\s\S]*setLocalCompleted\(\(prev\) => \(\{ \.\.\.prev, \[item\.id\]: previous \}\)\)/)
+  assert.doesNotMatch(eventDetail, /changedPaths: \[['"]checklistDefinitions/)
+  assert.doesNotMatch(eventDetail, /changedPaths: \[['"]actionDefinitions/)
+})
+
+test('editing any address requires a fresh human review', () => {
+  assert.match(eventLocation, /verified: false/)
+  assert.doesNotMatch(eventLocation, /verified: trusted/)
+  assert.match(eventDetail, /setVerifiedOverride\(false\)/)
 })

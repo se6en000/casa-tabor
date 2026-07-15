@@ -36,14 +36,24 @@ import EventTransportationSection from './EventTransportationSection'
 import InlinePlaceEditor from './InlinePlaceEditor'
 import AddressReviewSummary, { AddressTechnicalStatusChip, type AddressTechnicalStatus } from './AddressReviewSummary'
 import RecurrenceScopeDialog from './RecurrenceScopeDialog'
-import { persistScopedEventLocation, type EventLocationScope } from '../../lib/eventLocation'
+import {
+  isTrustedPlaceSelection,
+  persistScopedEventLocation,
+  type EventLocationScope,
+} from '../../lib/eventLocation'
 import {
   createDefaultTransportationPlan,
   eventPassengerNames,
   syncTransportationAttendees,
+  updateTransportationEventPlace,
   type EventTransportationPlan,
   type TransportationPlace,
 } from '../../lib/eventTransportation'
+import {
+  useRecurringQuickAction,
+  type RecurringQuickActionRequest,
+  type RecurringQuickActionResult,
+} from '../../hooks/useRecurringQuickAction'
 
 // Calendar-specific aliases compose the shared theme contract without creating a parallel palette.
 const S = {
@@ -130,10 +140,24 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
   const dragDismissOffset = isMobile ? 150 : 180
   const dragDismissVelocity = isMobile ? 550 : 700
   const addressReviewed = verifiedOverride === true
+  const recurringQuickAction = useRecurringQuickAction(event)
+  const requestRecurringQuickAction = recurringQuickAction.request
+  const executeRecurringQuickActionScope = recurringQuickAction.executeScope
 
   const persistTransportationPlan = useCallback(async (nextPlan: EventTransportationPlan | null) => {
     if (!event) throw new Error('This event is no longer available.')
     setOverrideSaveError(null)
+    const result = await requestRecurringQuickAction({
+      operation: 'update',
+      changedPaths: ['transportationPlan'],
+      detailPatch: { transportation_plan: nextPlan },
+    })
+    if (result === 'cancelled') return
+    if (result === 'handled') {
+      setTransportationPlan(nextPlan)
+      window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+      return
+    }
     const { error } = await supabase
       .from('event_plan_overrides')
       .upsert({
@@ -148,7 +172,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
     setTransportationPlan(nextPlan)
     window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
     await queryClient.invalidateQueries({ queryKey: ['events'] })
-  }, [event, queryClient])
+  }, [event, queryClient, requestRecurringQuickAction])
 
   useEffect(() => {
     if (!event) return
@@ -347,6 +371,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   event={event}
                   verified={addressReviewed}
                   modeOverride={modeOverride}
+                  transportationPlan={transportationPlan}
                   onClose={onClose}
                   onConfirmAddress={() => setVerifiedOverride(true)}
                   addressReviewLoading={overridesHydratedEventId !== event.id}
@@ -354,15 +379,54 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   onRetryAddressSave={() => setOverrideSaveRevision((revision) => revision + 1)}
                   onSaveAddress={async (place, scope) => {
                     setOverridesHydratedEventId(null)
+                    const trusted = isTrustedPlaceSelection(place)
+                    const nextPlace: TransportationPlace = {
+                      ...place,
+                      name: place.name.trim() || place.address.trim(),
+                      address: place.address.trim(),
+                      kind: 'event',
+                    }
+                    const nextPlan = transportationPlan
+                      ? updateTransportationEventPlace(transportationPlan, nextPlace)
+                      : null
+                    const handled = await executeRecurringQuickActionScope({
+                      operation: 'location',
+                      changedPaths: [
+                        'event.locationName',
+                        'event.address',
+                        'event.lat',
+                        'event.lng',
+                        ...(nextPlan ? ['transportationPlan'] : []),
+                      ],
+                      detailPatch: {
+                        event: {
+                          location_name: place.name.trim() || null,
+                          address: place.address.trim() || null,
+                          lat: trusted ? (place.lat ?? null) : null,
+                          lng: trusted ? (place.lng ?? null) : null,
+                        },
+                        ...(nextPlan ? { transportation_plan: nextPlan } : {}),
+                      },
+                    }, scope)
+                    if (handled) {
+                      setTransportationPlan(nextPlan)
+                      setVerifiedOverride(false)
+                      setOverridesHydratedEventId(event.id)
+                      queryClient.removeQueries({ queryKey: ['travel-eta'] })
+                      return
+                    }
                     await persistScopedEventLocation({ event, place, scope })
                     queryClient.removeQueries({ queryKey: ['travel-eta'] })
                     await queryClient.invalidateQueries({ queryKey: ['events'] })
                   }}
-                  onRosterChange={(names) => {
+                  onQuickAction={requestRecurringQuickAction}
+                  onRosterChange={(names, persist = true) => {
                     const nextPlan = transportationPlan
                       ? syncTransportationAttendees(transportationPlan, names)
                       : null
-                    if (nextPlan !== transportationPlan) void persistTransportationPlan(nextPlan)
+                    if (nextPlan === transportationPlan) return
+                    if (persist) void persistTransportationPlan(nextPlan)
+                    else setTransportationPlan(nextPlan)
                   }}
                 />
                 <PanelBody
@@ -391,6 +455,8 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
         )}
       </AnimatePresence>
 
+      <RecurrenceScopeDialog {...recurringQuickAction.dialog} />
+
       {event && (
         <EventEditSheet event={event} open={showEdit} onClose={() => setShowEdit(false)} />
       )}
@@ -402,10 +468,14 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
 
 function MemberEditor({
   event,
+  transportationPlan,
   onRosterChange,
+  onQuickAction,
 }: {
   event: EventWithDetails
-  onRosterChange: (names: string[]) => void
+  transportationPlan: EventTransportationPlan | null
+  onRosterChange: (names: string[], persist?: boolean) => void
+  onQuickAction: (request: RecurringQuickActionRequest) => Promise<RecurringQuickActionResult>
 }) {
   const queryClient = useQueryClient()
   const { data: allMembers = [] } = useFamilyMembers()
@@ -429,53 +499,118 @@ function MemberEditor({
 
   const sorted = [...event.members].sort((a, b) => (a.role === 'primary' ? -1 : b.role === 'primary' ? 1 : 0))
   const assignedIds = new Set(event.members.map(m => m.family_member?.id))
+  const assignments = event.members.map((member) => ({
+    family_member_id: member.family_member.id,
+    role: member.role,
+  }))
+
+  async function saveAssignments(
+    nextAssignments: Array<{ family_member_id: string; role: string }>,
+    nextNames: string[],
+  ) {
+    const nextPlan = transportationPlan
+      ? syncTransportationAttendees(transportationPlan, nextNames)
+      : null
+    const result = await onQuickAction({
+      operation: 'update',
+      changedPaths: ['assignments', ...(nextPlan ? ['transportationPlan'] : [])],
+      detailPatch: {
+        assignments: nextAssignments,
+        ...(nextPlan ? { transportation_plan: nextPlan } : {}),
+      },
+    })
+    return { result, nextPlan }
+  }
 
   async function makeOwner(memberId: string) {
     setSaving(memberId)
-    // Demote current primary, promote new one
-    await supabase.from('event_members').update({ role: 'attendee' }).eq('event_id', event.id).eq('role', 'primary')
-    await supabase.from('event_members').update({ role: 'primary' }).eq('event_id', event.id).eq('family_member_id', memberId)
-    queryClient.invalidateQueries({ queryKey: ['events'] })
-    setSaving(null)
+    setMutationError(null)
+    try {
+      const nextAssignments = assignments.map((assignment) => ({
+        ...assignment,
+        role: assignment.family_member_id === memberId ? 'primary' : 'attendee',
+      }))
+      const nextNames = event.members
+        .map((member) => member.family_member?.name?.trim())
+        .filter((name): name is string => Boolean(name))
+      const { result, nextPlan } = await saveAssignments(nextAssignments, nextNames)
+      if (result === 'cancelled') return
+      if (result === 'handled') {
+        if (nextPlan) onRosterChange(nextNames, false)
+      } else {
+        const { error: demoteError } = await supabase.from('event_members').update({ role: 'attendee' }).eq('event_id', event.id).eq('role', 'primary')
+        if (demoteError) throw demoteError
+        const { error: promoteError } = await supabase.from('event_members').update({ role: 'primary' }).eq('event_id', event.id).eq('family_member_id', memberId)
+        if (promoteError) throw promoteError
+        await queryClient.invalidateQueries({ queryKey: ['events'] })
+      }
+    } catch (cause) {
+      setMutationError(`Could not change the primary attendee. ${cause instanceof Error ? cause.message : ''}`)
+    } finally {
+      setSaving(null)
+    }
   }
 
   async function removeMember(eventMemberId: string, memberName: string) {
     setSaving(eventMemberId)
     setMutationError(null)
-    const { error } = await supabase.from('event_members').delete().eq('id', eventMemberId)
-    if (!error) {
-      onRosterChange(event.members
+    try {
+      const nextAssignments = assignments.filter((assignment) => (
+        assignment.family_member_id !== event.members.find((member) => member.id === eventMemberId)?.family_member.id
+      ))
+      const nextNames = event.members
         .filter((member) => member.id !== eventMemberId)
         .map((member) => member.family_member?.name?.trim())
-        .filter((name): name is string => Boolean(name)))
-      queryClient.invalidateQueries({ queryKey: ['events'] })
-    } else {
-      setMutationError(`Could not remove ${memberName}. ${error.message}`)
+        .filter((name): name is string => Boolean(name))
+      const { result, nextPlan } = await saveAssignments(nextAssignments, nextNames)
+      if (result === 'cancelled') return
+      if (result === 'legacy') {
+        const { error } = await supabase.from('event_members').delete().eq('id', eventMemberId)
+        if (error) throw error
+      }
+      onRosterChange(nextNames, result === 'legacy')
+      if (result === 'handled' && !nextPlan) await queryClient.invalidateQueries({ queryKey: ['events'] })
+      await queryClient.invalidateQueries({ queryKey: ['events'] })
+    } catch (cause) {
+      setMutationError(`Could not remove ${memberName}. ${cause instanceof Error ? cause.message : ''}`)
+    } finally {
+      setSaving(null)
     }
-    setSaving(null)
   }
 
   async function addMember(familyMemberId: string) {
     setSaving(familyMemberId)
     setMutationError(null)
-    const { error } = await supabase.from('event_members').upsert(
-      { event_id: event.id, family_member_id: familyMemberId, role: 'attendee' },
-      { onConflict: 'event_id,family_member_id', ignoreDuplicates: true }
-    )
     const addedMember = allMembers.find((member) => member.id === familyMemberId)
-    if (!error && addedMember) {
-      onRosterChange([
+    try {
+      if (!addedMember) throw new Error('That family member is no longer available.')
+      const nextAssignments = [
+        ...assignments,
+        { family_member_id: familyMemberId, role: 'attendee' },
+      ]
+      const nextNames = [
         ...event.members
           .map((member) => member.family_member?.name?.trim())
           .filter((name): name is string => Boolean(name)),
-        addedMember.name,
-      ])
-      queryClient.invalidateQueries({ queryKey: ['events'] })
-    } else if (error) {
-      setMutationError(`Could not add ${addedMember?.name ?? 'that person'}. ${error.message}`)
+        ...(addedMember ? [addedMember.name] : []),
+      ]
+      const { result } = await saveAssignments(nextAssignments, nextNames)
+      if (result === 'cancelled') return
+      if (result === 'legacy') {
+        const { error } = await supabase.from('event_members').upsert(
+          { event_id: event.id, family_member_id: familyMemberId, role: 'attendee' },
+          { onConflict: 'event_id,family_member_id', ignoreDuplicates: true },
+        )
+        if (error) throw error
+      }
+      onRosterChange(nextNames, result === 'legacy')
+      await queryClient.invalidateQueries({ queryKey: ['events'] })
+    } catch (cause) {
+      setMutationError(`Could not add ${addedMember?.name ?? 'that person'}. ${cause instanceof Error ? cause.message : ''}`)
+    } finally {
+      setSaving(null)
+      setShowPicker(false)
     }
-    setSaving(null)
-    setShowPicker(false)
   }
 
   return (
@@ -591,15 +726,17 @@ function MemberEditor({
 /* ── Category quick-edit popover ───────────────────────────── */
 
 function CategoryPicker({
-  eventId,
+  event,
   category,
   accent,
   dark = false,
+  onQuickAction,
 }: {
-  eventId: string
+  event: EventWithDetails
   category: string | null | undefined
   accent: string
   dark?: boolean
+  onQuickAction: (request: RecurringQuickActionRequest) => Promise<RecurringQuickActionResult>
 }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -607,9 +744,8 @@ function CategoryPicker({
   const [selectedCategory, setSelectedCategory] = useState(category)
   const containerRef = useRef<HTMLDivElement>(null)
   const save = useSaveEnrichmentBatch()
-  const label = selectedCategory ? (CATEGORY_LABEL[selectedCategory] ?? selectedCategory) : 'Category'
-
-  useEffect(() => setSelectedCategory(category), [category, eventId])
+  const effectiveCategory = open ? (selectedCategory ?? category) : category
+  const label = effectiveCategory ? (CATEGORY_LABEL[effectiveCategory] ?? effectiveCategory) : 'Category'
 
   useEffect(() => {
     if (!open) return
@@ -623,12 +759,28 @@ function CategoryPicker({
 
   const handleSelect = async (cat: string) => {
     if (saving) return
-    const previousCategory = selectedCategory
+    const previousCategory = effectiveCategory
     setSaving(true)
     setSaveError(null)
     setSelectedCategory(cat)
     try {
-      await save.mutateAsync({ eventId, fields: { category: cat, category_locked: true } })
+      const enrichment = { ...(event.enrichment ?? {}), category: cat, category_locked: true }
+      delete (enrichment as Record<string, unknown>).id
+      delete (enrichment as Record<string, unknown>).event_id
+      delete (enrichment as Record<string, unknown>).created_at
+      delete (enrichment as Record<string, unknown>).updated_at
+      const result = await onQuickAction({
+        operation: 'update',
+        changedPaths: ['enrichment'],
+        detailPatch: { enrichment },
+      })
+      if (result === 'cancelled') {
+        setSelectedCategory(previousCategory)
+        return
+      }
+      if (result === 'legacy') {
+        await save.mutateAsync({ eventId: event.id, fields: { category: cat, category_locked: true } })
+      }
       setOpen(false)
     } catch (error) {
       setSelectedCategory(previousCategory)
@@ -650,7 +802,10 @@ function CategoryPicker({
           : { background: `color-mix(in srgb, ${accent} 14%, transparent)`, color: S.navy, letterSpacing: '0.04em', gap: '0.25rem' }
         }
         onClick={() => setOpen((wasOpen) => {
-          if (!wasOpen) setSaveError(null)
+          if (!wasOpen) {
+            setSaveError(null)
+            setSelectedCategory(category)
+          }
           return !wasOpen
         })}
         aria-label={`Category: ${label}. Tap to change`}
@@ -675,7 +830,7 @@ function CategoryPicker({
                 <Chip
                   key={cat}
                   size="sm"
-                  selected={cat === selectedCategory}
+                  selected={cat === effectiveCategory}
                   onClick={() => void handleSelect(cat)}
                 >
                   {CATEGORY_LABEL[cat]}
@@ -695,6 +850,7 @@ function PanelHeader({
   event,
   verified,
   modeOverride,
+  transportationPlan,
   onClose,
   onConfirmAddress,
   addressReviewLoading,
@@ -702,17 +858,20 @@ function PanelHeader({
   onRetryAddressSave,
   onSaveAddress,
   onRosterChange,
+  onQuickAction,
 }: {
   event: EventWithDetails
   verified: boolean
   modeOverride: EventMode | null
+  transportationPlan: EventTransportationPlan | null
   onClose: () => void
   onConfirmAddress: () => void
   addressReviewLoading: boolean
   addressSaveError: string | null
   onRetryAddressSave: () => void
   onSaveAddress: (place: TransportationPlace, scope: EventLocationScope) => Promise<void>
-  onRosterChange: (names: string[]) => void
+  onRosterChange: (names: string[], persist?: boolean) => void
+  onQuickAction: (request: RecurringQuickActionRequest) => Promise<RecurringQuickActionResult>
 }) {
   const category = event.enrichment?.category
   const isBirthday = isBirthdayEvent(event)
@@ -721,7 +880,7 @@ function PanelHeader({
   const eyebrow = primary?.family_member?.name
     ? `${primary.family_member.name}${event.members.length > 1 ? ` +${event.members.length - 1}` : ''}`
     : null
-  const isRecurring = Boolean(event.rrule || event.recurrence_master_id)
+  const isRecurring = Boolean(event.rrule || event.recurrence_master_id || event.series_id)
   const reminder = event.event_type === 'reminder'
   const mode = modeOverride ?? inferEventMode(event)
   const planKind = inferEventPlanKind(event, mode)
@@ -749,7 +908,7 @@ function PanelHeader({
   const peopleSectionLabel = reminder ? 'Assigned people' : 'Attendees'
   const showAddressSummary = !reminder && (planKind === 'travel' || hostedAtHome || Boolean(event.location_name || event.address))
   const showLowerSection = (hasPeople && rosterOpen) || addressEditorOpen
-  const recurring = Boolean(event.rrule || event.recurrence_master_id)
+  const recurring = Boolean(event.rrule || event.recurrence_master_id || event.series_id)
 
   const commitAddress = async (place: TransportationPlace, scope: EventLocationScope) => {
     setAddressEditError(null)
@@ -857,7 +1016,7 @@ function PanelHeader({
               Reminder
             </Chip>
           )}
-          <CategoryPicker eventId={event.id} category={category} accent={accent} dark={!isBirthday} />
+          <CategoryPicker event={event} category={category} accent={accent} dark={!isBirthday} onQuickAction={onQuickAction} />
           <span className={cn('font-semibold', isBirthday ? '' : '')} style={{ color: isBirthday ? S.navy : S.planLabel }}>
             {headerWhen}
           </span>
@@ -927,7 +1086,12 @@ function PanelHeader({
               <div className="mb-2 text-caption font-bold uppercase tracking-wide" style={{ color: S.label }}>
                 {peopleSectionLabel}
               </div>
-              <MemberEditor event={event} onRosterChange={onRosterChange} />
+              <MemberEditor
+                event={event}
+                transportationPlan={transportationPlan}
+                onRosterChange={onRosterChange}
+                onQuickAction={onQuickAction}
+              />
             </div>
           )}
           {addressEditorOpen && (
@@ -1957,17 +2121,26 @@ function ReferenceBlock({
 
 function ChecklistSection({ items }: { items: EventChecklistItem[]; eventId: string }) {
   const [localChecked, setLocalChecked] = useState<Record<string, boolean>>({})
+  const [saveError, setSaveError] = useState<string | null>(null)
   const qc = useQueryClient()
 
   const toggle = async (item: EventChecklistItem) => {
-    const newVal = !(localChecked[item.id] ?? item.checked)
+    const previous = localChecked[item.id] ?? item.checked
+    const newVal = !previous
+    setSaveError(null)
     setLocalChecked((prev) => ({ ...prev, [item.id]: newVal }))
-    await supabase.from('event_checklist_items').update({ checked: newVal }).eq('id', item.id)
-    qc.invalidateQueries({ queryKey: ['events'] })
+    const { error } = await supabase.from('event_checklist_items').update({ checked: newVal }).eq('id', item.id)
+    if (error) {
+      setLocalChecked((prev) => ({ ...prev, [item.id]: previous }))
+      setSaveError(`Could not update "${item.label}". ${error.message}`)
+      return
+    }
+    await qc.invalidateQueries({ queryKey: ['events'] })
   }
 
   return (
     <div>
+      {saveError && <p role="alert" className="pb-1 text-caption text-casa-error">{saveError}</p>}
       {items.map((item, i) => {
         const checked = localChecked[item.id] ?? item.checked
         return (
@@ -1975,7 +2148,7 @@ function ChecklistSection({ items }: { items: EventChecklistItem[]; eventId: str
             key={item.id}
             className="flex items-center gap-3 py-2.5 min-h-[44px] cursor-pointer"
             style={i > 0 ? { borderTop: `1px solid ${S.hair}` } : undefined}
-            onClick={() => toggle(item)}
+            onClick={() => void toggle(item)}
           >
             {checked ? (
               <span className="flex-none w-[22px] h-[22px] rounded-md flex items-center justify-center text-white" style={{ background: S.navy }}>
@@ -1996,21 +2169,30 @@ function ChecklistSection({ items }: { items: EventChecklistItem[]; eventId: str
 
 function ActionItemsSection({ items }: { items: EventActionItem[] }) {
   const [localCompleted, setLocalCompleted] = useState<Record<string, boolean>>({})
+  const [saveError, setSaveError] = useState<string | null>(null)
   const qc = useQueryClient()
 
   const toggle = async (item: EventActionItem) => {
-    const nextCompleted = !(localCompleted[item.id] ?? item.completed)
+    const previous = localCompleted[item.id] ?? item.completed
+    const nextCompleted = !previous
+    setSaveError(null)
     setLocalCompleted((prev) => ({ ...prev, [item.id]: nextCompleted }))
     const payload = {
       completed: nextCompleted,
       completed_at: nextCompleted ? new Date().toISOString() : null,
     }
-    await supabase.from('event_action_items').update(payload).eq('id', item.id)
-    qc.invalidateQueries({ queryKey: ['events'] })
+    const { error } = await supabase.from('event_action_items').update(payload).eq('id', item.id)
+    if (error) {
+      setLocalCompleted((prev) => ({ ...prev, [item.id]: previous }))
+      setSaveError(`Could not update "${item.title}". ${error.message}`)
+      return
+    }
+    await qc.invalidateQueries({ queryKey: ['events'] })
   }
 
   return (
     <div>
+      {saveError && <p role="alert" className="pb-1 text-caption text-casa-error">{saveError}</p>}
       {items.map((item, i) => {
         const completed = localCompleted[item.id] ?? item.completed
         return (
@@ -2018,7 +2200,7 @@ function ActionItemsSection({ items }: { items: EventActionItem[] }) {
             key={item.id}
             className="flex items-center gap-3 py-2.5 min-h-[44px] cursor-pointer"
             style={i > 0 ? { borderTop: `1px solid ${S.hair}` } : undefined}
-            onClick={() => toggle(item)}
+            onClick={() => void toggle(item)}
           >
             {completed ? (
               <span className="flex-none w-[22px] h-[22px] rounded-md flex items-center justify-center text-white" style={{ background: S.navy }}>
