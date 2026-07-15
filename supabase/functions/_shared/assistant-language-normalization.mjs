@@ -4,6 +4,8 @@ const COMMON_SPEECH_FORMS = Object.freeze([
   [/\bdont\b/g, "don't"],
   [/\bim\b/g, "i'm"],
   [/\bcalender\b|\bcalandar\b/g, 'calendar'],
+  [/\bbrthday\b/g, 'birthday'],
+  [/\bu\b/g, 'you'],
   [/\btomoro\b|\btommorow\b/g, 'tomorrow'],
   [/\bthurs day\b/g, 'thursday'],
   [/\bfry day\b/g, 'friday'],

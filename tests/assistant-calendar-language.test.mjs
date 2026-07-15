@@ -360,4 +360,8 @@ test('calendar concepts tolerate common typed and STT forms', () => {
     parseCalendarLanguage('hows thurs day looking')?.slots.temporalScope,
     { kind: 'weekday', weekday: 'thursday' },
   )
+  assert.equal(
+    parseCalendarLanguage('can u move the brthday dinner to thursday at 6')?.intent,
+    'event.move',
+  )
 })

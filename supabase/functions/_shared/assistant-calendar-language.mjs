@@ -268,8 +268,11 @@ export function parseCalendarLanguage(text, options = {}) {
   const mutationLanguage = /\b(add|create|book|move|reschedule|shift|push|change|update|edit|delete|remove|cancel)\b/.test(input) ||
     /\bschedule\s+(?:an?\s+)?(?:event|appointment|meeting|reminder)\b/.test(input) ||
     naturalScheduleCreate
+  const namedTemporalMove = Boolean(
+    scope && /\b(move|reschedule|shift|push)\b/.test(input)
+  )
 
-  if (mutationLanguage && (activeEvent || naturalScheduleCreate || CALENDAR_NOUNS.test(input))) {
+  if (mutationLanguage && (activeEvent || naturalScheduleCreate || namedTemporalMove || CALENDAR_NOUNS.test(input))) {
     if (/\b(delete|remove|cancel)\b/.test(input)) return frame('event.delete', 0.98, { temporalScope: scope })
     if (/\b(move|reschedule|shift|push)\b/.test(input)) {
       return frame('event.move', 0.98, {
