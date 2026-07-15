@@ -33,6 +33,12 @@ export function stableJson(value) {
   return JSON.stringify(canonical(value))
 }
 
+export function diffReusablePaths(left, right) {
+  return REUSABLE_PATHS.filter(
+    (path) => stableJson(valueAtPath(left, path)) !== stableJson(valueAtPath(right, path)),
+  )
+}
+
 function valueAtPath(source, path) {
   return path.split('.').reduce((current, key) => current?.[key], source)
 }
@@ -118,7 +124,7 @@ export function buildReusableBundle(event, children) {
 }
 
 export function inferReusableBaseline(rows) {
-  const baseline = {}
+  const modalBaseline = {}
   const ambiguousPaths = []
 
   for (const path of REUSABLE_PATHS) {
@@ -134,7 +140,7 @@ export function inferReusableBaseline(rows) {
     const ranked = [...variants.values()].sort(
       (left, right) => right.count - left.count || stableJson(left.value).localeCompare(stableJson(right.value)),
     )
-    setAtPath(baseline, path, ranked[0]?.value)
+    setAtPath(modalBaseline, path, ranked[0]?.value)
     if (ranked.length > 1 && ranked[0].count === ranked[1].count) {
       ambiguousPaths.push({
         path,
@@ -144,6 +150,20 @@ export function inferReusableBaseline(rows) {
     }
   }
 
+  const rankedRows = rows
+    .map((row) => ({
+      row,
+      mismatchCount: rows.reduce(
+        (total, candidate) => total + REUSABLE_PATHS.filter(
+          (path) => stableJson(valueAtPath(row.bundle, path))
+            !== stableJson(valueAtPath(candidate.bundle, path)),
+        ).length,
+        0,
+      ),
+    }))
+    .sort((left, right) => left.mismatchCount - right.mismatchCount || left.row.id.localeCompare(right.row.id))
+  const templateSource = rankedRows[0]?.row
+  const baseline = templateSource?.bundle ?? modalBaseline
   const occurrences = rows.map((row) => ({
     eventId: row.id,
     googleEventId: row.google_event_id,
@@ -155,6 +175,7 @@ export function inferReusableBaseline(rows) {
 
   return {
     baseline,
+    templateSourceEventId: templateSource?.id ?? null,
     baselineHash: createHash('sha256').update(stableJson(baseline)).digest('hex'),
     ambiguousPaths,
     occurrences,
@@ -227,6 +248,10 @@ export function classifySeries({ account, master, instances, casaRows }) {
       originalStartSource: instance ? 'google_original_start' : 'casa_start_fallback',
       googleStart: instance ? googleStart(instance) : null,
       googleStatus: instance?.status ?? null,
+      googleEtag: instance?.etag ?? null,
+      googleUpdatedAt: instance?.updated ?? null,
+      allDay: row.all_day,
+      durationMs: new Date(row.end_time).getTime() - new Date(row.start_time).getTime(),
     }
   })
   const reviewReasons = []
@@ -245,6 +270,11 @@ export function classifySeries({ account, master, instances, casaRows }) {
     title: master.summary ?? '(untitled)',
     status: master.status ?? null,
     recurrence: master.recurrence ?? [],
+    masterStart: googleStart(master),
+    masterEnd: master.end?.dateTime ?? master.end?.date ?? null,
+    timezone: master.start?.timeZone ?? master.end?.timeZone ?? 'America/New_York',
+    googleEtag: master.etag ?? null,
+    googleUpdatedAt: master.updated ?? null,
     googleInstanceCount: instances.length,
     casaOccurrenceCount: casaRows.length,
     identityMatches,
@@ -255,6 +285,7 @@ export function classifySeries({ account, master, instances, casaRows }) {
     occurrenceLinks,
     proposedCasaExceptions,
     proposedTemplateBundle: detailAnalysis?.baseline ?? null,
+    templateSourceEventId: detailAnalysis?.templateSourceEventId ?? null,
     baselineHash: detailAnalysis?.baselineHash ?? null,
     ambiguousPaths: detailAnalysis?.ambiguousPaths ?? [],
     migrationDisposition: reviewReasons.length > 0

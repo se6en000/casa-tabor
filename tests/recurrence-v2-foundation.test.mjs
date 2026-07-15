@@ -53,6 +53,14 @@ const transportationNullNormalization = readFileSync(
   resolve('supabase/migrations/20260715212000_normalize_null_transportation_plan.sql'),
   'utf8',
 )
+const shadowMigration = readFileSync(
+  resolve('supabase/migrations/20260715220000_recurrence_shadow_migration.sql'),
+  'utf8',
+)
+const shadowMigrationScript = readFileSync(
+  resolve('scripts/recurrence-v2-shadow-migration.mjs'),
+  'utf8',
+)
 const { rrulestr } = rrulePackage
 const recurrenceEngine = createRecurrenceEngine({ rrulestr, formatInTimeZone, fromZonedTime })
 
@@ -411,9 +419,33 @@ test('migration inventory reports Google exceptions and ambiguous identities', (
   assert.deepEqual(report.identityMatches, { instance_id: 2 })
   assert.equal(report.occurrenceLinks[0].originalStart, '2026-08-03T09:00:00-04:00')
   assert.equal(report.occurrenceLinks[0].originalStartSource, 'google_original_start')
-  assert.equal(report.proposedTemplateBundle.event.title, 'Therapy moved')
+  assert.equal(report.proposedTemplateBundle.event.title, 'Therapy')
+  assert.equal(report.templateSourceEventId, 'event-1')
   assert.deepEqual(report.reviewReasons, [
     'duplicate_casa_google_links',
     'ambiguous_reusable_baseline',
   ])
+})
+
+test('shadow migration is atomic, idempotent, reversible, and service-only', () => {
+  assert.match(shadowMigration, /create table if not exists public\.recurrence_shadow_migrations/)
+  assert.match(shadowMigration, /create or replace function public\.recurrence_apply_shadow_migration/)
+  assert.match(shadowMigration, /where action_id = p_action_id/)
+  assert.match(shadowMigration, /different plan/)
+  assert.match(shadowMigration, /create or replace function public\.recurrence_rollback_shadow_migration/)
+  assert.match(shadowMigration, /series\.revision <> 1/)
+  assert.match(shadowMigration, /from public, anon, authenticated/)
+  assert.match(shadowMigration, /to service_role/)
+})
+
+test('shadow migration keeps templates invisible and proves bundle parity', () => {
+  assert.match(shadowMigration, /new\.record_kind = 'series_template'/)
+  assert.match(shadowMigration, /'cancelled'[\s\S]*'series_template'/)
+  assert.match(shadowMigration, /new\.record_kind in \('series_template', 'occurrence'\)/)
+  assert.match(shadowMigration, /status = ''confirmed''/)
+  assert.match(shadowMigrationScript, /changedBundles/)
+  assert.match(shadowMigrationScript, /visibleEventDelta/)
+  assert.match(shadowMigrationScript, /notificationDelta/)
+  assert.match(shadowMigrationScript, /totalEventDelta/)
+  assert.match(shadowMigrationScript, /master_id_prefix/)
 })
