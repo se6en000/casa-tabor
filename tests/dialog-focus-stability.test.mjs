@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 
 const hook = readFileSync(resolve('src/components/ui/useDialogA11y.ts'), 'utf8')
 const editor = readFileSync(resolve('src/components/calendar/EventTransportationSection.tsx'), 'utf8')
+const smartPlace = readFileSync(resolve('src/components/calendar/SmartPlaceInput.tsx'), 'utf8')
 
 test('dialog focus lifecycle does not restart when an inline close callback changes', () => {
   assert.match(hook, /const onCloseRef = useRef\(onClose\)/)
@@ -15,6 +16,15 @@ test('dialog focus lifecycle does not restart when an inline close callback chan
 })
 
 test('typing a custom place name preserves its paired address until a saved place is selected', () => {
-  assert.match(editor, /onChange=\{\(event\) => onChange\(\{ \.\.\.value, name: event\.target\.value \}\)\}/)
-  assert.match(editor, /onChange=\{\(event\) => onChange\(\{ \.\.\.value, address: event\.target\.value \}\)\}/)
+  assert.match(editor, /<SmartPlaceInput/)
+  assert.match(smartPlace, /onChange\(\{ \.\.\.value, \[field\]: event\.target\.value \}\)/)
+  assert.match(smartPlace, /name: suggestion\.name,[\s\S]*address: suggestion\.address/)
+})
+
+test('smart place fields filter saved places immediately and debounce Google lookup', () => {
+  assert.match(smartPlace, /filter\(\(place\) => matchesQuery\(place, query\)\)/)
+  assert.match(smartPlace, /window\.setTimeout\(async \(\) =>/)
+  assert.match(smartPlace, /\}, 350\)/)
+  assert.match(smartPlace, /supabase\.functions\.invoke\('place-search'/)
+  assert.match(smartPlace, /onPointerDown=\{\(event\) => event\.preventDefault\(\)\}/)
 })

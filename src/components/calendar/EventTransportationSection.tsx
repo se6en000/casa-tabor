@@ -27,6 +27,7 @@ import {
 } from '../../lib/eventTransportation'
 import { Button, Card, Checkbox, Field, IconButton, Input, Select, Sheet } from '../ui'
 import InlinePlaceEditor from './InlinePlaceEditor'
+import SmartPlaceInput from './SmartPlaceInput'
 
 interface EventTransportationSectionProps {
   event: EventWithDetails
@@ -271,33 +272,14 @@ function TripPlaceFields({
 
   return (
     <div className="space-y-3">
-      <Field label={`${label} saved place`}>
-        <Select
-          value=""
-          aria-label={`${label} saved place`}
-          onChange={(event) => {
-            const selected = places.find((place) => place.id === event.target.value)
-            if (!selected) return
-            onChange({
-              name: selected.name,
-              address: savedPlaceAddress(selected),
-              ...(value.kind ? { kind: value.kind } : {}),
-            })
-          }}
-        >
-          <option value="">Choose a saved place…</option>
-          {places.map((place) => (
-            <option key={place.id} value={place.id}>
-              {place.name}{savedPlaceAddress(place) ? ` · ${savedPlaceAddress(place)}` : ''}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field label={label}>
-        <Input
-          value={value.name}
-          placeholder={label === 'From' ? 'Starting place' : 'Destination'}
-          onChange={(event) => onChange({ ...value, name: event.target.value })}
+      <Field label={`${label} place`}>
+        <SmartPlaceInput
+          value={value}
+          field="name"
+          label={`${label} place`}
+          placeholder="Type a saved place or new place"
+          onClear={() => onChange({ ...value, name: '', address: '' })}
+          onChange={onChange}
         />
       </Field>
       <Field
@@ -306,10 +288,13 @@ function TripPlaceFields({
           ? 'Add the event address so traffic works everywhere.'
           : undefined}
       >
-        <Input
-          value={value.address}
-          placeholder="Address for traffic"
-          onChange={(event) => onChange({ ...value, address: event.target.value })}
+        <SmartPlaceInput
+          value={value}
+          field="address"
+          label={`${label} address`}
+          placeholder="Start typing an address"
+          onClear={() => onChange({ ...value, address: '' })}
+          onChange={onChange}
         />
       </Field>
       {(canSave || exactSavedPlace || savePlace.isPending) && (
