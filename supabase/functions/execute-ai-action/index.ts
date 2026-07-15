@@ -9,6 +9,11 @@ import {
 } from '../_shared/enrichment-impact.mjs'
 import { requireEnv } from '../_shared/env.mjs'
 import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
+import {
+  buildRecurringDetailMutation,
+  buildRecurringSeriesPatch,
+  isCanonicalRecurringEvent,
+} from '../_shared/assistant-recurring-mutation.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -237,6 +242,63 @@ async function applyMemberRoleOverrides(
   }
 }
 
+async function applyRecurringMemberChanges(
+  sb: ReturnType<typeof createClient>,
+  detailPatch: Record<string, unknown>,
+  normalized: {
+    membersAdd?: string[]
+    membersRemove?: string[]
+    membersChanged: boolean
+  },
+  membersPrimary?: string,
+  membersAttendees?: string[],
+) {
+  if (!normalized.membersChanged && !membersPrimary && membersAttendees === undefined) return false
+
+  const names = [
+    ...(normalized.membersAdd ?? []),
+    ...(normalized.membersRemove ?? []),
+    ...(membersPrimary ? [membersPrimary] : []),
+    ...(membersAttendees ?? []),
+  ]
+  const { resolvedIds, unresolved } = await resolveFamilyMembersByName(sb, names)
+  if (unresolved.length > 0) throw new Error(`Unknown family member(s): ${unresolved.join(', ')}`)
+
+  const current = new Map(
+    ((detailPatch.assignments as Array<{ family_member_id: string; role: string }>) ?? [])
+      .map((assignment) => [assignment.family_member_id, assignment.role]),
+  )
+  for (const name of normalized.membersRemove ?? []) {
+    const id = resolvedIds.get(name)
+    if (id) current.delete(id)
+  }
+  for (const name of normalized.membersAdd ?? []) {
+    const id = resolvedIds.get(name)
+    if (id && !current.has(id)) current.set(id, 'attendee')
+  }
+
+  if (membersAttendees !== undefined) {
+    const attendeeIds = new Set(membersAttendees.map((name) => resolvedIds.get(name)).filter(Boolean))
+    for (const [id, role] of current) {
+      if (role !== 'primary') current.delete(id)
+    }
+    for (const id of attendeeIds) current.set(id as string, 'attendee')
+  }
+  if (membersPrimary) {
+    const primaryId = resolvedIds.get(membersPrimary)
+    for (const [id, role] of current) {
+      if (role === 'primary') current.set(id, 'attendee')
+    }
+    if (primaryId) current.set(primaryId, 'primary')
+  }
+
+  detailPatch.assignments = [...current.entries()].map(([family_member_id, role]) => ({
+    family_member_id,
+    role,
+  }))
+  return true
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
@@ -462,11 +524,77 @@ Deno.serve(async (req) => {
 
       const { data: eventRow, error: eventLoadError } = await sb
         .from('events')
-        .select('id, event_type, google_event_id, recurrence_master_id, rrule, updated_at')
+        .select('id, event_type, google_event_id, recurrence_master_id, rrule, updated_at, series_id, record_kind, series_revision_applied, original_start_time, original_start_date, start_time')
         .eq('id', normalized.eventId)
         .maybeSingle()
       if (eventLoadError || !eventRow) {
         throw new Error(eventLoadError?.message ?? 'Event not found')
+      }
+
+      if (isCanonicalRecurringEvent(eventRow)) {
+        if (!actionId) throw new Error('Recurring event changes require an action ID.')
+        if (!normalized.recurrenceScope || !normalized.expectedSeriesRevision) {
+          throw new Error('Choose whether to change this event, this and following events, or the entire series.')
+        }
+        const { data: context, error: contextError } = await sb.rpc('recurrence_get_editor_context_core', {
+          p_selected_event_id: normalized.eventId,
+        })
+        if (contextError || !context) throw new Error(contextError?.message ?? 'Recurring event details are unavailable.')
+        if (context.series.revision !== normalized.expectedSeriesRevision) {
+          throw new Error('This recurring series changed before confirmation. Please review it again.')
+        }
+
+        const { changedPaths, detailPatch } = buildRecurringDetailMutation(context, normalized)
+        const assignmentsChanged = await applyRecurringMemberChanges(
+          sb,
+          detailPatch,
+          normalized,
+          membersPrimary,
+          membersAttendees,
+        )
+        if (assignmentsChanged) changedPaths.push('assignments')
+        if (changedPaths.length === 0) throw new Error('No recurring event changes were provided.')
+
+        const seriesPatch = buildRecurringSeriesPatch(
+          context,
+          normalized.recurrenceScope,
+          eventRow,
+        )
+        const recurrenceResult = await sb.functions.invoke('recurring-event-editor', {
+          body: {
+            action: 'save',
+            selected_event_id: normalized.eventId,
+            action_id: actionId,
+            scope: normalized.recurrenceScope,
+            expected_series_revision: normalized.expectedSeriesRevision,
+            changed_paths: [...new Set(changedPaths)],
+            detail_patch: detailPatch,
+            series_patch: seriesPatch,
+          },
+          headers: { Authorization: `Bearer ${requireEnv('SUPABASE_SERVICE_ROLE_KEY')}` },
+        })
+        if (recurrenceResult.error) throw new Error(recurrenceResult.error.message)
+        if (recurrenceResult.data?.success === false) {
+          throw new Error(recurrenceResult.data.error ?? 'Recurring event change failed.')
+        }
+        appendActionTrace('server_ai_action_recurring_succeeded', 'update_event', {
+          event_id: normalized.eventId,
+          scope: normalized.recurrenceScope,
+          series_id: recurrenceResult.data?.result?.series_id ?? eventRow.series_id,
+          series_revision: recurrenceResult.data?.result?.series_revision ?? null,
+        })
+        return new Response(JSON.stringify({
+          success: true,
+          event_id: normalized.eventId,
+          action_id: actionId,
+          recurrence_scope: normalized.recurrenceScope,
+          casa_saved: true,
+          google_sync_status: 'queued',
+          result: recurrenceResult.data?.result ?? null,
+          correlation_id: cid,
+        }), {
+          headers: { ...CORS, 'content-type': 'application/json' },
+        })
       }
 
       if (eventRow.recurrence_master_id || eventRow.rrule) {
@@ -748,6 +876,65 @@ Deno.serve(async (req) => {
     }
 
     if (tool === 'delete_event') {
+      const { data: eventRow, error: eventLoadError } = await sb
+        .from('events')
+        .select('id, series_id, record_kind, series_revision_applied, original_start_time, original_start_date, start_time, recurrence_master_id, rrule')
+        .eq('id', args.id)
+        .maybeSingle()
+      if (eventLoadError || !eventRow) throw new Error(eventLoadError?.message ?? 'Event not found')
+
+      if (isCanonicalRecurringEvent(eventRow)) {
+        const scope = args.recurrence_scope
+        const expectedSeriesRevision = args.expected_series_revision
+        if (!actionId) throw new Error('Recurring event deletion requires an action ID.')
+        if (!['this', 'future', 'all'].includes(scope) || !Number.isSafeInteger(expectedSeriesRevision) || expectedSeriesRevision < 1) {
+          throw new Error('Choose whether to delete this event, this and following events, or the entire series.')
+        }
+        const { data: context, error: contextError } = await sb.rpc('recurrence_get_editor_context_core', {
+          p_selected_event_id: args.id,
+        })
+        if (contextError || !context) throw new Error(contextError?.message ?? 'Recurring event details are unavailable.')
+        if (context.series.revision !== expectedSeriesRevision) {
+          throw new Error('This recurring series changed before confirmation. Please review it again.')
+        }
+        const recurrenceResult = await sb.functions.invoke('recurring-event-editor', {
+          body: {
+            action: 'delete',
+            selected_event_id: args.id,
+            action_id: actionId,
+            scope,
+            expected_series_revision: expectedSeriesRevision,
+            series_patch: buildRecurringSeriesPatch(context, scope, eventRow),
+          },
+          headers: { Authorization: `Bearer ${requireEnv('SUPABASE_SERVICE_ROLE_KEY')}` },
+        })
+        if (recurrenceResult.error) throw new Error(recurrenceResult.error.message)
+        if (recurrenceResult.data?.success === false) {
+          throw new Error(recurrenceResult.data.error ?? 'Recurring event deletion failed.')
+        }
+        appendActionTrace('server_ai_action_recurring_succeeded', 'delete_event', {
+          event_id: args.id,
+          scope,
+          series_id: recurrenceResult.data?.result?.series_id ?? eventRow.series_id,
+          series_revision: recurrenceResult.data?.result?.series_revision ?? null,
+        })
+        return new Response(JSON.stringify({
+          success: true,
+          event_id: args.id,
+          action_id: actionId,
+          recurrence_scope: scope,
+          casa_saved: true,
+          google_sync_status: 'queued',
+          result: recurrenceResult.data?.result ?? null,
+          correlation_id: cid,
+        }), {
+          headers: { ...CORS, 'content-type': 'application/json' },
+        })
+      }
+
+      if (eventRow.recurrence_master_id || eventRow.rrule) {
+        throw new Error(RECURRING_EDIT_ERROR)
+      }
       await sb.functions.invoke('delete-google-event', { body: { event_id: args.id } }).catch(() => {})
       const { error } = await sb.from('events').update({ status: 'cancelled' }).eq('id', args.id)
       if (error) throw new Error(error.message)
@@ -786,10 +973,13 @@ Deno.serve(async (req) => {
 
       const { data: matchedRows, error: matchedLoadError } = await sb
         .from('events')
-        .select('id, title')
+        .select('id, title, series_id, record_kind, recurrence_master_id, rrule')
         .in('id', uniqueIds)
       if (matchedLoadError) throw new Error(matchedLoadError.message)
       if (!matchedRows || matchedRows.length === 0) throw new Error('No matching events found for bulk delete')
+      if (matchedRows.some((event) => isCanonicalRecurringEvent(event) || event.recurrence_master_id || event.rrule)) {
+        throw new Error('Bulk deletion cannot include recurring events. Choose one recurring event and an explicit scope.')
+      }
 
       const matchedIds = matchedRows.map((row) => row.id)
       const missingCount = uniqueIds.length - matchedIds.length

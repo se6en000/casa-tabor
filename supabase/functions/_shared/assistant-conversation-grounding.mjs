@@ -77,6 +77,18 @@ export function normalizeConversationState(value, now = Date.now()) {
   if (value.activeEntityType !== 'event') return null
   const activeEventId = typeof value.activeEventId === 'string' ? value.activeEventId.trim() : ''
   if (!activeEventId) return null
+  const pendingMutation = (
+    ['update_event', 'delete_event'].includes(value.pendingMutation?.tool) &&
+    value.pendingMutation?.args &&
+    typeof value.pendingMutation.args === 'object' &&
+    !Array.isArray(value.pendingMutation.args) &&
+    value.pendingMutation.args.id === activeEventId
+  )
+    ? {
+        tool: value.pendingMutation.tool,
+        args: structuredClone(value.pendingMutation.args),
+      }
+    : null
   return {
     activeEntityType: 'event',
     activeEventId,
@@ -84,6 +96,7 @@ export function normalizeConversationState(value, now = Date.now()) {
     eventType: value.eventType === 'reminder' ? 'reminder' : 'event',
     expectedFollowUp: 'event_follow_up',
     establishedAt: new Date(establishedAt).toISOString(),
+    ...(pendingMutation ? { pendingMutation } : {}),
   }
 }
 

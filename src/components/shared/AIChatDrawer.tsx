@@ -1459,6 +1459,13 @@ function looksLikeRecipeSuggestion(text: string): boolean {
   return hasIngredients && hasSteps && hasListLikeContent
 }
 
+function recurrenceScopeLabel(scope: unknown) {
+  if (scope === 'this') return 'Only this event'
+  if (scope === 'future') return 'This and following events'
+  if (scope === 'all') return 'Entire series'
+  return null
+}
+
 function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<string, unknown>; events: EventWithDetails[] }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -1485,11 +1492,15 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
     const matchedEvent = events.find((event) => event.id === String(args.id ?? ''))
     const preview = buildUpdatePreviewCopy(args, matchedEvent)
     const changes = summarizeUpdateArgs(args)
+    const scopeLabel = recurrenceScopeLabel(args.recurrence_scope)
     const MAX_VISIBLE = 6
     const visibleChanges = expanded ? changes : changes.slice(0, MAX_VISIBLE)
     return (
       <div className="space-y-2">
         <p className="font-semibold text-casa-navy text-body-sm">{preview.heading}</p>
+        {scopeLabel && (
+          <p className="text-caption font-semibold text-casa-gold">{scopeLabel}</p>
+        )}
         {preview.currentSpan && preview.nextSpan && (
           <div className="rounded-lg border border-casa-border bg-casa-surface px-2.5 py-2 text-caption text-casa-muted space-y-1">
             <p><span className="font-semibold text-casa-navy">Current:</span> {preview.currentSpan}</p>
@@ -1501,8 +1512,8 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
         )}
         <p className="text-caption text-casa-muted">
           {changes.length > 0
-            ? `Updating ${changes.length} field${changes.length === 1 ? '' : 's'} on one event.`
-            : 'Updating one event.'}
+            ? `Updating ${changes.length} field${changes.length === 1 ? '' : 's'} for ${scopeLabel?.toLowerCase() ?? 'one event'}.`
+            : `Updating ${scopeLabel?.toLowerCase() ?? 'one event'}.`}
         </p>
         <div className="flex flex-wrap gap-1.5">
           {visibleChanges.map((change) => (
@@ -1555,9 +1566,11 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
   if (tool === 'delete_event') {
     const matchedEvent = events.find((event) => event.id === String(args.id ?? ''))
     const preview = buildDeletePreviewCopy(matchedEvent, args)
+    const scopeLabel = recurrenceScopeLabel(args.recurrence_scope)
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 space-y-1">
         <p className="font-semibold text-red-700 text-body-sm">{preview.heading}</p>
+        {scopeLabel && <p className="text-caption font-semibold text-red-700">{scopeLabel}</p>}
         {preview.when && <p className="text-caption text-red-600">{preview.when}</p>}
         <p className="text-caption text-red-600">{preview.note}</p>
       </div>

@@ -162,6 +162,27 @@ test('calendar safety catches malformed ranges, duplicates, and recurrence scope
     args: { id: 'event-1', expected_updated_at: 'v1', title: 'Practice' },
     authoritativeEntities: [{ type: 'event', id: 'event-1', version: 'v1', recurring: true }],
   }).code, 'recurring_scope_unsupported')
+
+  assert.equal(evaluate({
+    toolName: 'calendar.update',
+    actionId: 'update-recurring',
+    idempotencyKey: 'turn-1:update-recurring',
+    args: {
+      id: 'event-1',
+      expected_updated_at: 'v1',
+      expected_series_revision: 6,
+      recurrence_scope: 'future',
+      title: 'Practice',
+    },
+    authoritativeEntities: [{
+      type: 'event',
+      id: 'event-1',
+      version: 'v1',
+      recurring: true,
+      seriesRevision: 6,
+    }],
+    recurrenceScopeExplicit: true,
+  }).decision, 'confirm')
 })
 
 test('calendar writes reject family members not present in authoritative context', () => {

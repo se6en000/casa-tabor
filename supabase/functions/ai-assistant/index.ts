@@ -21,6 +21,11 @@ import {
   singularBulkDeleteClarification,
 } from '../_shared/assistant-calendar-mutation-edge.mjs'
 import {
+  isCanonicalRecurringEvent,
+  resolvePendingRecurringScope,
+  scopeCanonicalMutation,
+} from '../_shared/assistant-recurring-mutation.mjs'
+import {
   answerGroundedEventFollowUp,
   answerGroundedEventSemanticFrame,
   calendarClarificationConversationState,
@@ -474,7 +479,7 @@ Deno.serve(async (req) => {
       : skippedRows,
     needsEventData
       ? sb.from('events')
-      .select('id, title, start_time, end_time, updated_at, location_name, address, all_day, event_type, description, recurrence_master_id, rrule, event_enrichments(prep_notes, category, what_to_bring, outfit_suggestion, parking_notes, contact_name, contact_phone, cost_estimate, dietary_notes, meal_impact), event_checklist_items(id, label, note, checked, category, sort_order, created_at), event_action_items(id, title, description, due_date, is_urgent, completed, assigned_to, created_at), event_members(family_members(id, name))')
+      .select('id, title, start_time, end_time, updated_at, location_name, address, all_day, event_type, description, recurrence_master_id, rrule, series_id, record_kind, series_revision_applied, original_start_time, original_start_date, event_enrichments(prep_notes, category, what_to_bring, outfit_suggestion, parking_notes, contact_name, contact_phone, cost_estimate, dietary_notes, meal_impact), event_checklist_items(id, label, note, checked, category, sort_order, created_at), event_action_items(id, title, description, due_date, is_urgent, completed, assigned_to, created_at), event_members(family_members(id, name))')
       .is('deleted_at', null)
       .eq('status', 'confirmed')
       .or(`start_time.gte.${windowStart.toISOString()},end_time.gte.${windowStart.toISOString()}`)
@@ -796,17 +801,27 @@ Deno.serve(async (req) => {
       },
     }
   }
-  if (!shouldRunAgentWrite && intentRouting.profile === 'event' && latestUserText && activeConversationEvent) {
-    const activeMutation = resolveActiveCalendarMutation(
+  if (
+    (!shouldRunAgentWrite || isCanonicalRecurringEvent(activeConversationEvent)) &&
+    intentRouting.profile === 'event' &&
+    latestUserText &&
+    activeConversationEvent
+  ) {
+    const pendingRecurringMutation = resolvePendingRecurringScope(
       latestUserText,
+      incomingConversationState,
       activeConversationEvent,
-      allEvents ?? [],
-      {
-        now,
-        utcOffset: context?.utcOffset,
-        familyNames: authorizedFamilyNames,
-      },
     )
+    const activeMutation = pendingRecurringMutation ?? resolveActiveCalendarMutation(
+        latestUserText,
+        activeConversationEvent,
+        allEvents ?? [],
+        {
+          now,
+          utcOffset: context?.utcOffset,
+          familyNames: authorizedFamilyNames,
+        },
+      )
     if (activeMutation?.text || activeMutation?.tool) {
       appendServerTrace('server_ai_assistant_active_calendar_mutation', activeMutation.tool ?? 'clarify', {
         tool: activeMutation.tool ?? null,
@@ -831,7 +846,12 @@ Deno.serve(async (req) => {
           : {
               type: 'text',
               text: activeMutation.text,
-              conversation_state: eventConversationState(activeConversationEvent, now),
+              conversation_state: {
+                ...eventConversationState(activeConversationEvent, now),
+                ...(activeMutation.pendingMutation
+                  ? { pendingMutation: activeMutation.pendingMutation }
+                  : {}),
+              },
               correlation_id: cid,
               telemetry: {
                 ...llmTelemetry,
@@ -912,6 +932,13 @@ Deno.serve(async (req) => {
           semanticTurn?: Record<string, unknown>
         }
       }
+      recurringClarification?: {
+        eventId?: string
+        pendingMutation?: {
+          tool?: string
+          args?: Record<string, unknown>
+        }
+      }
     } | null
     if (
       !agentWriteResult.error &&
@@ -979,7 +1006,21 @@ Deno.serve(async (req) => {
       typeof agentWriteData.text === 'string'
     ) {
       const clarification = agentWriteData.clarification
-      const clarificationState = Array.isArray(clarification?.candidates) &&
+      const recurringClarification = agentWriteData.recurringClarification
+      const recurringClarificationEvent = recurringClarification?.eventId
+        ? (allEvents ?? []).find((event) => event.id === recurringClarification.eventId)
+        : null
+      const clarificationState = (
+        recurringClarificationEvent &&
+        isCanonicalRecurringEvent(recurringClarificationEvent) &&
+        ['update_event', 'delete_event'].includes(String(recurringClarification?.pendingMutation?.tool ?? '')) &&
+        recurringClarification?.pendingMutation?.args
+      )
+        ? {
+            ...eventConversationState(recurringClarificationEvent, now),
+            pendingMutation: recurringClarification.pendingMutation,
+          }
+        : Array.isArray(clarification?.candidates) &&
           clarification.candidates.length > 1 &&
           ['update_event', 'delete_event', 'complete_reminder'].includes(String(clarification.pendingMutation?.tool ?? '')) &&
           clarification.pendingMutation?.args
@@ -988,7 +1029,7 @@ Deno.serve(async (req) => {
             clarification.pendingMutation,
             now,
           )
-        : responseConversationState
+          : responseConversationState
       appendServerTrace('server_agent_write_blocked', agentWriteData.code ?? 'write_rejected', {
         code: agentWriteData.code ?? null,
         tool_name: agentWriteData.toolName ?? agentWriteData.plan?.toolName ?? null,
@@ -3889,7 +3930,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       }
     }
     if (intentRouting.profile === 'event' && latestUserText && !context.focusedEvent) {
-      const deterministicMutation = resolveDeterministicEventMutation(
+      const rawDeterministicMutation = resolveDeterministicEventMutation(
         latestUserText,
         allEvents ?? [],
         {
@@ -3898,13 +3939,20 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           familyNames: (context.family as { name: string }[]).map((member) => member.name),
         },
       )
+      const deterministicMutation = rawDeterministicMutation?.event
+        ? scopeCanonicalMutation(
+            latestUserText,
+            rawDeterministicMutation,
+            rawDeterministicMutation.event,
+          )
+        : rawDeterministicMutation
       if (deterministicMutation) {
         const requestTotalMs = Date.now() - requestStartMs
         appendServerTrace(
           'server_ai_assistant_deterministic_mutation',
           `tool=${deterministicMutation.tool} ms=${requestTotalMs}`,
           {
-            tool: deterministicMutation.tool,
+            tool: deterministicMutation.tool ?? null,
             event_id: deterministicMutation.event?.id ?? null,
             request_ms: requestTotalMs,
           },
@@ -3921,10 +3969,13 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         return {
           status: 200,
           payload: {
-            type: 'tool_action',
+            type: deterministicMutation.tool ? 'tool_action' : 'text',
             tool: deterministicMutation.tool,
             args: deterministicMutation.args,
-            display_text: buildDisplayText(deterministicMutation.tool, deterministicMutation.args),
+            text: deterministicMutation.text,
+            display_text: deterministicMutation.tool
+              ? buildDisplayText(deterministicMutation.tool, deterministicMutation.args)
+              : undefined,
             conversation_state: deterministicMutation.event
               ? eventConversationState(deterministicMutation.event, now)
               : responseConversationState,

@@ -27,6 +27,8 @@ export const AI_EVENT_EDIT_LIMITS = {
 const ALLOWED_UPDATE_KEYS = new Set([
   'id',
   'expected_updated_at',
+  'recurrence_scope',
+  'expected_series_revision',
   'title',
   'start',
   'end',
@@ -163,6 +165,16 @@ export function buildValidatedUpdatePayload(args) {
   if (expectedUpdatedAt === undefined) {
     errors.push('expected_updated_at is required')
   }
+  const recurrenceScope = args.recurrence_scope === undefined
+    ? undefined
+    : ['this', 'future', 'all'].includes(args.recurrence_scope)
+      ? args.recurrence_scope
+      : (errors.push('recurrence_scope must be this, future, or all'), undefined)
+  const expectedSeriesRevision = args.expected_series_revision === undefined
+    ? undefined
+    : Number.isSafeInteger(args.expected_series_revision) && args.expected_series_revision > 0
+      ? args.expected_series_revision
+      : (errors.push('expected_series_revision must be a positive integer'), undefined)
 
   if (args.title !== undefined) {
     const title = normalizeOptionalText(args.title)
@@ -267,6 +279,8 @@ export function buildValidatedUpdatePayload(args) {
     normalized: {
       eventId: String(args.id ?? '').trim(),
       expectedUpdatedAt,
+      recurrenceScope,
+      expectedSeriesRevision,
       eventUpdates,
       enrichmentUpdates,
       checklistItems,

@@ -99,7 +99,20 @@ function evaluateDomainPolicy(tool, request) {
         return reject('stale_authoritative_target')
       }
 
-      if (target.recurring === true) return reject('recurring_scope_unsupported')
+      if (target.recurring === true) {
+        const hasExplicitScope = ['this', 'future', 'all'].includes(request.args.recurrence_scope)
+        const hasMatchingRevision = Number.isSafeInteger(request.args.expected_series_revision) &&
+          request.args.expected_series_revision > 0 &&
+          request.args.expected_series_revision === target.seriesRevision
+        if (
+          !['calendar.update', 'calendar.delete'].includes(tool.name) ||
+          request.recurrenceScopeExplicit !== true ||
+          !hasExplicitScope ||
+          !hasMatchingRevision
+        ) {
+          return reject('recurring_scope_unsupported')
+        }
+      }
       if (tool.name === 'calendar.complete_reminder' && target.eventType !== 'reminder') {
         return reject('calendar_reminder_required')
       }

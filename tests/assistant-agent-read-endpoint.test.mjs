@@ -31,7 +31,7 @@ test('active reminder completion runs before generic active-event mutation handl
   const reminderCompletion = assistantEndpoint.indexOf(
     "server_ai_assistant_reminder_completion_follow_up",
   )
-  const genericMutation = assistantEndpoint.indexOf('const activeMutation = resolveActiveCalendarMutation')
+  const genericMutation = assistantEndpoint.indexOf('const activeMutation = pendingRecurringMutation')
   assert.ok(reminderCompletion > 0)
   assert.ok(genericMutation > reminderCompletion)
 })

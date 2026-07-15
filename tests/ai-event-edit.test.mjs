@@ -77,6 +77,20 @@ test('buildValidatedUpdatePayload rejects unsupported fields and empty edits', (
   assert.ok(errors.includes('update_event must include at least one editable field'))
 })
 
+test('buildValidatedUpdatePayload accepts validated recurrence coordination metadata', () => {
+  const { errors, normalized } = buildValidatedUpdatePayload({
+    id: 'event-1',
+    expected_updated_at: '2026-07-16T12:00:00.000Z',
+    recurrence_scope: 'future',
+    expected_series_revision: 8,
+    title: 'Updated title',
+  })
+
+  assert.deepEqual(errors, [])
+  assert.equal(normalized.recurrenceScope, 'future')
+  assert.equal(normalized.expectedSeriesRevision, 8)
+})
+
 test('buildValidatedUpdatePayload enforces optimistic concurrency timestamp and item limits', () => {
   const { errors, normalized } = buildValidatedUpdatePayload({
     id: 'event-1',

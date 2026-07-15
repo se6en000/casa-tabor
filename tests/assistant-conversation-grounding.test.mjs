@@ -35,6 +35,24 @@ test('conversation state retains an authoritative event identity and expires', (
   assert.equal(normalizeConversationState(state, now.getTime() + 31 * 60 * 1000), null)
 })
 
+test('event conversation state safely preserves a pending recurrence scope choice', () => {
+  const now = new Date('2026-07-11T13:00:00Z')
+  const state = normalizeConversationState({
+    ...eventConversationState(event, now),
+    pendingMutation: {
+      tool: 'update_event',
+      args: {
+        id: event.id,
+        expected_updated_at: event.updated_at,
+        title: 'Updated party',
+      },
+    },
+  }, now.getTime() + 1000)
+
+  assert.equal(state.pendingMutation.tool, 'update_event')
+  assert.equal(state.pendingMutation.args.id, event.id)
+})
+
 test('conversation state retains an authoritative grocery item identity', () => {
   const now = new Date('2026-07-11T13:00:00Z')
   const state = groceryConversationState({ id: 'milk' }, now)

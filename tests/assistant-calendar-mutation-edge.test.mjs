@@ -69,6 +69,41 @@ test('active event pronoun deletes preserve the authoritative ID', () => {
   assert.match(recurring.text, /recurring event/)
 })
 
+test('canonical recurring mutations require and preserve an explicit scope', () => {
+  const canonical = {
+    ...event,
+    series_id: 'series-1',
+    record_kind: 'occurrence',
+    series_revision_applied: 4,
+  }
+  const clarification = resolveActiveCalendarMutation(
+    'Move it to 6 PM.',
+    canonical,
+    [canonical],
+    { utcOffset: '-04:00' },
+  )
+  assert.match(clarification.text, /only this event, this and following events, or the entire series/i)
+
+  const update = resolveActiveCalendarMutation(
+    'Move it to 6 PM for this event and all following events.',
+    canonical,
+    [canonical],
+    { utcOffset: '-04:00' },
+  )
+  assert.equal(update.tool, 'update_event')
+  assert.equal(update.args.recurrence_scope, 'future')
+  assert.equal(update.args.expected_series_revision, 4)
+
+  const deletion = resolveActiveCalendarMutation(
+    'Delete it for the entire series.',
+    canonical,
+    [canonical],
+    { utcOffset: '-04:00' },
+  )
+  assert.equal(deletion.tool, 'delete_event')
+  assert.equal(deletion.args.recurrence_scope, 'all')
+})
+
 test('ambiguous times and singular bulk deletes clarify safely', () => {
   assert.equal(calendarMutationClarification('Schedule tutoring next sat at ate.'), 'Did you mean 8 AM or 8 PM?')
   assert.match(

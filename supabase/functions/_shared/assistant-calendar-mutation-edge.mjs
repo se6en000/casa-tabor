@@ -1,3 +1,8 @@
+import {
+  isCanonicalRecurringEvent,
+  scopeCanonicalMutation,
+} from './assistant-recurring-mutation.mjs'
+
 const NUMBER_WORDS = new Map([
   ['one', 1],
   ['two', 2],
@@ -92,7 +97,19 @@ function deleteSelectionMatches(request, events, utcOffset) {
 export function resolveActiveCalendarMutation(text, event, events, options = {}) {
   if (!event?.id) return null
   const input = String(text ?? '').replace(/\s+/g, ' ').trim()
-  const activeDeleteRequest = /^(?:delete|cancel|remove)\s+(?:it|this|that|this one|that one|the one)[.!]?$/i.test(input)
+  const activeDeleteRequest = /^(?:delete|cancel|remove)\s+(?:it|this|that|this one|that one|the one)(?:[,;]?\s+(?:(?:for\s+)?(?:just|only)\s+(?:this|that|the)\s+(?:event|appointment|occurrence|one)|(?:for\s+)?(?:this|the)\s+(?:event|appointment|occurrence|one)\s+and\s+(?:all\s+)?(?:future|following|later|upcoming)\s*(?:events|appointments|occurrences|ones)?|(?:for\s+)?(?:all|every)\s+(?:event|appointment|occurrence|one)(?:\s+in\s+(?:the|this)\s+series)?|(?:for\s+)?(?:the\s+)?(?:entire|whole)\s+series))?[.!]?$/i.test(input)
+
+  if (isCanonicalRecurringEvent(event)) {
+    const standaloneView = {
+      ...event,
+      series_id: null,
+      record_kind: 'standalone',
+      recurrence_master_id: null,
+      rrule: null,
+    }
+    const mutation = resolveActiveCalendarMutation(input, standaloneView, events, options)
+    return scopeCanonicalMutation(input, mutation, event)
+  }
 
   if (event.rrule || event.recurrence_master_id) {
     if (

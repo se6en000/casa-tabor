@@ -13,6 +13,7 @@ if (liveFixtures) {
     ['Scoped mutation database fixture', 'node', ['scripts/recurrence-v2-command-integration.mjs', '--live-fixture']],
     ['Materializer database fixture', 'node', ['scripts/recurrence-v2-materializer-integration.mjs', '--live-fixture']],
     ['Google projection fixture', 'node', ['scripts/google-recurrence-projection-integration.mjs', '--live-fixture']],
+    ['Scoped AI recurrence fixture', 'node', ['scripts/recurrence-v2-ai-integration.mjs', '--live-fixture']],
   )
 }
 

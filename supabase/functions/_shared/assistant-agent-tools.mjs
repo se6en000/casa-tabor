@@ -1,5 +1,6 @@
 const string = (description) => ({ type: 'string', description })
 const boolean = (description) => ({ type: 'boolean', description })
+const number = (description) => ({ type: 'number', description })
 const stringArray = (description) => ({ type: 'array', items: { type: 'string' }, description })
 
 function tool({ name, domain, effect, description, properties, required = [], legacyTool = null }) {
@@ -104,6 +105,8 @@ export const AGENT_TOOL_DEFINITIONS = Object.freeze([
       members_add: stringArray('Family member names to add.'),
       members_remove: stringArray('Family member names to remove.'),
       all_day: boolean('Replacement all-day status.'),
+      recurrence_scope: string('Deterministically validated recurrence scope: this, future, or all.'),
+      expected_series_revision: number('Authoritative recurring-series revision used for stale-write protection.'),
     },
     required: ['id', 'expected_updated_at'],
   }),
@@ -117,6 +120,8 @@ export const AGENT_TOOL_DEFINITIONS = Object.freeze([
       id: string('Exact event UUID returned by a calendar read tool.'),
       expected_updated_at: string('Authoritative version timestamp used for stale-write protection.'),
       title: string('Authoritative event title shown during confirmation.'),
+      recurrence_scope: string('Deterministically validated recurrence scope: this, future, or all.'),
+      expected_series_revision: number('Authoritative recurring-series revision used for stale-write protection.'),
     },
     required: ['id', 'expected_updated_at', 'title'],
   }),

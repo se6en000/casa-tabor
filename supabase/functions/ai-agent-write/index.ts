@@ -21,6 +21,7 @@ import {
   hardenExplicitReminderTurn,
 } from '../_shared/assistant-reminder-intent.mjs'
 import { resolveActiveCalendarMutation } from '../_shared/assistant-calendar-mutation-edge.mjs'
+import { parseExplicitRecurrenceScope } from '../_shared/assistant-recurring-mutation.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -66,6 +67,9 @@ Deno.serve(async (req) => {
         event_type?: string
         recurrence_master_id?: string | null
         rrule?: string | null
+        series_id?: string | null
+        record_kind?: string | null
+        series_revision_applied?: number | null
       }) => ({
         type: 'event',
         id: event.id,
@@ -75,7 +79,12 @@ Deno.serve(async (req) => {
         end: event.end_time,
         allDay: event.all_day === true,
         eventType: event.event_type === 'reminder' ? 'reminder' : 'event',
-        recurring: Boolean(event.recurrence_master_id || event.rrule),
+        recurring: Boolean(
+          event.recurrence_master_id ||
+          event.rrule ||
+          (event.series_id && event.record_kind === 'occurrence')
+        ),
+        seriesRevision: event.series_revision_applied ?? null,
       })),
       ...groceryItems.map((item: {
         id?: string
@@ -282,6 +291,17 @@ Deno.serve(async (req) => {
     const duplicateCandidates = plan.toolName === 'calendar.create'
       ? findAgentCalendarDuplicates(events, plan.args)
       : []
+    const explicitRecurrenceScope = parseExplicitRecurrenceScope(latestUserText)
+    const plannedTarget = ['calendar.update', 'calendar.delete'].includes(plan.toolName)
+      ? authoritativeEntities.find((entity) => entity.type === 'event' && entity.id === plan.args?.id)
+      : null
+    if (plannedTarget?.recurring === true && explicitRecurrenceScope) {
+      plan.args = {
+        ...plan.args,
+        recurrence_scope: explicitRecurrenceScope,
+        expected_series_revision: plannedTarget.seriesRevision,
+      }
+    }
     if (
       plan.toolName === 'calendar.update' &&
       !isAgentCalendarUpdateTargetUnambiguous(
@@ -352,6 +372,7 @@ Deno.serve(async (req) => {
             typeof member?.name === 'string' ? [member.name] : []
           )
         : [],
+      recurrenceScopeExplicit: explicitRecurrenceScope !== null,
     })
     const acceptedDecision = [
       'calendar.update',
@@ -363,6 +384,11 @@ Deno.serve(async (req) => {
       ? 'confirm'
       : 'execute'
     if (policy.decision !== acceptedDecision || policy.allowed !== true) {
+      const recurringPendingArgs = Object.fromEntries(
+        Object.entries(plan.args ?? {}).filter(([key]) =>
+          !['recurrence_scope', 'expected_series_revision'].includes(key)
+        ),
+      )
       return result({
         supported: false,
         handled: true,
@@ -371,6 +397,17 @@ Deno.serve(async (req) => {
         planKind: plan.kind,
         toolName: plan.toolName,
         policy,
+        ...(policy.code === 'recurring_scope_unsupported' && plannedTarget
+          ? {
+              recurringClarification: {
+                eventId: plannedTarget.id,
+                pendingMutation: {
+                  tool: legacyToolNameFor(plan.toolName),
+                  args: recurringPendingArgs,
+                },
+              },
+            }
+          : {}),
       })
     }
 
@@ -461,6 +498,9 @@ function writeRejectionText(code: unknown, detail?: Record<string, unknown>) {
   }
   if (code === 'stale_authoritative_target') {
     return 'That item changed before I could prepare the update. Please try again with the latest version. Nothing was changed.'
+  }
+  if (code === 'recurring_scope_unsupported') {
+    return 'Should I change only this event, this and following events, or the entire series? Nothing was changed.'
   }
   return `I understood this as a change, but I couldn't prepare it safely. Nothing was saved.`
 }
