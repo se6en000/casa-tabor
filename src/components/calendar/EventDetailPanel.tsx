@@ -586,7 +586,7 @@ function CategoryPicker({
         tone="accent"
         className="capitalize"
         style={dark
-          ? { background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.90)', letterSpacing: '0.04em', gap: '0.25rem', border: '1px solid rgba(255,255,255,0.18)' }
+          ? { background: `color-mix(in srgb, ${accent} 28%, rgba(255,255,255,0.10))`, color: 'rgba(255,255,255,0.95)', letterSpacing: '0.04em', gap: '0.25rem', border: `1px solid color-mix(in srgb, ${accent} 40%, rgba(255,255,255,0.20))` }
           : { background: `color-mix(in srgb, ${accent} 14%, transparent)`, color: S.navy, letterSpacing: '0.04em', gap: '0.25rem' }
         }
         onClick={() => setOpen(v => !v)}
@@ -671,6 +671,20 @@ function PanelHeader({
         style={{ background: isBirthday ? undefined : S.navy }}
       >
         {isBirthday && <BirthdayCardDecoration className="opacity-60" />}
+
+        {/* Accent radial glow — makes every event visually distinct */}
+        {!isBirthday && (
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{ background: `radial-gradient(ellipse 70% 100% at 90% 0%, color-mix(in srgb, ${accent} 28%, transparent), transparent 65%)` }}
+          />
+        )}
+
+        {/* Bottom fade — softens the cut to the white attendee strip */}
+        <div
+          className="pointer-events-none absolute bottom-0 inset-x-0 h-5"
+          style={{ background: isBirthday ? undefined : 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.18))' }}
+        />
 
         {/* Eyebrow row: category · owner · recurring · avatar dots · close */}
         <div className="relative z-10 flex items-center gap-2 pr-10">
