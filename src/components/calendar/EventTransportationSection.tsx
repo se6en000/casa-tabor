@@ -23,6 +23,7 @@ import {
   updateTransportationDriver,
   updateTransportationEventPlace,
   updateTransportationPlace,
+  transportationPlaceMatchesEvent,
   type EventTransportationPlan,
   type TransportationLeg,
   type TransportationPlace,
@@ -35,7 +36,7 @@ import PassengerChipSelector from './PassengerChipSelector'
 interface EventTransportationSectionProps {
   event: EventWithDetails
   plan: EventTransportationPlan | null
-  onChange: (plan: EventTransportationPlan | null) => void
+  onChange: (plan: EventTransportationPlan | null) => Promise<void>
   suggestedPlan?: boolean
 }
 
@@ -344,6 +345,7 @@ export default function EventTransportationSection({
   const [savingTrip, setSavingTrip] = useState(false)
   const [tripError, setTripError] = useState<string | null>(null)
   const [savingPassenger, setSavingPassenger] = useState<string | null>(null)
+  const [savingQuickChange, setSavingQuickChange] = useState(false)
   const { data: household = [] } = useFamilyMembers()
   const { data: savedPlaces = [] } = useSavedPlaces()
   const queryClient = useQueryClient()
@@ -411,29 +413,45 @@ export default function EventTransportationSection({
     })
   }
 
-  const updatePlanPlace = (
+  const updatePlanPlace = async (
     legIndex: number,
     side: 'origin' | 'destination',
     place: TransportationPlace,
   ) => {
-    if (!hydratedPlan) return
+    if (!hydratedPlan || savingQuickChange) return
     const current = hydratedPlan.legs[legIndex]?.[side]
     const nextPlan = current && isTransportationEventPlace(current)
       ? updateTransportationEventPlace(hydratedPlan, place)
       : updateTransportationPlace(hydratedPlan, legIndex, side, place)
-    if (current && isTransportationEventPlace(current)) {
-      return persistEventLocation(place).then(() => onChange(nextPlan))
+    setTripError(null)
+    setSavingQuickChange(true)
+    try {
+      if (current && isTransportationEventPlace(current) && !transportationPlaceMatchesEvent(place, event)) {
+        await persistEventLocation(place)
+      }
+      await onChange(nextPlan)
+    } catch (cause) {
+      setTripError(cause instanceof Error ? cause.message : 'Could not save this trip change.')
+    } finally {
+      setSavingQuickChange(false)
     }
-    onChange(nextPlan)
   }
 
-  const updatePlanDriver = (
+  const updatePlanDriver = async (
     legIndex: number,
     driver: { id: string | null; name: string },
     applyToRemaining: boolean,
   ) => {
-    if (!hydratedPlan) return
-    onChange(updateTransportationDriver(hydratedPlan, legIndex, driver, applyToRemaining))
+    if (!hydratedPlan || savingQuickChange) return
+    setTripError(null)
+    setSavingQuickChange(true)
+    try {
+      await onChange(updateTransportationDriver(hydratedPlan, legIndex, driver, applyToRemaining))
+    } catch (cause) {
+      setTripError(cause instanceof Error ? cause.message : 'Could not save this driver change.')
+    } finally {
+      setSavingQuickChange(false)
+    }
   }
 
   const persistEventLocation = async (place: TransportationPlace) => {
@@ -445,8 +463,8 @@ export default function EventTransportationSection({
       .update({
         location_name: normalizedName,
         address: normalizedAddress,
-        lat: null,
-        lng: null,
+        lat: place.lat ?? null,
+        lng: place.lng ?? null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', event.id)
@@ -529,6 +547,8 @@ export default function EventTransportationSection({
               </Button>
             </div>
             <p className="px-[18px] pt-3 text-caption text-casa-muted">Tap any place or driver for a quick change.</p>
+            {savingQuickChange && <p className="px-[18px] pt-2 text-caption text-casa-muted">Saving trip change…</p>}
+            {tripError && <p role="alert" className="px-[18px] pt-2 text-caption text-casa-error">{tripError}</p>}
             <ol className="px-[18px] pb-2">
               {hydratedPlan.legs.map((leg, index) => (
                 <TripLegTimeline
@@ -728,8 +748,10 @@ export default function EventTransportationSection({
                       const eventPlace = draft.legs
                         .flatMap((leg) => [leg.origin, leg.destination])
                         .find(isTransportationEventPlace)
-                      if (eventPlace) await persistEventLocation(eventPlace)
-                      onChange(draft)
+                      if (eventPlace && !transportationPlaceMatchesEvent(eventPlace, event)) {
+                        await persistEventLocation(eventPlace)
+                      }
+                      await onChange(draft)
                       setEditorOpen(false)
                     } catch (cause) {
                       setTripError(cause instanceof Error ? cause.message : 'Could not save this trip.')
@@ -749,14 +771,22 @@ export default function EventTransportationSection({
         open={removeConfirmOpen}
         onClose={() => setRemoveConfirmOpen(false)}
         onConfirm={() => {
-          onChange(null)
-          setRemoveConfirmOpen(false)
-          setEditorOpen(false)
+          setSavingTrip(true)
+          setTripError(null)
+          void onChange(null).then(() => {
+            setRemoveConfirmOpen(false)
+            setEditorOpen(false)
+          }).catch((cause) => {
+            setTripError(cause instanceof Error ? cause.message : 'Could not remove this driving plan.')
+          }).finally(() => {
+            setSavingTrip(false)
+          })
         }}
         title="Remove driving plan?"
         description="This removes every driving leg from this event. The event and its location will stay in Casa."
         confirmLabel="Remove driving plan"
         destructive
+        loading={savingTrip}
       />
     </>
   )

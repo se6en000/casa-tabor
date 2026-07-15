@@ -131,6 +131,25 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
   const dragDismissVelocity = isMobile ? 550 : 700
   const addressReviewed = verifiedOverride === true
 
+  const persistTransportationPlan = useCallback(async (nextPlan: EventTransportationPlan | null) => {
+    if (!event) throw new Error('This event is no longer available.')
+    setOverrideSaveError(null)
+    const { error } = await supabase
+      .from('event_plan_overrides')
+      .upsert({
+        event_id: event.id,
+        transportation_plan: nextPlan,
+      }, { onConflict: 'event_id' })
+    if (error) {
+      const message = `Could not save this driving plan: ${error.message}`
+      setOverrideSaveError(message)
+      throw new Error(message)
+    }
+    setTransportationPlan(nextPlan)
+    window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+    await queryClient.invalidateQueries({ queryKey: ['events'] })
+  }, [event, queryClient])
+
   useEffect(() => {
     if (!event) return
     setOverridesHydratedEventId(null)
@@ -218,7 +237,6 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
           driver_overrides: driverOverrides,
           mode_override: modeOverride,
           two_driver_confirmed: twoDriverConfirmed,
-          transportation_plan: transportationPlan,
           location_signature: locationSignature(event),
         }, { onConflict: 'event_id' })
       if (error) {
@@ -341,9 +359,10 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                     await queryClient.invalidateQueries({ queryKey: ['events'] })
                   }}
                   onRosterChange={(names) => {
-                    setTransportationPlan((current) => current
-                      ? syncTransportationAttendees(current, names)
-                      : current)
+                    const nextPlan = transportationPlan
+                      ? syncTransportationAttendees(transportationPlan, names)
+                      : null
+                    if (nextPlan !== transportationPlan) void persistTransportationPlan(nextPlan)
                   }}
                 />
                 <PanelBody
@@ -363,7 +382,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   }}
                   onSetModeOverride={setModeOverride}
                   onSetTwoDriverConfirmed={setTwoDriverConfirmed}
-                  onSetTransportationPlan={setTransportationPlan}
+                  onSetTransportationPlan={persistTransportationPlan}
                 />
               </div>
               <PanelFooter event={event} modeOverride={modeOverride} onEdit={() => setShowEdit(true)} />
@@ -979,7 +998,7 @@ function PanelBody({
   onSetDriverOverride: (legIndex: number, driverId: string) => void
   onSetModeOverride: (mode: EventMode | null) => void
   onSetTwoDriverConfirmed: (value: boolean) => void
-  onSetTransportationPlan: (plan: EventTransportationPlan | null) => void
+  onSetTransportationPlan: (plan: EventTransportationPlan | null) => Promise<void>
 }) {
   return (
     <StandardPanelBody
@@ -1022,7 +1041,7 @@ function StandardPanelBody({
   onSetDriverOverride: (legIndex: number, driverId: string) => void
   onSetModeOverride: (mode: EventMode | null) => void
   onSetTwoDriverConfirmed: (value: boolean) => void
-  onSetTransportationPlan: (plan: EventTransportationPlan | null) => void
+  onSetTransportationPlan: (plan: EventTransportationPlan | null) => Promise<void>
 }) {
   const enr = event.enrichment
   const reminder = event.event_type === 'reminder'
@@ -1246,7 +1265,7 @@ function StandardPanelBody({
                 const defaultDriver = household.find((member) =>
                   member.can_drive && (member.role === 'parent' || member.role === 'caregiver')
                 )
-                onSetTransportationPlan(createDefaultTransportationPlan(event, homeAddress, defaultDriver))
+                void onSetTransportationPlan(createDefaultTransportationPlan(event, homeAddress, defaultDriver))
               }}
             />
           ) : (

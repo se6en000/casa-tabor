@@ -10,6 +10,7 @@ const passengerChips = readFileSync(resolve('src/components/calendar/PassengerCh
 const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
 const addressReview = readFileSync(resolve('src/components/calendar/AddressReviewSummary.tsx'), 'utf8')
 const eventLocation = readFileSync(resolve('src/lib/eventLocation.ts'), 'utf8')
+const transportationLib = readFileSync(resolve('src/lib/eventTransportation.ts'), 'utf8')
 const recurrenceScope = readFileSync(resolve('src/components/calendar/RecurrenceScopeDialog.tsx'), 'utf8')
 const categoryPicker = detail.slice(detail.indexOf('function CategoryPicker'), detail.indexOf('/* ── Header'))
 const eventEdit = readFileSync(resolve('src/components/calendar/EventEditSheet.tsx'), 'utf8')
@@ -42,6 +43,22 @@ test('The Plan supports quick driver reassignment including external drivers and
   assert.match(transportation, /updateTransportationDriver/)
   assert.match(transportation, /backgroundColor: activeDriver\?\.color_hex/)
   assert.match(transportation, /backgroundColor: driver\.color_hex/)
+})
+
+test('transportation mutations use one awaited durable writer without stale plan overwrites', () => {
+  assert.match(detail, /const persistTransportationPlan = useCallback\(async/)
+  assert.match(detail, /transportation_plan: nextPlan/)
+  assert.match(detail, /onSetTransportationPlan=\{persistTransportationPlan\}/)
+  assert.doesNotMatch(detail, /two_driver_confirmed: twoDriverConfirmed,\s+transportation_plan: transportationPlan,/)
+  assert.match(transportation, /await onChange\(draft\)/)
+  assert.match(transportation, /await onChange\(nextPlan\)/)
+  assert.match(transportation, /void onChange\(null\)\.then/)
+  assert.match(transportation, /savingQuickChange/)
+  assert.match(transportation, /Saving trip change…/)
+  assert.match(transportation, /transportationPlaceMatchesEvent\(eventPlace, event\)/)
+  assert.match(transportationLib, /export function transportationPlaceMatchesEvent/)
+  assert.match(transportation, /lat: place\.lat \?\? null/)
+  assert.match(transportation, /lng: place\.lng \?\? null/)
 })
 
 test('driving plan removal is truthful, editor-only, and confirmed', () => {

@@ -172,6 +172,14 @@ export function eventTransportationPlace(event: Pick<EventWithDetails, 'location
   }
 }
 
+export function transportationPlaceMatchesEvent(
+  place: TransportationPlace,
+  event: Pick<EventWithDetails, 'location_name' | 'address'>,
+): boolean {
+  return place.name.trim() === (event.location_name?.trim() || event.address?.trim() || '')
+    && place.address.trim() === (event.address?.trim() || '')
+}
+
 export function isTransportationEventPlace(place: TransportationPlace): boolean {
   return place.kind === 'event' || place.name.trim().toLowerCase() === 'event location'
 }
