@@ -76,13 +76,25 @@ function WheelColumn({ items, value, onChange, wide = false }: {
   const userScrolling = useRef(false)
   const selectedIndex = Math.max(0, items.findIndex(item => item.value === value))
 
+  useEffect(() => () => {
+    if (settleTimer.current) window.clearTimeout(settleTimer.current)
+  }, [])
+
   useEffect(() => {
     if (userScrolling.current || !scrollRef.current) return
     scrollRef.current.scrollTop = selectedIndex * ITEM_HEIGHT
   }, [selectedIndex])
 
-  const handleScroll = () => {
+  const beginUserScroll = () => {
     userScrolling.current = true
+    if (settleTimer.current) window.clearTimeout(settleTimer.current)
+    settleTimer.current = window.setTimeout(() => {
+      userScrolling.current = false
+    }, 250)
+  }
+
+  const handleScroll = () => {
+    if (!userScrolling.current) return
     if (settleTimer.current) window.clearTimeout(settleTimer.current)
     settleTimer.current = window.setTimeout(() => {
       userScrolling.current = false
@@ -98,7 +110,14 @@ function WheelColumn({ items, value, onChange, wide = false }: {
 
   return (
     <div className={cn('relative overflow-hidden', wide ? 'flex-[2.4]' : 'flex-1')} style={{ height: VISIBLE_ITEMS * ITEM_HEIGHT }}>
-      <div ref={scrollRef} onScroll={handleScroll} className="h-full snap-y snap-mandatory overflow-y-scroll overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div
+        ref={scrollRef}
+        onPointerDown={beginUserScroll}
+        onWheel={beginUserScroll}
+        onKeyDown={beginUserScroll}
+        onScroll={handleScroll}
+        className="h-full snap-y snap-mandatory overflow-y-scroll overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
         <div style={{ height: WHEEL_PADDING }} />
         {items.map((item, index) => {
           const distance = Math.abs(index - selectedIndex)

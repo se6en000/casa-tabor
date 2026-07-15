@@ -111,6 +111,12 @@ Deno.serve(async (req) => {
         allDay: series.template.all_day,
       })
       if (generated.truncated) throw new Error(`Series ${series.id} exceeded the materialization limit.`)
+      if (generated.wallTimeValidation.unexpected.length > 0) {
+        throw new Error(
+          `Series ${series.id} generated wall times that disagree with its template: `
+          + generated.wallTimeValidation.unexpected.slice(0, 3).join(', '),
+        )
+      }
 
       const { data: reconciled, error: reconcileError } = await supabase.rpc(
         'recurrence_reconcile_materialized_occurrences',

@@ -247,6 +247,14 @@ test('event editor uses shared progressive disclosure and date-time dials', () =
   assert.match(exports, /export \{ FormSummaryCard/)
 })
 
+test('date-time wheel ignores programmatic scroll positioning', () => {
+  const dial = readFileSync(resolve('src/components/ui/DateTimeDial.tsx'), 'utf8')
+  assert.match(dial, /onPointerDown=\{beginUserScroll\}/)
+  assert.match(dial, /onWheel=\{beginUserScroll\}/)
+  assert.match(dial, /if \(!userScrolling\.current\) return/)
+  assert.match(dial, /window\.clearTimeout\(settleTimer\.current\)/)
+})
+
 test('calendar cards and event details use shared touch contracts', () => {
   const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
   const largeCard = readFileSync(resolve('src/components/calendar/LargeEventCard.tsx'), 'utf8')

@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import rrulePackage from 'rrule'
@@ -51,6 +52,10 @@ const materializerCron = readFileSync(
 )
 const transportationNullNormalization = readFileSync(
   resolve('supabase/migrations/20260715212000_normalize_null_transportation_plan.sql'),
+  'utf8',
+)
+const materializationIncidentRepair = readFileSync(
+  resolve('supabase/migrations/20260715243000_repair_recurrence_materialization_incident.sql'),
   'utf8',
 )
 const shadowMigration = readFileSync(
@@ -127,6 +132,39 @@ test('recurrence engine keeps weekly wall time stable across daylight saving tim
     '2026-03-08T09:00:00[America/New_York]',
     '2026-03-15T09:00:00[America/New_York]',
   ])
+})
+
+test('recurrence engine is host-timezone independent for the production incident shape', () => {
+  const script = `
+    import rrulePackage from 'rrule'
+    import { formatInTimeZone, fromZonedTime } from 'date-fns-tz'
+    import { createRecurrenceEngine } from './supabase/functions/_shared/recurrence-engine-core.mjs'
+    const { rrulestr } = rrulePackage
+    const result = createRecurrenceEngine({ rrulestr, formatInTimeZone, fromZonedTime }).generateOccurrences({
+      dtstart: '2026-06-29T18:30:00.000Z',
+      durationMs: 150 * 60 * 1000,
+      recurrenceLines: ['RRULE:FREQ=WEEKLY;BYDAY=FR,MO,TH,TU,WE'],
+      timezone: 'America/New_York',
+      rangeStart: '2026-07-15T00:00:00.000Z',
+      rangeEnd: '2026-07-18T00:00:00.000Z',
+    })
+    console.log(JSON.stringify(result))
+  `
+  const run = (timezone) => JSON.parse(execFileSync(
+    process.execPath,
+    ['--input-type=module', '-e', script],
+    { cwd: resolve('.'), env: { ...process.env, TZ: timezone }, encoding: 'utf8' },
+  ))
+  const utc = run('UTC')
+  const pacific = run('America/Los_Angeles')
+
+  assert.deepEqual(utc.occurrences, pacific.occurrences)
+  assert.deepEqual(utc.occurrences.map((occurrence) => occurrence.start), [
+    '2026-07-15T18:30:00.000Z',
+    '2026-07-16T18:30:00.000Z',
+    '2026-07-17T18:30:00.000Z',
+  ])
+  assert.deepEqual(utc.wallTimeValidation, { expected: '14:30:00', unexpected: [] })
 })
 
 test('recurrence engine supports ordinal weekdays, RDATE, and EXDATE', () => {
@@ -342,11 +380,25 @@ test('materializer extends a guarded rolling horizon on schedule', () => {
   assert.match(materializerFunction, /recurrence_v2_disabled/)
   assert.match(materializerFunction, /Service-role authorization required/)
   assert.match(materializerFunction, /recurrenceEngine\.generateOccurrences/)
+  assert.match(materializerFunction, /generated\.wallTimeValidation\.unexpected\.length > 0/)
   assert.match(materializerCron, /materialize-recurring-events/)
   assert.match(materializerCron, /'17 3 \* \* \*'/)
   assert.match(materializerCron, /vault\.decrypted_secrets/)
   assert.match(transportationNullNormalization, /new\.transportation_plan = 'null'::jsonb/)
   assert.match(transportationNullNormalization, /before insert or update of transportation_plan/)
+})
+
+test('materialization incident repair is series-specific and fails closed', () => {
+  assert.match(materializationIncidentRepair, /v_series_id constant uuid := '8da8597c-493a-4632-9953-b8afebb416d8'/)
+  assert.match(materializationIncidentRepair, /v_count <> 405/)
+  assert.match(materializationIncidentRepair, /v_count <> 51/)
+  assert.match(materializationIncidentRepair, /updated_at = created_at/)
+  assert.match(materializationIncidentRepair, /google_event_id is null/)
+  assert.match(materializationIncidentRepair, /attempts = 0/)
+  assert.match(materializationIncidentRepair, /status = 'cancelled'/)
+  assert.match(materializationIncidentRepair, /path <> 'event\.startTime'/)
+  assert.match(materializationIncidentRepair, /'2026-07-16T18:30:00Z'/)
+  assert.match(materializationIncidentRepair, /'2026-07-16T21:05:00Z'/)
 })
 
 test('migration inventory separates reusable divergence from occurrence progress', () => {

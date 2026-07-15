@@ -49,6 +49,42 @@ function compactLocalDateTime(value) {
   return value.replace(' ', 'T').replace(/[-:]/g, '')
 }
 
+function parseCompactUtc(value) {
+  const match = value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/)
+  if (!match) return null
+  return new Date(`${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}Z`)
+}
+
+function normalizeTimedRecurrenceLines(lines, timezone, formatInTimeZone) {
+  return lines.map((line) => {
+    if (line.startsWith('RRULE:')) {
+      return line.replace(/UNTIL=(\d{8}T\d{6}Z)/, (_match, value) => {
+        const instant = parseCompactUtc(value)
+        if (!instant || !Number.isFinite(instant.getTime())) return `UNTIL=${value}`
+        const local = compactLocalDateTime(formatInTimeZone(instant, timezone, 'yyyy-MM-dd HH:mm:ss'))
+        return `UNTIL=${local}Z`
+      })
+    }
+
+    const separator = line.indexOf(':')
+    const name = line.slice(0, separator).split(';')[0]
+    const values = line.slice(separator + 1).split(',').map((value) => {
+      if (/^\d{8}T\d{6}$/.test(value)) return `${value}Z`
+      const instant = parseCompactUtc(value)
+      if (!instant || !Number.isFinite(instant.getTime())) {
+        throw new Error(`Timed ${name} values must include a date and time: ${value}`)
+      }
+      const local = compactLocalDateTime(formatInTimeZone(instant, timezone, 'yyyy-MM-dd HH:mm:ss'))
+      return `${local}Z`
+    })
+    return `${name}:${values.join(',')}`
+  })
+}
+
+function wallTime(date) {
+  return utcWallString(date).slice(11)
+}
+
 function occurrenceKey({ start, timezone, allDay, formatInTimeZone }) {
   if (allDay) return start.toISOString().slice(0, 10)
   return `${formatInTimeZone(start, timezone, "yyyy-MM-dd'T'HH:mm:ss")}[${timezone}]`
@@ -87,10 +123,13 @@ export function createRecurrenceEngine({ rrulestr, formatInTimeZone, fromZonedTi
       const localStart = allDay
         ? startInstant.toISOString().slice(0, 10).replaceAll('-', '') + 'T000000Z'
         : compactLocalDateTime(formatInTimeZone(startInstant, timezone, 'yyyy-MM-dd HH:mm:ss'))
+      const engineLines = allDay
+        ? normalizedLines
+        : normalizeTimedRecurrenceLines(normalizedLines, timezone, formatInTimeZone)
       const dtstartLine = allDay
         ? `DTSTART:${localStart}`
-        : `DTSTART;TZID=${timezone}:${localStart}`
-      const set = rrulestr([dtstartLine, ...normalizedLines].join('\n'), {
+        : `DTSTART:${localStart}Z`
+      const set = rrulestr([dtstartLine, ...engineLines].join('\n'), {
         compatible: true,
         forceset: true,
       })
@@ -103,6 +142,27 @@ export function createRecurrenceEngine({ rrulestr, formatInTimeZone, fromZonedTi
         : new Date(`${formatInTimeZone(rangeEndInstant, timezone, 'yyyy-MM-dd HH:mm:ss')}Z`)
       const candidates = set.between(wallRangeStart, wallRangeEnd, true)
       const truncated = candidates.length > limit
+      const ruleOverridesTime = engineLines
+        .filter((line) => line.startsWith('RRULE:'))
+        .some((line) => /(?:^|;)(?:BYHOUR|BYMINUTE|BYSECOND)=/.test(line))
+      const localStartDate = allDay ? null : parseCompactUtc(`${localStart}Z`)
+      const expectedWallTime = allDay || ruleOverridesTime || !localStartDate
+        ? null
+        : wallTime(localStartDate)
+      const explicitWallStarts = new Set(
+        engineLines
+          .filter((line) => line.startsWith('RDATE:'))
+          .flatMap((line) => line.slice(line.indexOf(':') + 1).split(','))
+          .map((value) => value.replace(/Z$/, '')),
+      )
+      const unexpectedWallTimes = expectedWallTime
+        ? candidates
+            .filter((candidate) => (
+              wallTime(candidate) !== expectedWallTime
+              && !explicitWallStarts.has(compactLocalDateTime(utcWallString(candidate)))
+            ))
+            .map((candidate) => candidate.toISOString())
+        : []
 
       const occurrences = candidates.slice(0, limit).map((wallStart) => {
         const start = allDay
@@ -122,6 +182,10 @@ export function createRecurrenceEngine({ rrulestr, formatInTimeZone, fromZonedTi
         occurrences,
         truncated,
         normalizedRecurrenceLines: normalizedLines,
+        wallTimeValidation: {
+          expected: expectedWallTime,
+          unexpected: unexpectedWallTimes,
+        },
       }
     },
   }
