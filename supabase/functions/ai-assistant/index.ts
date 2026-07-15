@@ -251,6 +251,13 @@ Deno.serve(async (req) => {
     activeEntityType: incomingConversationState?.activeEntityType,
     page: context?.page,
       })
+  const authoritativeGroceryContext = Boolean(
+    groceryFrame && (
+      context?.page === 'grocery' ||
+      ['grocery_item', 'grocery_clarification'].includes(incomingConversationState?.activeEntityType ?? '') ||
+      isGroceryLikeLanguage(latestUserText)
+    )
+  )
   const cookingFrame = parseCookingLanguage(latestUserText, {
     assistantMode: context?.assistant_mode,
     activeEntityType: incomingConversationState?.activeEntityType,
@@ -286,8 +293,12 @@ Deno.serve(async (req) => {
     ? { profile: 'event', forceEventSearch: true }
     : incomingConversationState?.activeEntityType === 'calendar_clarification'
     ? { profile: 'event', forceEventSearch: false }
+    : incomingConversationState?.activeEntityType === 'grocery_clarification'
+    ? { profile: 'grocery', forceEventSearch: false }
     : calendarMutationDisambiguationFollowUp
     ? { profile: 'event', forceEventSearch: false }
+    : authoritativeGroceryContext
+    ? { profile: 'grocery', forceEventSearch: false }
     : calendarFrame
     ? { profile: 'event', forceEventSearch: calendarFrameNeedsSearch }
     : groceryFrame

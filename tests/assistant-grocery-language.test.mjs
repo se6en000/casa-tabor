@@ -128,6 +128,11 @@ test('explicit grocery semantics bypass probabilistic agent planning', () => {
   )
   assert.match(source, /const shouldRunAgentWrite =[\s\S]*?!groceryFrame &&/)
   assert.match(source, /const shouldRunAgentRead =[\s\S]*?!groceryFrame &&/)
+  assert.match(source, /authoritativeGroceryContext[\s\S]*?isGroceryLikeLanguage\(latestUserText\)/)
+  assert.ok(
+    source.indexOf(': authoritativeGroceryContext') <
+      source.indexOf(': calendarFrame'),
+  )
   assert.ok(
     source.indexOf("incomingConversationState?.activeEntityType === 'grocery_clarification'") <
       source.indexOf('if (shouldRunAgentWrite)'),
