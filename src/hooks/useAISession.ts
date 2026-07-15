@@ -22,6 +22,16 @@ export interface AIMessage {
         establishedAt: string
       }
     | {
+        activeEntityType: 'grocery_clarification'
+        candidateGroceryItems: Array<{
+          id: string
+          name: string
+          version: string | null
+        }>
+        expectedFollowUp: 'grocery_clarification'
+        establishedAt: string
+      }
+    | {
         activeEntityType: 'calendar_clarification'
         candidateEvents: Array<{
           id: string

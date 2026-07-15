@@ -446,6 +446,15 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames) {
       ],
     },
     {
+      key: 'semantic-grocery-list-follow-up',
+      page: 'grocery',
+      assistantMode: 'general',
+      steps: [
+        { text: 'read my grocery list', expect: { type: 'text', semanticIntent: 'grocery.list', maxLlmCalls: 0 } },
+        { text: 'check off the second one', expect: { type: 'write', tool: 'check_grocery_item', maxLlmCalls: 0 } },
+      ],
+    },
+    {
       key: 'semantic-grocery-variance',
       page: 'grocery',
       assistantMode: 'general',

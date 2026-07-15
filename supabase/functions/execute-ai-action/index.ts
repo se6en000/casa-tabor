@@ -837,15 +837,18 @@ Deno.serve(async (req) => {
     }
 
     if (tool === 'remove_grocery_item') {
-      const { data, error } = await sb
+      const expectedUpdatedAt = normalizeOptionalText(args.expected_updated_at, 80)
+      let query = sb
         .from('grocery_items')
         .update({ deleted_at: new Date().toISOString(), last_modified_source: 'casa' })
         .eq('id', args.item_id)
         .is('deleted_at', null)
+      if (expectedUpdatedAt) query = query.eq('updated_at', expectedUpdatedAt)
+      const { data, error } = await query
         .select('id, name')
         .maybeSingle()
       if (error) throw new Error(error.message)
-      if (!data) throw new Error('Grocery item not found')
+      if (!data) throw new Error(expectedUpdatedAt ? 'Grocery item changed since this action was proposed' : 'Grocery item not found')
       return new Response(JSON.stringify({ success: true, item: data, external_sync_status: 'asynchronous', correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })

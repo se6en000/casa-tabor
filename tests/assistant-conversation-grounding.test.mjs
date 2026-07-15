@@ -6,9 +6,11 @@ import {
   answerGroundedEventSemanticFrame,
   calendarClarificationConversationState,
   eventConversationState,
+  groceryClarificationConversationState,
   groceryConversationState,
   normalizeConversationState,
   resolveCalendarClarificationSelection,
+  resolveGroceryClarificationSelection,
 } from '../supabase/functions/_shared/assistant-conversation-grounding.mjs'
 import { secureAssistantResult } from '../supabase/functions/_shared/assistant-output-safety.mjs'
 import { isIncompleteVoiceFragment } from '../src/lib/voiceTurnTaking.mjs'
@@ -37,6 +39,34 @@ test('conversation state retains an authoritative grocery item identity', () => 
   const now = new Date('2026-07-11T13:00:00Z')
   const state = groceryConversationState({ id: 'milk' }, now)
   assert.equal(normalizeConversationState(state, now.getTime() + 1000)?.activeGroceryItemId, 'milk')
+})
+
+test('grocery clarification state resolves ordinal, named, and ambiguous plural follow-ups', () => {
+  const now = new Date('2026-07-11T13:00:00Z')
+  const groceries = [
+    { id: 'milk', name: 'Whole Milk', updated_at: 'v1', checked: false },
+    { id: 'eggs', name: 'Eggs', updated_at: 'v2', checked: false },
+    { id: 'bread', name: 'Bread', updated_at: 'v3', checked: false },
+  ]
+  const state = groceryClarificationConversationState(groceries, now)
+  assert.equal(normalizeConversationState(state, now.getTime() + 1000)?.candidateGroceryItems.length, 3)
+
+  const ordinal = resolveGroceryClarificationSelection('Check off the second one', state, groceries)
+  assert.deepEqual(ordinal.args, {
+    item_id: 'eggs',
+    item_name: 'Eggs',
+    expected_updated_at: 'v2',
+    checked: true,
+  })
+  assert.equal(resolveGroceryClarificationSelection('Remove the bread', state, groceries).item.id, 'bread')
+  assert.match(resolveGroceryClarificationSelection('Mark them all done', state, groceries).text, /Which grocery item/)
+  assert.match(resolveGroceryClarificationSelection('Mark it done', state, groceries).text, /Which grocery item/)
+  assert.deepEqual(resolveGroceryClarificationSelection('Make the third one two', state, groceries).args, {
+    item_id: 'bread',
+    item_name: 'Bread',
+    expected_updated_at: 'v3',
+    quantity: '2',
+  })
 })
 
 test('calendar clarification state preserves choices and resolves ordinal follow-ups', () => {

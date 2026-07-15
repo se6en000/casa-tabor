@@ -25,9 +25,11 @@ import {
   answerGroundedEventSemanticFrame,
   calendarClarificationConversationState,
   eventConversationState,
+  groceryClarificationConversationState,
   groceryConversationState,
   normalizeConversationState,
   resolveCalendarClarificationSelection,
+  resolveGroceryClarificationSelection,
 } from '../_shared/assistant-conversation-grounding.mjs'
 import { secureAssistantResult } from '../_shared/assistant-output-safety.mjs'
 import { resolveCalendarDayRead } from '../_shared/assistant-calendar-read.mjs'
@@ -435,7 +437,6 @@ Deno.serve(async (req) => {
     needsGroceryData
       ? sb.from('grocery_items')
       .select('id, list_id, name, quantity, unit, category, checked, notes, updated_at')
-      .eq('checked', false)
       .is('deleted_at', null)
       .order('category')
       .order('name')
@@ -540,6 +541,7 @@ Deno.serve(async (req) => {
     agentWriteConfig?.enabled === true &&
     agentWriteRate > 0 &&
     !isCalendarSemanticRead &&
+    !groceryFrame &&
     AGENT_GENERAL_PAGES.has(String(context?.page ?? '')) &&
     context?.assistant_mode !== 'chef' &&
     !image &&
@@ -611,6 +613,52 @@ Deno.serve(async (req) => {
           args: selection.args,
           display_text: buildDisplayText(selection.tool, selection.args),
           conversation_state: eventConversationState(selection.event, now),
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+  }
+  if (latestUserText && incomingConversationState?.activeEntityType === 'grocery_clarification') {
+    const selection = resolveGroceryClarificationSelection(
+      latestUserText,
+      incomingConversationState,
+      groceryItems ?? [],
+    )
+    if (selection?.text) {
+      return {
+        status: 200,
+        payload: {
+          type: 'text',
+          text: selection.text,
+          conversation_state: selection.conversationState ?? incomingConversationState,
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+    if (selection?.tool) {
+      appendServerTrace('server_ai_assistant_grocery_clarification_resolved', `tool=${selection.tool}`, {
+        tool: selection.tool,
+        item_id: selection.item?.id ?? null,
+      })
+      return {
+        status: 200,
+        payload: {
+          type: 'tool_action',
+          tool: selection.tool,
+          args: selection.args,
+          display_text: buildDisplayText(selection.tool, selection.args),
+          conversation_state: incomingConversationState,
+          semantic_intent: 'grocery.semantic.v2',
           correlation_id: cid,
           telemetry: {
             ...llmTelemetry,
@@ -904,6 +952,7 @@ Deno.serve(async (req) => {
     AGENT_GENERAL_PAGES.has(String(context?.page ?? '')) &&
     context?.assistant_mode !== 'chef' &&
     !context?.pendingAction &&
+    !groceryFrame &&
     !image &&
     (isCalendarSemanticRead || Math.random() < agentReadRate)
   if (shouldRunAgentRead) {
@@ -1338,6 +1387,8 @@ Deno.serve(async (req) => {
           : []
       if (semanticItems.length === 1) {
         responseConversationState = groceryConversationState(semanticItems[0], now)
+      } else if (semanticItems.length > 1) {
+        responseConversationState = groceryClarificationConversationState(semanticItems, now)
       }
       appendServerTrace('server_ai_assistant_grocery_semantic_dispatch', `intent=${groceryFrame.intent} type=${semantic.type} ms=${requestTotalMs}`, {
         intent: groceryFrame.intent,
@@ -1367,6 +1418,7 @@ Deno.serve(async (req) => {
               item_ids: semanticItems.map((item: { id: string }) => item.id),
               semantic_intent: groceryFrame.intent,
             },
+            semantic_contract: 'grocery-semantic-v2',
             conversation_state: responseConversationState,
             telemetry: {
               ...llmTelemetry,
@@ -1411,6 +1463,7 @@ Deno.serve(async (req) => {
               item_ids: savedItems.map((item) => item.id),
               semantic_intent: groceryFrame.intent,
             },
+            semantic_contract: 'grocery-semantic-v2',
             telemetry: {
               ...llmTelemetry,
               request_total_ms: completedMs,
@@ -3372,8 +3425,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const items = args.items as { name: string; quantity?: string }[]
       return `Add to grocery list: ${items.map(i => `${i.name}${i.quantity ? ` (${i.quantity})` : ''}`).join(', ')}`
     }
-    if (name === 'check_grocery_item') return `Mark grocery item as ${args.checked ? 'done' : 'undone'}`
-    if (name === 'remove_grocery_item') return 'Remove this grocery item'
+    if (name === 'check_grocery_item') return `Mark **${args.item_name ?? 'grocery item'}** as ${args.checked ? 'done' : 'needed'}`
+    if (name === 'remove_grocery_item') return `Remove **${args.item_name ?? 'this grocery item'}**`
     if (name === 'update_grocery_item_quantity') {
       return `Change grocery quantity to ${[args.quantity, args.unit].filter(Boolean).join(' ')}`
     }

@@ -10,13 +10,19 @@ function activeRows(items) {
   return (items ?? []).filter((item) => !item?.checked && !item?.deleted_at)
 }
 
+function availableRows(items, checked) {
+  return (items ?? []).filter((item) => item?.checked === checked && !item?.deleted_at)
+}
+
 function describeItem(item) {
   const amount = [item.quantity, item.unit].filter(Boolean).join(' ')
   return amount ? `${item.name} (${amount})` : item.name
 }
 
-export function findGroceryItem(items, itemName, activeItemId = null) {
-  const rows = activeRows(items)
+export function findGroceryItem(items, itemName, activeItemId = null, options = {}) {
+  const rows = typeof options.checked === 'boolean'
+    ? availableRows(items, options.checked)
+    : activeRows(items)
   if (!itemName && activeItemId) {
     const active = rows.find((item) => item.id === activeItemId)
     return active ? { item: active, ambiguous: false } : { item: null, ambiguous: false }
@@ -100,8 +106,13 @@ export function resolveGrocerySemantic(frame, items, options = {}) {
   if (frame.intent === 'grocery.clear_checked') {
     return { type: 'action', tool: 'clear_checked_grocery_items', args: {} }
   }
-  if (['grocery.check', 'grocery.remove', 'grocery.quantity'].includes(frame.intent)) {
-    const match = findGroceryItem(rows, frame.slots?.item, options.activeItemId)
+  if (['grocery.check', 'grocery.uncheck', 'grocery.remove', 'grocery.quantity'].includes(frame.intent)) {
+    const match = findGroceryItem(
+      frame.intent === 'grocery.uncheck' ? items : rows,
+      frame.slots?.item,
+      options.activeItemId,
+      frame.intent === 'grocery.uncheck' ? { checked: true } : {},
+    )
     if (match.ambiguous) {
       return { type: 'text', text: `I found more than one match for "${frame.slots?.item}". Please use the exact grocery item name.`, items: [] }
     }
@@ -109,15 +120,52 @@ export function resolveGrocerySemantic(frame, items, options = {}) {
       return { type: 'text', text: `I could not find "${frame.slots?.item ?? 'that item'}" on the active grocery list.`, items: [] }
     }
     if (frame.intent === 'grocery.check') {
-      return { type: 'action', tool: 'check_grocery_item', args: { item_id: match.item.id, checked: true }, item: match.item }
+      return {
+        type: 'action',
+        tool: 'check_grocery_item',
+        args: {
+          item_id: match.item.id,
+          item_name: match.item.name,
+          expected_updated_at: match.item.updated_at,
+          checked: true,
+        },
+        item: match.item,
+      }
+    }
+    if (frame.intent === 'grocery.uncheck') {
+      return {
+        type: 'action',
+        tool: 'check_grocery_item',
+        args: {
+          item_id: match.item.id,
+          item_name: match.item.name,
+          expected_updated_at: match.item.updated_at,
+          checked: false,
+        },
+        item: match.item,
+      }
     }
     if (frame.intent === 'grocery.remove') {
-      return { type: 'action', tool: 'remove_grocery_item', args: { item_id: match.item.id }, item: match.item }
+      return {
+        type: 'action',
+        tool: 'remove_grocery_item',
+        args: {
+          item_id: match.item.id,
+          item_name: match.item.name,
+          expected_updated_at: match.item.updated_at,
+        },
+        item: match.item,
+      }
     }
     return {
       type: 'action',
       tool: 'update_grocery_item_quantity',
-      args: { item_id: match.item.id, quantity: frame.slots.quantity },
+      args: {
+        item_id: match.item.id,
+        item_name: match.item.name,
+        expected_updated_at: match.item.updated_at,
+        quantity: frame.slots.quantity,
+      },
       item: match.item,
     }
   }

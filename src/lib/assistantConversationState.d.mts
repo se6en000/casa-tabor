@@ -8,6 +8,7 @@ export type CalendarActionConversationState =
       establishedAt: string
     }
   | CalendarClarificationConversationState
+  | GroceryActionConversationState
   | {
       activeEntityType: 'none'
       expectedFollowUp: 'none'
@@ -31,6 +32,24 @@ export type CalendarClarificationConversationState = {
   expectedFollowUp: 'calendar_clarification'
   establishedAt: string
 }
+
+export type GroceryActionConversationState =
+  | {
+      activeEntityType: 'grocery_item'
+      activeGroceryItemId: string
+      expectedFollowUp: 'grocery_follow_up'
+      establishedAt: string
+    }
+  | {
+      activeEntityType: 'grocery_clarification'
+      candidateGroceryItems: Array<{
+        id: string
+        name: string
+        version: string | null
+      }>
+      expectedFollowUp: 'grocery_clarification'
+      establishedAt: string
+    }
 
 export function conversationStateAfterCalendarAction(
   tool: string,

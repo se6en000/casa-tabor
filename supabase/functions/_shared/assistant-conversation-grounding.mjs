@@ -18,6 +18,26 @@ export function normalizeConversationState(value, now = Date.now()) {
       establishedAt: new Date(establishedAt).toISOString(),
     }
   }
+  if (value.activeEntityType === 'grocery_clarification') {
+    const candidates = Array.isArray(value.candidateGroceryItems)
+      ? value.candidateGroceryItems.slice(0, 20).flatMap((candidate) => {
+          const id = typeof candidate?.id === 'string' ? candidate.id.trim() : ''
+          if (!id) return []
+          return [{
+            id,
+            name: typeof candidate.name === 'string' ? candidate.name : 'Grocery item',
+            version: typeof candidate.version === 'string' ? candidate.version : null,
+          }]
+        })
+      : []
+    if (candidates.length < 2) return null
+    return {
+      activeEntityType: 'grocery_clarification',
+      candidateGroceryItems: candidates,
+      expectedFollowUp: 'grocery_clarification',
+      establishedAt: new Date(establishedAt).toISOString(),
+    }
+  }
   if (value.activeEntityType === 'calendar_clarification') {
     const candidates = Array.isArray(value.candidateEvents)
       ? value.candidateEvents.slice(0, 6).flatMap((candidate) => {
@@ -73,6 +93,86 @@ export function groceryConversationState(item, now = new Date()) {
     activeGroceryItemId: item.id,
     expectedFollowUp: 'grocery_follow_up',
     establishedAt: now.toISOString(),
+  }
+}
+
+export function groceryClarificationConversationState(items, now = new Date()) {
+  return {
+    activeEntityType: 'grocery_clarification',
+    candidateGroceryItems: items.slice(0, 20).map((item) => ({
+      id: item.id,
+      name: item.name ?? 'Grocery item',
+      version: item.updated_at ?? null,
+    })),
+    expectedFollowUp: 'grocery_clarification',
+    establishedAt: now.toISOString(),
+  }
+}
+
+export function resolveGroceryClarificationSelection(text, state, items) {
+  if (state?.activeEntityType !== 'grocery_clarification') return null
+  const input = String(text ?? '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
+  const candidates = state.candidateGroceryItems
+    .map((candidate) => items.find((item) => item.id === candidate.id && !item.deleted_at))
+    .filter(Boolean)
+  if (candidates.length === 0) {
+    return { text: 'Those grocery items are no longer available. Please read the list again.' }
+  }
+
+  const ordinal = input.match(/\b(first|1st|second|2nd|third|3rd|last)\b/)?.[1]
+  let selected = ordinal
+    ? candidates[ordinal === 'first' || ordinal === '1st'
+      ? 0
+      : ordinal === 'second' || ordinal === '2nd'
+        ? 1
+        : ordinal === 'third' || ordinal === '3rd'
+          ? 2
+          : candidates.length - 1]
+    : null
+  if (!selected) {
+    const ignored = new Set(['as', 'bought', 'check', 'complete', 'done', 'it', 'make', 'mark', 'off', 'one', 'please', 'remove', 'that', 'the', 'to', 'uncheck'])
+    const terms = input.split(' ').filter((term) => term.length > 1 && !ignored.has(term) && !/^\d+$/.test(term))
+    const matches = candidates.filter((item) => {
+      const name = String(item.name ?? '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ')
+      return terms.length > 0 && terms.every((term) => name.includes(term))
+    })
+    if (matches.length === 1) selected = matches[0]
+  }
+  if (!selected) {
+    return /\b(?:it|that|them|all|both|these)\b/.test(input)
+      ? { text: `Which grocery item do you mean?\n${candidates.map((item, index) => `${index + 1}. ${item.name}`).join('\n')}` }
+      : null
+  }
+
+  const common = {
+    item_id: selected.id,
+    item_name: selected.name,
+    expected_updated_at: selected.updated_at,
+  }
+  if (/\b(?:remove|delete|take|drop)\b/.test(input)) {
+    return { tool: 'remove_grocery_item', args: common, item: selected }
+  }
+  if (/\b(?:uncheck|restore|put back|not bought|not done|needed)\b/.test(input)) {
+    return { tool: 'check_grocery_item', args: { ...common, checked: false }, item: selected }
+  }
+  if (/\b(?:check|bought|got|done|complete|cross)\b/.test(input)) {
+    return { tool: 'check_grocery_item', args: { ...common, checked: true }, item: selected }
+  }
+  const quantityMatches = Array.from(input.matchAll(/\b(\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/g))
+  const quantityText = /\b(?:make|change|set|quantity)\b/.test(input)
+    ? quantityMatches.at(-1)?.[1]
+    : null
+  const quantityWords = {
+    one: '1', two: '2', three: '3', four: '4', five: '5', six: '6',
+    seven: '7', eight: '8', nine: '9', ten: '10', eleven: '11', twelve: '12',
+  }
+  const quantity = quantityWords[quantityText] ?? quantityText
+  if (quantity) {
+    return { tool: 'update_grocery_item_quantity', args: { ...common, quantity }, item: selected }
+  }
+  return {
+    text: `I selected ${selected.name}. What would you like to change?`,
+    conversationState: groceryConversationState(selected),
   }
 }
 

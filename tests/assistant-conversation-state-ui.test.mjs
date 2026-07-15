@@ -68,3 +68,33 @@ test('confirmed reminder completion keeps the remaining authoritative reminder l
   assert.deepEqual(remaining.candidateEvents.map((candidate) => candidate.id), ['two', 'three'])
   assert.equal(remaining.establishedAt, now.toISOString())
 })
+
+test('confirmed grocery actions preserve the remaining authoritative list context', () => {
+  const previousState = {
+    activeEntityType: 'grocery_clarification',
+    candidateGroceryItems: [
+      { id: 'milk', name: 'Milk', version: 'v1' },
+      { id: 'eggs', name: 'Eggs', version: 'v2' },
+      { id: 'bread', name: 'Bread', version: 'v3' },
+    ],
+    expectedFollowUp: 'grocery_clarification',
+    establishedAt: new Date('2026-07-14T17:00:00.000Z').toISOString(),
+  }
+  const remaining = conversationStateAfterCalendarAction(
+    'check_grocery_item',
+    { item_id: 'milk', checked: true },
+    {},
+    now,
+    previousState,
+  )
+  assert.deepEqual(remaining.candidateGroceryItems.map((candidate) => candidate.id), ['eggs', 'bread'])
+
+  const updated = conversationStateAfterCalendarAction(
+    'update_grocery_item_quantity',
+    { item_id: 'eggs', quantity: '2' },
+    { item: { updated_at: 'v4' } },
+    now,
+    remaining,
+  )
+  assert.equal(updated.candidateGroceryItems.find((candidate) => candidate.id === 'eggs').version, 'v4')
+})

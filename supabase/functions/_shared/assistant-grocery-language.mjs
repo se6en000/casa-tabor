@@ -29,6 +29,7 @@ export const GROCERY_INTENTS = Object.freeze([
   'grocery.quantity_read',
   'grocery.add',
   'grocery.check',
+  'grocery.uncheck',
   'grocery.remove',
   'grocery.quantity',
   'grocery.clear_checked',
@@ -64,6 +65,10 @@ export const GROCERY_UTTERANCE_CORPUS = Object.freeze([
   ]),
   ...['clear checked groceries', 'remove completed shopping items', 'clear bought items']
     .map((text) => ({ text, intent: 'grocery.clear_checked' })),
+  ...ITEMS.flatMap((item) => [
+    { text: `uncheck ${item}`, intent: 'grocery.uncheck' },
+    { text: `put back ${item} on the shopping list`, intent: 'grocery.uncheck' },
+  ]),
 ])
 
 function normalize(value) {
@@ -154,9 +159,23 @@ export function parseGroceryLanguage(text, options = {}) {
     input.match(/^how much\s+(.+?)\s+is on\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/)
   if (quantityRead) return frame('grocery.quantity_read', 0.98, { item: cleanItem(quantityRead[1]) })
 
+  if (activeItem && /^(?:check|mark|cross)\s+(?:it|that)(?:\s+(?:off|done|complete|completed|as\s+(?:bought|done|complete|completed)))?$/.test(input)) {
+    return frame('grocery.check', 0.99, {}, true)
+  }
+  if (activeItem && /^(?:uncheck|restore|put back)\s+(?:it|that)$/.test(input)) {
+    return frame('grocery.uncheck', 0.99, {}, true)
+  }
+  if (activeItem && /^(?:remove|delete|drop)\s+(?:it|that)$/.test(input)) {
+    return frame('grocery.remove', 0.99, {}, true)
+  }
   const check = input.match(/^(?:check off|mark|cross)\s+(.+?)(?:\s+(?:off|as\s+(?:bought|done|complete|completed)))?$/) ||
     input.match(/^(?:i|we)\s+(?:bought|got|picked up)\s+(.+)$/)
   if (check) return frame('grocery.check', 0.97, { item: cleanItem(check[1]) })
+
+  const uncheck = input.match(/^(?:uncheck|restore|put back)\s+(.+?)(?:\s+(?:on|to)\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?)?$/) ||
+    input.match(/^put\s+(.+?)\s+back(?:\s+(?:on|to)\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?)?$/) ||
+    input.match(/^mark\s+(.+?)\s+(?:as\s+)?(?:not bought|not done|needed)$/)
+  if (uncheck) return frame('grocery.uncheck', 0.98, { item: cleanItem(uncheck[1]) })
 
   const remove = input.match(/^(?:remove|delete|take|drop)\s+(.+?)\s+(?:from|off)\s+(?:my|the|our)?\s*(?:grocery|shopping)(?: list)?$/)
   if (remove) return frame('grocery.remove', 0.99, { item: cleanItem(remove[1]) })

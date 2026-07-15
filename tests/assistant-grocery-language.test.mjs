@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -10,9 +11,9 @@ import {
 import { resolveGrocerySemantic } from '../supabase/functions/_shared/assistant-grocery-semantic.mjs'
 
 const items = [
-  { id: 'milk', name: 'Whole Milk', quantity: '1', unit: 'gallon', checked: false, deleted_at: null },
-  { id: 'eggs', name: 'Eggs', quantity: null, unit: null, checked: false, deleted_at: null },
-  { id: 'old', name: 'Bread', checked: true, deleted_at: null },
+  { id: 'milk', name: 'Whole Milk', quantity: '1', unit: 'gallon', checked: false, deleted_at: null, updated_at: 'v1' },
+  { id: 'eggs', name: 'Eggs', quantity: null, unit: null, checked: false, deleted_at: null, updated_at: 'v2' },
+  { id: 'old', name: 'Bread', checked: true, deleted_at: null, updated_at: 'v3' },
 ]
 
 test('grocery language contract publishes stable intents and generated coverage', () => {
@@ -44,10 +45,19 @@ test('grocery parser handles reads, multi-item adds, and bounded follow-ups', ()
     parseGroceryLanguage('Do we already have milk on there?', { page: 'grocery' })?.slots,
     { items: ['milk'] },
   )
+  assert.equal(parseGroceryLanguage('Put bread back on the shopping list')?.intent, 'grocery.uncheck')
   assert.deepEqual(parseGroceryLanguage('What quantity does oat milk show?')?.slots, { item: 'oat milk' })
   assert.deepEqual(
     parseGroceryLanguage('Make that two', { activeEntityType: 'grocery_item' })?.slots,
     { quantity: '2' },
+  )
+  assert.equal(
+    parseGroceryLanguage('Mark it done', { activeEntityType: 'grocery_item' })?.intent,
+    'grocery.check',
+  )
+  assert.equal(
+    parseGroceryLanguage('Remove it', { activeEntityType: 'grocery_item' })?.intent,
+    'grocery.remove',
   )
 })
 
@@ -69,14 +79,32 @@ test('grocery semantic reads use authoritative active rows', () => {
 
 test('grocery semantic mutations target exact authoritative rows', () => {
   const check = resolveGrocerySemantic(parseGroceryLanguage('Check off eggs'), items)
-  assert.deepEqual(check.args, { item_id: 'eggs', checked: true })
+  assert.deepEqual(check.args, {
+    item_id: 'eggs',
+    item_name: 'Eggs',
+    expected_updated_at: 'v2',
+    checked: true,
+  })
 
   const quantity = resolveGrocerySemantic(
     parseGroceryLanguage('Make that two', { activeEntityType: 'grocery_item' }),
     items,
     { activeItemId: 'milk' },
   )
-  assert.deepEqual(quantity.args, { item_id: 'milk', quantity: '2' })
+  assert.deepEqual(quantity.args, {
+    item_id: 'milk',
+    item_name: 'Whole Milk',
+    expected_updated_at: 'v1',
+    quantity: '2',
+  })
+
+  const uncheck = resolveGrocerySemantic(parseGroceryLanguage('Uncheck bread'), items)
+  assert.deepEqual(uncheck.args, {
+    item_id: 'old',
+    item_name: 'Bread',
+    expected_updated_at: 'v3',
+    checked: false,
+  })
 })
 
 test('non-grocery language stays outside the contract', () => {
@@ -91,4 +119,17 @@ test('grocery concepts tolerate common typed and STT forms', () => {
   assert.equal(parseGroceryLanguage('casa whats on the grossery list')?.intent, 'grocery.list')
   assert.equal(parseGroceryLanguage('put milk on the shoping list')?.intent, 'grocery.add')
   assert.equal(parseGroceryLanguage('dont let me forget eggs')?.intent, 'grocery.add')
+})
+
+test('explicit grocery semantics bypass probabilistic agent planning', () => {
+  const source = fs.readFileSync(
+    new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url),
+    'utf8',
+  )
+  assert.match(source, /const shouldRunAgentWrite =[\s\S]*?!groceryFrame &&/)
+  assert.match(source, /const shouldRunAgentRead =[\s\S]*?!groceryFrame &&/)
+  assert.ok(
+    source.indexOf("incomingConversationState?.activeEntityType === 'grocery_clarification'") <
+      source.indexOf('if (shouldRunAgentWrite)'),
+  )
 })
