@@ -24,6 +24,7 @@ export const COOKING_INTENTS = Object.freeze([
   'cooking.dietary',
   'cooking.leftovers',
   'cooking.missing_ingredients',
+  'cooking.add_to_grocery',
   'cooking.nutrition',
   'recipe.save',
 ])
@@ -127,6 +128,11 @@ const samples = {
     'what do i need to buy for this recipe',
     'compare this recipe to my grocery list',
   ],
+  'cooking.add_to_grocery': [
+    'add the missing ingredients to my grocery list',
+    'put everything i need for this recipe on the shopping list',
+    'add those ingredients to groceries',
+  ],
   'cooking.nutrition': [
     'how much protein is in this',
     'roughly how many calories per serving',
@@ -169,6 +175,9 @@ export function parseCookingLanguage(text, options = {}) {
   if (/\b(?:save|keep|store|add)\b.*\b(?:this|that|the)?\s*recipe\b|\badd this to my recipe library\b/.test(input)) {
     return frame('recipe.save', 0.98)
   }
+  if (/\b(?:add|put)\b.*\b(?:missing ingredients?|everything i need|those ingredients?)\b.*\b(?:grocery|groceries|shopping list)\b/.test(input)) {
+    return frame('cooking.add_to_grocery', 0.99, { source: 'conversation_recipe' })
+  }
   if (cookingContext && /^(?:make|give|create)(?: me)? (?:one )?(?:combined )?grocery list$/.test(input)) {
     return frame('cooking.missing_ingredients', 0.97, { source: 'conversation_plan' })
   }
@@ -191,7 +200,8 @@ export function parseCookingLanguage(text, options = {}) {
     })
   }
   if (/\b(?:double|triple|cut .+ in half|scale|servings?|people)\b/.test(input) && /\b(?:recipe|this|make)\b/.test(input)) {
-    return frame('cooking.scale', 0.96)
+    const targetServings = input.match(/\b(?:for|to|serves?)\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d+)\s*(?:people|servings?)?\b/)?.[1] ?? null
+    return frame('cooking.scale', 0.96, targetServings ? { targetServings } : {})
   }
   if (/\b(?:convert|how many|what is|how much)\b.*\b(?:cups?|tablespoons?|tbsp|teaspoons?|tsp|ounces?|oz|grams?|kilograms?|pounds?|lbs?|fahrenheit|celsius)\b/.test(input)) {
     return frame('cooking.convert', 0.96)
@@ -245,6 +255,9 @@ export function parseCookingLanguage(text, options = {}) {
 }
 
 export function cookingFrameGuidance(frameValue) {
+  if (frameValue?.intent === 'cooking.add_to_grocery') {
+    return 'Use add_grocery_items exactly once with only the explicit missing or selected ingredients from the immediately preceding recipe. Preserve useful quantities and units. Do not add pantry staples unless the user selected them or the household food profile does not identify them as on hand.'
+  }
   if (
     frameValue?.intent === 'cooking.missing_ingredients' &&
     frameValue.slots?.source === 'conversation_plan'

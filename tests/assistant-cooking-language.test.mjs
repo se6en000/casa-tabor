@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -8,9 +9,15 @@ import {
   isCookingLikeLanguage,
   parseCookingLanguage,
 } from '../supabase/functions/_shared/assistant-cooking-language.mjs'
+import {
+  cookingPolicyGuidance,
+  cookingToolNames,
+  formatAuthoritativeRecipes,
+  validateCookingGroceryItems,
+} from '../supabase/functions/_shared/assistant-cooking-policy.mjs'
 
 test('cooking language contract publishes stable concepts and generated coverage', () => {
-  assert.equal(COOKING_INTENTS.length, 22)
+  assert.equal(COOKING_INTENTS.length, 23)
   assert.equal(new Set(COOKING_INTENTS).size, COOKING_INTENTS.length)
   assert.ok(COOKING_UTTERANCE_CORPUS.length >= 80)
   for (const sample of COOKING_UTTERANCE_CORPUS) {
@@ -44,6 +51,79 @@ test('cooking follow-ups require cooking context', () => {
   assert.equal(parseCookingLanguage('Say that step again')?.intent, 'cooking.repeat_step')
 })
 
+test('explicit cooking grocery handoff is narrow and confirmation-safe', () => {
+  const frame = parseCookingLanguage(
+    'Add the missing ingredients to my grocery list',
+    { assistantMode: 'chef' },
+  )
+  assert.equal(frame?.intent, 'cooking.add_to_grocery')
+  assert.deepEqual(cookingToolNames(frame), ['add_grocery_items'])
+  assert.deepEqual(cookingToolNames(parseCookingLanguage('What ingredients am I missing?')), [])
+  assert.match(cookingFrameGuidance(frame), /exactly once/)
+})
+
+test('cooking policy makes household allergies authoritative', () => {
+  const policy = cookingPolicyGuidance(
+    parseCookingLanguage('What can I use instead of buttermilk?'),
+    {
+      allergies: 'peanuts; shellfish',
+      dietaryRules: 'dairy free',
+      pantryStaples: 'rice, olive oil',
+    },
+  )
+  assert.match(policy, /hard constraints/)
+  assert.match(policy, /peanuts, shellfish/)
+  assert.match(policy, /dairy free/)
+  assert.match(policy, /rice, olive oil/)
+  assert.match(policy, /flavor, texture, structure, and ratio/)
+})
+
+test('cooking grocery handoff blocks household allergens before execution', () => {
+  assert.deepEqual(
+    validateCookingGroceryItems(
+      [{ name: 'peanut butter' }, { name: 'strawberries' }],
+      { allergies: 'peanut, shellfish' },
+    ),
+    { allowed: false, blockedItems: ['peanut butter'] },
+  )
+  assert.deepEqual(
+    validateCookingGroceryItems([{ name: 'sunflower butter' }], { allergies: 'peanut' }),
+    { allowed: true, blockedItems: [] },
+  )
+})
+
+test('saved recipe grounding includes authoritative ingredients and ordered steps', () => {
+  const text = formatAuthoritativeRecipes([{
+    id: 'recipe-1',
+    name: 'Tomato Soup',
+    servings: '4',
+    recipe_ingredients: [
+      { name: 'salt', raw_text: '1 tsp salt', sort_order: 2 },
+      { name: 'tomatoes', raw_text: '4 tomatoes', sort_order: 1 },
+    ],
+    recipe_steps: [
+      { step_number: 2, instruction: 'Blend until smooth.' },
+      { step_number: 1, instruction: 'Simmer the tomatoes.' },
+    ],
+  }])
+  assert.match(text, /recipe_id=recipe-1/)
+  assert.ok(text.indexOf('4 tomatoes') < text.indexOf('1 tsp salt'))
+  assert.ok(text.indexOf('Simmer the tomatoes') < text.indexOf('Blend until smooth'))
+})
+
+test('cooking authority outranks overlapping grocery parsing only in cooking context', () => {
+  const source = fs.readFileSync(
+    new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url),
+    'utf8',
+  )
+  assert.ok(
+    source.indexOf(': authoritativeCookingContext') <
+      source.indexOf(': authoritativeGroceryContext'),
+  )
+  assert.match(source, /const recipeToolNames = cookingToolNames\(cookingFrame\)/)
+  assert.match(source, /recipe_ingredients\(name, raw_text, quantity, unit, optional, sort_order\)/)
+})
+
 test('combined grocery list requests remain read-only cooking follow-ups', () => {
   const frame = parseCookingLanguage('Make me one combined grocery list.', { assistantMode: 'chef' })
   assert.equal(
@@ -64,6 +144,13 @@ test('numbered dinner plans capture their requested ingredients', () => {
   )
   assert.equal(frame?.intent, 'cooking.meal_plan')
   assert.deepEqual(frame?.slots, { ingredients: 'salmon black beans and leftover rice' })
+})
+
+test('recipe scaling captures an explicit serving target', () => {
+  assert.deepEqual(
+    parseCookingLanguage('Make this recipe for eight people', { assistantMode: 'chef' })?.slots,
+    { targetServings: 'eight' },
+  )
 })
 
 test('common STT and spelling forms normalize before semantic parsing', () => {

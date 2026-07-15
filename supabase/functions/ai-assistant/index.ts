@@ -55,6 +55,12 @@ import {
   parseCookingLanguage,
 } from '../_shared/assistant-cooking-language.mjs'
 import {
+  cookingPolicyGuidance,
+  cookingToolNames,
+  formatAuthoritativeRecipes,
+  validateCookingGroceryItems,
+} from '../_shared/assistant-cooking-policy.mjs'
+import {
   isGroceryLikeLanguage,
   parseGroceryLanguage,
 } from '../_shared/assistant-grocery-language.mjs'
@@ -262,6 +268,13 @@ Deno.serve(async (req) => {
     assistantMode: context?.assistant_mode,
     activeEntityType: incomingConversationState?.activeEntityType,
   })
+  const authoritativeCookingContext = Boolean(
+    cookingFrame && (
+      context?.assistant_mode === 'chef' ||
+      context?.page === 'cooking' ||
+      incomingConversationState?.activeEntityType === 'recipe'
+    )
+  )
   const cookingGuidance = cookingFrameGuidance(cookingFrame)
   const requestAmbiguity = classifyAssistantAmbiguity(latestUserText, {
     hasActiveEntity: Boolean(incomingConversationState?.activeEntityType || context?.focusedEvent),
@@ -297,6 +310,8 @@ Deno.serve(async (req) => {
     ? { profile: 'grocery', forceEventSearch: false }
     : calendarMutationDisambiguationFollowUp
     ? { profile: 'event', forceEventSearch: false }
+    : authoritativeCookingContext
+    ? { profile: 'recipe', forceEventSearch: false }
     : authoritativeGroceryContext
     ? { profile: 'grocery', forceEventSearch: false }
     : calendarFrame
@@ -454,7 +469,7 @@ Deno.serve(async (req) => {
       : skippedRows,
     needsRecipeData
       ? sb.from('recipes')
-      .select('id, name, cook_time, servings')
+      .select('id, name, cook_time, servings, recipe_ingredients(name, raw_text, quantity, unit, optional, sort_order), recipe_steps(step_number, instruction)')
       .order('last_used_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .limit(30)
@@ -1552,9 +1567,7 @@ Deno.serve(async (req) => {
 
   // Build context strings
   const familyNames = (context.family as {name: string}[]).map(f => f.name).join(', ')
-  const recipesText = (recipes ?? []).map((row: { name: string; cook_time?: string | null; servings?: string | null }, idx: number) =>
-    `${idx + 1}. ${row.name}${row.cook_time ? ` · ${row.cook_time}` : ''}${row.servings ? ` · serves ${row.servings}` : ''}`
-  ).join('\n')
+  const recipesText = formatAuthoritativeRecipes(recipes ?? [])
 
   // ── Food profile (dietary rules, allergies, preferences) ──
   const foodProfileRaw = (foodProfileResult as { data?: { value?: Record<string, unknown> } } | null)?.data?.value ?? null
@@ -1574,6 +1587,7 @@ Deno.serve(async (req) => {
     if (typeof fp.weeklyBudgetUsd === 'number') lines.push(`- Weekly grocery budget: $${fp.weeklyBudgetUsd}`)
     return lines.join('\n')
   })()
+  const cookingPolicy = cookingPolicyGuidance(cookingFrame, foodProfileRaw ?? {})
 
   // ── Member availability (recurring rules + upcoming exceptions) ──
   const memberNameById = new Map<string, string>()
@@ -2050,7 +2064,7 @@ Deno.serve(async (req) => {
     ],
   }]
 
-  const recipeToolNames = cookingFrame?.intent === 'recipe.save' ? ['create_recipe'] : []
+  const recipeToolNames = cookingToolNames(cookingFrame)
   const toolNamesByProfile: Record<string, string[]> = {
     event: ['search_events', 'create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title'],
     grocery: ['add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items'],
@@ -2186,6 +2200,7 @@ ${includeGroceryContext ? `\nGROCERY LIST (unchecked items):\n${groceryText}\n${
 ${includeRecipeContext ? `\nRECIPE LIBRARY SNAPSHOT (recent):\n${recipesText || 'No recipes saved yet.'}` : ''}
 ${includeRecipeContext && foodProfileText ? `\nFOOD PROFILE (household dietary needs & preferences — honor for all meal/grocery/recipe suggestions):\n${foodProfileText}` : ''}
 ${cookingFrame ? `\nCOOKING SEMANTIC FRAME (Casa's normalized interpretation; answer the concept, not the wording):\nIntent: ${cookingFrame.intent}\nSlots: ${JSON.stringify(cookingFrame.slots)}${cookingGuidance ? `\nRequired handling: ${cookingGuidance}` : ''}` : ''}
+${cookingPolicy ? `\n${cookingPolicy}` : ''}
 ${includeAvailabilityContext && availabilityText ? `\nMEMBER AVAILABILITY (recurring rules + upcoming overrides — use to warn about conflicts and pick times people are free):\n${availabilityText}` : ''}
 
 INSTRUCTIONS:
@@ -2193,6 +2208,8 @@ INSTRUCTIONS:
 - If assistant_mode is "chef", bias responses toward cooking, recipe planning, pantry-aware substitutions, and grocery execution.
 - When the user asks you to save/store/add a recipe to the Recipe Library, call create_recipe with complete structured ingredients and ordered steps.
 - create_recipe is low-risk and should execute immediately once structured details are ready.
+- In cooking mode, use add_grocery_items only when the COOKING SEMANTIC FRAME is cooking.add_to_grocery. Never mutate groceries merely because you suggested a recipe or listed missing ingredients.
+- Treat recipe IDs, saved ingredients, saved steps, grocery rows, and the food profile supplied by Casa as authoritative. Conversationally generated recipes are suggestions until explicitly saved.
 - For simple math and calculations (tips, percentages, unit conversions, arithmetic) — answer directly from reasoning. Do NOT call search_web.
 - Use tools for calendar/grocery/place actions. Reads (search) execute immediately. Most writes need confirmation, but low-risk create_event, create_recipe, and add_grocery_items should execute immediately.
 - Always operate on UUIDs from the events list. ALWAYS call search_events FIRST for delete_event, delete_events_by_title, bulk_update_events, and update_event — never attempt them without a search result providing the event ID(s). Use search_events when unsure, then update/delete with the exact ID(s) from the search result.
@@ -3154,6 +3171,19 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           const itemsList = Array.isArray(args.items) ? args.items.filter((i: { name?: string }) => i?.name?.trim()) : []
           if (itemsList.length === 0) {
             return { type: 'text', text: "I didn't catch what you'd like to add to the grocery list. Could you say the item name?" }
+          }
+          if (cookingFrame?.intent === 'cooking.add_to_grocery') {
+            const policyResult = validateCookingGroceryItems(itemsList, foodProfileRaw ?? {})
+            if (!policyResult.allowed) {
+              appendServerTrace('server_ai_assistant_cooking_grocery_blocked', 'allergy_policy', {
+                blocked_item_count: policyResult.blockedItems.length,
+                semantic_intent: cookingFrame.intent,
+              })
+              return {
+                type: 'text',
+                text: `I did not add ${policyResult.blockedItems.join(', ')} because ${policyResult.blockedItems.length === 1 ? 'it conflicts' : 'they conflict'} with the household allergy profile.`,
+              }
+            }
           }
           const groceryArgs = { ...args, items: itemsList }
           if (dryRun) {
