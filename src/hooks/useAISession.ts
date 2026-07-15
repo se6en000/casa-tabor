@@ -11,6 +11,7 @@ export interface AIMessage {
         activeEntityType: 'event'
         activeEventId: string
         activeEventUpdatedAt?: string | null
+        eventType?: 'event' | 'reminder'
         expectedFollowUp: 'event_follow_up'
         establishedAt: string
       }
@@ -27,9 +28,10 @@ export interface AIMessage {
           title: string
           start: string | null
           version: string | null
+          eventType?: 'event' | 'reminder'
         }>
         pendingMutation: {
-          tool: 'update_event' | 'delete_event'
+          tool: 'select_event' | 'update_event' | 'delete_event' | 'complete_reminder'
           args: Record<string, unknown>
           semanticTurn?: Record<string, unknown>
         }

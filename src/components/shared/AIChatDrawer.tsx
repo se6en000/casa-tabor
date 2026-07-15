@@ -955,7 +955,13 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                       updateMessageToolStatus(messageId, 'done', {
                         actionId: data?.action_id,
                         resultEventId: data?.event_id,
-                        conversationState: conversationStateAfterCalendarAction(tool, requestArgs, data),
+                        conversationState: conversationStateAfterCalendarAction(
+                          tool,
+                          requestArgs,
+                          data,
+                          new Date(),
+                          msg.conversationState,
+                        ),
                         syncWarning: data?.sync_warning,
                         syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
                         undoStatus: 'idle',

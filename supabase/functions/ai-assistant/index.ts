@@ -65,6 +65,7 @@ import { isAgentWriteCompatible } from '../_shared/assistant-agent-write-compati
 import {
   explicitReminderSearchForMessages,
   isExplicitReminderCompletion,
+  isReminderCompletionFollowUp,
 } from '../_shared/assistant-reminder-intent.mjs'
 
 const CORS = {
@@ -220,6 +221,10 @@ Deno.serve(async (req) => {
   const previousUserText = userMessageTexts.at(-2) ?? null
   const explicitReminderRead = explicitReminderSearchForMessages(messages)
   const incomingConversationState = normalizeConversationState(context?.conversationState)
+  const reminderCompletionFollowUp = isReminderCompletionFollowUp(
+    latestUserText,
+    incomingConversationState,
+  )
   const parsedCalendarFrame = parseCalendarLanguage(latestUserText, {
     focusedEvent: Boolean(context?.focusedEvent),
     activeEntityType: incomingConversationState?.activeEntityType,
@@ -238,7 +243,7 @@ Deno.serve(async (req) => {
         utcOffset: context?.utcOffset,
       })
     : null
-  const groceryFrame = isExplicitReminderCompletion(latestUserText)
+  const groceryFrame = isExplicitReminderCompletion(latestUserText) || reminderCompletionFollowUp
     ? null
     : parseGroceryLanguage(latestUserText, {
     activeEntityType: incomingConversationState?.activeEntityType,
@@ -591,6 +596,37 @@ Deno.serve(async (req) => {
             context_load_ms: contextLoadMs,
           },
         },
+      }
+      if (
+        latestUserText &&
+        reminderCompletionFollowUp &&
+        activeConversationEvent?.event_type === 'reminder'
+      ) {
+        const args = {
+          id: activeConversationEvent.id,
+          expected_updated_at: activeConversationEvent.updated_at,
+          title: activeConversationEvent.title,
+        }
+        appendServerTrace('server_ai_assistant_reminder_completion_follow_up', 'tool=complete_reminder', {
+          event_id: activeConversationEvent.id,
+        })
+        return {
+          status: 200,
+          payload: {
+            type: 'tool_action',
+            tool: 'complete_reminder',
+            args,
+            display_text: buildDisplayText('complete_reminder', args),
+            conversation_state: eventConversationState(activeConversationEvent, now),
+            semantic_intent: 'agent.write.update',
+            correlation_id: cid,
+            telemetry: {
+              ...llmTelemetry,
+              request_total_ms: Date.now() - requestStartMs,
+              context_load_ms: contextLoadMs,
+            },
+          },
+        }
       }
     }
     if (selection?.tool) {

@@ -220,6 +220,7 @@ Deno.serve(async (req) => {
           activeEntityType: 'event',
           activeEventId: activeEvents[0].id,
           activeEventUpdatedAt: activeEvents[0].updated_at ?? null,
+          eventType: activeEvents[0].event_type === 'reminder' ? 'reminder' : 'event',
           expectedFollowUp: 'event_follow_up',
           establishedAt: new Date().toISOString(),
         }
@@ -231,6 +232,7 @@ Deno.serve(async (req) => {
               title: event.title,
               start: event.start_time,
               version: event.updated_at,
+              eventType: event.event_type === 'reminder' ? 'reminder' : 'event',
             })),
             pendingMutation: { tool: 'select_event', args: {} },
             expectedFollowUp: 'calendar_clarification',

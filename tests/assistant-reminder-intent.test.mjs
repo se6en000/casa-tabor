@@ -5,6 +5,7 @@ import {
   fallbackExplicitRelativeReminderTurn,
   hardenExplicitReminderTurn,
   isExplicitReminderCompletion,
+  isReminderCompletionFollowUp,
   explicitReminderSearchForMessages,
   explicitReminderSearchOverride,
 } from '../supabase/functions/_shared/assistant-reminder-intent.mjs'
@@ -117,4 +118,24 @@ test('reminder result corrections retain the preceding authoritative reminder sc
     { role: 'assistant', content: 'Two events.' },
     { role: 'user', content: 'These are reminders' },
   ]), null)
+})
+
+test('completion follow-ups inherit only authoritative reminder context', () => {
+  const reminderList = {
+    activeEntityType: 'calendar_clarification',
+    candidateEvents: [
+      { id: 'one', eventType: 'reminder' },
+      { id: 'two', eventType: 'reminder' },
+    ],
+  }
+  assert.equal(isReminderCompletionFollowUp('Mark the first one done', reminderList), true)
+  assert.equal(isReminderCompletionFollowUp('Mark them done', reminderList), true)
+  assert.equal(isReminderCompletionFollowUp('Mark it done', {
+    activeEntityType: 'event',
+    eventType: 'reminder',
+  }), true)
+  assert.equal(isReminderCompletionFollowUp('Mark it done', {
+    activeEntityType: 'event',
+    eventType: 'event',
+  }), false)
 })

@@ -161,6 +161,68 @@ test('calendar search candidates ground explicit ordinal and weekday deletes', (
   )
 })
 
+test('reminder search candidates ground ordinal and named completion follow-ups', () => {
+  const dental = {
+    ...event,
+    id: 'dental-reminder',
+    title: 'Jake | Schedule Family Dental Appointments',
+    updated_at: 'dental-v1',
+    event_type: 'reminder',
+  }
+  const softball = {
+    ...event,
+    id: 'softball-reminder',
+    title: "Jake | Liv's Softball Registration",
+    updated_at: 'softball-v1',
+    event_type: 'reminder',
+  }
+  const state = calendarClarificationConversationState(
+    [dental, softball],
+    { tool: 'select_event', args: {} },
+    new Date('2026-07-14T13:00:00Z'),
+  )
+  const normalized = normalizeConversationState(state, Date.parse('2026-07-14T13:00:01Z'))
+
+  const ordinal = resolveCalendarClarificationSelection(
+    'Mark the first one as done',
+    normalized,
+    [dental, softball],
+    { utcOffset: '-04:00' },
+  )
+  assert.equal(ordinal.tool, 'complete_reminder')
+  assert.deepEqual(ordinal.args, {
+    id: dental.id,
+    expected_updated_at: 'dental-v1',
+    title: dental.title,
+  })
+
+  const named = resolveCalendarClarificationSelection(
+    'Mark softball registration done',
+    normalized,
+    [dental, softball],
+    { utcOffset: '-04:00' },
+  )
+  assert.equal(named.tool, 'complete_reminder')
+  assert.equal(named.args.id, softball.id)
+
+  const plural = resolveCalendarClarificationSelection(
+    'Mark them done',
+    normalized,
+    [dental, softball],
+    { utcOffset: '-04:00' },
+  )
+  assert.match(plural.text, /Which reminder should I mark done/)
+  assert.match(plural.text, /1\. Jake \| Schedule Family Dental Appointments/)
+
+  const multiple = resolveCalendarClarificationSelection(
+    'Mark the first and second ones done',
+    normalized,
+    [dental, softball],
+    { utcOffset: '-04:00' },
+  )
+  assert.match(multiple.text, /Which reminder should I mark done/)
+})
+
 test('calendar clarification preserves and applies the semantic mutation after selection', () => {
   const now = new Date('2026-07-14T13:00:00Z')
   const secondEvent = {

@@ -50,6 +50,19 @@ export function isExplicitReminderCompletion(text) {
   return /\b(?:mark|check)\b.*\breminder\b.*\b(?:done|complete|off)\b|\bcomplete\b.*\breminder\b/i.test(value)
 }
 
+export function isReminderCompletionFollowUp(text, conversationState) {
+  if (!isCompletionLanguage(text)) return false
+  if (conversationState?.activeEntityType === 'event') {
+    return conversationState.eventType === 'reminder'
+  }
+  if (conversationState?.activeEntityType !== 'calendar_clarification') return false
+  const candidates = Array.isArray(conversationState.candidateEvents)
+    ? conversationState.candidateEvents
+    : []
+  return candidates.length > 0 &&
+    candidates.every((candidate) => candidate?.eventType === 'reminder')
+}
+
 export function explicitReminderSearchOverride(text) {
   const value = String(text ?? '').toLowerCase()
   if (
@@ -98,6 +111,11 @@ export function explicitReminderSearchForMessages(messages) {
 
 function isExplicitReminder(text) {
   return /\bremind\s+me\b|\bset\s+(?:me\s+)?(?:a\s+)?reminder\b|\bcreate\s+(?:a\s+)?reminder\b/i.test(String(text ?? ''))
+}
+
+function isCompletionLanguage(text) {
+  const value = String(text ?? '')
+  return /\b(?:mark|check)\b.*\b(?:done|complete|completed|off)\b|\b(?:complete|finish)\b.*|\b(?:is|are)\s+(?:done|complete|completed)\b/i.test(value)
 }
 
 function parseRelativeMinutes(text) {

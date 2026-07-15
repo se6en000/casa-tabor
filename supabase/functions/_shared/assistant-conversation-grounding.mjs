@@ -28,13 +28,14 @@ export function normalizeConversationState(value, now = Date.now()) {
             title: typeof candidate.title === 'string' ? candidate.title : 'Calendar event',
             start: typeof candidate.start === 'string' ? candidate.start : null,
             version: typeof candidate.version === 'string' ? candidate.version : null,
+            eventType: candidate.eventType === 'reminder' ? 'reminder' : 'event',
           }]
         })
       : []
     const pendingMutation = value.pendingMutation
     if (
       candidates.length < 2 ||
-      !['select_event', 'update_event', 'delete_event'].includes(pendingMutation?.tool) ||
+      !['select_event', 'update_event', 'delete_event', 'complete_reminder'].includes(pendingMutation?.tool) ||
       !pendingMutation.args ||
       typeof pendingMutation.args !== 'object' ||
       Array.isArray(pendingMutation.args)
@@ -60,6 +61,7 @@ export function normalizeConversationState(value, now = Date.now()) {
     activeEntityType: 'event',
     activeEventId,
     activeEventUpdatedAt: typeof value.activeEventUpdatedAt === 'string' ? value.activeEventUpdatedAt : null,
+    eventType: value.eventType === 'reminder' ? 'reminder' : 'event',
     expectedFollowUp: 'event_follow_up',
     establishedAt: new Date(establishedAt).toISOString(),
   }
@@ -79,6 +81,7 @@ export function eventConversationState(event, now = new Date()) {
     activeEntityType: 'event',
     activeEventId: event.id,
     activeEventUpdatedAt: event.updated_at ?? null,
+    eventType: event.event_type === 'reminder' ? 'reminder' : 'event',
     expectedFollowUp: 'event_follow_up',
     establishedAt: now.toISOString(),
   }
@@ -92,6 +95,9 @@ export function calendarClarificationConversationState(candidates, pendingMutati
       title: candidate.title ?? 'Calendar event',
       start: candidate.start ?? candidate.start_time ?? null,
       version: candidate.version ?? candidate.updated_at ?? null,
+      eventType: candidate.eventType === 'reminder' || candidate.event_type === 'reminder'
+        ? 'reminder'
+        : 'event',
     })),
     pendingMutation: {
       tool: pendingMutation.tool,
@@ -123,21 +129,38 @@ export function resolveCalendarClarificationSelection(text, state, events, optio
   }
 
   let selectedIndex = null
-  if (/\b(?:first|1st)\b/.test(input)) selectedIndex = 0
-  else if (/\b(?:second|2nd)\b/.test(input)) selectedIndex = 1
-  else if (/\b(?:third|3rd)\b/.test(input)) selectedIndex = 2
-  else if (/\b(?:last|latest)\b/.test(input)) selectedIndex = candidates.length - 1
-  else if (/\b(?:earlier|morning)\b/.test(input)) selectedIndex = 0
-  else if (/\b(?:later|afternoon|evening|night)\b/.test(input)) selectedIndex = candidates.length - 1
+  const selectionReferences = input.match(/\b(?:first|1st|second|2nd|third|3rd|last|latest)\b/g) ?? []
+  const multipleSelections = selectionReferences.length > 1
+  if (!multipleSelections) {
+    if (/\b(?:first|1st)\b/.test(input)) selectedIndex = 0
+    else if (/\b(?:second|2nd)\b/.test(input)) selectedIndex = 1
+    else if (/\b(?:third|3rd)\b/.test(input)) selectedIndex = 2
+    else if (/\b(?:last|latest)\b/.test(input)) selectedIndex = candidates.length - 1
+    else if (/\b(?:earlier|morning)\b/.test(input)) selectedIndex = 0
+    else if (/\b(?:later|afternoon|evening|night)\b/.test(input)) selectedIndex = candidates.length - 1
+  }
   if (selectedIndex == null) {
     selectedIndex = candidateIndexBySpokenTime(input, candidates, options.utcOffset)
   }
   if (selectedIndex == null) {
     selectedIndex = candidateIndexByWeekday(input, candidates, options.utcOffset)
   }
+  if (selectedIndex == null) {
+    selectedIndex = candidateIndexByTitle(input, candidates)
+  }
 
   const selected = selectedIndex == null ? null : candidates[selectedIndex]
-  if (!selected) return null
+  const completionRequested = /\b(?:mark|check)\b.*\b(?:done|complete|completed|off)\b|\b(?:complete|finish)\b.*|\b(?:is|are)\s+(?:done|complete|completed)\b/i.test(input)
+  if (!selected) {
+    if (completionRequested && candidates.every((event) => event.event_type === 'reminder')) {
+      return {
+        text: `Which reminder should I mark done?\n${candidates.map((event, index) =>
+          `${index + 1}. ${event.title} — ${formatClarificationStart(event.start_time, options.utcOffset)}`
+        ).join('\n')}`,
+      }
+    }
+    return null
+  }
   const pending = state.pendingMutation
   if (pending.semanticTurn) {
     const result = resolveCalendarSemanticTurn({
@@ -174,8 +197,30 @@ export function resolveCalendarClarificationSelection(text, state, events, optio
       args: { id: selected.id, title: selected.title },
       event: selected,
     }
+    if (pending.tool === 'complete_reminder' && selected.event_type === 'reminder') {
+      return {
+        tool: 'complete_reminder',
+        args: {
+          id: selected.id,
+          expected_updated_at: selected.updated_at,
+          title: selected.title,
+        },
+        event: selected,
+      }
+    }
   }
   if (pending.tool === 'select_event') {
+    if (completionRequested && selected.event_type === 'reminder') {
+      return {
+        tool: 'complete_reminder',
+        args: {
+          id: selected.id,
+          expected_updated_at: selected.updated_at,
+          title: selected.title,
+        },
+        event: selected,
+      }
+    }
     if (/\b(?:delete|remove|cancel)\b/.test(input)) {
       return {
         tool: 'delete_event',
@@ -197,6 +242,25 @@ export function resolveCalendarClarificationSelection(text, state, events, optio
     },
     event: selected,
   }
+}
+
+function candidateIndexByTitle(input, candidates) {
+  const ignored = new Set([
+    'a', 'an', 'as', 'check', 'complete', 'completed', 'done', 'finish', 'first',
+    'it', 'mark', 'off', 'one', 'please', 'reminder', 'reminders', 'second',
+    'that', 'the', 'them', 'third', 'this',
+  ])
+  const terms = input
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter((term) => term.length > 1 && !ignored.has(term))
+  if (terms.length === 0) return null
+  const matches = candidates.flatMap((event, index) => {
+    const title = String(event.title ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ')
+    return terms.every((term) => title.includes(term)) ? [index] : []
+  })
+  return matches.length === 1 ? matches[0] : null
 }
 
 function candidateIndexBySpokenTime(input, candidates, utcOffset) {

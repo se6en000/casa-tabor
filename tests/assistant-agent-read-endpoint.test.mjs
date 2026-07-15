@@ -61,6 +61,8 @@ test('multi-event searches retain authoritative candidates for follow-up selecti
   assert.match(endpoint, /plan\.toolName === 'calendar\.search' && activeEvents\?\.length > 1/)
   assert.match(endpoint, /activeEntityType: 'calendar_clarification'/)
   assert.match(endpoint, /pendingMutation: \{ tool: 'select_event', args: \{\} \}/)
+  assert.match(endpoint, /eventType: event\.event_type === 'reminder'/)
+  assert.match(endpoint, /eventType: activeEvents\[0\]\.event_type === 'reminder'/)
   assert.match(assistantEndpoint, /selection\.conversationState \?\? incomingConversationState/)
 })
 
