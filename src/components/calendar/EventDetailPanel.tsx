@@ -545,10 +545,12 @@ function CategoryPicker({
   eventId,
   category,
   accent,
+  dark = false,
 }: {
   eventId: string
   category: string | null | undefined
   accent: string
+  dark?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -583,13 +585,16 @@ function CategoryPicker({
         size="sm"
         tone="accent"
         className="capitalize"
-        style={{ background: `color-mix(in srgb, ${accent} 14%, transparent)`, color: S.navy, letterSpacing: '0.04em', gap: '0.25rem' }}
+        style={dark
+          ? { background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.90)', letterSpacing: '0.04em', gap: '0.25rem', border: '1px solid rgba(255,255,255,0.18)' }
+          : { background: `color-mix(in srgb, ${accent} 14%, transparent)`, color: S.navy, letterSpacing: '0.04em', gap: '0.25rem' }
+        }
         onClick={() => setOpen(v => !v)}
         aria-label={`Category: ${label}. Tap to change`}
         aria-expanded={open}
       >
         {saving ? <Loader2 size={12} className="animate-spin" /> : label}
-        <ChevronDown size={11} className={cn('opacity-50 transition-transform duration-150', open && 'rotate-180')} />
+        <ChevronDown size={11} className={cn('transition-transform duration-150', dark ? 'opacity-60' : 'opacity-50', open && 'rotate-180')} />
       </Chip>
       <AnimatePresence>
         {open && (
@@ -655,68 +660,98 @@ function PanelHeader({
     : format(new Date(event.start_time), 'EEE, MMM d · h:mm a')
   const headerDuration = event.all_day ? 'All day' : formatDuration(new Date(event.start_time), new Date(event.end_time))
   const showAttendees = !reminder && (event.members?.length ?? 0) > 0
+  const avatarMembers = event.members?.slice(0, 5) ?? []
+  const avatarOverflow = (event.members?.length ?? 0) - 5
 
   return (
-    <div
-      className={cn('relative overflow-visible px-7 pb-5 pt-6', isBirthday && 'bg-gradient-to-br from-casa-accent-subtle via-transparent to-casa-bg')}
-      style={{ borderBottom: `1px solid ${S.borderSoft}` }}
-    >
-      {isBirthday && <BirthdayCardDecoration className="opacity-70" />}
+    <div>
+      {/* ── Navy editorial crown ───────────────────────────────── */}
+      <div
+        className={cn('relative overflow-hidden px-6 pt-4 pb-5', isBirthday && 'bg-gradient-to-br from-casa-accent-subtle via-transparent to-transparent')}
+        style={{ background: isBirthday ? undefined : S.navy }}
+      >
+        {isBirthday && <BirthdayCardDecoration className="opacity-60" />}
 
-      {/* Close — absolute so it never displaces content */}
-      <IconButton
-        onClick={onClose}
-        icon={<X size={18} />}
-        aria-label="Close event details"
-        variant="ghost"
-        size="sm"
-        className="absolute top-4 right-4 z-10"
-      />
-
-      {/* Two-column layout: info left, attendees right at ≥lg */}
-      <div className="relative z-10 flex flex-col lg:flex-row lg:items-start gap-x-4 pr-9">
-        {/* Left column: eyebrow · category · title · date */}
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            {eyebrow && (
-              <div className="flex items-center gap-1.5">
-                <span className="w-[9px] h-[9px] shrink-0 rounded-full" style={{ background: accent }} />
-                <span className="text-caption font-bold uppercase tracking-wide" style={{ color: S.eyebrow }}>{eyebrow}</span>
-              </div>
+        {/* Eyebrow row: category · owner · recurring · avatar dots · close */}
+        <div className="relative z-10 flex items-center gap-2 pr-10">
+          <CategoryPicker eventId={event.id} category={category} accent={accent} dark={!isBirthday} />
+          {eyebrow && (
+            <span
+              className="text-caption font-bold uppercase tracking-widest truncate"
+              style={{ color: isBirthday ? S.eyebrow : 'rgba(255,255,255,0.55)' }}
+            >
+              {eyebrow}
+            </span>
+          )}
+          {isRecurring && (
+            <span className="text-caption font-semibold" style={{ color: isBirthday ? S.muted : 'rgba(255,255,255,0.45)' }}>↻</span>
+          )}
+          <div className="ml-auto flex items-center -space-x-1.5 shrink-0">
+            {avatarMembers.map((m) => (
+              <span
+                key={m.id}
+                title={m.family_member?.name}
+                className="flex size-6 shrink-0 items-center justify-center rounded-full text-caption font-bold text-white ring-[2px]"
+                style={{ backgroundColor: m.family_member?.color_hex ?? 'var(--color-casa-muted)', ringColor: isBirthday ? 'white' : S.navy }}
+              >
+                {m.family_member?.name?.[0]}
+              </span>
+            ))}
+            {avatarOverflow > 0 && (
+              <span
+                className="flex size-6 shrink-0 items-center justify-center rounded-full text-caption font-bold ring-[2px]"
+                style={{ background: 'rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.85)', ringColor: S.navy }}
+              >
+                +{avatarOverflow}
+              </span>
             )}
-            <CategoryPicker eventId={event.id} category={category} accent={accent} />
-            {isRecurring && <Chip size="sm">↻ Repeats</Chip>}
-          </div>
-
-          <h2 className="mt-1.5 font-display text-display-sm font-semibold text-casa-navy">
-            {isBirthday && <span className="mr-1.5" aria-hidden="true">🎉</span>}
-            {event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}
-          </h2>
-          <div className="mt-2 flex items-center gap-2 text-body-sm" style={{ color: S.muted }}>
-            <span className="font-semibold" style={{ color: S.navy }}>{headerWhen}</span>
-            <span>·</span>
-            <span>{headerDuration}</span>
           </div>
         </div>
 
-        {/* Right column: attendee chips alongside the info on large screens */}
+        {/* Title */}
+        <h2 className={cn('relative z-10 mt-2 font-display text-display-sm font-bold leading-tight', isBirthday ? 'text-casa-navy' : 'text-white')}>
+          {isBirthday && <span className="mr-1.5" aria-hidden="true">🎉</span>}
+          {event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}
+        </h2>
+
+        {/* Date / duration */}
+        <div className="relative z-10 mt-1.5 flex items-center gap-1.5 text-body-sm">
+          <span className={cn('font-semibold', isBirthday ? '' : '')} style={{ color: isBirthday ? S.navy : S.planLabel }}>
+            {headerWhen}
+          </span>
+          <span style={{ color: isBirthday ? S.muted : 'rgba(255,255,255,0.35)' }}>·</span>
+          <span style={{ color: isBirthday ? S.muted : 'rgba(255,255,255,0.55)' }}>{headerDuration}</span>
+        </div>
+
+        {/* Close button */}
+        <IconButton
+          onClick={onClose}
+          icon={<X size={18} />}
+          aria-label="Close event details"
+          variant="ghost"
+          size="sm"
+          className={cn('absolute top-3.5 right-3.5 z-10', !isBirthday && 'text-white/70 hover:text-white hover:bg-white/10')}
+        />
+      </div>
+
+      {/* ── White strip: attendee editor + destination ─────────── */}
+      <div style={{ borderBottom: `1px solid ${S.borderSoft}` }}>
         {showAttendees && (
-          <div className="mt-4 lg:mt-0 lg:flex-none lg:w-44 lg:shrink-0 lg:pt-1">
+          <div className="px-6 pt-4 pb-3">
             <MemberEditor event={event} onRosterChange={onRosterChange} />
           </div>
         )}
+        {!reminder && planKind === 'travel' && (
+          <DestinationHeaderCard
+            locationName={event.location_name}
+            address={event.address}
+            verified={verified}
+            atHome={hostedAtHome}
+            onCheckAddress={onEdit}
+            accent={accent}
+          />
+        )}
       </div>
-
-      {!reminder && planKind === 'travel' && (
-        <DestinationHeaderCard
-          locationName={event.location_name}
-          address={event.address}
-          verified={verified}
-          atHome={hostedAtHome}
-          onCheckAddress={onEdit}
-          accent={accent}
-        />
-      )}
     </div>
   )
 }
