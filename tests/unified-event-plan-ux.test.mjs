@@ -83,12 +83,21 @@ test('event detail header uses editorial navy crown with compact avatars', () =>
   assert.match(detail, /aria-label="Close event details"/)
 })
 
-test('event detail drag cap continues the theme-aware navy crown', () => {
-  assert.match(detail, /background: 'var\(--color-casa-navy\)'/)
-  assert.match(detail, /color-mix\(in srgb, var\(--color-casa-gold\) 24%, transparent\)/)
-  assert.match(detail, /color-mix\(in srgb, var\(--color-casa-gold\) 38%, transparent\)/)
+test('event detail drag cap and crown share one theme-aware treatment', () => {
+  assert.match(detail, /function eventCrownStyle\(event: EventWithDetails, region: 'cap' \| 'body'\): React\.CSSProperties/)
+  assert.match(detail, /eventCrownStyle\(event, 'cap'\)/)
+  assert.match(detail, /eventCrownStyle\(event, 'body'\)/)
+  assert.match(detail, /backgroundColor: 'var\(--color-casa-navy\)'/)
+  assert.match(detail, /var\(--color-casa-accent-subtle\), transparent 72%/)
+  assert.match(detail, /const glowOrigin = region === 'cap' \? '90% 100%' : '90% 0%'/)
+  assert.match(detail, /className="relative h-control-sm flex-shrink-0 px-3"/)
+  assert.match(detail, /className="absolute inset-x-0 top-0 z-10 mx-auto block h-control w-\[86px\]/)
+  assert.match(detail, /h-\[5px\] w-control-sm rounded-full/)
   assert.match(detail, /aria-label="Drag down to dismiss panel"/)
-  assert.match(detail, /var\(--color-casa-on-dark\) 72%, var\(--color-casa-gold\)/)
+  assert.match(detail, /var\(--color-casa-on-dark\) 48%, transparent/)
+  assert.match(detail, /var\(--color-casa-navy\) 38%, transparent/)
+  assert.doesNotMatch(detail, /borderBottom: '1px solid color-mix/)
+  assert.doesNotMatch(detail, /boxShadow: 'inset 0 -1px 0 color-mix/)
   assert.doesNotMatch(detail, /background: '#(?:1b2a4a|1B2A4A)'/)
 })
 

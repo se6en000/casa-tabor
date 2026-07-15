@@ -78,6 +78,22 @@ const PANEL_ENTER_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1]
 const PANEL_EXIT_EASE: [number, number, number, number] = [0.4, 0, 1, 1]
 const ALL_CATEGORIES_FOR_PICKER = Object.keys(CATEGORY_LABEL) as string[]
 
+function eventCrownStyle(event: EventWithDetails, region: 'cap' | 'body'): React.CSSProperties {
+  if (isBirthdayEvent(event)) {
+    return {
+      backgroundColor: 'var(--color-casa-surface)',
+      backgroundImage: 'linear-gradient(to bottom right, var(--color-casa-accent-subtle), transparent 72%)',
+    }
+  }
+  const accent = eventAccentColor(event)
+  const glowOrigin = region === 'cap' ? '90% 100%' : '90% 0%'
+  const glowHeight = region === 'cap' ? '180%' : '100%'
+  return {
+    backgroundColor: 'var(--color-casa-navy)',
+    backgroundImage: `radial-gradient(ellipse 70% ${glowHeight} at ${glowOrigin}, color-mix(in srgb, ${accent} 28%, transparent), transparent 65%)`,
+  }
+}
+
 function verifyFromTrustedSource(event: EventWithDetails, savedPlaces: SavedPlace[] = []): boolean {
   if (findSavedPlace(savedPlaces ?? [], event.location_name, event.address)) return true
   if (event.lat == null || event.lng == null) return false
@@ -288,23 +304,26 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
               onTouchEnd={stopTouch}
             >
               <div
-                className="flex-shrink-0 px-3 pt-3 pb-1.5"
-                style={{
-                  background: 'var(--color-casa-navy)',
-                  borderBottom: '1px solid color-mix(in srgb, var(--color-casa-gold) 24%, transparent)',
-                  boxShadow: 'inset 0 -1px 0 color-mix(in srgb, var(--color-casa-gold) 38%, transparent)',
-                }}
+                className="relative h-control-sm flex-shrink-0 px-3"
+                style={eventCrownStyle(event, 'cap')}
               >
                 <button
                   type="button"
-                  className="mx-auto block h-6 w-[86px] cursor-grab active:cursor-grabbing"
+                  className="absolute inset-x-0 top-0 z-10 mx-auto block h-control w-[86px] cursor-grab active:cursor-grabbing"
                   aria-label="Drag down to dismiss panel"
                   style={{ touchAction: 'none' }}
                   data-native-drag
                   data-ptr-ignore
                   onPointerDown={e => panelDragControls.start(e)}
                 >
-                  <span className="mx-auto mt-1.5 block h-[5px] w-11 rounded-full shadow-card" style={{ background: 'color-mix(in srgb, var(--color-casa-on-dark) 72%, var(--color-casa-gold))' }} />
+                  <span
+                    className="mx-auto mt-1.5 block h-[5px] w-control-sm rounded-full"
+                    style={{
+                      background: isBirthdayEvent(event)
+                        ? 'color-mix(in srgb, var(--color-casa-navy) 38%, transparent)'
+                        : 'color-mix(in srgb, var(--color-casa-on-dark) 48%, transparent)',
+                    }}
+                  />
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain" data-native-drag data-ptr-ignore>
@@ -698,18 +717,10 @@ function PanelHeader({
     <div>
       {/* ── Navy editorial crown ───────────────────────────────── */}
       <div
-        className={cn('relative overflow-visible px-6 pt-4 pb-5', isBirthday && 'bg-gradient-to-br from-casa-accent-subtle via-transparent to-transparent')}
-        style={{ background: isBirthday ? undefined : S.navy }}
+        className="relative overflow-visible px-6 pt-4 pb-5"
+        style={eventCrownStyle(event, 'body')}
       >
         {isBirthday && <BirthdayCardDecoration className="opacity-60" />}
-
-        {/* Accent radial glow — makes every event visually distinct */}
-        {!isBirthday && (
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{ background: `radial-gradient(ellipse 70% 100% at 90% 0%, color-mix(in srgb, ${accent} 28%, transparent), transparent 65%)` }}
-          />
-        )}
 
         {/* Bottom fade — softens the cut to the white attendee strip */}
         <div
