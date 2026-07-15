@@ -23,6 +23,7 @@
     "qa:ai-agent:benchmark:core": "node scripts/ai-agent-model-benchmark.mjs --scope=core --models=gemini-2.5-flash --trials=3",
     "qa:ai-agent:benchmark:list": "node scripts/ai-agent-model-benchmark.mjs --list",
     "qa:ai-agent:live": "node scripts/ai-agent-live-regression.mjs",
+    "qa:recurrence-v2": "node scripts/recurrence-v2-release-gate.mjs",
     "design-system:export": "node scripts/export-design-system.mjs",
     "style:audit": "node scripts/style-audit.mjs",
     "style:report": "node scripts/style-audit.mjs --json",
