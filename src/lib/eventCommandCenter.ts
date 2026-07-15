@@ -15,6 +15,7 @@ import type { FamilyMember } from '../types'
 import type { TravelEtaResult } from '../hooks/useTravelEta'
 
 export type EventMode = 'appointment' | 'pickup' | 'hosted' | 'trip'
+export type EventPlanKind = 'travel' | 'at_home' | 'coverage' | 'remote' | 'details'
 
 export type LegKind = 'drop' | 'pickup' | 'depart' | 'return' | 'stay' | 'host'
 
@@ -46,6 +47,7 @@ export interface TrafficPill {
 
 export interface PlanModel {
   mode: EventMode
+  kind: EventPlanKind
   pattern: string
   twoDrivers: boolean
   yourTime: string | null
@@ -118,6 +120,8 @@ const PICKUP_INTENT_KEYWORDS = /\b(pick[\s-]?up|pickup|collect|dismissal|car lin
 const DROPOFF_INTENT_KEYWORDS = /\b(drop[\s-]?off|dropoff|hand[\s-]?off|deliver)\b/i
 const TRIP_KEYWORDS = /\b(trip|outing|camp|scalloping|excursion|road trip|day trip|festival|fair|beach|park day)\b/i
 const HOSTED_KEYWORDS = /\b(sitter|babysitter|nanny|plumber|delivery|repair|technician|cleaner|handyman|contractor|at home|home visit)\b/i
+const COVERAGE_KEYWORDS = /\b(sitter|babysitter|nanny|caregiver|childcare)\b/i
+const REMOTE_KEYWORDS = /\b(zoom|google meet|microsoft teams|facetime|video call|virtual|online|remote|phone call)\b/i
 const HOSTED_CATEGORIES = new Set(['home_maintenance'])
 const TRIP_CATEGORIES = new Set(['travel', 'holiday'])
 
@@ -159,6 +163,25 @@ export function inferEventMode(event: EventWithDetails, opts?: { homeName?: stri
 
   // 4. Default — a there-and-back appointment event.
   return 'appointment'
+}
+
+export function inferEventPlanKind(
+  event: EventWithDetails,
+  mode: EventMode,
+  opts?: { homeName?: string | null },
+): EventPlanKind {
+  const title = event.title ?? ''
+  const location = event.location_name ?? ''
+  const address = event.address ?? ''
+  const searchable = `${title} ${location} ${address}`
+  if (REMOTE_KEYWORDS.test(searchable) || /https?:\/\//i.test(searchable)) return 'remote'
+  if (COVERAGE_KEYWORDS.test(title)) return 'coverage'
+  if (isAtHome(event, opts?.homeName)) {
+    const explicitlyAtHome = /\b(at home|home visit)\b/i.test(`${title} ${location}`)
+    const hostedAtHome = HOSTED_CATEGORIES.has(event.enrichment?.category ?? '') || HOSTED_KEYWORDS.test(title)
+    return explicitlyAtHome || hostedAtHome ? 'at_home' : 'details'
+  }
+  return mode === 'hosted' ? 'at_home' : 'travel'
 }
 
 function inferSingleStopIntent(title: string): 'pickup' | 'dropoff' | 'mixed' {
@@ -371,6 +394,31 @@ export function deriveLegs(event: EventWithDetails, mode: EventMode, opts: Deriv
 }
 
 export function derivePlan(event: EventWithDetails, mode: EventMode, opts: DeriveOpts): PlanModel {
+  const kind = inferEventPlanKind(event, mode, opts)
+  if (kind !== 'travel') {
+    const startTime = event.all_day ? 'All day' : fmtTime(event.start_time)
+    const endTime = event.all_day ? null : fmtTime(event.end_time)
+    const timeWindow = startTime && endTime ? `${startTime}–${endTime}` : startTime
+    const context =
+      kind === 'at_home' ? 'at home'
+      : kind === 'coverage' ? 'at-home coverage'
+      : kind === 'remote' ? 'remote'
+      : 'no travel needed'
+    const pattern =
+      kind === 'at_home' ? 'At home'
+      : kind === 'coverage' ? 'Coverage'
+      : kind === 'remote' ? 'Remote'
+      : 'Event details'
+    return {
+      mode,
+      kind,
+      pattern,
+      twoDrivers: false,
+      yourTime: null,
+      legs: [],
+      headline: [timeWindow, context].filter(Boolean).join(' · '),
+    }
+  }
   const legs = deriveLegs(event, mode, opts)
   const dropLeg = legs.find((l) => l.kind === 'drop' || l.kind === 'depart')
   const pickLeg = legs.find((l) => l.kind === 'pickup' || l.kind === 'return')
@@ -413,7 +461,7 @@ export function derivePlan(event: EventWithDetails, mode: EventMode, opts: Deriv
     : addMinutesToIso(event.end_time, eta?.found ? eta.drive_time_mins ?? eta.base_drive_time_mins ?? null : null)
   const headline = deriveHeadline(mode, legs, { leaveBy, returnHomeAt, isSingleStop: !dropLeg && Boolean(pickLeg) })
 
-  return { mode, pattern, twoDrivers, yourTime, legs, headline }
+  return { mode, kind, pattern, twoDrivers, yourTime, legs, headline }
 }
 
 function deriveYourTime(

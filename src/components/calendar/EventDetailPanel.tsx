@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { format } from 'date-fns'
 import { motion, AnimatePresence, useDragControls } from 'framer-motion'
 import {
-  X, MapPin, Navigation, ChevronRight,
+  X, MapPin, Navigation, ChevronRight, CalendarDays, House, Users, Video,
   Loader2, Crown, Plus, Check, Pencil, Share2, Phone, MessageSquare,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -18,7 +18,7 @@ import { useTravelEta } from '../../hooks/useTravelEta'
 import { useMemberAvailability } from '../../hooks/useMemberAvailability'
 import { DepartureRiskBanner } from '../shared/DepartureRiskBanner'
 import {
-  inferEventMode, derivePlan, eventAccentColor, trafficPill, eventAttendees,
+  inferEventMode, inferEventPlanKind, derivePlan, eventAccentColor, trafficPill, eventAttendees,
   deriveSingleStopPattern, type PlanModel, type EventMode,
 } from '../../lib/eventCommandCenter'
 import {
@@ -504,6 +504,7 @@ function PanelHeader({
   const isRecurring = Boolean(event.rrule || event.recurrence_master_id)
   const reminder = event.event_type === 'reminder'
   const mode = modeOverride ?? inferEventMode(event)
+  const planKind = inferEventPlanKind(event, mode)
   const hostedAtHome = mode === 'hosted'
   const displayStartDay = getEventDisplayStartDay(event)
   const headerWhen = event.all_day
@@ -564,13 +565,19 @@ function PanelHeader({
       {!reminder && event.members?.length > 0 && (
         <div className="mt-4">
           <div className="mb-2 text-caption font-bold uppercase tracking-wide" style={{ color: S.label }}>
-            {hostedAtHome ? 'At home' : 'Going'}
+            {planKind === 'travel'
+              ? 'Going'
+              : planKind === 'remote'
+                ? 'Joining'
+                : isBirthday || planKind === 'at_home' || planKind === 'coverage'
+                  ? 'At home'
+                  : 'Attending'}
           </div>
           <MemberEditor event={event} />
         </div>
       )}
 
-      {!reminder && mode !== 'hosted' && (
+      {!reminder && planKind === 'travel' && (
         <DestinationHeaderCard
           locationName={event.location_name}
           address={event.address}
@@ -663,7 +670,8 @@ function StandardPanelBody({
   const enr = event.enrichment
   const reminder = event.event_type === 'reminder'
   const mode = modeOverride ?? inferEventMode(event)
-  const showTravelLocation = mode !== 'hosted'
+  const planKind = inferEventPlanKind(event, mode)
+  const showTravelLocation = planKind === 'travel'
   const hasChecklist = event.checklist?.length > 0
   const activeFields = getFieldsForCategory(enr?.category)
   const shows = (field: string) => activeFields.includes(field as ReturnType<typeof getFieldsForCategory>[number])
@@ -829,55 +837,52 @@ function StandardPanelBody({
     const role = m.family_member?.role
     return role === 'parent' || role === 'caregiver'
   })
-  const showMeanwhile = mode !== 'hosted' && caregiversAway && coverageRows.length > 0
+  const showMeanwhile = planKind === 'travel' && caregiversAway && coverageRows.length > 0
 
   return (
     <div className="event-command-center-content p-6 space-y-5">
       {/* ── The Plan ── */}
       {plan && (
         <section>
-          <PlanBlock
-            plan={plan}
-            loading={verified && commuteQuery.isLoading && !commuteQuery.data}
-            driverPool={driverPool}
-            waitsOverride={waitsOverride}
-            driverOverrides={driverOverrides}
-            modeOverride={modeOverride}
-            twoDriverConfirmed={twoDriverConfirmed}
-            onSetWaitsOverride={onSetWaitsOverride}
-            onSetDriverOverride={(legIndex, driverId) => {
-              // When reassigning the outbound leg (drop/depart), cascade the
-              // same driver to the stay and return/pickup legs so all three
-              // stay in sync — unless those legs have already been individually
-              // pinned to a different person.
-              const changedLeg = plan.legs[legIndex]
-              const isOutbound = changedLeg?.kind === 'drop' || changedLeg?.kind === 'depart'
-              if (isOutbound) {
-                const cascadeUpdates: Record<number, string> = { [legIndex]: driverId }
-                plan.legs.forEach((leg, i) => {
-                  if (i === legIndex) return
-                  const isDownstream = leg.kind === 'stay' || leg.kind === 'return' || leg.kind === 'pickup'
-                  // Only cascade to legs that have a driver slot and haven't
-                  // been manually overridden to a *different* driver.
-                  if (isDownstream && leg.driver && !driverOverrides[i]) {
-                    cascadeUpdates[i] = driverId
-                  }
-                })
-                // Apply all cascades at once via parent setter (one state update per index).
-                Object.entries(cascadeUpdates).forEach(([idx, id]) =>
-                  onSetDriverOverride(Number(idx), id)
-                )
-              } else {
-                onSetDriverOverride(legIndex, driverId)
-              }
-            }}
-            onSetModeOverride={onSetModeOverride}
-            onSetTwoDriverConfirmed={onSetTwoDriverConfirmed}
-          />
+          {plan.kind === 'travel' ? (
+            <PlanBlock
+              plan={plan}
+              loading={verified && commuteQuery.isLoading && !commuteQuery.data}
+              driverPool={driverPool}
+              waitsOverride={waitsOverride}
+              driverOverrides={driverOverrides}
+              modeOverride={modeOverride}
+              twoDriverConfirmed={twoDriverConfirmed}
+              onSetWaitsOverride={onSetWaitsOverride}
+              onSetDriverOverride={(legIndex, driverId) => {
+                const changedLeg = plan.legs[legIndex]
+                const isOutbound = changedLeg?.kind === 'drop' || changedLeg?.kind === 'depart'
+                if (isOutbound) {
+                  const cascadeUpdates: Record<number, string> = { [legIndex]: driverId }
+                  plan.legs.forEach((leg, i) => {
+                    if (i === legIndex) return
+                    const isDownstream = leg.kind === 'stay' || leg.kind === 'return' || leg.kind === 'pickup'
+                    if (isDownstream && leg.driver && !driverOverrides[i]) {
+                      cascadeUpdates[i] = driverId
+                    }
+                  })
+                  Object.entries(cascadeUpdates).forEach(([idx, id]) =>
+                    onSetDriverOverride(Number(idx), id)
+                  )
+                } else {
+                  onSetDriverOverride(legIndex, driverId)
+                }
+              }}
+              onSetModeOverride={onSetModeOverride}
+              onSetTwoDriverConfirmed={onSetTwoDriverConfirmed}
+            />
+          ) : (
+            <NonTravelEventBlock event={event} plan={plan} />
+          )}
         </section>
       )}
 
-      {!reminder && hasDestination && mode !== 'hosted' && (
+      {!reminder && hasDestination && planKind === 'travel' && (
         <DepartureRiskBanner event={event} travelEta={verified ? commuteQuery.data : null} />
       )}
 
@@ -953,6 +958,51 @@ function StandardPanelBody({
 }
 
 /* ── Command Center blocks ──────────────────────────────────── */
+
+function NonTravelEventBlock({ event, plan }: { event: EventWithDetails; plan: PlanModel }) {
+  const birthday = isBirthdayEvent(event)
+  const content = {
+    at_home: {
+      title: birthday ? 'Birthday at home' : 'Happening at home',
+      description: 'Everyone is already where they need to be. No driving plan is needed.',
+      icon: <House size={20} />,
+    },
+    coverage: {
+      title: 'At-home coverage',
+      description: 'No driving is needed. Attendees and event notes are the source of truth for coverage.',
+      icon: <Users size={20} />,
+    },
+    remote: {
+      title: 'Remote event',
+      description: 'No drive time is needed. Use the meeting details or event notes to join.',
+      icon: <Video size={20} />,
+    },
+    details: {
+      title: birthday ? 'Birthday at home' : 'Event details',
+      description: birthday
+        ? 'A celebration placeholder with no transportation plan.'
+        : 'No location or transportation plan is attached to this event.',
+      icon: <CalendarDays size={20} />,
+    },
+    travel: null,
+  }[plan.kind]
+
+  if (!content) return null
+
+  return (
+    <Card padding="md" className="flex items-start gap-4 border-casa-border bg-casa-bg shadow-none">
+      <span className="flex size-control shrink-0 items-center justify-center rounded-button bg-casa-surface text-casa-gold shadow-card">
+        {content.icon}
+      </span>
+      <div className="min-w-0">
+        <p className="text-caption font-bold uppercase tracking-wide text-casa-muted">Event overview</p>
+        <h3 className="mt-1 font-display text-body-lg font-semibold text-casa-navy">{content.title}</h3>
+        {plan.headline && <p className="mt-1 text-body-sm font-semibold text-casa-text">{plan.headline}</p>}
+        <p className="mt-2 text-body-sm text-casa-muted">{content.description}</p>
+      </div>
+    </Card>
+  )
+}
 
 function DestinationHeaderCard({ locationName, address, verified, atHome, onCheckAddress, accent }: {
   locationName: string | null

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { derivePlan, inferEventMode } from '../src/lib/eventCommandCenter.ts'
+import { derivePlan, inferEventMode, inferEventPlanKind } from '../src/lib/eventCommandCenter.ts'
 
 function member(id, name, role, color = '#888888', canDrive) {
   return {
@@ -33,6 +33,60 @@ test('inferEventMode prioritizes hosted when no destination exists', () => {
     location_name: null,
   })
   assert.equal(inferEventMode(event), 'hosted')
+})
+
+test('location-free birthday placeholders use event details without invented logistics', () => {
+  const event = makeEvent({
+    title: "Liv's Birthday Celebration",
+    address: null,
+    location_name: null,
+    enrichment: { category: 'birthday' },
+  })
+  const mode = inferEventMode(event)
+  const plan = derivePlan(event, mode, { household: [] })
+  assert.equal(inferEventPlanKind(event, mode), 'details')
+  assert.equal(plan.kind, 'details')
+  assert.deepEqual(plan.legs, [])
+  assert.equal(plan.yourTime, null)
+  assert.doesNotMatch(plan.headline, /leave|drive|hand.?off|cover/i)
+})
+
+test('at-home lessons and sitter coverage never create driving legs', () => {
+  const lesson = makeEvent({
+    title: 'Violin lesson at home',
+    address: null,
+    location_name: 'Home',
+  })
+  const sitter = makeEvent({
+    title: 'Sitter at home',
+    address: null,
+    location_name: null,
+  })
+  const lessonPlan = derivePlan(lesson, inferEventMode(lesson), { household: [] })
+  const sitterPlan = derivePlan(sitter, inferEventMode(sitter), { household: [] })
+  assert.equal(lessonPlan.kind, 'at_home')
+  assert.equal(sitterPlan.kind, 'coverage')
+  assert.deepEqual(lessonPlan.legs, [])
+  assert.deepEqual(sitterPlan.legs, [])
+})
+
+test('remote events never create driving legs', () => {
+  const event = makeEvent({
+    title: 'Parent conference on Zoom',
+    address: null,
+    location_name: 'https://zoom.us/j/123',
+  })
+  const plan = derivePlan(event, inferEventMode(event), { household: [] })
+  assert.equal(plan.kind, 'remote')
+  assert.deepEqual(plan.legs, [])
+})
+
+test('real destinations retain the travel sequence', () => {
+  const event = makeEvent()
+  const mode = inferEventMode(event)
+  const plan = derivePlan(event, mode, { household: [] })
+  assert.equal(plan.kind, 'travel')
+  assert.ok(plan.legs.some((leg) => ['drop', 'depart', 'pickup', 'return'].includes(leg.kind)))
 })
 
 test('inferEventMode prioritizes trip for long duration events', () => {
