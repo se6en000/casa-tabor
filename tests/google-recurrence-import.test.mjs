@@ -101,6 +101,7 @@ test('import schema stages full reconciliation before cursor commit and retireme
   assert.match(migration, /adoption_status in \('adopted', 'ignored'\)/)
   assert.match(migration, /'pending_automatic'/)
   assert.match(migration, /recurrence_link_google_occurrences_core/)
+  assert.match(migration, /recurrence_adopt_google_masters_core/)
   assert.match(migration, /grant execute on function public\.recurrence_adopt_google_master_core/)
   assert.match(migration, /where name = 'SUPABASE_SERVICE_ROLE_KEY'/)
 })
@@ -113,6 +114,8 @@ test('importer is service-only, flag-gated, and reconciles expired cursors', () 
   assert.match(importer, /recurrence_stage_google_resources_core/)
   assert.match(importer, /recurrence_link_google_occurrences_core/)
   assert.match(importer, /\.neq\('google_status', 'cancelled'\)/)
+  assert.match(importer, /recurrence_adopt_google_masters_core/)
+  assert.match(importer, /if \(!nextSyncToken\)[\s\S]*automaticMasterResourceIds\.size/)
 })
 
 test('inbound recurrence import does not overwrite Casa-owned event detail', () => {
