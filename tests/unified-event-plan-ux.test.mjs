@@ -63,7 +63,8 @@ test('event detail header uses editorial navy crown with compact avatars', () =>
   assert.match(detail, /avatarOverflow/)
   // title-first hero and meta line with category beneath title
   assert.match(detail, /Title hero/)
-  assert.match(detail, /text-display-md/)
+  assert.match(detail, /event-command-center-title/)
+  assert.match(detail, /casa-heading-on-dark/)
   assert.match(detail, /Meta line: category \+ date \+ duration/)
   assert.match(detail, /<CategoryPicker eventId=\{event\.id\} category=\{category\} accent=\{accent\} dark=\{!isBirthday\} \/>/)
   // adaptive utility row: travel uses location-first chip

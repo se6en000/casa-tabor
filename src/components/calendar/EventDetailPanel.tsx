@@ -680,7 +680,7 @@ function PanelHeader({
     <div>
       {/* ── Navy editorial crown ───────────────────────────────── */}
       <div
-        className={cn('relative overflow-hidden px-6 pt-4 pb-5', isBirthday && 'bg-gradient-to-br from-casa-accent-subtle via-transparent to-transparent')}
+        className={cn('relative overflow-visible px-6 pt-4 pb-5', isBirthday && 'bg-gradient-to-br from-casa-accent-subtle via-transparent to-transparent')}
         style={{ background: isBirthday ? undefined : S.navy }}
       >
         {isBirthday && <BirthdayCardDecoration className="opacity-60" />}
@@ -744,7 +744,7 @@ function PanelHeader({
         </div>
 
         {/* Title hero */}
-        <h2 className={cn('relative z-10 mt-2 font-display text-display-md font-bold leading-tight', isBirthday ? 'text-casa-navy' : 'text-white')}>
+        <h2 className={cn('event-command-center-title relative z-10 mt-2 font-bold leading-tight', isBirthday ? 'text-casa-navy' : 'casa-heading-on-dark')}>
           {isBirthday && <span className="mr-1.5" aria-hidden="true">🎉</span>}
           {displayTitle}
         </h2>

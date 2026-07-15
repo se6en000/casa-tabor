@@ -9,8 +9,8 @@ const panel = readFileSync(
 
 test('member picker escapes the header and stacks above later event sections', () => {
   assert.match(panel, /showPicker && 'z-popover'/)
-  // Navy crown is overflow-hidden to contain decorations; MemberEditor lives in
-  // the white strip below it so the picker popover can escape without clipping.
-  assert.match(panel, /overflow-hidden px-6 pt-4 pb-5/)
-  assert.doesNotMatch(panel, /overflow-hidden[\s\S]{0,60}MemberEditor/)
+  // The crown must remain overflow-visible so category and member popovers are
+  // not clipped; BirthdayCardDecoration contains its own artwork overflow.
+  assert.match(panel, /overflow-visible px-6 pt-4 pb-5/)
+  assert.doesNotMatch(panel, /overflow-hidden px-6 pt-4 pb-5/)
 })
