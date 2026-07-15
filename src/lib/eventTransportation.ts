@@ -24,6 +24,7 @@ export interface TransportationLeg {
 export interface EventTransportationPlan {
   version: 1
   legs: TransportationLeg[]
+  attendeeRoster?: string[]
 }
 
 const PURPOSES = new Set<TransportationPurpose>(['drive', 'pickup', 'dropoff', 'appointment', 'return'])
@@ -75,7 +76,13 @@ export function normalizeTransportationPlan(value: unknown): EventTransportation
     }]
   })
 
-  return legs.length > 0 ? { version: 1, legs } : null
+  const attendeeRoster = Array.isArray(raw.attendeeRoster)
+    ? raw.attendeeRoster
+        .filter((name): name is string => typeof name === 'string')
+        .map((name) => name.trim())
+        .filter(Boolean)
+    : undefined
+  return legs.length > 0 ? { version: 1, legs, ...(attendeeRoster ? { attendeeRoster } : {}) } : null
 }
 
 export function eventTimeValue(iso: string | null | undefined): string {
@@ -95,25 +102,60 @@ export function transportationTimeIso(event: EventWithDetails, leg: Transportati
   return anchor.toISOString()
 }
 
+export function eventPassengerNames(event: Pick<EventWithDetails, 'members'>): string[] {
+  return [...(event.members ?? [])]
+    .sort((left, right) => (left.role === 'primary' ? -1 : right.role === 'primary' ? 1 : 0))
+    .map((member) => member.family_member?.name?.trim())
+    .filter((name): name is string => Boolean(name))
+}
+
 export function createDefaultTransportationPlan(
   event: EventWithDetails,
   homeAddress: string,
   driver?: { id: string; name: string } | null,
 ): EventTransportationPlan {
   const destinationName = event.location_name?.trim() || event.address?.trim() || 'Event location'
+  const attendeeRoster = eventPassengerNames(event)
   return {
     version: 1,
+    attendeeRoster,
     legs: [{
       id: crypto.randomUUID(),
       origin: { name: 'Home', address: homeAddress },
       destination: { name: destinationName, address: event.address?.trim() || '', kind: 'event' },
       driverId: driver?.id ?? null,
       driverName: driver?.name ?? '',
-      passengers: [],
+      passengers: attendeeRoster,
       purpose: 'drive',
       timing: 'arrive_by',
       time: eventTimeValue(event.start_time),
     }],
+  }
+}
+
+export function syncTransportationAttendees(
+  plan: EventTransportationPlan,
+  attendeeNames: string[],
+): EventTransportationPlan {
+  const nextRoster = [...new Set(attendeeNames.map((name) => name.trim()).filter(Boolean))]
+  const previousRoster = plan.attendeeRoster
+  const added = previousRoster
+    ? nextRoster.filter((name) => !previousRoster.includes(name))
+    : nextRoster
+  const removed = previousRoster
+    ? previousRoster.filter((name) => !nextRoster.includes(name))
+    : []
+  if (added.length === 0 && removed.length === 0 && previousRoster) return plan
+  return {
+    ...plan,
+    attendeeRoster: nextRoster,
+    legs: plan.legs.map((leg) => ({
+      ...leg,
+      passengers: [
+        ...leg.passengers.filter((name) => !removed.includes(name)),
+        ...added.filter((name) => !leg.passengers.includes(name)),
+      ],
+    })),
   }
 }
 

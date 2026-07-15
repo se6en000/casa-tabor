@@ -15,8 +15,10 @@ import type { FamilyMember } from '../../types'
 import {
   appendReturnHomeLeg,
   createDefaultTransportationPlan,
+  eventPassengerNames,
   hydrateTransportationEventPlaces,
   isTransportationEventPlace,
+  syncTransportationAttendees,
   transportationTimeIso,
   updateTransportationDriver,
   updateTransportationEventPlace,
@@ -28,6 +30,7 @@ import {
 import { Button, Card, Checkbox, Field, IconButton, Input, Select, Sheet } from '../ui'
 import InlinePlaceEditor from './InlinePlaceEditor'
 import SmartPlaceInput from './SmartPlaceInput'
+import PassengerChipSelector from './PassengerChipSelector'
 
 interface EventTransportationSectionProps {
   event: EventWithDetails
@@ -331,6 +334,7 @@ export default function EventTransportationSection({
   const [draft, setDraft] = useState<EventTransportationPlan | null>(null)
   const [savingTrip, setSavingTrip] = useState(false)
   const [tripError, setTripError] = useState<string | null>(null)
+  const [savingPassenger, setSavingPassenger] = useState<string | null>(null)
   const { data: household = [] } = useFamilyMembers()
   const { data: savedPlaces = [] } = useSavedPlaces()
   const queryClient = useQueryClient()
@@ -363,7 +367,12 @@ export default function EventTransportationSection({
   }, [event.address, event.location_name, homeAddress, savedPlaces])
 
   const hydratedPlan = useMemo(
-    () => plan ? hydrateTransportationEventPlaces(plan, event) : null,
+    () => plan
+      ? syncTransportationAttendees(
+          hydrateTransportationEventPlaces(plan, event),
+          eventPassengerNames(event),
+        )
+      : null,
     [event, plan],
   )
 
@@ -448,6 +457,45 @@ export default function EventTransportationSection({
     setDraft(current && isTransportationEventPlace(current)
       ? updateTransportationEventPlace(draft, place)
       : updateTransportationPlace(draft, legIndex, side, place))
+  }
+
+  const togglePassenger = async (
+    legId: string,
+    member: FamilyMember,
+    selected: boolean,
+  ) => {
+    if (!draft) return
+    setTripError(null)
+    const updated = updateLeg(draft, legId, {
+      passengers: selected
+        ? [...new Set([...draft.legs.find((leg) => leg.id === legId)!.passengers, member.name])]
+        : draft.legs.find((leg) => leg.id === legId)!.passengers.filter((name) => name !== member.name),
+    })
+    setDraft(selected
+      ? { ...updated, attendeeRoster: [...new Set([...(updated.attendeeRoster ?? []), member.name])] }
+      : updated)
+    if (!selected || event.members.some((eventMember) => eventMember.family_member?.id === member.id)) return
+    setSavingPassenger(member.name)
+    const { error } = await supabase.from('event_members').upsert(
+      { event_id: event.id, family_member_id: member.id, role: 'attendee' },
+      { onConflict: 'event_id,family_member_id', ignoreDuplicates: true },
+    )
+    setSavingPassenger(null)
+    if (error) {
+      setDraft((current) => {
+        if (!current) return current
+        const rolledBack = updateLeg(current, legId, {
+          passengers: current.legs.find((leg) => leg.id === legId)!.passengers.filter((name) => name !== member.name),
+        })
+        return {
+          ...rolledBack,
+          attendeeRoster: rolledBack.attendeeRoster?.filter((name) => name !== member.name),
+        }
+      })
+      setTripError(`Could not add ${member.name} to the event: ${error.message}`)
+      return
+    }
+    queryClient.invalidateQueries({ queryKey: ['events'] })
   }
 
   return (
@@ -621,12 +669,14 @@ export default function EventTransportationSection({
                   </Field>
                 </div>
 
-                <Field label="Passengers" hint="Optional; separate names with commas.">
-                  <Input
-                    value={leg.passengers.join(', ')}
-                    placeholder="e.g. Owen"
-                    onChange={(event) => setDraft(updateLeg(draft, leg.id, {
-                      passengers: event.target.value.split(',').map((name) => name.trim()).filter(Boolean),
+                <Field label="Passengers" hint="Tap the people riding this leg. Event attendees are selected by default.">
+                  <PassengerChipSelector
+                    members={household}
+                    selectedNames={leg.passengers}
+                    disabledNames={savingPassenger ? [savingPassenger] : []}
+                    onToggle={(member, selected) => void togglePassenger(leg.id, member, selected)}
+                    onRemoveExternal={(name) => setDraft(updateLeg(draft, leg.id, {
+                      passengers: leg.passengers.filter((passenger) => passenger !== name),
                     }))}
                   />
                 </Field>

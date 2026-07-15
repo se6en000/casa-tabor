@@ -4,12 +4,14 @@ import assert from 'node:assert/strict'
 import {
   appendReturnHomeLeg,
   createDefaultTransportationPlan,
+  eventPassengerNames,
   hydrateTransportationEventPlaces,
   isTransportationEventPlace,
   normalizeTransportationPlan,
   transportationTimeIso,
   updateTransportationDriver,
   updateTransportationEventPlace,
+  syncTransportationAttendees,
   updateTransportationPlace,
 } from '../src/lib/eventTransportation.ts'
 
@@ -118,4 +120,29 @@ test('quick driver editing can update one leg or all remaining legs', () => {
 
   const remaining = updateTransportationDriver(original, 0, { id: null, name: 'Giselle' }, true)
   assert.deepEqual(remaining.legs.map((leg) => leg.driverName), ['Giselle', 'Giselle'])
+})
+
+test('event attendees default into passengers and later attendee changes sync across legs', () => {
+  const eventWithMembers = {
+    ...event,
+    members: [
+      { role: 'attendee', family_member: { name: 'Jake' } },
+      { role: 'primary', family_member: { name: 'Owen' } },
+    ],
+  }
+  assert.deepEqual(eventPassengerNames(eventWithMembers), ['Owen', 'Jake'])
+  const plan = createDefaultTransportationPlan(eventWithMembers, '1 Casa Way', null)
+  assert.deepEqual(plan.legs[0].passengers, ['Owen', 'Jake'])
+
+  const withAttendees = {
+    ...plan,
+    legs: plan.legs.map((leg) => ({ ...leg, passengers: [...leg.passengers, 'Grandma'] })),
+  }
+
+  const withReturn = appendReturnHomeLeg(withAttendees, event, '1 Casa Way')
+  const changed = syncTransportationAttendees(withReturn, ['Owen', 'Kelly'])
+  assert.deepEqual(changed.legs.map((leg) => leg.passengers), [
+    ['Owen', 'Grandma', 'Kelly'],
+    ['Owen', 'Grandma', 'Kelly'],
+  ])
 })

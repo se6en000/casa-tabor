@@ -35,7 +35,9 @@ import EventTransportationSection from './EventTransportationSection'
 import InlinePlaceEditor from './InlinePlaceEditor'
 import {
   createDefaultTransportationPlan,
+  eventPassengerNames,
   hydrateTransportationEventPlaces,
+  syncTransportationAttendees,
   updateTransportationEventPlace,
   type EventTransportationPlan,
   type TransportationPlace,
@@ -143,7 +145,12 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
     const persistedMode = persisted.modeOverride === 'travel' ? 'appointment' : persisted.modeOverride
     setModeOverride(persistedMode ?? null)
     setTwoDriverConfirmed(Boolean(persisted.twoDriverConfirmed))
-    setTransportationPlan(persisted.transportationPlan ?? null)
+    const attendeeNames = eventPassengerNames(event)
+    setTransportationPlan(
+      persisted.transportationPlan
+        ? syncTransportationAttendees(persisted.transportationPlan, attendeeNames)
+        : null,
+    )
     setOverridesHydrated(true)
   }, [event?.id])
 
@@ -298,6 +305,11 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   modeOverride={modeOverride}
                   onClose={onClose}
                   onEdit={() => setShowEdit(true)}
+                  onRosterChange={(names) => {
+                    setTransportationPlan((current) => current
+                      ? syncTransportationAttendees(current, names)
+                      : current)
+                  }}
                 />
                 <PanelBody
                   event={event}
@@ -337,11 +349,18 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
 
 /* ── Inline Member Editor ───────────────────────────────────── */
 
-function MemberEditor({ event }: { event: EventWithDetails }) {
+function MemberEditor({
+  event,
+  onRosterChange,
+}: {
+  event: EventWithDetails
+  onRosterChange: (names: string[]) => void
+}) {
   const queryClient = useQueryClient()
   const { data: allMembers = [] } = useFamilyMembers()
   const [showPicker, setShowPicker] = useState(false)
   const [saving, setSaving] = useState<string | null>(null)
+  const [mutationError, setMutationError] = useState<string | null>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
 
   // Close picker on outside tap
@@ -369,26 +388,48 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
     setSaving(null)
   }
 
-  async function removeMember(eventMemberId: string) {
+  async function removeMember(eventMemberId: string, memberName: string) {
     setSaving(eventMemberId)
-    await supabase.from('event_members').delete().eq('id', eventMemberId)
-    queryClient.invalidateQueries({ queryKey: ['events'] })
+    setMutationError(null)
+    const { error } = await supabase.from('event_members').delete().eq('id', eventMemberId)
+    if (!error) {
+      onRosterChange(event.members
+        .filter((member) => member.id !== eventMemberId)
+        .map((member) => member.family_member?.name?.trim())
+        .filter((name): name is string => Boolean(name)))
+      queryClient.invalidateQueries({ queryKey: ['events'] })
+    } else {
+      setMutationError(`Could not remove ${memberName}. ${error.message}`)
+    }
     setSaving(null)
   }
 
   async function addMember(familyMemberId: string) {
     setSaving(familyMemberId)
-    await supabase.from('event_members').upsert(
+    setMutationError(null)
+    const { error } = await supabase.from('event_members').upsert(
       { event_id: event.id, family_member_id: familyMemberId, role: 'attendee' },
       { onConflict: 'event_id,family_member_id', ignoreDuplicates: true }
     )
-    queryClient.invalidateQueries({ queryKey: ['events'] })
+    const addedMember = allMembers.find((member) => member.id === familyMemberId)
+    if (!error && addedMember) {
+      onRosterChange([
+        ...event.members
+          .map((member) => member.family_member?.name?.trim())
+          .filter((name): name is string => Boolean(name)),
+        addedMember.name,
+      ])
+      queryClient.invalidateQueries({ queryKey: ['events'] })
+    } else if (error) {
+      setMutationError(`Could not add ${addedMember?.name ?? 'that person'}. ${error.message}`)
+    }
     setSaving(null)
     setShowPicker(false)
   }
 
   return (
     <div className={cn('relative flex flex-wrap items-center gap-2', showPicker && 'z-popover')}>
+      {mutationError && <p role="alert" className="w-full text-caption text-casa-error">{mutationError}</p>}
       {sorted.map((m) => {
         const isPrimary = m.role === 'primary'
         const isLoading = saving === m.id || saving === m.family_member?.id
@@ -430,7 +471,7 @@ function MemberEditor({ event }: { event: EventWithDetails }) {
             )}
             {(event.members.length > 1 || !isPrimary) && (
               <IconButton
-                onClick={() => removeMember(m.id)}
+                onClick={() => removeMember(m.id, m.family_member?.name ?? 'member')}
                 icon={<X size={14} />}
                 variant="ghost"
                 size="sm"
@@ -504,12 +545,14 @@ function PanelHeader({
   modeOverride,
   onClose,
   onEdit,
+  onRosterChange,
 }: {
   event: EventWithDetails
   verified: boolean
   modeOverride: EventMode | null
   onClose: () => void
   onEdit: () => void
+  onRosterChange: (names: string[]) => void
 }) {
   const category = event.enrichment?.category
   const isBirthday = isBirthdayEvent(event)
@@ -593,7 +636,7 @@ function PanelHeader({
                   ? 'At home'
                   : 'Attending'}
           </div>
-          <MemberEditor event={event} />
+          <MemberEditor event={event} onRosterChange={onRosterChange} />
         </div>
       )}
 

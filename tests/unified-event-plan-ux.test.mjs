@@ -6,6 +6,7 @@ import { resolve } from 'node:path'
 const transportation = readFileSync(resolve('src/components/calendar/EventTransportationSection.tsx'), 'utf8')
 const placeEditor = readFileSync(resolve('src/components/calendar/InlinePlaceEditor.tsx'), 'utf8')
 const smartPlace = readFileSync(resolve('src/components/calendar/SmartPlaceInput.tsx'), 'utf8')
+const passengerChips = readFileSync(resolve('src/components/calendar/PassengerChipSelector.tsx'), 'utf8')
 const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
 
 test('explicit transportation uses the navy The Plan command-center presentation', () => {
@@ -14,6 +15,15 @@ test('explicit transportation uses the navy The Plan command-center presentation
   assert.match(transportation, />The Plan</)
   assert.match(transportation, /Tap any place or driver for a quick change/)
   assert.match(transportation, /Edit entire plan/)
+})
+
+test('transportation passengers use touch chips and synchronize with event attendees', () => {
+  assert.match(transportation, /<PassengerChipSelector/)
+  assert.match(passengerChips, /<Chip/)
+  assert.match(passengerChips, /selected=\{selected\}/)
+  assert.match(passengerChips, /min-h-control/)
+  assert.match(transportation, /\.from\('event_members'\)\.upsert/)
+  assert.match(detail, /syncTransportationAttendees/)
 })
 
 test('The Plan supports quick driver reassignment including external drivers and cascading', () => {
