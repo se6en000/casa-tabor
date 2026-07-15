@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowBigUp, ChevronLeft, ChevronRight, CornerDownLeft, Delete, Settings2, X } from 'lucide-react'
 
@@ -20,6 +20,13 @@ type TouchKeyboardControlDetail = {
 }
 
 const PREFS_KEY = 'casa-touch-keyboard-prefs-v1'
+
+function preserveEditableFocus(event: ReactPointerEvent<HTMLDivElement>) {
+  const pressedElement = event.target
+  if (pressedElement instanceof Element && pressedElement.closest('button')) {
+    event.preventDefault()
+  }
+}
 
 const ALPHA_ROWS = [
   ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
@@ -518,6 +525,7 @@ export default function TouchKeyboard() {
       {visible && (
         <motion.div
           ref={rootRef}
+          onPointerDownCapture={preserveEditableFocus}
           initial={{ y: '110%', opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: '110%', opacity: 0 }}
