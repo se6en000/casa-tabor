@@ -9,7 +9,7 @@ import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useTodayEvents, type EventWithDetails } from '../../hooks/useCalendarEvents'
-import type { EventChecklistItem, EventEnrichment, EventActionItem, EventLogistic, SavedPlace } from '../../types'
+import type { EventChecklistItem, EventEnrichment, EventActionItem, EventLogistic } from '../../types'
 import { getFieldsForCategory, CATEGORY_LABEL } from './categoryFields'
 import { useSaveEnrichmentBatch } from '../../hooks/useEnrichEvent'
 import EventEditSheet from './EventEditSheet'
@@ -34,6 +34,7 @@ import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import { Button, Card, Chip, IconButton, Switch } from '../ui'
 import EventTransportationSection from './EventTransportationSection'
 import InlinePlaceEditor from './InlinePlaceEditor'
+import AddressReviewSummary, { AddressTechnicalStatusChip, type AddressTechnicalStatus } from './AddressReviewSummary'
 import {
   createDefaultTransportationPlan,
   eventPassengerNames,
@@ -94,13 +95,6 @@ function eventCrownStyle(event: EventWithDetails, region: 'cap' | 'body'): React
   }
 }
 
-function verifyFromTrustedSource(event: EventWithDetails, savedPlaces: SavedPlace[] = []): boolean {
-  if (findSavedPlace(savedPlaces ?? [], event.location_name, event.address)) return true
-  if (event.lat == null || event.lng == null) return false
-  if (event.enrichment?.confidence === 'low') return false
-  return true
-}
-
 interface EventDetailPanelProps {
   event: EventWithDetails | null
   onClose: () => void
@@ -127,18 +121,18 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
   const [modeOverride, setModeOverride] = useState<EventMode | null>(null)
   const [twoDriverConfirmed, setTwoDriverConfirmed] = useState(false)
   const [transportationPlan, setTransportationPlan] = useState<EventTransportationPlan | null>(null)
-  const [overridesHydrated, setOverridesHydrated] = useState(false)
-  const { data: savedPlaces = [] } = useSavedPlaces()
+  const [overridesHydratedEventId, setOverridesHydratedEventId] = useState<string | null>(null)
+  const [overrideSaveError, setOverrideSaveError] = useState<string | null>(null)
+  const [overrideSaveRevision, setOverrideSaveRevision] = useState(0)
   const isMobile = useIsMobile()
   const panelDragControls = useDragControls()
   const dragDismissOffset = isMobile ? 150 : 180
   const dragDismissVelocity = isMobile ? 550 : 700
-  const sourceVerified = event ? verifyFromTrustedSource(event, savedPlaces) : false
-  const effectiveVerified = verifiedOverride ?? sourceVerified
+  const addressReviewed = verifiedOverride === true
 
   useEffect(() => {
     if (!event) return
-    setOverridesHydrated(false)
+    setOverridesHydratedEventId(null)
     const persisted = getPersistedPlanOverrides(event)
     if (
       persisted.verified == null
@@ -154,7 +148,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
       setModeOverride(null)
       setTwoDriverConfirmed(false)
       setTransportationPlan(null)
-      setOverridesHydrated(true)
+      setOverridesHydratedEventId(event.id)
       return
     }
     setVerifiedOverride(persisted.verified ?? null)
@@ -169,14 +163,15 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
         ? syncTransportationAttendees(persisted.transportationPlan, attendeeNames)
         : null,
     )
-    setOverridesHydrated(true)
+    setOverridesHydratedEventId(event.id)
   }, [event?.id])
 
   useEffect(() => {
     if (!event) return
-    if (!overridesHydrated) return
+    if (overridesHydratedEventId !== event.id) return
     const hasOverrides = verifiedOverride != null || waitsOverride != null || Object.keys(driverOverrides).length > 0 || modeOverride != null || twoDriverConfirmed || transportationPlan != null
     const persist = async () => {
+      setOverrideSaveError(null)
       if (!hasOverrides) {
         try {
           localStorage.removeItem(overridesStorageKey(event.id))
@@ -189,6 +184,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
           .eq('event_id', event.id)
         if (error) {
           console.error('EventDetailPanel: failed to clear plan overrides in DB', error)
+          setOverrideSaveError('Could not save this event detail across devices.')
         }
         window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
         return
@@ -226,11 +222,12 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
         }, { onConflict: 'event_id' })
       if (error) {
         console.error('EventDetailPanel: failed to persist plan overrides in DB', error)
+        setOverrideSaveError('Could not save this event detail across devices.')
       }
       window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
     }
     void persist()
-  }, [event?.id, overridesHydrated, verifiedOverride, waitsOverride, driverOverrides, modeOverride, twoDriverConfirmed, transportationPlan])
+  }, [event?.id, overridesHydratedEventId, verifiedOverride, waitsOverride, driverOverrides, modeOverride, twoDriverConfirmed, transportationPlan, overrideSaveRevision])
 
 
   // Lock body scroll while panel is open so the calendar can't scroll behind it
@@ -329,10 +326,14 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
               <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain" data-native-drag data-ptr-ignore>
                 <PanelHeader
                   event={event}
-                  verified={effectiveVerified}
+                  verified={addressReviewed}
                   modeOverride={modeOverride}
                   onClose={onClose}
                   onEdit={() => setShowEdit(true)}
+                  onConfirmAddress={() => setVerifiedOverride(true)}
+                  addressReviewLoading={overridesHydratedEventId !== event.id}
+                  addressSaveError={overrideSaveError}
+                  onRetryAddressSave={() => setOverrideSaveRevision((revision) => revision + 1)}
                   onRosterChange={(names) => {
                     setTransportationPlan((current) => current
                       ? syncTransportationAttendees(current, names)
@@ -341,7 +342,6 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 />
                 <PanelBody
                   event={event}
-                  verified={effectiveVerified}
                   modeOverride={modeOverride}
                   waitsOverride={waitsOverride}
                   driverOverrides={driverOverrides}
@@ -674,6 +674,10 @@ function PanelHeader({
   modeOverride,
   onClose,
   onEdit,
+  onConfirmAddress,
+  addressReviewLoading,
+  addressSaveError,
+  onRetryAddressSave,
   onRosterChange,
 }: {
   event: EventWithDetails
@@ -681,6 +685,10 @@ function PanelHeader({
   modeOverride: EventMode | null
   onClose: () => void
   onEdit: () => void
+  onConfirmAddress: () => void
+  addressReviewLoading: boolean
+  addressSaveError: string | null
+  onRetryAddressSave: () => void
   onRosterChange: (names: string[]) => void
 }) {
   const category = event.enrichment?.category
@@ -711,7 +719,8 @@ function PanelHeader({
   const peopleCountLabel = reminder ? `${attendeeCount} assigned` : `${attendeeCount} attending`
   const editPeopleLabel = reminder ? 'Edit people' : 'Edit attendees'
   const peopleSectionLabel = reminder ? 'Assigned people' : 'Attendees'
-  const showLowerSection = (hasPeople && rosterOpen) || (!reminder && planKind === 'travel')
+  const showAddressSummary = !reminder && (planKind === 'travel' || Boolean(event.location_name || event.address))
+  const showLowerSection = (hasPeople && rosterOpen) || showAddressSummary
 
   return (
     <div>
@@ -823,7 +832,6 @@ function PanelHeader({
               >
                 <MapPin size={12} />
                 <span className="truncate">{event.location_name || event.address || 'Location not set'}</span>
-                {verified && <span aria-hidden="true">✓</span>}
               </Chip>
             ) : (
               <Chip
@@ -864,14 +872,17 @@ function PanelHeader({
               <MemberEditor event={event} onRosterChange={onRosterChange} />
             </div>
           )}
-          {!reminder && planKind === 'travel' && (
+          {showAddressSummary && (
             <DestinationHeaderCard
               locationName={event.location_name}
               address={event.address}
               verified={verified}
               atHome={hostedAtHome}
-              onCheckAddress={onEdit}
-              accent={accent}
+              onConfirmAddress={onConfirmAddress}
+              onEditAddress={onEdit}
+              loading={addressReviewLoading}
+              saveError={addressSaveError}
+              onRetrySave={onRetryAddressSave}
             />
           )}
         </div>
@@ -885,7 +896,6 @@ function PanelHeader({
 
 function PanelBody({
   event,
-  verified,
   modeOverride,
   waitsOverride,
   driverOverrides,
@@ -900,7 +910,6 @@ function PanelBody({
   onEdit,
 }: {
   event: EventWithDetails
-  verified: boolean
   modeOverride: EventMode | null
   waitsOverride: boolean | null
   driverOverrides: Record<number, string>
@@ -917,7 +926,6 @@ function PanelBody({
   return (
     <StandardPanelBody
       event={event}
-      verified={verified}
       modeOverride={modeOverride}
       waitsOverride={waitsOverride}
       driverOverrides={driverOverrides}
@@ -937,7 +945,6 @@ function PanelBody({
 
 function StandardPanelBody({
   event,
-  verified,
   modeOverride,
   waitsOverride,
   driverOverrides,
@@ -952,7 +959,6 @@ function StandardPanelBody({
   onEdit,
 }: {
   event: EventWithDetails
-  verified: boolean
   modeOverride: EventMode | null
   waitsOverride: boolean | null
   driverOverrides: Record<number, string>
@@ -998,7 +1004,7 @@ function StandardPanelBody({
   const commuteDestination = event.address ?? event.location_name ?? null
   const msUntilStart = new Date(event.start_time).getTime() - Date.now()
   const etaRefetchIntervalMs =
-    !verified
+    !commuteDestination
       ? false
       : msUntilStart <= 90 * 60_000
         ? 60_000
@@ -1008,13 +1014,14 @@ function StandardPanelBody({
   const commuteQuery = useTravelEta({
     destination: commuteDestination,
     eventStartIso: event.start_time,
-    enabled: !reminder && showSuggestedTravel && verified && Boolean(commuteDestination),
+    enabled: !reminder && showSuggestedTravel && Boolean(commuteDestination),
     bufferMins: 10,
     refetchIntervalMs: etaRefetchIntervalMs,
   })
+  const routeReady = commuteQuery.data?.found === true
   const liveWeatherQuery = useQuery({
-    queryKey: ['event-weather', event.id, verified],
-    enabled: !reminder && showLocation && verified && Boolean(commuteDestination),
+    queryKey: ['event-weather', event.id, commuteDestination],
+    enabled: !reminder && showLocation && Boolean(commuteDestination),
     staleTime: 15 * 60_000,
     refetchInterval: etaRefetchIntervalMs,
     queryFn: async () => {
@@ -1031,13 +1038,13 @@ function StandardPanelBody({
   }
   const plan = reminder ? null : derivePlan(event, mode, {
     household,
-    eta: verified ? commuteQuery.data : null,
-    verified,
+    eta: routeReady ? commuteQuery.data : null,
+    verified: routeReady,
   })
   const eventStartMs = new Date(event.start_time).getTime()
   const parsedEventEndMs = new Date(event.end_time).getTime()
   const eventEndMs = Number.isNaN(parsedEventEndMs) ? eventStartMs + (60 * 60 * 1000) : parsedEventEndMs
-  const driveWindowStartIso = (verified
+  const driveWindowStartIso = (routeReady
     ? (commuteQuery.data?.leave_by ?? enr?.departure_time)
     : enr?.departure_time) ?? event.start_time
   const driveWindowStart = new Date(driveWindowStartIso)
@@ -1156,7 +1163,7 @@ function StandardPanelBody({
           {plan.kind === 'travel' && !transportationPlan ? (
             <PlanBlock
               plan={plan}
-              loading={verified && commuteQuery.isLoading && !commuteQuery.data}
+              loading={commuteQuery.isLoading && !commuteQuery.data}
               driverPool={driverPool}
               waitsOverride={waitsOverride}
               driverOverrides={driverOverrides}
@@ -1207,7 +1214,7 @@ function StandardPanelBody({
       )}
 
       {!reminder && hasDestination && showSuggestedTravel && (
-        <DepartureRiskBanner event={event} travelEta={verified ? commuteQuery.data : null} />
+        <DepartureRiskBanner event={event} travelEta={routeReady ? commuteQuery.data : null} />
       )}
 
       {/* ── Where (map + weather + verify state) ── */}
@@ -1237,8 +1244,6 @@ function StandardPanelBody({
                 place,
               ))
             }}
-            onConfirmAddress={() => onSetVerifiedOverride(true)}
-            verified={verified}
             mode={mode}
             transportationNeeded={Boolean(transportationPlan) || planKind === 'travel'}
             accent={eventAccentColor(event)}
@@ -1349,50 +1354,29 @@ function NonTravelEventBlock({ event, plan, hasTransportation }: {
   )
 }
 
-function DestinationHeaderCard({ locationName, address, verified, atHome, onCheckAddress, accent }: {
+function DestinationHeaderCard({ locationName, address, verified, atHome, onConfirmAddress, onEditAddress, loading, saveError, onRetrySave }: {
   locationName: string | null
   address: string | null
   verified: boolean
   atHome: boolean
-  onCheckAddress?: () => void
-  accent: string
+  onConfirmAddress: () => void
+  onEditAddress: () => void
+  loading: boolean
+  saveError: string | null
+  onRetrySave: () => void
 }) {
-  const hasDestination = Boolean(locationName || address)
-  const headline = locationName ?? (atHome ? 'Home' : 'Destination needed')
-  const subline = address ?? (!atHome ? 'Add an address to unlock live drive times.' : null)
-  const border = verified ? 'color-mix(in srgb, var(--color-casa-success) 28%, transparent)' : S.amberBorder
-  const bg = verified ? S.greenBg : S.amberBg
   return (
-    <Card padding="sm" className="mt-4 flex items-center gap-3" style={{ border: `1px solid ${border}`, background: bg }}>
-      <span
-        className="flex size-control-sm flex-none items-center justify-center rounded-button bg-casa-surface"
-        style={{ border: `1px solid ${S.borderSoft}`, color: accent }}
-      >
-        <MapPin size={14} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-body-sm font-bold leading-tight" style={{ color: S.navy }}>{headline}</div>
-        {subline && <div className="truncate text-caption" style={{ color: S.muted }}>{subline}</div>}
-      </div>
-      {verified ? (
-        <Chip tone="success" size="sm" className="flex-none">
-          ✓ Confirmed
-        </Chip>
-      ) : atHome ? (
-        <Chip size="sm" className="flex-none">
-          At home
-        </Chip>
-      ) : (
-        <Button
-          onClick={onCheckAddress}
-          variant="secondary"
-          size="sm"
-          className="flex-none"
-        >
-          {hasDestination ? 'Check address ›' : 'Add destination'}
-        </Button>
-      )}
-    </Card>
+    <AddressReviewSummary
+      locationName={locationName}
+      address={address}
+      reviewed={verified}
+      atHome={atHome}
+      onConfirm={onConfirmAddress}
+      onEdit={onEditAddress}
+      loading={loading}
+      saveError={saveError}
+      onRetry={onRetrySave}
+    />
   )
 }
 
@@ -2111,7 +2095,7 @@ function FallbackBringChecklist({ items, eventId }: { items: string[]; eventId: 
 
 /* ── LocationBlock ──────────────────────────────────────────── */
 
-function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes, contactPhone, weatherAtVenue, onEditAddress, onLocationChanged, onConfirmAddress, verified, mode, transportationNeeded, accent }: {
+function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes, contactPhone, weatherAtVenue, onEditAddress, onLocationChanged, mode, transportationNeeded, accent }: {
   eventId: string
   locationName: string | null
   address: string | null
@@ -2122,8 +2106,6 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
   weatherAtVenue?: string | null
   onEditAddress: () => void
   onLocationChanged: (place: TransportationPlace) => void
-  onConfirmAddress: () => void
-  verified: boolean
   mode: EventMode
   transportationNeeded: boolean
   accent: string
@@ -2179,6 +2161,12 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
     ? `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(`${effectiveLng - 0.01},${effectiveLat - 0.01},${effectiveLng + 0.01},${effectiveLat + 0.01}`)}&layer=mapnik&marker=${encodeURIComponent(`${effectiveLat},${effectiveLng}`)}`
     : null
   const needsGeocode = hasDestination && !hasCoordinates
+  const technicalStatus: AddressTechnicalStatus =
+    needsGeocode && geocodeState === 'error'
+      ? 'unavailable'
+      : needsGeocode
+        ? 'checking'
+        : 'ready'
 
   const resolveCoordsFromPlaceSearch = useCallback(async () => {
     if (!mapsQuery) return null
@@ -2272,10 +2260,8 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
     await queryClient.invalidateQueries({ queryKey: ['events'] })
   }
 
-  const verifyBorder = verified ? S.borderMed : S.amberBorder
-
   return (
-    <div className="rounded-[14px] overflow-hidden" style={{ border: `1px solid ${verifyBorder}` }}>
+    <div className="rounded-[14px] overflow-hidden" style={{ border: `1px solid ${S.borderMed}` }}>
       <div
         style={{
           height: 'clamp(360px, 42vh, 400px)',
@@ -2342,11 +2328,7 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
             </Button>
           </div>
         )}
-        {verified && hasDestination ? (
-          <div className="mt-3 text-caption font-semibold flex items-center gap-1.5" style={{ color: S.green }}>
-            <Check size={13} /> Address confirmed{transportationNeeded ? ' · drive times are live' : ''}
-          </div>
-        ) : !hasDestination && mode !== 'hosted' ? (
+        {!hasDestination && mode !== 'hosted' ? (
           <div className="mt-3 rounded-lg px-3 py-2.5" style={{ background: S.amberBg, border: `1px solid ${S.amberBorder}` }}>
             <div className="text-body-sm font-bold" style={{ color: S.goldText }}>Missing destination</div>
             <div className="text-caption mt-0.5" style={{ color: S.muted }}>Add an address before we calculate travel and leave times.</div>
@@ -2356,22 +2338,18 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
               </Button>
             </div>
           </div>
-        ) : (
-          <div className="mt-3 rounded-lg px-3 py-2.5" style={{ background: S.amberBg, border: `1px solid ${S.amberBorder}` }}>
-            <div className="text-body-sm font-bold" style={{ color: S.goldText }}>Is this the right place?</div>
-            <div className="text-caption mt-0.5" style={{ color: S.muted }}>
-              {transportationNeeded ? 'Confirm the pin before we trust the drive time.' : 'Confirm the pin so everyone can find the event.'}
-            </div>
-            <div className="flex gap-2 mt-2.5">
-              <Button onClick={onConfirmAddress} variant="primary" size="sm" className="rounded-pill bg-casa-success text-caption font-bold text-white">
-                Yes, confirm
-              </Button>
-              <Button onClick={onEditAddress} variant="secondary" size="sm" className="rounded-pill text-caption font-bold">
-                Edit address
-              </Button>
-            </div>
+        ) : hasDestination ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <AddressTechnicalStatusChip status={technicalStatus} />
+            <span className="text-caption text-casa-muted">
+              {technicalStatus === 'ready'
+                ? (transportationNeeded ? 'Available for maps and travel calculations.' : 'Available for maps and directions.')
+                : technicalStatus === 'checking'
+                  ? 'Resolving the destination for maps and travel.'
+                  : 'Review the address or retry the map lookup.'}
+            </span>
           </div>
-        )}
+        ) : null}
         <div className="flex gap-2 mt-3">
           {googleMapsUrl && (
             <a
