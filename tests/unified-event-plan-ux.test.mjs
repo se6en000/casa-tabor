@@ -21,7 +21,7 @@ test('transportation passengers use touch chips and synchronize with event atten
   assert.match(transportation, /<PassengerChipSelector/)
   assert.match(passengerChips, /<Chip/)
   assert.match(passengerChips, /selected=\{selected\}/)
-  assert.match(passengerChips, /min-h-control/)
+  assert.match(passengerChips, /min-h-control-lg/)
   assert.match(transportation, /\.from\('event_members'\)\.upsert/)
   assert.match(detail, /syncTransportationAttendees/)
 })

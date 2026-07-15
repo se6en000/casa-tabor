@@ -28,7 +28,7 @@ export default function PassengerChipSelector({
           <Chip
             key={member.id}
             size="sm"
-            className="min-h-control rounded-pill px-2.5"
+            className="min-h-control-lg rounded-pill px-2.5"
             selected={selected}
             disabled={disabled}
             onClick={() => onToggle(member, !selected)}
@@ -47,7 +47,7 @@ export default function PassengerChipSelector({
         <Chip
           key={name}
           size="sm"
-          className="min-h-control rounded-pill px-2.5"
+          className="min-h-control-lg rounded-pill px-2.5"
           aria-label={`Remove ${name} from this leg`}
           onClick={() => onRemoveExternal(name)}
         >
