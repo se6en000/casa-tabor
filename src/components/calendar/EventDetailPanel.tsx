@@ -32,7 +32,12 @@ import { isBirthdayEvent } from '../../utils/eventTitle'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import { Button, Card, Chip, IconButton, Switch } from '../ui'
 import EventTransportationSection from './EventTransportationSection'
-import type { EventTransportationPlan } from '../../lib/eventTransportation'
+import InlinePlaceEditor from './InlinePlaceEditor'
+import {
+  createDefaultTransportationPlan,
+  type EventTransportationPlan,
+  type TransportationPlace,
+} from '../../lib/eventTransportation'
 
 // Calendar-specific aliases compose the shared theme contract without creating a parallel palette.
 const S = {
@@ -706,6 +711,16 @@ function StandardPanelBody({
   }
   const { data: household = [] } = useFamilyMembers()
   const queryClient = useQueryClient()
+  const { data: homeConfig } = useQuery({
+    queryKey: ['home-config'],
+    staleTime: 10 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('settings').select('value').eq('key', 'home_config').maybeSingle()
+      if (error) throw error
+      return (data?.value ?? null) as { address?: string; city?: string; state?: string; zip?: string } | null
+    },
+  })
+  const homeAddress = [homeConfig?.address, homeConfig?.city, homeConfig?.state, homeConfig?.zip].filter(Boolean).join(', ').trim()
   const { data: dayEvents = [] } = useTodayEvents(getEventDisplayStartDay(event))
   const availability = useMemberAvailability(household.map((member) => member.id))
 
@@ -898,6 +913,12 @@ function StandardPanelBody({
               }}
               onSetModeOverride={onSetModeOverride}
               onSetTwoDriverConfirmed={onSetTwoDriverConfirmed}
+              onCustomizePlan={() => {
+                const defaultDriver = household.find((member) =>
+                  member.can_drive && (member.role === 'parent' || member.role === 'caregiver')
+                )
+                onSetTransportationPlan(createDefaultTransportationPlan(event, homeAddress, defaultDriver))
+              }}
             />
           ) : (
             <NonTravelEventBlock event={event} plan={plan} hasTransportation={Boolean(transportationPlan)} />
@@ -905,7 +926,7 @@ function StandardPanelBody({
         </section>
       )}
 
-      {!reminder && (
+      {!reminder && (transportationPlan || planKind !== 'travel') && (
         <EventTransportationSection
           event={event}
           plan={transportationPlan}
@@ -935,6 +956,25 @@ function StandardPanelBody({
               onSetVerifiedOverride(false)
               queryClient.removeQueries({ queryKey: ['travel-eta'] })
               onEdit()
+            }}
+            onLocationChanged={(place) => {
+              onSetVerifiedOverride(false)
+              queryClient.removeQueries({ queryKey: ['travel-eta'] })
+              if (!transportationPlan) return
+              const previous = {
+                name: event.location_name?.trim() || event.address?.trim() || '',
+                address: event.address?.trim() || '',
+              }
+              const matchesPrevious = (candidate: TransportationPlace) =>
+                candidate.name === previous.name && candidate.address === previous.address
+              onSetTransportationPlan({
+                ...transportationPlan,
+                legs: transportationPlan.legs.map((leg) => ({
+                  ...leg,
+                  origin: matchesPrevious(leg.origin) ? place : leg.origin,
+                  destination: matchesPrevious(leg.destination) ? place : leg.destination,
+                })),
+              })
             }}
             onConfirmAddress={() => onSetVerifiedOverride(true)}
             verified={verified}
@@ -1226,6 +1266,7 @@ function PlanBlock({
   onSetDriverOverride,
   onSetModeOverride,
   onSetTwoDriverConfirmed,
+  onCustomizePlan,
 }: {
   plan: PlanModel
   loading?: boolean
@@ -1238,6 +1279,7 @@ function PlanBlock({
   onSetDriverOverride: (legIndex: number, driverId: string) => void
   onSetModeOverride: (mode: EventMode | null) => void
   onSetTwoDriverConfirmed: (value: boolean) => void
+  onCustomizePlan: () => void
 }) {
   const withDriverOverrides = plan.legs.map((leg, i) => {
     const overrideDriverId = driverOverrides[i]
@@ -1435,6 +1477,9 @@ function PlanBlock({
             </p>
           </div>
         )}
+        <Button variant="secondary" size="sm" className="mb-2 mt-3" onClick={onCustomizePlan}>
+          <Pencil size={14} /> Customize stops and locations
+        </Button>
       </div>
     </div>
   )
@@ -1805,7 +1850,7 @@ function FallbackBringChecklist({ items, eventId }: { items: string[]; eventId: 
 
 /* ── LocationBlock ──────────────────────────────────────────── */
 
-function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes, contactPhone, weatherAtVenue, onEditAddress, onConfirmAddress, verified, mode, transportationNeeded, accent }: {
+function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes, contactPhone, weatherAtVenue, onEditAddress, onLocationChanged, onConfirmAddress, verified, mode, transportationNeeded, accent }: {
   eventId: string
   locationName: string | null
   address: string | null
@@ -1815,6 +1860,7 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
   contactPhone?: string | null
   weatherAtVenue?: string | null
   onEditAddress: () => void
+  onLocationChanged: (place: TransportationPlace) => void
   onConfirmAddress: () => void
   verified: boolean
   mode: EventMode
@@ -1825,6 +1871,10 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
   const [saving, setSaving] = useState(false)
   const [geocodeState, setGeocodeState] = useState<'idle' | 'loading' | 'error' | 'done'>('idle')
   const [fallbackCoords, setFallbackCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const [displayPlace, setDisplayPlace] = useState<TransportationPlace>({
+    name: locationName?.trim() || address?.trim() || '',
+    address: address?.trim() || '',
+  })
   const { data: savedPlaces = [] } = useSavedPlaces()
   const savePlace = useSavePlace()
   const queryClient = useQueryClient()
@@ -1839,9 +1889,16 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
   })
 
   const homeAddress = [homeConfig?.address, homeConfig?.city, homeConfig?.state, homeConfig?.zip].filter(Boolean).join(', ').trim() || null
-  const effectiveLocationName = locationName ?? (mode === 'hosted' && homeAddress ? 'Home' : null)
-  const effectiveAddress = address ?? (mode === 'hosted' ? homeAddress : null)
-  const sourceHasDestination = Boolean(locationName || address)
+  const effectiveLocationName = displayPlace.name || (mode === 'hosted' && homeAddress ? 'Home' : null)
+  const effectiveAddress = displayPlace.address || (mode === 'hosted' ? homeAddress : null)
+  const sourceHasDestination = Boolean(displayPlace.name || displayPlace.address)
+
+  useEffect(() => {
+    setDisplayPlace({
+      name: locationName?.trim() || address?.trim() || '',
+      address: address?.trim() || '',
+    })
+  }, [address, locationName])
 
   const existingPlace = findSavedPlace(savedPlaces, effectiveLocationName, effectiveAddress)
   const isAlreadySaved = Boolean(existingPlace) || savedLocal
@@ -1928,13 +1985,33 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
     setSaving(false)
   }
 
+  async function handleInlineLocationChange(place: TransportationPlace) {
+    const normalizedName = place.name.trim() || null
+    const normalizedAddress = place.address.trim() || null
+    const { error } = await supabase
+      .from('events')
+      .update({
+        location_name: normalizedName,
+        address: normalizedAddress,
+        lat: null,
+        lng: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', eventId)
+    if (error) throw new Error(`Could not update location: ${error.message}`)
+
+    const next = {
+      name: normalizedName ?? normalizedAddress ?? '',
+      address: normalizedAddress ?? '',
+    }
+    setDisplayPlace(next)
+    setFallbackCoords(null)
+    setGeocodeState('idle')
+    onLocationChanged(next)
+    await queryClient.invalidateQueries({ queryKey: ['events'] })
+  }
+
   const verifyBorder = verified ? S.borderMed : S.amberBorder
-  const title = effectiveLocationName ?? effectiveAddress ?? (mode === 'hosted' ? 'Home' : 'Destination needed')
-  const subtitle = hasDestination
-    ? [effectiveAddress, parkingNotes].filter(Boolean).join(' · ')
-    : mode === 'hosted'
-      ? 'Hosted at home — no driving required.'
-      : 'Add an address to unlock live drive times.'
 
   return (
     <div className="rounded-[14px] overflow-hidden" style={{ border: `1px solid ${verifyBorder}` }}>
@@ -1983,12 +2060,14 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
         )}
       </div>
       <div className="p-4">
-        <div className="text-body font-bold" style={{ color: S.navy }}>{title}</div>
-        {subtitle && (
-          <div className="text-body-sm mt-0.5" style={{ color: S.muted }}>
-            {subtitle}
-          </div>
-        )}
+        <InlinePlaceEditor
+          value={{ name: effectiveLocationName ?? '', address: effectiveAddress ?? '' }}
+          ariaLabel="Event location"
+          extraPlaces={homeAddress ? [{ name: 'Home', address: homeAddress }] : []}
+          allowEmpty
+          onConfirm={handleInlineLocationChange}
+        />
+        {parkingNotes && <div className="mt-1 text-body-sm text-casa-muted">{parkingNotes}</div>}
         {needsGeocode && geocodeState === 'error' && (
           <div className="mt-2 rounded-lg px-3 py-2 text-caption" style={{ background: S.amberBg, border: `1px solid ${S.amberBorder}`, color: S.goldText }}>
             Map snapshot unavailable for this address.

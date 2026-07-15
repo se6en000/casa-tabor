@@ -137,3 +137,54 @@ export function appendReturnHomeLeg(
     ],
   }
 }
+
+export function updateTransportationPlace(
+  plan: EventTransportationPlan,
+  legIndex: number,
+  side: 'origin' | 'destination',
+  place: TransportationPlace,
+): EventTransportationPlan {
+  const changed = plan.legs[legIndex]
+  if (!changed) return plan
+  const previousPlace = changed[side]
+  const legs = plan.legs.map((leg) => ({
+    ...leg,
+    origin: { ...leg.origin },
+    destination: { ...leg.destination },
+  }))
+  legs[legIndex] = { ...legs[legIndex], [side]: place }
+
+  if (
+    side === 'destination'
+    && legs[legIndex + 1]
+    && legs[legIndex + 1].origin.name === previousPlace.name
+    && legs[legIndex + 1].origin.address === previousPlace.address
+  ) {
+    legs[legIndex + 1] = { ...legs[legIndex + 1], origin: place }
+  }
+  if (
+    side === 'origin'
+    && legs[legIndex - 1]
+    && legs[legIndex - 1].destination.name === previousPlace.name
+    && legs[legIndex - 1].destination.address === previousPlace.address
+  ) {
+    legs[legIndex - 1] = { ...legs[legIndex - 1], destination: place }
+  }
+  return { ...plan, legs }
+}
+
+export function updateTransportationDriver(
+  plan: EventTransportationPlan,
+  legIndex: number,
+  driver: { id: string | null; name: string },
+  applyToRemaining: boolean,
+): EventTransportationPlan {
+  return {
+    ...plan,
+    legs: plan.legs.map((leg, index) =>
+      index === legIndex || (applyToRemaining && index > legIndex)
+        ? { ...leg, driverId: driver.id, driverName: driver.name }
+        : leg,
+    ),
+  }
+}

@@ -1,26 +1,29 @@
-import { useMemo, useState } from 'react'
-import { Car, House, Pencil, Plus, Trash2 } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { Car, Check, ChevronDown, House, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useSavedPlaces } from '../../hooks/useSavedPlaces'
 import { useTravelEta } from '../../hooks/useTravelEta'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
+import type { FamilyMember } from '../../types'
 import {
   appendReturnHomeLeg,
   createDefaultTransportationPlan,
   transportationTimeIso,
+  updateTransportationDriver,
+  updateTransportationPlace,
   type EventTransportationPlan,
   type TransportationLeg,
   type TransportationPlace,
 } from '../../lib/eventTransportation'
-import { Button, Card, Field, IconButton, Input, Select, Sheet } from '../ui'
+import { Button, Card, Checkbox, Field, IconButton, Input, Select, Sheet } from '../ui'
+import InlinePlaceEditor from './InlinePlaceEditor'
 
 interface EventTransportationSectionProps {
   event: EventWithDetails
   plan: EventTransportationPlan | null
   onChange: (plan: EventTransportationPlan | null) => void
-  compact?: boolean
   suggestedPlan?: boolean
 }
 
@@ -44,7 +47,126 @@ function formatClock(iso: string | null | undefined): string | null {
   return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
-function TripLegTimeline({ event, leg, last }: { event: EventWithDetails; leg: TransportationLeg; last: boolean }) {
+function QuickDriverPicker({
+  leg,
+  household,
+  onSelect,
+}: {
+  leg: TransportationLeg
+  household: FamilyMember[]
+  onSelect: (driver: { id: string | null; name: string }, applyToRemaining: boolean) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [custom, setCustom] = useState('')
+  const [showCustom, setShowCustom] = useState(false)
+  const [applyToRemaining, setApplyToRemaining] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const drivers = household.filter((member) => member.can_drive)
+
+  return (
+    <div ref={containerRef} className="relative shrink-0">
+      <Button
+        variant="secondary"
+        size="sm"
+        className="rounded-pill px-2.5"
+        aria-label={`Change driver from ${leg.driverName || 'unassigned'}`}
+        aria-expanded={open}
+        onClick={() => {
+          setOpen((value) => !value)
+          setShowCustom(false)
+        }}
+      >
+        <span className="flex size-6 items-center justify-center rounded-full bg-casa-navy text-caption font-bold text-white">
+          {leg.driverName?.[0]?.toUpperCase() || '?'}
+        </span>
+        {leg.driverName || 'Driver'}
+        <ChevronDown size={14} />
+      </Button>
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+8px)] z-popover w-72 rounded-card border border-casa-border bg-casa-surface p-3 shadow-modal">
+          <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">Who drives this leg?</p>
+          <div className="mt-2 space-y-1">
+            {drivers.map((driver) => (
+              <Button
+                key={driver.id}
+                variant="ghost"
+                size="sm"
+                fullWidth
+                align="start"
+                onClick={() => {
+                  onSelect({ id: driver.id, name: driver.name }, applyToRemaining)
+                  setOpen(false)
+                }}
+              >
+                <span className="flex size-7 items-center justify-center rounded-full bg-casa-navy text-caption font-bold text-white">
+                  {driver.name[0]?.toUpperCase()}
+                </span>
+                <span className="flex-1">{driver.name}</span>
+                {driver.id === leg.driverId && <Check size={15} className="text-casa-success" />}
+              </Button>
+            ))}
+            <Button
+              variant="ghost"
+              size="sm"
+              fullWidth
+              align="start"
+              onClick={() => {
+                setCustom(leg.driverId ? '' : leg.driverName)
+                setShowCustom(true)
+              }}
+            >
+              Someone else
+            </Button>
+          </div>
+          {showCustom && (
+            <div className="mt-2 flex gap-2">
+              <Input
+                value={custom}
+                aria-label="Driver name"
+                placeholder="e.g. Giselle"
+                onChange={(event) => setCustom(event.target.value)}
+              />
+              <Button
+                size="sm"
+                disabled={!custom.trim()}
+                onClick={() => {
+                  onSelect({ id: null, name: custom.trim() }, applyToRemaining)
+                  setOpen(false)
+                }}
+              >
+                Apply
+              </Button>
+            </div>
+          )}
+          <Checkbox
+            checked={applyToRemaining}
+            onChange={(event) => setApplyToRemaining(event.target.checked)}
+            label="Use for remaining legs"
+            className="mt-3"
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TripLegTimeline({
+  event,
+  leg,
+  last,
+  household,
+  placeOptions,
+  onPlaceChange,
+  onDriverChange,
+}: {
+  event: EventWithDetails
+  leg: TransportationLeg
+  last: boolean
+  household: FamilyMember[]
+  placeOptions: TransportationPlace[]
+  onPlaceChange: (side: 'origin' | 'destination', place: TransportationPlace) => void
+  onDriverChange: (driver: { id: string | null; name: string }, applyToRemaining: boolean) => void
+}) {
   const timingIso = transportationTimeIso(event, leg)
   const eta = useTravelEta({
     origin: leg.origin.address || leg.origin.name,
@@ -66,24 +188,41 @@ function TripLegTimeline({ event, leg, last }: { event: EventWithDetails; leg: T
   ].filter(Boolean).join(' ')
 
   return (
-    <li className="relative flex gap-3">
+    <li className="relative flex gap-3 py-3">
       <div className="flex w-control-sm shrink-0 flex-col items-center">
         <span className="flex size-control-sm items-center justify-center rounded-full bg-casa-navy text-white">
           <Car size={16} />
         </span>
         {!last && <span className="my-1 min-h-8 w-px flex-1 bg-casa-border" />}
       </div>
-      <div className="min-w-0 flex-1 pb-4">
+      <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-body font-semibold text-casa-navy">{timingLabel}</p>
           <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">
             {PURPOSE_LABELS[leg.purpose]}
           </span>
         </div>
-        <p className="mt-1 text-body-sm font-semibold text-casa-text">
-          {leg.origin.name} → {leg.destination.name}
-        </p>
-        <p className="mt-0.5 text-caption text-casa-muted">{driverLine}</p>
+        <div className="mt-2 grid gap-1">
+          <InlinePlaceEditor
+            value={leg.origin}
+            ariaLabel={`${PURPOSE_LABELS[leg.purpose]} origin`}
+            extraPlaces={placeOptions}
+            onConfirm={(place) => onPlaceChange('origin', place)}
+          />
+          <div className="ml-control-sm flex items-center gap-2 text-caption text-casa-muted">
+            <span className="h-4 w-px bg-casa-border" /> to
+          </div>
+          <InlinePlaceEditor
+            value={leg.destination}
+            ariaLabel={`${PURPOSE_LABELS[leg.purpose]} destination`}
+            extraPlaces={placeOptions}
+            onConfirm={(place) => onPlaceChange('destination', place)}
+          />
+        </div>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-caption text-casa-muted">{driverLine}</p>
+          <QuickDriverPicker leg={leg} household={household} onSelect={onDriverChange} />
+        </div>
         {eta.isLoading && <p className="mt-1 text-caption text-casa-muted">Calculating traffic…</p>}
         {result?.found && (
           <p className="mt-1 text-caption font-semibold text-casa-success">
@@ -113,7 +252,6 @@ export default function EventTransportationSection({
   event,
   plan,
   onChange,
-  compact = false,
   suggestedPlan = false,
 }: EventTransportationSectionProps) {
   const [editorOpen, setEditorOpen] = useState(false)
@@ -173,59 +311,93 @@ export default function EventTransportationSection({
     })
   }
 
+  const updatePlanPlace = (
+    legIndex: number,
+    side: 'origin' | 'destination',
+    place: TransportationPlace,
+  ) => {
+    if (!plan) return
+    onChange(updateTransportationPlace(plan, legIndex, side, place))
+  }
+
+  const updatePlanDriver = (
+    legIndex: number,
+    driver: { id: string | null; name: string },
+    applyToRemaining: boolean,
+  ) => {
+    if (!plan) return
+    onChange(updateTransportationDriver(plan, legIndex, driver, applyToRemaining))
+  }
+
   return (
     <>
-      <section>
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">Transportation</p>
-          {plan && (
-            <IconButton
-              icon={<Pencil size={16} />}
-              aria-label="Edit transportation"
-              title="Edit transportation"
-              size="sm"
-              variant="ghost"
-              onClick={openEditor}
-            />
-          )}
-        </div>
+      <section aria-label="The Plan">
         {plan ? (
-          <Card padding="md" className="border-casa-border bg-casa-bg shadow-none">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-body font-semibold text-casa-navy">
-                  {plan.legs.length} driving {plan.legs.length === 1 ? 'leg' : 'legs'}
+          <div className="overflow-visible rounded-2xl border border-casa-border">
+            <div className="flex items-center justify-between gap-3 rounded-t-2xl bg-casa-navy px-[18px] py-3.5">
+              <div className="min-w-0">
+                <p className="text-caption font-bold uppercase tracking-widest text-white/70">The Plan</p>
+                <p className="mt-0.5 font-display text-body-lg font-semibold text-white">
+                  {plan.legs.length} driving {plan.legs.length === 1 ? 'leg' : 'legs'} · live traffic
                 </p>
-                <p className="text-caption text-casa-muted">Traffic and leave times update automatically.</p>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-pill bg-white/10 px-2.5 text-caption font-bold text-white hover:bg-white/20 hover:text-white"
+                onClick={openEditor}
+              >
+                <Pencil size={14} /> Edit entire plan
+              </Button>
             </div>
-            <ol>
+            <p className="px-[18px] pt-3 text-caption text-casa-muted">Tap any place or driver for a quick change.</p>
+            <ol className="px-[18px] pb-2">
               {plan.legs.map((leg, index) => (
-                <TripLegTimeline key={leg.id} event={event} leg={leg} last={index === plan.legs.length - 1} />
+                <TripLegTimeline
+                  key={leg.id}
+                  event={event}
+                  leg={leg}
+                  last={index === plan.legs.length - 1}
+                  household={household}
+                  placeOptions={placeOptions}
+                  onPlaceChange={(side, place) => updatePlanPlace(index, side, place)}
+                  onDriverChange={(driver, applyToRemaining) => updatePlanDriver(index, driver, applyToRemaining)}
+                />
               ))}
             </ol>
-          </Card>
+            <div className="flex flex-wrap gap-2 border-t border-casa-border px-[18px] py-3">
+              <Button variant="secondary" size="sm" onClick={openEditor}>
+                <Plus size={15} /> Add or reorder stops
+              </Button>
+              <Button variant="ghost" size="sm" className="text-casa-error" onClick={() => onChange(null)}>
+                No driving logistics
+              </Button>
+            </div>
+          </div>
         ) : (
-          <Card padding="md" className="flex items-center gap-4 border-casa-border bg-casa-bg shadow-none">
-            <span className="flex size-control shrink-0 items-center justify-center rounded-button bg-casa-surface text-casa-muted shadow-card">
-              <Car size={19} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-body font-semibold text-casa-navy">
-                {suggestedPlan ? 'Using Casa’s suggested route' : 'No driving logistics needed'}
+          <div className="overflow-hidden rounded-2xl border border-casa-border">
+            <div className="bg-casa-navy px-[18px] py-3.5">
+              <p className="text-caption font-bold uppercase tracking-widest text-white/70">The Plan</p>
+              <p className="mt-0.5 font-display text-body-lg font-semibold text-white">
+                {suggestedPlan ? 'Casa suggested a simple route' : 'No driving logistics needed'}
               </p>
-              {!compact && (
-                <p className="mt-0.5 text-body-sm text-casa-muted">
+            </div>
+            <div className="flex items-center gap-4 px-[18px] py-4">
+              <span className="flex size-control shrink-0 items-center justify-center rounded-button bg-casa-bg text-casa-muted">
+                <Car size={19} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-body-sm text-casa-muted">
                   {suggestedPlan
                     ? 'Customize it when the driver, origin, stops, or return route differ.'
-                    : 'The location stays visible without assigning a trip.'}
+                    : 'The event location stays visible without assigning a trip.'}
                 </p>
-              )}
+              </div>
+              <Button variant="secondary" size="sm" onClick={openEditor}>
+                {suggestedPlan ? 'Customize trip' : 'Add a trip'}
+              </Button>
             </div>
-            <Button variant="secondary" size="sm" onClick={openEditor}>
-              {suggestedPlan ? 'Customize trip' : 'Add a trip'}
-            </Button>
-          </Card>
+          </div>
         )}
       </section>
 

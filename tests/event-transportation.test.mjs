@@ -6,6 +6,8 @@ import {
   createDefaultTransportationPlan,
   normalizeTransportationPlan,
   transportationTimeIso,
+  updateTransportationDriver,
+  updateTransportationPlace,
 } from '../src/lib/eventTransportation.ts'
 
 const event = {
@@ -54,4 +56,31 @@ test('normalization rejects malformed plans and preserves valid multi-stop plans
     '1 Casa Way',
   )
   assert.deepEqual(normalizeTransportationPlan(plan), plan)
+})
+
+test('quick stop editing keeps adjacent route legs connected', () => {
+  const original = appendReturnHomeLeg(
+    createDefaultTransportationPlan(event, '1 Casa Way', { id: 'jake', name: 'Jake' }),
+    event,
+    '1 Casa Way',
+  )
+  const nextPlace = { name: 'New Clinic', address: '200 New Way' }
+  const updated = updateTransportationPlace(original, 0, 'destination', nextPlace)
+  assert.deepEqual(updated.legs[0].destination, nextPlace)
+  assert.deepEqual(updated.legs[1].origin, nextPlace)
+  assert.deepEqual(original.legs[0].destination, { name: 'ABA Hope Center', address: '100 Therapy Way' })
+})
+
+test('quick driver editing can update one leg or all remaining legs', () => {
+  const original = appendReturnHomeLeg(
+    createDefaultTransportationPlan(event, '1 Casa Way', { id: 'jake', name: 'Jake' }),
+    event,
+    '1 Casa Way',
+  )
+  const oneLeg = updateTransportationDriver(original, 0, { id: null, name: 'Giselle' }, false)
+  assert.equal(oneLeg.legs[0].driverName, 'Giselle')
+  assert.equal(oneLeg.legs[1].driverName, 'Jake')
+
+  const remaining = updateTransportationDriver(original, 0, { id: null, name: 'Giselle' }, true)
+  assert.deepEqual(remaining.legs.map((leg) => leg.driverName), ['Giselle', 'Giselle'])
 })
