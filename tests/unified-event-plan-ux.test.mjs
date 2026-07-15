@@ -8,6 +8,10 @@ const placeEditor = readFileSync(resolve('src/components/calendar/InlinePlaceEdi
 const smartPlace = readFileSync(resolve('src/components/calendar/SmartPlaceInput.tsx'), 'utf8')
 const passengerChips = readFileSync(resolve('src/components/calendar/PassengerChipSelector.tsx'), 'utf8')
 const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
+const eventEdit = readFileSync(resolve('src/components/calendar/EventEditSheet.tsx'), 'utf8')
+const eventQuery = readFileSync(resolve('src/hooks/useCalendarEvents.ts'), 'utf8')
+const enrichFunction = readFileSync(resolve('supabase/functions/enrich-event/index.ts'), 'utf8')
+const categoryLockMigration = readFileSync(resolve('supabase/migrations/20260715122500_event_enrichment_category_lock.sql'), 'utf8')
 
 test('explicit transportation uses the navy The Plan command-center presentation', () => {
   assert.match(transportation, /aria-label="The Plan"/)
@@ -53,7 +57,7 @@ test('event detail header uses editorial navy crown with compact avatars', () =>
   assert.match(detail, /function CategoryPicker/)
   assert.match(detail, /aria-label=\{`Category:.*Tap to change`\}/)
   assert.match(detail, /aria-expanded=\{open\}/)
-  assert.match(detail, /lockedCategory: cat/)
+  assert.match(detail, /category_locked: true/)
   assert.match(detail, /import \{ cleanEventTitle, isBirthdayEvent \} from '\.\.\/\.\.\/utils\/eventTitle'/)
   assert.match(detail, /const displayTitle = cleanedTitle \|\| rawTitle \|\|/)
   // navy crown background
@@ -76,6 +80,21 @@ test('event detail header uses editorial navy crown with compact avatars', () =>
   assert.match(detail, /showAttendees && rosterOpen[\s\S]{0,300}MemberEditor/)
   // close button remains in the top utility rail
   assert.match(detail, /aria-label="Close event details"/)
+})
+
+test('manual category changes persist, stay locked, and surface save failures', () => {
+  assert.match(categoryLockMigration, /category_locked boolean not null default false/)
+  assert.match(eventQuery, /category_locked,/)
+  assert.match(detail, /fields: \{ category: cat, category_locked: true \}/)
+  assert.doesNotMatch(detail, /fields: \{ category: cat, lockedCategory:/)
+  assert.match(detail, /setSelectedCategory\(cat\)/)
+  assert.match(detail, /role="alert"/)
+  assert.match(detail, /Could not save category\. Please try again\./)
+  assert.match(eventEdit, /setCategoryLocked\(Boolean\(activeEnr\?\.category_locked\)\)/)
+  assert.match(eventEdit, /patch\.category_locked = categoryLocked/)
+  assert.match(enrichFunction, /event_enrichments\(source_hash, category, category_locked,/)
+  assert.match(enrichFunction, /existingEnrichment\?\.category_locked === true/)
+  assert.match(enrichFunction, /category_locked: Boolean\(effectiveLockedCategory\)/)
 })
 
 test('month view uses shared cleanEventTitle helper for non-holiday non-reminder labels', () => {

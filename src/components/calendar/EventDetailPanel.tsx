@@ -561,9 +561,13 @@ function CategoryPicker({
 }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [selectedCategory, setSelectedCategory] = useState(category)
   const containerRef = useRef<HTMLDivElement>(null)
   const save = useSaveEnrichmentBatch()
-  const label = category ? (CATEGORY_LABEL[category] ?? category) : 'Category'
+  const label = selectedCategory ? (CATEGORY_LABEL[selectedCategory] ?? selectedCategory) : 'Category'
+
+  useEffect(() => setSelectedCategory(category), [category, eventId])
 
   useEffect(() => {
     if (!open) return
@@ -577,12 +581,19 @@ function CategoryPicker({
 
   const handleSelect = async (cat: string) => {
     if (saving) return
+    const previousCategory = selectedCategory
     setSaving(true)
+    setSaveError(null)
+    setSelectedCategory(cat)
     try {
-      await save.mutateAsync({ eventId, fields: { category: cat, lockedCategory: cat } })
+      await save.mutateAsync({ eventId, fields: { category: cat, category_locked: true } })
+      setOpen(false)
+    } catch (error) {
+      setSelectedCategory(previousCategory)
+      console.error('CategoryPicker: failed to save category', error)
+      setSaveError('Could not save category. Please try again.')
     } finally {
       setSaving(false)
-      setOpen(false)
     }
   }
 
@@ -596,7 +607,10 @@ function CategoryPicker({
           ? { background: `color-mix(in srgb, ${accent} 28%, rgba(255,255,255,0.10))`, color: 'rgba(255,255,255,0.95)', letterSpacing: '0.04em', gap: '0.25rem', border: `1px solid color-mix(in srgb, ${accent} 40%, rgba(255,255,255,0.20))` }
           : { background: `color-mix(in srgb, ${accent} 14%, transparent)`, color: S.navy, letterSpacing: '0.04em', gap: '0.25rem' }
         }
-        onClick={() => setOpen(v => !v)}
+        onClick={() => setOpen((wasOpen) => {
+          if (!wasOpen) setSaveError(null)
+          return !wasOpen
+        })}
         aria-label={`Category: ${label}. Tap to change`}
         aria-expanded={open}
       >
@@ -613,12 +627,13 @@ function CategoryPicker({
             className="absolute left-0 top-[calc(100%+10px)] z-popover w-64 rounded-card border border-casa-border bg-casa-surface p-3 shadow-modal"
           >
             <p className="mb-2 text-caption font-semibold uppercase tracking-wide" style={{ color: S.muted }}>Change category</p>
+            {saveError && <p role="alert" className="mb-2 text-caption text-casa-error">{saveError}</p>}
             <div className="flex flex-wrap gap-1.5">
               {ALL_CATEGORIES_FOR_PICKER.map(cat => (
                 <Chip
                   key={cat}
                   size="sm"
-                  selected={cat === category}
+                  selected={cat === selectedCategory}
                   onClick={() => void handleSelect(cat)}
                 >
                   {CATEGORY_LABEL[cat]}

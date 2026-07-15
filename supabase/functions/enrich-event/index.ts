@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
   // Load everything in parallel
   const [eventRes, llmRes, familyRes, homeRes, placesRes] = await Promise.all([
     sb.from('events')
-      .select('id, title, description, start_time, end_time, all_day, location_name, address, source_member_id, leg_type, event_members(family_members(id, name, full_name, role)), event_enrichments(source_hash, category, confidence, what_to_bring, outfit_suggestion, parking_notes, contact_name, contact_phone, cost_estimate, dietary_notes, meal_impact, prep_notes, departure_time, drive_time_mins, route_summary, weather_at_event, weather_summary)')
+      .select('id, title, description, start_time, end_time, all_day, location_name, address, source_member_id, leg_type, event_members(family_members(id, name, full_name, role)), event_enrichments(source_hash, category, category_locked, confidence, what_to_bring, outfit_suggestion, parking_notes, contact_name, contact_phone, cost_estimate, dietary_notes, meal_impact, prep_notes, departure_time, drive_time_mins, route_summary, weather_at_event, weather_summary)')
       .eq('id', event_id)
       .single(),
     sb.from('settings').select('value').eq('key', 'llm_config').single(),
@@ -69,6 +69,10 @@ Deno.serve(async (req) => {
   ].join('|')
 
   const existingEnrichment = (event.event_enrichments as Record<string, unknown>[] | null)?.[0]
+  const effectiveLockedCategory = locked_category
+    || (existingEnrichment?.category_locked === true && typeof existingEnrichment.category === 'string'
+      ? existingEnrichment.category
+      : undefined)
   if (
     targetFields.length === 0 &&
     !extra_context &&
@@ -93,7 +97,7 @@ Deno.serve(async (req) => {
     homeConfig,
     defaultOwnerName,
     extra_context,
-    locked_category,
+    effectiveLockedCategory,
     usageAccum,
     savedPlaces,
     existingEnrichment ?? null,
@@ -152,6 +156,7 @@ Deno.serve(async (req) => {
       {
         event_id,
         ...contractFields,
+        category_locked: Boolean(effectiveLockedCategory),
         source_hash: contentHash,
         enriched_by: `${llmConfig.provider}/${llmConfig.model}`,
         enriched_at: new Date().toISOString(),

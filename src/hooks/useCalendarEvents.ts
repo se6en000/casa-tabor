@@ -41,6 +41,7 @@ async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDet
     id,
     event_id,
     category,
+    category_locked,
     confidence,
     what_to_bring,
     outfit_suggestion,

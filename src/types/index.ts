@@ -107,6 +107,7 @@ export interface EventEnrichment {
   contact_phone: string | null
   meal_impact: string | null
   category: string | null
+  category_locked: boolean
   confidence: 'high' | 'medium' | 'low'
   enriched_by: string | null
   enriched_at: string

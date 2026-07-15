@@ -340,7 +340,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     const activeEnr = isInstance ? (masterData?.enrichment ?? enr) : enr
     const cat = activeEnr?.category ?? 'other'
     setCategory(cat)
-    setCategoryLocked(false)
+    setCategoryLocked(Boolean(activeEnr?.category_locked))
     setLocation(event.location_name ?? '')
     setAddress(event.address ?? '')
     setDisplayTitle(event.title)
@@ -547,6 +547,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     // 1. Save enrichment fields (category + all form fields)
     const patch = objectFromForm(form, fields) as Record<string, unknown>
     patch.category = category
+    patch.category_locked = categoryLocked
 
     // Determine which event ID to apply enrichment to
     const masterIdForEnrichment = isInstance ? (event.recurrence_master_id!) : event.id
