@@ -597,37 +597,6 @@ Deno.serve(async (req) => {
           },
         },
       }
-      if (
-        latestUserText &&
-        reminderCompletionFollowUp &&
-        activeConversationEvent?.event_type === 'reminder'
-      ) {
-        const args = {
-          id: activeConversationEvent.id,
-          expected_updated_at: activeConversationEvent.updated_at,
-          title: activeConversationEvent.title,
-        }
-        appendServerTrace('server_ai_assistant_reminder_completion_follow_up', 'tool=complete_reminder', {
-          event_id: activeConversationEvent.id,
-        })
-        return {
-          status: 200,
-          payload: {
-            type: 'tool_action',
-            tool: 'complete_reminder',
-            args,
-            display_text: buildDisplayText('complete_reminder', args),
-            conversation_state: eventConversationState(activeConversationEvent, now),
-            semantic_intent: 'agent.write.update',
-            correlation_id: cid,
-            telemetry: {
-              ...llmTelemetry,
-              request_total_ms: Date.now() - requestStartMs,
-              context_load_ms: contextLoadMs,
-            },
-          },
-        }
-      }
     }
     if (selection?.tool) {
       appendServerTrace('server_ai_assistant_calendar_clarification_resolved', `tool=${selection.tool}`, {
@@ -650,6 +619,37 @@ Deno.serve(async (req) => {
           },
         },
       }
+    }
+  }
+  if (
+    latestUserText &&
+    reminderCompletionFollowUp &&
+    activeConversationEvent?.event_type === 'reminder'
+  ) {
+    const args = {
+      id: activeConversationEvent.id,
+      expected_updated_at: activeConversationEvent.updated_at,
+      title: activeConversationEvent.title,
+    }
+    appendServerTrace('server_ai_assistant_reminder_completion_follow_up', 'tool=complete_reminder', {
+      event_id: activeConversationEvent.id,
+    })
+    return {
+      status: 200,
+      payload: {
+        type: 'tool_action',
+        tool: 'complete_reminder',
+        args,
+        display_text: buildDisplayText('complete_reminder', args),
+        conversation_state: eventConversationState(activeConversationEvent, now),
+        semantic_intent: 'agent.write.update',
+        correlation_id: cid,
+        telemetry: {
+          ...llmTelemetry,
+          request_total_ms: Date.now() - requestStartMs,
+          context_load_ms: contextLoadMs,
+        },
+      },
     }
   }
   if (!shouldRunAgentWrite && intentRouting.profile === 'event' && latestUserText && activeConversationEvent) {

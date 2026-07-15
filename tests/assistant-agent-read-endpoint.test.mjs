@@ -27,6 +27,15 @@ test('explicit reminder reads bypass probabilistic planning with authoritative t
   assert.match(assistantEndpoint, /explicitReminderRead \|\|/)
 })
 
+test('active reminder completion runs before generic active-event mutation handling', () => {
+  const reminderCompletion = assistantEndpoint.indexOf(
+    "server_ai_assistant_reminder_completion_follow_up",
+  )
+  const genericMutation = assistantEndpoint.indexOf('const activeMutation = resolveActiveCalendarMutation')
+  assert.ok(reminderCompletion > 0)
+  assert.ok(genericMutation > reminderCompletion)
+})
+
 test('agent read endpoint keeps the authoritative annual event window available to search', () => {
   assert.match(endpoint, /body\.authoritative_data\.events\.slice\(0, 500\)/)
   assert.doesNotMatch(endpoint, /body\.authoritative_data\.events\.slice\(0, 100\)/)
