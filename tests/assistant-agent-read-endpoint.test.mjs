@@ -20,6 +20,13 @@ test('agent read endpoint delegates language planning and executes only approved
   assert.match(endpoint, /formatAgentReadResult/)
 })
 
+test('explicit reminder reads bypass probabilistic planning with authoritative type scope', () => {
+  assert.match(endpoint, /explicitReminderSearchForMessages/)
+  assert.match(endpoint, /trustedReminderRead/)
+  assert.match(endpoint, /trusted_reminder_read/)
+  assert.match(assistantEndpoint, /explicitReminderRead \|\|/)
+})
+
 test('agent read endpoint keeps the authoritative annual event window available to search', () => {
   assert.match(endpoint, /body\.authoritative_data\.events\.slice\(0, 500\)/)
   assert.doesNotMatch(endpoint, /body\.authoritative_data\.events\.slice\(0, 100\)/)

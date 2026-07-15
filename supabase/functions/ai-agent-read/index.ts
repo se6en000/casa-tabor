@@ -4,7 +4,10 @@ import {
   executeAgentReadTool,
   formatAgentReadResult,
 } from '../_shared/assistant-agent-read.mjs'
-import { explicitReminderSearchOverride } from '../_shared/assistant-reminder-intent.mjs'
+import {
+  explicitReminderSearchForMessages,
+  explicitReminderSearchOverride,
+} from '../_shared/assistant-reminder-intent.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -61,26 +64,45 @@ Deno.serve(async (req) => {
       })),
     ].filter((entity) => typeof entity.id === 'string')
 
-    const plannerResult = await sb.functions.invoke('ai-agent-shadow', {
-      body: {
-        messages: body?.messages,
-        context: {
-          ...body?.context,
-          authoritativeEntities,
+    const deterministicReminderSearch = explicitReminderSearchForMessages(body?.messages)
+    let planner = null
+    let plan
+    if (deterministicReminderSearch) {
+      plan = {
+        kind: 'tool',
+        toolName: 'calendar.search',
+        args: {
+          event_type: deterministicReminderSearch.event_type,
+          ...(deterministicReminderSearch.query ? { query: deterministicReminderSearch.query } : {}),
         },
-        trace_id: traceId,
-        turn_id: turnId,
-        correlation_id: `${correlationId}:planner`,
-        household_id: optionalText(body?.household_id, 120) ?? 'default',
-        planner_mode: 'authoritative_read',
-        model_override: body?.model_override,
-      },
-    })
-    if (plannerResult.error) {
-      return result({ supported: false, code: 'planner_error' }, 503)
+        responsePlan: {
+          userGoal: 'List only authoritative open reminders matching the user request.',
+          helpfulEntityIds: [],
+        },
+      }
+    } else {
+      const plannerResult = await sb.functions.invoke('ai-agent-shadow', {
+        body: {
+          messages: body?.messages,
+          context: {
+            ...body?.context,
+            authoritativeEntities,
+          },
+          trace_id: traceId,
+          turn_id: turnId,
+          correlation_id: `${correlationId}:planner`,
+          household_id: optionalText(body?.household_id, 120) ?? 'default',
+          planner_mode: 'authoritative_read',
+          model_override: body?.model_override,
+        },
+      })
+      if (plannerResult.error) {
+        return result({ supported: false, code: 'planner_error' }, 503)
+      }
+      planner = plannerResult.data
+      plan = planner?.plan
     }
-    const planner = plannerResult.data
-    let plan = planner?.plan
+    const trustedReminderRead = Boolean(deterministicReminderSearch)
     const trustedCalendarRead = (
       typeof body?.context?.calendarReadContext?.start === 'string' &&
       typeof body?.context?.calendarReadContext?.end === 'string'
@@ -113,8 +135,8 @@ Deno.serve(async (req) => {
     }
     if (
       plan?.kind !== 'tool' ||
-      (!trustedReadOverride && planner?.policy?.decision !== 'execute') ||
-      (!trustedReadOverride && planner?.telemetry?.tool_effect !== 'read')
+      (!trustedReadOverride && !trustedReminderRead && planner?.policy?.decision !== 'execute') ||
+      (!trustedReadOverride && !trustedReminderRead && planner?.telemetry?.tool_effect !== 'read')
     ) {
       const handledMutation = plan?.kind === 'defer' && plan?.reason === 'mutation'
       return result({
@@ -138,9 +160,10 @@ Deno.serve(async (req) => {
     ) {
       plan.args = { ...plan.args, query: body.context.groceryQuery.trim() }
     }
-    const reminderSearch = plan.toolName === 'calendar.search'
+    const reminderSearch = deterministicReminderSearch ?? (plan.toolName === 'calendar.search'
       ? explicitReminderSearchOverride(latestUserText)
       : null
+    )
     if (reminderSearch) {
       plan.args = {
         ...plan.args,
@@ -226,7 +249,9 @@ Deno.serve(async (req) => {
       type: 'text',
       text,
       plan,
-      policy: trustedReadOverride
+      policy: trustedReminderRead
+        ? { decision: 'execute', code: 'trusted_reminder_read' }
+        : trustedReadOverride
         ? { decision: 'execute', code: 'trusted_semantic_read' }
         : planner.policy,
       activeEntity,
@@ -253,6 +278,7 @@ Deno.serve(async (req) => {
           count: payload.count ?? null,
           context_count: payload.contextCount ?? null,
           trusted_read_override: trustedReadOverride,
+          trusted_reminder_read: trustedReminderRead,
         },
         page: optionalText(body?.context?.page, 64),
         source_component: 'server:ai-agent-read',

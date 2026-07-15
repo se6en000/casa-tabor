@@ -136,6 +136,11 @@ test('type-only reminder searches return reminders without matching the word in 
     query: 'show my reminders',
   }, { events: [appointment, reminder] })
   assert.deepEqual(result.events.map((event) => event.id), ['laundry-reminder'])
+  assert.equal(result.eventType, 'reminder')
+  assert.match(
+    formatAgentReadResult('calendar.search', result, { utcOffset: '-04:00' }),
+    /^1 open reminder:\n- \*\*Switch the laundry\*\*/,
+  )
 })
 
 test('calendar exact reads use authoritative active identity', () => {

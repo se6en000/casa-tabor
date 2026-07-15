@@ -62,7 +62,10 @@ import { classifyAssistantAmbiguity, safeFullProfileToolNames } from '../_shared
 import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
 import { getAgentToolByLegacyName } from '../_shared/assistant-agent-tools.mjs'
 import { isAgentWriteCompatible } from '../_shared/assistant-agent-write-compatibility.mjs'
-import { isExplicitReminderCompletion } from '../_shared/assistant-reminder-intent.mjs'
+import {
+  explicitReminderSearchForMessages,
+  isExplicitReminderCompletion,
+} from '../_shared/assistant-reminder-intent.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -215,6 +218,7 @@ Deno.serve(async (req) => {
     : []
   const latestUserText = userMessageTexts.at(-1) ?? null
   const previousUserText = userMessageTexts.at(-2) ?? null
+  const explicitReminderRead = explicitReminderSearchForMessages(messages)
   const incomingConversationState = normalizeConversationState(context?.conversationState)
   const parsedCalendarFrame = parseCalendarLanguage(latestUserText, {
     focusedEvent: Boolean(context?.focusedEvent),
@@ -271,7 +275,9 @@ Deno.serve(async (req) => {
     calendarFrame.intent !== 'event.create' &&
     !calendarFrame.requiresActiveEvent
   )
-  const intentRouting = incomingConversationState?.activeEntityType === 'calendar_clarification'
+  const intentRouting = explicitReminderRead
+    ? { profile: 'event', forceEventSearch: true }
+    : incomingConversationState?.activeEntityType === 'calendar_clarification'
     ? { profile: 'event', forceEventSearch: false }
     : calendarMutationDisambiguationFollowUp
     ? { profile: 'event', forceEventSearch: false }
@@ -515,8 +521,10 @@ Deno.serve(async (req) => {
     ? Math.max(0, Math.min(1, agentWriteConfig.sample_rate))
     : 0
   const isCalendarSemanticRead = Boolean(
-    calendarFrame &&
-    !['event.create', 'event.move', 'event.delete', 'event.edit'].includes(calendarFrame.intent),
+    explicitReminderRead ||
+    (calendarFrame &&
+      !['event.create', 'event.move', 'event.delete', 'event.edit'].includes(calendarFrame.intent)
+    )
   )
   const authorizedFamilyNames = Array.isArray(context?.family)
     ? context.family.flatMap((member: { name?: unknown }) =>

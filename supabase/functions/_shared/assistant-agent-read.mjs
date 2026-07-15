@@ -34,6 +34,10 @@ export function formatAgentReadResult(toolName, result, options = {}) {
     const helpfulIds = new Set(Array.isArray(options.helpfulEntityIds) ? options.helpfulEntityIds : [])
     const contextEvents = (Array.isArray(result.contextEvents) ? result.contextEvents : [])
       .filter((event) => result.laterContextEventIds?.includes(event.id) || helpfulIds.has(event.id))
+    if (toolName === 'calendar.search' && result.eventType === 'reminder') {
+      if (primaryEvents.length === 0) return 'I could not find any open reminders.'
+      return `${primaryEvents.length} open reminder${primaryEvents.length === 1 ? '' : 's'}:\n${eventLines(primaryEvents, options.utcOffset)}`
+    }
     if (primaryEvents.length === 0 && contextEvents.length === 0) return 'Nothing is on the calendar for that request.'
     const primaryText = primaryEvents.length === 0
       ? `Nothing falls directly in ${options.scopeLabel ?? 'that requested time'}.`
@@ -75,7 +79,12 @@ function searchCalendar(args, rawEvents) {
     return true
   })
   filtered.sort((a, b) => compareCalendarEvents(a, b, args?.utc_offset))
-  return { supported: true, events: filtered, count: filtered.length }
+  return {
+    supported: true,
+    events: filtered,
+    count: filtered.length,
+    eventType: search.eventType || null,
+  }
 }
 
 function normalizeCalendarSearch(queryValue, eventTypeValue) {

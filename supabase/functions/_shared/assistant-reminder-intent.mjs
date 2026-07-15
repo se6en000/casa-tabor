@@ -54,15 +54,17 @@ export function explicitReminderSearchOverride(text) {
   const value = String(text ?? '').toLowerCase()
   if (
     !/\breminders?\b/.test(value) ||
-    !/\b(?:find|look|search|show|what|where|which)\b/.test(value) ||
+    !/\b(?:any|are|find|give|have|list|look|search|show|tell|what|where|which)\b/.test(value) ||
     isExplicitReminder(value) ||
     isExplicitReminderCompletion(value)
   ) return null
 
   const ignored = new Set([
-    'a', 'an', 'calendar', 'can', 'could', 'do', 'event', 'events', 'find',
-    'for', 'i', 'is', 'look', 'me', 'my', 'on', 'please', 'reminder',
-    'reminders', 'search', 'show', 'the', 'what', 'where', 'which', 'you',
+    'a', 'active', 'an', 'any', 'are', 'calendar', 'can', 'could', 'current',
+    'currently', 'do', 'event', 'events', 'find', 'for', 'give', 'have', 'i',
+    'incomplete', 'is', 'list', 'look', 'me', 'my', 'now', 'on', 'open',
+    'our', 'outstanding', 'pending', 'please', 'reminder', 'reminders', 'right',
+    'search', 'show', 'tell', 'the', 'what', 'where', 'which', 'you',
   ])
   const temporal = new Set([
     'today', 'tomorrow', 'yesterday', 'sunday', 'monday', 'tuesday',
@@ -78,6 +80,20 @@ export function explicitReminderSearchOverride(text) {
     query: query || undefined,
     clear_range: !hasTemporalReference,
   }
+}
+
+export function explicitReminderSearchForMessages(messages) {
+  const userTexts = (Array.isArray(messages) ? messages : []).flatMap((message) =>
+    message?.role === 'user' && typeof message.content === 'string'
+      ? [message.content]
+      : []
+  )
+  const latest = userTexts.at(-1)
+  const isCorrection =
+    /^\s*(?:(?:these|those|they)\s+(?:are|were)|i\s+(?:mean|meant))\s+(?:the\s+)?reminders?\s*[.!?]*\s*$/i.test(String(latest ?? ''))
+  if (isCorrection) return explicitReminderSearchOverride(userTexts.at(-2))
+
+  return explicitReminderSearchOverride(latest)
 }
 
 function isExplicitReminder(text) {

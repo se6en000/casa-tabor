@@ -5,6 +5,7 @@ import {
   fallbackExplicitRelativeReminderTurn,
   hardenExplicitReminderTurn,
   isExplicitReminderCompletion,
+  explicitReminderSearchForMessages,
   explicitReminderSearchOverride,
 } from '../supabase/functions/_shared/assistant-reminder-intent.mjs'
 
@@ -88,10 +89,32 @@ test('explicit reminder searches deterministically preserve type and user scope'
     query: undefined,
     clear_range: true,
   })
+  assert.deepEqual(explicitReminderSearchOverride('What reminders do I have open right now'), {
+    event_type: 'reminder',
+    query: undefined,
+    clear_range: true,
+  })
   assert.deepEqual(explicitReminderSearchOverride('find my dentist reminder tomorrow'), {
     event_type: 'reminder',
     query: 'dentist',
     clear_range: false,
   })
   assert.equal(explicitReminderSearchOverride('Remind me tomorrow to call the dentist'), null)
+})
+
+test('reminder result corrections retain the preceding authoritative reminder scope', () => {
+  assert.deepEqual(explicitReminderSearchForMessages([
+    { role: 'user', content: 'What reminders do I have open right now' },
+    { role: 'assistant', content: 'I found 4 matching events.' },
+    { role: 'user', content: 'These are reminders' },
+  ]), {
+    event_type: 'reminder',
+    query: undefined,
+    clear_range: true,
+  })
+  assert.equal(explicitReminderSearchForMessages([
+    { role: 'user', content: 'Show my calendar today' },
+    { role: 'assistant', content: 'Two events.' },
+    { role: 'user', content: 'These are reminders' },
+  ]), null)
 })
