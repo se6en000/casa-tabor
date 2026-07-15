@@ -34,6 +34,12 @@ import {
 import { formatAllDayRangeLabel, normalizeAllDayEventRange } from '../../utils/allDayEventRange'
 import type { EventLocationScope } from '../../lib/eventLocation'
 import RecurrenceScopeDialog from './RecurrenceScopeDialog'
+import {
+  loadRecurringEditorContext,
+  saveRecurringEditorMutation,
+  truncateRecurrenceLinesForFuture,
+  type RecurringEditorContext,
+} from '../../lib/recurringEventEditor'
 
 const ALL_CATEGORIES = Object.keys(CATEGORY_LABEL) as string[]
 
@@ -135,13 +141,20 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     return () => { document.body.style.overflow = prev }
   }, [open])
 
-  // Is this event a recurring instance (not the master)?
-  const isInstance = !!event.recurrence_master_id
+  // Canonical v2 occurrences use series_id; legacy instances use recurrence_master_id.
+  const isCanonicalOccurrence = Boolean(event.series_id && event.record_kind === 'occurrence')
+  const isInstance = isCanonicalOccurrence || Boolean(event.recurrence_master_id)
   const [masterData, setMasterData] = useState<{ rrule: string | null; enrichment: typeof enr } | null>(null)
+  const [recurringContext, setRecurringContext] = useState<RecurringEditorContext | null>(null)
+  const [recurringEditorEnabled, setRecurringEditorEnabled] = useState(false)
+  const [recurringEditorWritable, setRecurringEditorWritable] = useState(false)
+  const [recurringContextLoading, setRecurringContextLoading] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const recurringActionIdRef = useRef<string | null>(null)
 
   // Fetch master's rrule + enrichment for instances
   useEffect(() => {
-    if (!open || !isInstance || !event.recurrence_master_id) { setMasterData(null); return }
+    if (!open || isCanonicalOccurrence || !event.recurrence_master_id) { setMasterData(null); return }
     supabase.from('events').select(`
       rrule,
       event_enrichments (
@@ -177,7 +190,34 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             : (data as any).event_enrichments ?? null,
         })
       })
-  }, [open, event.id, event.recurrence_master_id, isInstance])
+  }, [open, event.id, event.recurrence_master_id, isCanonicalOccurrence])
+
+  useEffect(() => {
+    if (!open || !isCanonicalOccurrence) {
+      setRecurringContext(null)
+      setRecurringEditorEnabled(false)
+      setRecurringEditorWritable(false)
+      setRecurringContextLoading(false)
+      return
+    }
+    let cancelled = false
+    setRecurringContextLoading(true)
+    setSaveError(null)
+    loadRecurringEditorContext(event.id)
+      .then((result) => {
+        if (cancelled) return
+        setRecurringEditorEnabled(result.enabled)
+        setRecurringEditorWritable(Boolean(result.writable))
+        setRecurringContext(result.context ?? null)
+      })
+      .catch((error: Error) => {
+        if (!cancelled) setSaveError(`Could not load recurring event details: ${error.message}`)
+      })
+      .finally(() => {
+        if (!cancelled) setRecurringContextLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [event.id, isCanonicalOccurrence, open])
 
   // Recurring edit scope modal
   type RecurScope = EventLocationScope
@@ -272,8 +312,14 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     return { freq, interval, byDay, endType, endDate, count }
   }
   // For instances, use the master's rrule (loaded async); fall back to event.rrule
-  const effectiveRrule = isInstance ? (masterData?.rrule ?? event.rrule ?? null) : (event.rrule ?? null)
+  const canonicalRrule = recurringContext?.series.recurrence_lines
+    .find((line) => line.startsWith('RRULE:'))
+    ?.slice('RRULE:'.length) ?? null
+  const effectiveRrule = isCanonicalOccurrence
+    ? (canonicalRrule ?? event.rrule ?? null)
+    : isInstance ? (masterData?.rrule ?? event.rrule ?? null) : (event.rrule ?? null)
   const [recur, setRecur] = useState(() => parseRrule(effectiveRrule))
+  const [recurrenceTouched, setRecurrenceTouched] = useState(false)
 
   const buildRrule = (): string | null => {
     if (recur.freq === 'none') return null
@@ -349,10 +395,17 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     setExtraContext('')
     setEnrichStatus('idle')
     setShowDeleteConfirm(false)
+    setSaveError(null)
     setEventType(event.event_type ?? 'event')
     setIsAllDay(event.all_day ?? false)
-    const activeRrule = isInstance ? (masterData?.rrule ?? event.rrule ?? null) : (event.rrule ?? null)
+    const activeCanonicalRrule = recurringContext?.series.recurrence_lines
+      .find((line) => line.startsWith('RRULE:'))
+      ?.slice('RRULE:'.length) ?? null
+    const activeRrule = isCanonicalOccurrence
+      ? (activeCanonicalRrule ?? event.rrule ?? null)
+      : isInstance ? (masterData?.rrule ?? event.rrule ?? null) : (event.rrule ?? null)
     setRecur(parseRrule(activeRrule))
+    setRecurrenceTouched(false)
     // Seed memberRoles from current event.members
     const roles: Record<string, 'primary' | 'attendee'> = {}
     for (const m of event.members ?? []) {
@@ -367,7 +420,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     } else {
       setForm({})
     }
-  }, [open, event.id, masterData]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, event.id, masterData, recurringContext]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update form when category changes (keep existing values, populate missing)
   const handleCategoryChange = (cat: string) => {
@@ -503,6 +556,15 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     const finalTitle = titleRef.current?.value ?? displayTitle
     if (finalTitle !== displayTitle) setDisplayTitle(finalTitle)
     pendingTitleRef.current = finalTitle
+    setSaveError(null)
+    if (isCanonicalOccurrence && recurringContextLoading) {
+      setSaveError('Recurring event details are still loading. Please wait a moment and try again.')
+      return
+    }
+    if (isCanonicalOccurrence && recurringEditorEnabled && !recurringEditorWritable) {
+      setSaveError('This read-only Google series must be explicitly adopted before Casa can edit it.')
+      return
+    }
     // If this is a recurring instance, show scope modal before saving
     if (isInstance && !showScopeModal) {
       setShowScopeModal(true)
@@ -513,14 +575,21 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   }
 
   const handleScopeChoice = async (scope: RecurScope) => {
-    setShowScopeModal(false)
-    setPendingSave(false)
-    await doSave(scope)
+    if (recurringEditorEnabled && recurrenceTouched && scope === 'this') {
+      setSaveError('A repeat-pattern change must apply to this and following events or the entire series.')
+      return
+    }
+    const saved = await doSave(scope)
+    if (saved) {
+      setShowScopeModal(false)
+      setPendingSave(false)
+    }
   }
 
-  const doSave = async (scope: RecurScope) => {
+  const doSave = async (scope: RecurScope): Promise<boolean> => {
     setIsSaving(true)
     setSaveStatus('saving')
+    setSaveError(null)
 
     // Supabase free tier cold-starts can take 15-20s — allow 35s before giving up
     const saveTimeout = new Promise<never>((_, reject) =>
@@ -531,9 +600,11 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
 
     try {
       await Promise.race([doSaveInner(scope), saveTimeout])
+      return true
     } catch (err) {
       console.error('[EventEditSheet] doSave error:', err)
-      alert((err as Error).message ?? 'Save failed. Please try again.')
+      setSaveError((err as Error).message ?? 'Save failed. Please try again.')
+      return false
     } finally {
       clearTimeout(slowTimer)
       setIsSaving(false)
@@ -541,10 +612,155 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     }
   }
 
+  const doCanonicalSave = async (
+    scope: RecurScope,
+    titleToSave: string,
+  ) => {
+    if (!recurringContext) throw new Error('Recurring event details are not available yet.')
+    if (recurrenceTouched && recur.freq === 'none') {
+      throw new Error('Converting a recurring series into one event is not available in this rollout phase.')
+    }
+    if (
+      recurrenceTouched &&
+      recurringContext.series.recurrence_lines.some((line) => !line.startsWith('RRULE:'))
+    ) {
+      throw new Error('This series has advanced recurrence dates that the visual repeat editor cannot safely rewrite.')
+    }
+    const snapshot = recurringContext.effective_bundle as {
+      event?: Record<string, unknown>
+      members?: Array<Record<string, unknown>>
+      enrichment?: Record<string, unknown> | null
+    }
+    const baselineEvent = snapshot.event ?? event as unknown as Record<string, unknown>
+    const changedPaths: string[] = []
+    const changed = (path: string, current: unknown, baseline: unknown) => {
+      if (JSON.stringify(current) !== JSON.stringify(baseline)) changedPaths.push(path)
+    }
+    const parseDateTime = (dtLocal: string, fallbackISO: string): string => {
+      if (!dtLocal) return fallbackISO
+      const parsed = new Date(dtLocal)
+      return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : fallbackISO
+    }
+    const allDayRange = isAllDay ? normalizeAllDayEventRange(startDT, endDT) : null
+    const startTime = allDayRange?.start ?? parseDateTime(startDT, event.start_time)
+    const endTime = allDayRange?.end ?? parseDateTime(endDT, event.end_time)
+    const durationMs = new Date(endTime).getTime() - new Date(startTime).getTime()
+    if (!Number.isFinite(durationMs) || durationMs <= 0) throw new Error('Event end must follow event start.')
+    const normalizedLocation = location.trim() || null
+    const normalizedAddress = address.trim() || null
+    const locationChanged =
+      normalizedLocation !== ((baselineEvent.location_name as string | null)?.trim() || null) ||
+      normalizedAddress !== ((baselineEvent.address as string | null)?.trim() || null)
+    const lat = locationChanged ? null : (event.lat ?? null)
+    const lng = locationChanged ? null : (event.lng ?? null)
+
+    changed('event.title', titleToSave.trim(), baselineEvent.title)
+    changed('event.startTime', startTime, baselineEvent.start_time)
+    changed('event.endTime', endTime, baselineEvent.end_time)
+    changed('event.allDay', isAllDay, baselineEvent.all_day)
+    changed('event.eventType', eventType, baselineEvent.event_type)
+    changed('event.locationName', normalizedLocation, baselineEvent.location_name ?? null)
+    changed('event.address', normalizedAddress, baselineEvent.address ?? null)
+    changed('event.lat', lat, baselineEvent.lat ?? null)
+    changed('event.lng', lng, baselineEvent.lng ?? null)
+
+    const assignments = Object.entries(memberRoles)
+      .map(([family_member_id, role]) => ({ family_member_id, role }))
+      .sort((a, b) => a.family_member_id.localeCompare(b.family_member_id))
+    const baselineAssignments = (snapshot.members ?? [])
+      .map((member) => ({
+        family_member_id: String(member.family_member_id),
+        role: String(member.role),
+      }))
+      .sort((a, b) => a.family_member_id.localeCompare(b.family_member_id))
+    changed('assignments', assignments, baselineAssignments)
+
+    const enrichment = {
+      ...(snapshot.enrichment ?? {}),
+      ...objectFromForm(form, fields),
+      category,
+      category_locked: categoryLocked,
+    }
+    delete (enrichment as Record<string, unknown>).id
+    delete (enrichment as Record<string, unknown>).event_id
+    delete (enrichment as Record<string, unknown>).created_at
+    delete (enrichment as Record<string, unknown>).updated_at
+    const baselineEnrichment = { ...(snapshot.enrichment ?? {}) }
+    delete (baselineEnrichment as Record<string, unknown>).id
+    delete (baselineEnrichment as Record<string, unknown>).event_id
+    delete (baselineEnrichment as Record<string, unknown>).created_at
+    delete (baselineEnrichment as Record<string, unknown>).updated_at
+    changed('enrichment', enrichment, baselineEnrichment)
+
+    const detailPatch = {
+      event: {
+        title: titleToSave,
+        start_time: startTime,
+        end_time: endTime,
+        duration_ms: durationMs,
+        all_day: isAllDay,
+        event_type: eventType,
+        location_name: normalizedLocation,
+        address: normalizedAddress,
+        lat,
+        lng,
+      },
+      assignments,
+      enrichment,
+    }
+    const currentLines = recurringContext.series.recurrence_lines
+    const nextRrule = buildRrule()
+    const nextLines = recurrenceTouched
+      ? [
+          ...currentLines.filter((line) => !line.startsWith('RRULE:')),
+          ...(nextRrule ? [`RRULE:${nextRrule}`] : []),
+        ]
+      : currentLines
+    const seriesPatch: Record<string, unknown> = { timezone: recurringContext.series.timezone }
+    if (scope === 'future') {
+      const originalStart = event.original_start_time ?? (
+        event.original_start_date ? `${event.original_start_date}T00:00:00Z` : event.start_time
+      )
+      seriesPatch.original_recurrence_lines = truncateRecurrenceLinesForFuture(currentLines, originalStart)
+      seriesPatch.future_recurrence_lines = nextLines
+    } else if (scope === 'all' && recurrenceTouched) {
+      seriesPatch.recurrence_lines = nextLines
+    }
+    if (changedPaths.length === 0 && !recurrenceTouched) {
+      throw new Error('No changes to save.')
+    }
+    const actionId = recurringActionIdRef.current ?? crypto.randomUUID()
+    recurringActionIdRef.current = actionId
+    const result = await saveRecurringEditorMutation({
+      selected_event_id: event.id,
+      action_id: actionId,
+      scope,
+      expected_series_revision: recurringContext.series.revision,
+      changed_paths: changedPaths,
+      detail_patch: detailPatch,
+      series_patch: seriesPatch,
+    })
+    recurringActionIdRef.current = null
+    await qc.invalidateQueries({ queryKey: ['events'] })
+    await qc.refetchQueries({ queryKey: ['events'], type: 'active' })
+    if (result.result?.series_revision) {
+      setRecurringContext((current) => current
+        ? { ...current, series: { ...current.series, revision: result.result.series_revision } }
+        : current)
+    }
+    onClose()
+  }
+
   const doSaveInner = async (scope: RecurScope, autoSave = false) => {
     // Use pendingTitleRef when available (set in handleSave to flush DOM composition state)
     const titleToSave = pendingTitleRef.current ?? displayTitle
     pendingTitleRef.current = null
+
+    if (isCanonicalOccurrence && recurringEditorEnabled) {
+      if (autoSave) return
+      await doCanonicalSave(scope, titleToSave)
+      return
+    }
 
     // 1. Save enrichment fields (category + all form fields)
     const patch = objectFromForm(form, fields) as Record<string, unknown>
@@ -819,6 +1035,23 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
     setDeleting(false)
   }
 
+  const scopeImpacts = recurringContext
+    ? {
+        this: {
+          affectedCount: recurringContext.impacts.this.occurrence_count,
+          preservedExceptionCount: recurringContext.impacts.this.exception_count,
+        },
+        future: {
+          affectedCount: recurringContext.impacts.future.occurrence_count,
+          preservedExceptionCount: recurringContext.impacts.future.exception_count,
+        },
+        all: {
+          affectedCount: recurringContext.impacts.all.occurrence_count,
+          preservedExceptionCount: recurringContext.impacts.all.exception_count,
+        },
+      }
+    : undefined
+
   return (
     <AnimatePresence>
       {open && (
@@ -866,6 +1099,7 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                   <Button
                     onClick={handleSave}
                     loading={isSaving}
+                    disabled={recurringContextLoading}
                     size="sm"
                     leadingIcon={<Save size={14} />}
                   >
@@ -886,6 +1120,21 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
               <p className="mt-2 truncate text-body-sm text-casa-muted">
                 {scheduleSummary}{location ? ` · ${location}` : ''}
               </p>
+              {recurringContextLoading && (
+                <p className="mt-2 text-caption text-casa-muted">Loading recurring series details…</p>
+              )}
+              {recurringEditorEnabled && recurringContext && (
+                <p className="mt-2 text-caption text-content-secondary">
+                  {recurringContext.exception_paths.length > 0
+                    ? `${recurringContext.exception_paths.length} field group${recurringContext.exception_paths.length === 1 ? '' : 's'} changed only for this event; other details inherit from the series.`
+                    : 'This event currently inherits all editable details from the series.'}
+                </p>
+              )}
+              {saveError && !showScopeModal && (
+                <div className="mt-3">
+                  <Alert tone="danger" title="Could not save changes">{saveError}</Alert>
+                </div>
+              )}
             </div>
 
             {/* Form */}
@@ -1095,10 +1344,16 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     <div className="relative flex-1">
                       <Select
                         value={recur.freq}
-                        onChange={e => { setRecur(r => ({ ...r, freq: e.target.value as typeof r.freq, byDay: [] })); markDirty() }}
+                        onChange={e => {
+                          setRecur(r => ({ ...r, freq: e.target.value as typeof r.freq, byDay: [] }))
+                          setRecurrenceTouched(true)
+                          markDirty()
+                        }}
                         className="pr-8 appearance-none"
                       >
-                        <option value="none">Does not repeat</option>
+                        <option value="none" disabled={isCanonicalOccurrence && recurringEditorEnabled}>
+                          Does not repeat
+                        </option>
                         <option value="daily">Daily</option>
                         <option value="weekly">Weekly</option>
                         <option value="monthly">Monthly</option>
@@ -1113,7 +1368,11 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                           type="number"
                           min={1} max={99}
                           value={recur.interval}
-                          onChange={e => { setRecur(r => ({ ...r, interval: Math.max(1, parseInt(e.target.value) || 1) })); markDirty() }}
+                          onChange={e => {
+                            setRecur(r => ({ ...r, interval: Math.max(1, parseInt(e.target.value) || 1) }))
+                            setRecurrenceTouched(true)
+                            markDirty()
+                          }}
                           className="w-20 text-center"
                         />
                         <span className="text-caption text-casa-muted">
@@ -1131,10 +1390,14 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                           key={i}
                           type="button"
                           selected={recur.byDay.includes(i)}
-                          onClick={() => { setRecur(r => ({
-                            ...r,
-                            byDay: r.byDay.includes(i) ? r.byDay.filter(x => x !== i) : [...r.byDay, i]
-                          })); markDirty() }}
+                          onClick={() => {
+                            setRecur(r => ({
+                              ...r,
+                              byDay: r.byDay.includes(i) ? r.byDay.filter(x => x !== i) : [...r.byDay, i],
+                            }))
+                            setRecurrenceTouched(true)
+                            markDirty()
+                          }}
                         >
                           {d}
                         </Chip>
@@ -1152,7 +1415,11 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                             key={opt}
                             type="button"
                             selected={recur.endType === opt}
-                            onClick={() => { setRecur(r => ({ ...r, endType: opt })); markDirty() }}
+                            onClick={() => {
+                              setRecur(r => ({ ...r, endType: opt }))
+                              setRecurrenceTouched(true)
+                              markDirty()
+                            }}
                           >
                             {opt === 'never' ? 'Never' : opt === 'date' ? 'On date' : 'After'}
                           </Chip>
@@ -1162,7 +1429,11 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                         <Input
                           type="date"
                           value={recur.endDate}
-                          onChange={e => { setRecur(r => ({ ...r, endDate: e.target.value })); markDirty() }}
+                          onChange={e => {
+                            setRecur(r => ({ ...r, endDate: e.target.value }))
+                            setRecurrenceTouched(true)
+                            markDirty()
+                          }}
                           className="flex-1"
                         />
                       )}
@@ -1172,7 +1443,11 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                             type="number"
                             min={2} max={999}
                             value={recur.count}
-                            onChange={e => { setRecur(r => ({ ...r, count: Math.max(2, parseInt(e.target.value) || 2) })); markDirty() }}
+                            onChange={e => {
+                              setRecur(r => ({ ...r, count: Math.max(2, parseInt(e.target.value) || 2) }))
+                              setRecurrenceTouched(true)
+                              markDirty()
+                            }}
                             className="w-24 text-center"
                           />
                           <span className="text-caption text-casa-muted">occurrences</span>
@@ -1349,8 +1624,10 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
             open={showScopeModal}
             operation="update"
             selectedStart={event.start_time}
+            impacts={scopeImpacts}
             loading={isSaving}
-            onClose={() => { setShowScopeModal(false); setPendingSave(false) }}
+            error={saveError}
+            onClose={() => { setShowScopeModal(false); setPendingSave(false); setSaveError(null) }}
             onSelect={handleScopeChoice}
           />
           <Modal

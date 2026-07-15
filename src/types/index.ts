@@ -72,6 +72,8 @@ export interface CalendarEvent {
   record_kind?: 'single' | 'series_template' | 'occurrence'
   series_id?: string | null
   occurrence_key?: string | null
+  original_start_time?: string | null
+  original_start_date?: string | null
   is_exception?: boolean
   exception_paths?: string[]
   series_revision_applied?: number | null
