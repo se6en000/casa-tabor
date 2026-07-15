@@ -660,8 +660,11 @@ function PanelHeader({
     : format(new Date(event.start_time), 'EEE, MMM d · h:mm a')
   const headerDuration = event.all_day ? 'All day' : formatDuration(new Date(event.start_time), new Date(event.end_time))
   const showAttendees = !reminder && (event.members?.length ?? 0) > 0
+  const [rosterOpen, setRosterOpen] = useState(false)
   const avatarMembers = event.members?.slice(0, 5) ?? []
   const avatarOverflow = (event.members?.length ?? 0) - 5
+  const attendeeCount = event.members?.length ?? 0
+  const showLowerSection = (showAttendees && rosterOpen) || (!reminder && planKind === 'travel')
 
   return (
     <div>
@@ -737,6 +740,31 @@ function PanelHeader({
           <span style={{ color: isBirthday ? S.muted : 'rgba(255,255,255,0.55)' }}>{headerDuration}</span>
         </div>
 
+        {showAttendees && (
+          <div className="relative z-10 mt-3 flex items-center gap-2">
+            <Chip
+              size="sm"
+              className="uppercase"
+              style={{
+                letterSpacing: '0.06em',
+                background: 'rgba(255,255,255,0.10)',
+                color: 'rgba(255,255,255,0.82)',
+                border: '1px solid rgba(255,255,255,0.18)',
+              }}
+            >
+              {attendeeCount} attending
+            </Chip>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-white/80 hover:text-white hover:bg-white/10"
+              onClick={() => setRosterOpen((open) => !open)}
+            >
+              {rosterOpen ? 'Done editing' : 'Edit attendees'}
+            </Button>
+          </div>
+        )}
+
         {/* Close button */}
         <IconButton
           onClick={onClose}
@@ -749,23 +777,28 @@ function PanelHeader({
       </div>
 
       {/* ── White strip: attendee editor + destination ─────────── */}
-      <div style={{ borderBottom: `1px solid ${S.borderSoft}` }}>
-        {showAttendees && (
-          <div className="px-6 pt-4 pb-3">
-            <MemberEditor event={event} onRosterChange={onRosterChange} />
-          </div>
-        )}
-        {!reminder && planKind === 'travel' && (
-          <DestinationHeaderCard
-            locationName={event.location_name}
-            address={event.address}
-            verified={verified}
-            atHome={hostedAtHome}
-            onCheckAddress={onEdit}
-            accent={accent}
-          />
-        )}
-      </div>
+      {showLowerSection && (
+        <div style={{ borderBottom: `1px solid ${S.borderSoft}` }}>
+          {showAttendees && rosterOpen && (
+            <div className="px-6 pt-3 pb-3">
+              <div className="mb-2 text-caption font-bold uppercase tracking-wide" style={{ color: S.label }}>
+                Attendees
+              </div>
+              <MemberEditor event={event} onRosterChange={onRosterChange} />
+            </div>
+          )}
+          {!reminder && planKind === 'travel' && (
+            <DestinationHeaderCard
+              locationName={event.location_name}
+              address={event.address}
+              verified={verified}
+              atHome={hostedAtHome}
+              onCheckAddress={onEdit}
+              accent={accent}
+            />
+          )}
+        </div>
+      )}
     </div>
   )
 }

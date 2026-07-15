@@ -61,8 +61,10 @@ test('event detail header uses editorial navy crown with compact avatars', () =>
   assert.match(detail, /avatarOverflow/)
   // dark variant for CategoryPicker on navy
   assert.match(detail, /dark=\{!isBirthday\}/)
-  // attendee MemberEditor in white strip below crown
-  assert.match(detail, /showAttendees[\s\S]{0,200}MemberEditor/)
+  // attendee editing is now intentional (toggle) instead of always-on divider row
+  assert.match(detail, /Edit attendees/)
+  assert.match(detail, /rosterOpen \? 'Done editing' : 'Edit attendees'/)
+  assert.match(detail, /showAttendees && rosterOpen[\s\S]{0,300}MemberEditor/)
   // close button with white ghost class
   assert.match(detail, /absolute top-3.5 right-3.5/)
 })
