@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { format } from 'date-fns'
 import { motion, AnimatePresence, useDragControls } from 'framer-motion'
 import {
-  X, MapPin, Navigation, ChevronRight, CalendarDays, House, Users, Video,
+  X, MapPin, Navigation, ChevronRight, ChevronDown, CalendarDays, House, Users, Video,
   Loader2, Crown, Plus, Check, Pencil, Share2, Phone, MessageSquare,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -11,6 +11,7 @@ import { cn } from '../../utils/cn'
 import { useTodayEvents, type EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { EventChecklistItem, EventEnrichment, EventActionItem, EventLogistic, SavedPlace } from '../../types'
 import { getFieldsForCategory, CATEGORY_LABEL } from './categoryFields'
+import { useSaveEnrichmentBatch } from '../../hooks/useEnrichEvent'
 import EventEditSheet from './EventEditSheet'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useSavedPlaces, useSavePlace, findSavedPlace } from '../../hooks/useSavedPlaces'
@@ -75,6 +76,7 @@ const MODE_OVERRIDE_OPTIONS: Array<{ value: 'auto' | EventMode; label: string; h
 ]
 const PANEL_ENTER_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1]
 const PANEL_EXIT_EASE: [number, number, number, number] = [0.4, 0, 1, 1]
+const ALL_CATEGORIES_FOR_PICKER = Object.keys(CATEGORY_LABEL) as string[]
 
 function verifyFromTrustedSource(event: EventWithDetails, savedPlaces: SavedPlace[] = []): boolean {
   if (findSavedPlace(savedPlaces ?? [], event.location_name, event.address)) return true
@@ -537,6 +539,87 @@ function MemberEditor({
   )
 }
 
+/* ── Category quick-edit popover ───────────────────────────── */
+
+function CategoryPicker({
+  eventId,
+  category,
+  accent,
+}: {
+  eventId: string
+  category: string | null | undefined
+  accent: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const save = useSaveEnrichmentBatch()
+  const label = category ? (CATEGORY_LABEL[category] ?? category) : 'Category'
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent | TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    document.addEventListener('touchstart', handler)
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler) }
+  }, [open])
+
+  const handleSelect = async (cat: string) => {
+    if (saving) return
+    setSaving(true)
+    try {
+      await save.mutateAsync({ eventId, fields: { category: cat, lockedCategory: cat } })
+    } finally {
+      setSaving(false)
+      setOpen(false)
+    }
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <Chip
+        size="sm"
+        tone="accent"
+        className="capitalize"
+        style={{ background: `color-mix(in srgb, ${accent} 14%, transparent)`, color: S.navy, letterSpacing: '0.04em', gap: '0.25rem' }}
+        onClick={() => setOpen(v => !v)}
+        aria-label={`Category: ${label}. Tap to change`}
+        aria-expanded={open}
+      >
+        {saving ? <Loader2 size={12} className="animate-spin" /> : label}
+        <ChevronDown size={11} className={cn('opacity-50 transition-transform duration-150', open && 'rotate-180')} />
+      </Chip>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+            transition={{ duration: 0.15 }}
+            className="absolute left-0 top-[calc(100%+6px)] z-popover w-64 rounded-card border border-casa-border bg-casa-surface p-3 shadow-modal"
+          >
+            <p className="mb-2 text-caption font-semibold uppercase tracking-wide" style={{ color: S.muted }}>Change category</p>
+            <div className="flex flex-wrap gap-1.5">
+              {ALL_CATEGORIES_FOR_PICKER.map(cat => (
+                <Chip
+                  key={cat}
+                  size="sm"
+                  selected={cat === category}
+                  onClick={() => void handleSelect(cat)}
+                >
+                  {CATEGORY_LABEL[cat]}
+                </Chip>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 /* ── Header ─────────────────────────────────────────────────── */
 
 function PanelHeader({
@@ -565,13 +648,13 @@ function PanelHeader({
   const reminder = event.event_type === 'reminder'
   const mode = modeOverride ?? inferEventMode(event)
   const planKind = inferEventPlanKind(event, mode)
-  const hasDestination = Boolean(event.location_name || event.address)
   const hostedAtHome = mode === 'hosted'
   const displayStartDay = getEventDisplayStartDay(event)
   const headerWhen = event.all_day
     ? format(displayStartDay, 'EEE, MMM d')
     : format(new Date(event.start_time), 'EEE, MMM d · h:mm a')
   const headerDuration = event.all_day ? 'All day' : formatDuration(new Date(event.start_time), new Date(event.end_time))
+  const showAttendees = !reminder && (event.members?.length ?? 0) > 0
 
   return (
     <div
@@ -579,66 +662,50 @@ function PanelHeader({
       style={{ borderBottom: `1px solid ${S.borderSoft}` }}
     >
       {isBirthday && <BirthdayCardDecoration className="opacity-70" />}
-      <div className="relative z-10 flex items-start justify-between">
-        <div className="flex items-center gap-2">
-          {category && (
-            <Chip
-              size="sm"
-              tone="accent"
-              className="capitalize"
-              style={{ background: `color-mix(in srgb, ${accent} 14%, transparent)`, color: S.navy, letterSpacing: '0.04em' }}
-            >
-              {CATEGORY_LABEL[category] ?? category}
-            </Chip>
-          )}
-          {isRecurring && (
-            <Chip size="sm">
-              ↻ Repeats
-            </Chip>
-          )}
-        </div>
-        <IconButton
-          onClick={onClose}
-          icon={<X size={18} />}
-          aria-label="Close event details"
-          variant="ghost"
-          size="sm"
-        />
-      </div>
 
-      {eyebrow && (
-        <div className="relative z-10 flex items-center gap-2 mt-3.5">
-          <span className="w-[9px] h-[9px] rounded-full" style={{ background: accent }} />
-          <span className="text-caption font-bold uppercase tracking-wide" style={{ color: S.eyebrow }}>{eyebrow}</span>
-        </div>
-      )}
+      {/* Close — absolute so it never displaces content */}
+      <IconButton
+        onClick={onClose}
+        icon={<X size={18} />}
+        aria-label="Close event details"
+        variant="ghost"
+        size="sm"
+        className="absolute top-4 right-4 z-10"
+      />
 
-      <h2 className="relative z-10 mt-1.5 font-display text-display-sm font-semibold text-casa-navy">
-        {isBirthday && <span className="mr-1.5" aria-hidden="true">🎉</span>}
-        {event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}
-      </h2>
-      <div className="relative z-10 mt-2 flex items-center gap-2 text-body-sm" style={{ color: S.muted }}>
-        <span className="font-semibold" style={{ color: S.navy }}>{headerWhen}</span>
-        <span>·</span>
-        <span>{headerDuration}</span>
-      </div>
-
-      {!reminder && event.members?.length > 0 && (
-        <div className="mt-4">
-          <div className="mb-2 text-caption font-bold uppercase tracking-wide" style={{ color: S.label }}>
-            {planKind === 'travel'
-              ? 'Going'
-              : planKind === 'remote'
-                ? 'Joining'
-                : planKind === 'coverage' && hasDestination
-                  ? 'Attending'
-                  : isBirthday || planKind === 'at_home' || planKind === 'coverage'
-                  ? 'At home'
-                  : 'Attending'}
+      {/* Two-column layout: info left, attendees right at ≥lg */}
+      <div className="relative z-10 flex flex-col lg:flex-row lg:items-start gap-x-4 pr-9">
+        {/* Left column: eyebrow · category · title · date */}
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            {eyebrow && (
+              <div className="flex items-center gap-1.5">
+                <span className="w-[9px] h-[9px] shrink-0 rounded-full" style={{ background: accent }} />
+                <span className="text-caption font-bold uppercase tracking-wide" style={{ color: S.eyebrow }}>{eyebrow}</span>
+              </div>
+            )}
+            <CategoryPicker eventId={event.id} category={category} accent={accent} />
+            {isRecurring && <Chip size="sm">↻ Repeats</Chip>}
           </div>
-          <MemberEditor event={event} onRosterChange={onRosterChange} />
+
+          <h2 className="mt-1.5 font-display text-display-sm font-semibold text-casa-navy">
+            {isBirthday && <span className="mr-1.5" aria-hidden="true">🎉</span>}
+            {event.title.includes(' | ') ? event.title.split(' | ').slice(1).join(' | ') : event.title}
+          </h2>
+          <div className="mt-2 flex items-center gap-2 text-body-sm" style={{ color: S.muted }}>
+            <span className="font-semibold" style={{ color: S.navy }}>{headerWhen}</span>
+            <span>·</span>
+            <span>{headerDuration}</span>
+          </div>
         </div>
-      )}
+
+        {/* Right column: attendee chips alongside the info on large screens */}
+        {showAttendees && (
+          <div className="mt-4 lg:mt-0 lg:flex-none lg:w-44 lg:shrink-0 lg:pt-1">
+            <MemberEditor event={event} onRosterChange={onRosterChange} />
+          </div>
+        )}
+      </div>
 
       {!reminder && planKind === 'travel' && (
         <DestinationHeaderCard

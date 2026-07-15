@@ -49,6 +49,17 @@ test('driving plan removal is truthful, editor-only, and confirmed', () => {
   assert.match(transportation, /onConfirm=\{\(\) => \{[\s\S]*?onChange\(null\)/)
 })
 
+test('event detail header uses two-column layout with attendees right and no dead whitespace', () => {
+  assert.match(detail, /function CategoryPicker/)
+  assert.match(detail, /aria-label=\{`Category:.*Tap to change`\}/)
+  assert.match(detail, /aria-expanded=\{open\}/)
+  assert.match(detail, /lockedCategory: cat/)
+  assert.match(detail, /lg:flex-row lg:items-start/)
+  assert.match(detail, /lg:w-44 lg:shrink-0/)
+  assert.match(detail, /absolute top-4 right-4 z-10/)
+  assert.doesNotMatch(detail, /function PanelHeader[\s\S]{0,3000}justify-between/)
+})
+
 test('route stops and event Where reuse confirmed inline saved-place editing', () => {
   assert.match(transportation, /<InlinePlaceEditor/)
   assert.match(detail, /<InlinePlaceEditor/)
