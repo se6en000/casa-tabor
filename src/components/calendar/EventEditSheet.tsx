@@ -205,6 +205,13 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
   const [deleting, setDeleting] = useState(false)
   const [eventType, setEventType] = useState<'event' | 'reminder'>(event.event_type ?? 'event')
 
+  const clearLocation = () => {
+    setLocation('')
+    setAddress('')
+    setShowLocationSuggest(false)
+    markDirty()
+  }
+
   // Mic state for AI context textarea
   const [micActive, setMicActive] = useState(false)
   const micPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -1217,6 +1224,15 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
                     icon={<MapPin size={18} />}
                     title={location || 'Location'}
                     detail={address || 'No address'}
+                    action={
+                      <IconButton
+                        icon={<X size={18} />}
+                        aria-label="Clear location"
+                        title="Clear location"
+                        variant="ghost"
+                        onClick={clearLocation}
+                      />
+                    }
                     className="mb-4"
                   />
                 )}
