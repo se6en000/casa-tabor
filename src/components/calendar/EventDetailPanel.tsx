@@ -290,8 +290,8 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
               <div
                 className="flex-shrink-0 px-3 pt-3 pb-1.5"
                 style={{
-                  background: 'linear-gradient(to bottom, color-mix(in srgb, var(--color-casa-navy) 42%, var(--color-casa-surface)), color-mix(in srgb, var(--color-casa-navy) 24%, var(--color-casa-surface)))',
-                  borderBottom: '1px solid color-mix(in srgb, var(--color-casa-navy) 34%, transparent)',
+                  background: 'var(--color-casa-navy)',
+                  borderBottom: '1px solid color-mix(in srgb, var(--color-casa-gold) 24%, transparent)',
                   boxShadow: 'inset 0 -1px 0 color-mix(in srgb, var(--color-casa-gold) 38%, transparent)',
                 }}
               >

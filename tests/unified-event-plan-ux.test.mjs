@@ -83,9 +83,9 @@ test('event detail header uses editorial navy crown with compact avatars', () =>
   assert.match(detail, /aria-label="Close event details"/)
 })
 
-test('event detail drag cap has a theme-aware visible gradient and handle', () => {
-  assert.match(detail, /color-mix\(in srgb, var\(--color-casa-navy\) 42%, var\(--color-casa-surface\)\)/)
-  assert.match(detail, /color-mix\(in srgb, var\(--color-casa-navy\) 24%, var\(--color-casa-surface\)\)/)
+test('event detail drag cap continues the theme-aware navy crown', () => {
+  assert.match(detail, /background: 'var\(--color-casa-navy\)'/)
+  assert.match(detail, /color-mix\(in srgb, var\(--color-casa-gold\) 24%, transparent\)/)
   assert.match(detail, /color-mix\(in srgb, var\(--color-casa-gold\) 38%, transparent\)/)
   assert.match(detail, /aria-label="Drag down to dismiss panel"/)
   assert.match(detail, /var\(--color-casa-on-dark\) 72%, var\(--color-casa-gold\)/)
