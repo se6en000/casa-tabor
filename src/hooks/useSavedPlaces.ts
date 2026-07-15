@@ -33,6 +33,24 @@ export interface SavePlaceInput {
   phone?: string | null
 }
 
+export function savedPlaceAddress(place: Pick<SavedPlace, 'address' | 'city' | 'state' | 'zip'>): string {
+  return [place.address, place.city, place.state, place.zip].filter(Boolean).join(', ')
+}
+
+export function findExactSavedPlace(
+  places: SavedPlace[],
+  name: string,
+  address: string,
+): SavedPlace | null {
+  const normalizedName = name.trim().toLowerCase()
+  const normalizedAddress = address.trim().toLowerCase()
+  if (!normalizedName || !normalizedAddress) return null
+  return places.find((place) =>
+    place.name.trim().toLowerCase() === normalizedName
+    && savedPlaceAddress(place).trim().toLowerCase() === normalizedAddress,
+  ) ?? null
+}
+
 export function useSavePlace() {
   const qc = useQueryClient()
   return useMutation({

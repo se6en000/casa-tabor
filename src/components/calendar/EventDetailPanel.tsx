@@ -35,6 +35,8 @@ import EventTransportationSection from './EventTransportationSection'
 import InlinePlaceEditor from './InlinePlaceEditor'
 import {
   createDefaultTransportationPlan,
+  hydrateTransportationEventPlaces,
+  updateTransportationEventPlace,
   type EventTransportationPlan,
   type TransportationPlace,
 } from '../../lib/eventTransportation'
@@ -961,20 +963,10 @@ function StandardPanelBody({
               onSetVerifiedOverride(false)
               queryClient.removeQueries({ queryKey: ['travel-eta'] })
               if (!transportationPlan) return
-              const previous = {
-                name: event.location_name?.trim() || event.address?.trim() || '',
-                address: event.address?.trim() || '',
-              }
-              const matchesPrevious = (candidate: TransportationPlace) =>
-                candidate.name === previous.name && candidate.address === previous.address
-              onSetTransportationPlan({
-                ...transportationPlan,
-                legs: transportationPlan.legs.map((leg) => ({
-                  ...leg,
-                  origin: matchesPrevious(leg.origin) ? place : leg.origin,
-                  destination: matchesPrevious(leg.destination) ? place : leg.destination,
-                })),
-              })
+              onSetTransportationPlan(updateTransportationEventPlace(
+                hydrateTransportationEventPlaces(transportationPlan, event),
+                place,
+              ))
             }}
             onConfirmAddress={() => onSetVerifiedOverride(true)}
             verified={verified}

@@ -6,6 +6,7 @@ export type TransportationTiming = 'arrive_by' | 'depart_at'
 export interface TransportationPlace {
   name: string
   address: string
+  kind?: 'event'
 }
 
 export interface TransportationLeg {
@@ -34,7 +35,11 @@ function normalizePlace(value: unknown): TransportationPlace | null {
   const name = typeof raw.name === 'string' ? raw.name.trim() : ''
   const address = typeof raw.address === 'string' ? raw.address.trim() : ''
   if (!name && !address) return null
-  return { name: name || address, address }
+  return {
+    name: name || address,
+    address,
+    ...(raw.kind === 'event' ? { kind: 'event' as const } : {}),
+  }
 }
 
 export function normalizeTransportationPlan(value: unknown): EventTransportationPlan | null {
@@ -101,7 +106,7 @@ export function createDefaultTransportationPlan(
     legs: [{
       id: crypto.randomUUID(),
       origin: { name: 'Home', address: homeAddress },
-      destination: { name: destinationName, address: event.address?.trim() || '' },
+      destination: { name: destinationName, address: event.address?.trim() || '', kind: 'event' },
       driverId: driver?.id ?? null,
       driverName: driver?.name ?? '',
       passengers: [],
@@ -109,6 +114,54 @@ export function createDefaultTransportationPlan(
       timing: 'arrive_by',
       time: eventTimeValue(event.start_time),
     }],
+  }
+}
+
+export function eventTransportationPlace(event: Pick<EventWithDetails, 'location_name' | 'address'>): TransportationPlace {
+  const address = event.address?.trim() || ''
+  return {
+    name: event.location_name?.trim() || address || 'Event location',
+    address,
+    kind: 'event',
+  }
+}
+
+export function isTransportationEventPlace(place: TransportationPlace): boolean {
+  return place.kind === 'event' || place.name.trim().toLowerCase() === 'event location'
+}
+
+export function updateTransportationEventPlace(
+  plan: EventTransportationPlan,
+  place: TransportationPlace,
+): EventTransportationPlan {
+  const eventPlace = { ...place, kind: 'event' as const }
+  return {
+    ...plan,
+    legs: plan.legs.map((leg) => ({
+      ...leg,
+      origin: isTransportationEventPlace(leg.origin) ? eventPlace : leg.origin,
+      destination: isTransportationEventPlace(leg.destination) ? eventPlace : leg.destination,
+    })),
+  }
+}
+
+export function hydrateTransportationEventPlaces(
+  plan: EventTransportationPlan,
+  event: Pick<EventWithDetails, 'location_name' | 'address'>,
+): EventTransportationPlan {
+  const current = eventTransportationPlace(event)
+  const hasStoredEventLocation = Boolean(event.location_name?.trim() || event.address?.trim())
+  return {
+    ...plan,
+    legs: plan.legs.map((leg) => ({
+      ...leg,
+      origin: isTransportationEventPlace(leg.origin)
+        ? (hasStoredEventLocation ? current : { ...leg.origin, kind: 'event' })
+        : leg.origin,
+      destination: isTransportationEventPlace(leg.destination)
+        ? (hasStoredEventLocation ? current : { ...leg.destination, kind: 'event' })
+        : leg.destination,
+    })),
   }
 }
 

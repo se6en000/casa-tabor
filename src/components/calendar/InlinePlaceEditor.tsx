@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, MapPin, Pencil, X } from 'lucide-react'
-import { useSavedPlaces } from '../../hooks/useSavedPlaces'
+import { BookmarkPlus, Check, MapPin, Pencil, X } from 'lucide-react'
+import {
+  findExactSavedPlace,
+  savedPlaceAddress,
+  useSavedPlaces,
+  useSavePlace,
+} from '../../hooks/useSavedPlaces'
 import type { TransportationPlace } from '../../lib/eventTransportation'
 import { Button, IconButton, Input } from '../ui'
 
@@ -10,16 +15,8 @@ interface InlinePlaceEditorProps {
   ariaLabel: string
   extraPlaces?: TransportationPlace[]
   allowEmpty?: boolean
+  requireAddress?: boolean
   className?: string
-}
-
-function savedPlaceAddress(place: {
-  address: string | null
-  city: string | null
-  state: string | null
-  zip: string | null
-}): string {
-  return [place.address, place.city, place.state, place.zip].filter(Boolean).join(', ')
 }
 
 export default function InlinePlaceEditor({
@@ -28,6 +25,7 @@ export default function InlinePlaceEditor({
   ariaLabel,
   extraPlaces = [],
   allowEmpty = false,
+  requireAddress = false,
   className,
 }: InlinePlaceEditorProps) {
   const [editing, setEditing] = useState(false)
@@ -37,6 +35,7 @@ export default function InlinePlaceEditor({
   const [error, setError] = useState<string | null>(null)
   const nameRef = useRef<HTMLInputElement>(null)
   const { data: savedPlaces = [] } = useSavedPlaces()
+  const savePlace = useSavePlace()
 
   useEffect(() => {
     if (editing) nameRef.current?.focus()
@@ -56,7 +55,10 @@ export default function InlinePlaceEditor({
     return [...unique.values()]
   }, [extraPlaces, savedPlaces])
 
-  const needle = `${name} ${address}`.trim().toLowerCase()
+  const searchName = requireAddress && name.trim().toLowerCase() === 'event location' && !address.trim()
+    ? ''
+    : name
+  const needle = `${searchName} ${address}`.trim().toLowerCase()
   const matches = needle
     ? options.filter((place) =>
         [place.name, place.address, ...(place.aliases ?? [])]
@@ -77,6 +79,10 @@ export default function InlinePlaceEditor({
       setError('Enter a location name or address.')
       return
     }
+    if (requireAddress && !next.address) {
+      setError('Add the event address so traffic works everywhere.')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -87,6 +93,21 @@ export default function InlinePlaceEditor({
     } finally {
       setSaving(false)
     }
+  }
+
+  const exactSavedPlace = findExactSavedPlace(savedPlaces, name, address)
+  const canSavePlace = Boolean(name.trim() && address.trim() && !exactSavedPlace)
+  const saveCurrentPlace = () => {
+    setError(null)
+    savePlace.mutate({
+      name: name.trim(),
+      address: address.trim(),
+      category: 'other',
+    }, {
+      onError: (cause) => {
+        setError(cause instanceof Error ? cause.message : 'Could not save this place.')
+      },
+    })
   }
 
   if (!editing) {
@@ -109,9 +130,11 @@ export default function InlinePlaceEditor({
           <span className="block truncate text-body-sm font-semibold text-casa-navy">
             {value.name || value.address || 'Add location'}
           </span>
-          {value.address && value.address !== value.name && (
+          {value.address && value.address !== value.name ? (
             <span className="mt-0.5 block truncate text-caption text-casa-muted">{value.address}</span>
-          )}
+          ) : requireAddress ? (
+            <span className="mt-0.5 block truncate text-caption font-semibold text-casa-error">Add event address</span>
+          ) : null}
         </span>
         <Pencil size={15} className="shrink-0 text-casa-muted" />
       </Button>
@@ -162,7 +185,7 @@ export default function InlinePlaceEditor({
 
       {matches.length > 0 && (
         <div className="mt-2 overflow-hidden rounded-button border border-casa-border bg-casa-surface">
-          <p className="px-3 pb-1 pt-2 text-caption font-semibold uppercase tracking-wide text-casa-muted">Saved places</p>
+          <p className="px-3 pb-1 pt-2 text-caption font-semibold uppercase tracking-wide text-casa-muted">Saved places · choose one</p>
           {matches.map((place) => (
             <Button
               key={`${place.name}-${place.address}`}
@@ -189,7 +212,18 @@ export default function InlinePlaceEditor({
       )}
 
       {error && <p role="alert" className="mt-2 text-caption text-casa-error">{error}</p>}
-      <div className="mt-3 flex justify-end gap-2">
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        {(canSavePlace || exactSavedPlace || savePlace.isPending) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={saveCurrentPlace}
+            disabled={!canSavePlace || savePlace.isPending}
+          >
+            <BookmarkPlus size={15} />
+            {exactSavedPlace ? 'Saved place' : savePlace.isPending ? 'Saving…' : 'Save place'}
+          </Button>
+        )}
         <Button variant="secondary" size="sm" onClick={cancel} disabled={saving}>Cancel</Button>
         <Button variant="primary" size="sm" onClick={apply} loading={saving}>
           <Check size={15} /> Apply

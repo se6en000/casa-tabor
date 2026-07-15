@@ -15,7 +15,6 @@ test('dialog focus lifecycle does not restart when an inline close callback chan
 })
 
 test('typing a custom place name preserves its paired address until a saved place is selected', () => {
-  assert.match(editor, /option\.name\.toLowerCase\(\) === name\.toLowerCase\(\)/)
-  assert.doesNotMatch(editor, /option\.name\.toLowerCase\(\) === name\.trim\(\)\.toLowerCase\(\)/)
-  assert.match(editor, /return match \? \{ \.\.\.match \} : \{ \.\.\.fallback, name \}/)
+  assert.match(editor, /onChange=\{\(event\) => onChange\(\{ \.\.\.value, name: event\.target\.value \}\)\}/)
+  assert.match(editor, /onChange=\{\(event\) => onChange\(\{ \.\.\.value, address: event\.target\.value \}\)\}/)
 })

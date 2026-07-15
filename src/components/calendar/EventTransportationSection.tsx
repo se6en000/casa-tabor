@@ -1,17 +1,25 @@
 import { useMemo, useRef, useState } from 'react'
-import { Car, Check, ChevronDown, House, Pencil, Plus, Trash2 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { BookmarkPlus, Car, Check, ChevronDown, House, Pencil, Plus, Trash2 } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
-import { useSavedPlaces } from '../../hooks/useSavedPlaces'
+import {
+  findExactSavedPlace,
+  savedPlaceAddress,
+  useSavedPlaces,
+  useSavePlace,
+} from '../../hooks/useSavedPlaces'
 import { useTravelEta } from '../../hooks/useTravelEta'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../types'
 import {
   appendReturnHomeLeg,
   createDefaultTransportationPlan,
+  hydrateTransportationEventPlaces,
+  isTransportationEventPlace,
   transportationTimeIso,
   updateTransportationDriver,
+  updateTransportationEventPlace,
   updateTransportationPlace,
   type EventTransportationPlan,
   type TransportationLeg,
@@ -207,6 +215,7 @@ function TripLegTimeline({
             value={leg.origin}
             ariaLabel={`${PURPOSE_LABELS[leg.purpose]} origin`}
             extraPlaces={placeOptions}
+            requireAddress={isTransportationEventPlace(leg.origin)}
             onConfirm={(place) => onPlaceChange('origin', place)}
           />
           <div className="ml-control-sm flex items-center gap-2 text-caption text-casa-muted">
@@ -216,6 +225,7 @@ function TripLegTimeline({
             value={leg.destination}
             ariaLabel={`${PURPOSE_LABELS[leg.purpose]} destination`}
             extraPlaces={placeOptions}
+            requireAddress={isTransportationEventPlace(leg.destination)}
             onConfirm={(place) => onPlaceChange('destination', place)}
           />
         </div>
@@ -243,9 +253,87 @@ function updateLeg(plan: EventTransportationPlan, legId: string, patch: Partial<
   }
 }
 
-function placeFromName(name: string, options: PlaceOption[], fallback: TransportationPlace): TransportationPlace {
-  const match = options.find((option) => option.name.toLowerCase() === name.toLowerCase())
-  return match ? { ...match } : { ...fallback, name }
+function TripPlaceFields({
+  label,
+  value,
+  savedPlaces,
+  onChange,
+}: {
+  label: string
+  value: TransportationPlace
+  savedPlaces: ReturnType<typeof useSavedPlaces>['data']
+  onChange: (place: TransportationPlace) => void
+}) {
+  const savePlace = useSavePlace()
+  const places = savedPlaces ?? []
+  const exactSavedPlace = findExactSavedPlace(places, value.name, value.address)
+  const canSave = Boolean(value.name.trim() && value.address.trim() && !exactSavedPlace)
+
+  return (
+    <div className="space-y-3">
+      <Field label={`${label} saved place`}>
+        <Select
+          value=""
+          aria-label={`${label} saved place`}
+          onChange={(event) => {
+            const selected = places.find((place) => place.id === event.target.value)
+            if (!selected) return
+            onChange({
+              name: selected.name,
+              address: savedPlaceAddress(selected),
+              ...(value.kind ? { kind: value.kind } : {}),
+            })
+          }}
+        >
+          <option value="">Choose a saved place…</option>
+          {places.map((place) => (
+            <option key={place.id} value={place.id}>
+              {place.name}{savedPlaceAddress(place) ? ` · ${savedPlaceAddress(place)}` : ''}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label={label}>
+        <Input
+          value={value.name}
+          placeholder={label === 'From' ? 'Starting place' : 'Destination'}
+          onChange={(event) => onChange({ ...value, name: event.target.value })}
+        />
+      </Field>
+      <Field
+        label={`${label} address`}
+        error={isTransportationEventPlace(value) && !value.address.trim()
+          ? 'Add the event address so traffic works everywhere.'
+          : undefined}
+      >
+        <Input
+          value={value.address}
+          placeholder="Address for traffic"
+          onChange={(event) => onChange({ ...value, address: event.target.value })}
+        />
+      </Field>
+      {(canSave || exactSavedPlace || savePlace.isPending) && (
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={!canSave || savePlace.isPending}
+          onClick={() => savePlace.mutate({
+            name: value.name.trim(),
+            address: value.address.trim(),
+            category: 'other',
+          })}
+        >
+          <BookmarkPlus size={15} />
+          {exactSavedPlace ? 'Saved place' : savePlace.isPending ? 'Saving…' : 'Save place'}
+        </Button>
+      )}
+      {savePlace.isError && (
+        <p role="alert" className="text-caption text-casa-error">
+          {savePlace.error instanceof Error ? savePlace.error.message : 'Could not save this place.'}
+        </p>
+      )}
+    </div>
+  )
 }
 
 export default function EventTransportationSection({
@@ -256,8 +344,11 @@ export default function EventTransportationSection({
 }: EventTransportationSectionProps) {
   const [editorOpen, setEditorOpen] = useState(false)
   const [draft, setDraft] = useState<EventTransportationPlan | null>(null)
+  const [savingTrip, setSavingTrip] = useState(false)
+  const [tripError, setTripError] = useState<string | null>(null)
   const { data: household = [] } = useFamilyMembers()
   const { data: savedPlaces = [] } = useSavedPlaces()
+  const queryClient = useQueryClient()
   const { data: homeConfig } = useQuery({
     queryKey: ['home-config'],
     staleTime: 10 * 60_000,
@@ -278,7 +369,7 @@ export default function EventTransportationSection({
       })
     }
     savedPlaces.forEach((place) => {
-      const address = [place.address, place.city, place.state, place.zip].filter(Boolean).join(', ')
+      const address = savedPlaceAddress(place)
       if (!options.some((option) => option.name.toLowerCase() === place.name.toLowerCase())) {
         options.push({ name: place.name, address })
       }
@@ -286,8 +377,14 @@ export default function EventTransportationSection({
     return options
   }, [event.address, event.location_name, homeAddress, savedPlaces])
 
+  const hydratedPlan = useMemo(
+    () => plan ? hydrateTransportationEventPlaces(plan, event) : null,
+    [event, plan],
+  )
+
   const openEditor = () => {
-    setDraft(plan ?? createDefaultTransportationPlan(event, homeAddress, defaultDriver))
+    setDraft(hydratedPlan ?? createDefaultTransportationPlan(event, homeAddress, defaultDriver))
+    setTripError(null)
     setEditorOpen(true)
   }
 
@@ -316,8 +413,15 @@ export default function EventTransportationSection({
     side: 'origin' | 'destination',
     place: TransportationPlace,
   ) => {
-    if (!plan) return
-    onChange(updateTransportationPlace(plan, legIndex, side, place))
+    if (!hydratedPlan) return
+    const current = hydratedPlan.legs[legIndex]?.[side]
+    const nextPlan = current && isTransportationEventPlace(current)
+      ? updateTransportationEventPlace(hydratedPlan, place)
+      : updateTransportationPlace(hydratedPlan, legIndex, side, place)
+    if (current && isTransportationEventPlace(current)) {
+      return persistEventLocation(place).then(() => onChange(nextPlan))
+    }
+    onChange(nextPlan)
   }
 
   const updatePlanDriver = (
@@ -325,20 +429,52 @@ export default function EventTransportationSection({
     driver: { id: string | null; name: string },
     applyToRemaining: boolean,
   ) => {
-    if (!plan) return
-    onChange(updateTransportationDriver(plan, legIndex, driver, applyToRemaining))
+    if (!hydratedPlan) return
+    onChange(updateTransportationDriver(hydratedPlan, legIndex, driver, applyToRemaining))
+  }
+
+  const persistEventLocation = async (place: TransportationPlace) => {
+    const normalizedName = place.name.trim() || null
+    const normalizedAddress = place.address.trim() || null
+    if (!normalizedAddress) throw new Error('Add the event address so traffic works everywhere.')
+    const { error } = await supabase
+      .from('events')
+      .update({
+        location_name: normalizedName,
+        address: normalizedAddress,
+        lat: null,
+        lng: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', event.id)
+    if (error) throw new Error(`Could not update event location: ${error.message}`)
+    queryClient.removeQueries({ queryKey: ['travel-eta'] })
+    await queryClient.invalidateQueries({ queryKey: ['events'] })
+  }
+
+  const updateDraftPlace = (
+    legIndex: number,
+    side: 'origin' | 'destination',
+    place: TransportationPlace,
+  ) => {
+    if (!draft) return
+    const current = draft.legs[legIndex]?.[side]
+    setTripError(null)
+    setDraft(current && isTransportationEventPlace(current)
+      ? updateTransportationEventPlace(draft, place)
+      : updateTransportationPlace(draft, legIndex, side, place))
   }
 
   return (
     <>
       <section aria-label="The Plan">
-        {plan ? (
+        {hydratedPlan ? (
           <div className="overflow-visible rounded-2xl border border-casa-border">
             <div className="flex items-center justify-between gap-3 rounded-t-2xl bg-casa-navy px-[18px] py-3.5">
               <div className="min-w-0">
                 <p className="text-caption font-bold uppercase tracking-widest text-white/70">The Plan</p>
                 <p className="mt-0.5 font-display text-body-lg font-semibold text-white">
-                  {plan.legs.length} driving {plan.legs.length === 1 ? 'leg' : 'legs'} · live traffic
+                  {hydratedPlan.legs.length} driving {hydratedPlan.legs.length === 1 ? 'leg' : 'legs'} · live traffic
                 </p>
               </div>
               <Button
@@ -352,12 +488,12 @@ export default function EventTransportationSection({
             </div>
             <p className="px-[18px] pt-3 text-caption text-casa-muted">Tap any place or driver for a quick change.</p>
             <ol className="px-[18px] pb-2">
-              {plan.legs.map((leg, index) => (
+              {hydratedPlan.legs.map((leg, index) => (
                 <TripLegTimeline
                   key={leg.id}
                   event={event}
                   leg={leg}
-                  last={index === plan.legs.length - 1}
+                  last={index === hydratedPlan.legs.length - 1}
                   household={household}
                   placeOptions={placeOptions}
                   onPlaceChange={(side, place) => updatePlanPlace(index, side, place)}
@@ -414,10 +550,6 @@ export default function EventTransportationSection({
             <p className="text-body-sm text-casa-muted">
               Add only the driving that needs coordination. Each leg can start and end somewhere different.
             </p>
-            <datalist id={`transport-places-${event.id}`}>
-              {placeOptions.map((place) => <option key={`${place.name}-${place.address}`} value={place.name}>{place.address}</option>)}
-            </datalist>
-
             {draft.legs.map((leg, index) => (
               <Card key={leg.id} padding="md" className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
@@ -463,48 +595,18 @@ export default function EventTransportationSection({
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-3">
-                    <Field label="From">
-                      <Input
-                        list={`transport-places-${event.id}`}
-                        value={leg.origin.name}
-                        placeholder="Starting place"
-                        onChange={(event) => setDraft(updateLeg(draft, leg.id, {
-                          origin: placeFromName(event.target.value, placeOptions, leg.origin),
-                        }))}
-                      />
-                    </Field>
-                    <Field label="From address">
-                      <Input
-                        value={leg.origin.address}
-                        placeholder="Address for traffic"
-                        onChange={(event) => setDraft(updateLeg(draft, leg.id, {
-                          origin: { ...leg.origin, address: event.target.value },
-                        }))}
-                      />
-                    </Field>
-                  </div>
-                  <div className="space-y-3">
-                    <Field label="To">
-                      <Input
-                        list={`transport-places-${event.id}`}
-                        value={leg.destination.name}
-                        placeholder="Destination"
-                        onChange={(event) => setDraft(updateLeg(draft, leg.id, {
-                          destination: placeFromName(event.target.value, placeOptions, leg.destination),
-                        }))}
-                      />
-                    </Field>
-                    <Field label="To address">
-                      <Input
-                        value={leg.destination.address}
-                        placeholder="Address for traffic"
-                        onChange={(event) => setDraft(updateLeg(draft, leg.id, {
-                          destination: { ...leg.destination, address: event.target.value },
-                        }))}
-                      />
-                    </Field>
-                  </div>
+                  <TripPlaceFields
+                    label="From"
+                    value={leg.origin}
+                    savedPlaces={savedPlaces}
+                    onChange={(place) => updateDraftPlace(index, 'origin', place)}
+                  />
+                  <TripPlaceFields
+                    label="To"
+                    value={leg.destination}
+                    savedPlaces={savedPlaces}
+                    onChange={(place) => updateDraftPlace(index, 'destination', place)}
+                  />
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-3">
@@ -558,6 +660,7 @@ export default function EventTransportationSection({
               </Button>
             </div>
 
+            {tripError && <p role="alert" className="text-caption text-casa-error">{tripError}</p>}
             <div className="flex flex-col-reverse gap-2 border-t border-casa-border pt-4 sm:flex-row sm:justify-between">
               <Button
                 variant="danger"
@@ -572,10 +675,29 @@ export default function EventTransportationSection({
                 <Button variant="secondary" onClick={() => setEditorOpen(false)}>Cancel</Button>
                 <Button
                   variant="primary"
-                  disabled={draft.legs.some((leg) => !leg.origin.name.trim() || !leg.destination.name.trim() || !leg.time)}
-                  onClick={() => {
-                    onChange(draft)
-                    setEditorOpen(false)
+                  loading={savingTrip}
+                  disabled={draft.legs.some((leg) =>
+                    !leg.origin.name.trim()
+                    || !leg.destination.name.trim()
+                    || !leg.time
+                    || (isTransportationEventPlace(leg.origin) && !leg.origin.address.trim())
+                    || (isTransportationEventPlace(leg.destination) && !leg.destination.address.trim()),
+                  )}
+                  onClick={async () => {
+                    setSavingTrip(true)
+                    setTripError(null)
+                    try {
+                      const eventPlace = draft.legs
+                        .flatMap((leg) => [leg.origin, leg.destination])
+                        .find(isTransportationEventPlace)
+                      if (eventPlace) await persistEventLocation(eventPlace)
+                      onChange(draft)
+                      setEditorOpen(false)
+                    } catch (cause) {
+                      setTripError(cause instanceof Error ? cause.message : 'Could not save this trip.')
+                    } finally {
+                      setSavingTrip(false)
+                    }
                   }}
                 >
                   Save trip
