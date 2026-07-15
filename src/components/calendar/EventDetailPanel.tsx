@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { format } from 'date-fns'
 import { motion, AnimatePresence, useDragControls } from 'framer-motion'
 import {
-  X, MapPin, Navigation, ChevronRight, ChevronDown, CalendarDays, House, Users, Video,
+  X, MapPin, Navigation, ChevronRight, ChevronDown, CalendarDays, House, Users, Video, Bell,
   Loader2, Crown, Plus, Check, Pencil, Share2, Phone, MessageSquare,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -280,7 +280,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
               data-ptr-ignore
               role="dialog"
               aria-modal="true"
-              aria-label={`Event details: ${event.title}`}
+              aria-label={`${event.event_type === 'reminder' ? 'Reminder' : 'Event'} details: ${event.title}`}
               onClick={e => e.stopPropagation()}
               onPointerDown={stopTouch}
               onTouchStart={stopTouch}
@@ -620,9 +620,9 @@ function CategoryPicker({
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, y: -4, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+            initial={{ y: -4, scale: 0.97 }}
+            animate={{ y: 0, scale: 1 }}
+            exit={{ y: -4, scale: 0.97 }}
             transition={{ duration: 0.15 }}
             className="absolute left-0 top-[calc(100%+10px)] z-popover w-64 rounded-card border border-casa-border bg-casa-surface p-3 shadow-modal"
           >
@@ -684,12 +684,15 @@ function PanelHeader({
   const cleanedTitle = cleanEventTitle(event.title ?? '').trim()
   const rawTitle = (event.title ?? '').trim()
   const displayTitle = cleanedTitle || rawTitle || (category ? (CATEGORY_LABEL[category] ?? category) : 'Event details')
-  const showAttendees = !reminder && (event.members?.length ?? 0) > 0
-  const [rosterOpen, setRosterOpen] = useState(false)
   const avatarMembers = event.members?.slice(0, 5) ?? []
   const avatarOverflow = (event.members?.length ?? 0) - 5
   const attendeeCount = event.members?.length ?? 0
-  const showLowerSection = (showAttendees && rosterOpen) || (!reminder && planKind === 'travel')
+  const hasPeople = attendeeCount > 0
+  const [rosterOpen, setRosterOpen] = useState(false)
+  const peopleCountLabel = reminder ? `${attendeeCount} assigned` : `${attendeeCount} attending`
+  const editPeopleLabel = reminder ? 'Edit people' : 'Edit attendees'
+  const peopleSectionLabel = reminder ? 'Assigned people' : 'Attendees'
+  const showLowerSection = (hasPeople && rosterOpen) || (!reminder && planKind === 'travel')
 
   return (
     <div>
@@ -766,6 +769,21 @@ function PanelHeader({
 
         {/* Meta line: category + date + duration */}
         <div className="relative z-10 mt-2 flex flex-wrap items-center gap-2 text-body-sm">
+          {reminder && (
+            <Chip
+              size="sm"
+              className="uppercase"
+              style={{
+                letterSpacing: '0.06em',
+                background: isBirthday ? S.chipFill : 'rgba(255,255,255,0.10)',
+                color: isBirthday ? S.navy : 'rgba(255,255,255,0.88)',
+                border: `1px solid ${isBirthday ? S.borderMed : 'rgba(255,255,255,0.18)'}`,
+              }}
+            >
+              <Bell size={12} aria-hidden="true" />
+              Reminder
+            </Chip>
+          )}
           <CategoryPicker eventId={event.id} category={category} accent={accent} dark={!isBirthday} />
           <span className={cn('font-semibold', isBirthday ? '' : '')} style={{ color: isBirthday ? S.navy : S.planLabel }}>
             {headerWhen}
@@ -780,8 +798,8 @@ function PanelHeader({
           )}
         </div>
 
-        {(showAttendees || (!reminder && planKind === 'travel')) && (
-          <div className="relative z-10 mt-3 flex items-center gap-2">
+        {(hasPeople || (!reminder && planKind === 'travel')) && (
+          <div className="relative mt-3 flex items-center gap-2">
             {!reminder && planKind === 'travel' ? (
               <Chip
                 size="sm"
@@ -807,17 +825,17 @@ function PanelHeader({
                   border: '1px solid rgba(255,255,255,0.18)',
                 }}
               >
-                {attendeeCount} attending
+                {peopleCountLabel}
               </Chip>
             )}
-            {showAttendees && (
+            {hasPeople && (
               <Button
                 variant="ghost"
                 size="sm"
                 className="text-white/80 hover:text-white hover:bg-white/10"
                 onClick={() => setRosterOpen((open) => !open)}
               >
-                {rosterOpen ? 'Done editing' : 'Edit attendees'}
+                {rosterOpen ? 'Done editing' : editPeopleLabel}
               </Button>
             )}
           </div>
@@ -827,10 +845,10 @@ function PanelHeader({
       {/* ── White strip: attendee editor + destination ─────────── */}
       {showLowerSection && (
         <div style={{ borderBottom: `1px solid ${S.borderSoft}` }}>
-          {showAttendees && rosterOpen && (
+          {hasPeople && rosterOpen && (
             <div className="px-6 pt-3 pb-3">
               <div className="mb-2 text-caption font-bold uppercase tracking-wide" style={{ color: S.label }}>
-                Attendees
+                {peopleSectionLabel}
               </div>
               <MemberEditor event={event} onRosterChange={onRosterChange} />
             </div>

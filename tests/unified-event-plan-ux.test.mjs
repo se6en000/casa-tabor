@@ -8,6 +8,7 @@ const placeEditor = readFileSync(resolve('src/components/calendar/InlinePlaceEdi
 const smartPlace = readFileSync(resolve('src/components/calendar/SmartPlaceInput.tsx'), 'utf8')
 const passengerChips = readFileSync(resolve('src/components/calendar/PassengerChipSelector.tsx'), 'utf8')
 const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
+const categoryPicker = detail.slice(detail.indexOf('function CategoryPicker'), detail.indexOf('/* ── Header'))
 const eventEdit = readFileSync(resolve('src/components/calendar/EventEditSheet.tsx'), 'utf8')
 const eventQuery = readFileSync(resolve('src/hooks/useCalendarEvents.ts'), 'utf8')
 const enrichFunction = readFileSync(resolve('supabase/functions/enrich-event/index.ts'), 'utf8')
@@ -76,10 +77,28 @@ test('event detail header uses editorial navy crown with compact avatars', () =>
   assert.match(detail, /event\.location_name \|\| event\.address \|\| 'Location not set'/)
   // attendee editing is now intentional (toggle) instead of always-on divider row
   assert.match(detail, /Edit attendees/)
-  assert.match(detail, /rosterOpen \? 'Done editing' : 'Edit attendees'/)
-  assert.match(detail, /showAttendees && rosterOpen[\s\S]{0,300}MemberEditor/)
+  assert.match(detail, /rosterOpen \? 'Done editing' : editPeopleLabel/)
+  assert.match(detail, /hasPeople && rosterOpen[\s\S]{0,300}MemberEditor/)
   // close button remains in the top utility rail
   assert.match(detail, /aria-label="Close event details"/)
+})
+
+test('reminder details identify their type and allow assigned people editing', () => {
+  assert.match(detail, /event\.event_type === 'reminder' \? 'Reminder' : 'Event'/)
+  assert.match(detail, /<Bell size=\{12\} aria-hidden="true" \/>[\s\S]{0,80}Reminder/)
+  assert.match(detail, /const hasPeople = attendeeCount > 0/)
+  assert.match(detail, /reminder \? `\$\{attendeeCount\} assigned` : `\$\{attendeeCount\} attending`/)
+  assert.match(detail, /reminder \? 'Edit people' : 'Edit attendees'/)
+  assert.match(detail, /reminder \? 'Assigned people' : 'Attendees'/)
+  assert.match(detail, /hasPeople && rosterOpen[\s\S]{0,300}<MemberEditor/)
+  assert.doesNotMatch(detail, /const showAttendees = !reminder/)
+})
+
+test('category popover paints above the later people utility row', () => {
+  assert.match(detail, /Meta line: category \+ date \+ duration[\s\S]{0,120}<div className="relative z-10/)
+  assert.match(detail, /\{\(hasPeople \|\| \(!reminder && planKind === 'travel'\)\) && \([\s\S]{0,100}<div className="relative mt-3/)
+  assert.doesNotMatch(detail, /<div className="relative z-10 mt-3 flex items-center gap-2">/)
+  assert.doesNotMatch(categoryPicker, /initial=\{\{ opacity:/)
 })
 
 test('manual category changes persist, stay locked, and surface save failures', () => {
