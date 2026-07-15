@@ -133,6 +133,7 @@ test('natural activity scheduling maps to event creation', () => {
     'Schedule swim practice Friday at 4 PM.',
     'Schedule a swim practice Friday at 4 PM.',
     'Schedule tutoring next Saturday at 8 AM.',
+    'Create a Myrtle Beach family trip for me and Giselle from August 2 thru August 6.',
   ]) {
     assert.equal(parseCalendarLanguage(text)?.intent, 'event.create', text)
   }

@@ -307,27 +307,28 @@ Deno.serve(async (req) => {
     calendarFrame.intent !== 'event.create' &&
     !calendarFrame.requiresActiveEvent
   )
-  const intentRouting = explicitReminderRead
-    ? { profile: 'event', forceEventSearch: true }
+  const intentRoutingDecision = explicitReminderRead
+    ? { route: { profile: 'event', forceEventSearch: true }, source: 'explicit_reminder' }
     : incomingConversationState?.activeEntityType === 'calendar_clarification'
-    ? { profile: 'event', forceEventSearch: false }
+    ? { route: { profile: 'event', forceEventSearch: false }, source: 'calendar_clarification' }
     : incomingConversationState?.activeEntityType === 'grocery_clarification'
-    ? { profile: 'grocery', forceEventSearch: false }
+    ? { route: { profile: 'grocery', forceEventSearch: false }, source: 'grocery_clarification' }
     : calendarMutationDisambiguationFollowUp
-    ? { profile: 'event', forceEventSearch: false }
+    ? { route: { profile: 'event', forceEventSearch: false }, source: 'calendar_disambiguation' }
     : authoritativeCookingContext
-    ? { profile: 'recipe', forceEventSearch: false }
+    ? { route: { profile: 'recipe', forceEventSearch: false }, source: 'cooking_semantic' }
     : authoritativeGroceryContext
-    ? { profile: 'grocery', forceEventSearch: false }
+    ? { route: { profile: 'grocery', forceEventSearch: false }, source: 'grocery_semantic' }
     : calendarFrame
-    ? { profile: 'event', forceEventSearch: calendarFrameNeedsSearch }
+    ? { route: { profile: 'event', forceEventSearch: calendarFrameNeedsSearch }, source: 'calendar_semantic' }
     : cookingSurfaceContext
-    ? { profile: 'recipe', forceEventSearch: false }
+    ? { route: { profile: 'recipe', forceEventSearch: false }, source: 'cooking_surface' }
     : groceryFrame
-      ? { profile: 'grocery', forceEventSearch: false }
+      ? { route: { profile: 'grocery', forceEventSearch: false }, source: 'grocery_semantic' }
       : cookingFrame
-        ? { profile: 'recipe', forceEventSearch: false }
-        : classifiedIntentRouting
+        ? { route: { profile: 'recipe', forceEventSearch: false }, source: 'cooking_semantic' }
+        : { route: classifiedIntentRouting, source: 'lexical_fallback' }
+  const intentRouting = intentRoutingDecision.route
   const userRequestedWriteIntent = /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push|book|schedule|plan)\b/i
     .test(latestUserText ?? '') && (!authoritativeCookingContext || cookingMutationIntent)
   appendServerTrace('server_ai_assistant_start', `messages=${Array.isArray(messages) ? messages.length : 0}`, {
@@ -338,6 +339,7 @@ Deno.serve(async (req) => {
     client_build: clientBuild,
     client_trace_source: clientTraceSource,
     intent_profile: intentRouting.profile,
+    intent_routing_source: intentRoutingDecision.source,
     force_event_search: intentRouting.forceEventSearch,
     active_entity_type: incomingConversationState?.activeEntityType ?? null,
     active_event_id: incomingConversationState?.activeEventId ?? null,

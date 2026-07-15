@@ -1,11 +1,7 @@
-import { parseCookingLanguage } from './assistant-cooking-language.mjs'
-
 const EVENT_TERMS = /\b(calendar|event|events|appointment|appointments|appt|apt|reminder|reminders|schedule|scheduled|therapy|practice|birthday|party|trip|vacation|double[- ]?book|conflict|busy|free)\b/i
-const EVENT_TIME_QUERY = /\b(what(?:'s| is| do we have| have we got)?|anything|who)\b.*\b(today|tomorrow|tonight|week|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next)\b/i
-const EVENT_CREATE = /\b(create|add|book|set up|plan|schedule)\b.*\b(event|appointment|appt|apt|reminder|calendar|trip|vacation|meeting)\b|\b(?:schedule|book|plan)\s+(?:an?\s+)?(?:event|appointment|appt|apt|reminder|meeting|trip|vacation)\b/i
-const EVENT_MUTATION = /\b(move|resched(?:ule)?|change|update|edit|delete|remove|cancel|shift|push)\b/i
-const EVENT_MUTATION_CONTEXT = /\b(today|tomorrow|tonight|week|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next|january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec|am|pm|appointment|event|calendar|trip|vacation)\b/i
 const GENERIC_ACTION = /\b(add|create|save|store|check|clear|delete|remove|update|change|move|send|book|schedule)\b/i
+const AMBIGUOUS_MUTATION = /\b(delete|remove|update|change|move)\b/i
+const ADDITIVE_ACTION = /\b(add|create|book|schedule)\b/i
 
 export function classifyAssistantIntent(text, options = {}) {
   const input = String(text ?? '').trim()
@@ -18,14 +14,12 @@ export function classifyAssistantIntent(text, options = {}) {
     /\b(it|that|this|one|party|location|address|venue|calendar|time|when|where|who|attend|bring|prep|prepare|details?|drive|travel|traffic|route|eta|leave|get there|how long)\b/i.test(input) ||
     /^(?:yes|yeah|yep|correct|right|do it|update it|change it)\b/i.test(input)
   ))
-  const mutationLooksEventLike = EVENT_MUTATION.test(input) && EVENT_MUTATION_CONTEXT.test(input)
-  const hasEventIntent = focusedEvent || eventFollowUp || mutationLooksEventLike || EVENT_TERMS.test(input) || EVENT_TIME_QUERY.test(input)
+  const hasEventIntent = focusedEvent || eventFollowUp || EVENT_TERMS.test(input)
   const hasWeatherIntent = /\b(weather|forecast|temperature|rain|storm|umbrella|uv|heat index|beach day|kayak)\b/i.test(input)
   const hasTravelIntent = /\b(traffic|commute|drive time|travel time|leave by|when should (?:i|we) leave|eta|route)\b/i.test(input)
   const groceryFollowUp = activeGroceryItem && /^(?:make|change|update|set)\s+(?:that|it)\b/i.test(input)
   const hasGroceryIntent = groceryFollowUp || /\b(grocer(?:y|ies)|shopping list|buy|bought|picked up|pantry|restock|food shop|check off)\b/i.test(input)
   const hasRecipeIntent = assistantMode === 'chef' ||
-    Boolean(parseCookingLanguage(input, { assistantMode })) ||
     /\b(recipe|cook|meal|dinner|lunch|breakfast|ingredient|servings?)\b/i.test(input)
   const hasPlaceIntent = /\b(address|phone number|where is|find (?:a|an|the)?\s*(?:restaurant|store|business|place)|nearby)\b/i.test(input)
   const hasWebIntent = /\b(latest|news|score|stock price|current price|recent review|look it up|search the web)\b/i.test(input)
@@ -39,16 +33,15 @@ export function classifyAssistantIntent(text, options = {}) {
     hasWebIntent,
   ].filter(Boolean).length
 
-  if (hasRecipeIntent && EVENT_MUTATION.test(input)) {
+  if (hasRecipeIntent && AMBIGUOUS_MUTATION.test(input)) {
     return { profile: 'full', forceEventSearch: false }
   }
   if (hasEventIntent) {
     const hasAuthoritativeEvent = focusedEvent || eventFollowUp
-    const createIntent = !hasAuthoritativeEvent && EVENT_CREATE.test(input) && !EVENT_MUTATION.test(input)
-    if (matchedDomains > 1 && !hasAuthoritativeEvent && !createIntent) {
+    if (matchedDomains > 1 && !hasAuthoritativeEvent && !ADDITIVE_ACTION.test(input)) {
       return { profile: 'full', forceEventSearch: false }
     }
-    return { profile: 'event', forceEventSearch: !hasAuthoritativeEvent && !createIntent }
+    return { profile: 'event', forceEventSearch: !hasAuthoritativeEvent }
   }
   if (matchedDomains > 1) return { profile: 'full', forceEventSearch: false }
   if (hasWeatherIntent) return { profile: 'weather', forceEventSearch: false }

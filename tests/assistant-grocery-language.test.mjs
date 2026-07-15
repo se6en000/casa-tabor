@@ -61,6 +61,13 @@ test('grocery parser handles reads, multi-item adds, and bounded follow-ups', ()
   )
 })
 
+test('Oxford-comma grocery adds do not retain the final conjunction', () => {
+  assert.deepEqual(
+    parseGroceryLanguage('Add pears, pita chips, and ricotta to the grocery list.')?.slots.items,
+    [{ name: 'pears' }, { name: 'pita chips' }, { name: 'ricotta' }],
+  )
+})
+
 test('grocery semantic reads use authoritative active rows', () => {
   const list = resolveGrocerySemantic(parseGroceryLanguage('Read my shopping list'), items)
   assert.match(list.text, /Whole Milk/)

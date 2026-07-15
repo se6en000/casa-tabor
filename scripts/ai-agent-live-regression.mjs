@@ -635,7 +635,7 @@ async function run() {
 
     const groceryAdd = await callAssistant({
     key: '07-grocery-add',
-    text: 'Add pears, pita chips, and ricotta to the grocery list.',
+    text: "We're basically out of pears, pita chips, and ricotta—throw those on the list.",
     family,
     page: 'grocery',
   })
@@ -650,7 +650,11 @@ async function run() {
     family,
     page: 'grocery',
   })
-  expect(oatRead.response.semantic_intent === 'agent.read', 'Oat milk lookup did not use agent.read')
+  expect(
+    oatRead.response.semantic_intent === 'agent.read' ||
+      oatRead.response.authoritative_provenance?.semantic_intent === 'grocery.quantity_read',
+    'Oat milk lookup did not use an authoritative read',
+  )
   expect(oatRead.response.conversation_state?.activeGroceryItemId === oatMilk.id, 'Oat milk lookup did not establish the exact item')
     const oatUpdate = await callAssistant({
     key: '09-oat-quantity',
@@ -674,7 +678,11 @@ async function run() {
     family,
     page: 'grocery',
   })
-  expect(eggRead.response.semantic_intent === 'agent.read', 'Egg lookup did not use agent.read')
+  expect(
+    eggRead.response.semantic_intent === 'agent.read' ||
+      eggRead.response.authoritative_provenance?.semantic_intent === 'grocery.contains',
+    'Egg lookup did not use an authoritative read',
+  )
   expect(eggRead.response.conversation_state?.activeGroceryItemId === quailEggs.id, 'Egg lookup did not establish the exact item')
     const eggUpdate = await callAssistant({
     key: '11-egg-check',
@@ -699,7 +707,10 @@ async function run() {
       groceryRemove.response.tool === 'remove_grocery_item',
     'Exact grocery removal did not produce a confirmation proposal',
   )
-  expect(groceryRemove.response.args.id === quailEggs.id, 'Exact grocery removal targeted the wrong item')
+  expect(
+    (groceryRemove.response.args.id ?? groceryRemove.response.args.item_id) === quailEggs.id,
+    'Exact grocery removal targeted the wrong item',
+  )
   const proposedRemoveRows = await fetchJson(
     `/rest/v1/grocery_items?select=id&id=eq.${quailEggs.id}&deleted_at=is.null`,
     { headers },

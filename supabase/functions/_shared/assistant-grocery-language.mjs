@@ -77,6 +77,7 @@ function normalize(value) {
 
 function cleanItem(value) {
   return String(value ?? '')
+    .replace(/^(?:and|plus)\s+/i, '')
     .replace(/^(?:some|the|a|an)\s+/i, '')
     .replace(/\s+(?:to|on|from|off)\s+(?:my|the|our)?\s*(?:grocery|shopping)?\s*list$/i, '')
     .replace(/\s+/g, ' ')

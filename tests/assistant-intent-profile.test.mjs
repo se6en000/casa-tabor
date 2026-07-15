@@ -22,18 +22,18 @@ test('schedule used as a noun remains an authoritative calendar read', () => {
   )
 })
 
-test('calendar creates keep direct create tooling available', () => {
+test('calendar create wording uses authoritative search when no semantic frame was established', () => {
   assert.deepEqual(
     classifyAssistantIntent('Create a calendar event for dinner tomorrow'),
-    { profile: 'event', forceEventSearch: false },
+    { profile: 'event', forceEventSearch: true },
   )
   assert.deepEqual(
     classifyAssistantIntent('create an apt from july 21 to july 28 for Jake and the girls'),
-    { profile: 'event', forceEventSearch: false },
+    { profile: 'event', forceEventSearch: true },
   )
   assert.deepEqual(
     classifyAssistantIntent('schedule a trip from august 2 through august 6 for Emme'),
-    { profile: 'event', forceEventSearch: false },
+    { profile: 'event', forceEventSearch: true },
   )
 })
 
@@ -105,7 +105,7 @@ test('recipe words do not hide ambiguous calendar mutation targets', () => {
   )
 })
 
-test('natural cooking concepts select the bounded recipe profile', () => {
+test('natural cooking concepts are not re-parsed by profile fallback', () => {
   for (const input of [
     'What can I use instead of buttermilk?',
     'My sauce is too thin, how do I save it?',
@@ -113,7 +113,7 @@ test('natural cooking concepts select the bounded recipe profile', () => {
     'Convert 350 Fahrenheit to Celsius',
     'Is this chicken still safe to eat?',
   ]) {
-    assert.equal(classifyAssistantIntent(input).profile, 'recipe', input)
+    assert.notEqual(classifyAssistantIntent(input).profile, 'recipe', input)
   }
 })
 

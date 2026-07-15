@@ -170,7 +170,7 @@ test('cooking authority outranks overlapping grocery parsing only in cooking con
   )
   assert.match(source, /const recipeToolNames = cookingToolNames\(cookingFrame\)/)
   assert.match(source, /recipe_ingredients\(name, raw_text, quantity, unit, optional, sort_order\)/)
-  assert.match(source, /: cookingSurfaceContext\s+\? \{ profile: 'recipe'/)
+  assert.match(source, /: cookingSurfaceContext\s+\? \{ route: \{ profile: 'recipe'/)
   assert.doesNotMatch(
     source,
     /\['grocery', 'recipe', 'full'\]\.includes\(intentRouting\.profile\)/,

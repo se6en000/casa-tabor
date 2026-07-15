@@ -264,6 +264,11 @@ export function parseCalendarLanguage(text, options = {}) {
   const activeEvent = options.activeEntityType === 'event' || options.focusedEvent === true
   const scope = temporalScope(input)
   const naturalScheduleCreate = /^schedule\s+.+\b(?:today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b.*\b(?:around|at)?\s*(?:\d{1,2}(?::\d{2})?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?:\s*(?:am|pm))?\b/.test(input)
+  const scopedNamedCreate = Boolean(
+    scope &&
+    /\b(add|create|book|schedule)\b/.test(input) &&
+    /\b(event|appointment|meeting|reminder|practice|party|dinner|trip|vacation)\b/.test(input)
+  )
   const attendeeUpdate = /\badd\s+[\w'-]+(?:\s+too|\s+to\s+(?:the\s+)?(?:calendar\s+)?(?:event|appointment|meeting|dinner|party|practice))\b/.test(input)
   const mutationLanguage = /\b(add|create|book|move|reschedule|shift|push|change|update|edit|delete|remove|cancel)\b/.test(input) ||
     /\bschedule\s+(?:an?\s+)?(?:event|appointment|meeting|reminder)\b/.test(input) ||
@@ -272,7 +277,7 @@ export function parseCalendarLanguage(text, options = {}) {
     scope && /\b(move|reschedule|shift|push)\b/.test(input)
   )
 
-  if (mutationLanguage && (activeEvent || naturalScheduleCreate || namedTemporalMove || CALENDAR_NOUNS.test(input))) {
+  if (mutationLanguage && (activeEvent || naturalScheduleCreate || scopedNamedCreate || namedTemporalMove || CALENDAR_NOUNS.test(input))) {
     if (/\b(delete|remove|cancel)\b/.test(input)) return frame('event.delete', 0.98, { temporalScope: scope })
     if (/\b(move|reschedule|shift|push)\b/.test(input)) {
       return frame('event.move', 0.98, {
