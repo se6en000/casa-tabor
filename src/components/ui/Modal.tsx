@@ -21,8 +21,11 @@ export interface ModalProps {
   closeOnBackdrop?: boolean
   /** Pressing Escape calls onClose. Default true. */
   closeOnEscape?: boolean
+  /** Disables the built-in close action while a blocking operation is running. */
+  closeDisabled?: boolean
   className?: string
   panelClassName?: string
+  contentClassName?: string
 }
 
 /**
@@ -40,8 +43,10 @@ export function Modal({
   showHeader = true,
   closeOnBackdrop = true,
   closeOnEscape = true,
+  closeDisabled = false,
   className,
   panelClassName,
+  contentClassName,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
@@ -74,19 +79,20 @@ export function Modal({
             className={cn(modalPanelClassName({ size }), panelClassName)}
           >
             {showHeader && (
-              <div className="flex items-start justify-between gap-3 p-6 pb-3">
+              <div className="flex shrink-0 items-start justify-between gap-3 p-6 pb-3">
                 <h3 id={titleId} className="font-display text-display-sm text-content-heading leading-tight">{title}</h3>
                 <IconButton
                   icon={<X size={18} />}
                   aria-label="Close"
                   size="sm"
                   variant="ghost"
+                  disabled={closeDisabled}
                   onClick={onClose}
                   className="-mr-2 -mt-2"
                 />
               </div>
             )}
-            <div className={showHeader ? 'px-6 pb-6' : 'p-6'}>{children}</div>
+            <div className={cn(showHeader ? 'px-6 pb-6' : 'p-6', contentClassName)}>{children}</div>
           </motion.div>
         </div>
       )}

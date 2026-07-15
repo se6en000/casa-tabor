@@ -957,7 +957,8 @@ function PanelHeader({
       )}
       <RecurrenceScopeDialog
         open={scopeOpen}
-        title="Change recurring event location"
+        operation="location"
+        selectedStart={event.start_time}
         onClose={() => {
           setScopeOpen(false)
           setPendingPlace(null)

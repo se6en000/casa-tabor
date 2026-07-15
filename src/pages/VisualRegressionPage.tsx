@@ -31,6 +31,7 @@ import {
   Switch,
   Text,
 } from '../components/ui'
+import RecurrenceScopeDialog from '../components/calendar/RecurrenceScopeDialog'
 
 const CALENDAR_OPTIONS = [
   { value: 'day', label: 'Day' },
@@ -253,8 +254,13 @@ function FeedbackFixture() {
 }
 
 export default function VisualRegressionPage() {
+  const visualQuery = new URLSearchParams(window.location.search)
   const [modalOpen, setModalOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [recurrenceScopeOpen, setRecurrenceScopeOpen] = useState(
+    () => visualQuery.has('recurrence-scope'),
+  )
+  const recurrenceOperation = visualQuery.get('recurrence-operation') === 'delete' ? 'delete' : 'update'
 
   return (
     <main data-testid="visual-regression-fixture" className="min-h-screen bg-surface-page text-casa-text">
@@ -301,6 +307,19 @@ export default function VisualRegressionPage() {
         <Text role="body-sm">Review the task details without losing your place.</Text>
         <Button className="mt-4" variant="secondary" onClick={() => setSheetOpen(false)}>Done</Button>
       </Sheet>
+      <RecurrenceScopeDialog
+        open={recurrenceScopeOpen}
+        operation={recurrenceOperation}
+        selectedStart="2026-07-24T16:00:00-04:00"
+        impacts={{
+          this: { affectedCount: 1 },
+          future: { affectedCount: 7, preservedExceptionCount: 2 },
+          all: { affectedCount: 12, preservedExceptionCount: 3 },
+        }}
+        googleDestination="Jacob’s Google Calendar"
+        onClose={() => setRecurrenceScopeOpen(false)}
+        onSelect={() => setRecurrenceScopeOpen(false)}
+      />
     </main>
   )
 }

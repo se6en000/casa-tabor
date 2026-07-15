@@ -12,6 +12,7 @@ const addressReview = readFileSync(resolve('src/components/calendar/AddressRevie
 const eventLocation = readFileSync(resolve('src/lib/eventLocation.ts'), 'utf8')
 const transportationLib = readFileSync(resolve('src/lib/eventTransportation.ts'), 'utf8')
 const recurrenceScope = readFileSync(resolve('src/components/calendar/RecurrenceScopeDialog.tsx'), 'utf8')
+const recurrenceScopePresentation = readFileSync(resolve('src/lib/recurrenceScopePresentation.ts'), 'utf8')
 const categoryPicker = detail.slice(detail.indexOf('function CategoryPicker'), detail.indexOf('/* ── Header'))
 const eventEdit = readFileSync(resolve('src/components/calendar/EventEditSheet.tsx'), 'utf8')
 const eventQuery = readFileSync(resolve('src/hooks/useCalendarEvents.ts'), 'utf8')
@@ -226,9 +227,10 @@ test('trusted selections preserve provenance and coordinates while typing clears
 
 test('recurring quick address saves ask scope and target the selected range', () => {
   assert.match(detail, /<RecurrenceScopeDialog/)
-  assert.match(recurrenceScope, /This event/)
-  assert.match(recurrenceScope, /This and following events/)
-  assert.match(recurrenceScope, /All events/)
+  assert.match(recurrenceScope, /<Radio/)
+  assert.match(recurrenceScopePresentation, /Only this event/)
+  assert.match(recurrenceScopePresentation, /This and following events/)
+  assert.match(recurrenceScopePresentation, /Entire series/)
   assert.match(eventLocation, /scope === 'this'/)
   assert.match(eventLocation, /scope === 'all'/)
   assert.match(eventLocation, /start_time\.gte\.\$\{event\.start_time\}/)

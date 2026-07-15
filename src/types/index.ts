@@ -68,6 +68,12 @@ export interface CalendarEvent {
   is_enriched: boolean
   rrule: string | null
   recurrence_master_id: string | null
+  record_kind?: 'single' | 'series_template' | 'occurrence'
+  series_id?: string | null
+  occurrence_key?: string | null
+  is_exception?: boolean
+  exception_paths?: string[]
+  series_revision_applied?: number | null
   created_at: string
   updated_at: string
   // Trip leg fields (new leg-based model)

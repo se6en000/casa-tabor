@@ -1347,6 +1347,9 @@ export default function EventEditSheet({ event, open, onClose }: Props) {
 
           <RecurrenceScopeDialog
             open={showScopeModal}
+            operation="update"
+            selectedStart={event.start_time}
+            loading={isSaving}
             onClose={() => { setShowScopeModal(false); setPendingSave(false) }}
             onSelect={handleScopeChoice}
           />
