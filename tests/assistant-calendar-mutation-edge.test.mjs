@@ -43,6 +43,23 @@ test('active event moves surface conflicts and recurring edit limits', () => {
   assert.match(oneOccurrence.text, /event editor/)
 })
 
+test('active event pronoun deletes preserve the authoritative ID', () => {
+  const deletion = resolveActiveCalendarMutation('Delete that one.', event, [event], { utcOffset: '-04:00' })
+  assert.equal(deletion.tool, 'delete_event')
+  assert.deepEqual(deletion.args, {
+    id: 'dentist',
+    title: 'Dentist appointment',
+  })
+
+  const recurring = resolveActiveCalendarMutation(
+    'Remove it.',
+    { ...event, rrule: 'FREQ=WEEKLY' },
+    [event],
+    { utcOffset: '-04:00' },
+  )
+  assert.match(recurring.text, /recurring event/)
+})
+
 test('ambiguous times and singular bulk deletes clarify safely', () => {
   assert.equal(calendarMutationClarification('Schedule tutoring next sat at ate.'), 'Did you mean 8 AM or 8 PM?')
   assert.match(

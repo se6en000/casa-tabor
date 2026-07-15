@@ -28,6 +28,15 @@ test('cooking language contract publishes stable concepts and generated coverage
   }
 })
 
+test('chef mode recognizes a singular dish-planning request as a recipe', () => {
+  const frame = parseCookingLanguage(
+    'Plan a salmon rice bowl for four. I already have salmon and rice.',
+    { assistantMode: 'chef' },
+  )
+  assert.equal(frame?.intent, 'cooking.recipe')
+  assert.equal(frame?.slots.recipe, 'salmon rice bowl')
+})
+
 test('cooking parser extracts useful open-class slots', () => {
   assert.deepEqual(parseCookingLanguage('How do I make chicken tacos?')?.slots, { recipe: 'chicken tacos' })
   assert.deepEqual(parseCookingLanguage('What can I make with salmon and rice?')?.slots, { ingredients: 'salmon and rice' })
@@ -60,6 +69,22 @@ test('explicit cooking grocery handoff is narrow and confirmation-safe', () => {
   assert.deepEqual(cookingToolNames(frame), ['add_grocery_items'])
   assert.deepEqual(cookingToolNames(parseCookingLanguage('What ingredients am I missing?')), [])
   assert.match(cookingFrameGuidance(frame), /exactly once/)
+  assert.equal(
+    parseCookingLanguage(
+      'Add only the missing broccoli and soy sauce to my grocery list. Do not add salmon or rice.',
+      { assistantMode: 'chef' },
+    )?.intent,
+    'cooking.add_to_grocery',
+  )
+})
+
+test('recipe generation guidance is explicitly read-only Markdown', () => {
+  const guidance = cookingFrameGuidance(
+    parseCookingLanguage('How do I make salmon bowls?', { assistantMode: 'chef' }),
+  )
+  assert.match(guidance, /readable Markdown/)
+  assert.match(guidance, /do not call create_recipe/)
+  assert.match(guidance, /do not .*use code fences/i)
 })
 
 test('cooking policy makes household allergies authoritative', () => {
@@ -122,6 +147,17 @@ test('cooking authority outranks overlapping grocery parsing only in cooking con
   )
   assert.match(source, /const recipeToolNames = cookingToolNames\(cookingFrame\)/)
   assert.match(source, /recipe_ingredients\(name, raw_text, quantity, unit, optional, sort_order\)/)
+  assert.match(source, /: cookingSurfaceContext\s+\? \{ profile: 'recipe'/)
+  assert.doesNotMatch(
+    source,
+    /\['grocery', 'recipe', 'full'\]\.includes\(intentRouting\.profile\)/,
+  )
+  assert.match(source, /intentRouting\.profile === 'recipe' && referencesSavedRecipe/)
+  assert.match(source, /const includeFoodProfileContext = needsFoodProfileData/)
+  assert.match(source, /const includeRecipeContext = needsRecipeData/)
+  assert.match(source, /!authoritativeCookingContext \|\| cookingMutationIntent/)
+  assert.match(source, /intentRouting\.profile === 'recipe'\s+\? RECIPE_PRIMARY_HARD_TIMEOUT_MS/)
+  assert.match(source, /'create_recipe', 'add_grocery_items'\]\.includes\(tool\.name\)/)
 })
 
 test('combined grocery list requests remain read-only cooking follow-ups', () => {

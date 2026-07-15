@@ -1,7 +1,11 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 
-import { eventConversationState, groceryConversationState } from '../supabase/functions/_shared/assistant-conversation-grounding.mjs'
+import {
+  eventConversationState,
+  groceryClarificationConversationState,
+  groceryConversationState,
+} from '../supabase/functions/_shared/assistant-conversation-grounding.mjs'
 import { formatTextForMarkdown } from '../src/lib/assistantMarkdown.mjs'
 
 const env = Object.fromEntries(
@@ -243,9 +247,63 @@ async function seedGroceryFixtures(listId, created = []) {
   return created
 }
 
+async function seedRecipeFixture(created = []) {
+  const recipeUrl = new URL('/rest/v1/recipes', SUPABASE_URL)
+  const recipePayload = [{
+    name: `[QA] Cedar Salmon Bowl ${runId}`,
+    source_type: 'manual',
+    source_excerpt: runId,
+    servings: '4',
+    cook_time: '30 minutes',
+    last_used_at: new Date().toISOString(),
+  }]
+  const insertedRecipes = await fetchJson(recipeUrl, {
+    method: 'POST',
+    headers: { ...headers, prefer: 'return=representation' },
+    body: JSON.stringify(recipePayload),
+  })
+  const recipe = insertedRecipes?.[0]
+  if (!recipe?.id) throw new Error('Failed to create isolated QA recipe')
+  created.push(recipe)
+
+  const ingredientUrl = new URL('/rest/v1/recipe_ingredients', SUPABASE_URL)
+  await fetchJson(ingredientUrl, {
+    method: 'POST',
+    headers: { ...headers, prefer: 'return=representation' },
+    body: JSON.stringify([
+      { recipe_id: recipe.id, raw_text: '1.5 pounds salmon', name: 'salmon', quantity: '1.5', unit: 'pounds', sort_order: 0 },
+      { recipe_id: recipe.id, raw_text: '2 teaspoons sumac', name: 'sumac', quantity: '2', unit: 'teaspoons', sort_order: 1 },
+      { recipe_id: recipe.id, raw_text: '3 tablespoons tahini', name: 'tahini', quantity: '3', unit: 'tablespoons', sort_order: 2 },
+    ]),
+  })
+
+  const stepUrl = new URL('/rest/v1/recipe_steps', SUPABASE_URL)
+  await fetchJson(stepUrl, {
+    method: 'POST',
+    headers: { ...headers, prefer: 'return=representation' },
+    body: JSON.stringify([
+      { recipe_id: recipe.id, step_number: 1, instruction: 'Season the salmon with sumac.' },
+      { recipe_id: recipe.id, step_number: 2, instruction: 'Roast the salmon until safely cooked.' },
+      { recipe_id: recipe.id, step_number: 3, instruction: 'Whisk the tahini sauce and rest the salmon.' },
+    ]),
+  })
+  return recipe
+}
+
 async function cleanupEvents(ids) {
   if (!ids.length) return 0
   const url = new URL('/rest/v1/events', SUPABASE_URL)
+  url.searchParams.set('id', `in.(${ids.join(',')})`)
+  await fetchJson(url, {
+    method: 'DELETE',
+    headers: { ...headers, prefer: 'return=minimal' },
+  })
+  return ids.length
+}
+
+async function cleanupRecipes(ids) {
+  if (!ids.length) return 0
+  const url = new URL('/rest/v1/recipes', SUPABASE_URL)
   url.searchParams.set('id', `in.(${ids.join(',')})`)
   await fetchJson(url, {
     method: 'DELETE',
@@ -287,7 +345,16 @@ async function countRowsByIds(table, ids, extraParams = {}) {
   return Array.isArray(rows) ? rows.length : 0
 }
 
-function scenarioGroups(fixtures, grocerySeeds, familyNames) {
+async function countRowsByColumn(table, column, values) {
+  if (!values.length) return 0
+  const url = new URL(`/rest/v1/${table}`, SUPABASE_URL)
+  url.searchParams.set('select', 'id')
+  url.searchParams.set(column, `in.(${values.join(',')})`)
+  const rows = await fetchJson(url, { headers })
+  return Array.isArray(rows) ? rows.length : 0
+}
+
+function scenarioGroups(fixtures, grocerySeeds, familyNames, recipeFixture) {
   const [firstName = 'Alex', secondName = firstName] = familyNames
   const eventBySuffix = (title) => fixtures.find((event) => event.title.endsWith(title))
   const groceries = Object.fromEntries(grocerySeeds.map((item) => [item.name, item]))
@@ -380,8 +447,9 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames) {
       key: 'calendar-typos',
       page: 'calendar',
       assistantMode: 'general',
+      conversationState: eventConversationState(eventBySuffix('Birthday dinner'), now),
       steps: [
-        { text: 'can u move the brthday dinner to thursday at 6?', expect: { type: 'write', tool: 'update_event' } },
+        { text: 'can u move the brthday dinner to thursday at 6?', expect: { type: 'writeOrClarify', tool: 'update_event' } },
         { text: 'what time is the piano recital?', expect: { type: 'text' } },
       ],
     },
@@ -449,8 +517,13 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames) {
       key: 'semantic-grocery-list-follow-up',
       page: 'grocery',
       assistantMode: 'general',
+      conversationState: groceryClarificationConversationState(grocerySeeds, now),
       steps: [
-        { text: 'read my grocery list', expect: { type: 'text', semanticIntent: 'grocery.list', maxLlmCalls: 0 } },
+        {
+          text: 'read my grocery list',
+          expect: { type: 'text', semanticIntent: 'grocery.list', maxLlmCalls: 0 },
+          preserveConversationState: true,
+        },
         { text: 'check off the second one', expect: { type: 'write', tool: 'check_grocery_item', maxLlmCalls: 0 } },
       ],
     },
@@ -473,6 +546,68 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames) {
         { text: 'my sauce is too thin and dinner is in twenty minutes, how do I save it?', expect: { type: 'text' } },
         { text: 'what can I use instead of buttermilk?', expect: { type: 'text' } },
         { text: 'how should I store leftover rice safely?', expect: { type: 'text' } },
+      ],
+    },
+    {
+      key: 'cooking-saved-recipe-grounding',
+      page: 'cooking',
+      assistantMode: 'chef',
+      steps: [
+        {
+          text: `For my saved recipe "${recipeFixture.name}", list its ingredients and tell me what happens immediately after roasting the salmon.`,
+          expect: { type: 'text', containsAll: ['sumac', 'tahini', 'whisk'] },
+        },
+      ],
+    },
+    {
+      key: 'cooking-serving-scale',
+      page: 'cooking',
+      assistantMode: 'chef',
+      steps: [
+        {
+          text: 'Use this exact salmon bowl recipe for four: 1.5 pounds salmon, 2 cups dry rice, 4 cups broccoli, and 4 tablespoons sauce.',
+          expect: { type: 'text' },
+        },
+        {
+          text: 'Make that recipe for eight people.',
+          expect: { type: 'text', containsAll: ['3 pounds', '4 cups', '8 cups', '8 tablespoons'] },
+        },
+      ],
+    },
+    {
+      key: 'cooking-grocery-handoff',
+      page: 'cooking',
+      assistantMode: 'chef',
+      steps: [
+        {
+          text: 'For salmon rice bowls, what ingredients am I missing? I already have salmon and rice; I still need broccoli and soy sauce. Do not change my grocery list.',
+          expect: { type: 'text', containsAll: ['broccoli', 'soy sauce'] },
+        },
+        {
+          text: 'Add only those missing ingredients to my grocery list. Do not add salmon or rice.',
+          expect: {
+            type: 'write',
+            tool: 'add_grocery_items',
+            itemNamesAll: ['broccoli', 'soy sauce'],
+            itemNamesNotAny: ['salmon', 'rice'],
+          },
+          deferAction: true,
+        },
+      ],
+    },
+    {
+      key: 'cooking-safety',
+      page: 'cooking',
+      assistantMode: 'chef',
+      steps: [
+        {
+          text: 'Cooked rice sat on the counter overnight. Is it safe to reheat and eat?',
+          expect: { type: 'text', containsAny: ['discard', 'throw it away', 'not safe'] },
+        },
+        {
+          text: 'I have a severe peanut allergy. What can I safely use instead of peanut butter in a sauce?',
+          expect: { type: 'text', containsAny: ['sunflower', 'seed', 'allergy'] },
+        },
       ],
     },
   ]
@@ -711,11 +846,25 @@ function isClarifyingResponse(response) {
   return response?.type === 'text' && /(which one|please tell me more|what should i|could you|i need more detail|which event|which item)/i.test(text)
 }
 
+function itemNameExpectationError(response, expectation) {
+  const itemNames = Array.isArray(response?.args?.items)
+    ? response.args.items.map((item) => String(item?.name ?? '').trim().toLowerCase()).filter(Boolean)
+    : []
+  const missing = (expectation.itemNamesAll ?? [])
+    .filter((term) => !itemNames.some((name) => name.includes(term.toLowerCase())))
+  const unexpected = (expectation.itemNamesNotAny ?? [])
+    .filter((term) => itemNames.some((name) => name.includes(term.toLowerCase())))
+  if (missing.length) return `tool_items_missing:${missing.join('_')}`
+  if (unexpected.length) return `tool_items_unexpected:${unexpected.join('_')}`
+  return null
+}
+
 async function run() {
   const family = await loadFamily()
   const familyNames = family.map((member) => member.name)
   let calendarFixtures = []
   let groceryFixtures = []
+  let recipeFixtures = []
   let qaGroceryListId = null
   const results = []
   const conversationStates = new Map()
@@ -728,11 +877,12 @@ async function run() {
     await seedCalendarFixtures(calendarFixtures)
     qaGroceryListId = await createQaGroceryList()
     await seedGroceryFixtures(qaGroceryListId, groceryFixtures)
+    const recipeFixture = await seedRecipeFixture(recipeFixtures)
     const groups = MODE === 'showcase'
       ? showcaseScenarioGroups()
       : MODE === 'calendar-edge'
         ? calendarEdgeScenarioGroups(calendarFixtures)
-        : scenarioGroups(calendarFixtures, groceryFixtures, familyNames)
+        : scenarioGroups(calendarFixtures, groceryFixtures, familyNames, recipeFixture)
     const flatSteps = groups.flatMap((group) => group.steps.map((step, index) => ({
       ...step,
       groupKey: group.key,
@@ -803,8 +953,10 @@ async function run() {
       output.semantic_intent = response?.authoritative_provenance?.semantic_intent ?? null
       output.llm_calls = response?.telemetry?.llm_calls ?? null
 
-      if (response?.conversation_state) {
+      if (response?.conversation_state && !step.preserveConversationState) {
         conversationStates.set(step.groupKey, response.conversation_state)
+      } else if (step.preserveConversationState && currentState) {
+        conversationStates.set(step.groupKey, currentState)
       }
       if (response?.type === 'text' && output.assistant_text) {
         conversationHistories.set(step.groupKey, [
@@ -812,6 +964,7 @@ async function run() {
           { role: 'assistant', content: output.assistant_text },
         ])
       }
+      const itemNameError = itemNameExpectationError(response, step.expect)
 
       if (step.expect.type === 'clarify') {
         if (!(isClarifyingResponse(response) || (response?.type === 'text' && !response?.tool))) {
@@ -897,6 +1050,9 @@ async function run() {
         } else if (response?.tool !== step.expect.tool) {
           output.ok = false
           output.note = `tool_mismatch:expected_${step.expect.tool}:got_${response?.tool}`
+        } else if (itemNameError) {
+          output.ok = false
+          output.note = itemNameError
         } else if (step.deferAction) {
           pendingActions.set(step.groupKey, { tool: response.tool, args: response.args ?? {} })
           output.action_result = 'deferred'
@@ -956,10 +1112,12 @@ async function run() {
     const eventIds = [...calendarFixtures.map((event) => event.id).filter(Boolean), ...createdEventIds]
     const fixtureGroceryIds = groceryFixtures.map((item) => item.id).filter(Boolean)
     const createdGroceryItemIds = [...createdGroceryIds]
+    const recipeIds = recipeFixtures.map((recipe) => recipe.id).filter(Boolean)
     const cleanup = {
       events_deleted: await cleanupEvents(eventIds),
       grocery_items_deleted: fixtureGroceryIds.length + await cleanupGroceryItems(createdGroceryItemIds),
       grocery_lists_deleted: await cleanupQaGroceryList(qaGroceryListId),
+      recipes_deleted: await cleanupRecipes(recipeIds),
     }
     cleanup.events_remaining = await countRowsByIds('events', eventIds)
     cleanup.fixture_grocery_items_remaining = await countRowsByIds('grocery_items', fixtureGroceryIds)
@@ -967,10 +1125,16 @@ async function run() {
       deleted_at: 'is.null',
     })
     cleanup.qa_grocery_lists_remaining = await countRowsByIds('grocery_lists', qaGroceryListId ? [qaGroceryListId] : [])
+    cleanup.recipes_remaining = await countRowsByIds('recipes', recipeIds)
+    cleanup.recipe_ingredients_remaining = await countRowsByColumn('recipe_ingredients', 'recipe_id', recipeIds)
+    cleanup.recipe_steps_remaining = await countRowsByColumn('recipe_steps', 'recipe_id', recipeIds)
     cleanup.verified = cleanup.events_remaining === 0 &&
       cleanup.fixture_grocery_items_remaining === 0 &&
       cleanup.active_grocery_items_remaining === 0 &&
-      cleanup.qa_grocery_lists_remaining === 0
+      cleanup.qa_grocery_lists_remaining === 0 &&
+      cleanup.recipes_remaining === 0 &&
+      cleanup.recipe_ingredients_remaining === 0 &&
+      cleanup.recipe_steps_remaining === 0
     const totals = {
       total: results.length,
       passed: results.filter((result) => result.ok).length,

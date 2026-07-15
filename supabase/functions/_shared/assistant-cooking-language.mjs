@@ -175,7 +175,10 @@ export function parseCookingLanguage(text, options = {}) {
   if (/\b(?:save|keep|store|add)\b.*\b(?:this|that|the)?\s*recipe\b|\badd this to my recipe library\b/.test(input)) {
     return frame('recipe.save', 0.98)
   }
-  if (/\b(?:add|put)\b.*\b(?:missing ingredients?|everything i need|those ingredients?)\b.*\b(?:grocery|groceries|shopping list)\b/.test(input)) {
+  if (
+    /\b(?:add|put)\b.*\b(?:missing ingredients?|everything i need|those ingredients?)\b.*\b(?:grocery|groceries|shopping list)\b/.test(input) ||
+    (cookingContext && /\b(?:add|put)\b.*\bmissing\b.*\b(?:grocery|groceries|shopping list)\b/.test(input))
+  ) {
     return frame('cooking.add_to_grocery', 0.99, { source: 'conversation_recipe' })
   }
   if (cookingContext && /^(?:make|give|create)(?: me)? (?:one )?(?:combined )?grocery list$/.test(input)) {
@@ -190,6 +193,11 @@ export function parseCookingLanguage(text, options = {}) {
   if (/\b(?:meal plan|plan (?:(?:one|two|three|four|five|six|\d+)\s+)?(?:our|my|the family)?\s*(?:meals|dinners)|weeknight meals)\b/.test(input)) {
     const ingredients = extractAfter(input, /\busing\s+(.+?)(?:\.\s*keep|\s+keep|$)/)
     return frame('cooking.meal_plan', 0.96, ingredients ? { ingredients } : {})
+  }
+  if (cookingContext && /^plan (?:me )?(?:a|an) .+\b(?:bowl|dish|recipe|meal|dinner|lunch|breakfast)\b/.test(input)) {
+    return frame('cooking.recipe', 0.95, {
+      recipe: extractAfter(input, /^plan (?:me )?(?:a|an) (.+?)(?:\s+for\s+(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)(?:\s+people)?(?:\s|$)|$)/),
+    })
   }
   if (/\b(?:dairy free|gluten free|vegetarian|vegan|nut free|low carb|keto)\b/.test(input)) {
     return frame('cooking.dietary', 0.94)
@@ -255,6 +263,9 @@ export function parseCookingLanguage(text, options = {}) {
 }
 
 export function cookingFrameGuidance(frameValue) {
+  if (frameValue?.intent === 'cooking.recipe') {
+    return 'Return the proposed recipe as readable Markdown with ingredients and ordered steps. This is a read-only suggestion: do not call create_recipe, emit JSON or tool syntax, or use code fences. Save only after a separate explicit recipe.save request.'
+  }
   if (frameValue?.intent === 'cooking.add_to_grocery') {
     return 'Use add_grocery_items exactly once with only the explicit missing or selected ingredients from the immediately preceding recipe. Preserve useful quantities and units. Do not add pantry staples unless the user selected them or the household food profile does not identify them as on hand.'
   }

@@ -309,6 +309,14 @@ test('output safety rejects pseudo-tools and unsupported write claims', () => {
     'raw_tool_syntax',
   )
   assert.equal(
+    secureAssistantResult({ type: 'text', text: '```json\n{"name":"create_event","args":{}}\n```' }).safety_rejection,
+    'raw_tool_syntax',
+  )
+  assert.equal(
+    secureAssistantResult({ type: 'text', text: 'Salmon bowl:\n```\nRice, broccoli, and salmon\n```' }).safety_rejection,
+    undefined,
+  )
+  assert.equal(
     secureAssistantResult({ type: 'text', text: "Okay, I'll update the address." }, { userRequestedWrite: true }).safety_rejection,
     'unsupported_write_claim',
   )

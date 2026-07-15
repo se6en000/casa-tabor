@@ -92,9 +92,12 @@ function deleteSelectionMatches(request, events, utcOffset) {
 export function resolveActiveCalendarMutation(text, event, events, options = {}) {
   if (!event?.id) return null
   const input = String(text ?? '').replace(/\s+/g, ' ').trim()
+  const activeDeleteRequest = /^(?:delete|cancel|remove)\s+(?:it|this|that|this one|that one|the one)[.!]?$/i.test(input)
 
   if (event.rrule || event.recurrence_master_id) {
     if (
+      activeDeleteRequest
+      ||
       /\b(?:move|reschedule|shift|change|update|edit)\b/i.test(input)
       || /^(?:just\s+)?(?:that|this|the)\s+one[.!]?$/i.test(input)
     ) {
@@ -102,6 +105,17 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
         text: 'This is a recurring event. AI editing cannot safely choose one occurrence, future events, or the whole series yet. Please use the event editor.',
         event,
       }
+    }
+  }
+
+  if (activeDeleteRequest) {
+    return {
+      tool: 'delete_event',
+      args: {
+        id: event.id,
+        title: event.title,
+      },
+      event,
     }
   }
 

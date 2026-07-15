@@ -182,6 +182,7 @@ Deno.serve(async (req) => {
   const requestStartMs = Date.now()
   const REQUEST_HARD_TIMEOUT_MS = 9000
   const PRIMARY_HARD_TIMEOUT_MS = 6800
+  const RECIPE_PRIMARY_HARD_TIMEOUT_MS = 8200
   const SECONDARY_HARD_TIMEOUT_MS = 5000
   const FALLBACK_HARD_TIMEOUT_MS = 2200
   const STAGE_SLO = {
@@ -268,12 +269,13 @@ Deno.serve(async (req) => {
     assistantMode: context?.assistant_mode,
     activeEntityType: incomingConversationState?.activeEntityType,
   })
+  const cookingSurfaceContext = Boolean(
+    context?.assistant_mode === 'chef' ||
+    context?.page === 'cooking' ||
+    incomingConversationState?.activeEntityType === 'recipe'
+  )
   const authoritativeCookingContext = Boolean(
-    cookingFrame && (
-      context?.assistant_mode === 'chef' ||
-      context?.page === 'cooking' ||
-      incomingConversationState?.activeEntityType === 'recipe'
-    )
+    cookingFrame && cookingSurfaceContext
   )
   const cookingGuidance = cookingFrameGuidance(cookingFrame)
   const requestAmbiguity = classifyAssistantAmbiguity(latestUserText, {
@@ -316,11 +318,16 @@ Deno.serve(async (req) => {
     ? { profile: 'grocery', forceEventSearch: false }
     : calendarFrame
     ? { profile: 'event', forceEventSearch: calendarFrameNeedsSearch }
+    : cookingSurfaceContext
+    ? { profile: 'recipe', forceEventSearch: false }
     : groceryFrame
       ? { profile: 'grocery', forceEventSearch: false }
       : cookingFrame
         ? { profile: 'recipe', forceEventSearch: false }
         : classifiedIntentRouting
+  const cookingMutationIntent = ['recipe.save', 'cooking.add_to_grocery'].includes(cookingFrame?.intent ?? '')
+  const userRequestedWriteIntent = /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push|book|schedule|plan)\b/i
+    .test(latestUserText ?? '') && (!authoritativeCookingContext || cookingMutationIntent)
   appendServerTrace('server_ai_assistant_start', `messages=${Array.isArray(messages) ? messages.length : 0}`, {
     message_count: Array.isArray(messages) ? messages.length : 0,
     has_image: Boolean(image),
@@ -409,9 +416,17 @@ Deno.serve(async (req) => {
   const needsContactData = !requestAmbiguity && ['event', 'full', 'places'].includes(intentRouting.profile)
   const needsGroceryData = !requestAmbiguity && (
     context?.page === 'grocery' ||
-    ['grocery', 'recipe', 'full'].includes(intentRouting.profile)
+    ['grocery', 'full'].includes(intentRouting.profile)
   )
-  const needsRecipeData = !requestAmbiguity && ['recipe', 'full'].includes(intentRouting.profile)
+  const referencesSavedRecipe = Boolean(
+    incomingConversationState?.activeEntityType === 'recipe' ||
+    /\b(?:(?:saved|my)\s+recipes?|recipe library)\b/i.test(latestUserText)
+  )
+  const needsRecipeData = !requestAmbiguity && (
+    intentRouting.profile === 'full' ||
+    (intentRouting.profile === 'recipe' && referencesSavedRecipe)
+  )
+  const needsFoodProfileData = !requestAmbiguity && ['recipe', 'full'].includes(intentRouting.profile)
   const needsAvailabilityData = !requestAmbiguity && ['event', 'full'].includes(intentRouting.profile)
   const skippedRows = Promise.resolve({ data: [], error: null })
   const skippedRow = Promise.resolve({ data: null, error: null })
@@ -474,7 +489,7 @@ Deno.serve(async (req) => {
       .order('created_at', { ascending: false })
       .limit(30)
       : skippedRows,
-    needsRecipeData
+    needsFoodProfileData
       ? sb.from('settings').select('value').eq('key', 'food_profile').maybeSingle().then(r => r).catch(() => ({ data: null, error: null }))
       : skippedRow,
     needsAvailabilityData
@@ -2105,8 +2120,9 @@ Deno.serve(async (req) => {
   const includeEventContext =
     intentRouting.profile === 'full' ||
     (intentRouting.profile === 'event' && !intentRouting.forceEventSearch)
-  const includeGroceryContext = ['full', 'grocery', 'recipe'].includes(intentRouting.profile)
-  const includeRecipeContext = ['full', 'recipe'].includes(intentRouting.profile)
+  const includeGroceryContext = needsGroceryData
+  const includeRecipeContext = needsRecipeData
+  const includeFoodProfileContext = needsFoodProfileData
   const includePlaceContext = ['full', 'event', 'places', 'travel'].includes(intentRouting.profile)
   const includeAvailabilityContext = ['full', 'event'].includes(intentRouting.profile)
 
@@ -2198,7 +2214,7 @@ If that event is unavailable, say so and search again instead of guessing.` : ''
 ${includeEventContext ? `UPCOMING EVENTS SNAPSHOT (next ${PROMPT_EVENT_WINDOW_DAYS} days, capped; use search_events for anything outside snapshot):\n${eventsText}` : ''}
 ${includeGroceryContext ? `\nGROCERY LIST (unchecked items):\n${groceryText}\n${defaultListId ? `Default list ID: ${defaultListId}` : ''}` : ''}
 ${includeRecipeContext ? `\nRECIPE LIBRARY SNAPSHOT (recent):\n${recipesText || 'No recipes saved yet.'}` : ''}
-${includeRecipeContext && foodProfileText ? `\nFOOD PROFILE (household dietary needs & preferences — honor for all meal/grocery/recipe suggestions):\n${foodProfileText}` : ''}
+${includeFoodProfileContext && foodProfileText ? `\nFOOD PROFILE (household dietary needs & preferences — honor for all meal/grocery/recipe suggestions):\n${foodProfileText}` : ''}
 ${cookingFrame ? `\nCOOKING SEMANTIC FRAME (Casa's normalized interpretation; answer the concept, not the wording):\nIntent: ${cookingFrame.intent}\nSlots: ${JSON.stringify(cookingFrame.slots)}${cookingGuidance ? `\nRequired handling: ${cookingGuidance}` : ''}` : ''}
 ${cookingPolicy ? `\n${cookingPolicy}` : ''}
 ${includeAvailabilityContext && availabilityText ? `\nMEMBER AVAILABILITY (recurring rules + upcoming overrides — use to warn about conflicts and pick times people are free):\n${availabilityText}` : ''}
@@ -2206,8 +2222,8 @@ ${includeAvailabilityContext && availabilityText ? `\nMEMBER AVAILABILITY (recur
 INSTRUCTIONS:
 - You are allowed to answer general/random questions directly (facts, explanations, ideas, writing help, etc.) when no Casa data/action is needed.
 - If assistant_mode is "chef", bias responses toward cooking, recipe planning, pantry-aware substitutions, and grocery execution.
-- When the user asks you to save/store/add a recipe to the Recipe Library, call create_recipe with complete structured ingredients and ordered steps.
-- create_recipe is low-risk and should execute immediately once structured details are ready.
+- Call create_recipe only when the COOKING SEMANTIC FRAME is recipe.save; include complete structured ingredients and ordered steps.
+- create_recipe is low-risk and should execute immediately once the explicit recipe.save request has structured details ready.
 - In cooking mode, use add_grocery_items only when the COOKING SEMANTIC FRAME is cooking.add_to_grocery. Never mutate groceries merely because you suggested a recipe or listed missing ingredients.
 - Treat recipe IDs, saved ingredients, saved steps, grocery rows, and the food profile supplied by Casa as authoritative. Conversationally generated recipes are suggestions until explicitly saved.
 - For simple math and calculations (tips, percentages, unit conversions, arithmetic) — answer directly from reasoning. Do NOT call search_web.
@@ -2772,10 +2788,12 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   // Call Gemini with function calling — one primary and at most one synthesis round.
   async function callGeminiWithTools(contents: GeminiContent[]): Promise<{ type: string; [key: string]: unknown }> {
     const llmStartMs = Date.now()
-    const userLikelyRequestedWrite = /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push|book|schedule|plan)\b/i
-      .test(latestUserText ?? '')
+    const userLikelyRequestedWrite = userRequestedWriteIntent
+    const primaryHardTimeoutMs = intentRouting.profile === 'recipe'
+      ? RECIPE_PRIMARY_HARD_TIMEOUT_MS
+      : PRIMARY_HARD_TIMEOUT_MS
     const primaryWriteToolNames = primaryToolDeclarations
-      .filter((tool) => ['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'create_recipe'].includes(tool.name))
+      .filter((tool) => ['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'create_recipe', 'add_grocery_items'].includes(tool.name))
       .map((tool) => tool.name)
     const primaryToolConfig = intentRouting.forceEventSearch
       ? { function_calling_config: { mode: 'ANY', allowed_function_names: ['search_events'] } }
@@ -2785,7 +2803,10 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     const body = {
       system_instruction: { parts: [{ text: systemInstruction }] },
       contents,
-      generation_config: { temperature: 0.4, max_output_tokens: 2048 },
+      generation_config: {
+        temperature: 0.4,
+        max_output_tokens: intentRouting.profile === 'recipe' ? 1024 : 2048,
+      },
       ...(primaryTools.length > 0 ? {
         tools: primaryTools,
         tool_config: primaryToolConfig,
@@ -2805,7 +2826,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       },
     )
 
-    let res = await callModel(body, { stream: wantStream, timeoutMs: PRIMARY_HARD_TIMEOUT_MS })
+    let res = await callModel(body, { stream: wantStream, timeoutMs: primaryHardTimeoutMs })
     let llmPrimaryMs = Date.now() - llmStartMs
     if (shouldRetryTransientLlmStatus(res.status, remainingRequestBudgetMs())) {
       recordLlmCall('llm_primary_transient', llmPrimaryMs, res.status)
@@ -2817,7 +2838,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       })
       await new Promise((resolve) => setTimeout(resolve, 100))
       const retryStartMs = Date.now()
-      res = await callModel(body, { stream: wantStream, timeoutMs: PRIMARY_HARD_TIMEOUT_MS })
+      res = await callModel(body, { stream: wantStream, timeoutMs: primaryHardTimeoutMs })
       llmPrimaryMs = Date.now() - retryStartMs
     }
     console.log(`[ai-assistant][${cid}] stage=llm_primary ms=${llmPrimaryMs} status=${res.status}`)
@@ -3856,7 +3877,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     }
     const rawResult = await callGeminiWithTools(history)
     const result = secureAssistantResult(rawResult, {
-      userRequestedWrite: /\b(move|resched|change|update|edit|delete|remove|cancel|add|create|set|shift|push|book|schedule|plan)\b/i.test(latestUserText ?? ''),
+      userRequestedWrite: userRequestedWriteIntent,
       writeWasVerified: rawResult?.write_verified === true,
     })
     if (result?.safety_rejection) {
