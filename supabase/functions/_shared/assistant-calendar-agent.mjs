@@ -275,8 +275,12 @@ export function shouldPreferActiveCalendarEntity(text, activeEntity, entities = 
   const normalizedText = normalizeSearchText(text)
   return !entities.some((entity) => {
     if (entity?.type !== 'event' || entity.id === activeEntity.id) return false
-    const title = normalizeSearchText(String(entity.title ?? '').replace(/^[^|]{1,40}\|\s*/, ''))
-    return title.length >= 4 && normalizedText.includes(title)
+    const literalTitle = String(entity.title ?? '')
+    const titleCandidates = [
+      literalTitle,
+      ...(literalTitle.includes(' | ') ? [literalTitle.slice(literalTitle.indexOf(' | ') + 3)] : []),
+    ].map(normalizeSearchText)
+    return titleCandidates.some((title) => title.length >= 4 && normalizedText.includes(title))
   })
 }
 

@@ -17,7 +17,12 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-  const { event_id, audit_history_id = null, enqueue_on_failure = true } = await req.json().catch(() => ({}))
+  const {
+    event_id,
+    audit_history_id = null,
+    enqueue_on_failure = true,
+    title_only = false,
+  } = await req.json().catch(() => ({}))
 
   if (!event_id || typeof event_id !== 'string') {
     return json({ ok: false, sync_status: 'failed', error: 'event_id required' }, 400)
@@ -38,11 +43,13 @@ Deno.serve(async (req) => {
   }
 
   const targetFn = event.google_event_id ? 'push-to-google' : 'create-google-event'
-  const syncRes = await sb.functions.invoke(targetFn, { body: { event_id } }).catch((err: Error) => ({ data: null, error: err }))
+  const syncRes = await sb.functions.invoke(targetFn, {
+    body: { event_id, title_only: title_only === true },
+  }).catch((err: Error) => ({ data: null, error: err }))
   const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? null
   const skipped = typeof syncRes?.data?.skipped === 'string' ? syncRes.data.skipped : null
 
-  const successSkips = new Set(['already has google_event_id', 'reminder'])
+  const successSkips = new Set(['already has google_event_id', 'reminder', 'immutable_google_event'])
   if (!syncError && (!skipped || successSkips.has(skipped))) {
     return json({
       ok: true,

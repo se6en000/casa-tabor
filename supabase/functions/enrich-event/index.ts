@@ -16,10 +16,6 @@ function normalizePossessiveSuffixCasing(value: string): string {
   return value.replace(/([a-z])(['’])S\b/g, '$1$2s')
 }
 
-function toTitleCasePreservingPossessives(value: string): string {
-  return normalizePossessiveSuffixCasing(value.replace(/\b\w/g, (c: string) => c.toUpperCase()))
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const sb = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))
@@ -115,8 +111,7 @@ Deno.serve(async (req) => {
 
   const nameToId = Object.fromEntries(familyMembers.map(m => [m.name.toLowerCase(), m.id]))
 
-  // ── Server-side primary detection from title (more reliable than AI) ──
-  // Strip all "Name | " prefixes to find who is named AND get the clean description
+  // Legacy prefix detection remains read-only during migration; assignments are stored separately.
   const titleStr = (event.title as string) ?? ''
   const titleSegments = titleStr.split('|').map((s: string) => s.trim())
   let serverDetectedPrimary: string | null = null
@@ -145,10 +140,10 @@ Deno.serve(async (req) => {
   const resolvedPrimary = serverDetectedPrimary
     ?? (aiPrimaryRaw && nameToId[aiPrimaryRaw.toLowerCase()] ? aiPrimaryRaw : defaultOwnerName)
 
-  // ── Guaranteed title: AI concise desc → AI title stripped → cleaned-up title (no name prefix) ──
-  const rawConcise = aiConcise?.trim() || aiTitleRaw?.replace(/^[^|]+\|\s*/,'').trim() || normalizedTitleDescription
-  const concisePart = toTitleCasePreservingPossessives(rawConcise)
-  const finalTitle = `${resolvedPrimary} | ${concisePart}`
+  // Enrichment may infer structured assignments, but the user-authored event title remains authoritative.
+  const finalTitle = normalizePossessiveSuffixCasing(
+    titleStr.trim() || aiConcise?.trim() || aiTitleRaw?.trim() || normalizedTitleDescription || 'Calendar event',
+  )
   const targetedMode = targetFields.length > 0
 
   const { error: upsertErr } = await sb.from('event_enrichments')
@@ -191,9 +186,7 @@ Deno.serve(async (req) => {
   const finalAddress = isTripLeg
     ? (event.address as string | null)
     : (aiAddress ?? (event.address as string | null))
-  const eventPatch: Record<string, string> = isTripLeg || targetedMode
-    ? {}  // don't overwrite title or location for leg events
-    : { title: finalTitle }
+  const eventPatch: Record<string, string> = {}
   if (!isTripLeg && !targetedMode && aiLocationName) eventPatch.location_name = aiLocationName
   if (!isTripLeg && !targetedMode && aiAddress) eventPatch.address = aiAddress
 

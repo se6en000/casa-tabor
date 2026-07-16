@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
-  const { event_id } = await req.json().catch(() => ({}))
+  const { event_id, title_only = false } = await req.json().catch(() => ({}))
   if (!event_id) return new Response(JSON.stringify({ error: 'event_id required' }), { status: 400, headers: { ...CORS, 'content-type': 'application/json' } })
 
   try {
@@ -34,6 +34,56 @@ Deno.serve(async (req) => {
   const { connection, accessToken } = await loadWritableGoogleConnection(sb)
 
   const calendarId = connection.calendar_id
+  const summary = (event.title as string) ?? undefined
+
+  if (title_only === true) {
+    const current = await getGoogleEvent({
+      accessToken,
+      calendarId,
+      eventId: event.google_event_id,
+    })
+    if (current.eventType && current.eventType !== 'default') {
+      if (current.summary?.includes(' | ')) {
+        throw new Error(
+          `Immutable Google ${current.eventType} title still contains legacy pipe formatting and cannot be patched.`,
+        )
+      }
+      return new Response(JSON.stringify({
+        ok: true,
+        skipped: 'immutable_google_event',
+        google_event_type: current.eventType,
+        verified_summary: current.summary,
+      }), { headers: { ...CORS, 'content-type': 'application/json' } })
+    }
+    await patchGoogleEvent({
+      accessToken,
+      calendarId,
+      eventId: event.google_event_id,
+      patch: { summary },
+    })
+    const verified = await getGoogleEvent({
+      accessToken,
+      calendarId,
+      eventId: event.google_event_id,
+    })
+    if (verified.summary !== summary) {
+      throw new Error('Google title verification failed after patch.')
+    }
+    await sb.from('events').update({
+      google_connection_id: connection.id,
+      source_member_id: connection.family_member_id,
+      google_calendar_id: calendarId,
+      updated_at: new Date().toISOString(),
+    }).eq('id', event_id)
+    await markGoogleConnectionHealthy(sb, connection.id)
+    return new Response(JSON.stringify({
+      ok: true,
+      connection_id: connection.id,
+      projection: 'title_only',
+      verified_summary: verified.summary,
+    }), { headers: { ...CORS, 'content-type': 'application/json' } })
+  }
+
   const { data: bundle, error: bundleError } = await sb.rpc('recurrence_build_reusable_patch', {
     p_event_id: event_id,
   })
@@ -42,9 +92,7 @@ Deno.serve(async (req) => {
   // ── Build Google Calendar patch ──
   // Send all editable fields: title, times, location, description+enrichment
 
-  // title — strip any "Name | " prefix that Casa adds for display, send the clean title
-  const summary = (event.title as string) ?? undefined
-
+  // Casa stores the authoritative literal title; Google receives the same title.
   // location — prefer location_name; append address only if it's different
   const locationParts = [event.location_name, event.address].filter((p, i, arr) => p && arr.indexOf(p) === i)
   const location = locationParts.length > 0 ? locationParts.join(', ') : undefined

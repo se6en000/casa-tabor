@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
           .join(', ')
 
         const startStr = formatEasternTime(eventStart)
-        const title = stripPersonPrefix(event.title)
+        const title = event.title
         let body = `${startStr}`
         if (peopleNames) body += ` · ${peopleNames}`
         if (event.location_name) body += `\n📍 ${event.location_name}`
@@ -172,11 +172,6 @@ Deno.serve(async (req) => {
     return json({ ok: false, correlation_id: correlationId, error: getErrorMessage(err) }, 500, correlationId)
   }
 })
-
-function stripPersonPrefix(title: string): string {
-  const parts = title.split(' | ')
-  return parts.length > 1 ? parts.slice(1).join(' | ') : title
-}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

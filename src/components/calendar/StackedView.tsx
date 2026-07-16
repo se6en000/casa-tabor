@@ -6,6 +6,7 @@ import {
   Pencil, Navigation, Share2, ChevronRight,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
+import { cleanEventTitle } from '../../utils/eventTitle'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { useRollingEvents } from '../../hooks/useCalendarEvents'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
@@ -419,8 +420,7 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
 
         {/* Title — 1-line clamp, larger + bolder */}
         {(() => {
-          const pipeIdx = event.title.indexOf(' | ')
-          const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
+          const cleanTitle = cleanEventTitle(event.title)
           const showGoingRow = visibleGoingMembers.length > 0
           const showResponsibilityRow = Boolean(responsibilityChip)
           const showRoleRows = showGoingRow || showResponsibilityRow

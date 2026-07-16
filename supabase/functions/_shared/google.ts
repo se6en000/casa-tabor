@@ -83,6 +83,7 @@ export async function fetchUserEmail(accessToken: string): Promise<string> {
 export interface GoogleEvent {
   id: string
   status: string
+  eventType?: string
   summary?: string
   description?: string
   location?: string

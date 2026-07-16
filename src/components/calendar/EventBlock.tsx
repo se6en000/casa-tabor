@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Repeat } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
+import { cleanEventTitle } from '../../utils/eventTitle'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 
 const HOUR_HEIGHT = 60 // px per hour
@@ -131,19 +132,12 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
         backgroundColor: color,
       }}
     >
-      {/* Title — strip "Owner | " prefix */}
-      {(() => {
-        const pipeIdx = event.title.indexOf(' | ')
-        const cleanTitle = pipeIdx !== -1 ? event.title.slice(pipeIdx + 3) : event.title
-        return (
-          <p className={cn(
-            'font-body font-semibold truncate leading-tight',
-            isCompact ? 'text-caption' : 'text-body-sm'
-          )}>
-            {cleanTitle}
-          </p>
-        )
-      })()}
+      <p className={cn(
+        'font-body font-semibold truncate leading-tight',
+        isCompact ? 'text-caption' : 'text-body-sm'
+      )}>
+        {cleanEventTitle(event.title)}
+      </p>
 
       {/* Time range */}
       {!isCompact && (

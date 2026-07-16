@@ -27,6 +27,9 @@ type Operation = Json & {
   connection_id: string
   casa_revision: number
   attempts: number
+  payload_snapshot?: {
+    changed_paths?: unknown
+  }
 }
 
 class GoogleApiError extends Error {
@@ -137,6 +140,9 @@ async function executeOperation(
 ) {
   const { series, event, bundle } = await loadProjectionContext(supabase, operation)
   const steps = operationPlan(operation, series)
+  const titleOnly = Array.isArray(operation.payload_snapshot?.changed_paths)
+    && operation.payload_snapshot.changed_paths.length === 1
+    && operation.payload_snapshot.changed_paths[0] === 'event.title'
   let googleEvent: Json | null = null
   let conflictDetected = false
 
@@ -167,9 +173,51 @@ async function executeOperation(
     }
 
     const targetId = step.includes('instance') ? event.google_event_id : series.google_recurring_event_id
-    const current = targetId && !step.startsWith('cancel') && !step.startsWith('delete')
-      ? await googleRequest(accessToken, eventUrl(connection.calendar_id, targetId))
-      : null
+    let current: Json | null = null
+    if (targetId && !step.startsWith('cancel') && !step.startsWith('delete')) {
+      try {
+        current = await googleRequest(accessToken, eventUrl(connection.calendar_id, targetId))
+      } catch (cause) {
+        if (titleOnly && cause instanceof GoogleApiError && cause.status === 404) {
+          continue
+        }
+        throw cause
+      }
+    }
+    if (
+      titleOnly
+      && (step === 'patch_master' || step === 'patch_instance')
+      && (
+        current?.status === 'cancelled'
+        || (current?.eventType && current.eventType !== 'default')
+      )
+    ) {
+      continue
+    }
+    if (titleOnly && (step === 'patch_master' || step === 'patch_instance')) {
+      if (!targetId) throw new Error(`${step} requires a Google event identity.`)
+      try {
+        googleEvent = await googleRequest(
+          accessToken,
+          eventUrl(connection.calendar_id, targetId),
+          'PATCH',
+          { summary: event.title },
+        )
+      } catch (cause) {
+        if (cause instanceof GoogleApiError) {
+          throw new GoogleApiError(
+            cause.status,
+            `${cause.message} (Google status: ${String(current?.status ?? 'unknown')}; event type: ${String(current?.eventType ?? 'default')})`,
+          )
+        }
+        throw cause
+      }
+      if (googleEvent.summary !== event.title) {
+        throw new Error('Google title verification failed after recurrence patch.')
+      }
+      await saveGoogleIdentity(supabase, operation, series, event, googleEvent, step === 'patch_master')
+      continue
+    }
     conflictDetected ||= detectsGoogleConflict(step.includes('instance') ? event : series, current)
     const payload = serializeGoogleRecurrenceProjection({
       event,

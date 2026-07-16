@@ -12,8 +12,8 @@ test('normalizePossessiveSuffixCasing preserves non-possessive apostrophe casing
   assert.equal(normalizePossessiveSuffixCasing("O'Connor Visit"), "O'Connor Visit")
 })
 
-test('cleanEventTitle strips owner prefix and fixes possessive suffix', () => {
-  assert.equal(cleanEventTitle("Jake | Owen'S Soccer Practice"), "Owen's Soccer Practice")
+test('cleanEventTitle preserves literal pipes and fixes possessive suffix', () => {
+  assert.equal(cleanEventTitle("Weekly Update | Owen'S Soccer Practice"), "Weekly Update | Owen's Soccer Practice")
   assert.equal(cleanEventTitle("Owen'S Soccer Practice"), "Owen's Soccer Practice")
 })
 

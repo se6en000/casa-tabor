@@ -10,6 +10,7 @@ import EventEditSheet from './EventEditSheet'
 import QuickCreateSheet from '../shared/QuickCreateSheet'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
+import { cleanEventTitle } from '../../utils/eventTitle'
 import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, REMINDER_COLOR } from '../../utils/holidays'
 import { getEventDisplayEnd, getEventDisplayStartDay, isEventMultiDay } from '../../utils/eventTime'
 
@@ -409,10 +410,7 @@ export default function WeekView() {
                     backgroundColor: color,
                   }}
                 >
-                  {holiday ? holidayLabel(ev.title) : reminder ? `🔔 ${ev.title}` : (() => {
-                    const pipeIdx = ev.title.indexOf(' | ')
-                    return pipeIdx !== -1 ? ev.title.slice(pipeIdx + 3) : ev.title
-                  })()}
+                  {holiday ? holidayLabel(ev.title) : reminder ? `🔔 ${ev.title}` : cleanEventTitle(ev.title)}
                 </button>
               )
             })}

@@ -1837,7 +1837,7 @@ Deno.serve(async (req) => {
         parameters: {
           type: 'OBJECT',
           properties: {
-            title: { type: 'STRING', description: 'Event title in format "Owner | Description"' },
+            title: { type: 'STRING', description: 'Event title only. Never prefix it with an owner, attendee, or family member.' },
             start: { type: 'STRING', description: 'ISO datetime with UTC offset e.g. 2026-06-09T18:30:00-04:00' },
             end: { type: 'STRING', description: 'ISO datetime with UTC offset' },
             location: { type: 'STRING', description: 'Full street address or place name' },

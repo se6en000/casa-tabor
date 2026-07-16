@@ -32,6 +32,7 @@ Deno.serve(async (req) => {
           event_id: job.event_id,
           audit_history_id: job.audit_history_id ?? null,
           enqueue_on_failure: false,
+          title_only: job.sync_mode === 'title_only',
         },
       }).catch((err: Error) => ({ data: null, error: err }))
 
