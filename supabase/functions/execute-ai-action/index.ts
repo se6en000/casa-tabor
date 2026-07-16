@@ -384,13 +384,17 @@ Deno.serve(async (req) => {
 
       // Fire enrichment async (slow — Gemini AI, don't block)
       sb.functions.invoke('enrich-event', { body: { event_id: event.id } }).catch(() => {})
-      // Await Google sync — fire-and-forget can be killed before completion in Deno Deploy
-      await sb.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {})
+
+      if (normalizedEventType !== 'reminder') {
+        // Await Google sync for calendar events — fire-and-forget can be killed before completion in Deno Deploy.
+        await sb.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {})
+      }
 
       return new Response(JSON.stringify({
         success: true,
         event_id: event.id,
         event_updated_at: event.updated_at,
+        sync_status: 'synced',
         correlation_id: cid,
       }), {
         headers: { ...CORS, 'content-type': 'application/json' },

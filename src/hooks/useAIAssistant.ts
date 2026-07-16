@@ -31,7 +31,7 @@ const genId = (): string =>
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2) + Date.now().toString(36)
 
-const GOODBYE_PHRASES = /\b(thank you|thanks|goodbye|bye|that'?s all|all done|good night|ciao|close session|new session|start over|end session)\b/i
+const GOODBYE_PHRASES = /\b(goodbye|bye|go away|that'?s all|all done|i(?:'| a)?m done|we(?:'| a)?re done|done for now|close session|new session|start over|end session)\b/i
 const CONTEXTLESS_USER_PHRASES = /\b(yes|yeah|yep|ok|okay|no|nope|cancel|stop|do it|sounds good|correct|right|thanks|thank you|never mind|nvm)\b/i
 const VAGUE_REFERENCE_ONLY = /\b(it|that|this|one|him|her|them|there)\b/i
 

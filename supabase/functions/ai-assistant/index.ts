@@ -78,9 +78,13 @@ import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
 import { getAgentToolByLegacyName } from '../_shared/assistant-agent-tools.mjs'
 import { isAgentWriteCompatible } from '../_shared/assistant-agent-write-compatibility.mjs'
 import {
+  explicitReminderCreateRequestForMessages,
+  explicitReminderSubject,
   explicitReminderSearchForMessages,
   isExplicitReminderCompletion,
+  isExplicitReminderRequest,
   isReminderCompletionFollowUp,
+  reminderCreateClarification,
 } from '../_shared/assistant-reminder-intent.mjs'
 
 const CORS = {
@@ -193,8 +197,10 @@ Deno.serve(async (req) => {
   const requestStartMs = Date.now()
   const NORMAL_REQUEST_HARD_TIMEOUT_MS = 9000
   const RECIPE_REQUEST_HARD_TIMEOUT_MS = 15000
+  const IMAGE_REQUEST_HARD_TIMEOUT_MS = 26000
   const PRIMARY_HARD_TIMEOUT_MS = 6800
   const RECIPE_PRIMARY_HARD_TIMEOUT_MS = 14500
+  const IMAGE_PRIMARY_HARD_TIMEOUT_MS = 22000
   const SECONDARY_HARD_TIMEOUT_MS = 5000
   const FALLBACK_HARD_TIMEOUT_MS = 2200
   const STAGE_SLO = {
@@ -242,11 +248,20 @@ Deno.serve(async (req) => {
   const latestUserText = userMessageTexts.at(-1) ?? null
   const previousUserText = userMessageTexts.at(-2) ?? null
   const explicitReminderRead = explicitReminderSearchForMessages(messages)
+  const reminderCreateRequestText = explicitReminderCreateRequestForMessages(messages)
   const incomingConversationState = normalizeConversationState(context?.conversationState)
   const reminderCompletionFollowUp = isReminderCompletionFollowUp(
     latestUserText,
     incomingConversationState,
   )
+  const explicitReminderCreate = Boolean(
+    reminderCreateRequestText &&
+    isExplicitReminderRequest(reminderCreateRequestText) &&
+    !isExplicitReminderCompletion(reminderCreateRequestText)
+  )
+  const reminderClarification = explicitReminderCreate
+    ? reminderCreateClarification(reminderCreateRequestText)
+    : null
   const parsedCalendarFrame = parseCalendarLanguage(latestUserText, {
     focusedEvent: Boolean(context?.focusedEvent),
     activeEntityType: incomingConversationState?.activeEntityType,
@@ -319,14 +334,36 @@ Deno.serve(async (req) => {
     calendarFrame.intent !== 'event.create' &&
     !calendarFrame.requiresActiveEvent
   )
+  const imageEventCreateHint = Boolean(
+    image &&
+    latestUserText &&
+    !calendarFrame &&
+    !authoritativeCookingContext &&
+    /\b(?:event|appointment|appt|apt|calendar)\b/i.test(latestUserText) &&
+    /\b(?:add|create|schedule|book|make|put)\b/i.test(latestUserText)
+  )
+  const imageEventCreateFollowUp = Boolean(
+    image &&
+    imageContextRaw === 'conversation' &&
+    !calendarFrame &&
+    previousCalendarFrame?.intent === 'event.create' &&
+    latestUserText &&
+    /\b(?:again|retry|try again|do it|go ahead|create it|book it|schedule it|add it|make it|use this|from this|this one)\b/i.test(latestUserText)
+  )
   const intentRoutingDecision = explicitReminderRead
     ? { route: { profile: 'event', forceEventSearch: true }, source: 'explicit_reminder' }
+    : explicitReminderCreate
+    ? { route: { profile: 'event', forceEventSearch: false }, source: 'explicit_reminder_create' }
     : incomingConversationState?.activeEntityType === 'calendar_clarification'
     ? { route: { profile: 'event', forceEventSearch: false }, source: 'calendar_clarification' }
     : incomingConversationState?.activeEntityType === 'grocery_clarification'
     ? { route: { profile: 'grocery', forceEventSearch: false }, source: 'grocery_clarification' }
     : calendarMutationDisambiguationFollowUp
     ? { route: { profile: 'event', forceEventSearch: false }, source: 'calendar_disambiguation' }
+    : imageEventCreateFollowUp
+    ? { route: { profile: 'event', forceEventSearch: false }, source: 'image_event_followup' }
+    : imageEventCreateHint
+    ? { route: { profile: 'event', forceEventSearch: false }, source: 'image_event_hint' }
     : authoritativeCookingContext
     ? { route: { profile: 'recipe', forceEventSearch: false }, source: 'cooking_semantic' }
     : authoritativeGroceryContext
@@ -341,9 +378,11 @@ Deno.serve(async (req) => {
         ? { route: { profile: 'recipe', forceEventSearch: false }, source: 'cooking_semantic' }
         : { route: classifiedIntentRouting, source: 'lexical_fallback' }
   const intentRouting = intentRoutingDecision.route
-  requestHardTimeoutMs = intentRouting.profile === 'recipe'
-    ? RECIPE_REQUEST_HARD_TIMEOUT_MS
-    : NORMAL_REQUEST_HARD_TIMEOUT_MS
+  requestHardTimeoutMs = image
+    ? Math.max(IMAGE_REQUEST_HARD_TIMEOUT_MS, intentRouting.profile === 'recipe' ? RECIPE_REQUEST_HARD_TIMEOUT_MS : NORMAL_REQUEST_HARD_TIMEOUT_MS)
+    : intentRouting.profile === 'recipe'
+      ? RECIPE_REQUEST_HARD_TIMEOUT_MS
+      : NORMAL_REQUEST_HARD_TIMEOUT_MS
   const imageContext = image
     ? imageContextRaw === 'conversation' ? 'conversation' : 'current_turn'
     : 'none'
@@ -369,6 +408,8 @@ Deno.serve(async (req) => {
     grocery_semantic_confidence: groceryFrame?.confidence ?? null,
     cooking_semantic_intent: cookingFrame?.intent ?? null,
     cooking_semantic_confidence: cookingFrame?.confidence ?? null,
+    image_event_create_hint: imageEventCreateHint,
+    image_event_create_followup: imageEventCreateFollowUp,
   })
   if (calendarFrame) {
     appendServerTrace('server_ai_assistant_calendar_language_match', `intent=${calendarFrame.intent}`, {
@@ -430,12 +471,53 @@ Deno.serve(async (req) => {
   }
 
   const run = async (): Promise<{ status: number; payload: Record<string, unknown> }> => {
+  if (reminderClarification) {
+    appendServerTrace('server_ai_assistant_reminder_clarification', reminderClarification, {
+      missing_title: /what should/i.test(reminderClarification),
+      missing_timing: /when/i.test(reminderClarification),
+    })
+    return {
+      status: 200,
+      payload: {
+        type: 'text',
+        text: reminderClarification,
+        correlation_id: cid,
+        telemetry: {
+          llm_calls: 0,
+          llm_input_tokens: 0,
+          llm_output_tokens: 0,
+          llm_total_tokens: 0,
+          llm_thought_tokens: 0,
+          llm_inference_ms: 0,
+          request_total_ms: Date.now() - requestStartMs,
+          context_load_ms: 0,
+        },
+      },
+    }
+  }
+
   // Load config, saved places, contacts, grocery list, events in parallel
   const now = new Date()
   // Start from 24h ago so in-progress events (started earlier today) are visible
   const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000)
   const yearEnd = new Date(); yearEnd.setFullYear(yearEnd.getFullYear() + 1, 11, 31); yearEnd.setHours(23,59,59,999)
-  const needsEventData = !requestAmbiguity && ['event', 'full', 'travel', 'general'].includes(intentRouting.profile)
+  const imageDirectEventCreateFlow = Boolean(
+    image &&
+    intentRouting.profile === 'event' &&
+    !intentRouting.forceEventSearch &&
+    (
+      calendarFrame?.intent === 'event.create' ||
+      imageEventCreateHint ||
+      imageEventCreateFollowUp
+    )
+  )
+  const directReminderCreateFlow = explicitReminderCreate &&
+    intentRouting.profile === 'event' &&
+    !intentRouting.forceEventSearch
+  const needsEventData = !requestAmbiguity &&
+    ['event', 'full', 'travel', 'general'].includes(intentRouting.profile) &&
+    !imageDirectEventCreateFlow &&
+    !directReminderCreateFlow
   const needsPlaceData = !requestAmbiguity && ['event', 'full', 'travel', 'places'].includes(intentRouting.profile)
   const needsContactData = !requestAmbiguity && ['event', 'full', 'places'].includes(intentRouting.profile)
   const needsGroceryData = !requestAmbiguity && (
@@ -658,6 +740,7 @@ Deno.serve(async (req) => {
     agentWriteConfig?.enabled === true &&
     agentWriteRate > 0 &&
     !isCalendarSemanticRead &&
+    !explicitReminderCreate &&
     !groceryFrame &&
     AGENT_GENERAL_PAGES.has(String(context?.page ?? '')) &&
     context?.assistant_mode !== 'chef' &&
@@ -694,7 +777,11 @@ Deno.serve(async (req) => {
       }
     }
   }
-  if (latestUserText && incomingConversationState?.activeEntityType === 'calendar_clarification') {
+  if (
+    latestUserText &&
+    !explicitReminderCreate &&
+    incomingConversationState?.activeEntityType === 'calendar_clarification'
+  ) {
     const selection = resolveCalendarClarificationSelection(
       latestUserText,
       incomingConversationState,
@@ -1458,6 +1545,8 @@ Deno.serve(async (req) => {
       needsRecipeData ? 'recipes' : null,
       needsAvailabilityData ? 'availability' : null,
     ].filter(Boolean),
+    image_direct_event_create_flow: imageDirectEventCreateFlow,
+    direct_reminder_create_flow: directReminderCreateFlow,
   })
   if (modelOverride && !validatedOverrideModel) {
     appendServerTrace('server_ai_assistant_model_override_rejected', `unsupported_override=${modelOverride}`, {
@@ -2222,7 +2311,9 @@ Deno.serve(async (req) => {
     : new Set(toolNamesByProfile[intentRouting.profile] ?? [])
   const selectedToolDeclarations = tools[0].function_declarations
     .filter((tool) => selectedToolNames.has(tool.name))
-  const primaryToolDeclarations = intentRouting.forceEventSearch
+  const primaryToolDeclarations = directReminderCreateFlow
+    ? selectedToolDeclarations.filter((tool) => tool.name === 'create_event')
+    : intentRouting.forceEventSearch
     ? selectedToolDeclarations.filter((tool) => tool.name === 'search_events')
     : selectedToolDeclarations
   const primaryTools = primaryToolDeclarations.length > 0
@@ -2235,7 +2326,9 @@ Deno.serve(async (req) => {
     : /\b(all|every|each)\b/i.test(latestUserText ?? '')
       ? ['bulk_update_events']
       : ['update_event']
-  const secondaryToolDeclarations = intentRouting.profile === 'event' && intentRouting.forceEventSearch
+  const secondaryToolDeclarations = directReminderCreateFlow
+    ? selectedToolDeclarations.filter((tool) => tool.name === 'create_event')
+    : intentRouting.profile === 'event' && intentRouting.forceEventSearch
     ? routedWriteIntent
       ? selectedToolDeclarations.filter((tool) => secondaryEventToolNames.includes(tool.name))
       : []
@@ -2273,6 +2366,7 @@ TEMPORAL ASSUMPTIONS (default unless user clearly overrides):
   - "10" should usually be treated as 10 AM unless context strongly indicates otherwise.
 
 INTENT PROFILE: ${intentRouting.profile}
+${directReminderCreateFlow ? 'REMINDER CREATE MODE: Create a new reminder with create_event and event_type="reminder". Never search for or update an appointment merely because the reminder text mentions changing, calling, cancelling, or rescheduling one. If the reminder task or timing is missing, ask one concise follow-up question instead of inventing it.' : ''}
 FAMILY MEMBERS: ${familyNames}
 ${includePlaceContext && placesText ? `\nSAVED PLACES (use for location nicknames):\n${placesText}` : ''}
 ${includePlaceContext && contactsText ? `\nSAVED CONTACTS:\n${contactsText}` : ''}
@@ -2916,14 +3010,18 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   // Call Gemini with function calling — one primary and at most one synthesis round.
   async function callGeminiWithTools(contents: GeminiContent[]): Promise<{ type: string; [key: string]: unknown }> {
     const llmStartMs = Date.now()
-    const userLikelyRequestedWrite = userRequestedWriteIntent
-    const primaryHardTimeoutMs = intentRouting.profile === 'recipe'
-      ? RECIPE_PRIMARY_HARD_TIMEOUT_MS
-      : PRIMARY_HARD_TIMEOUT_MS
+    const userLikelyRequestedWrite = explicitReminderCreate || userRequestedWriteIntent
+    const primaryHardTimeoutMs = image
+      ? Math.max(IMAGE_PRIMARY_HARD_TIMEOUT_MS, intentRouting.profile === 'recipe' ? RECIPE_PRIMARY_HARD_TIMEOUT_MS : PRIMARY_HARD_TIMEOUT_MS)
+      : intentRouting.profile === 'recipe'
+        ? RECIPE_PRIMARY_HARD_TIMEOUT_MS
+        : PRIMARY_HARD_TIMEOUT_MS
     const primaryWriteToolNames = primaryToolDeclarations
       .filter((tool) => ['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'create_recipe', 'add_grocery_items'].includes(tool.name))
       .map((tool) => tool.name)
-    const primaryToolConfig = intentRouting.forceEventSearch
+    const primaryToolConfig = directReminderCreateFlow
+      ? { function_calling_config: { mode: 'AUTO' } }
+      : intentRouting.forceEventSearch
       ? { function_calling_config: { mode: 'ANY', allowed_function_names: ['search_events'] } }
       : userLikelyRequestedWrite && primaryWriteToolNames.length > 0
         ? { function_calling_config: { mode: 'ANY', allowed_function_names: primaryWriteToolNames } }
@@ -3409,11 +3507,18 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         }
 
         if (name === 'create_event') {
+          if (explicitReminderCreate) {
+            const reminderSubject = explicitReminderSubject(reminderCreateRequestText)
+            if (reminderSubject) args.title = reminderSubject
+            args.event_type = 'reminder'
+          }
           const title = typeof args.title === 'string' ? args.title.trim() : ''
           const start = typeof args.start === 'string' ? args.start : ''
           const end = typeof args.end === 'string' ? args.end : ''
           const location = typeof args.location === 'string' ? args.location.trim() : ''
           const notes = typeof args.notes === 'string' ? args.notes.trim() : ''
+          const requestedReminder = typeof args.event_type === 'string' &&
+            ['reminder', 'task', 'todo'].includes(args.event_type.trim().toLowerCase())
           const members = Array.isArray(args.members)
             ? args.members.filter((member): member is string => typeof member === 'string' && member.trim().length > 0)
             : []
@@ -3460,6 +3565,10 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             const payload = (execResult.data as { success?: boolean; sync_status?: 'synced' | 'queued' | 'failed'; sync_warning?: string } | null) ?? {}
             if (!payload.success) {
               return { type: 'text', text: "I couldn't auto-create that yet. Please try once more." }
+            }
+
+            if (requestedReminder) {
+              return { type: 'text', text: `Got it — reminder set for "${title}".`, write_verified: true }
             }
 
             if (payload.sync_status === 'synced') {
@@ -4005,6 +4114,19 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           )
         : rawDeterministicMutation
       if (deterministicMutation) {
+        const reminderSubject = explicitReminderCreate
+          ? explicitReminderSubject(reminderCreateRequestText)
+          : null
+        const deterministicArgs = (
+          deterministicMutation.tool === 'create_event' &&
+          explicitReminderCreate
+        )
+          ? {
+              ...deterministicMutation.args,
+              ...(reminderSubject ? { title: reminderSubject } : {}),
+              event_type: 'reminder',
+            }
+          : deterministicMutation.args
         const requestTotalMs = Date.now() - requestStartMs
         appendServerTrace(
           'server_ai_assistant_deterministic_mutation',
@@ -4029,10 +4151,10 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           payload: {
             type: deterministicMutation.tool ? 'tool_action' : 'text',
             tool: deterministicMutation.tool,
-            args: deterministicMutation.args,
+            args: deterministicArgs,
             text: deterministicMutation.text,
             display_text: deterministicMutation.tool
-              ? buildDisplayText(deterministicMutation.tool, deterministicMutation.args)
+              ? buildDisplayText(deterministicMutation.tool, deterministicArgs)
               : undefined,
             conversation_state: deterministicMutation.event
               ? eventConversationState(deterministicMutation.event, now)

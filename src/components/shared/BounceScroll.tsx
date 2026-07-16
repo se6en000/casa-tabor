@@ -50,6 +50,8 @@ export default function BounceScroll({ children, className, innerClassName, maxB
     const hitBottom = delta < 0 && atBottom()
 
     if (hitTop || hitBottom) {
+      if (e.cancelable) e.preventDefault()
+      e.stopPropagation()
       // Sqrt resistance curve — feels like iOS rubber-band
       const sign = Math.sign(delta)
       const abs = Math.abs(delta)
@@ -70,7 +72,8 @@ export default function BounceScroll({ children, className, innerClassName, maxB
       <motion.div style={{ y: springY }} className="h-full w-full">
         <div
           ref={scrollRef}
-          className={cn('overflow-y-auto overscroll-none h-full w-full', innerClassName)}
+          className={cn('overflow-y-auto overscroll-none touch-pan-y h-full w-full', innerClassName)}
+          data-ptr-ignore
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}

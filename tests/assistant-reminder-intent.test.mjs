@@ -2,13 +2,106 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  explicitReminderCreateRequestForMessages,
+  explicitReminderSubject,
   fallbackExplicitRelativeReminderTurn,
   hardenExplicitReminderTurn,
   isExplicitReminderCompletion,
+  isExplicitReminderRequest,
   isReminderCompletionFollowUp,
   explicitReminderSearchForMessages,
   explicitReminderSearchOverride,
+  reminderCreateClarification,
 } from '../supabase/functions/_shared/assistant-reminder-intent.mjs'
+
+test('natural reminder requests cover common typed and spoken phrasing', () => {
+  for (const phrase of [
+    'Remind me tomorrow to call the dentist',
+    'Set a reminder for tomorrow morning',
+    'Create me a reminder to mail the form',
+    'Add a reminder for the school payment',
+    'Make a reminder to call Mom',
+    'Schedule a reminder to change the air filter',
+    'Give me a reminder tomorrow afternoon',
+    'Send us a reminder to leave',
+    'Alert me at 4 PM to get the kids',
+    'Notify us tomorrow to bring the forms',
+    'Nudge me in an hour to check the oven',
+    'I need to be reminded tomorrow morning to reschedule the dentist appointment',
+    'I want to remember to buy stamps',
+    'I would like to be reminded to call Jake',
+    'We have to remember to submit the paperwork',
+    "I've gotta remember to charge the tablet",
+    'I need a reminder for the prescription',
+    "Don't let me forget to return the library books",
+    'Make sure I remember to pay the bill',
+    'Could you please remind me to take the bins out',
+    'Reminder to renew the registration',
+    'Please remember to call the school',
+  ]) {
+    assert.equal(isExplicitReminderRequest(phrase), true, phrase)
+  }
+})
+
+test('ordinary calendar edits and memory questions are not reminder creates', () => {
+  for (const phrase of [
+    'Reschedule the dentist appointment tomorrow morning',
+    'What do you remember about the dentist?',
+    'Show my reminders',
+    'Mark that reminder done',
+    'Schedule dinner tomorrow',
+  ]) {
+    assert.equal(isExplicitReminderRequest(phrase), false, phrase)
+  }
+})
+
+test('underspecified reminder creates ask for missing details instead of inventing them', () => {
+  assert.equal(
+    reminderCreateClarification('Can you create a reminder?'),
+    'Sure — what should I remind you about, and when?',
+  )
+  assert.equal(
+    reminderCreateClarification('Create a reminder for tomorrow morning for me'),
+    'What should I remind you about?',
+  )
+  assert.equal(
+    reminderCreateClarification('Remind me to call the dentist'),
+    'When should I remind you?',
+  )
+  assert.equal(
+    reminderCreateClarification('Create a reminder for tomorrow at 10 AM to order Walmart groceries'),
+    null,
+  )
+  assert.equal(
+    explicitReminderSubject('Create a reminder for tomorrow at 10 AM to order Walmart groceries'),
+    'Order Walmart groceries',
+  )
+  assert.equal(
+    explicitReminderSubject('I need a reminder for the prescription'),
+    'The prescription',
+  )
+})
+
+test('reminder clarification follow-ups retain the original reminder intent', () => {
+  const completedRequest = explicitReminderCreateRequestForMessages([
+    { role: 'user', content: 'Can you create a reminder?' },
+    { role: 'assistant', content: 'Sure — what should I remind you about, and when?' },
+    { role: 'user', content: 'Tomorrow morning' },
+    { role: 'assistant', content: 'What should I remind you about?' },
+    { role: 'user', content: 'Call Liv and Emme’s dentist' },
+  ])
+  assert.equal(
+    completedRequest,
+    'Can you create a reminder? Tomorrow morning to Call Liv and Emme’s dentist',
+  )
+  assert.equal(reminderCreateClarification(completedRequest), null)
+
+  assert.equal(explicitReminderCreateRequestForMessages([
+    { role: 'user', content: 'Show my reminders' },
+    { role: 'assistant', content: 'I found two reminders.' },
+    { role: 'user', content: 'Schedule a dentist appointment tomorrow' },
+  ]), null)
+})
 
 test('explicit reminder language cannot be downgraded to an appointment', () => {
   const turn = hardenExplicitReminderTurn({

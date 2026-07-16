@@ -91,6 +91,20 @@ test('assistant model calls have hard budgets and only one secondary synthesis r
   assert.doesNotMatch(assistantFunction, /stage=llm_retry/)
 })
 
+test('reminder create safety clarifies missing details before write-tool rescue', () => {
+  assert.match(assistantFunction, /reminderCreateClarification\(reminderCreateRequestText\)/)
+  assert.match(assistantFunction, /args\.title = reminderSubject/)
+  assert.match(assistantFunction, /args\.event_type = 'reminder'/)
+  assert.match(assistantFunction, /const deterministicArgs = \(/)
+  assert.match(assistantFunction, /buildDisplayText\(deterministicMutation\.tool, deterministicArgs\)/)
+  assert.match(assistantFunction, /server_ai_assistant_reminder_clarification/)
+  assert.match(assistantFunction, /const userLikelyRequestedWrite = explicitReminderCreate \|\| userRequestedWriteIntent/)
+  assert.match(
+    assistantFunction,
+    /explicitReminderCreate[\s\S]{0,250}source: 'explicit_reminder_create'[\s\S]{0,250}activeEntityType === 'calendar_clarification'/,
+  )
+})
+
 test('assistant buffers model text until output safety validation completes', () => {
   assert.match(assistantFunction, /secureAssistantResult\(rawResult/)
   assert.match(assistantFunction, /server_ai_assistant_output_rejected/)
@@ -102,6 +116,16 @@ test('assistant image context is conversation-scoped and never salvages partial 
   assert.match(assistant, /const activeImageRef = useRef/)
   assert.match(assistant, /image \?\? activeImageRef\.current/)
   assert.match(assistant, /image_context: imageContext/)
+  assert.match(assistantFunction, /IMAGE_REQUEST_HARD_TIMEOUT_MS = 26000/)
+  assert.match(assistantFunction, /IMAGE_PRIMARY_HARD_TIMEOUT_MS = 22000/)
+  assert.match(assistantFunction, /requestHardTimeoutMs = image/)
+  assert.match(assistantFunction, /const primaryHardTimeoutMs = image/)
+  assert.match(assistantFunction, /const imageEventCreateHint = Boolean\(/)
+  assert.match(assistantFunction, /const imageEventCreateFollowUp = Boolean\(/)
+  assert.match(assistantFunction, /source: 'image_event_hint'/)
+  assert.match(assistantFunction, /source: 'image_event_followup'/)
+  assert.match(assistantFunction, /const imageDirectEventCreateFlow = Boolean\(/)
+  assert.match(assistantFunction, /!imageDirectEventCreateFlow/)
   assert.match(assistantFunction, /image_context: imageContext/)
   assert.match(assistantFunction, /thought_tokens: usage\.thoughtTokens/)
   assert.match(assistantFunction, /finish_reason:/)
@@ -124,6 +148,12 @@ test('assistant narrows prompt context and tools by intent profile', () => {
   assert.match(assistantFunction, /classifyAssistantIntent\(latestUserText/)
   assert.match(assistantFunction, /selectedToolDeclarations/)
   assert.match(assistantFunction, /primaryToolDeclarations/)
+  assert.match(assistantFunction, /source: 'explicit_reminder_create'/)
+  assert.match(assistantFunction, /const directReminderCreateFlow =/)
+  assert.match(assistantFunction, /const shouldRunAgentWrite =[\s\S]{0,320}!explicitReminderCreate/)
+  assert.match(assistantFunction, /directReminderCreateFlow[\s\S]{0,160}tool\.name === 'create_event'/)
+  assert.match(assistantFunction, /REMINDER CREATE MODE:/)
+  assert.match(assistantFunction, /directReminderCreateFlow[\s\S]{0,160}function_calling_config: \{ mode: 'AUTO' \}/)
   assert.match(assistantFunction, /server_ai_assistant_prompt_profile/)
   assert.match(assistantFunction, /allowed_function_names: \['search_events'\]/)
   assert.match(assistantFunction, /includeEventContext/)
@@ -165,9 +195,16 @@ test('confirmation state is atomic, self-clearing, and fully traced', () => {
   }
 })
 
-test('voice confirmation closes the drawer without clearing saved conversation history', () => {
+test('voice confirmation keeps the drawer open and relies on explicit dismiss phrases', () => {
   assert.doesNotMatch(drawer, /onConfirm:[\s\S]{0,320}startFresh\(\)/)
   assert.doesNotMatch(drawer, /onCancel:[\s\S]{0,320}startFresh\(\)/)
+  assert.doesNotMatch(drawer, /onConfirm:[\s\S]{0,320}setTimeout\(onClose, 350\)/)
+  assert.doesNotMatch(drawer, /onCancel:[\s\S]{0,320}setTimeout\(onClose, 350\)/)
+  assert.match(assistant, /const GOODBYE_PHRASES = /)
+  assert.match(speech, /const DISMISS_PHRASES = /)
+  assert.doesNotMatch(assistant, /GOODBYE_PHRASES = [^\n]*thank you/)
+  assert.doesNotMatch(speech, /DISMISS_PHRASES = [^\n]*thank you/)
+  assert.match(speech, /DISMISS_PHRASES = [^\n]*go away/)
 })
 
 test('confirmed actions preserve client trace provenance on the server', () => {
@@ -189,4 +226,7 @@ test('create_event action normalizes unsupported event_type values before insert
   assert.match(actionFunction, /function normalizeCreateEventType\(value: unknown\)/)
   assert.match(actionFunction, /event_type: normalizedEventType/)
   assert.match(actionFunction, /\\['reminder', 'task', 'todo'\\]/)
+  assert.match(actionFunction, /if \(normalizedEventType !== 'reminder'\)/)
+  assert.match(actionFunction, /sync_status: 'synced'/)
+  assert.match(assistantFunction, /Got it — reminder set for/)
 })

@@ -8,6 +8,96 @@ const ONES = new Map([
 const TENS = new Map([
   ['twenty', 20], ['thirty', 30], ['forty', 40], ['fifty', 50],
 ])
+const REMINDER_CLARIFICATION_PROMPTS = new Set([
+  'Sure — what should I remind you about, and when?',
+  'What should I remind you about?',
+  'When should I remind you?',
+])
+
+export function isExplicitReminderRequest(text) {
+  const value = String(text ?? '').replace(/\s+/g, ' ').trim()
+  if (!value) return false
+  return (
+    /\bremind\s+(?:me|us|him|her|them)\b/i.test(value) ||
+    /\b(?:set|create|add|make|schedule)\s+(?:(?:me|us)\s+)?(?:a\s+)?reminder\b/i.test(value) ||
+    /\b(?:give|send)\s+(?:me|us)\s+(?:a\s+)?reminder\b/i.test(value) ||
+    /\b(?:alert|notify|nudge)\s+(?:me|us)\b/i.test(value) ||
+    /\b(?:i|we)\s+(?:need|want|would like|have)\s+to\s+(?:be\s+reminded|remember)\b/i.test(value) ||
+    /\b(?:i|we)(?:'ve| have)?\s+got(?:ta|\s+to)\s+remember\b/i.test(value) ||
+    /\b(?:i|we)\s+(?:need|want|would like)\s+(?:a\s+)?reminder\b/i.test(value) ||
+    /\bdon'?t\s+let\s+(?:me|us)\s+forget\b/i.test(value) ||
+    /\bmake\s+sure\s+(?:i|we)\s+(?:remember|don'?t\s+forget)\b/i.test(value) ||
+    /\b(?:can|could|will|would)\s+you\s+(?:please\s+)?remind\s+(?:me|us)\b/i.test(value) ||
+    /\breminder\s+(?:for|to)\b/i.test(value) ||
+    /^(?:please\s+)?remember\s+to\b/i.test(value)
+  )
+}
+
+export function explicitReminderCreateRequestForMessages(messages) {
+  const normalizedMessages = Array.isArray(messages) ? messages : []
+  const latestUserIndex = normalizedMessages.findLastIndex((message) =>
+    message?.role === 'user' && typeof message.content === 'string'
+  )
+  if (latestUserIndex < 0) return null
+
+  const latestUserText = normalizedMessages[latestUserIndex].content
+  if (isExplicitReminderRequest(latestUserText)) return latestUserText
+
+  const priorAssistant = normalizedMessages
+    .slice(0, latestUserIndex)
+    .findLast((message) => message?.role === 'assistant' && typeof message.content === 'string')
+  if (!REMINDER_CLARIFICATION_PROMPTS.has(priorAssistant?.content?.trim())) return null
+
+  const reminderStartIndex = normalizedMessages
+    .slice(0, latestUserIndex)
+    .findLastIndex((message) =>
+      message?.role === 'user' &&
+      typeof message.content === 'string' &&
+      isExplicitReminderRequest(message.content)
+    )
+  if (reminderStartIndex < 0) return null
+
+  const userParts = normalizedMessages
+    .slice(reminderStartIndex, latestUserIndex + 1)
+    .flatMap((message) =>
+      message?.role === 'user' && typeof message.content === 'string'
+        ? [message.content.trim()]
+        : []
+    )
+    .filter(Boolean)
+  if (priorAssistant.content.trim() === 'What should I remind you about?' && userParts.length > 1) {
+    userParts[userParts.length - 1] = `to ${userParts.at(-1)}`
+  }
+  return userParts.join(' ')
+}
+
+export function reminderCreateClarification(text) {
+  if (!isExplicitReminderRequest(text)) return null
+  const value = String(text ?? '').replace(/\s+/g, ' ').trim()
+  const hasTiming = reminderHasTiming(value)
+  const hasSubject = reminderHasSubject(value)
+  if (hasTiming && hasSubject) return null
+  if (!hasTiming && !hasSubject) return 'Sure — what should I remind you about, and when?'
+  return hasSubject ? 'When should I remind you?' : 'What should I remind you about?'
+}
+
+export function explicitReminderSubject(text) {
+  if (!isExplicitReminderRequest(text)) return null
+  const value = String(text ?? '').replace(/\s+/g, ' ').trim()
+  const clauses = [...value.matchAll(/\b(?:to|about|that)\s+([^.!?]+?)(?=$|[.!?])/gi)]
+  const subject = clauses
+    .map((match) => match[1].trim())
+    .findLast((candidate) =>
+      candidate.length >= 2 && !/^(?:be\s+)?reminded\b|^remember\b/i.test(candidate)
+    )
+  if (subject) return capitalizeReminderSubject(subject)
+
+  const reminderFor = value.match(/\breminder\s+for\s+([^.!?]+?)(?=$|[.!?])/i)?.[1]?.trim() ?? ''
+  if (reminderFor.length >= 2 && !reminderHasTiming(reminderFor)) {
+    return capitalizeReminderSubject(reminderFor)
+  }
+  return null
+}
 
 export function hardenExplicitReminderTurn(turn, text) {
   if (!turn || typeof turn !== 'object') return turn
@@ -109,13 +199,31 @@ export function explicitReminderSearchForMessages(messages) {
   return explicitReminderSearchOverride(latest)
 }
 
-function isExplicitReminder(text) {
-  return /\bremind\s+me\b|\bset\s+(?:me\s+)?(?:a\s+)?reminder\b|\bcreate\s+(?:a\s+)?reminder\b/i.test(String(text ?? ''))
-}
+const isExplicitReminder = isExplicitReminderRequest
 
 function isCompletionLanguage(text) {
   const value = String(text ?? '')
   return /\b(?:mark|check)\b.*\b(?:done|complete|completed|off)\b|\b(?:complete|finish)\b.*|\b(?:is|are)\s+(?:done|complete|completed)\b/i.test(value)
+}
+
+function reminderHasTiming(text) {
+  return (
+    /\b(?:today|tomorrow|tonight|morning|afternoon|evening|night|noon|midnight)\b/i.test(text) ||
+    /\b(?:sun(?:day)?|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?)\b/i.test(text) ||
+    /\b(?:this|next)\s+(?:week|month|weekend|sun(?:day)?|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?)\b/i.test(text) ||
+    /\b(?:at|around|by|before|after)\s+\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)?\b/i.test(text) ||
+    /\bin\s+(?:\d+|[a-z]+(?:[\s-]+[a-z]+)?)\s+(?:minutes?|hours?|days?|weeks?)\b/i.test(text) ||
+    /\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/.test(text) ||
+    /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}\b/i.test(text)
+  )
+}
+
+function reminderHasSubject(text) {
+  return explicitReminderSubject(text) !== null
+}
+
+function capitalizeReminderSubject(value) {
+  return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
 function parseRelativeMinutes(text) {

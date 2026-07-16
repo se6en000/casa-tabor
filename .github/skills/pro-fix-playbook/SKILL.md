@@ -1,129 +1,122 @@
 ---
 name: pro-fix-playbook
-description: "Run a root-cause-first, blast-radius-aware fix workflow with dual-layer remediation (source + UX/data), regression proofing, and runtime verification. Use for any bug or behavior regression that may affect multiple surfaces."
+description: "Run an opt-in, risk-tiered, root-cause-first engineering workflow. Use when the user explicitly invokes /pro-fix-playbook for production incidents, destructive data repair, migrations, authentication, recurrence/sync bugs, complex cross-system regressions, or genuinely ambiguous UX behavior."
+argument-hint: "Describe the high-risk bug, incident, migration, or complex change"
+disable-model-invocation: true
 ---
 
 # Pro Fix Playbook
 
-Use this skill when a fix must be **correct, durable, and production-safe**.
-It is the invokable version of the always-on pro-fix framework.
+Apply rigor in proportion to risk. This skill is for work where a narrow default
+workflow is not enough; it is not a requirement for every bug or feature.
 
-## When to invoke
+Do not invoke subagents. Use repository and runtime tools directly.
 
-- User reports a confusing bug and wants a deep dive.
-- The same symptom appears across calendar/home/reminders or multiple pages.
-- You suspect mutation/normalization/sync logic is involved.
-- A quick patch would hide symptoms but not stop bad data generation.
+## 1. Classify risk first
 
-## Output contract (always deliver in this order)
+Choose the highest applicable tier:
 
-1. Symptom definition (exact + reproducible)
-2. Root cause path (write -> storage -> read -> display)
-3. Blast radius map (all affected surfaces)
-4. Patch plan (source fix + immediate UX/data shield)
-5. Validation evidence (tests/build/runtime checks)
-6. Deployment/runtime verification
-7. Residual risk + follow-ups
+| Tier | Typical work | Required proof |
+| --- | --- | --- |
+| 0 | Docs, copy, comments | Diff review; docs check if one exists |
+| 1 | Isolated component or helper | Focused regression; changed-file lint; relevant type-check |
+| 2 | Shared UI, state, API, or multiple consumers | Focused tests; type-check; relevant build; full suite once before release |
+| 3 | Schema, production data, sync, recurrence, auth, destructive or cross-system behavior | Full playbook, focused and full tests, build, runtime fixture, deployment verification |
 
-## Execution checklist
+If the task is Tier 0-1 and has no meaningful ambiguity, use the concise path:
+inspect, fix, focused validation, handoff. Do not manufacture ceremony.
 
-### Phase 1: Frame the bug
+## 2. Discover only what can change the solution
 
-- Capture exact failing text/state and expected result.
-- Identify where user sees it first and where it likely originates.
-- Avoid coding before evidence.
+Before editing:
 
-### Phase 2: Trace mutation pipeline
+- Capture the exact symptom/outcome and expected behavior.
+- Inspect the first visible surface and likely source.
+- For a bug, trace only as far as needed to find the first incorrect mutation.
+- Search for shared helpers and directly coupled writers/readers.
+- Separate facts, inferences, and unresolved product decisions.
+- Do not ask questions tools or repository conventions can answer.
 
-- Inspect all transformation points:
-  - ingest/enrichment/import/sync functions
-  - DB write payloads
-  - query hydration/normalization
-  - UI render helpers
-- Name the first place bad data can be created.
+Investigation budget for Tier 0-2:
 
-### Phase 3: Blast-radius sweep
+- Begin with one batched search/read pass.
+- Prefer directly relevant files and shared helpers.
+- Reassess after roughly six files.
+- Expand to storage, logs, production data, or parallel surfaces only when
+  evidence implicates them.
+- Summarize large command output instead of retaining full logs.
 
-- Search for duplicate helpers and inline formatting logic.
-- List every surface that reads/derives the affected field.
-- Convert repeated logic into one shared utility when possible.
+Tier 3 may expand beyond this budget when evidence requires it. Load
+[the incident checklist](./references/incident-checklist.md) only then.
 
-### Phase 4: Dual-layer remediation
+## 3. Clarify conditionally
 
-Apply both unless intentionally scoped otherwise:
+Ask one question at a time only when an unresolved choice materially changes
+behavior, architecture, data compatibility, risk, or acceptance criteria.
 
-1. **Source-layer fix**: prevent future bad writes.
-2. **Read/render-layer fix**: normalize existing records now for UX continuity.
+Proceed without a confirmation round when evidence and repository conventions
+establish one safe implementation. Require explicit shared-understanding
+confirmation only for destructive operations, migrations/backfills, ambiguous
+product behavior, or material scope choices.
 
-Then decide whether a persistent data backfill is required.
+Do not silently make a new consequential product decision during implementation.
 
-### Phase 5: Regression hardening
+## 4. Plan and track proportionally
 
-- Add focused tests for:
-  - the broken case,
-  - nearby valid cases,
-  - shared-helper behavior.
-- Ensure tests guard against reintroduction.
+Keep the active plan limited to:
 
-### Phase 6: Verify with repo standards
+- current objective;
+- established root cause;
+- decisions and non-goals;
+- affected files/systems;
+- remaining work;
+- validation status.
 
-- Run existing lint/build/test commands.
-- Explicitly separate pre-existing failures from change-caused failures.
-- Validate behavior in real app/runtime flow.
+Use dependency-aware todos only when work spans multiple systems, needs
+migration/deployment, has at least three independently verifiable phases, or may
+continue across sessions. Otherwise, work directly without ceremonial todos.
 
-### Phase 7: Deploy and operational verify
+## 5. Implement root-cause-first
 
-- Deploy changed backend functions when applicable.
-- Deploy frontend per repo rules.
-- Refresh Pi kiosk session and verify Chromium is running before handoff.
+- Correct the authoritative source of behavior.
+- Add a read/UX compatibility shield only when existing bad data can remain.
+- Backfill only when persistent repair is necessary and guarded.
+- Reuse shared helpers and preserve established payload/type boundaries.
+- Keep failures explicit; do not add silent success-shaped fallbacks.
 
-### Phase 8: Incident-grade handoff
+## 6. Validate by risk
+
+During implementation, run focused checks first. Expand only when the change,
+dependency graph, or a failure justifies it.
+
+- Run the full test suite once at the release boundary for Tier 2-3.
+- Do not rerun unchanged full gates after every edit.
+- Build only when compilation, bundling, generated output, or release readiness
+  is relevant.
+- Deploy only when the user requested deployment or production-sensitive work
+  must be made live.
+- After deployment, verify the exact revision and real affected runtime path.
+
+Use [the validation strategy](./references/validation-strategy.md) to select
+checks and escalation rules.
+
+## 7. Handoff concisely
 
 Report:
-- root cause,
-- source-layer fix,
-- UX/data mitigation,
-- validation commands/results,
-- what remains (if anything).
 
-## Right vs wrong pattern
+1. Root cause or implementation outcome.
+2. What changed at the source.
+3. Compatibility/data remediation, if any.
+4. Validation actually run.
+5. Deployment/runtime status, if applicable.
+6. Residual risks or intentionally deferred work.
 
-### Wrong
+Do not include empty sections or a file-by-file inventory.
 
-- Patch only one visible component.
-- Ignore the upstream transform that keeps generating bad values.
-- Declare done without runtime verification.
+## Attribution
 
-### Right
+The conditional one-question-at-a-time technique is adapted from Matt Pocock's
+MIT-licensed `grilling` skill:
+https://github.com/mattpocock/skills/blob/main/skills/productivity/grilling/SKILL.md
 
-- Fix upstream generator and all read/display surfaces.
-- Add shared normalization utility to eliminate drift.
-- Add regression tests and verify in production runtime path.
-
-## Casa example (possessive bug)
-
-Problem: event titles showed `Owen'S`, `Jake'S`.
-
-Root cause: title-casing with `\b\w` uppercased possessive suffixes after apostrophes.
-
-Playbook application:
-- Source fix in `supabase/functions/enrich-event/index.ts` (possessive-safe title casing).
-- Immediate UX/data shield in event hydration + shared `cleanEventTitle`.
-- Multi-surface cleanup (Home, Day view, Large card, Reminder card, reminder->Needs You flow).
-- Regression tests added (`tests/event-title.test.mjs`).
-- Full validation + deploy + Pi runtime verification.
-
-## Quick command starter (adapt per issue)
-
-```bash
-# 1) Find transform points
-rg -n "title|normalize|format|replace|toUpperCase|toLowerCase" src supabase/functions
-
-# 2) Find all display surfaces for target field
-rg -n "event.title|cleanEventTitle|Reminder|DayView|HomePage" src
-
-# 3) Validate
-npm run test
-npm run build
-npm run lint
-```
+Copyright (c) 2026 Matt Pocock. Used and adapted under the MIT License.

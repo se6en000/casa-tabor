@@ -7,7 +7,7 @@ import {
 } from '../lib/sttTurnProtocol.mjs'
 import { isIncompleteVoiceFragment } from '../lib/voiceTurnTaking.mjs'
 
-const DISMISS_PHRASES = /\b(thank you|thanks|goodbye|bye|close|dismiss|that'?s all|all done|never mind|nevermind|stop)\b/i
+const DISMISS_PHRASES = /\b(goodbye|bye|go away|close|dismiss|that'?s all|all done|i(?:'| a)?m done|we(?:'| a)?re done|done for now|stop listening|end session|close session|never mind|nevermind|stop)\b/i
 const CONFIRM_PHRASES = /\b(yes|yeah|yep|confirm|ok|okay|go ahead|do it|sounds good|correct|right|affirmative|absolutely|sure|proceed)\b/i
 const CANCEL_PHRASES  = /\b(no|nope|cancel|don't|do not|stop|abort|never mind|nevermind|undo)\b/i
 

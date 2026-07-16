@@ -442,10 +442,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
         return
       }
       pending.state = 'executing'
-      void Promise.resolve(pending.confirm()).then((confirmed) => {
-        if (!confirmed) return
-        setTimeout(onClose, 350)
-      })
+      void Promise.resolve(pending.confirm())
     },
     onCancel:  () => {
       markUserInteraction()
@@ -462,10 +459,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
         return
       }
       pending.state = 'executing'
-      void Promise.resolve(pending.cancel()).then((cancelled) => {
-        if (!cancelled) return
-        setTimeout(onClose, 350)
-      })
+      void Promise.resolve(pending.cancel())
     },
     hasPendingAction: hasPendingToolAction,
   })
@@ -789,6 +783,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
               'sm:rounded-2xl sm:w-[760px] sm:shadow-[0_8px_40px_rgba(0,0,0,0.22)] sm:border sm:border-casa-border',
               loading && 'ai-thinking',
             )}
+            data-panel-overlay
             data-touch-keyboard="ignore"
             style={{
               ...(window.innerWidth < 640 ? {
