@@ -92,6 +92,19 @@ export interface GoogleEvent {
   updated: string
 }
 
+export async function getGoogleEvent(opts: {
+  accessToken: string
+  calendarId: string
+  eventId: string
+}): Promise<GoogleEvent> {
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(opts.calendarId)}/events/${encodeURIComponent(opts.eventId)}`,
+    { headers: { authorization: 'Bearer ' + opts.accessToken } },
+  )
+  if (!res.ok) throw new Error(`Calendar get failed: ${res.status} ${await res.text()}`)
+  return res.json()
+}
+
 export interface ListEventsResult {
   items: GoogleEvent[]
   nextSyncToken?: string

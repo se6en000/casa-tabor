@@ -6,13 +6,6 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-function nextRetryDelayMinutes(attempt: number): number {
-  if (attempt <= 1) return 5
-  if (attempt === 2) return 15
-  if (attempt === 3) return 60
-  return 180
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
@@ -20,14 +13,11 @@ Deno.serve(async (req) => {
   const { limit = 10 } = await req.json().catch(() => ({}))
 
   try {
-    const nowIso = new Date().toISOString()
-    const { data: jobs, error: loadError } = await sb
-      .from('google_sync_jobs')
-      .select('id, event_id, audit_history_id, attempts, max_attempts')
-      .in('status', ['pending', 'retrying'])
-      .lte('next_retry_at', nowIso)
-      .order('created_at', { ascending: true })
-      .limit(Math.max(1, Math.min(Number(limit) || 10, 25)))
+    const workerId = `google-sync-jobs:${crypto.randomUUID()}`
+    const { data: jobs, error: loadError } = await sb.rpc('claim_google_sync_jobs', {
+      p_worker_id: workerId,
+      p_limit: Math.max(1, Math.min(Number(limit) || 10, 25)),
+    })
 
     if (loadError) throw new Error(loadError.message)
 
@@ -37,19 +27,6 @@ Deno.serve(async (req) => {
 
     for (const job of jobs ?? []) {
       processed += 1
-      const attemptNumber = Number(job.attempts ?? 0) + 1
-      const startedAt = new Date().toISOString()
-
-      await sb
-        .from('google_sync_jobs')
-        .update({
-          status: 'running',
-          attempts: attemptNumber,
-          last_attempt_at: startedAt,
-          updated_at: startedAt,
-        })
-        .eq('id', job.id)
-
       const syncRes = await sb.functions.invoke('sync-event-to-google', {
         body: {
           event_id: job.event_id,
@@ -61,16 +38,12 @@ Deno.serve(async (req) => {
       const syncStatus = typeof syncRes?.data?.sync_status === 'string' ? syncRes.data.sync_status : null
       const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? (syncStatus === 'failed' ? 'sync-event-to-google failed' : null)
       if (!syncError && (syncStatus === 'synced' || syncStatus === 'not_needed')) {
-        const finishedAt = new Date().toISOString()
-        await sb
-          .from('google_sync_jobs')
-          .update({
-            status: 'succeeded',
-            last_error: null,
-            completed_at: finishedAt,
-            updated_at: finishedAt,
-          })
-          .eq('id', job.id)
+        const { error: finishError } = await sb.rpc('finish_google_sync_job', {
+          p_job_id: job.id,
+          p_worker_id: workerId,
+          p_success: true,
+        })
+        if (finishError) throw new Error(finishError.message)
 
         if (job.audit_history_id) {
           await sb
@@ -83,21 +56,14 @@ Deno.serve(async (req) => {
         continue
       }
 
-      const exhausted = attemptNumber >= Number(job.max_attempts ?? 5)
-      const nextRetryAt = new Date(Date.now() + nextRetryDelayMinutes(attemptNumber) * 60_000).toISOString()
-      const nextStatus = exhausted ? 'failed' : 'retrying'
-      const finishedAt = new Date().toISOString()
-
-      await sb
-        .from('google_sync_jobs')
-        .update({
-          status: nextStatus,
-          last_error: syncError,
-          next_retry_at: exhausted ? finishedAt : nextRetryAt,
-          completed_at: exhausted ? finishedAt : null,
-          updated_at: finishedAt,
-        })
-        .eq('id', job.id)
+      const exhausted = Number(job.attempts ?? 0) >= Number(job.max_attempts ?? 5)
+      const { error: finishError } = await sb.rpc('finish_google_sync_job', {
+        p_job_id: job.id,
+        p_worker_id: workerId,
+        p_success: false,
+        p_error: syncError,
+      })
+      if (finishError) throw new Error(finishError.message)
 
       if (job.audit_history_id) {
         await sb

@@ -57,6 +57,45 @@ test('Casa details block is idempotent and preserves Google-owned description te
   assert.doesNotMatch(second.description, /Water/)
 })
 
+test('projection includes actionable driver and transportation logistics', () => {
+  const payload = serializeGoogleRecurrenceProjection({
+    event,
+    series,
+    bundle: {
+      members: [{ name: 'Owen' }],
+      plan_override: {
+        mode_override: 'appointment',
+        waits: true,
+        two_driver_confirmed: true,
+        driver_names: { 0: 'Jake' },
+      },
+      transportation_plan: {
+        version: 1,
+        legs: [{
+          purpose: 'pickup',
+          origin: { name: 'Home', address: '10 Oak St' },
+          destination: { name: 'Hope Center', address: '20 Main St' },
+          driverName: 'Jake',
+          passengers: ['Owen'],
+          timing: 'arrive_by',
+          time: '14:30',
+        }],
+      },
+      logistics: [{ title: 'Bring booster seat' }],
+    },
+  })
+
+  assert.match(payload.description, /People: Owen/)
+  assert.match(payload.description, /Transportation 1: Pickup/)
+  assert.match(payload.description, /Home \(10 Oak St\) -> Hope Center \(20 Main St\)/)
+  assert.match(payload.description, /Driver: Jake/)
+  assert.match(payload.description, /Passengers: Owen/)
+  assert.match(payload.description, /Arrive By: 14:30/)
+  assert.match(payload.description, /Driving plan: Mode: Appointment; Driver waits; Two-driver plan confirmed/)
+  assert.match(payload.description, /Driver assignments: Leg 1: Jake/)
+  assert.match(payload.description, /Logistics: Bring booster seat/)
+})
+
 test('household members never become Google invitations implicitly', () => {
   const withoutInvites = serializeGoogleRecurrenceProjection({
     event,

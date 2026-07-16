@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { patchGoogleEvent, createGoogleEvent } from '../_shared/google.ts'
+import { patchGoogleEvent, createGoogleEvent, getGoogleEvent } from '../_shared/google.ts'
 import { loadWritableGoogleConnection, markGoogleConnectionHealthy } from '../_shared/google-connection.ts'
+import { buildGoogleEventDescription } from '../_shared/google-event-details-core.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -32,8 +33,11 @@ Deno.serve(async (req) => {
 
   const { connection, accessToken } = await loadWritableGoogleConnection(sb)
 
-  const enr = Array.isArray(event.event_enrichments) ? event.event_enrichments[0] : event.event_enrichments
   const calendarId = connection.calendar_id
+  const { data: bundle, error: bundleError } = await sb.rpc('recurrence_build_reusable_patch', {
+    p_event_id: event_id,
+  })
+  if (bundleError) throw bundleError
 
   // ── Build Google Calendar patch ──
   // Send all editable fields: title, times, location, description+enrichment
@@ -44,38 +48,6 @@ Deno.serve(async (req) => {
   // location — prefer location_name; append address only if it's different
   const locationParts = [event.location_name, event.address].filter((p, i, arr) => p && arr.indexOf(p) === i)
   const location = locationParts.length > 0 ? locationParts.join(', ') : undefined
-
-  // description = structured enrichment block appended to original description
-  const descLines: string[] = []
-
-  if (enr) {
-    const primaryMember = (event.event_members as { role: string; family_members: { name: string } }[] | undefined)
-      ?.find(m => m.role === 'primary')?.family_members?.name
-    const attendees = (event.event_members as { role: string; family_members: { name: string } }[] | undefined)
-      ?.filter(m => m.role === 'attendee').map(m => m.family_members?.name).filter(Boolean)
-
-    if (primaryMember) descLines.push(`👤 Primary: ${primaryMember}`)
-    if (attendees?.length) descLines.push(`👥 Also: ${attendees.join(', ')}`)
-    if (enr.prep_notes) descLines.push(`\n📋 Prep Notes\n${enr.prep_notes}`)
-    if (enr.what_to_bring?.length) descLines.push(`\n🎒 What to Bring\n${(enr.what_to_bring as string[]).join('\n')}`)
-    if (enr.outfit_suggestion) descLines.push(`\n👗 Outfit\n${enr.outfit_suggestion}`)
-    if (enr.parking_notes) descLines.push(`\n🅿️ Parking\n${enr.parking_notes}`)
-    if (enr.contact_name) {
-      const contact = [enr.contact_name, enr.contact_phone].filter(Boolean).join(' · ')
-      descLines.push(`\n📞 Contact\n${contact}`)
-    }
-    if (enr.cost_estimate) descLines.push(`\n💰 Cost\n${enr.cost_estimate}`)
-    if (enr.dietary_notes) descLines.push(`\n🥗 Dietary\n${enr.dietary_notes}`)
-    if (enr.meal_impact) descLines.push(`\n🍽️ Meal Impact\n${enr.meal_impact}`)
-  }
-
-  const enrichmentBlock = descLines.length > 0
-    ? `\n\n━━━━━━━━━━━━━━━━━━━━━\n🏠 Casa Tabor Details\n━━━━━━━━━━━━━━━━━━━━━\n${descLines.join('\n')}`
-    : ''
-
-  // Strip any previous Casa Tabor block before re-appending
-  const originalDesc = (event.description as string | null)?.replace(/\n*━━━━━━━━━━━━━━━━━━━━━\n🏠 Casa Tabor Details[\s\S]*$/, '') ?? ''
-  const description = originalDesc + enrichmentBlock
 
   const isAllDay = event.all_day || (!event.start_time?.includes('T') && !event.start_time?.includes(' '))
   const toISO = (t: string) => new Date(t).toISOString()
@@ -91,10 +63,9 @@ Deno.serve(async (req) => {
   // Google Calendar requires timeZone when using dateTime (especially when switching from all-day)
   const TZ = 'America/New_York'
 
-  const patch = {
+  const projectionFields = {
     summary,
     ...(location !== undefined ? { location } : {}),
-    description,
     start: isAllDay
       ? { date: toGoogleAllDayDate(event.start_time as string) }
       : { dateTime: toISO(event.start_time), timeZone: TZ },
@@ -102,9 +73,22 @@ Deno.serve(async (req) => {
       ? { date: toGoogleAllDayEndDate(event.end_time as string) }
       : { dateTime: toISO(event.end_time), timeZone: TZ },
   }
-  console.log('[push-to-google] patch payload:', JSON.stringify(patch))
 
   try {
+    const current = await getGoogleEvent({
+      accessToken,
+      calendarId,
+      eventId: event.google_event_id,
+    })
+    const patch = {
+      ...projectionFields,
+      description: buildGoogleEventDescription({
+        bundle,
+        existingDescription: current.description ?? event.description ?? '',
+        eventId: event.id,
+      }),
+    }
+    console.log('[push-to-google] patch payload:', JSON.stringify(patch))
     await patchGoogleEvent({
       accessToken,
       calendarId,
@@ -128,9 +112,13 @@ Deno.serve(async (req) => {
       event: {
         summary: summary ?? event.title,
         ...(location !== undefined ? { location } : {}),
-        description,
-        start: patch.start,
-        end: patch.end,
+        description: buildGoogleEventDescription({
+          bundle,
+          existingDescription: event.description ?? '',
+          eventId: event.id,
+        }),
+        start: projectionFields.start,
+        end: projectionFields.end,
       },
     })
     await sb.from('events').update({

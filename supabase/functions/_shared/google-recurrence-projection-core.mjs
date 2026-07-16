@@ -1,6 +1,7 @@
-const CASA_BLOCK_START = '<!-- CASA-TABOR-DETAILS:START -->'
-const CASA_BLOCK_END = '<!-- CASA-TABOR-DETAILS:END -->'
-const DEFAULT_DESCRIPTION_LIMIT = 8_000
+import {
+  buildGoogleEventDescription,
+  replaceCasaDetailsBlock,
+} from './google-event-details-core.mjs'
 
 function text(value) {
   return typeof value === 'string' ? value.trim() : ''
@@ -10,62 +11,7 @@ function compactLines(lines) {
   return lines.map(text).filter(Boolean)
 }
 
-function formatItems(items, labelKey = 'label') {
-  if (!Array.isArray(items)) return []
-  return items
-    .map((item) => text(item?.[labelKey] ?? item?.title ?? item?.description))
-    .filter(Boolean)
-}
-
-function buildCasaDetailsLines(bundle, eventUrl) {
-  const members = Array.isArray(bundle.members)
-    ? bundle.members.map((member) => text(member?.name ?? member?.family_member?.name)).filter(Boolean)
-    : []
-  const enrichment = bundle.enrichment ?? {}
-  const transportation = bundle.transportation_plan ?? null
-  const logistics = formatItems(bundle.logistics, 'title')
-  const checklist = formatItems(bundle.checklist_definitions)
-  const actions = formatItems(bundle.action_definitions, 'title')
-  const bring = Array.isArray(enrichment.what_to_bring)
-    ? enrichment.what_to_bring.map(text).filter(Boolean)
-    : []
-
-  return compactLines([
-    'Casa Tabor details',
-    members.length ? `People: ${members.join(', ')}` : '',
-    enrichment.category ? `Category: ${enrichment.category}` : '',
-    bring.length ? `Bring: ${bring.join(', ')}` : '',
-    enrichment.prep_notes ? `Prep: ${enrichment.prep_notes}` : '',
-    enrichment.parking_notes ? `Parking: ${enrichment.parking_notes}` : '',
-    transportation ? `Transportation: ${text(transportation.summary) || `${transportation.legs?.length ?? 0} leg(s)`}` : '',
-    logistics.length ? `Logistics: ${logistics.join('; ')}` : '',
-    checklist.length ? `Checklist: ${checklist.join('; ')}` : '',
-    actions.length ? `Actions: ${actions.join('; ')}` : '',
-    eventUrl ? `Open in Casa: ${eventUrl}` : '',
-  ])
-}
-
-export function replaceCasaDetailsBlock(description, casaLines, maxLength = DEFAULT_DESCRIPTION_LIMIT) {
-  const current = text(description)
-  const start = current.indexOf(CASA_BLOCK_START)
-  const end = current.indexOf(CASA_BLOCK_END)
-  const withoutCasa = start >= 0 && end > start
-    ? `${current.slice(0, start)}${current.slice(end + CASA_BLOCK_END.length)}`.trim()
-    : current
-  const markerLength = CASA_BLOCK_START.length + CASA_BLOCK_END.length + 2
-  const contentBudget = Math.max(0, maxLength - markerLength)
-  const preservedBudget = Math.min(withoutCasa.length, Math.floor(contentBudget / 2))
-  const preserved = withoutCasa.length > preservedBudget
-    ? `${withoutCasa.slice(0, Math.max(0, preservedBudget - 1)).trimEnd()}…`
-    : withoutCasa
-  const header = preserved ? `${preserved}\n\n` : ''
-  const available = Math.max(0, contentBudget - header.length)
-  let details = compactLines(casaLines).join('\n')
-  if (details.length > available) {
-    details = available > 1 ? `${details.slice(0, available - 1).trimEnd()}…` : ''
-  }
-  return `${header}${CASA_BLOCK_START}\n${details}\n${CASA_BLOCK_END}`
-}
+export { replaceCasaDetailsBlock }
 
 function googleTime(event, timezone) {
   if (event.all_day) {
@@ -92,7 +38,6 @@ export function serializeGoogleRecurrenceProjection({
     throw new Error('A persisted event and revisioned series are required for Google projection.')
   }
   const timezone = text(series.timezone) || 'America/New_York'
-  const eventUrl = `${casaBaseUrl.replace(/\/$/, '')}/calendar?event=${encodeURIComponent(event.id)}`
   const location = compactLines([event.location_name, event.address])
     .filter((value, index, all) => all.indexOf(value) === index)
     .join(', ')
@@ -108,10 +53,12 @@ export function serializeGoogleRecurrenceProjection({
 
   return {
     summary: text(event.title) || 'Untitled event',
-    description: replaceCasaDetailsBlock(
-      existingGoogleDescription,
-      buildCasaDetailsLines(bundle, eventUrl),
-    ),
+    description: buildGoogleEventDescription({
+      bundle,
+      existingDescription: existingGoogleDescription,
+      eventId: event.id,
+      casaBaseUrl,
+    }),
     ...(location ? { location } : {}),
     ...googleTime(event, timezone),
     ...(recurrence.length ? { recurrence } : {}),

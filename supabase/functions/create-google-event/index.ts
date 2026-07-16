@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { createGoogleEvent } from '../_shared/google.ts'
 import { loadWritableGoogleConnection, markGoogleConnectionHealthy } from '../_shared/google-connection.ts'
+import { buildGoogleEventDescription } from '../_shared/google-event-details-core.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -32,6 +33,12 @@ Deno.serve(async (req) => {
 
   const { connection, accessToken } = await loadWritableGoogleConnection(sb)
   const calendarId = connection.calendar_id
+  const { data: bundle, error: bundleError } = await sb.rpc('recurrence_build_reusable_patch', {
+    p_event_id: event_id,
+  })
+  if (bundleError) {
+    return new Response(JSON.stringify({ error: bundleError.message }), { status: 500, headers: { ...CORS, 'content-type': 'application/json' } })
+  }
 
   // Build location string
   const locationParts = [event.location_name, event.address].filter((p: string | null, i: number, arr: (string | null)[]) => p && arr.indexOf(p) === i)
@@ -67,6 +74,11 @@ Deno.serve(async (req) => {
     event: {
       summary: event.title,
       ...(location ? { location } : {}),
+      description: buildGoogleEventDescription({
+        bundle,
+        existingDescription: event.description ?? '',
+        eventId: event.id,
+      }),
       ...(recurrence.length > 0 ? { recurrence } : {}),
       start: startField,
       end: endField,

@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { createGoogleEvent, patchGoogleEvent } from '../_shared/google.ts'
+import { createGoogleEvent, getGoogleEvent, patchGoogleEvent } from '../_shared/google.ts'
 import { loadWritableGoogleConnection, markGoogleConnectionHealthy } from '../_shared/google-connection.ts'
+import { buildGoogleEventDescription } from '../_shared/google-event-details-core.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -38,6 +39,10 @@ Deno.serve(async (req) => {
     const { connection, accessToken } = await loadWritableGoogleConnection(sb)
     const calendarId = connection.calendar_id
     const isAllDay = master.all_day
+    const { data: bundle, error: bundleError } = await sb.rpc('recurrence_build_reusable_patch', {
+      p_event_id: master_event_id,
+    })
+    if (bundleError) throw bundleError
 
     // Build start/end for Google
     const start = isAllDay
@@ -58,7 +63,6 @@ Deno.serve(async (req) => {
     const eventBody = {
       summary: master.title as string,
       ...(location !== undefined ? { location } : {}),
-      ...(master.description ? { description: master.description as string } : {}),
       start,
       end,
       ...(recurrence.length > 0 ? { recurrence } : {}),
@@ -67,11 +71,23 @@ Deno.serve(async (req) => {
     if (master.google_event_id) {
       // PATCH existing Google recurring event — updates title, times, location, recurrence rule
       try {
+        const current = await getGoogleEvent({
+          accessToken,
+          calendarId,
+          eventId: master.google_event_id as string,
+        })
         await patchGoogleEvent({
           accessToken,
           calendarId,
           eventId: master.google_event_id as string,
-          patch: eventBody,
+          patch: {
+            ...eventBody,
+            description: buildGoogleEventDescription({
+              bundle,
+              existingDescription: current.description ?? master.description ?? '',
+              eventId: master.id,
+            }),
+          },
         })
         await sb.from('events').update({
           google_connection_id: connection.id,
@@ -88,7 +104,14 @@ Deno.serve(async (req) => {
         const created = await createGoogleEvent({
           accessToken,
           calendarId,
-          event: eventBody,
+          event: {
+            ...eventBody,
+            description: buildGoogleEventDescription({
+              bundle,
+              existingDescription: master.description ?? '',
+              eventId: master.id,
+            }),
+          },
         })
         await sb.from('events').update({
           google_event_id: created.id,
@@ -106,7 +129,14 @@ Deno.serve(async (req) => {
       const created = await createGoogleEvent({
         accessToken,
         calendarId,
-        event: eventBody,
+        event: {
+          ...eventBody,
+          description: buildGoogleEventDescription({
+            bundle,
+            existingDescription: master.description ?? '',
+            eventId: master.id,
+          }),
+        },
       })
       await sb.from('events').update({
         google_event_id: created.id,
