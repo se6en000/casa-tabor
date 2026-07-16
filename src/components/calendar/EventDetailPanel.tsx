@@ -93,7 +93,6 @@ const MODE_OVERRIDE_OPTIONS: Array<{ value: 'auto' | EventMode; label: string; h
 ]
 const PANEL_ENTER_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1]
 const PANEL_EXIT_EASE: [number, number, number, number] = [0.4, 0, 1, 1]
-const PANEL_DRAG_HANDOFF_DISTANCE = 8
 const ALL_CATEGORIES_FOR_PICKER = Object.keys(CATEGORY_LABEL) as string[]
 
 function eventCrownStyle(event: EventWithDetails, region: 'cap' | 'body'): React.CSSProperties {
@@ -144,7 +143,6 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
   const queryClient = useQueryClient()
   const isMobile = useIsMobile()
   const panelDragControls = useDragControls()
-  const scrollDragCandidateRef = useRef<{ pointerId: number; x: number; y: number } | null>(null)
   const dragDismissOffset = isMobile ? 150 : 180
   const dragDismissVelocity = isMobile ? 550 : 700
   const { data: savedPlaces = [], isPending: savedPlacesPending } = useSavedPlaces()
@@ -471,24 +469,8 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 }}
                 onPointerDown={e => {
                   if (!e.isPrimary || e.currentTarget.scrollTop > 0) return
-                  scrollDragCandidateRef.current = { pointerId: e.pointerId, x: e.clientX, y: e.clientY }
+                  panelDragControls.start(e)
                 }}
-                onPointerMove={e => {
-                  const candidate = scrollDragCandidateRef.current
-                  if (!candidate || candidate.pointerId !== e.pointerId) return
-                  const deltaX = e.clientX - candidate.x
-                  const deltaY = e.clientY - candidate.y
-                  if (deltaY < -PANEL_DRAG_HANDOFF_DISTANCE || Math.abs(deltaX) > Math.abs(deltaY)) {
-                    scrollDragCandidateRef.current = null
-                    return
-                  }
-                  if (deltaY >= PANEL_DRAG_HANDOFF_DISTANCE) {
-                    scrollDragCandidateRef.current = null
-                    panelDragControls.start(e)
-                  }
-                }}
-                onPointerUp={() => { scrollDragCandidateRef.current = null }}
-                onPointerCancel={() => { scrollDragCandidateRef.current = null }}
               >
                 <PanelHeader
                   event={event}
