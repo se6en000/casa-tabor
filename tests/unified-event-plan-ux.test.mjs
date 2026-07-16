@@ -39,7 +39,16 @@ test('explicit transportation uses the navy The Plan command-center presentation
   assert.match(transportation, /aria-label="The Plan"/)
   assert.match(transportation, /bg-casa-navy/)
   assert.match(transportation, />The Plan</)
-  assert.match(transportation, /Tap any place or driver for a quick change/)
+  assert.match(transportation, /Use a place pencil or driver menu for a quick change/)
+  assert.match(placeEditor, /<IconButton/)
+  assert.match(placeEditor, /aria-label=\{`Edit \$\{ariaLabel\}`\}/)
+  const placeSummaryStart = placeEditor.indexOf('if (!editing && !editorOnly)')
+  const placeSummaryReturn = placeEditor.indexOf('\n    return (', placeSummaryStart)
+  const placeSummary = placeEditor.slice(
+    placeSummaryStart,
+    placeEditor.indexOf('\n  return (', placeSummaryReturn + 1),
+  )
+  assert.doesNotMatch(placeSummary, /<Button/)
   assert.match(transportation, /Edit entire plan/)
   assert.match(transportation, /Casa generated · review anytime/)
   assert.match(transportation, /label="Driver waits on site"/)

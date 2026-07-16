@@ -6,7 +6,7 @@ import {
   useSavePlace,
 } from '../../hooks/useSavedPlaces'
 import type { TransportationPlace } from '../../lib/eventTransportation'
-import { Button } from '../ui'
+import { Button, IconButton } from '../ui'
 import SmartPlaceInput from './SmartPlaceInput'
 
 interface InlinePlaceEditorProps {
@@ -88,18 +88,7 @@ export default function InlinePlaceEditor({
 
   if (!editing && !editorOnly) {
     return (
-      <Button
-        variant="ghost"
-        fullWidth
-        align="start"
-        aria-label={ariaLabel}
-        onClick={() => {
-          setDraft(value)
-          setEditing(true)
-        }}
-        className={`rounded-button px-2 text-left ${className ?? ''}`}
-        contentClassName="w-full justify-start"
-      >
+      <div className={`flex min-w-0 items-center gap-2 px-2 text-left ${className ?? ''}`}>
         <MapPin size={16} className="shrink-0 text-casa-gold" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-body-sm font-semibold text-casa-navy">
@@ -111,8 +100,18 @@ export default function InlinePlaceEditor({
             <span className="mt-0.5 block truncate text-caption font-semibold text-casa-error">Add event address</span>
           ) : null}
         </span>
-        <Pencil size={15} className="shrink-0 text-casa-muted" />
-      </Button>
+        <IconButton
+          icon={<Pencil size={15} />}
+          aria-label={`Edit ${ariaLabel}`}
+          title={`Edit ${ariaLabel}`}
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setDraft(value)
+            setEditing(true)
+          }}
+        />
+      </div>
     )
   }
 

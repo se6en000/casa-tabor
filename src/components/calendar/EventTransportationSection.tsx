@@ -567,7 +567,9 @@ export default function EventTransportationSection({
                 <Pencil size={14} /> Edit entire plan
               </Button>
             </div>
-            <p className="px-[18px] pt-3 text-caption text-casa-muted">Tap any place or driver for a quick change.</p>
+            <p className="px-[18px] pt-3 text-caption text-casa-muted">
+              Use a place pencil or driver menu for a quick change.
+            </p>
             {savingQuickChange && <p className="px-[18px] pt-2 text-caption text-casa-muted">Saving trip change…</p>}
             {tripError && <p role="alert" className="px-[18px] pt-2 text-caption text-casa-error">{tripError}</p>}
             <ol className="px-[18px] pb-2">
