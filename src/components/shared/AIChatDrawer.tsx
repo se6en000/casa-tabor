@@ -113,6 +113,42 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     [open, events],
   )
 
+  useEffect(() => {
+    if (!open) return
+
+    const root = document.documentElement
+    const body = document.body
+    const appMain = document.querySelector<HTMLElement>('.app-shell-main')
+    const previous = {
+      rootOverflow: root.style.overflow,
+      rootOverscroll: root.style.overscrollBehavior,
+      bodyOverflow: body.style.overflow,
+      bodyOverscroll: body.style.overscrollBehavior,
+      appMainTouchAction: appMain?.style.touchAction ?? '',
+      appMainOverscroll: appMain?.style.overscrollBehavior ?? '',
+    }
+
+    root.style.overflow = 'hidden'
+    root.style.overscrollBehavior = 'none'
+    body.style.overflow = 'hidden'
+    body.style.overscrollBehavior = 'none'
+    if (appMain) {
+      appMain.style.touchAction = 'none'
+      appMain.style.overscrollBehavior = 'none'
+    }
+
+    return () => {
+      root.style.overflow = previous.rootOverflow
+      root.style.overscrollBehavior = previous.rootOverscroll
+      body.style.overflow = previous.bodyOverflow
+      body.style.overscrollBehavior = previous.bodyOverscroll
+      if (appMain) {
+        appMain.style.touchAction = previous.appMainTouchAction
+        appMain.style.overscrollBehavior = previous.appMainOverscroll
+      }
+    }
+  }, [open])
+
   const dynamicSuggestions = useMemo(
     () => buildDynamicSuggestions(page, events, new Date()),
     [page, events],
