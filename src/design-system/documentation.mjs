@@ -1,4 +1,4 @@
-export const DESIGN_SYSTEM_VERSION = '1.6.0'
+export const DESIGN_SYSTEM_VERSION = '1.7.0'
 export const DESIGN_SYSTEM_RELEASE_DATE = '2026-07-16'
 export const DESIGN_SYSTEM_SCHEMA_VERSION = 1
 
@@ -373,7 +373,7 @@ export const COMPONENT_MANIFEST = [
     states: ['collapsed', 'expanded', 'focus-visible', 'disabled'],
     accessibility: 'The trigger exposes expanded state and controls the labeled content region.',
     responsive: 'Expanded content stays in normal flow and follows container width.',
-    example: '<DisclosureSection title="Advanced options">...</DisclosureSection>',
+    example: '<DisclosureSection title="Advanced options" open={open} onOpenChange={setOpen}>...</DisclosureSection>',
   }),
   component({
     name: 'FormSummaryCard',
@@ -510,6 +510,13 @@ export const COMPONENT_MANIFEST = [
 ]
 
 export const DESIGN_SYSTEM_CHANGELOG = [
+  {
+    version: '1.7.0',
+    date: '2026-07-16',
+    changes: [
+      'Added controlled open-state support to DisclosureSection for workflows with stateful content and scoped input handling.',
+    ],
+  },
   {
     version: '1.6.0',
     date: '2026-07-16',

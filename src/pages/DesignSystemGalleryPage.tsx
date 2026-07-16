@@ -134,6 +134,7 @@ export default function DesignSystemGalleryPage() {
   const { width, height, isFinePointer } = useViewport()
   const [modalOpen, setModalOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [disclosureOpen, setDisclosureOpen] = useState(false)
   const [segment, setSegment] = useState<'first' | 'second' | 'third'>('first')
   const [switchOn, setSwitchOn] = useState(true)
   const [checked, setChecked] = useState(true)
@@ -290,7 +291,13 @@ export default function DesignSystemGalleryPage() {
               onStartChange={setDialStart}
               onEndChange={setDialEnd}
             />
-            <DisclosureSection title="Additional details" summary="Pickup · 2 completed" className="mt-3 rounded-card border border-casa-border">
+            <DisclosureSection
+              title="Additional details"
+              summary="Pickup · 2 completed"
+              open={disclosureOpen}
+              onOpenChange={setDisclosureOpen}
+              className="mt-3 rounded-card border border-casa-border"
+            >
               <Field label="Notes">
                 <Textarea rows={2} placeholder="Optional details" />
               </Field>

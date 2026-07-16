@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Camera, Check, ChevronLeft, ChevronRight, CircleHelp, Clock3, ExternalLink, Search, ShoppingCart, Sparkles, Trash2, Upload, Users } from 'lucide-react'
@@ -10,7 +10,7 @@ import { DEFAULT_FOOD_PROFILE, normalizeFoodProfile, type FoodProfile } from '..
 import { appendPantryInventoryAudit, normalizePackageUnit, normalizePantryKey, sanitizePantryInventoryAudit, type PantryInventoryAuditEntry } from '../lib/pantryInventoryUtils'
 import { cn } from '../utils/cn'
 import recipeFallbackHero from '../assets/hero.png'
-import { Alert, Button, Card, Checkbox, Chip, Heading, IconButton, Progress, SegmentedControl, Switch, Text, Textarea } from '../components/ui'
+import { Alert, Button, Card, Checkbox, Chip, DisclosureSection, Heading, IconButton, Input, Progress, SegmentedControl, Switch, Text, Textarea } from '../components/ui'
 
 type RecipeScale = '0.5' | '1' | '2'
 
@@ -529,12 +529,14 @@ export default function CookPage() {
   const [checkedCookIngredients, setCheckedCookIngredients] = useState<Set<string>>(new Set())
   // Auto-scroll target for the currently-active direction step.
   const currentStepRef = useRef<HTMLElement | null>(null)
-  const [photoEditorRecipeId, setPhotoEditorRecipeId] = useState<string | null>(null)
   const [photoEditorName, setPhotoEditorName] = useState('')
   const [photoEditorUrl, setPhotoEditorUrl] = useState('')
+  const [photoEditorPreviewUrl, setPhotoEditorPreviewUrl] = useState('')
+  const [photoEditorPendingFile, setPhotoEditorPendingFile] = useState<File | null>(null)
+  const [photoEditorDirty, setPhotoEditorDirty] = useState(false)
+  const [photoEditorExpanded, setPhotoEditorExpanded] = useState(false)
   const [photoEditorFocalX, setPhotoEditorFocalX] = useState(50)
   const [photoEditorFocalY, setPhotoEditorFocalY] = useState(50)
-  const [photoEditorSaving, setPhotoEditorSaving] = useState(false)
   const [photoEditorUploading, setPhotoEditorUploading] = useState(false)
   const [photoEditorError, setPhotoEditorError] = useState<string | null>(null)
   const [photoSearchQuery, setPhotoSearchQuery] = useState('')
@@ -593,6 +595,7 @@ export default function CookPage() {
   const importCameraInputRef = useRef<HTMLInputElement>(null)
   const photoEditorUploadInputRef = useRef<HTMLInputElement>(null)
   const photoEditorCameraInputRef = useRef<HTMLInputElement>(null)
+  const photoEditorObjectUrlRef = useRef<string | null>(null)
   const hasImportSource = importUrlInput.trim().length > 0 || importCaptureFiles.length > 0
 
   function plannerMealKey(meal: MealPlannerMeal): string {
@@ -976,7 +979,6 @@ export default function CookPage() {
   }, [recipes, recipeSearch, recipeBrowseFilter, plannedRecipeIds])
 
   const cookRecipe = cookRecipeId ? recipeById.get(cookRecipeId) ?? null : null
-  const photoEditorOpen = Boolean(photoEditorRecipeId)
   const cookSteps = cookRecipeId ? stepsByRecipe.get(cookRecipeId) ?? [] : []
   const cookIngredients = cookRecipeId ? ingredientsByRecipe.get(cookRecipeId) ?? [] : []
   const currentStep = cookSteps[stepIndex] ?? null
@@ -1033,7 +1035,7 @@ export default function CookPage() {
   // Only active while cooking (not editing) and no nested dialog is open.
   useEffect(() => {
     if (!cookRecipeId || isRecipeEditMode) return
-    if (importDialogOpen || photoEditorRecipeId || deleteConfirmRecipe) return
+    if (importDialogOpen || deleteConfirmRecipe) return
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         setCookRecipeId(null)
@@ -1047,7 +1049,11 @@ export default function CookPage() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [cookRecipeId, isRecipeEditMode, importDialogOpen, photoEditorRecipeId, deleteConfirmRecipe, directionsViewMode, cookSteps.length])
+  }, [cookRecipeId, isRecipeEditMode, importDialogOpen, deleteConfirmRecipe, directionsViewMode, cookSteps.length])
+
+  useEffect(() => () => {
+    if (photoEditorObjectUrlRef.current) URL.revokeObjectURL(photoEditorObjectUrlRef.current)
+  }, [])
 
   // Keep the active step in view as it changes (esp. in the all-steps list).
   useEffect(() => {
@@ -1255,8 +1261,14 @@ export default function CookPage() {
     setLibraryActionError(null)
   }
 
+  function closeCookRecipe() {
+    clearPhotoEditorPendingFile()
+    setCookRecipeId(null)
+  }
+
   function startRecipeEditing() {
     if (!cookRecipe) return
+    initializePhotoEditorDraft(cookRecipe)
     const nextDraft: RecipeEditorDraft = {
       name: cookRecipe.name,
       ingredients: cookIngredients.map((ingredient) => {
@@ -1289,6 +1301,7 @@ export default function CookPage() {
   }
 
   function cancelRecipeEditing() {
+    clearPhotoEditorPendingFile()
     setIsRecipeEditMode(false)
     setRecipeEditorDraft(null)
     setRecipeEditorError(null)
@@ -2109,7 +2122,6 @@ export default function CookPage() {
 
       await refetchRecipes()
       setCookRecipeId((current) => (current === recipe.id ? null : current))
-      setPhotoEditorRecipeId((current) => (current === recipe.id ? null : current))
       setLibraryActionStatus(`Deleted "${recipe.name}".`)
     } catch (error) {
       setLibraryActionError(formatSupabaseError(error, 'Could not delete recipe'))
@@ -2248,12 +2260,14 @@ export default function CookPage() {
         })
         .filter((row): row is { raw_text: string; name: string | null; quantity: string | null; unit: string | null; optional: boolean } => row !== null)
 
+      const imageUrl = await resolvePhotoEditorImageUrl(cookRecipe.id)
       const { error: recipeError } = await supabase
         .from('recipes')
         .update({
           name: cleanedName,
           instructions_text: cleanedSteps.map((step) => `${step.step_number}. ${step.instruction}`).join('\n'),
           last_used_at: new Date().toISOString(),
+          ...(imageUrl !== undefined ? { image_url: imageUrl } : {}),
         })
         .eq('id', cookRecipe.id)
       if (recipeError) throw new Error(`Updating recipe failed: ${formatSupabaseError(recipeError, 'Could not update recipe')}`)
@@ -2290,6 +2304,7 @@ export default function CookPage() {
       if (insertStepsError) throw new Error(`Saving directions failed: ${formatSupabaseError(insertStepsError, 'Could not save directions')}`)
 
       await Promise.all([refetchRecipes(), refetchIngredients(), refetchSteps()])
+      clearPhotoEditorPendingFile()
       setIsRecipeEditMode(false)
       setRecipeEditorDraft(null)
       setRecipeEditorStatus('Recipe updated.')
@@ -2346,11 +2361,15 @@ export default function CookPage() {
     }
   }
 
-  function openPhotoEditor(recipe: Recipe) {
+  function initializePhotoEditorDraft(recipe: Recipe) {
+    clearPhotoEditorPendingFile()
     const focus = parseRecipeImageFocus(recipe.image_url)
-    setPhotoEditorRecipeId(recipe.id)
     setPhotoEditorName(recipe.name)
     setPhotoEditorUrl(pickRecipeThumb(recipe) ?? '')
+    setPhotoEditorPreviewUrl('')
+    setPhotoEditorPendingFile(null)
+    setPhotoEditorDirty(false)
+    setPhotoEditorExpanded(false)
     setPhotoSearchQuery(recipe.name)
     setPhotoEditorFocalX(focus.focalX)
     setPhotoEditorFocalY(focus.focalY)
@@ -2358,11 +2377,18 @@ export default function CookPage() {
     setPhotoEditorError(null)
     setPhotoSearchResults([])
     setPhotoSearchError(null)
-    void searchWebImages(recipe.name)
   }
 
-  async function uploadPhotoEditorImage(file: File) {
-    if (!photoEditorRecipeId) return
+  function clearPhotoEditorPendingFile() {
+    if (photoEditorObjectUrlRef.current) {
+      URL.revokeObjectURL(photoEditorObjectUrlRef.current)
+      photoEditorObjectUrlRef.current = null
+    }
+    setPhotoEditorPreviewUrl('')
+    setPhotoEditorPendingFile(null)
+  }
+
+  function stagePhotoEditorImage(file: File) {
     if (!isLikelyImageFile(file)) {
       setPhotoEditorError('Please choose an image file.')
       return
@@ -2371,45 +2397,71 @@ export default function CookPage() {
       setPhotoEditorError('Photo is too large. Please use an image under 10MB.')
       return
     }
-    setPhotoEditorUploading(true)
+    clearPhotoEditorPendingFile()
+    const previewUrl = URL.createObjectURL(file)
+    photoEditorObjectUrlRef.current = previewUrl
+    setPhotoEditorPreviewUrl(previewUrl)
+    setPhotoEditorPendingFile(file)
+    setPhotoEditorDirty(true)
+    setPhotoEditorFocalX(50)
+    setPhotoEditorFocalY(42)
     setPhotoEditorError(null)
-    try {
-      const buffer = await file.arrayBuffer()
-      const base64 = arrayBufferToBase64(buffer)
-      const mimeType = file.type || 'image/jpeg'
-      const { data, error } = await supabase.functions.invoke('recipe-photo-upload', {
-        body: {
-          recipe_id: photoEditorRecipeId,
-          file_name: file.name,
-          file_base64: base64,
-          mime_type: mimeType,
-        },
-      })
-      if (error) throw error
-      const uploadedUrl = String(data?.url ?? '').trim()
-      if (!uploadedUrl) throw new Error('Uploaded photo URL missing')
-      setPhotoEditorUrl(uploadedUrl)
-      setPhotoEditorFocalX(50)
-      setPhotoEditorFocalY(42)
-    } catch (error) {
-      setPhotoEditorError(formatSupabaseError(error, 'Could not upload photo'))
-    } finally {
-      setPhotoEditorUploading(false)
-    }
   }
 
-  async function handlePhotoEditorFileSelection(files: File[], source: 'upload' | 'camera') {
+  function handlePhotoEditorFileSelection(files: File[], source: 'upload' | 'camera') {
     const first = files[0]
     if (!first) {
       if (source === 'camera') setPhotoEditorError('No photo captured. Please try again.')
       return
     }
-    await uploadPhotoEditorImage(first)
+    stagePhotoEditorImage(first)
   }
 
-  async function savePhotoEditor() {
-    if (!photoEditorRecipeId) return
-    const candidate = photoEditorUrl.trim()
+  function handlePhotoEditorPaste(event: ClipboardEvent<HTMLDivElement>) {
+    const imageItem = Array.from(event.clipboardData.items)
+      .find((item) => item.kind === 'file' && item.type.startsWith('image/'))
+    if (!imageItem) return
+    const file = imageItem.getAsFile()
+    if (!file) return
+    event.preventDefault()
+    stagePhotoEditorImage(file)
+  }
+
+  function setPhotoEditorRemoteUrl(url: string) {
+    clearPhotoEditorPendingFile()
+    setPhotoEditorUrl(url)
+    setPhotoEditorDirty(true)
+    setPhotoEditorError(null)
+  }
+
+  async function resolvePhotoEditorImageUrl(recipeId: string): Promise<string | undefined> {
+    if (!photoEditorDirty) return undefined
+    let candidate = photoEditorUrl.trim()
+    if (photoEditorPendingFile) {
+      setPhotoEditorUploading(true)
+      try {
+        const buffer = await photoEditorPendingFile.arrayBuffer()
+        const base64 = arrayBufferToBase64(buffer)
+        const mimeType = photoEditorPendingFile.type || 'image/jpeg'
+        const { data, error } = await supabase.functions.invoke('recipe-photo-upload', {
+          body: {
+            recipe_id: recipeId,
+            file_name: photoEditorPendingFile.name || `pasted-recipe-${Date.now()}.png`,
+            file_base64: base64,
+            mime_type: mimeType,
+          },
+        })
+        if (error) throw error
+        candidate = String(data?.url ?? '').trim()
+        if (!candidate) throw new Error('Uploaded photo URL missing')
+      } catch (error) {
+        const message = formatSupabaseError(error, 'Could not upload photo')
+        setPhotoEditorError(message)
+        throw new Error(message, { cause: error })
+      } finally {
+        setPhotoEditorUploading(false)
+      }
+    }
     try {
       const parsed = new URL(candidate)
       if (!['http:', 'https:'].includes(parsed.protocol)) {
@@ -2417,24 +2469,10 @@ export default function CookPage() {
       }
     } catch {
       setPhotoEditorError('Please paste a valid image URL')
-      return
+      throw new Error('Please paste a valid image URL')
     }
-    setPhotoEditorSaving(true)
     setPhotoEditorError(null)
-    try {
-      const nextUrl = encodeRecipeImageUrl(candidate, photoEditorFocalX, photoEditorFocalY)
-      const { error } = await supabase
-        .from('recipes')
-        .update({ image_url: nextUrl })
-        .eq('id', photoEditorRecipeId)
-      if (error) throw error
-      await refetchRecipes()
-      setPhotoEditorRecipeId(null)
-    } catch (error) {
-      setPhotoEditorError(error instanceof Error ? error.message : 'Could not save photo')
-    } finally {
-      setPhotoEditorSaving(false)
-    }
+    return encodeRecipeImageUrl(candidate, photoEditorFocalX, photoEditorFocalY)
   }
 
   async function importRecipeFromSource(payload: {
@@ -3666,185 +3704,6 @@ export default function CookPage() {
         </div>
       </section>
 
-      {photoEditorOpen && (
-        <div className="fixed inset-0 z-modal bg-casa-navy/40 flex items-end md:items-center justify-center p-3 md:p-4 overflow-y-auto" onClick={() => setPhotoEditorRecipeId(null)}>
-          <div
-            className="w-full max-w-2xl max-h-[92vh] rounded-2xl border border-casa-border bg-casa-surface shadow-modal overflow-hidden flex flex-col self-end md:self-auto"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="px-4 py-3 border-b border-casa-divider">
-              <p className="text-caption uppercase tracking-[0.14em] text-casa-muted font-semibold">Recipe photo editor</p>
-              <p className="text-body font-semibold text-casa-navy mt-1">{photoEditorName}</p>
-            </div>
-            <div className="p-4 space-y-3 overflow-y-auto flex-1 min-h-0">
-              <div className="rounded-xl border border-casa-border bg-casa-bg p-3">
-                <p className="text-caption text-casa-muted mb-2">Search recipe images (Pexels + Unsplash)</p>
-                <div className="flex items-center gap-2">
-                  <input
-                    value={photoSearchQuery}
-                    onChange={(event) => setPhotoSearchQuery(event.target.value)}
-                    placeholder="e.g., chicken alfredo"
-                    className="flex-1 rounded-button border border-casa-border bg-casa-surface px-3 py-2 text-body-sm text-casa-text outline-none"
-                  />
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => void searchWebImages(photoSearchQuery)}
-                    disabled={photoSearchLoading}
-                    loading={photoSearchLoading}
-                  >
-                    Search
-                  </Button>
-                </div>
-                <div className="mt-2 flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => triggerFileInput(photoEditorUploadInputRef)}
-                    disabled={photoEditorUploading}
-                    leadingIcon={<Upload size={14} />}
-                  >
-                    Upload photo
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => triggerFileInput(photoEditorCameraInputRef)}
-                    disabled={photoEditorUploading}
-                    leadingIcon={<Camera size={14} />}
-                  >
-                    Take photo
-                  </Button>
-                  {photoEditorUploading && (
-                    <span className="text-caption text-casa-muted animate-breathe">Uploading…</span>
-                  )}
-                </div>
-                <input
-                  ref={photoEditorUploadInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(event) => {
-                    const files = event.target.files ? Array.from(event.target.files) : []
-                    event.currentTarget.value = ''
-                    void handlePhotoEditorFileSelection(files, 'upload')
-                  }}
-                />
-                <input
-                  ref={photoEditorCameraInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="hidden"
-                  onChange={(event) => {
-                    const files = event.target.files ? Array.from(event.target.files) : []
-                    event.currentTarget.value = ''
-                    void handlePhotoEditorFileSelection(files, 'camera')
-                  }}
-                />
-                {photoSearchError && <p className="mt-2 text-caption text-casa-error">{photoSearchError}</p>}
-                {photoSearchResults.length > 0 && (
-                  <div className="mt-3 grid grid-cols-3 gap-2">
-                    {photoSearchResults.map((option) => (
-                      <Button
-                        key={option.id}
-                        variant="ghost"
-                        onClick={() => {
-                          setPhotoEditorUrl(option.url.split('#')[0] ?? option.url)
-                          setPhotoEditorFocalX(50)
-                          setPhotoEditorFocalY(42)
-                        }}
-                        className={cn(
-                          'h-auto min-h-0 overflow-hidden rounded-lg border p-0 text-left',
-                          photoEditorUrl.trim() === option.url ? 'border-casa-gold' : 'border-casa-border hover:border-casa-gold/40'
-                        )}
-                        contentClassName="block w-full"
-                      >
-                        <img
-                          src={option.url}
-                          alt={option.title || 'recipe option'}
-                          className="h-20 w-full object-cover"
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                        />
-                        {option.source && (
-                          <span className="block px-2 py-1 text-caption text-casa-muted truncate border-t border-casa-divider/60">
-                            {option.source}
-                          </span>
-                        )}
-                      </Button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <label className="block">
-                <span className="text-caption text-casa-muted">Image URL</span>
-                <input
-                  value={photoEditorUrl}
-                  onChange={(event) => setPhotoEditorUrl(event.target.value)}
-                  placeholder="https://.../recipe-photo.jpg"
-                  className="mt-1 w-full rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm text-casa-text outline-none"
-                />
-              </label>
-              <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-start">
-                <div className="rounded-xl border border-casa-border bg-casa-bg p-2">
-                  <img
-                    src={photoEditorUrl.trim() || recipeFallbackHero}
-                    alt={photoEditorName}
-                    className="w-full h-56 rounded-lg object-cover border border-casa-border"
-                    style={{ objectPosition: `${photoEditorFocalX}% ${photoEditorFocalY}%` }}
-                    referrerPolicy="no-referrer"
-                    onError={(event) => {
-                      const target = event.currentTarget
-                      if (target.src !== recipeFallbackHero) target.src = recipeFallbackHero
-                    }}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div>
-                    <p className="text-caption text-casa-muted mb-1">Horizontal crop focus</p>
-                    <input type="range" min={0} max={100} value={photoEditorFocalX} onChange={(event) => setPhotoEditorFocalX(Number(event.target.value))} />
-                  </div>
-                  <div>
-                    <p className="text-caption text-casa-muted mb-1">Vertical crop focus</p>
-                    <input type="range" min={0} max={100} value={photoEditorFocalY} onChange={(event) => setPhotoEditorFocalY(Number(event.target.value))} />
-                  </div>
-                  <Chip
-                    size="sm"
-                    onClick={() => {
-                      setPhotoEditorFocalX(50)
-                      setPhotoEditorFocalY(42)
-                    }}
-                  >
-                    Auto-crop
-                  </Chip>
-                </div>
-              </div>
-              {photoEditorError && <p className="text-caption text-casa-error">{photoEditorError}</p>}
-            </div>
-            <div
-              className="px-4 pt-3 border-t border-casa-divider flex items-center justify-end gap-2"
-              style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
-            >
-              <Button
-                variant="secondary"
-                onClick={() => setPhotoEditorRecipeId(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="strong"
-                disabled={photoEditorSaving || photoEditorUploading}
-                onClick={() => void savePhotoEditor()}
-                loading={photoEditorSaving}
-              >
-                Save photo
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
       {deleteConfirmRecipe && (
         <div
           className="fixed inset-0 z-modal bg-casa-navy/40 flex items-center justify-center p-4"
@@ -4275,7 +4134,7 @@ export default function CookPage() {
       {cookRecipe && (
         <div
           className="fixed inset-0 z-modal casa-scrim flex items-start justify-center overflow-y-auto p-4 sm:p-6"
-          onClick={() => setCookRecipeId(null)}
+          onClick={closeCookRecipe}
         >
           <div
             className="w-[min(64rem,calc(100vw-2rem))] my-auto max-h-[calc(100vh-2rem)] rounded-modal border border-casa-border bg-casa-bg shadow-modal flex flex-col overflow-hidden"
@@ -4288,10 +4147,10 @@ export default function CookPage() {
               <div className="px-5 py-3.5 border-b border-casa-divider flex items-center justify-between gap-2 flex-shrink-0">
                 <div className="flex items-center gap-3 min-w-0">
                   <RecipeImage
-                    src={getRecipeImage(cookRecipe)}
+                    src={photoEditorPreviewUrl || photoEditorUrl || getRecipeImage(cookRecipe)}
                     alt={cookRecipe.name}
-                    focalX={parseRecipeImageFocus(cookRecipe.image_url).focalX}
-                    focalY={parseRecipeImageFocus(cookRecipe.image_url).focalY}
+                    focalX={photoEditorFocalX}
+                    focalY={photoEditorFocalY}
                     className="w-12 h-12 rounded-card object-cover border border-casa-border bg-casa-bg flex-shrink-0"
                   />
                   <div className="min-w-0">
@@ -4302,14 +4161,6 @@ export default function CookPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => openPhotoEditor(cookRecipe)}
-                    leadingIcon={<Camera size={12} />}
-                  >
-                    Edit photo
-                  </Button>
                   <Button
                     variant="danger"
                     size="sm"
@@ -4390,6 +4241,213 @@ export default function CookPage() {
                         className="mt-1 w-full rounded-button border border-casa-border bg-casa-surface px-3 py-2 text-body-lg text-casa-text outline-none"
                       />
                     </label>
+                    <div onPaste={photoEditorExpanded ? handlePhotoEditorPaste : undefined}>
+                      <DisclosureSection
+                        title="Photo"
+                        summary={photoEditorPendingFile ? 'New image ready to save' : 'Search, upload, take, paste, or crop'}
+                        icon={<Camera size={18} />}
+                        open={photoEditorExpanded}
+                        onOpenChange={(open) => {
+                          setPhotoEditorExpanded(open)
+                          if (open && photoSearchResults.length === 0 && !photoSearchLoading) {
+                            void searchWebImages(photoSearchQuery)
+                          }
+                        }}
+                        className="overflow-hidden rounded-card border border-casa-border bg-casa-surface"
+                      >
+                        <div className="space-y-4">
+                          <div
+                            className="rounded-card border border-dashed border-casa-border bg-casa-bg p-3"
+                            tabIndex={0}
+                            aria-label="Recipe photo inputs. Paste an image here, or choose another photo source."
+                          >
+                            <p className="text-body-sm font-semibold text-casa-navy">Add or replace photo</p>
+                            <p className="mt-1 text-caption text-casa-muted">
+                              Paste a screenshot anywhere in this section, upload an image, or take a photo.
+                            </p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => triggerFileInput(photoEditorUploadInputRef)}
+                                disabled={recipeEditorSaving || photoEditorUploading}
+                                leadingIcon={<Upload size={14} />}
+                              >
+                                Choose image
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => triggerFileInput(photoEditorCameraInputRef)}
+                                disabled={recipeEditorSaving || photoEditorUploading}
+                                leadingIcon={<Camera size={14} />}
+                              >
+                                Take photo
+                              </Button>
+                              {photoEditorPendingFile && (
+                                <span role="status" className="flex min-h-control items-center text-caption font-semibold text-casa-success">
+                                  {photoEditorPendingFile.name || 'Pasted image'} ready to save
+                                </span>
+                              )}
+                              {photoEditorUploading && (
+                                <span role="status" className="flex min-h-control items-center text-caption text-casa-muted animate-breathe">
+                                  Uploading photo…
+                                </span>
+                              )}
+                            </div>
+                            <input
+                              ref={photoEditorUploadInputRef}
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(event) => {
+                                const files = event.target.files ? Array.from(event.target.files) : []
+                                event.currentTarget.value = ''
+                                handlePhotoEditorFileSelection(files, 'upload')
+                              }}
+                            />
+                            <input
+                              ref={photoEditorCameraInputRef}
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              className="hidden"
+                              onChange={(event) => {
+                                const files = event.target.files ? Array.from(event.target.files) : []
+                                event.currentTarget.value = ''
+                                handlePhotoEditorFileSelection(files, 'camera')
+                              }}
+                            />
+                          </div>
+
+                          <div>
+                            <label htmlFor="recipe-photo-search" className="text-body-sm font-semibold text-casa-navy">
+                              Find a recipe image
+                            </label>
+                            <p className="mt-1 text-caption text-casa-muted">Searches Pexels and Unsplash.</p>
+                            <div className="mt-2 flex items-center gap-2">
+                              <Input
+                                id="recipe-photo-search"
+                                value={photoSearchQuery}
+                                onChange={(event) => setPhotoSearchQuery(event.target.value)}
+                                placeholder="e.g., chicken alfredo"
+                              />
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => void searchWebImages(photoSearchQuery)}
+                                disabled={photoSearchLoading}
+                                loading={photoSearchLoading}
+                              >
+                                Search
+                              </Button>
+                            </div>
+                            {photoSearchError && <p role="alert" className="mt-2 text-caption text-casa-error">{photoSearchError}</p>}
+                            {photoSearchResults.length > 0 && (
+                              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                {photoSearchResults.map((option) => (
+                                  <Button
+                                    key={option.id}
+                                    variant="ghost"
+                                    onClick={() => {
+                                      setPhotoEditorRemoteUrl(option.url.split('#')[0] ?? option.url)
+                                      setPhotoEditorFocalX(50)
+                                      setPhotoEditorFocalY(42)
+                                    }}
+                                    className={cn(
+                                      'h-auto min-h-0 overflow-hidden rounded-card border p-0 text-left',
+                                      photoEditorUrl.trim() === option.url ? 'border-casa-gold' : 'border-casa-border hover:border-casa-gold/40'
+                                    )}
+                                    contentClassName="block w-full"
+                                  >
+                                    <img
+                                      src={option.url}
+                                      alt={option.title || 'Recipe image option'}
+                                      className="h-20 w-full object-cover"
+                                      loading="lazy"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                    {option.source && (
+                                      <span className="block truncate border-t border-casa-divider/60 px-2 py-1 text-caption text-casa-muted">
+                                        {option.source}
+                                      </span>
+                                    )}
+                                  </Button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <label className="block">
+                            <span className="text-body-sm font-semibold text-casa-navy">Image URL</span>
+                            <Input
+                              value={photoEditorUrl}
+                              onChange={(event) => setPhotoEditorRemoteUrl(event.target.value)}
+                              placeholder="https://.../recipe-photo.jpg"
+                              className="mt-2"
+                            />
+                          </label>
+
+                          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-[minmax(0,1fr)_14rem]">
+                            <div className="rounded-card border border-casa-border bg-casa-bg p-2">
+                              <img
+                                src={photoEditorPreviewUrl || photoEditorUrl.trim() || recipeFallbackHero}
+                                alt={`Preview for ${photoEditorName}`}
+                                className="h-56 w-full rounded-card border border-casa-border object-cover"
+                                style={{ objectPosition: `${photoEditorFocalX}% ${photoEditorFocalY}%` }}
+                                referrerPolicy="no-referrer"
+                                onError={(event) => {
+                                  const target = event.currentTarget
+                                  if (target.src !== recipeFallbackHero) target.src = recipeFallbackHero
+                                }}
+                              />
+                            </div>
+                            <div className="space-y-4">
+                              <label className="block text-body-sm font-semibold text-casa-navy">
+                                Horizontal crop focus
+                                <input
+                                  className="mt-2 w-full"
+                                  type="range"
+                                  min={0}
+                                  max={100}
+                                  value={photoEditorFocalX}
+                                  onChange={(event) => {
+                                    setPhotoEditorFocalX(Number(event.target.value))
+                                    setPhotoEditorDirty(true)
+                                  }}
+                                />
+                              </label>
+                              <label className="block text-body-sm font-semibold text-casa-navy">
+                                Vertical crop focus
+                                <input
+                                  className="mt-2 w-full"
+                                  type="range"
+                                  min={0}
+                                  max={100}
+                                  value={photoEditorFocalY}
+                                  onChange={(event) => {
+                                    setPhotoEditorFocalY(Number(event.target.value))
+                                    setPhotoEditorDirty(true)
+                                  }}
+                                />
+                              </label>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => {
+                                  setPhotoEditorFocalX(50)
+                                  setPhotoEditorFocalY(42)
+                                  setPhotoEditorDirty(true)
+                                }}
+                              >
+                                Auto-crop
+                              </Button>
+                            </div>
+                          </div>
+                          {photoEditorError && <p role="alert" className="text-caption text-casa-error">{photoEditorError}</p>}
+                        </div>
+                      </DisclosureSection>
+                    </div>
                     <div className="rounded-lg border border-casa-border bg-casa-surface p-2 space-y-2">
                       <p className="text-body-sm text-casa-muted">Quick actions</p>
                       <div className="flex flex-wrap gap-1.5">
@@ -4807,7 +4865,7 @@ export default function CookPage() {
                   </Button>
                   <Button
                     variant="secondary"
-                    onClick={() => setCookRecipeId(null)}
+                    onClick={closeCookRecipe}
                   >
                     Close
                   </Button>
@@ -4815,7 +4873,7 @@ export default function CookPage() {
                     variant="strong"
                     onClick={() => {
                       if (stepIndex >= cookSteps.length - 1) {
-                        setCookRecipeId(null)
+                        closeCookRecipe()
                         return
                       }
                       setStepIndex((current) => Math.min(Math.max(0, cookSteps.length - 1), current + 1))

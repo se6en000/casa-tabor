@@ -9,6 +9,8 @@ export interface DisclosureSectionProps {
   icon?: ReactNode
   children: ReactNode
   defaultOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   className?: string
 }
 
@@ -18,9 +20,17 @@ export function DisclosureSection({
   icon,
   children,
   defaultOpen = false,
+  open: controlledOpen,
+  onOpenChange,
   className,
 }: DisclosureSectionProps) {
-  const [open, setOpen] = useState(defaultOpen)
+  const [internalOpen, setInternalOpen] = useState(defaultOpen)
+  const open = controlledOpen ?? internalOpen
+  const toggle = () => {
+    const next = !open
+    if (controlledOpen === undefined) setInternalOpen(next)
+    onOpenChange?.(next)
+  }
 
   return (
     <section className={cn('border-b border-casa-divider', className)}>
@@ -28,7 +38,7 @@ export function DisclosureSection({
         type="button"
         className="flex min-h-control w-full items-center gap-3 px-6 py-4 text-left"
         aria-expanded={open}
-        onClick={() => setOpen(value => !value)}
+        onClick={toggle}
       >
         {icon && <span className="shrink-0 text-casa-muted">{icon}</span>}
         <span className="min-w-0 flex-1">
