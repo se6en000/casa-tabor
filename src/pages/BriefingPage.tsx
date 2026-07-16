@@ -349,6 +349,36 @@ export default function BriefingPage() {
               </Alert>
             )}
 
+            {isLoading && !briefing ? (
+              <Card padding="lg" className="space-y-4" aria-label="Loading today's briefing">
+                <Skeleton className="h-5 w-36" />
+                <Skeleton className="h-5 w-full" />
+                <Skeleton className="h-5 w-11/12" />
+                <Skeleton className="h-5 w-4/5" />
+              </Card>
+            ) : briefing?.summary_text ? (
+              <section aria-labelledby="briefing-summary-title" className="space-y-4 py-2">
+                <SectionHeader
+                  compact
+                  title={<span id="briefing-summary-title">Today's briefing</span>}
+                  icon={FileText}
+                />
+                <MarkdownContent
+                  content={formatTextForMarkdown(briefing.summary_text)}
+                  className="max-w-page-narrow space-y-4 text-body text-casa-text-secondary [&_p]:leading-relaxed"
+                />
+              </section>
+            ) : briefing ? (
+              <Card tone="subtle" padding="lg">
+                <EmptyState
+                  icon={<Sparkles size={24} />}
+                  title="Your schedule is ready"
+                  description="Add an API key in AI settings to include a written daily summary."
+                  action={<Button variant="secondary" onClick={() => navigate('/settings/ai')}>Open AI settings</Button>}
+                />
+              </Card>
+            ) : null}
+
             {visibleNeeds.length > 0 && (
               <section aria-labelledby="briefing-needs-title" className="space-y-3">
                 <SectionHeader
@@ -380,36 +410,6 @@ export default function BriefingPage() {
                 </div>
               </section>
             )}
-
-            {isLoading && !briefing ? (
-              <Card padding="lg" className="space-y-4" aria-label="Loading today's briefing">
-                <Skeleton className="h-5 w-36" />
-                <Skeleton className="h-5 w-full" />
-                <Skeleton className="h-5 w-11/12" />
-                <Skeleton className="h-5 w-4/5" />
-              </Card>
-            ) : briefing?.summary_text ? (
-              <section aria-labelledby="briefing-summary-title" className="space-y-4 py-2">
-                <SectionHeader
-                  compact
-                  title={<span id="briefing-summary-title">Today's briefing</span>}
-                  icon={FileText}
-                />
-                <MarkdownContent
-                  content={formatTextForMarkdown(briefing.summary_text)}
-                  className="max-w-page-narrow space-y-4 text-body text-casa-text-secondary [&_p]:leading-relaxed"
-                />
-              </section>
-            ) : briefing ? (
-              <Card tone="subtle" padding="lg">
-                <EmptyState
-                  icon={<Sparkles size={24} />}
-                  title="Your schedule is ready"
-                  description="Add an API key in AI settings to include a written daily summary."
-                  action={<Button variant="secondary" onClick={() => navigate('/settings/ai')}>Open AI settings</Button>}
-                />
-              </Card>
-            ) : null}
           </main>
 
           <ScheduleRail timeline={timeline} emptyMembers={emptyMembers} isLoading={isLoading && !briefing} />

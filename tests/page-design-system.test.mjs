@@ -692,12 +692,15 @@ test('remaining active surfaces use shared controls and semantic presentation co
 test('Briefing uses the Design 1B hierarchy with bounded needs and overlay review', () => {
   const briefing = readFileSync(resolve('src/pages/BriefingPage.tsx'), 'utf8')
   const addEventFab = readFileSync(resolve('src/components/shared/AddEventFab.tsx'), 'utf8')
+  const briefingSummaryIndex = briefing.indexOf('id="briefing-summary-title"')
+  const needsIndex = briefing.indexOf('id="briefing-needs-title"')
 
   assert.match(briefing, /visibleNeeds = needs\.slice\(0, 3\)/)
   assert.match(briefing, /Everything that needs you/)
   assert.match(briefing, /side=\{isNarrow \? 'bottom' : 'right'\}/)
   assert.match(briefing, /<ScheduleRail/)
   assert.match(briefing, /<MarkdownContent/)
+  assert.ok(briefingSummaryIndex !== -1 && needsIndex !== -1 && briefingSummaryIndex < needsIndex)
   assert.match(briefing, /variant="strong"[\s\S]*?>\s*Review/)
   assert.doesNotMatch(briefing, /<ConflictAlertsSection/)
   assert.doesNotMatch(briefing, /<PrepAlertsSection/)
