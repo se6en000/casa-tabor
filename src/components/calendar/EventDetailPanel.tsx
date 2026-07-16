@@ -459,7 +459,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain" data-native-drag data-ptr-ignore>
+              <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-y-none" data-native-drag data-ptr-ignore>
                 <PanelHeader
                   event={event}
                   verified={addressReviewed}
