@@ -305,6 +305,8 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
   const [_autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'scheduled' | 'saving' | 'saved'>('idle')
   const isDirtyRef = useRef(false)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autoSaveInFlightRef = useRef<Promise<void> | null>(null)
+  const runAutoSaveRef = useRef<() => Promise<void>>(async () => {})
 
   // All-day toggle
   const [isAllDay, setIsAllDay] = useState(event.all_day ?? false)
@@ -464,18 +466,25 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
     if (isInstance) return  // recurring: use manual Save for scope control
     setAutoSaveStatus('scheduled')
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
-    autoSaveTimerRef.current = setTimeout(() => runAutoSave(), 1500)
+    autoSaveTimerRef.current = setTimeout(() => void runAutoSaveRef.current(), 1500)
   }
 
   const runAutoSave = async () => {
+    if (autoSaveInFlightRef.current) {
+      await autoSaveInFlightRef.current
+      if (isDirtyRef.current) await runAutoSaveRef.current()
+      return
+    }
     isDirtyRef.current = false
     if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null }
     setAutoSaveStatus('saving')
     setIsSaving(true)
     setSaveStatus('saving')
     const slowTimer = setTimeout(() => setSaveStatus('slow'), 5000)
+    const savePromise = doSaveInner('all', true)
+    autoSaveInFlightRef.current = savePromise
     try {
-      await doSaveInner('all', true)
+      await savePromise
       setAutoSaveStatus('saved')
       setTimeout(() => setAutoSaveStatus('idle'), 2000)
     } catch (err) {
@@ -483,16 +492,21 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
       setAutoSaveStatus('idle')
     } finally {
       clearTimeout(slowTimer)
+      if (autoSaveInFlightRef.current === savePromise) autoSaveInFlightRef.current = null
       setIsSaving(false)
       setSaveStatus('saving')
     }
   }
+  runAutoSaveRef.current = runAutoSave
 
   const handleClose = () => {
-    if (isSaving) { onClose(); return }
-    if (isDirtyRef.current && !isInstance) {
+    if (!isInstance && (isSaving || isDirtyRef.current)) {
       if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null }
-      runAutoSave().finally(() => onClose())
+      const flushLatestSave = async () => {
+        if (autoSaveInFlightRef.current) await autoSaveInFlightRef.current
+        if (isDirtyRef.current) await runAutoSaveRef.current()
+      }
+      void flushLatestSave().finally(() => onClose())
     } else {
       onClose()
     }

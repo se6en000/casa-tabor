@@ -21,3 +21,15 @@ test('a selected place updates the location name and address as one pair', () =>
 test('address-only clearing preserves the current location name', () => {
   assert.match(source, /onClear=\{\(\) => updateLocation\(\{\s*name: location,\s*address: '',\s*source: 'manual',\s*\}\)\}/)
 })
+
+test('autosave serializes a newer place selection behind an in-flight text save', () => {
+  assert.match(source, /const autoSaveInFlightRef = useRef<Promise<void> \| null>\(null\)/)
+  assert.match(source, /if \(autoSaveInFlightRef\.current\) \{\s*await autoSaveInFlightRef\.current\s*if \(isDirtyRef\.current\) await runAutoSaveRef\.current\(\)/)
+  assert.match(source, /autoSaveTimerRef\.current = setTimeout\(\(\) => void runAutoSaveRef\.current\(\), 1500\)/)
+})
+
+test('closing during autosave flushes the latest dirty place before dismissing', () => {
+  assert.match(source, /if \(!isInstance && \(isSaving \|\| isDirtyRef\.current\)\)/)
+  assert.match(source, /if \(autoSaveInFlightRef\.current\) await autoSaveInFlightRef\.current\s*if \(isDirtyRef\.current\) await runAutoSaveRef\.current\(\)/)
+  assert.match(source, /void flushLatestSave\(\)\.finally\(\(\) => onClose\(\)\)/)
+})
