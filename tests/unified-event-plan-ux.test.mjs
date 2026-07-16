@@ -218,15 +218,6 @@ test('event detail drag cap and crown share one theme-aware treatment', () => {
   assert.doesNotMatch(detail, /background: '#(?:1b2a4a|1B2A4A)'/)
 })
 
-test('event detail scroll remains touch-native without elastic overscroll', () => {
-  assert.match(detail, /className="flex-1 overflow-y-auto overflow-x-hidden overscroll-y-none"/)
-  assert.doesNotMatch(detail, /className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"/)
-  assert.match(detail, /style=\{\{ touchAction: 'pan-up' \}\}/)
-  assert.match(detail, /scrollTop <= 0 \? 'pan-up' : 'pan-y'/)
-  assert.match(detail, /if \(!e\.isPrimary \|\| e\.currentTarget\.scrollTop > 0\) return[\s\S]*panelDragControls\.start\(e\)/)
-  assert.doesNotMatch(detail, /onPointerMove=/)
-})
-
 test('reminder details identify their type and allow assigned people editing', () => {
   assert.match(detail, /event\.event_type === 'reminder' \? 'Reminder' : 'Event'/)
   assert.match(detail, /<Bell size=\{12\} aria-hidden="true" \/>[\s\S]{0,80}Reminder/)

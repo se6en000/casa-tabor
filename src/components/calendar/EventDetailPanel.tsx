@@ -459,19 +459,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   />
                 </button>
               </div>
-              <div
-                className="flex-1 overflow-y-auto overflow-x-hidden overscroll-y-none"
-                style={{ touchAction: 'pan-up' }}
-                data-native-drag
-                data-ptr-ignore
-                onScroll={e => {
-                  e.currentTarget.style.touchAction = e.currentTarget.scrollTop <= 0 ? 'pan-up' : 'pan-y'
-                }}
-                onPointerDown={e => {
-                  if (!e.isPrimary || e.currentTarget.scrollTop > 0) return
-                  panelDragControls.start(e)
-                }}
-              >
+              <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain" data-native-drag data-ptr-ignore>
                 <PanelHeader
                   event={event}
                   verified={addressReviewed}
