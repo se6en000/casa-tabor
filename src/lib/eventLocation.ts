@@ -84,6 +84,7 @@ export async function persistScopedEventLocation({
       event_id: row.id,
       verified: false,
       location_signature: locationSignature(row),
+      location_projection_blocked: false,
       transportation_plan: currentPlan ? updateTransportationEventPlace(currentPlan, nextPlace) : null,
     }
   })

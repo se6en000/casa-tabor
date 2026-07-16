@@ -7,10 +7,12 @@ import {
   eventPassengerNames,
   hydrateTransportationEventPlaces,
   isTransportationEventPlace,
+  markTransportationPlanManual,
   normalizeTransportationPlan,
   transportationTimeIso,
   updateTransportationDriver,
   updateTransportationEventPlace,
+  updateTransportationWait,
   syncTransportationAttendees,
   updateTransportationPlace,
 } from '../src/lib/eventTransportation.ts'
@@ -61,6 +63,22 @@ test('normalization rejects malformed plans and preserves valid multi-stop plans
     '1 Casa Way',
   )
   assert.deepEqual(normalizeTransportationPlan(plan), plan)
+})
+
+test('normalization preserves generated provenance, wait state, and place trust metadata', () => {
+  const plan = createDefaultTransportationPlan(event, '1 Casa Way', null)
+  plan.source = 'generated'
+  plan.waitOnSite = true
+  plan.legs[0].destination = {
+    ...plan.legs[0].destination,
+    source: 'google',
+    placeId: 'place-1',
+    lat: 26.7,
+    lng: -80.05,
+  }
+  assert.deepEqual(normalizeTransportationPlan(plan), plan)
+  assert.equal(markTransportationPlanManual(plan).source, 'manual')
+  assert.equal(updateTransportationWait(plan, false).waitOnSite, false)
 })
 
 test('quick stop editing keeps adjacent route legs connected', () => {

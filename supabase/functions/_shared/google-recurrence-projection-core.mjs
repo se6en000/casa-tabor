@@ -1,14 +1,11 @@
 import {
   buildGoogleEventDescription,
+  googleLocationForEvent,
   replaceCasaDetailsBlock,
 } from './google-event-details-core.mjs'
 
 function text(value) {
   return typeof value === 'string' ? value.trim() : ''
-}
-
-function compactLines(lines) {
-  return lines.map(text).filter(Boolean)
 }
 
 export { replaceCasaDetailsBlock }
@@ -38,9 +35,7 @@ export function serializeGoogleRecurrenceProjection({
     throw new Error('A persisted event and revisioned series are required for Google projection.')
   }
   const timezone = text(series.timezone) || 'America/New_York'
-  const location = compactLines([event.location_name, event.address])
-    .filter((value, index, all) => all.indexOf(value) === index)
-    .join(', ')
+  const location = googleLocationForEvent(event, bundle)
   const attendees = invitationAttendees
     .map((attendee) => ({
       email: text(attendee?.email),

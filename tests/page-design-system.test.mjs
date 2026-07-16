@@ -311,6 +311,7 @@ test('calendar chrome uses shared controls while runtime event geometry stays in
   const week = readFileSync(resolve('src/components/calendar/WeekView.tsx'), 'utf8')
   const block = readFileSync(resolve('src/components/calendar/EventBlock.tsx'), 'utf8')
   const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
+  const transportation = readFileSync(resolve('src/components/calendar/EventTransportationSection.tsx'), 'utf8')
 
   assert.match(day, /import \{ Button, CalendarPill, IconButton \} from '\.\.\/ui'/)
   assert.match(month, /import \{ Button, CalendarPill, IconButton \} from '\.\.\/ui'/)
@@ -319,7 +320,7 @@ test('calendar chrome uses shared controls while runtime event geometry stays in
   assert.doesNotMatch(page, /<button\b/)
   assert.match(page, /<SegmentedControl[\s\S]*?aria-label="Calendar view"[\s\S]*?onChange=\{setActiveView\}/)
   assert.doesNotMatch(page, /variant=\{activeView === v\.key \? 'strong' : 'ghost'\}/)
-  assert.match(detail, /<Switch[\s\S]*label="Someone waits on site"/)
+  assert.match(transportation, /<Switch[\s\S]*label="Driver waits on site"/)
   assert.equal((detail.match(/<button\b/g) ?? []).length, 1)
   assert.match(detail, /data-native-drag/)
 

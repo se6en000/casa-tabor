@@ -50,6 +50,18 @@ function transportationLines(plan) {
   })
 }
 
+export function locationProjectionBlocked(bundle = {}) {
+  return bundle?.plan_override?.location_projection_blocked === true
+}
+
+export function googleLocationForEvent(event = {}, bundle = {}) {
+  if (locationProjectionBlocked(bundle)) return undefined
+  const location = compactLines([event.location_name, event.address])
+    .filter((value, index, all) => all.indexOf(value) === index)
+    .join(', ')
+  return location || undefined
+}
+
 function planningLines(bundle) {
   const planning = bundle.plan_override ?? bundle.planning ?? null
   if (!planning || typeof planning !== 'object') return []
@@ -89,7 +101,7 @@ export function buildCasaDetailsLines(bundle = {}, eventUrl = '') {
     bring.length ? `Bring: ${bring.join(', ')}` : '',
     enrichment.prep_notes ? `Prep: ${enrichment.prep_notes}` : '',
     enrichment.parking_notes ? `Parking: ${enrichment.parking_notes}` : '',
-    ...transportationLines(bundle.transportation_plan),
+    ...(!locationProjectionBlocked(bundle) ? transportationLines(bundle.transportation_plan) : []),
     ...planningLines(bundle),
     logistics.length ? `Logistics: ${logistics.join('; ')}` : '',
     checklist.length ? `Checklist: ${checklist.join('; ')}` : '',

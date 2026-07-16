@@ -33,6 +33,7 @@ export interface EventPlanOverride {
   two_driver_confirmed: boolean
   transportation_plan: EventTransportationPlan | null
   location_signature: string | null
+  location_projection_blocked: boolean
   updated_at: string
 }
 
@@ -80,6 +81,7 @@ async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDet
         two_driver_confirmed,
         transportation_plan,
         location_signature,
+        location_projection_blocked,
         updated_at
       ),
       event_enrichments (${enrichmentSelect}),

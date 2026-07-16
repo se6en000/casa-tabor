@@ -23,12 +23,13 @@ import {
   updateTransportationDriver,
   updateTransportationEventPlace,
   updateTransportationPlace,
+  updateTransportationWait,
   transportationPlaceMatchesEvent,
   type EventTransportationPlan,
   type TransportationLeg,
   type TransportationPlace,
 } from '../../lib/eventTransportation'
-import { Button, Card, Checkbox, ConfirmationDialog, Field, IconButton, Input, Select, Sheet } from '../ui'
+import { Button, Card, Checkbox, ConfirmationDialog, Field, IconButton, Input, Select, Sheet, Switch } from '../ui'
 import InlinePlaceEditor from './InlinePlaceEditor'
 import SmartPlaceInput from './SmartPlaceInput'
 import PassengerChipSelector from './PassengerChipSelector'
@@ -38,6 +39,7 @@ interface EventTransportationSectionProps {
   plan: EventTransportationPlan | null
   onChange: (plan: EventTransportationPlan | null) => Promise<void>
   suggestedPlan?: boolean
+  noRouteReason?: 'trip' | null
 }
 
 interface PlaceOption {
@@ -338,6 +340,7 @@ export default function EventTransportationSection({
   plan,
   onChange,
   suggestedPlan = false,
+  noRouteReason = null,
 }: EventTransportationSectionProps) {
   const [editorOpen, setEditorOpen] = useState(false)
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false)
@@ -385,6 +388,10 @@ export default function EventTransportationSection({
         )
       : null,
     [event, plan],
+  )
+  const supportsWait = Boolean(
+    hydratedPlan?.legs.some((leg) => leg.purpose === 'appointment')
+    && hydratedPlan?.legs.some((leg) => leg.purpose === 'return'),
   )
 
   const openEditor = () => {
@@ -449,6 +456,19 @@ export default function EventTransportationSection({
       await onChange(updateTransportationDriver(hydratedPlan, legIndex, driver, applyToRemaining))
     } catch (cause) {
       setTripError(cause instanceof Error ? cause.message : 'Could not save this driver change.')
+    } finally {
+      setSavingQuickChange(false)
+    }
+  }
+
+  const updateWait = async (waitOnSite: boolean) => {
+    if (!hydratedPlan || savingQuickChange) return
+    setTripError(null)
+    setSavingQuickChange(true)
+    try {
+      await onChange(updateTransportationWait(hydratedPlan, waitOnSite))
+    } catch (cause) {
+      setTripError(cause instanceof Error ? cause.message : 'Could not save the waiting plan.')
     } finally {
       setSavingQuickChange(false)
     }
@@ -534,8 +554,12 @@ export default function EventTransportationSection({
               <div className="min-w-0">
                 <p className="text-caption font-bold uppercase tracking-widest text-white/70">The Plan</p>
                 <p className="mt-0.5 font-display text-body-lg font-semibold text-white">
-                  {hydratedPlan.legs.length} driving {hydratedPlan.legs.length === 1 ? 'leg' : 'legs'} · live traffic
+                  {hydratedPlan.legs.length} driving {hydratedPlan.legs.length === 1 ? 'leg' : 'legs'}
+                  {supportsWait && hydratedPlan.waitOnSite ? ' · driver waits on site' : ' · live traffic'}
                 </p>
+                {hydratedPlan.source === 'generated' && (
+                  <p className="mt-1 text-caption font-semibold text-white/70">Casa generated · review anytime</p>
+                )}
               </div>
               <Button
                 variant="ghost"
@@ -563,6 +587,16 @@ export default function EventTransportationSection({
                 />
               ))}
             </ol>
+            {supportsWait && (
+              <div className="border-t border-casa-border px-[18px] py-3">
+                <Switch
+                  checked={hydratedPlan.waitOnSite === true}
+                  onCheckedChange={(checked) => void updateWait(checked)}
+                  label="Driver waits on site"
+                  disabled={savingQuickChange}
+                />
+              </div>
+            )}
             <div className="flex flex-wrap gap-2 border-t border-casa-border px-[18px] py-3">
               <Button variant="secondary" size="sm" onClick={openEditor}>
                 <Plus size={15} /> Add or reorder stops
@@ -574,7 +608,11 @@ export default function EventTransportationSection({
             <div className="bg-casa-navy px-[18px] py-3.5">
               <p className="text-caption font-bold uppercase tracking-widest text-white/70">The Plan</p>
               <p className="mt-0.5 font-display text-body-lg font-semibold text-white">
-                {suggestedPlan ? 'Casa suggested a simple route' : 'No driving logistics needed'}
+                {suggestedPlan
+                  ? 'Casa is preparing the round trip'
+                  : noRouteReason === 'trip'
+                    ? 'No local driving route attached'
+                    : 'No driving logistics needed'}
               </p>
             </div>
             <div className="flex items-center gap-4 px-[18px] py-4">
@@ -584,12 +622,14 @@ export default function EventTransportationSection({
               <div className="min-w-0 flex-1">
                 <p className="text-body-sm text-casa-muted">
                   {suggestedPlan
-                    ? 'Customize it when the driver, origin, stops, or return route differ.'
-                    : 'The event location stays visible without assigning a trip.'}
+                    ? 'The driver, outbound leg, return leg, and waiting plan will appear here.'
+                    : noRouteReason === 'trip'
+                      ? 'Flights and destination trips stay truthful until someone adds the local driving that actually needs coordination.'
+                      : 'The event location stays visible without assigning a trip.'}
                 </p>
               </div>
               <Button variant="secondary" size="sm" onClick={openEditor}>
-                {suggestedPlan ? 'Customize trip' : 'Add a trip'}
+                {suggestedPlan ? 'Set up now' : 'Add a trip'}
               </Button>
             </div>
           </div>
@@ -720,6 +760,16 @@ export default function EventTransportationSection({
                 <House size={16} /> Add return home
               </Button>
             </div>
+
+            {draft.legs.some((leg) => leg.purpose === 'appointment')
+              && draft.legs.some((leg) => leg.purpose === 'return') && (
+              <Switch
+                checked={draft.waitOnSite === true}
+                onCheckedChange={(checked) => setDraft(updateTransportationWait(draft, checked))}
+                label="Driver waits on site"
+                className="rounded-button border border-casa-border bg-casa-bg px-3"
+              />
+            )}
 
             {tripError && <p role="alert" className="text-caption text-casa-error">{tripError}</p>}
             <div className="flex flex-col-reverse gap-2 border-t border-casa-border pt-4 sm:flex-row sm:justify-between">

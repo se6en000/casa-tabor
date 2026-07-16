@@ -19,7 +19,7 @@ import { useTravelEta } from '../../hooks/useTravelEta'
 import { useMemberAvailability } from '../../hooks/useMemberAvailability'
 import { DepartureRiskBanner } from '../shared/DepartureRiskBanner'
 import {
-  inferEventMode, inferEventPlanKind, derivePlan, eventAccentColor, trafficPill, eventAttendees,
+  inferEventMode, inferEventPlanKind, derivePlan, eventAccentColor, trafficPill,
   deriveSingleStopPattern, type PlanModel, type EventMode,
 } from '../../lib/eventCommandCenter'
 import {
@@ -42,8 +42,8 @@ import {
   type EventLocationScope,
 } from '../../lib/eventLocation'
 import {
-  createDefaultTransportationPlan,
   eventPassengerNames,
+  markTransportationPlanManual,
   syncTransportationAttendees,
   updateTransportationEventPlace,
   type EventTransportationPlan,
@@ -147,14 +147,15 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
   const persistTransportationPlan = useCallback(async (nextPlan: EventTransportationPlan | null) => {
     if (!event) throw new Error('This event is no longer available.')
     setOverrideSaveError(null)
+    const durablePlan = nextPlan ? markTransportationPlanManual(nextPlan) : null
     const result = await requestRecurringQuickAction({
       operation: 'update',
       changedPaths: ['transportationPlan'],
-      detailPatch: { transportation_plan: nextPlan },
+      detailPatch: { transportation_plan: durablePlan },
     })
     if (result === 'cancelled') return
     if (result === 'handled') {
-      setTransportationPlan(nextPlan)
+      setTransportationPlan(durablePlan)
       window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
       return
     }
@@ -162,17 +163,36 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
       .from('event_plan_overrides')
       .upsert({
         event_id: event.id,
-        transportation_plan: nextPlan,
+        transportation_plan: durablePlan,
       }, { onConflict: 'event_id' })
     if (error) {
       const message = `Could not save this driving plan: ${error.message}`
       setOverrideSaveError(message)
       throw new Error(message)
     }
-    setTransportationPlan(nextPlan)
+    setTransportationPlan(durablePlan)
     window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
     await queryClient.invalidateQueries({ queryKey: ['events'] })
   }, [event, queryClient, requestRecurringQuickAction])
+
+  const confirmAddress = useCallback(async () => {
+    if (!event) return
+    setOverrideSaveError(null)
+    const { error } = await supabase
+      .from('event_plan_overrides')
+      .upsert({
+        event_id: event.id,
+        verified: true,
+        location_signature: locationSignature(event),
+        location_projection_blocked: false,
+      }, { onConflict: 'event_id' })
+    if (error) {
+      setOverrideSaveError(`Could not confirm this address: ${error.message}`)
+      return
+    }
+    setVerifiedOverride(true)
+    await queryClient.invalidateQueries({ queryKey: ['events'] })
+  }, [event, queryClient])
 
   useEffect(() => {
     if (!event) return
@@ -373,7 +393,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   modeOverride={modeOverride}
                   transportationPlan={transportationPlan}
                   onClose={onClose}
-                  onConfirmAddress={() => setVerifiedOverride(true)}
+                  onConfirmAddress={() => void confirmAddress()}
                   addressReviewLoading={overridesHydratedEventId !== event.id}
                   addressSaveError={overrideSaveError}
                   onRetryAddressSave={() => setOverrideSaveRevision((revision) => revision + 1)}
@@ -409,6 +429,13 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                       },
                     }, scope)
                     if (handled) {
+                      const { error: projectionError } = await supabase
+                        .from('event_plan_overrides')
+                        .update({ location_projection_blocked: false })
+                        .eq('event_id', event.id)
+                      if (projectionError) {
+                        throw new Error(`Address saved, but Google projection could not be enabled: ${projectionError.message}`)
+                      }
                       setTransportationPlan(nextPlan)
                       setVerifiedOverride(false)
                       setOverridesHydratedEventId(event.id)
@@ -432,20 +459,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 <PanelBody
                   event={event}
                   modeOverride={modeOverride}
-                  waitsOverride={waitsOverride}
-                  driverOverrides={driverOverrides}
-                  twoDriverConfirmed={twoDriverConfirmed}
                   transportationPlan={transportationPlan}
-                  onSetWaitsOverride={(next) => {
-                    setTwoDriverConfirmed(false)
-                    setWaitsOverride(next)
-                  }}
-                  onSetDriverOverride={(legIndex, driverId) => {
-                    setTwoDriverConfirmed(false)
-                    setDriverOverrides((prev) => ({ ...prev, [legIndex]: driverId }))
-                  }}
-                  onSetModeOverride={setModeOverride}
-                  onSetTwoDriverConfirmed={setTwoDriverConfirmed}
                   onSetTransportationPlan={persistTransportationPlan}
                 />
               </div>
@@ -1143,40 +1157,19 @@ function PanelHeader({
 function PanelBody({
   event,
   modeOverride,
-  waitsOverride,
-  driverOverrides,
-  twoDriverConfirmed,
   transportationPlan,
-  onSetWaitsOverride,
-  onSetDriverOverride,
-  onSetModeOverride,
-  onSetTwoDriverConfirmed,
   onSetTransportationPlan,
 }: {
   event: EventWithDetails
   modeOverride: EventMode | null
-  waitsOverride: boolean | null
-  driverOverrides: Record<number, string>
-  twoDriverConfirmed: boolean
   transportationPlan: EventTransportationPlan | null
-  onSetWaitsOverride: (value: boolean | null) => void
-  onSetDriverOverride: (legIndex: number, driverId: string) => void
-  onSetModeOverride: (mode: EventMode | null) => void
-  onSetTwoDriverConfirmed: (value: boolean) => void
   onSetTransportationPlan: (plan: EventTransportationPlan | null) => Promise<void>
 }) {
   return (
     <StandardPanelBody
       event={event}
       modeOverride={modeOverride}
-      waitsOverride={waitsOverride}
-      driverOverrides={driverOverrides}
-      twoDriverConfirmed={twoDriverConfirmed}
       transportationPlan={transportationPlan}
-      onSetWaitsOverride={onSetWaitsOverride}
-      onSetDriverOverride={onSetDriverOverride}
-      onSetModeOverride={onSetModeOverride}
-      onSetTwoDriverConfirmed={onSetTwoDriverConfirmed}
       onSetTransportationPlan={onSetTransportationPlan}
     />
   )
@@ -1186,26 +1179,12 @@ function PanelBody({
 function StandardPanelBody({
   event,
   modeOverride,
-  waitsOverride,
-  driverOverrides,
-  twoDriverConfirmed,
   transportationPlan,
-  onSetWaitsOverride,
-  onSetDriverOverride,
-  onSetModeOverride,
-  onSetTwoDriverConfirmed,
   onSetTransportationPlan,
 }: {
   event: EventWithDetails
   modeOverride: EventMode | null
-  waitsOverride: boolean | null
-  driverOverrides: Record<number, string>
-  twoDriverConfirmed: boolean
   transportationPlan: EventTransportationPlan | null
-  onSetWaitsOverride: (value: boolean | null) => void
-  onSetDriverOverride: (legIndex: number, driverId: string) => void
-  onSetModeOverride: (mode: EventMode | null) => void
-  onSetTwoDriverConfirmed: (value: boolean) => void
   onSetTransportationPlan: (plan: EventTransportationPlan | null) => Promise<void>
 }) {
   const enr = event.enrichment
@@ -1223,16 +1202,6 @@ function StandardPanelBody({
     return value !== null && value !== undefined
   }
   const { data: household = [] } = useFamilyMembers()
-  const { data: homeConfig } = useQuery({
-    queryKey: ['home-config'],
-    staleTime: 10 * 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase.from('settings').select('value').eq('key', 'home_config').maybeSingle()
-      if (error) throw error
-      return (data?.value ?? null) as { address?: string; city?: string; state?: string; zip?: string } | null
-    },
-  })
-  const homeAddress = [homeConfig?.address, homeConfig?.city, homeConfig?.state, homeConfig?.zip].filter(Boolean).join(', ').trim()
   const { data: dayEvents = [] } = useTodayEvents(getEventDisplayStartDay(event))
   const availability = useMemberAvailability(household.map((member) => member.id))
 
@@ -1327,30 +1296,6 @@ function StandardPanelBody({
       ),
     )
   }
-  const attendeePool = eventAttendees(event).filter((person) => {
-    const householdMatch = household.find((member) => member.id === person.id)
-    if (!householdMatch) return true
-    return adultCanDrive(householdMatch)
-  })
-  const householdDriverPool = household
-    .filter((m) => (m.role === 'parent' || m.role === 'caregiver') && adultCanDrive(m))
-    .map((m) => ({
-      id: m.id,
-      name: m.name,
-      initial: m.name?.[0]?.toUpperCase() ?? '?',
-      color: m.color_hex ?? 'var(--color-casa-muted)',
-      conflictWith: overlappingByMember.get(m.id)?.title
-        ?? (transportAvailabilityByMember.get(m.id)?.available ? null : transportAvailabilityByMember.get(m.id)?.reason ?? 'Unavailable'),
-    }))
-  const driverPool = [...attendeePool, ...householdDriverPool].reduce<Array<{ id: string; name: string; initial: string; color: string; conflictWith?: string | null }>>((acc, p) => {
-    if (!acc.some((x) => x.id === p.id)) acc.push(p)
-    return acc
-  }, []).map((driver) => ({
-    ...driver,
-    conflictWith: driver.conflictWith
-      ?? overlappingByMember.get(driver.id)?.title
-      ?? (transportAvailabilityByMember.get(driver.id)?.available ? null : transportAvailabilityByMember.get(driver.id)?.reason ?? 'Unavailable'),
-  }))
   const attendeeIds = new Set(event.members.map((m) => m.family_member?.id).filter(Boolean))
   const remainingHousehold = household.filter((m) => !attendeeIds.has(m.id))
   const availableAdults = remainingHousehold.filter((m) => {
@@ -1392,59 +1337,20 @@ function StandardPanelBody({
 
   return (
     <div className="event-command-center-content p-6 space-y-5">
-      {/* ── The Plan ── */}
-      {plan && (
+      {/* ── Event overview ── */}
+      {plan && plan.kind !== 'travel' && (
         <section>
-          {plan.kind === 'travel' && !transportationPlan ? (
-            <PlanBlock
-              plan={plan}
-              loading={commuteQuery.isLoading && !commuteQuery.data}
-              driverPool={driverPool}
-              waitsOverride={waitsOverride}
-              driverOverrides={driverOverrides}
-              modeOverride={modeOverride}
-              twoDriverConfirmed={twoDriverConfirmed}
-              onSetWaitsOverride={onSetWaitsOverride}
-              onSetDriverOverride={(legIndex, driverId) => {
-                const changedLeg = plan.legs[legIndex]
-                const isOutbound = changedLeg?.kind === 'drop' || changedLeg?.kind === 'depart'
-                if (isOutbound) {
-                  const cascadeUpdates: Record<number, string> = { [legIndex]: driverId }
-                  plan.legs.forEach((leg, i) => {
-                    if (i === legIndex) return
-                    const isDownstream = leg.kind === 'stay' || leg.kind === 'return' || leg.kind === 'pickup'
-                    if (isDownstream && leg.driver && !driverOverrides[i]) {
-                      cascadeUpdates[i] = driverId
-                    }
-                  })
-                  Object.entries(cascadeUpdates).forEach(([idx, id]) =>
-                    onSetDriverOverride(Number(idx), id)
-                  )
-                } else {
-                  onSetDriverOverride(legIndex, driverId)
-                }
-              }}
-              onSetModeOverride={onSetModeOverride}
-              onSetTwoDriverConfirmed={onSetTwoDriverConfirmed}
-              onCustomizePlan={() => {
-                const defaultDriver = household.find((member) =>
-                  member.can_drive && (member.role === 'parent' || member.role === 'caregiver')
-                )
-                void onSetTransportationPlan(createDefaultTransportationPlan(event, homeAddress, defaultDriver))
-              }}
-            />
-          ) : (
-            <NonTravelEventBlock event={event} plan={plan} hasTransportation={Boolean(transportationPlan)} />
-          )}
+          <NonTravelEventBlock event={event} plan={plan} hasTransportation={Boolean(transportationPlan)} />
         </section>
       )}
 
-      {!reminder && (transportationPlan || planKind !== 'travel') && (
+      {!reminder && (transportationPlan || planKind === 'travel') && (
         <EventTransportationSection
           event={event}
           plan={transportationPlan}
           onChange={onSetTransportationPlan}
-          suggestedPlan={planKind === 'travel' && !transportationPlan}
+          suggestedPlan={planKind === 'travel' && mode !== 'trip' && !/\bflight\b/i.test(event.title)}
+          noRouteReason={mode === 'trip' || /\bflight\b/i.test(event.title) ? 'trip' : null}
         />
       )}
 
@@ -1694,7 +1600,7 @@ function DriverChip({
   )
 }
 
-function PlanBlock({
+export function PlanBlock({
   plan,
   loading,
   driverPool,

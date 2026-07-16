@@ -27,6 +27,8 @@ export interface TransportationLeg {
 
 export interface EventTransportationPlan {
   version: 1
+  source?: 'generated' | 'manual'
+  waitOnSite?: boolean
   legs: TransportationLeg[]
   attendeeRoster?: string[]
 }
@@ -44,6 +46,12 @@ function normalizePlace(value: unknown): TransportationPlace | null {
     name: name || address,
     address,
     ...(raw.kind === 'event' ? { kind: 'event' as const } : {}),
+    ...(raw.source === 'manual' || raw.source === 'saved' || raw.source === 'google'
+      ? { source: raw.source }
+      : {}),
+    ...(typeof raw.placeId === 'string' && raw.placeId.trim() ? { placeId: raw.placeId.trim() } : {}),
+    ...(typeof raw.lat === 'number' ? { lat: raw.lat } : {}),
+    ...(typeof raw.lng === 'number' ? { lng: raw.lng } : {}),
   }
 }
 
@@ -86,7 +94,15 @@ export function normalizeTransportationPlan(value: unknown): EventTransportation
         .map((name) => name.trim())
         .filter(Boolean)
     : undefined
-  return legs.length > 0 ? { version: 1, legs, ...(attendeeRoster ? { attendeeRoster } : {}) } : null
+  return legs.length > 0
+    ? {
+        version: 1,
+        ...(raw.source === 'generated' || raw.source === 'manual' ? { source: raw.source } : {}),
+        ...(typeof raw.waitOnSite === 'boolean' ? { waitOnSite: raw.waitOnSite } : {}),
+        legs,
+        ...(attendeeRoster ? { attendeeRoster } : {}),
+      }
+    : null
 }
 
 export function eventTimeValue(iso: string | null | undefined): string {
@@ -122,6 +138,8 @@ export function createDefaultTransportationPlan(
   const attendeeRoster = eventPassengerNames(event)
   return {
     version: 1,
+    source: 'manual',
+    waitOnSite: false,
     attendeeRoster,
     legs: [{
       id: crypto.randomUUID(),
@@ -135,6 +153,17 @@ export function createDefaultTransportationPlan(
       time: eventTimeValue(event.start_time),
     }],
   }
+}
+
+export function markTransportationPlanManual(plan: EventTransportationPlan): EventTransportationPlan {
+  return plan.source === 'manual' ? plan : { ...plan, source: 'manual' }
+}
+
+export function updateTransportationWait(
+  plan: EventTransportationPlan,
+  waitOnSite: boolean,
+): EventTransportationPlan {
+  return { ...plan, waitOnSite }
 }
 
 export function syncTransportationAttendees(

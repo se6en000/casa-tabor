@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { patchGoogleEvent, createGoogleEvent, getGoogleEvent } from '../_shared/google.ts'
 import { loadWritableGoogleConnection, markGoogleConnectionHealthy } from '../_shared/google-connection.ts'
-import { buildGoogleEventDescription } from '../_shared/google-event-details-core.mjs'
+import { buildGoogleEventDescription, googleLocationForEvent } from '../_shared/google-event-details-core.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -93,9 +93,7 @@ Deno.serve(async (req) => {
   // Send all editable fields: title, times, location, description+enrichment
 
   // Casa stores the authoritative literal title; Google receives the same title.
-  // location — prefer location_name; append address only if it's different
-  const locationParts = [event.location_name, event.address].filter((p, i, arr) => p && arr.indexOf(p) === i)
-  const location = locationParts.length > 0 ? locationParts.join(', ') : undefined
+  const location = googleLocationForEvent(event, bundle)
 
   const isAllDay = event.all_day || (!event.start_time?.includes('T') && !event.start_time?.includes(' '))
   const toISO = (t: string) => new Date(t).toISOString()

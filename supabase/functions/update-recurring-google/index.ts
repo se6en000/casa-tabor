@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { createGoogleEvent, getGoogleEvent, patchGoogleEvent } from '../_shared/google.ts'
 import { loadWritableGoogleConnection, markGoogleConnectionHealthy } from '../_shared/google-connection.ts'
-import { buildGoogleEventDescription } from '../_shared/google-event-details-core.mjs'
+import { buildGoogleEventDescription, googleLocationForEvent } from '../_shared/google-event-details-core.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -52,10 +52,7 @@ Deno.serve(async (req) => {
       ? { date: toGoogleAllDayEndDate(master.end_time as string) }
       : { dateTime: new Date(master.end_time).toISOString(), timeZone: TZ }
 
-    // Build location string
-    const locationParts = [master.location_name, master.address]
-      .filter((p, i, arr) => p && arr.indexOf(p) === i)
-    const location = locationParts.length > 0 ? locationParts.join(', ') : undefined
+    const location = googleLocationForEvent(master, bundle)
 
     // Convert Casa RRULE (without prefix) to Google recurrence array format
     const recurrence: string[] = master.rrule ? [`RRULE:${master.rrule}`] : []

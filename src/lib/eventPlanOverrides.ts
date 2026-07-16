@@ -11,6 +11,7 @@ export type PersistedPlanOverrides = {
   twoDriverConfirmed?: boolean
   transportationPlan?: EventTransportationPlan | null
   locationSignature?: string
+  locationProjectionBlocked?: boolean
 }
 
 const PANEL_OVERRIDES_KEY_PREFIX = 'event-command-center-overrides:v1'
@@ -59,6 +60,7 @@ function normalizePersistedPlanOverrides(
     twoDriverConfirmed: locationMatches && Boolean(payload.twoDriverConfirmed),
     transportationPlan: normalizeTransportationPlan(payload.transportationPlan),
     locationSignature: payload.locationSignature,
+    locationProjectionBlocked: Boolean(payload.locationProjectionBlocked),
   }
 }
 
@@ -74,6 +76,7 @@ function getDbPersistedPlanOverrides(event: EventWithDetails): PersistedPlanOver
       twoDriverConfirmed: Boolean(row.two_driver_confirmed),
       transportationPlan: normalizeTransportationPlan(row.transportation_plan),
       locationSignature: row.location_signature ?? undefined,
+      locationProjectionBlocked: Boolean(row.location_projection_blocked),
     },
     event,
   )
@@ -113,6 +116,7 @@ export function getPersistedPlanOverrides(event: EventWithDetails): PersistedPla
       twoDriverConfirmed: false,
       transportationPlan: null,
       locationSignature: undefined,
+      locationProjectionBlocked: false,
     }
 }
 

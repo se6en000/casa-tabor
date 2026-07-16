@@ -2,6 +2,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import {
+  buildCasaDetailsLines,
+  googleLocationForEvent,
+} from '../supabase/functions/_shared/google-event-details-core.mjs'
 
 const createGoogle = readFileSync(resolve('supabase/functions/create-google-event/index.ts'), 'utf8')
 const pushGoogle = readFileSync(resolve('supabase/functions/push-to-google/index.ts'), 'utf8')
@@ -19,6 +23,30 @@ test('all Google write paths use the shared details projection', () => {
   for (const source of [createGoogle, pushGoogle, updateRecurring]) {
     assert.match(source, /recurrence_build_reusable_patch/)
   }
+})
+
+test('automatically resolved unconfirmed addresses stay out of every Google projection field', () => {
+  const event = { location_name: 'Possible Clinic', address: '100 Possible Way' }
+  const bundle = {
+    plan_override: { location_projection_blocked: true },
+    transportation_plan: {
+      version: 1,
+      legs: [{
+        origin: { name: 'Home', address: '1 Casa Way' },
+        destination: { name: 'Possible Clinic', address: '100 Possible Way' },
+        purpose: 'appointment',
+      }],
+    },
+  }
+  assert.equal(googleLocationForEvent(event, bundle), undefined)
+  assert.equal(buildCasaDetailsLines(bundle).some((line) => line.startsWith('Transportation ')), false)
+  assert.equal(
+    googleLocationForEvent(event, {
+      ...bundle,
+      plan_override: { location_projection_blocked: false },
+    }),
+    'Possible Clinic, 100 Possible Way',
+  )
 })
 
 test('updates preserve Google-owned description text before replacing Casa details', () => {

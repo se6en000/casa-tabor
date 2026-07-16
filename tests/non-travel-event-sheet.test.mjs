@@ -8,7 +8,8 @@ const panel = readFileSync(
 )
 
 test('event sheet uses a dedicated non-travel overview instead of the driver plan', () => {
-  assert.match(panel, /plan\.kind === 'travel' && !transportationPlan/)
+  assert.match(panel, /plan && plan\.kind !== 'travel'/)
+  assert.doesNotMatch(panel, /<PlanBlock/)
   assert.match(panel, /showLocation = hasDestination \|\| mode === 'hosted'/)
   assert.match(panel, /showMeanwhile = planKind === 'travel'/)
   assert.match(panel, /<NonTravelEventBlock event=\{event\} plan=\{plan\} hasTransportation=\{Boolean\(transportationPlan\)\} \/>/)

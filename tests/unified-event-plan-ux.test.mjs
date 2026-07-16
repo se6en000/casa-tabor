@@ -25,6 +25,10 @@ test('explicit transportation uses the navy The Plan command-center presentation
   assert.match(transportation, />The Plan</)
   assert.match(transportation, /Tap any place or driver for a quick change/)
   assert.match(transportation, /Edit entire plan/)
+  assert.match(transportation, /Casa generated · review anytime/)
+  assert.match(transportation, /label="Driver waits on site"/)
+  assert.match(transportation, /No local driving route attached/)
+  assert.doesNotMatch(detail, /<PlanBlock/)
 })
 
 test('transportation passengers use touch chips and synchronize with event attendees', () => {
@@ -58,6 +62,7 @@ test('transportation mutations use one awaited durable writer without stale plan
   assert.match(transportation, /Saving trip change…/)
   assert.match(transportation, /transportationPlaceMatchesEvent\(eventPlace, event\)/)
   assert.match(transportationLib, /export function transportationPlaceMatchesEvent/)
+  assert.match(detail, /markTransportationPlanManual/)
   assert.match(transportation, /lat: place\.lat \?\? null/)
   assert.match(transportation, /lng: place\.lng \?\? null/)
 })
@@ -187,10 +192,11 @@ test('address review means explicit human confirmation rather than automatic rou
   assert.match(detail, /const addressReviewed = verifiedOverride === true/)
   assert.doesNotMatch(detail, /verifyFromTrustedSource/)
   assert.doesNotMatch(detail, /findSavedPlace\(savedPlaces.*event\.location_name/)
-  assert.match(detail, /onConfirmAddress=\{\(\) => setVerifiedOverride\(true\)\}/)
+  assert.match(detail, /onConfirmAddress=\{\(\) => void confirmAddress\(\)\}/)
   assert.match(eventLocation, /verified: false/)
   assert.match(eventLocation, /place\.source === 'google' \|\| place\.source === 'saved'/)
   assert.match(detail, /locationSignature\(event\)/)
+  assert.match(detail, /location_projection_blocked: false/)
 })
 
 test('address review summary lives in the crown with a full address and truthful actions', () => {
