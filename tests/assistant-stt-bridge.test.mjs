@@ -53,6 +53,7 @@ test('ignored or abandoned wakes cannot strand the microphone', () => {
   assert.match(wake, /DRAWER_CLOSE_GRACE_MS/)
   assert.match(wake, /if \(now - drawerClosedAtRef\.current < DRAWER_CLOSE_GRACE_MS\) return/)
   assert.match(bridge, /PREWARM_ADOPTION_TIMEOUT_SECS = 2\.5/)
+  assert.match(bridge, /_stt_disconnect_seq > claim_seq_before_prewarm/)
   assert.match(bridge, /not adopted:[\s\S]{0,180}stop_recording\(wake_disarm_secs=0\)/)
   assert.match(drawer, /onDismiss: \(\) => \{[\s\S]{0,120}speechStopRef\.current\(\)/)
 })

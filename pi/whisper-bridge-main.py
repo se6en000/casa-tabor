@@ -834,13 +834,18 @@ def start_recording(force_restart=False, reason='manual'):
         _start_lock.release()
 
 def _start_accepted_wake(wake_id):
+    with _stt_lock:
+        claim_seq_before_prewarm = _stt_disconnect_seq
     if not start_recording(reason='wake_accepted'):
         return
     prewarm_gen = _ws_gen
     log.info(f'[wake] accepted id={wake_id}; prewarm generation={prewarm_gen}')
     time.sleep(PREWARM_ADOPTION_TIMEOUT_SECS)
     with _stt_lock:
-        adopted = _stt_client is not None
+        adopted = (
+            _stt_client is not None
+            and _stt_disconnect_seq > claim_seq_before_prewarm
+        )
     if _ws_gen == prewarm_gen and _get().get('recording') and not adopted:
         log.warning(f'[wake] prewarm id={wake_id} was not adopted — returning to wake listening')
         stop_recording(wake_disarm_secs=0)
