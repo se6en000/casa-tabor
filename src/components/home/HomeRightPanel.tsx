@@ -9,7 +9,7 @@ import { ChevronRight, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useWeekEvents } from '../../hooks/useCalendarEvents'
-import { useDismissPrepItem, useDownvotePrepItem, usePrepItems, useSnoozePrepItem } from '../../hooks/usePrepItems'
+import { useCompletePrepItem, useDownvotePrepItem, usePrepItems, useSnoozePrepItem } from '../../hooks/usePrepItems'
 import { supabase } from '../../lib/supabase'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useCalendarStore } from '../../stores/calendarStore'
@@ -71,7 +71,7 @@ function sourceBadge(item: PrepItem) {
 export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }: Props) {
   const navigate = useNavigate()
   const { data: prepItems = [] } = usePrepItems()
-  const dismissPrepItem = useDismissPrepItem()
+  const completePrepItem = useCompletePrepItem()
   const snoozePrepItem = useSnoozePrepItem()
   const downvotePrepItem = useDownvotePrepItem()
   const { data: weekEvents } = useWeekEvents(now)
@@ -79,6 +79,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   const setActiveView = useCalendarStore(s => s.setActiveView)
   const [checkingItemId, setCheckingItemId] = useState<string | null>(null)
   const [downvotingItemId, setDownvotingItemId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const weekStart = startOfWeek(now, { weekStartsOn: 0 })
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
@@ -124,8 +125,14 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
 
   async function handleDone(item: PrepItem) {
     setCheckingItemId(item.id)
-    await dismissPrepItem(item.id)
-    setCheckingItemId(null)
+    setActionError(null)
+    try {
+      await completePrepItem(item.id)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Casa could not complete this action.')
+    } finally {
+      setCheckingItemId(null)
+    }
   }
 
   async function handleDownvote(item: PrepItem) {
@@ -200,6 +207,11 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
             <EmptyState className="mt-3" title="All clear" description="No urgent prep actions right now." />
           ) : (
             <div className="mt-3 space-y-2.5">
+              {actionError && (
+                <p role="alert" className="text-caption text-casa-error">
+                  {actionError} The action is still active.
+                </p>
+              )}
               {prepItems.slice(0, 4).map(item => {
                 const urgency = urgencyLabel(daysUntil(item.event_date))
                 const source = sourceBadge(item)

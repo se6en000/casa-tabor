@@ -42,7 +42,6 @@ export function useReminderNeedsYouActions() {
     const { data: existing, error: existingError } = await supabase
       .from('prep_items')
       .select('id')
-      .eq('dismissed', false)
       .in('source_type', activeSources)
       .eq('source_ref', event.id)
       .limit(1)
@@ -123,7 +122,6 @@ export function useReminderNeedsYouActions() {
     const { data: existing, error: existingError } = await supabase
       .from('prep_items')
       .select('source_ref')
-      .eq('dismissed', false)
       .in('source_type', existingSources)
       .in('source_ref', missed.map((event) => event.id))
 

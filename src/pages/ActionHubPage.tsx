@@ -5,7 +5,7 @@ import { ClipboardList, Bell, ChevronLeft, Mail, Bot, ThumbsDown, CalendarPlus, 
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../utils/cn'
 import { supabase } from '../lib/supabase'
-import { usePrepItems, useDismissPrepItem, useDownvotePrepItem, useSnoozePrepItem } from '../hooks/usePrepItems'
+import { usePrepItems, useCompletePrepItem, useDownvotePrepItem, useSnoozePrepItem } from '../hooks/usePrepItems'
 import { useNotifications } from '../hooks/useNotifications'
 import { useWeekConflicts } from '../hooks/useConflicts'
 import type { PrepItem } from '../types'
@@ -36,13 +36,14 @@ function dueBadge(item: PrepItem, now: Date): { label: string; tone: string } | 
 export default function ActionHubPage() {
   const now = useLiveClock(60_000)
   const { data: prepItems = [] } = usePrepItems()
-  const dismiss = useDismissPrepItem()
+  const complete = useCompletePrepItem()
   const snooze = useSnoozePrepItem()
   const downvote = useDownvotePrepItem()
   const { notifications, unreadCount, markRead, clearAll } = useNotifications()
   const { data: conflicts = [] } = useWeekConflicts()
   const [selected, setSelected] = useState<PrepItem | null>(null)
   const [actingId, setActingId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const { data: gmailHealth } = useQuery({
     queryKey: ['actions-hub-gmail-health'],
@@ -85,13 +86,16 @@ export default function ActionHubPage() {
     ]
   }, [prepItems, unreadCount, gmailHealth?.recentProcessed, now, conflicts.length])
 
-  async function run(action: 'dismiss' | 'snooze' | 'downvote', id: string) {
+  async function run(action: 'complete' | 'snooze' | 'downvote', id: string) {
     setActingId(id)
+    setActionError(null)
     try {
-      if (action === 'dismiss') await dismiss(id)
+      if (action === 'complete') await complete(id)
       if (action === 'snooze') await snooze(id)
       if (action === 'downvote') await downvote(id)
       if (selected?.id === id) setSelected(null)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Casa could not update this action.')
     } finally {
       setActingId(null)
     }
@@ -134,6 +138,11 @@ export default function ActionHubPage() {
             <h2 className="font-display text-heading text-casa-navy flex items-center gap-2"><ClipboardList size={16} className="text-casa-gold" /> Prep &amp; Action</h2>
             <span className="text-caption font-semibold rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">{prepItems.length}</span>
           </div>
+          {actionError && (
+            <p role="alert" className="mb-3 text-body-sm text-casa-error">
+              {actionError} The action is still active.
+            </p>
+          )}
           <div className="space-y-2.5 pr-1 xl:max-h-[70vh] xl:overflow-y-auto">
             {prepItems.map((item) => {
               const src = sourceBadge(item)
@@ -165,7 +174,7 @@ export default function ActionHubPage() {
                       <span className="text-body-sm text-casa-muted truncate">{item.event_title || 'Casa Tabor'}</span>
                     </div>
                     <div className="mt-3 flex items-center gap-1.5 flex-wrap">
-                      <Button variant="ghost" onClick={() => run('dismiss', item.id)} className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition" title="Done">
+                      <Button variant="ghost" onClick={() => run('complete', item.id)} className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition" title="Done">
                         Done
                       </Button>
                       <Button variant="ghost" onClick={() => run('snooze', item.id)} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors" title="Snooze">

@@ -177,9 +177,10 @@ If nothing clears the bar, return [].`
 
   // ── Clear old undismissed prep items for these events ──
   if (validEventIds.size > 0) {
-    await sb.from('prep_items').delete()
+    const { error: clearError } = await sb.from('prep_items').delete()
       .eq('dismissed', false)
       .in('event_id', [...validEventIds])
+    if (clearError) return err(`Failed to clear stale prep items: ${clearError.message}`)
   }
 
   // ── Insert new items, skipping anything already dismissed ──
@@ -202,7 +203,8 @@ If nothing clears the bar, return [].`
         dismissed: false,
       }
     })
-    await sb.from('prep_items').insert(rows)
+    const { error: insertError } = await sb.from('prep_items').insert(rows)
+    if (insertError) return err(`Failed to store prep items: ${insertError.message}`)
   }
 
   return new Response(

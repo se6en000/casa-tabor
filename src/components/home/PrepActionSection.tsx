@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ClipboardList, ChevronDown, Gift, Plane, Stethoscope, CreditCard, ShoppingBag, Ban, Moon, ThumbsDown, Mail, Bot, Check, Bell } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { cn } from '../../utils/cn'
-import { usePrepItems, useDismissPrepItem, useSnoozePrepItem, useDownvotePrepItem } from '../../hooks/usePrepItems'
+import { usePrepItems, useCompletePrepItem, useSnoozePrepItem, useDownvotePrepItem } from '../../hooks/usePrepItems'
 import type { PrepItem } from '../../types'
 import { Button, CalendarPill, IconButton, Text } from '../ui'
 
@@ -81,13 +81,14 @@ interface PrepActionSectionProps {
 
 export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions' }: PrepActionSectionProps) {
   const { data: items = [] } = usePrepItems()
-  const dismiss = useDismissPrepItem()
+  const complete = useCompletePrepItem()
   const snooze = useSnoozePrepItem()
   const downvote = useDownvotePrepItem()
   const [open, setOpen] = useState(loadOpenState)
   const [checking, setChecking] = useState<string | null>(null)
   const [snoozingId, setSnoozingId] = useState<string | null>(null)
   const [downvoting, setDownvoting] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const grouped = useMemo(() => groupItems(items), [items])
 
@@ -95,10 +96,14 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
 
   async function handleCheck(id: string) {
     setChecking(id)
-    await new Promise(r => setTimeout(r, 300))
-    await dismiss(id)
-    await new Promise(r => setTimeout(r, 180))
-    setChecking(null)
+    setActionError(null)
+    try {
+      await complete(id)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Casa could not complete this action.')
+    } finally {
+      setChecking(null)
+    }
   }
 
   async function handleSnooze(id: string) {
@@ -267,6 +272,11 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
             className="overflow-hidden"
           >
             <div className="mt-3 space-y-3">
+              {actionError && (
+                <p role="alert" className="text-caption text-casa-error">
+                  {actionError} The action is still active.
+                </p>
+              )}
               <AnimatePresence initial={false}>
                 {renderGroup('Today / Tomorrow', grouped.today)}
                 {renderGroup('Soon', grouped.soon)}

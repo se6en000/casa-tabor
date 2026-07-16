@@ -212,6 +212,9 @@ export interface PrepItem {
   dismissed_at: string | null
   created_at: string
   source_type?: string | null
+  source_ref?: string | null
+  source_pattern_key?: string | null
+  action_key?: string
 }
 
 // ── Views ───────────────────────────────────────────────────

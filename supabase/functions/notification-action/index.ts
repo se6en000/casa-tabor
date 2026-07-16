@@ -22,18 +22,21 @@ Deno.serve(async (req) => {
       const nowIso = new Date().toISOString()
 
       if (action === 'done' || action === 'complete') {
-        await sb
-          .from('prep_items')
-          .update({ dismissed: true, dismissed_at: nowIso })
-          .eq('id', prep_item_id)
+        const { data: resolution, error: resolutionError } = await sb.rpc('resolve_prep_item', {
+          p_prep_item_id: prep_item_id,
+          p_outcome: 'done',
+        })
+        if (resolutionError) return json({ ok: false, error: resolutionError.message }, 500)
 
         await sb.from('notifications').insert({
           type: 'push_action_done',
-          title: 'Action marked done',
-          body: 'Notification action completed.',
+          title: resolution?.reminder_completed ? 'Reminder completed' : 'Action marked done',
+          body: resolution?.reminder_completed
+            ? 'The reminder and action were completed.'
+            : 'The action was permanently completed.',
           source: 'system',
         })
-        return json({ ok: true, action: 'done', prep_item_id })
+        return json({ ok: true, action: 'done', prep_item_id, resolution })
       }
 
       if (action === 'thumbs_down' || action === 'downvote') {

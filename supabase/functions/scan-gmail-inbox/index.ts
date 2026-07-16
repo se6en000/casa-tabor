@@ -298,6 +298,7 @@ function parseDueDateOrFallback(due: string | undefined, receivedAtIso: string, 
 async function persistInboxActions(
   sb: ReturnType<typeof createClient>,
   memberId: string,
+  messageId: string,
   subject: string,
   eventId: string | null,
   eventTitle: string | null,
@@ -329,10 +330,15 @@ async function persistInboxActions(
       event_date: eventDate ?? dueBy,
       due_by: dueBy,
       priority: normalizedPriority,
+      source_type: 'gmail',
+      source_ref: `gmail:${memberId}:${messageId}`,
+      source_pattern_key: `action:${a.type}`,
+      source_confidence: 1,
     }
   })
-  await sb.from('prep_items').insert(rows)
-  return rows.length
+  const { data, error } = await sb.from('prep_items').insert(rows).select('id')
+  if (error) throw error
+  return data?.length ?? 0
 }
 
 // ── Fuzzy event dedup ─────────────────────────────────────────────
@@ -479,6 +485,7 @@ Deno.serve(async (req) => {
       const actionsFromEmail = await persistInboxActions(
         sb,
         memberId,
+        msgId,
         details.subject,
         null,
         details.subject.slice(0, 80),
