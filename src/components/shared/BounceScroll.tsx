@@ -10,6 +10,8 @@ interface BounceScrollProps {
   innerClassName?: string
   /** Max rubber-band distance in px (default 72) */
   maxBounce?: number
+  /** Use the browser's native scroll surface without the transformed bounce layer. */
+  nativeScroll?: boolean
   /** Passed to the outer wrapper div */
   onClick?: React.MouseEventHandler<HTMLDivElement>
 }
@@ -23,7 +25,14 @@ interface BounceScrollProps {
  *     {content}
  *   </BounceScroll>
  */
-export default function BounceScroll({ children, className, innerClassName, maxBounce = 72, onClick }: BounceScrollProps) {
+export default function BounceScroll({
+  children,
+  className,
+  innerClassName,
+  maxBounce = 72,
+  nativeScroll = false,
+  onClick,
+}: BounceScrollProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const y = useMotionValue(0)
   const springY = useSpring(y, { stiffness: 380, damping: 38, mass: 0.5 })
@@ -32,6 +41,7 @@ export default function BounceScroll({ children, className, innerClassName, maxB
   const dragging = useRef(false)
 
   useEffect(() => {
+    if (nativeScroll) return
     const element = scrollRef.current
     if (!element) return
 
@@ -75,7 +85,26 @@ export default function BounceScroll({ children, className, innerClassName, maxB
       element.removeEventListener('touchend', onTouchEnd)
       element.removeEventListener('touchcancel', onTouchEnd)
     }
-  }, [maxBounce, y])
+  }, [maxBounce, nativeScroll, y])
+
+  if (nativeScroll) {
+    return (
+      <div
+        ref={scrollRef}
+        className={cn(
+          'relative min-h-0 overflow-y-auto overscroll-none touch-pan-y',
+          className,
+          innerClassName,
+        )}
+        data-native-scroll
+        data-ptr-ignore
+        style={{ overscrollBehaviorY: 'none', WebkitOverflowScrolling: 'touch' }}
+        onClick={onClick}
+      >
+        {children}
+      </div>
+    )
+  }
 
   return (
     <div className={cn('relative overflow-hidden', className)} onClick={onClick}>

@@ -902,7 +902,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
             </div>
 
             {/* Messages */}
-            <BounceScroll className="flex-1 min-h-0" innerClassName="px-4 py-4 space-y-3">
+            <BounceScroll nativeScroll className="flex-1 min-h-0" innerClassName="px-4 py-4 space-y-3">
               {/* Session resume banner */}
               {hasSession && messages.length > 0 && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-casa-gold/8 border border-casa-gold/20 text-caption text-casa-muted">

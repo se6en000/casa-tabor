@@ -22,3 +22,10 @@ test('AI drawer locks the background application scroll while open', () => {
   assert.match(aiDrawer, /root\.style\.overflow = previous\.rootOverflow/)
   assert.match(aiDrawer, /appMain\.style\.touchAction = previous\.appMainTouchAction/)
 })
+
+test('AI conversation uses native mobile scrolling without the bounce transform layer', () => {
+  assert.match(aiDrawer, /<BounceScroll nativeScroll className="flex-1 min-h-0"/)
+  assert.match(bounceScroll, /if \(nativeScroll\) \{/)
+  assert.match(bounceScroll, /data-native-scroll/)
+  assert.match(bounceScroll, /min-h-0 overflow-y-auto overscroll-none touch-pan-y/)
+})
