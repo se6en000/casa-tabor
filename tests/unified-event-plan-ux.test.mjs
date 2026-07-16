@@ -205,6 +205,7 @@ test('event detail drag cap and crown share one theme-aware treatment', () => {
   assert.match(detail, /eventCrownStyle\(event, 'cap'\)/)
   assert.match(detail, /eventCrownStyle\(event, 'body'\)/)
   assert.match(detail, /backgroundColor: 'var\(--color-casa-navy\)'/)
+  assert.match(detail, /overflow-y-auto overflow-x-hidden overscroll-contain bg-casa-navy/)
   assert.match(detail, /var\(--color-casa-accent-subtle\), transparent 72%/)
   assert.match(detail, /const glowOrigin = region === 'cap' \? '90% 100%' : '90% 0%'/)
   assert.match(detail, /className="relative h-control-sm flex-shrink-0 px-3"/)
