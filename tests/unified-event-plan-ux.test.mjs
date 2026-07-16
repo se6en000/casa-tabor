@@ -11,6 +11,11 @@ const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.ts
 const addressReview = readFileSync(resolve('src/components/calendar/AddressReviewSummary.tsx'), 'utf8')
 const eventLocation = readFileSync(resolve('src/lib/eventLocation.ts'), 'utf8')
 const transportationLib = readFileSync(resolve('src/lib/eventTransportation.ts'), 'utf8')
+const savedPlaces = readFileSync(resolve('src/hooks/useSavedPlaces.ts'), 'utf8')
+const savedPlaceAddressConfirmation = readFileSync(
+  resolve('supabase/migrations/20260715267000_confirm_saved_place_event_addresses.sql'),
+  'utf8',
+)
 const recurrenceScope = readFileSync(resolve('src/components/calendar/RecurrenceScopeDialog.tsx'), 'utf8')
 const recurrenceScopePresentation = readFileSync(resolve('src/lib/recurrenceScopePresentation.ts'), 'utf8')
 const categoryPicker = detail.slice(detail.indexOf('function CategoryPicker'), detail.indexOf('/* ── Header'))
@@ -273,15 +278,22 @@ test('event location quick edit persists location fields and invalidates stale c
   assert.match(eventLocation, /updateTransportationEventPlace\(currentPlan, nextPlace\)/)
 })
 
-test('address review means explicit human confirmation rather than automatic route confidence', () => {
-  assert.match(detail, /const addressReviewed = verifiedOverride === true/)
+test('address review trusts exact household saved addresses but not automatic route confidence', () => {
+  assert.match(detail, /const addressReviewed = verifiedOverride === true[\s\S]*findSavedPlaceByAddress\(savedPlaces, event\?\.address\)/)
   assert.doesNotMatch(detail, /verifyFromTrustedSource/)
-  assert.doesNotMatch(detail, /findSavedPlace\(savedPlaces.*event\.location_name/)
+  assert.match(detail, /isPending: savedPlacesPending/)
+  assert.match(detail, /addressReviewLoading=\{overridesHydratedEventId !== event\.id \|\| savedPlacesPending\}/)
+  assert.match(savedPlaces, /export function findSavedPlaceByAddress/)
+  assert.match(savedPlaces, /replace\(\/\[\^\\p\{L\}\\p\{N\}\]\+\/gu, ''\)/)
+  assert.match(savedPlaces, /normalizeSavedPlaceAddress\(savedPlaceAddress\(place\)\) === normalizedAddress/)
   assert.match(detail, /onConfirmAddress=\{\(\) => void confirmAddress\(\)\}/)
-  assert.match(eventLocation, /verified: false/)
+  assert.match(eventLocation, /verified: place\.source === 'saved'/)
   assert.match(eventLocation, /place\.source === 'google' \|\| place\.source === 'saved'/)
   assert.match(detail, /locationSignature\(event\)/)
   assert.match(detail, /location_projection_blocked: false/)
+  assert.match(savedPlaceAddressConfirmation, /event_plan_overrides override/)
+  assert.match(savedPlaceAddressConfirmation, /override\.location_projection_blocked = true/)
+  assert.doesNotMatch(savedPlaceAddressConfirmation, /insert into public\.event_plan_overrides/)
 })
 
 test('address review summary lives in the crown with a full address and truthful actions', () => {

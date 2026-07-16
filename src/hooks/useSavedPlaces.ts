@@ -37,18 +37,30 @@ export function savedPlaceAddress(place: Pick<SavedPlace, 'address' | 'city' | '
   return [place.address, place.city, place.state, place.zip].filter(Boolean).join(', ')
 }
 
+function normalizeSavedPlaceAddress(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+}
+
+export function findSavedPlaceByAddress(places: SavedPlace[], address: string | null | undefined): SavedPlace | null {
+  const normalizedAddress = normalizeSavedPlaceAddress(address ?? '')
+  if (!normalizedAddress) return null
+  return places.find((place) => normalizeSavedPlaceAddress(savedPlaceAddress(place)) === normalizedAddress) ?? null
+}
+
 export function findExactSavedPlace(
   places: SavedPlace[],
   name: string,
   address: string,
 ): SavedPlace | null {
   const normalizedName = name.trim().toLowerCase()
-  const normalizedAddress = address.trim().toLowerCase()
-  if (!normalizedName || !normalizedAddress) return null
-  return places.find((place) =>
-    place.name.trim().toLowerCase() === normalizedName
-    && savedPlaceAddress(place).trim().toLowerCase() === normalizedAddress,
-  ) ?? null
+  const place = findSavedPlaceByAddress(places, address)
+  if (!normalizedName || !place) return null
+  return [place.name, ...place.aliases].some((candidate) => candidate.trim().toLowerCase() === normalizedName)
+    ? place
+    : null
 }
 
 export function useSavePlace() {

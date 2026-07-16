@@ -194,8 +194,8 @@ test('occurrence progress remains direct and rolls back failed optimistic state'
   assert.doesNotMatch(eventDetail, /changedPaths: \[['"]actionDefinitions/)
 })
 
-test('editing any address requires a fresh human review', () => {
-  assert.match(eventLocation, /verified: false/)
+test('saved address edits stay confirmed while manual and Google edits require review', () => {
+  assert.match(eventLocation, /verified: place\.source === 'saved'/)
   assert.doesNotMatch(eventLocation, /verified: trusted/)
   assert.match(eventDetail, /setVerifiedOverride\(false\)/)
 })

@@ -14,7 +14,12 @@ import { getFieldsForCategory, CATEGORY_LABEL } from './categoryFields'
 import { useSaveEnrichmentBatch } from '../../hooks/useEnrichEvent'
 import EventEditSheet from './EventEditSheet'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
-import { useSavedPlaces, useSavePlace, findSavedPlace } from '../../hooks/useSavedPlaces'
+import {
+  findSavedPlace,
+  findSavedPlaceByAddress,
+  useSavedPlaces,
+  useSavePlace,
+} from '../../hooks/useSavedPlaces'
 import { useTravelEta } from '../../hooks/useTravelEta'
 import { useMemberAvailability } from '../../hooks/useMemberAvailability'
 import { DepartureRiskBanner } from '../shared/DepartureRiskBanner'
@@ -140,7 +145,9 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
   const panelDragControls = useDragControls()
   const dragDismissOffset = isMobile ? 150 : 180
   const dragDismissVelocity = isMobile ? 550 : 700
+  const { data: savedPlaces = [], isPending: savedPlacesPending } = useSavedPlaces()
   const addressReviewed = verifiedOverride === true
+    || Boolean(findSavedPlaceByAddress(savedPlaces, event?.address))
   const recurringQuickAction = useRecurringQuickAction(event)
   const requestRecurringQuickAction = recurringQuickAction.request
   const executeRecurringQuickActionScope = recurringQuickAction.executeScope
@@ -460,7 +467,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   transportationPlan={transportationPlan}
                   onClose={onClose}
                   onConfirmAddress={() => void confirmAddress()}
-                  addressReviewLoading={overridesHydratedEventId !== event.id}
+                  addressReviewLoading={overridesHydratedEventId !== event.id || savedPlacesPending}
                   addressSaveError={overrideSaveError}
                   onRetryAddressSave={() => setOverrideSaveRevision((revision) => revision + 1)}
                   onSaveAddress={async (place, scope) => {
