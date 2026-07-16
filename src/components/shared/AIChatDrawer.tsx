@@ -421,6 +421,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     },
     onDismiss: () => {
       markUserInteraction()
+      void speechStopRef.current()
       // Verbal goodbye — clear session immediately so next open starts fresh
       startFresh()
       setTimeout(onClose, 400)

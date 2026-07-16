@@ -6,6 +6,8 @@ const bridge = readFileSync(new URL('../pi/whisper-bridge-main.py', import.meta.
 const launcher = readFileSync(new URL('../pi/start-casa.sh', import.meta.url), 'utf8')
 const refresh = readFileSync(new URL('../pi/refresh-casa-kiosk.sh', import.meta.url), 'utf8')
 const shadow = readFileSync(new URL('../pi/stt_flux_shadow.py', import.meta.url), 'utf8')
+const wake = readFileSync(new URL('../src/hooks/useWakeWord.ts', import.meta.url), 'utf8')
+const drawer = readFileSync(new URL('../src/components/shared/AIChatDrawer.tsx', import.meta.url), 'utf8')
 
 test('Pi bridge requires runtime provider credentials', () => {
   assert.match(bridge, /os\.environ\.get\('DEEPGRAM_API_KEY'/)
@@ -37,12 +39,22 @@ test('candidate protocol keeps segment finals separate from turn commits', () =>
   assert.match(bridge, /'type': 'committed'/)
 })
 
-test('wake prewarm captures immediately without discarding post-wake audio', () => {
+test('accepted wake prewarms without discarding post-wake audio', () => {
   assert.match(bridge, /PRIMARY_STT_MODEL = os\.environ\.get\('STT_PRIMARY_MODEL', 'nova-3'\)/)
-  assert.match(bridge, /kwargs=\{'reason': 'wake_prewarm'\}/)
+  assert.match(wake, /type: 'accept_wake', wake_id: msg\.wake_id/)
+  assert.match(bridge, /cmd == 'accept_wake'/)
+  assert.match(bridge, /start_recording\(reason='wake_accepted'\)/)
   assert.match(bridge, /'type': 'capturing'/)
   assert.match(bridge, /if not initial_buffer and warmup <= WARMUP_CHUNKS:/)
   assert.match(bridge, /_start_lock\.acquire\(blocking=False\)/)
+})
+
+test('ignored or abandoned wakes cannot strand the microphone', () => {
+  assert.match(wake, /DRAWER_CLOSE_GRACE_MS/)
+  assert.match(wake, /if \(now - drawerClosedAtRef\.current < DRAWER_CLOSE_GRACE_MS\) return/)
+  assert.match(bridge, /PREWARM_ADOPTION_TIMEOUT_SECS = 2\.5/)
+  assert.match(bridge, /not adopted:[\s\S]{0,180}stop_recording\(wake_disarm_secs=0\)/)
+  assert.match(drawer, /onDismiss: \(\) => \{[\s\S]{0,120}speechStopRef\.current\(\)/)
 })
 
 test('legacy dictation protocol retains final messages', () => {

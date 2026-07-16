@@ -74,6 +74,7 @@ export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean, ena
           if (now - drawerClosedAtRef.current < DRAWER_CLOSE_GRACE_MS) return
           if (screensaverActiveRef.current && now - screensaverActiveAtRef.current < SCREENSAVER_GRACE_MS) return
 
+          ws.send(JSON.stringify({ type: 'accept_wake', wake_id: msg.wake_id }))
           const traceId = createTraceId()
           const launchDetail = { source: 'wake_word', traceId, wakeAt: now }
           if (screensaverActiveRef.current) {

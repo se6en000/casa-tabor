@@ -43,6 +43,8 @@ POST_FINAL_WAKE_DISARM_SECS = 5.0
 START_DEBOUNCE_SECS = 0.8
 STT_CLIENT_GRACE_SECS = 2.5
 STT_CLIENT_DISCONNECT_GRACE_SECS = 0.7
+WAKE_ACCEPT_WINDOW_SECS = 1.5
+PREWARM_ADOPTION_TIMEOUT_SECS = 2.5
 WAKE_CONSECUTIVE_HITS_REQUIRED = 3
 WAKE_HIT_MAX_GAP_SECS = 0.35
 WAKE_SCORE_LOG_THROTTLE_SECS = 0.8
@@ -125,7 +127,7 @@ def _ws_push_stt(msg: dict):
             _stt_client = None
 
 def _handle_ws_client(ws):
-    global _stt_client, _stt_disconnect_seq, _stt_protocol, _turn_id, _turn_index, _finals, _final_conf
+    global _stt_client, _stt_disconnect_seq, _stt_protocol, _turn_id, _turn_index, _finals, _final_conf, _pending_wake_id
     with _ws_clients_lock:
         _ws_clients.add(ws)
     log.info('[WS] browser client connected')
@@ -136,7 +138,25 @@ def _handle_ws_client(ws):
             except Exception:
                 continue
             cmd = msg.get('type', '')
-            if cmd == 'start':
+            if cmd == 'accept_wake':
+                wake_id = str(msg.get('wake_id', ''))
+                with _wake_lock:
+                    accepted = (
+                        wake_id
+                        and wake_id == _pending_wake_id
+                        and time.time() - _wake_ts <= WAKE_ACCEPT_WINDOW_SECS
+                    )
+                    if accepted:
+                        _pending_wake_id = ''
+                if accepted:
+                    threading.Thread(
+                        target=_start_accepted_wake,
+                        args=(wake_id,),
+                        daemon=True,
+                    ).start()
+                else:
+                    log.info(f'[wake] ignored stale acceptance id={wake_id}')
+            elif cmd == 'start':
                 with _stt_lock:
                     _stt_client = ws
                     _stt_disconnect_seq += 1
@@ -227,6 +247,7 @@ def _run_ws_server():
 # ── Wake word state ──────────────────────────────────────────────────────────
 _wake_triggered      = False
 _wake_ts             = 0.0
+_pending_wake_id     = ''
 _wake_cooldown_until = 0.0
 _wake_lock           = threading.Lock()
 _wake_proc           = None
@@ -338,7 +359,7 @@ def _make_recorder_cmd():
     return ['arecord', '-D', ALSA_DEVICE, '-f', 'S16_LE', '-r', str(RATE), '-c', '1', '-']
 
 def _wake_word_loop():
-    global _wake_triggered, _wake_ts, _wake_last_chunk_ts, _wake_cooldown_until, _stt_missing_since, _wake_disarmed_until, _wake_last_score_log_ts
+    global _wake_triggered, _wake_ts, _pending_wake_id, _wake_last_chunk_ts, _wake_cooldown_until, _stt_missing_since, _wake_disarmed_until, _wake_last_score_log_ts
     try:
         import numpy as np
         from openwakeword.model import Model as WakeModel
@@ -451,6 +472,7 @@ def _wake_word_loop():
                         with _wake_lock:
                             _wake_triggered = True
                             _wake_ts = now
+                            _pending_wake_id = f'wake-{int(now * 1000)}'
                         
                         # Send wake event with buffered audio
                         msg = {
@@ -458,16 +480,9 @@ def _wake_word_loop():
                             'buffer': len(buffer_audio),
                             'score': float(score),
                             'threshold': float(WAKE_SCORE),
+                            'wake_id': _pending_wake_id,
                         }
                         _ws_push_all(msg)
-
-                        # Prewarm capture and transcription before React opens.
-                        # The browser adopts this active session over its STT socket.
-                        threading.Thread(
-                            target=start_recording,
-                            kwargs={'reason': 'wake_prewarm'},
-                            daemon=True,
-                        ).start()
                 else:
                     high_score_streak = 0
         except Exception as e:
@@ -818,7 +833,19 @@ def start_recording(force_restart=False, reason='manual'):
     finally:
         _start_lock.release()
 
-def stop_recording():
+def _start_accepted_wake(wake_id):
+    if not start_recording(reason='wake_accepted'):
+        return
+    prewarm_gen = _ws_gen
+    log.info(f'[wake] accepted id={wake_id}; prewarm generation={prewarm_gen}')
+    time.sleep(PREWARM_ADOPTION_TIMEOUT_SECS)
+    with _stt_lock:
+        adopted = _stt_client is not None
+    if _ws_gen == prewarm_gen and _get().get('recording') and not adopted:
+        log.warning(f'[wake] prewarm id={wake_id} was not adopted — returning to wake listening')
+        stop_recording(wake_disarm_secs=0)
+
+def stop_recording(wake_disarm_secs=POST_STOP_WAKE_DISARM_SECS):
     global _rec_proc, _ws, _wake_disarmed_until
     old_ws = _ws
     _ws = None
@@ -835,7 +862,7 @@ def stop_recording():
         try: old_ws.close()
         except: pass
     _flux_shadow.stop()
-    _wake_disarmed_until = max(_wake_disarmed_until, time.time() + POST_STOP_WAKE_DISARM_SECS)
+    _wake_disarmed_until = max(_wake_disarmed_until, time.time() + max(0, wake_disarm_secs))
     _set(recording=False, ready=False, volume=0)
     log.info('[bridge] stopped')
 
