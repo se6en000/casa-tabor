@@ -221,6 +221,11 @@ test('event detail drag cap and crown share one theme-aware treatment', () => {
 test('event detail scroll remains touch-native without elastic overscroll', () => {
   assert.match(detail, /className="flex-1 overflow-y-auto overflow-x-hidden overscroll-y-none"/)
   assert.doesNotMatch(detail, /className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"/)
+  assert.match(detail, /style=\{\{ touchAction: 'pan-up' \}\}/)
+  assert.match(detail, /scrollTop <= 0 \? 'pan-up' : 'pan-y'/)
+  assert.match(detail, /scrollDragCandidateRef/)
+  assert.match(detail, /deltaY >= PANEL_DRAG_HANDOFF_DISTANCE[\s\S]*panelDragControls\.start\(e\)/)
+  assert.match(detail, /deltaY < -PANEL_DRAG_HANDOFF_DISTANCE \|\| Math\.abs\(deltaX\) > Math\.abs\(deltaY\)/)
 })
 
 test('reminder details identify their type and allow assigned people editing', () => {
