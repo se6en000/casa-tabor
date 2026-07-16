@@ -70,8 +70,16 @@ const googleSyncCronAuth = readFileSync(
   resolve('supabase/migrations/20260715246000_add_anon_headers_for_google_sync_crons.sql'),
   'utf8',
 )
+const atomicGoogleInstanceLink = readFileSync(
+  resolve('supabase/migrations/20260715265000_atomically_link_google_recurrence_instances.sql'),
+  'utf8',
+)
 const recurrenceOutboxWorker = readFileSync(
   resolve('supabase/functions/process-google-recurrence-outbox/index.ts'),
+  'utf8',
+)
+const legacyGoogleSync = readFileSync(
+  resolve('supabase/functions/sync-event-to-google/index.ts'),
   'utf8',
 )
 const supabaseConfig = readFileSync(resolve('supabase/config.toml'), 'utf8')
@@ -132,6 +140,31 @@ test('recurrence outbox bypasses stale gateway JWT verification and validates re
     recurrenceOutboxWorker,
     /operation\.operation_type === 'recreate_projection'[\s\S]*google_recurring_event_id[\s\S]*'DELETE'/,
   )
+})
+
+test('recurrence projection treats already-deleted Google resources as idempotent deletes', () => {
+  assert.match(
+    recurrenceOutboxWorker,
+    /method === 'DELETE' && \(res\.status === 404 \|\| res\.status === 410\)/,
+  )
+  assert.match(recurrenceOutboxWorker, /reasons\.includes\('rateLimitExceeded'\)/)
+  assert.match(recurrenceOutboxWorker, /await wait\(150\)/)
+})
+
+test('canonical Google instance linking atomically retires exact flattened duplicates', () => {
+  assert.match(atomicGoogleInstanceLink, /create or replace function public\.recurrence_link_google_instance/)
+  assert.match(atomicGoogleInstanceLink, /v_conflict\.record_kind <> 'single'/)
+  assert.match(atomicGoogleInstanceLink, /v_conflict\.start_time is distinct from v_occurrence\.start_time/)
+  assert.match(atomicGoogleInstanceLink, /tombstone_origin = 'google'/)
+  assert.match(atomicGoogleInstanceLink, /Google instance identity belongs to a different Casa event/)
+  assert.match(atomicGoogleInstanceLink, /grant execute on function public\.recurrence_link_google_instance/)
+})
+
+test('legacy Google projection refuses deleted and canonical recurrence rows', () => {
+  assert.match(legacyGoogleSync, /record_kind, series_id, deleted_at/)
+  assert.match(legacyGoogleSync, /skipped: 'deleted_event'/)
+  assert.match(legacyGoogleSync, /skipped: 'canonical_recurrence_uses_outbox'/)
+  assert.match(legacyGoogleSync, /event\.record_kind === 'occurrence' && event\.series_id/)
 })
 
 test('recurrence v2 schema supports reversible deletion and stable child definitions', () => {

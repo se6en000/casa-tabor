@@ -24,6 +24,7 @@ export interface SheetProps {
   panelStyle?: CSSProperties
   transition?: Transition
   showHandle?: boolean
+  onExitComplete?: () => void
 }
 
 const SLIDE_TRANSFORM: Record<SheetSide, { initial: TargetAndTransition; animate: TargetAndTransition; exit: TargetAndTransition }> = {
@@ -52,6 +53,7 @@ export function Sheet({
   panelStyle,
   transition,
   showHandle = false,
+  onExitComplete,
 }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
@@ -60,7 +62,7 @@ export function Sheet({
   const transform = SLIDE_TRANSFORM[side]
 
   return createPortal(
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={onExitComplete}>
       {open && (
         <div className={cn('fixed inset-0 z-modal', className)}>
           <motion.div

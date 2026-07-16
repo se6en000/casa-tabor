@@ -45,6 +45,7 @@ import {
   eventPassengerNames,
   markTransportationPlanManual,
   syncTransportationAttendees,
+  transportationPlaceMatchesEvent,
   updateTransportationEventPlace,
   type EventTransportationPlan,
   type TransportationPlace,
@@ -144,20 +145,16 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
   const requestRecurringQuickAction = recurringQuickAction.request
   const executeRecurringQuickActionScope = recurringQuickAction.executeScope
 
-  const persistTransportationPlan = useCallback(async (nextPlan: EventTransportationPlan | null) => {
+  const persistDirectTransportationPlan = useCallback(async (
+    nextPlan: EventTransportationPlan | null,
+    eventPlace?: TransportationPlace,
+  ) => {
     if (!event) throw new Error('This event is no longer available.')
     setOverrideSaveError(null)
     const durablePlan = nextPlan ? markTransportationPlanManual(nextPlan) : null
-    const result = await requestRecurringQuickAction({
-      operation: 'update',
-      changedPaths: ['transportationPlan'],
-      detailPatch: { transportation_plan: durablePlan },
-    })
-    if (result === 'cancelled') return
-    if (result === 'handled') {
-      setTransportationPlan(durablePlan)
-      window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
-      return
+    if (eventPlace && !transportationPlaceMatchesEvent(eventPlace, event)) {
+      await persistScopedEventLocation({ event, place: eventPlace, scope: 'this' })
+      queryClient.removeQueries({ queryKey: ['travel-eta'] })
     }
     const { error } = await supabase
       .from('event_plan_overrides')
@@ -173,7 +170,76 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
     setTransportationPlan(durablePlan)
     window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
     await queryClient.invalidateQueries({ queryKey: ['events'] })
-  }, [event, queryClient, requestRecurringQuickAction])
+    return durablePlan
+  }, [event, queryClient])
+
+  const recurringTransportationRequest = useCallback((
+    durablePlan: EventTransportationPlan | null,
+    eventPlace?: TransportationPlace,
+  ): RecurringQuickActionRequest => {
+    const locationChanged = Boolean(event && eventPlace && !transportationPlaceMatchesEvent(eventPlace, event))
+    const trusted = eventPlace ? isTrustedPlaceSelection(eventPlace) : false
+    return {
+      operation: 'update',
+      changedPaths: [
+        'transportationPlan',
+        ...(locationChanged
+          ? ['event.locationName', 'event.address', 'event.lat', 'event.lng']
+          : []),
+      ],
+      detailPatch: {
+        transportation_plan: durablePlan,
+        ...(locationChanged && eventPlace
+          ? {
+              event: {
+                location_name: eventPlace.name.trim() || null,
+                address: eventPlace.address.trim() || null,
+                lat: trusted ? (eventPlace.lat ?? null) : null,
+                lng: trusted ? (eventPlace.lng ?? null) : null,
+              },
+            }
+          : {}),
+      },
+    }
+  }, [event])
+
+  const persistQuickTransportationPlan = useCallback(async (
+    nextPlan: EventTransportationPlan | null,
+    eventPlace?: TransportationPlace,
+  ) => {
+    if (!event) throw new Error('This event is no longer available.')
+    const durablePlan = nextPlan ? markTransportationPlanManual(nextPlan) : null
+    const request = recurringTransportationRequest(durablePlan, eventPlace)
+    if (event.series_id && event.record_kind === 'occurrence') {
+      await executeRecurringQuickActionScope(request, 'this')
+      setTransportationPlan(durablePlan)
+      window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+      if (eventPlace) queryClient.removeQueries({ queryKey: ['travel-eta'] })
+      return
+    }
+    await persistDirectTransportationPlan(durablePlan, eventPlace)
+  }, [event, executeRecurringQuickActionScope, persistDirectTransportationPlan, queryClient, recurringTransportationRequest])
+
+  const persistFullTransportationPlan = useCallback(async (
+    nextPlan: EventTransportationPlan | null,
+    eventPlace?: TransportationPlace,
+  ): Promise<RecurringQuickActionResult> => {
+    if (!event) throw new Error('This event is no longer available.')
+    setOverrideSaveError(null)
+    const durablePlan = nextPlan ? markTransportationPlanManual(nextPlan) : null
+    const result = await requestRecurringQuickAction({
+      ...recurringTransportationRequest(durablePlan, eventPlace),
+    })
+    if (result === 'cancelled') return result
+    if (result === 'handled') {
+      setTransportationPlan(durablePlan)
+      window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+      if (eventPlace) queryClient.removeQueries({ queryKey: ['travel-eta'] })
+      return result
+    }
+    await persistDirectTransportationPlan(durablePlan, eventPlace)
+    return result
+  }, [event, persistDirectTransportationPlan, queryClient, recurringTransportationRequest, requestRecurringQuickAction])
 
   const confirmAddress = useCallback(async () => {
     if (!event) return
@@ -452,7 +518,7 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                       ? syncTransportationAttendees(transportationPlan, names)
                       : null
                     if (nextPlan === transportationPlan) return
-                    if (persist) void persistTransportationPlan(nextPlan)
+                    if (persist) void persistQuickTransportationPlan(nextPlan)
                     else setTransportationPlan(nextPlan)
                   }}
                 />
@@ -460,7 +526,8 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                   event={event}
                   modeOverride={modeOverride}
                   transportationPlan={transportationPlan}
-                  onSetTransportationPlan={persistTransportationPlan}
+                  onQuickTransportationPlanChange={persistQuickTransportationPlan}
+                  onSaveTransportationPlan={persistFullTransportationPlan}
                 />
               </div>
               <PanelFooter event={event} modeOverride={modeOverride} onEdit={() => setShowEdit(true)} />
@@ -1158,19 +1225,28 @@ function PanelBody({
   event,
   modeOverride,
   transportationPlan,
-  onSetTransportationPlan,
+  onQuickTransportationPlanChange,
+  onSaveTransportationPlan,
 }: {
   event: EventWithDetails
   modeOverride: EventMode | null
   transportationPlan: EventTransportationPlan | null
-  onSetTransportationPlan: (plan: EventTransportationPlan | null) => Promise<void>
+  onQuickTransportationPlanChange: (
+    plan: EventTransportationPlan | null,
+    eventPlace?: TransportationPlace,
+  ) => Promise<void>
+  onSaveTransportationPlan: (
+    plan: EventTransportationPlan | null,
+    eventPlace?: TransportationPlace,
+  ) => Promise<RecurringQuickActionResult>
 }) {
   return (
     <StandardPanelBody
       event={event}
       modeOverride={modeOverride}
       transportationPlan={transportationPlan}
-      onSetTransportationPlan={onSetTransportationPlan}
+      onQuickTransportationPlanChange={onQuickTransportationPlanChange}
+      onSaveTransportationPlan={onSaveTransportationPlan}
     />
   )
 }
@@ -1180,12 +1256,20 @@ function StandardPanelBody({
   event,
   modeOverride,
   transportationPlan,
-  onSetTransportationPlan,
+  onQuickTransportationPlanChange,
+  onSaveTransportationPlan,
 }: {
   event: EventWithDetails
   modeOverride: EventMode | null
   transportationPlan: EventTransportationPlan | null
-  onSetTransportationPlan: (plan: EventTransportationPlan | null) => Promise<void>
+  onQuickTransportationPlanChange: (
+    plan: EventTransportationPlan | null,
+    eventPlace?: TransportationPlace,
+  ) => Promise<void>
+  onSaveTransportationPlan: (
+    plan: EventTransportationPlan | null,
+    eventPlace?: TransportationPlace,
+  ) => Promise<RecurringQuickActionResult>
 }) {
   const enr = event.enrichment
   const reminder = event.event_type === 'reminder'
@@ -1348,7 +1432,8 @@ function StandardPanelBody({
         <EventTransportationSection
           event={event}
           plan={transportationPlan}
-          onChange={onSetTransportationPlan}
+          onQuickChange={onQuickTransportationPlanChange}
+          onSave={onSaveTransportationPlan}
           suggestedPlan={planKind === 'travel' && mode !== 'trip' && !/\bflight\b/i.test(event.title)}
           noRouteReason={mode === 'trip' || /\bflight\b/i.test(event.title) ? 'trip' : null}
         />

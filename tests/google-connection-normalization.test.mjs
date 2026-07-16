@@ -85,6 +85,15 @@ test('all calendar sync paths resolve explicit database connections', () => {
   assert.doesNotMatch(remove, /google_calendar_id \?\? 'primary'/)
 })
 
+test('flattened Google sync links canonical recurrence instances instead of inserting duplicates', () => {
+  assert.match(inbound, /async function linkCanonicalOccurrence/)
+  assert.match(inbound, /extendedProperties\?\.private\?\.casaSeriesId/)
+  assert.match(inbound, /\.eq\('google_recurring_event_id', recurringEventId\)/)
+  assert.match(inbound, /\.eq\('original_start_time', originalStartTime\)/)
+  assert.match(inbound, /\.rpc\('recurrence_link_google_instance'/)
+  assert.match(inbound, /if \(await linkCanonicalOccurrence\(sb, connection, ev\)\) return/)
+})
+
 test('legacy rows without trustworthy source identity are not guessed', () => {
   assert.match(migration, /event\.source_member_id = connection\.family_member_id/)
   assert.doesNotMatch(migration, /source_member_id is null[\s\S]*google_connection_id/)

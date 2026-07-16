@@ -96,8 +96,74 @@ async function syncOne(sb: SupabaseClient, resolved: ResolvedGoogleConnection) {
   }
 }
 
+async function linkCanonicalOccurrence(
+  sb: SupabaseClient,
+  connection: CalendarConnection,
+  ev: Record<string, unknown>,
+) {
+  const recurringEventId = typeof ev.recurringEventId === 'string' ? ev.recurringEventId : null
+  const extendedProperties = ev.extendedProperties as {
+    private?: { casaSeriesId?: unknown }
+  } | undefined
+  const privateSeriesId = typeof extendedProperties?.private?.casaSeriesId === 'string'
+    ? extendedProperties.private.casaSeriesId
+    : null
+  if (!recurringEventId && !privateSeriesId) return false
+
+  let seriesQuery = sb
+    .from('event_series')
+    .select('id,google_recurring_event_id')
+    .eq('source_connection_id', connection.id)
+    .eq('status', 'active')
+  seriesQuery = privateSeriesId
+    ? seriesQuery.eq('id', privateSeriesId)
+    : seriesQuery.eq('google_recurring_event_id', recurringEventId)
+  const { data: series, error: seriesError } = await seriesQuery.maybeSingle()
+  if (seriesError) throw seriesError
+  if (!series) return false
+  if (
+    recurringEventId
+    && series.google_recurring_event_id
+    && recurringEventId !== series.google_recurring_event_id
+  ) {
+    return false
+  }
+
+  const originalStart = ev.originalStartTime as { dateTime?: string; date?: string } | undefined
+  const start = ev.start as { dateTime?: string; date?: string } | undefined
+  let occurrenceQuery = sb
+    .from('events')
+    .select('id')
+    .eq('series_id', series.id)
+    .eq('record_kind', 'occurrence')
+  if (originalStart?.date) {
+    occurrenceQuery = occurrenceQuery.eq('original_start_date', originalStart.date)
+  } else {
+    const originalStartTime = originalStart?.dateTime ?? start?.dateTime
+    if (!originalStartTime) return true
+    occurrenceQuery = occurrenceQuery.eq('original_start_time', originalStartTime)
+  }
+  const { data: occurrence, error: occurrenceError } = await occurrenceQuery.maybeSingle()
+  if (occurrenceError) throw occurrenceError
+  if (!occurrence) return true
+
+  const { error: linkError } = await sb.rpc('recurrence_link_google_instance', {
+    p_series_id: series.id,
+    p_occurrence_id: occurrence.id,
+    p_connection_id: connection.id,
+    p_calendar_id: connection.calendar_id,
+    p_google_event_id: ev.id,
+    p_google_ical_uid: ev.iCalUID ?? null,
+    p_google_etag: ev.etag ?? null,
+    p_google_updated_at: ev.updated ?? null,
+  })
+  if (linkError) throw new Error(linkError.message)
+  return true
+}
+
 async function upsertEvent(sb: SupabaseClient, connection: CalendarConnection, ev: Record<string, unknown>, accessToken: string) {
   const sourceMemberId = connection.family_member_id
+  if (await linkCanonicalOccurrence(sb, connection, ev)) return
   if (ev.status === 'cancelled') {
     await sb.from('events').update({ status: 'cancelled', updated_at: new Date().toISOString() })
       .eq('google_connection_id', connection.id)

@@ -153,7 +153,10 @@ try {
     p_expected_series_revision: 1,
     p_changed_paths: ['event.title'],
     p_detail_patch: { event: { title: 'stale title' } },
-    p_series_patch: {},
+    p_series_patch: {
+      timezone: 'America/New_York',
+      recurrence_lines: ['RRULE:FREQ=WEEKLY;COUNT=3'],
+    },
     p_actor: { type: 'integration_fixture' },
     p_correlation_id: runId,
   })

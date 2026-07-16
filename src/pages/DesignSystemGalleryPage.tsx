@@ -552,7 +552,7 @@ export default function DesignSystemGalleryPage() {
         <Button className="mt-4" fullWidth onClick={() => setModalOpen(false)}>Done</Button>
       </Modal>
       <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Accessible sheet">
-        <Text role="body-sm" muted>The sheet shares the same focus, dismissal, and layering contract.</Text>
+        <Text role="body-sm" muted>The sheet shares the same focus, dismissal, and layering contract. Sequential overlays wait for its exit to complete.</Text>
         <WorkflowActions className="mt-4">
           <Button variant="secondary" onClick={() => setSheetOpen(false)}>Cancel</Button>
           <Button onClick={() => setSheetOpen(false)}>Save changes</Button>

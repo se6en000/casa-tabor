@@ -35,10 +35,12 @@ type Operation = Json & {
 
 class GoogleApiError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  retryable: boolean
+  constructor(status: number, message: string, retryable = false) {
     super(message)
     this.name = 'GOOGLE_CALENDAR_API_ERROR'
     this.status = status
+    this.retryable = retryable
   }
 }
 
@@ -60,10 +62,21 @@ async function googleRequest(accessToken: string, url: string, method = 'GET', b
   })
   const text = await res.text()
   const payload = text ? JSON.parse(text) : {}
-  if (!res.ok && !(method === 'DELETE' && res.status === 404)) {
-    throw new GoogleApiError(res.status, payload?.error?.message ?? `Google Calendar ${method} failed.`)
+  if (!res.ok && !(method === 'DELETE' && (res.status === 404 || res.status === 410))) {
+    const reasons = Array.isArray(payload?.error?.errors)
+      ? payload.error.errors.map((item: Json) => item.reason)
+      : []
+    throw new GoogleApiError(
+      res.status,
+      payload?.error?.message ?? `Google Calendar ${method} failed.`,
+      reasons.includes('rateLimitExceeded') || reasons.includes('userRateLimitExceeded'),
+    )
   }
   return payload
+}
+
+function wait(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
 function eventUrl(calendarId: string, eventId?: string | null) {
@@ -223,8 +236,9 @@ async function executeOperation(
   const obsoleteMasterIds = Array.isArray(operation.payload_snapshot?.obsolete_google_master_ids)
     ? operation.payload_snapshot.obsolete_google_master_ids.filter((value): value is string => typeof value === 'string')
     : []
-  for (const obsoleteMasterId of obsoleteMasterIds) {
+  for (const [index, obsoleteMasterId] of obsoleteMasterIds.entries()) {
     await googleRequest(accessToken, eventUrl(connection.calendar_id, obsoleteMasterId), 'DELETE')
+    if (index < obsoleteMasterIds.length - 1) await wait(150)
   }
   if (operation.operation_type === 'recreate_projection' && series.google_recurring_event_id) {
     await googleRequest(accessToken, eventUrl(connection.calendar_id, series.google_recurring_event_id), 'DELETE')
@@ -404,7 +418,8 @@ Deno.serve(async (req) => {
               ? String(cause.message)
               : JSON.stringify(cause),
           )
-      const retryable = error instanceof GoogleApiError && isRetryableGoogleStatus(error.status)
+      const retryable = error instanceof GoogleApiError
+        && (error.retryable || isRetryableGoogleStatus(error.status))
       const { error: finishError } = await supabase.rpc('recurrence_finish_google_sync_operation', {
         p_operation_id: operation.id,
         p_worker_id: workerId,

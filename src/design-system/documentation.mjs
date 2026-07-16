@@ -1,4 +1,4 @@
-export const DESIGN_SYSTEM_VERSION = '1.7.0'
+export const DESIGN_SYSTEM_VERSION = '1.8.0'
 export const DESIGN_SYSTEM_RELEASE_DATE = '2026-07-16'
 export const DESIGN_SYSTEM_SCHEMA_VERSION = 1
 
@@ -188,12 +188,12 @@ export const COMPONENT_MANIFEST = [
     category: 'overlay',
     purpose: 'Presents an edge-anchored drawer for longer or contextual workflows.',
     useWhen: 'Use bottom sheets on touch surfaces and right drawers for contextual desktop tasks.',
-    avoid: 'Do not double-wrap with a backdrop or independent focus trap.',
+    avoid: 'Do not double-wrap with a backdrop or independent focus trap. Before opening another overlay, close the sheet and wait for onExitComplete.',
     variants: ['bottom', 'right'],
     states: ['closed', 'opening', 'open', 'closing'],
     accessibility: 'Owns dialog semantics, focus trapping, Escape handling, scroll lock, and focus return.',
     responsive: 'Bottom sheets suit phone/kiosk; right sheets suit wider contextual workflows.',
-    example: '<Sheet open={open} onClose={onClose} title="Earlier today" showHandle>...</Sheet>',
+    example: '<Sheet open={open} onClose={onClose} onExitComplete={continueWorkflow} title="Earlier today" showHandle>...</Sheet>',
   }),
   component({
     name: 'PageShell',
@@ -510,6 +510,13 @@ export const COMPONENT_MANIFEST = [
 ]
 
 export const DESIGN_SYSTEM_CHANGELOG = [
+  {
+    version: '1.8.0',
+    date: '2026-07-16',
+    changes: [
+      'Added Sheet onExitComplete support for safe sequential overlay handoffs without competing focus traps.',
+    ],
+  },
   {
     version: '1.7.0',
     date: '2026-07-16',

@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
 
   const { data: event, error: eventError } = await sb
     .from('events')
-    .select('id, event_type, google_event_id')
+    .select('id, event_type, google_event_id, record_kind, series_id, deleted_at')
     .eq('id', event_id)
     .maybeSingle()
 
@@ -40,6 +40,16 @@ Deno.serve(async (req) => {
 
   if (event.event_type === 'reminder') {
     return json({ ok: true, sync_status: 'not_needed', skipped: 'reminder' })
+  }
+  if (event.deleted_at) {
+    return json({ ok: true, sync_status: 'not_needed', skipped: 'deleted_event' })
+  }
+  if (event.record_kind === 'occurrence' && event.series_id) {
+    return json({
+      ok: true,
+      sync_status: 'not_needed',
+      skipped: 'canonical_recurrence_uses_outbox',
+    })
   }
 
   const targetFn = event.google_event_id ? 'push-to-google' : 'create-google-event'

@@ -18,6 +18,22 @@ const eventEdit = readFileSync(resolve('src/components/calendar/EventEditSheet.t
 const eventQuery = readFileSync(resolve('src/hooks/useCalendarEvents.ts'), 'utf8')
 const enrichFunction = readFileSync(resolve('supabase/functions/enrich-event/index.ts'), 'utf8')
 const categoryLockMigration = readFileSync(resolve('supabase/migrations/20260715122500_event_enrichment_category_lock.sql'), 'utf8')
+const dropoffConsolidation = readFileSync(
+  resolve('supabase/migrations/20260715263000_consolidate_owen_dropoff_series.sql'),
+  'utf8',
+)
+const recurrenceEnrichmentNormalization = readFileSync(
+  resolve('supabase/migrations/20260715262500_normalize_recurrence_enrichment_arrays.sql'),
+  'utf8',
+)
+const dropoffReimportCleanup = readFileSync(
+  resolve('supabase/migrations/20260715264000_remove_reimported_owen_dropoff_instances.sql'),
+  'utf8',
+)
+const dropoffFinalProjection = readFileSync(
+  resolve('supabase/migrations/20260715266000_finalize_owen_dropoff_google_projection.sql'),
+  'utf8',
+)
 
 test('explicit transportation uses the navy The Plan command-center presentation', () => {
   assert.match(transportation, /aria-label="The Plan"/)
@@ -50,21 +66,55 @@ test('The Plan supports quick driver reassignment including external drivers and
   assert.match(transportation, /backgroundColor: driver\.color_hex/)
 })
 
-test('transportation mutations use one awaited durable writer without stale plan overwrites', () => {
-  assert.match(detail, /const persistTransportationPlan = useCallback\(async/)
-  assert.match(detail, /transportation_plan: nextPlan/)
-  assert.match(detail, /onSetTransportationPlan=\{persistTransportationPlan\}/)
+test('transportation mutations separate quick one-off saves from scoped full-plan saves', () => {
+  assert.match(detail, /const persistQuickTransportationPlan = useCallback\(async/)
+  assert.match(detail, /executeRecurringQuickActionScope\(request, 'this'\)/)
+  assert.match(detail, /const persistFullTransportationPlan = useCallback\(async/)
+  assert.match(detail, /requestRecurringQuickAction\(\{[\s\S]*recurringTransportationRequest/)
+  assert.match(detail, /transportation_plan: durablePlan/)
+  assert.match(detail, /onQuickTransportationPlanChange=\{persistQuickTransportationPlan\}/)
+  assert.match(detail, /onSaveTransportationPlan=\{persistFullTransportationPlan\}/)
   assert.doesNotMatch(detail, /two_driver_confirmed: twoDriverConfirmed,\s+transportation_plan: transportationPlan,/)
-  assert.match(transportation, /await onChange\(draft\)/)
-  assert.match(transportation, /await onChange\(nextPlan\)/)
-  assert.match(transportation, /void onChange\(null\)\.then/)
+  assert.match(transportation, /await onQuickChange\([\s\S]*nextPlan/)
+  assert.match(transportation, /await onSave\(/)
+  assert.match(transportation, /onSave\(null\)/)
   assert.match(transportation, /savingQuickChange/)
   assert.match(transportation, /Saving trip change…/)
   assert.match(transportation, /transportationPlaceMatchesEvent\(eventPlace, event\)/)
   assert.match(transportationLib, /export function transportationPlaceMatchesEvent/)
   assert.match(detail, /markTransportationPlanManual/)
-  assert.match(transportation, /lat: place\.lat \?\? null/)
-  assert.match(transportation, /lng: place\.lng \?\? null/)
+  assert.match(detail, /lat: trusted \? \(eventPlace\.lat \?\? null\) : null/)
+  assert.match(detail, /lng: trusted \? \(eventPlace\.lng \?\? null\) : null/)
+})
+
+test('legacy Owen Drop Off consolidation is guarded and preserves the enhanced finite plan', () => {
+  assert.match(dropoffConsolidation, /expected 57 active legacy rows/)
+  assert.match(dropoffConsolidation, /jsonb_array_length\(transportation_plan->'legs'\) = 2/)
+  assert.match(dropoffConsolidation, /transportation_plan#>>'\{legs,1,purpose\}' = 'return'/)
+  assert.match(dropoffConsolidation, /UNTIL=20260817T125959Z/)
+  assert.match(dropoffConsolidation, /obsolete_google_master_ids/)
+  assert.match(dropoffConsolidation, /'recreate_projection',\s*3/)
+})
+
+test('recurrence reusable patches normalize nullable enrichment arrays', () => {
+  assert.match(recurrenceEnrichmentNormalization, /jsonb_typeof\(value#>'\{enrichment,what_to_bring\}'\) = 'array'/)
+  assert.match(recurrenceEnrichmentNormalization, /else '\[\]'::jsonb/)
+  assert.match(recurrenceEnrichmentNormalization, /grant execute on function public\.recurrence_build_reusable_patch\(uuid\) to service_role/)
+})
+
+test('drop-off cleanup links canonical occurrences before retiring flattened imports', () => {
+  assert.match(dropoffReimportCleanup, /Expected 18 freshly reimported Owen Drop Off instances/)
+  assert.match(dropoffReimportCleanup, /canonical\.start_time = duplicate\.start_time/)
+  assert.match(dropoffReimportCleanup, /tombstone_origin = 'google'/)
+  assert.doesNotMatch(dropoffReimportCleanup, /calendar_sync_operations/)
+})
+
+test('final drop-off projection removes orphan resources through one audited recreation', () => {
+  assert.match(dropoffFinalProjection, /Expected 23 linked canonical Owen Drop Off instances/)
+  assert.match(dropoffFinalProjection, /Final Owen Drop Off projection requires an idle recurrence queue/)
+  assert.match(dropoffFinalProjection, /'recreate_projection'/)
+  assert.match(dropoffFinalProjection, /'obsolete_google_master_ids', v_obsolete_ids/)
+  assert.match(dropoffFinalProjection, /'finalize-owen-dropoff-google-projection'/)
 })
 
 test('driving plan removal is truthful, editor-only, and confirmed', () => {
@@ -77,7 +127,33 @@ test('driving plan removal is truthful, editor-only, and confirmed', () => {
   assert.match(transportation, />\s*Remove driving plan\s*</)
   assert.match(transportation, /<ConfirmationDialog/)
   assert.match(transportation, /title="Remove driving plan\?"/)
-  assert.match(transportation, /onConfirm=\{\(\) => \{[\s\S]*?onChange\(null\)/)
+  assert.match(transportation, /onConfirm=\{\(\) => \{[\s\S]*?onSave\(null\)/)
+})
+
+test('full-plan recurrence handoff closes the sheet before scope and preserves drafts on cancellation', () => {
+  const sheet = readFileSync(resolve('src/components/ui/Sheet.tsx'), 'utf8')
+
+  assert.match(sheet, /onExitComplete\?: \(\) => void/)
+  assert.match(sheet, /<AnimatePresence onExitComplete=\{onExitComplete\}>/)
+  assert.match(transportation, /const closeEditorBeforeScope = \(\) => new Promise<void>/)
+  assert.match(transportation, /await closeEditorBeforeScope\(\)[\s\S]*await onSave/)
+  assert.match(transportation, /result === 'cancelled'\) setEditorOpen\(true\)/)
+  assert.match(transportation, /catch \(cause\) \{[\s\S]*setEditorOpen\(true\)/)
+})
+
+test('full-plan event-place changes share the scoped transportation mutation', () => {
+  assert.match(detail, /'transportationPlan',[\s\S]*'event\.locationName'[\s\S]*'event\.address'[\s\S]*'event\.lat'[\s\S]*'event\.lng'/)
+  assert.match(detail, /transportation_plan: durablePlan/)
+  assert.match(detail, /event: \{[\s\S]*location_name:[\s\S]*address:[\s\S]*lat:[\s\S]*lng:/)
+  const eventPlaceIndex = transportation.indexOf('const eventPlace = draft')
+  const saveHandler = transportation.slice(
+    transportation.lastIndexOf('onClick={async () => {', eventPlaceIndex),
+    transportation.indexOf('Save trip', eventPlaceIndex),
+  )
+  assert.doesNotMatch(saveHandler, /persistEventLocation\(/)
+  assert.match(saveHandler, /onSave\(/)
+  assert.match(transportation, /await onQuickChange\([\s\S]*current && isTransportationEventPlace\(current\)/)
+  assert.doesNotMatch(transportation, /const persistEventLocation = async/)
 })
 
 test('event detail header uses editorial navy crown with compact avatars', () => {

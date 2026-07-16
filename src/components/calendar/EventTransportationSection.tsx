@@ -37,7 +37,14 @@ import PassengerChipSelector from './PassengerChipSelector'
 interface EventTransportationSectionProps {
   event: EventWithDetails
   plan: EventTransportationPlan | null
-  onChange: (plan: EventTransportationPlan | null) => Promise<void>
+  onQuickChange: (
+    plan: EventTransportationPlan | null,
+    eventPlace?: TransportationPlace,
+  ) => Promise<void>
+  onSave: (
+    plan: EventTransportationPlan | null,
+    eventPlace?: TransportationPlace,
+  ) => Promise<'handled' | 'legacy' | 'cancelled'>
   suggestedPlan?: boolean
   noRouteReason?: 'trip' | null
 }
@@ -338,7 +345,8 @@ function TripPlaceFields({
 export default function EventTransportationSection({
   event,
   plan,
-  onChange,
+  onQuickChange,
+  onSave,
   suggestedPlan = false,
   noRouteReason = null,
 }: EventTransportationSectionProps) {
@@ -349,6 +357,7 @@ export default function EventTransportationSection({
   const [tripError, setTripError] = useState<string | null>(null)
   const [savingPassenger, setSavingPassenger] = useState<string | null>(null)
   const [savingQuickChange, setSavingQuickChange] = useState(false)
+  const sheetExitResolverRef = useRef<(() => void) | null>(null)
   const { data: household = [] } = useFamilyMembers()
   const { data: savedPlaces = [] } = useSavedPlaces()
   const queryClient = useQueryClient()
@@ -420,6 +429,11 @@ export default function EventTransportationSection({
     })
   }
 
+  const closeEditorBeforeScope = () => new Promise<void>((resolve) => {
+    sheetExitResolverRef.current = resolve
+    setEditorOpen(false)
+  })
+
   const updatePlanPlace = async (
     legIndex: number,
     side: 'origin' | 'destination',
@@ -433,10 +447,12 @@ export default function EventTransportationSection({
     setTripError(null)
     setSavingQuickChange(true)
     try {
-      if (current && isTransportationEventPlace(current) && !transportationPlaceMatchesEvent(place, event)) {
-        await persistEventLocation(place)
-      }
-      await onChange(nextPlan)
+      await onQuickChange(
+        nextPlan,
+        current && isTransportationEventPlace(current) && !transportationPlaceMatchesEvent(place, event)
+          ? place
+          : undefined,
+      )
     } catch (cause) {
       setTripError(cause instanceof Error ? cause.message : 'Could not save this trip change.')
     } finally {
@@ -453,7 +469,7 @@ export default function EventTransportationSection({
     setTripError(null)
     setSavingQuickChange(true)
     try {
-      await onChange(updateTransportationDriver(hydratedPlan, legIndex, driver, applyToRemaining))
+      await onQuickChange(updateTransportationDriver(hydratedPlan, legIndex, driver, applyToRemaining))
     } catch (cause) {
       setTripError(cause instanceof Error ? cause.message : 'Could not save this driver change.')
     } finally {
@@ -466,31 +482,12 @@ export default function EventTransportationSection({
     setTripError(null)
     setSavingQuickChange(true)
     try {
-      await onChange(updateTransportationWait(hydratedPlan, waitOnSite))
+      await onQuickChange(updateTransportationWait(hydratedPlan, waitOnSite))
     } catch (cause) {
       setTripError(cause instanceof Error ? cause.message : 'Could not save the waiting plan.')
     } finally {
       setSavingQuickChange(false)
     }
-  }
-
-  const persistEventLocation = async (place: TransportationPlace) => {
-    const normalizedName = place.name.trim() || null
-    const normalizedAddress = place.address.trim() || null
-    if (!normalizedAddress) throw new Error('Add the event address so traffic works everywhere.')
-    const { error } = await supabase
-      .from('events')
-      .update({
-        location_name: normalizedName,
-        address: normalizedAddress,
-        lat: place.lat ?? null,
-        lng: place.lng ?? null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', event.id)
-    if (error) throw new Error(`Could not update event location: ${error.message}`)
-    queryClient.removeQueries({ queryKey: ['travel-eta'] })
-    await queryClient.invalidateQueries({ queryKey: ['events'] })
   }
 
   const updateDraftPlace = (
@@ -639,6 +636,10 @@ export default function EventTransportationSection({
       <Sheet
         open={editorOpen}
         onClose={() => setEditorOpen(false)}
+        onExitComplete={() => {
+          sheetExitResolverRef.current?.()
+          sheetExitResolverRef.current = null
+        }}
         title={plan ? 'Edit transportation' : 'Add transportation'}
         side="bottom"
         showHandle
@@ -798,13 +799,17 @@ export default function EventTransportationSection({
                       const eventPlace = draft.legs
                         .flatMap((leg) => [leg.origin, leg.destination])
                         .find(isTransportationEventPlace)
-                      if (eventPlace && !transportationPlaceMatchesEvent(eventPlace, event)) {
-                        await persistEventLocation(eventPlace)
-                      }
-                      await onChange(draft)
-                      setEditorOpen(false)
+                      await closeEditorBeforeScope()
+                      const result = await onSave(
+                        draft,
+                        eventPlace && !transportationPlaceMatchesEvent(eventPlace, event)
+                          ? eventPlace
+                          : undefined,
+                      )
+                      if (result === 'cancelled') setEditorOpen(true)
                     } catch (cause) {
                       setTripError(cause instanceof Error ? cause.message : 'Could not save this trip.')
+                      setEditorOpen(true)
                     } finally {
                       setSavingTrip(false)
                     }
@@ -823,11 +828,14 @@ export default function EventTransportationSection({
         onConfirm={() => {
           setSavingTrip(true)
           setTripError(null)
-          void onChange(null).then(() => {
+          setRemoveConfirmOpen(false)
+          void closeEditorBeforeScope().then(() => onSave(null)).then((result) => {
+            if (result === 'cancelled') setEditorOpen(true)
+          }).then(() => {
             setRemoveConfirmOpen(false)
-            setEditorOpen(false)
           }).catch((cause) => {
             setTripError(cause instanceof Error ? cause.message : 'Could not remove this driving plan.')
+            setEditorOpen(true)
           }).finally(() => {
             setSavingTrip(false)
           })
