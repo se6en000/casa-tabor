@@ -74,7 +74,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
   const idleAutoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hadUserInteractionRef = useRef(false)
   const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; mimeType: string } | null>(null)
-  const [mobileAddOpen, setMobileAddOpen] = useState(false)
+  const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false)
   const [nudgeDismissed, setNudgeDismissed] = useState(false)
   const [conversationMode, setConversationMode] = useState<boolean>(() => {
     // Conversational by default: opening the assistant starts listening and
@@ -516,7 +516,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
       pendingLowConfidenceRef.current = null
       latestVoiceConfidenceRef.current = null
       setAttachedImage(null)
-      setMobileAddOpen(false)
+      setAttachmentMenuOpen(false)
       freshStartedRef.current = null  // allow fresh start next time this event is opened
       firedChefGreetRef.current = null
     }
@@ -1157,18 +1157,35 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                 ) : (
                   <div className="w-full">
                     <AnimatePresence initial={false}>
-                      {mobileAddOpen && (
+                      {attachmentMenuOpen && (
                         <motion.div
+                          id="assistant-attachment-actions"
                           initial={{ opacity: 0, y: 4 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: 4 }}
-                          className="mb-2 flex gap-2 sm:hidden"
+                          className="mb-2 flex gap-2"
                         >
-                          <Button variant="subtle" type="button" onClick={() => fileInputRef.current?.click()} className="min-h-control flex-1 gap-2">
-                            <Paperclip size={16} /> Attach
+                          <Button
+                            variant="subtle"
+                            type="button"
+                            onClick={() => {
+                              setAttachmentMenuOpen(false)
+                              fileInputRef.current?.click()
+                            }}
+                            className="min-h-control flex-1 gap-2"
+                          >
+                            <Paperclip size={16} /> Attach image
                           </Button>
-                          <Button variant="subtle" type="button" onClick={() => cameraInputRef.current?.click()} className="min-h-control flex-1 gap-2">
-                            <Camera size={16} /> Camera
+                          <Button
+                            variant="subtle"
+                            type="button"
+                            onClick={() => {
+                              setAttachmentMenuOpen(false)
+                              cameraInputRef.current?.click()
+                            }}
+                            className="min-h-control flex-1 gap-2"
+                          >
+                            <Camera size={16} /> Take photo
                           </Button>
                         </motion.div>
                       )}
@@ -1176,31 +1193,14 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                     <div className="flex items-end gap-2">
                       <Button variant="ghost"
                         type="button"
-                        onClick={() => setMobileAddOpen(value => !value)}
+                        onClick={() => setAttachmentMenuOpen(value => !value)}
                         title="Add attachment"
-                        className="size-control rounded-button text-casa-muted outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold sm:hidden"
+                        className="size-control rounded-button text-casa-muted outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold"
                         aria-label="Add attachment"
-                        aria-expanded={mobileAddOpen}
+                        aria-expanded={attachmentMenuOpen}
+                        aria-controls="assistant-attachment-actions"
                       >
                         <Plus size={16} />
-                      </Button>
-                      <Button variant="ghost"
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        title="Attach image from library"
-                        className="hidden size-control rounded-button text-casa-muted hover:text-casa-gold outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold sm:flex"
-                        aria-label="Attach image from library"
-                      >
-                        <Paperclip size={16} />
-                      </Button>
-                      <Button variant="ghost"
-                        type="button"
-                        onClick={() => cameraInputRef.current?.click()}
-                        title="Take a photo"
-                        className="hidden size-control rounded-button text-casa-muted hover:text-casa-gold outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold sm:flex"
-                        aria-label="Take a photo"
-                      >
-                        <Camera size={16} />
                       </Button>
                       <div className="relative min-w-0 flex-1">
                         <textarea
@@ -1217,7 +1217,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                       {speech.supported && (
                         <Button variant="ghost"
                           type="button"
-                          onClick={() => { markUserInteraction(); speech.start() }}
+                          onClick={() => {
+                            markUserInteraction()
+                            setAttachmentMenuOpen(false)
+                            speech.start()
+                          }}
                           title="Start voice input"
                           className="min-h-control min-w-control rounded-button flex items-center justify-center gap-2 px-3 outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold bg-casa-divider text-casa-muted hover:text-casa-gold"
                           aria-label="Start voice input"

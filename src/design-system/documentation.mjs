@@ -503,7 +503,7 @@ export const DESIGN_SYSTEM_CHANGELOG = [
     date: '2026-07-12',
     changes: [
       'Unified voice capture and editable text into one morphing assistant composer contract.',
-      'Defined launch-aware voice/text defaults and density-aware attachment and keyboard controls.',
+      'Defined launch-aware voice/text defaults, one progressive attachment disclosure across devices, and density-aware keyboard controls.',
     ],
   },
   {
