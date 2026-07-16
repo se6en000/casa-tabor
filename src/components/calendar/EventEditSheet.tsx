@@ -14,7 +14,6 @@ import { useSaveEnrichmentBatch, useEnrichEvent } from '../../hooks/useEnrichEve
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
-import { useSavedPlaces } from '../../hooks/useSavedPlaces'
 import BounceScroll from '../shared/BounceScroll'
 import {
   Alert,
@@ -33,7 +32,9 @@ import {
 } from '../ui'
 import { formatAllDayRangeLabel, normalizeAllDayEventRange } from '../../utils/allDayEventRange'
 import type { EventLocationScope } from '../../lib/eventLocation'
+import type { TransportationPlace } from '../../lib/eventTransportation'
 import RecurrenceScopeDialog from './RecurrenceScopeDialog'
+import SmartPlaceInput from './SmartPlaceInput'
 import {
   loadRecurringEditorContext,
   announceRecurringDelete,
@@ -245,9 +246,6 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
   const [form, setForm] = useState<Record<string, string>>({})
   const [location, setLocation] = useState('')
   const [address, setAddress] = useState('')
-  const [showLocationSuggest, setShowLocationSuggest] = useState(false)
-  const locationRef = useRef<HTMLDivElement>(null)
-  const { data: savedPlaces = [] } = useSavedPlaces()
   const [displayTitle, setDisplayTitle] = useState(event.title)
   const titleRef = useRef<HTMLInputElement>(null)
   const [extraContext, setExtraContext] = useState('')
@@ -262,7 +260,12 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
   const clearLocation = () => {
     setLocation('')
     setAddress('')
-    setShowLocationSuggest(false)
+    markDirty()
+  }
+
+  const updateLocation = (place: TransportationPlace) => {
+    setLocation(place.name)
+    setAddress(place.address)
     markDirty()
   }
 
@@ -1623,66 +1626,36 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
                   />
                 )}
                 <div className="space-y-4">
-                <div ref={locationRef} className="relative">
+                <div>
                   <label className="flex items-center gap-1.5 text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">
                     <MapPin size={12} />
                     Location Name
                   </label>
-                  <Input
-                    type="text"
-                    value={location}
-                    onChange={e => { setLocation(e.target.value); setShowLocationSuggest(true); markDirty() }}
-                    onFocus={() => setShowLocationSuggest(true)}
-                    onBlur={() => setTimeout(() => setShowLocationSuggest(false), 150)}
+                  <SmartPlaceInput
+                    value={{ name: location, address, source: 'manual' }}
+                    field="name"
+                    label="Location name"
                     placeholder="e.g. EDS Air Conditioning, Lincoln Park"
+                    onClear={clearLocation}
+                    onChange={updateLocation}
                   />
-                  {showLocationSuggest && location.length > 0 && (() => {
-                    const needle = location.toLowerCase()
-                    const matches = savedPlaces.filter(p =>
-                      [p.name, ...p.aliases, p.address ?? '', p.city ?? ''].some(s => s.toLowerCase().includes(needle))
-                    ).slice(0, 5)
-                    if (matches.length === 0) return null
-                    return (
-                      <ul className="absolute z-popover top-full left-0 right-0 mt-1 bg-casa-surface border border-casa-border rounded-card shadow-modal overflow-hidden">
-                        {matches.map(p => {
-                          const fullAddr = [p.address, p.city, p.state, p.zip].filter(Boolean).join(', ')
-                          return (
-                            <li key={p.id}>
-                              <Button
-                                type="button"
-                                onMouseDown={() => {
-                                  setLocation(p.name)
-                                  if (fullAddr) setAddress(fullAddr)
-                                  setShowLocationSuggest(false)
-                                  markDirty()
-                                }}
-                                variant="ghost"
-                                fullWidth
-                                className="justify-start text-left"
-                              >
-                                <MapPin size={12} className="text-casa-gold shrink-0" />
-                                <span>
-                                  <span className="text-body font-semibold text-casa-navy">{p.name}</span>
-                                  {fullAddr && <span className="text-caption text-casa-muted ml-1.5">{fullAddr}</span>}
-                                </span>
-                              </Button>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    )
-                  })()}
-                  </div>
+                </div>
                 <div>
                   <label className="flex items-center gap-1.5 text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">
                     <MapPin size={12} />
                     Address
                   </label>
-                  <Input
-                    type="text"
-                    value={address}
-                    onChange={e => { setAddress(e.target.value); markDirty() }}
+                  <SmartPlaceInput
+                    value={{ name: location, address, source: 'manual' }}
+                    field="address"
+                    label="Address"
                     placeholder="e.g. 3209 Washington Rd., West Palm Beach, FL"
+                    onClear={() => updateLocation({
+                      name: location,
+                      address: '',
+                      source: 'manual',
+                    })}
+                    onChange={updateLocation}
                   />
                 </div>
                 </div>

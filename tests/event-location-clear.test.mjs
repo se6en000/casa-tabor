@@ -6,7 +6,7 @@ import { resolve } from 'node:path'
 const source = readFileSync(resolve('src/components/calendar/EventEditSheet.tsx'), 'utf8')
 
 test('event editor exposes a touch-friendly action that clears the complete location', () => {
-  assert.match(source, /const clearLocation = \(\) => \{\s*setLocation\(''\)\s*setAddress\(''\)\s*setShowLocationSuggest\(false\)\s*markDirty\(\)\s*\}/)
+  assert.match(source, /const clearLocation = \(\) => \{\s*setLocation\(''\)\s*setAddress\(''\)\s*markDirty\(\)\s*\}/)
   assert.match(source, /<IconButton[\s\S]*?aria-label="Clear location"[\s\S]*?onClick=\{clearLocation\}/)
 })
 
