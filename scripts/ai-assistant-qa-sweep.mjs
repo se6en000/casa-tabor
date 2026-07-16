@@ -573,6 +573,33 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames, recipeFixture) {
       ],
     },
     {
+      key: 'cooking-recipe-create-retry',
+      page: 'cooking',
+      assistantMode: 'chef',
+      steps: [
+        {
+          text: 'Can you create a short recipe that includes tilapia and mushrooms for me?',
+          expect: {
+            type: 'text',
+            semanticIntent: 'cooking.recipe',
+            containsAll: ['tilapia', 'mushrooms', 'ingredients'],
+            containsAny: ['instructions', 'directions', 'steps'],
+            readable: true,
+          },
+        },
+        {
+          text: 'Can you try again?',
+          expect: {
+            type: 'text',
+            semanticIntent: 'cooking.recipe',
+            containsAll: ['tilapia', 'mushrooms', 'ingredients'],
+            containsAny: ['instructions', 'directions', 'steps'],
+            readable: true,
+          },
+        },
+      ],
+    },
+    {
       key: 'cooking-saved-recipe-grounding',
       page: 'cooking',
       assistantMode: 'chef',

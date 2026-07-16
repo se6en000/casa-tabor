@@ -36,6 +36,8 @@ test('assistant telemetry spans deterministic, streaming, fallback, and failure 
   ]) {
     assert.match(assistant, new RegExp(`emitAssistantTrace\\('${event}'`))
   }
+  assert.match(assistant, /outcome\.resultType === 'error' \|\| outcome\.safetyRejection/)
+  assert.match(assistant, /failure_class: outcome\.safetyRejection \? 'safety_rejection' : 'assistant_error'/)
 })
 
 test('voice telemetry covers wake through final ASR without recording transcript text', () => {

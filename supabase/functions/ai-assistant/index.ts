@@ -57,6 +57,7 @@ import {
 } from '../_shared/assistant-calendar-semantic-read.mjs'
 import {
   cookingFrameGuidance,
+  isCookingRetryLanguage,
   isCookingLikeLanguage,
   parseCookingLanguage,
 } from '../_shared/assistant-cooking-language.mjs'
@@ -293,10 +294,18 @@ Deno.serve(async (req) => {
       isGroceryLikeLanguage(latestUserText)
     )
   )
-  const cookingFrame = parseCookingLanguage(latestUserText, {
+  const cookingLanguageOptions = {
     assistantMode: context?.assistant_mode,
     activeEntityType: incomingConversationState?.activeEntityType,
-  })
+  }
+  const latestCookingFrame = parseCookingLanguage(latestUserText, cookingLanguageOptions)
+  const inheritedCookingFrame = !latestCookingFrame &&
+      previousUserText &&
+      isCookingRetryLanguage(latestUserText)
+    ? parseCookingLanguage(previousUserText, cookingLanguageOptions)
+    : null
+  const cookingFrame = latestCookingFrame ?? inheritedCookingFrame
+  const cookingRequestText = inheritedCookingFrame ? previousUserText : latestUserText
   const cookingSurfaceContext = Boolean(
     context?.assistant_mode === 'chef' ||
     context?.page === 'cooking' ||
@@ -408,6 +417,7 @@ Deno.serve(async (req) => {
     grocery_semantic_confidence: groceryFrame?.confidence ?? null,
     cooking_semantic_intent: cookingFrame?.intent ?? null,
     cooking_semantic_confidence: cookingFrame?.confidence ?? null,
+    cooking_retry_inherited: Boolean(inheritedCookingFrame),
     image_event_create_hint: imageEventCreateHint,
     image_event_create_followup: imageEventCreateFollowUp,
   })
@@ -2437,7 +2447,7 @@ ${includeGroceryContext ? `\nGROCERY LIST (unchecked items):\n${groceryText}\n${
 ${includeRecipeContext ? `\nRECIPE LIBRARY SNAPSHOT (recent):\n${recipesText || 'No recipes saved yet.'}` : ''}
 ${includeFoodProfileContext && foodProfileText ? `\nFOOD PROFILE (household dietary needs & preferences — honor for all meal/grocery/recipe suggestions):\n${foodProfileText}` : ''}
 ${image ? `\nIMAGE CONTEXT:\n- Casa supplied ${imageContext === 'conversation' ? 'the most recent image from this conversation' : 'an image attached to this turn'} for direct visual analysis.\n- You can analyze this image. Never claim that you cannot see, read, or interpret images.\n- If this specific image is too unclear to interpret reliably, say that the image could not be read clearly and ask for a clearer upload. Do not guess.` : ''}
-${cookingFrame ? `\nCOOKING SEMANTIC FRAME (Casa's normalized interpretation; answer the concept, not the wording):\nIntent: ${cookingFrame.intent}\nSlots: ${JSON.stringify(cookingFrame.slots)}${cookingGuidance ? `\nRequired handling: ${cookingGuidance}` : ''}` : ''}
+${cookingFrame ? `\nCOOKING SEMANTIC FRAME (Casa's normalized interpretation; answer the concept, not the wording):\nIntent: ${cookingFrame.intent}\nSlots: ${JSON.stringify(cookingFrame.slots)}${inheritedCookingFrame && cookingRequestText ? `\nOriginal request to retry: ${cookingRequestText}` : ''}${cookingGuidance ? `\nRequired handling: ${cookingGuidance}` : ''}` : ''}
 ${cookingPolicy ? `\n${cookingPolicy}` : ''}
 ${includeAvailabilityContext && availabilityText ? `\nMEMBER AVAILABILITY (recurring rules + upcoming overrides — use to warn about conflicts and pick times people are free):\n${availabilityText}` : ''}
 
@@ -3060,6 +3070,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
     let res = await callModel(body, { stream: wantStream, timeoutMs: primaryHardTimeoutMs })
     let llmPrimaryMs = Date.now() - llmStartMs
+    let recipeTextRecoveryUsed = false
     if (shouldRetryTransientLlmStatus(res.status, remainingRequestBudgetMs())) {
       recordLlmCall('llm_primary_transient', llmPrimaryMs, res.status)
       appendServerTrace('server_ai_assistant_llm_retry', `status=${res.status}`, {
@@ -3128,6 +3139,68 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       return null
     }
 
+    const runRecipeTextRecovery = async (reason: 'unexpected_tool_call' | 'incomplete_recipe') => {
+      if (
+        recipeTextRecoveryUsed ||
+        !requiresCompleteRecipe ||
+        !cookingRequestText ||
+        remainingRequestBudgetMs() < 1000
+      ) {
+        return null
+      }
+      recipeTextRecoveryUsed = true
+      const recoveryBody = {
+        system_instruction: {
+          parts: [{
+            text: [
+              'You are the Casa Tabor cooking assistant.',
+              'Answer the user with one complete read-only recipe in Markdown.',
+              'Include a Markdown title, a numbered Servings line, an Ingredients heading with bullets, and an Instructions heading with every numbered step.',
+              'Do not call tools, save anything, emit JSON, or describe future work.',
+            ].join(' '),
+          }],
+        },
+        contents: image
+          ? contents
+          : [{ role: 'user', parts: [{ text: cookingRequestText }] }],
+        generation_config: {
+          temperature: 0.2,
+          max_output_tokens: 2048,
+          thinking_config: { thinking_budget: 0 },
+        },
+      }
+      const recoveryStartMs = Date.now()
+      const recoveryRes = await callModel(recoveryBody, {
+        stream: false,
+        timeoutMs: Math.min(SECONDARY_HARD_TIMEOUT_MS, remainingRequestBudgetMs()),
+      })
+      const recoveryElapsedMs = Date.now() - recoveryStartMs
+      console.log(`[ai-assistant][${cid}] stage=llm_recipe_text_recovery ms=${recoveryElapsedMs} status=${recoveryRes.status}`)
+      if (!recoveryRes.ok || !recoveryRes.data) {
+        recordLlmCall('llm_recipe_text_recovery', recoveryElapsedMs, recoveryRes.status)
+        return null
+      }
+
+      recordLlmCall('llm_recipe_text_recovery', recoveryElapsedMs, recoveryRes.status, recoveryRes.data)
+      const recoveryText = recoveryRes.data.candidates?.[0]?.content?.parts
+        ?.flatMap((part: { text?: string }) => typeof part.text === 'string' && part.text.trim() ? [part.text.trim()] : [])
+        .join('\n') ?? ''
+      const missingSections = missingCompleteRecipeSections(recoveryText)
+      if (!recoveryText || missingSections.length > 0) {
+        appendServerTrace('server_ai_assistant_recipe_recovery_failed', `reason=${reason}`, {
+          reason,
+          missing_sections: missingSections,
+          recovery_ms: recoveryElapsedMs,
+        })
+        return null
+      }
+      appendServerTrace('server_ai_assistant_recipe_recovered', `reason=${reason}`, {
+        reason,
+        recovery_ms: recoveryElapsedMs,
+      })
+      return { type: 'text', text: recoveryText }
+    }
+
     if (res.ok) {
       const data = res.data
       recordLlmCall('llm_primary', llmPrimaryMs, res.status, data)
@@ -3138,6 +3211,10 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
       // Check for safety/finish reason blocks
       const finishReason = candidate.finishReason
+      if (finishReason === 'UNEXPECTED_TOOL_CALL' && requiresCompleteRecipe) {
+        const recoveredRecipe = await runRecipeTextRecovery('unexpected_tool_call')
+        if (recoveredRecipe) return recoveredRecipe
+      }
       if (finishReason === 'MAX_TOKENS') {
         return {
           type: 'text',
@@ -3654,6 +3731,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
               finish_reason: finishReason ?? null,
               output_tokens: extractGeminiUsage(data).outputTokens,
             })
+            const recoveredRecipe = await runRecipeTextRecovery('incomplete_recipe')
+            if (recoveredRecipe) return recoveredRecipe
             return {
               type: 'error',
               code: 'incomplete_recipe',

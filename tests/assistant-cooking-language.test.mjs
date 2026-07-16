@@ -6,6 +6,7 @@ import {
   COOKING_INTENTS,
   COOKING_UTTERANCE_CORPUS,
   cookingFrameGuidance,
+  isCookingRetryLanguage,
   isCookingLikeLanguage,
   parseCookingLanguage,
 } from '../supabase/functions/_shared/assistant-cooking-language.mjs'
@@ -19,6 +20,11 @@ import {
   formatAuthoritativeRecipes,
   validateCookingGroceryItems,
 } from '../supabase/functions/_shared/assistant-cooking-policy.mjs'
+
+const assistantFunction = fs.readFileSync(
+  new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url),
+  'utf8',
+)
 
 test('cooking language contract publishes stable concepts and generated coverage', () => {
   assert.equal(COOKING_INTENTS.length, 24)
@@ -39,6 +45,44 @@ test('chef mode recognizes a singular dish-planning request as a recipe', () => 
   )
   assert.equal(frame?.intent, 'cooking.recipe')
   assert.equal(frame?.slots.recipe, 'salmon rice bowl')
+})
+
+test('chef mode treats natural recipe creation wording as read-only recipe generation', () => {
+  for (const text of [
+    'Can you create a short recipe that includes tilapia and mushrooms for me?',
+    'Can you create a recipe with tilapia in a mushroom sauce?',
+    'I wanna create a recipe where I can use fish and mushrooms do you have any suggestions',
+    'Help me construct this dinner',
+    "I have these ingredients for a recipe but I don't have the steps, can you create them?",
+  ]) {
+    assert.equal(parseCookingLanguage(text, { assistantMode: 'chef' })?.intent, 'cooking.recipe', text)
+  }
+  assert.deepEqual(
+    parseCookingLanguage(
+      'Can you create a short recipe that includes tilapia and mushrooms for me?',
+      { assistantMode: 'chef' },
+    )?.slots,
+    { ingredients: 'tilapia and mushrooms' },
+  )
+  assert.equal(parseCookingLanguage('Save this recipe', { assistantMode: 'chef' })?.intent, 'recipe.save')
+})
+
+test('cooking retry language is narrow and does not reinterpret unrelated requests', () => {
+  assert.equal(isCookingRetryLanguage('Can you try again?'), true)
+  assert.equal(isCookingRetryLanguage('redo the recipe'), true)
+  assert.equal(isCookingRetryLanguage('try salmon with mushrooms'), false)
+  assert.equal(isCookingRetryLanguage('create a calendar event again'), false)
+})
+
+test('recipe generation has one bounded text-only provider recovery lane', () => {
+  assert.match(assistantFunction, /finishReason === 'UNEXPECTED_TOOL_CALL' && requiresCompleteRecipe/)
+  assert.match(assistantFunction, /runRecipeTextRecovery\('unexpected_tool_call'\)/)
+  assert.match(assistantFunction, /runRecipeTextRecovery\('incomplete_recipe'\)/)
+  assert.match(assistantFunction, /recipeTextRecoveryUsed/)
+  assert.match(assistantFunction, /Do not call tools, save anything, emit JSON/)
+  assert.match(assistantFunction, /server_ai_assistant_recipe_recovered/)
+  assert.match(assistantFunction, /const inheritedCookingFrame = !latestCookingFrame/)
+  assert.match(assistantFunction, /Original request to retry:/)
 })
 
 test('cooking parser extracts useful open-class slots', () => {

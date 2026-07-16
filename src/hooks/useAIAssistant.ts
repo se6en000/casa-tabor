@@ -319,7 +319,9 @@ export function useAIAssistant(ctx: AssistantContext) {
     }
 
     // Non-streaming path (also the fallback when streaming fails). Unchanged behavior.
-    const runNonStreaming = async () => {
+    type AssistantTurnOutcome = { resultType: string; safetyRejection?: string }
+
+    const runNonStreaming = async (): Promise<AssistantTurnOutcome> => {
       emitAssistantTrace('assistant_non_streaming_started', trace)
       const invokePromise = supabase.functions.invoke('ai-assistant', { body: requestBody })
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -331,11 +333,15 @@ export function useAIAssistant(ctx: AssistantContext) {
       emitAssistantTrace('assistant_result_received', trace, {
         payload: { transport: 'json', result_type: data?.type ?? 'unknown' },
       })
+      return {
+        resultType: data?.type ?? 'unknown',
+        safetyRejection: typeof data?.safety_rejection === 'string' ? data.safety_rejection : undefined,
+      }
     }
 
     // Streaming path: progressively render tokens, then reconcile with the `final`
-    // payload. Returns true on success; false → caller falls back to non-streaming.
-    const runStreaming = async (): Promise<boolean> => {
+    // payload. A null outcome tells the caller to use the non-streaming fallback.
+    const runStreaming = async (): Promise<AssistantTurnOutcome | null> => {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 35000)
       const streamMsgId = genId()
@@ -343,6 +349,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       let finalApplied = false
       let streamedText = ''
       let firstTokenSeen = false
+      let finalOutcome: AssistantTurnOutcome | null = null
       const removePlaceholder = () => {
         if (placeholderAdded) setMessages(prev => prev.filter(m => m.id !== streamMsgId))
       }
@@ -357,7 +364,7 @@ export function useAIAssistant(ctx: AssistantContext) {
           body: JSON.stringify({ ...requestBody, stream: true }),
           signal: controller.signal,
         })
-        if (!resp.ok || !resp.body) return false
+        if (!resp.ok || !resp.body) return null
         const reader = resp.body.getReader()
         const decoder = new TextDecoder()
         let buf = ''
@@ -380,6 +387,10 @@ export function useAIAssistant(ctx: AssistantContext) {
             setMessages(prev => prev.map(m => m.id === streamMsgId ? { ...m, content: next } : m))
           } else if (evt === 'final') {
             finalApplied = true
+            finalOutcome = {
+              resultType: payload?.type ?? 'unknown',
+              safetyRejection: typeof payload?.safety_rejection === 'string' ? payload.safety_rejection : undefined,
+            }
             emitAssistantTrace('assistant_result_received', trace, {
               payload: { transport: 'sse', result_type: payload?.type ?? 'unknown' },
             })
@@ -421,30 +432,41 @@ export function useAIAssistant(ctx: AssistantContext) {
             if (dataStr) handleEvent(evt, dataStr)
           }
         }
-        if (finalApplied) return true
+        if (finalApplied) return finalOutcome ?? { resultType: 'unknown' }
         removePlaceholder()
-        return false
+        return null
       } catch (err) {
-        if (finalApplied) return true
+        if (finalApplied) return finalOutcome ?? { resultType: 'unknown' }
         removePlaceholder()
         console.warn('[useAIAssistant] streaming failed, falling back', err)
-        return false
+        return null
       } finally {
         clearTimeout(timeout)
       }
     }
 
     try {
-      const streamed = await runStreaming()
-      if (!streamed) {
+      let outcome = await runStreaming()
+      if (!outcome) {
         emitAssistantTrace('assistant_stream_fallback', trace, {
           payload: { reason: 'stream_unavailable_before_content' },
         })
-        await runNonStreaming()
+        outcome = await runNonStreaming()
       }
-      emitAssistantTrace('turn_completed', trace, {
-        payload: { outcome: 'success' },
-      })
+      if (outcome.resultType === 'error' || outcome.safetyRejection) {
+        emitAssistantTrace('turn_failed', trace, {
+          detail: outcome.safetyRejection ?? 'assistant_error',
+          payload: {
+            failure_class: outcome.safetyRejection ? 'safety_rejection' : 'assistant_error',
+            result_type: outcome.resultType,
+            safety_rejection: outcome.safetyRejection ?? null,
+          },
+        })
+      } else {
+        emitAssistantTrace('turn_completed', trace, {
+          payload: { outcome: 'success', result_type: outcome.resultType },
+        })
+      }
     } catch (e) {
       const msg = (e as Error).message ?? 'Something went wrong'
       const isTimeout = msg.includes('timed out')

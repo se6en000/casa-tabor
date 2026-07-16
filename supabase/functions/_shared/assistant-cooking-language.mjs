@@ -174,6 +174,12 @@ function extractAfter(input, pattern) {
   return input.match(pattern)?.[1]?.trim() ?? null
 }
 
+export function isCookingRetryLanguage(text) {
+  const input = normalize(text)
+  return /^(?:can you |could you |please )?(?:try|do|make|create|generate)(?: that| it)? again\??$/.test(input) ||
+    /^(?:retry|redo|regenerate)(?: that| it| the recipe)?\??$/.test(input)
+}
+
 export function parseCookingLanguage(text, options = {}) {
   const input = normalize(text)
   if (!input) return null
@@ -283,6 +289,20 @@ export function parseCookingLanguage(text, options = {}) {
     /\b(?:give|show|write)\s+me\s+(?:(?:a|the)\s+)?(?:full\s+)?recipe\b/.test(input)
   ) {
     return frame('cooking.recipe', 0.96)
+  }
+  if (
+    cookingContext &&
+    (
+      /\b(?:create|make|build|draft|construct|generate|write|suggest|come up with)\b.*\b(?:recipe|dish|meal|dinner)\b/.test(input) ||
+      /\brecipe\b.*\b(?:include|includes|including|use|using|with)\b/.test(input) ||
+      /\b(?:recipe|ingredients?)\b.*\b(?:steps?|instructions?)\b/.test(input)
+    )
+  ) {
+    const ingredients = extractAfter(
+      input,
+      /\brecipe\b.*?\b(?:include|includes|including|use|using|with)\s+(.+?)(?:\s+for me)?$/,
+    )
+    return frame('cooking.recipe', 0.96, ingredients ? { ingredients } : {})
   }
   const recipe = extractAfter(input, /(?:how do i make|recipe for|walk me through)\s+(.+)$/)
   if (recipe) return frame('cooking.recipe', 0.95, { recipe })
