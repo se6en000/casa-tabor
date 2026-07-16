@@ -179,6 +179,10 @@ try {
         is_urgent: true,
       }],
     },
+    series: {
+      timezone: 'America/New_York',
+      recurrence_lines: ['RRULE:FREQ=WEEKLY;COUNT=3'],
+    },
   })
   assert.equal(all.series_revision, 3)
   assert.equal(all.affected_occurrences, 3)
@@ -188,8 +192,10 @@ try {
     .select('id,title,is_exception,exception_paths')
     .in('id', occurrenceIds)
   if (afterAllError) throw afterAllError
-  assert.equal(afterAll.find((event) => event.id === occurrenceIds[0]).title, `${prefix} one-off`)
+  assert.equal(afterAll.find((event) => event.id === occurrenceIds[0]).title, `${prefix} all`)
   assert.equal(afterAll.find((event) => event.id === occurrenceIds[1]).title, `${prefix} all`)
+  assert.ok(afterAll.every((event) => event.is_exception === false))
+  assert.ok(afterAll.every((event) => event.exception_paths.length === 0))
   const { data: progress } = await supabase
     .from('event_checklist_items')
     .select('checked,label')
@@ -222,8 +228,8 @@ try {
     .eq('id', occurrenceIds[0])
     .single()
   assert.equal(resetOccurrence.title, `${prefix} all`)
-  assert.equal(resetOccurrence.is_exception, true)
-  assert.deepEqual(resetOccurrence.exception_paths, ['transportationPlan'])
+  assert.equal(resetOccurrence.is_exception, false)
+  assert.deepEqual(resetOccurrence.exception_paths, [])
 
   const split = await mutate({
     action: `recurrence-fixture-future-${runId}`,
@@ -256,14 +262,53 @@ try {
   assert.equal(movedOccurrences.find((event) => event.id === occurrenceIds[1]).series_id, split.future_series_id)
   assert.equal(movedOccurrences.find((event) => event.id === occurrenceIds[1]).title, `${prefix} future`)
 
+  const sameBoundary = await mutate({
+    action: `recurrence-fixture-same-boundary-${runId}`,
+    eventId: occurrenceIds[1],
+    scope: 'future',
+    revision: 2,
+    paths: ['event.title'],
+    details: { event: { title: `${prefix} same boundary` } },
+    series: {
+      timezone: 'America/New_York',
+      original_recurrence_lines: ['RRULE:FREQ=WEEKLY;COUNT=1'],
+      future_recurrence_lines: ['RRULE:FREQ=WEEKLY;COUNT=2'],
+    },
+  })
+  assert.equal(sameBoundary.future_series_id, null)
+  assert.equal(sameBoundary.series_revision, 3)
+
+  const consolidated = await mutate({
+    action: `recurrence-fixture-family-all-${runId}`,
+    eventId: occurrenceIds[1],
+    scope: 'all',
+    revision: 3,
+    paths: ['event.title'],
+    details: { event: { title: `${prefix} consolidated` } },
+    series: {
+      timezone: 'America/New_York',
+      recurrence_lines: ['RRULE:FREQ=WEEKLY;COUNT=3'],
+    },
+  })
+  assert.equal(consolidated.series_id, series.id)
+  assert.equal(consolidated.series_revision, 6)
+  const { data: consolidatedOccurrences } = await supabase
+    .from('events')
+    .select('id,title,series_id,is_exception,exception_paths')
+    .in('id', occurrenceIds)
+  assert.ok(consolidatedOccurrences.every((event) => event.series_id === series.id))
+  assert.ok(consolidatedOccurrences.every((event) => event.title === `${prefix} consolidated`))
+  assert.ok(consolidatedOccurrences.every((event) => event.is_exception === false))
+  assert.ok(consolidatedOccurrences.every((event) => event.exception_paths.length === 0))
+
   const deleted = await mutate({
     action: `recurrence-fixture-delete-${runId}`,
     eventId: occurrenceIds[1],
     scope: 'this',
     type: 'delete',
-    revision: 2,
+    revision: 6,
   })
-  assert.equal(deleted.series_revision, 3)
+  assert.equal(deleted.series_revision, 7)
   const { data: tombstone } = await supabase
     .from('events')
     .select('deleted_at,purge_after')
@@ -277,9 +322,9 @@ try {
     eventId: occurrenceIds[1],
     scope: 'this',
     type: 'restore',
-    revision: 3,
+    revision: 7,
   })
-  assert.equal(restored.series_revision, 4)
+  assert.equal(restored.series_revision, 8)
   const { data: restoredOccurrence } = await supabase
     .from('events')
     .select('deleted_at,purge_after')
@@ -293,9 +338,11 @@ try {
     oneOccurrence: true,
     idempotency: true,
     staleRevisionRejected: true,
-    allPreservedExceptions: true,
+    allClearedExceptions: true,
     occurrenceProgressPreserved: true,
     futureSplit: true,
+    sameBoundaryReused: true,
+    linkedFamilyConsolidated: true,
     deleteRestore: true,
   }))
 } finally {

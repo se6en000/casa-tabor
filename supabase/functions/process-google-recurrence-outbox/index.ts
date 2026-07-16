@@ -29,6 +29,7 @@ type Operation = Json & {
   attempts: number
   payload_snapshot?: {
     changed_paths?: unknown
+    obsolete_google_master_ids?: unknown
   }
 }
 
@@ -145,6 +146,16 @@ async function executeOperation(
     && operation.payload_snapshot.changed_paths[0] === 'event.title'
   let googleEvent: Json | null = null
   let conflictDetected = false
+
+  const obsoleteMasterIds = Array.isArray(operation.payload_snapshot?.obsolete_google_master_ids)
+    ? operation.payload_snapshot.obsolete_google_master_ids.filter((value): value is string => typeof value === 'string')
+    : []
+  for (const obsoleteMasterId of obsoleteMasterIds) {
+    await googleRequest(accessToken, eventUrl(connection.calendar_id, obsoleteMasterId), 'DELETE')
+  }
+  if (operation.operation_type === 'recreate_projection' && series.google_recurring_event_id) {
+    await googleRequest(accessToken, eventUrl(connection.calendar_id, series.google_recurring_event_id), 'DELETE')
+  }
 
   for (const step of steps) {
     if (step === 'patch_parent_master') {

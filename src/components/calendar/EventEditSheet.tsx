@@ -39,6 +39,7 @@ import {
   announceRecurringDelete,
   deleteRecurringEditorMutation,
   saveRecurringEditorMutation,
+  announceRecurringSave,
   truncateRecurrenceLinesForFuture,
   type RecurringEditorContext,
 } from '../../lib/recurringEventEditor'
@@ -734,7 +735,7 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
       )
       seriesPatch.original_recurrence_lines = truncateRecurrenceLinesForFuture(currentLines, originalStart)
       seriesPatch.future_recurrence_lines = nextLines
-    } else if (scope === 'all' && recurrenceTouched) {
+    } else if (scope === 'all') {
       seriesPatch.recurrence_lines = nextLines
     }
     if (changedPaths.length === 0 && !recurrenceTouched) {
@@ -752,6 +753,11 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
       series_patch: seriesPatch,
     })
     recurringActionIdRef.current = null
+    announceRecurringSave({
+      title: titleToSave,
+      affected_occurrences: result.result?.affected_occurrences ?? 0,
+      google_sync_status: result.result?.google_sync_status ?? 'not_enabled',
+    })
     await qc.invalidateQueries({ queryKey: ['events'] })
     await qc.refetchQueries({ queryKey: ['events'], type: 'active' })
     if (result.result?.series_revision) {

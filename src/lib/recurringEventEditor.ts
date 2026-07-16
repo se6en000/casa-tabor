@@ -63,6 +63,12 @@ export interface RecurringDeleteReceipt extends RecurringDeleteResult {
   scope: EventLocationScope
 }
 
+export interface RecurringSaveReceipt {
+  title: string
+  affected_occurrences: number
+  google_sync_status: 'pending' | 'not_enabled'
+}
+
 async function invokeEditor(body: Record<string, unknown>) {
   const { data, error } = await supabase.functions.invoke('recurring-event-editor', { body })
   if (error) throw new Error(error.message)
@@ -116,9 +122,16 @@ export async function undoRecurringEditorDelete({
 }
 
 export const RECURRING_DELETE_EVENT = 'casa:recurring-event-deleted'
+export const RECURRING_SAVE_EVENT = 'casa:recurring-event-saved'
 
 export function announceRecurringDelete(receipt: RecurringDeleteReceipt) {
   window.dispatchEvent(new CustomEvent<RecurringDeleteReceipt>(RECURRING_DELETE_EVENT, {
+    detail: receipt,
+  }))
+}
+
+export function announceRecurringSave(receipt: RecurringSaveReceipt) {
+  window.dispatchEvent(new CustomEvent<RecurringSaveReceipt>(RECURRING_SAVE_EVENT, {
     detail: receipt,
   }))
 }

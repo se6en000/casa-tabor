@@ -74,6 +74,7 @@ const recurrenceOutboxWorker = readFileSync(
   resolve('supabase/functions/process-google-recurrence-outbox/index.ts'),
   'utf8',
 )
+const supabaseConfig = readFileSync(resolve('supabase/config.toml'), 'utf8')
 const shadowMigration = readFileSync(
   resolve('supabase/migrations/20260715220000_recurrence_shadow_migration.sql'),
   'utf8',
@@ -118,6 +119,19 @@ test('recurrence v2 schema separates series, occurrences, audit, and sync operat
   assert.match(schema, /create table if not exists public\.calendar_sync_operations/)
   assert.match(schema, /unique \(action_id, operation_key\)/)
   assert.match(schema, /depends_on_operation_id uuid references public\.calendar_sync_operations/)
+})
+
+test('recurrence outbox bypasses stale gateway JWT verification and validates replay internally', () => {
+  assert.match(
+    supabaseConfig,
+    /\[functions\.process-google-recurrence-outbox\]\s+verify_jwt = false/,
+  )
+  assert.match(recurrenceOutboxWorker, /Service-role authorization required for operation replay/)
+  assert.match(recurrenceOutboxWorker, /obsolete_google_master_ids/)
+  assert.match(
+    recurrenceOutboxWorker,
+    /operation\.operation_type === 'recreate_projection'[\s\S]*google_recurring_event_id[\s\S]*'DELETE'/,
+  )
 })
 
 test('recurrence v2 schema supports reversible deletion and stable child definitions', () => {

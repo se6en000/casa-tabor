@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.materialize-recurring-events]
 verify_jwt = false
+
+[functions.process-google-recurrence-outbox]
+verify_jwt = false

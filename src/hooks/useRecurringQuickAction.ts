@@ -5,6 +5,7 @@ import type { EventLocationScope } from '../lib/eventLocation'
 import type { RecurrenceScopeOperation } from '../lib/recurrenceScopePresentation'
 import {
   loadRecurringEditorContext,
+  announceRecurringSave,
   saveRecurringEditorMutation,
   truncateRecurrenceLinesForFuture,
   type RecurringEditorContext,
@@ -125,10 +126,12 @@ export function useRecurringQuickAction(event: EventWithDetails | null) {
           originalStart,
         )
         seriesPatch.future_recurrence_lines = context.series.recurrence_lines
+      } else if (scope === 'all') {
+        seriesPatch.recurrence_lines = context.series.recurrence_lines
       }
       const actionId = actionIdRef.current ?? crypto.randomUUID()
       actionIdRef.current = actionId
-      await saveRecurringEditorMutation({
+      const result = await saveRecurringEditorMutation({
         selected_event_id: event.id,
         action_id: actionId,
         scope,
@@ -138,6 +141,11 @@ export function useRecurringQuickAction(event: EventWithDetails | null) {
         series_patch: seriesPatch,
       })
       actionIdRef.current = null
+      announceRecurringSave({
+        title: event.title,
+        affected_occurrences: result.result?.affected_occurrences ?? 0,
+        google_sync_status: result.result?.google_sync_status ?? 'not_enabled',
+      })
       await queryClient.invalidateQueries({ queryKey: ['events'] })
       await queryClient.refetchQueries({ queryKey: ['events'], type: 'active' })
       await reloadContext()

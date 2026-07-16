@@ -28,6 +28,18 @@ const eventLocation = readFileSync(
   resolve('src/lib/eventLocation.ts'),
   'utf8',
 )
+const recurringEditorClient = readFileSync(
+  resolve('src/lib/recurringEventEditor.ts'),
+  'utf8',
+)
+const recurringToastHost = readFileSync(
+  resolve('src/components/calendar/RecurringDeleteUndoHost.tsx'),
+  'utf8',
+)
+const familyConsolidation = readFileSync(
+  resolve('supabase/migrations/20260715252000_consolidate_recurrence_families.sql'),
+  'utf8',
+)
 
 test('future split truncates RRULE without discarding companion recurrence lines', () => {
   assert.deepEqual(
@@ -115,6 +127,27 @@ test('canonical quick actions share the revision-guarded recurrence command', ()
   assert.match(quickActions, /await queryClient\.refetchQueries/)
   assert.match(quickActions, /actionIdRef\.current/)
   assert.doesNotMatch(quickActions, /sync-event-to-google|update-recurring-google/)
+  assert.match(quickActions, /scope === 'all'[\s\S]*seriesPatch\.recurrence_lines/)
+})
+
+test('entire series consolidates linked branches and clears reusable exceptions', () => {
+  assert.match(familyConsolidation, /with recursive ancestors/)
+  assert.match(familyConsolidation, /with recursive family/)
+  assert.match(familyConsolidation, /set series_id = v_root\.id/)
+  assert.match(familyConsolidation, /exception_paths = '\[\]'::jsonb/)
+  assert.match(familyConsolidation, /is_exception = false/)
+  assert.match(familyConsolidation, /Superseded by linked-family consolidation/)
+  assert.match(familyConsolidation, /obsolete_google_master_ids/)
+  assert.match(familyConsolidation, /'recreate_projection'/)
+  assert.match(familyConsolidation, /split_occurrence_key = v_selected\.occurrence_key/)
+  assert.match(editor, /scope === 'all'[\s\S]*seriesPatch\.recurrence_lines/)
+})
+
+test('recurring saves distinguish Casa persistence from queued Google sync', () => {
+  assert.match(recurringEditorClient, /RECURRING_SAVE_EVENT/)
+  assert.match(editor, /announceRecurringSave/)
+  assert.match(quickActions, /announceRecurringSave/)
+  assert.match(recurringToastHost, /saved in Casa\. Google Calendar sync is queued/)
 })
 
 test('address, category, assignments, and transportation use scoped quick actions', () => {
