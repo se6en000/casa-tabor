@@ -182,6 +182,7 @@ try {
     series: {
       timezone: 'America/New_York',
       recurrence_lines: ['RRULE:FREQ=WEEKLY;COUNT=3'],
+      preserve_exceptions: true,
     },
   })
   assert.equal(all.series_revision, 3)
@@ -192,10 +193,13 @@ try {
     .select('id,title,is_exception,exception_paths')
     .in('id', occurrenceIds)
   if (afterAllError) throw afterAllError
-  assert.equal(afterAll.find((event) => event.id === occurrenceIds[0]).title, `${prefix} all`)
+  assert.equal(afterAll.find((event) => event.id === occurrenceIds[0]).title, `${prefix} one-off`)
   assert.equal(afterAll.find((event) => event.id === occurrenceIds[1]).title, `${prefix} all`)
-  assert.ok(afterAll.every((event) => event.is_exception === false))
-  assert.ok(afterAll.every((event) => event.exception_paths.length === 0))
+  assert.equal(afterAll.find((event) => event.id === occurrenceIds[0]).is_exception, true)
+  assert.deepEqual(
+    afterAll.find((event) => event.id === occurrenceIds[0]).exception_paths,
+    ['event.title', 'transportationPlan'],
+  )
   const { data: progress } = await supabase
     .from('event_checklist_items')
     .select('checked,label')
@@ -213,29 +217,54 @@ try {
   assert.equal(actionProgress.completed, true)
   assert.equal(actionProgress.title, 'Complete updated form')
 
+  const replaceTitle = await mutate({
+    action: `recurrence-fixture-replace-title-${runId}`,
+    eventId: occurrenceIds[1],
+    scope: 'all',
+    revision: 3,
+    paths: ['event.title'],
+    details: { event: { title: `${prefix} replaced title` } },
+    series: {
+      timezone: 'America/New_York',
+      recurrence_lines: ['RRULE:FREQ=WEEKLY;COUNT=3'],
+      preserve_exceptions: false,
+    },
+  })
+  assert.equal(replaceTitle.series_revision, 4)
+  const { data: afterReplace } = await supabase
+    .from('events')
+    .select('id,title,is_exception,exception_paths')
+    .in('id', occurrenceIds)
+  assert.ok(afterReplace.every((event) => event.title === `${prefix} replaced title`))
+  assert.equal(afterReplace.find((event) => event.id === occurrenceIds[0]).is_exception, true)
+  assert.deepEqual(
+    afterReplace.find((event) => event.id === occurrenceIds[0]).exception_paths,
+    ['transportationPlan'],
+  )
+
   const reset = await mutate({
     action: `recurrence-fixture-reset-${runId}`,
     eventId: occurrenceIds[0],
     scope: 'this',
     type: 'reset_exceptions',
-    revision: 3,
+    revision: 4,
     paths: ['event.title'],
   })
-  assert.equal(reset.series_revision, 4)
+  assert.equal(reset.series_revision, 5)
   const { data: resetOccurrence } = await supabase
     .from('events')
     .select('title,is_exception,exception_paths')
     .eq('id', occurrenceIds[0])
     .single()
-  assert.equal(resetOccurrence.title, `${prefix} all`)
-  assert.equal(resetOccurrence.is_exception, false)
-  assert.deepEqual(resetOccurrence.exception_paths, [])
+  assert.equal(resetOccurrence.title, `${prefix} replaced title`)
+  assert.equal(resetOccurrence.is_exception, true)
+  assert.deepEqual(resetOccurrence.exception_paths, ['transportationPlan'])
 
   const split = await mutate({
     action: `recurrence-fixture-future-${runId}`,
     eventId: occurrenceIds[1],
     scope: 'future',
-    revision: 4,
+    revision: 5,
     paths: ['event.title'],
     details: { event: { title: `${prefix} future` } },
     series: {
@@ -291,24 +320,32 @@ try {
     },
   })
   assert.equal(consolidated.series_id, series.id)
-  assert.equal(consolidated.series_revision, 6)
+  assert.equal(consolidated.series_revision, 7)
   const { data: consolidatedOccurrences } = await supabase
     .from('events')
     .select('id,title,series_id,is_exception,exception_paths')
     .in('id', occurrenceIds)
   assert.ok(consolidatedOccurrences.every((event) => event.series_id === series.id))
   assert.ok(consolidatedOccurrences.every((event) => event.title === `${prefix} consolidated`))
-  assert.ok(consolidatedOccurrences.every((event) => event.is_exception === false))
-  assert.ok(consolidatedOccurrences.every((event) => event.exception_paths.length === 0))
+  assert.equal(consolidatedOccurrences.find((event) => event.id === occurrenceIds[0]).is_exception, true)
+  assert.deepEqual(
+    consolidatedOccurrences.find((event) => event.id === occurrenceIds[0]).exception_paths,
+    ['transportationPlan'],
+  )
+  assert.ok(
+    consolidatedOccurrences
+      .filter((event) => event.id !== occurrenceIds[0])
+      .every((event) => event.is_exception === false && event.exception_paths.length === 0),
+  )
 
   const deleted = await mutate({
     action: `recurrence-fixture-delete-${runId}`,
     eventId: occurrenceIds[1],
     scope: 'this',
     type: 'delete',
-    revision: 6,
+    revision: 7,
   })
-  assert.equal(deleted.series_revision, 7)
+  assert.equal(deleted.series_revision, 8)
   const { data: tombstone } = await supabase
     .from('events')
     .select('deleted_at,purge_after')
@@ -322,9 +359,9 @@ try {
     eventId: occurrenceIds[1],
     scope: 'this',
     type: 'restore',
-    revision: 7,
+    revision: 8,
   })
-  assert.equal(restored.series_revision, 8)
+  assert.equal(restored.series_revision, 9)
   const { data: restoredOccurrence } = await supabase
     .from('events')
     .select('deleted_at,purge_after')
@@ -338,7 +375,8 @@ try {
     oneOccurrence: true,
     idempotency: true,
     staleRevisionRejected: true,
-    allClearedExceptions: true,
+    preservedExceptionsByDefault: true,
+    replacedOnlyEditedExceptions: true,
     occurrenceProgressPreserved: true,
     futureSplit: true,
     sameBoundaryReused: true,

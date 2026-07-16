@@ -40,6 +40,14 @@ const familyConsolidation = readFileSync(
   resolve('supabase/migrations/20260715252000_consolidate_recurrence_families.sql'),
   'utf8',
 )
+const exceptionPolicy = readFileSync(
+  resolve('supabase/migrations/20260715261000_control_recurring_update_exceptions.sql'),
+  'utf8',
+)
+const entireSeriesGuard = readFileSync(
+  resolve('supabase/migrations/20260715262000_require_entire_series_recurrence_lines.sql'),
+  'utf8',
+)
 
 test('future split truncates RRULE without discarding companion recurrence lines', () => {
   assert.deepEqual(
@@ -163,6 +171,20 @@ test('address, category, assignments, and transportation use scoped quick action
   assert.match(eventDetail, /<RecurrenceScopeDialog \{\.\.\.recurringQuickAction\.dialog\} \/>/)
   assert.match(eventDetail, /assignments:[\s\S]*transportation_plan: nextPlan/)
   assert.match(eventDetail, /event\.series_id/)
+})
+
+test('recurring updates preserve one-offs by default and replace only edited paths on request', () => {
+  assert.match(endpoint, /preserve_exceptions: body\.preserve_exceptions !== false/)
+  assert.match(editor, /preserve_exceptions: preserveExceptions/)
+  assert.match(quickActions, /preserve_exceptions: preserveExceptions/)
+  assert.match(exceptionPolicy, /coalesce\(\(p_series_patch->>'preserve_exceptions'\)::boolean, true\)/)
+  assert.match(exceptionPolicy, /path like changed_path \|\| '\.%'/)
+  assert.match(exceptionPolicy, /changed_path like path \|\| '\.%'/)
+  assert.match(exceptionPolicy, /v_snapshot->'patch'/)
+  assert.match(exceptionPolicy, /p_detail_patch,[\s\S]*p_changed_paths/)
+  assert.match(exceptionPolicy, /'exception_policy', 'replace'/)
+  assert.doesNotMatch(exceptionPolicy, /exception_paths = '\[\]'::jsonb/)
+  assert.match(entireSeriesGuard, /jsonb_typeof\(p_series_patch->'recurrence_lines'\) is distinct from 'array'/)
 })
 
 test('occurrence progress remains direct and rolls back failed optimistic state', () => {

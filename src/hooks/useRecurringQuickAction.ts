@@ -106,6 +106,7 @@ export function useRecurringQuickAction(event: EventWithDetails | null) {
   const executeScope = useCallback(async (
     quickAction: RecurringQuickActionRequest,
     scope: EventLocationScope,
+    preserveExceptions = true,
   ): Promise<boolean> => {
     if (!event || !canonical) return false
     if (loadedEventId !== eventId) throw new Error('Recurring series details are still loading. Please try again in a moment.')
@@ -139,6 +140,7 @@ export function useRecurringQuickAction(event: EventWithDetails | null) {
         changed_paths: quickAction.changedPaths,
         detail_patch: quickAction.detailPatch,
         series_patch: seriesPatch,
+        preserve_exceptions: preserveExceptions,
       })
       actionIdRef.current = null
       announceRecurringSave({
@@ -159,14 +161,19 @@ export function useRecurringQuickAction(event: EventWithDetails | null) {
     }
   }, [canonical, context, enabled, event, eventId, failedEventId, loadedEventId, queryClient, reloadContext, writable])
 
-  const selectScope = useCallback(async (scope: EventLocationScope) => {
-    if (!pending) return
+  const selectScope = useCallback(async (
+    scope: EventLocationScope,
+    { preserveExceptions }: { preserveExceptions: boolean },
+  ) => {
+    if (!pending) return false
     try {
-      await executeScope(pending, scope)
+      await executeScope(pending, scope, preserveExceptions)
       pending.resolve('handled')
       setPending(null)
+      return true
     } catch {
       // Keep the decision surface and caller draft open for retry.
+      return false
     }
   }, [executeScope, pending])
 

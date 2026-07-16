@@ -71,6 +71,14 @@ function eventUrl(calendarId: string, eventId?: string | null) {
   return eventId ? `${base}/${encodeURIComponent(eventId)}` : base
 }
 
+function eventInstancesUrl(calendarId: string, recurringEventId: string, originalStart: string) {
+  return `${eventUrl(calendarId, recurringEventId)}/instances?${new URLSearchParams({
+    originalStart,
+    showDeleted: 'false',
+    maxResults: '2',
+  })}`
+}
+
 async function loadProjectionContext(supabase: ReturnType<typeof createClient>, operation: Operation) {
   const { data: series, error: seriesError } = await supabase
     .from('event_series')
@@ -133,6 +141,70 @@ async function saveGoogleIdentity(
   if (eventError) throw eventError
 }
 
+async function projectMaterializedExceptions(
+  supabase: ReturnType<typeof createClient>,
+  operation: Operation,
+  connection: CalendarConnection,
+  accessToken: string,
+  series: Json,
+  recurringEventId: string,
+) {
+  const { data: occurrences, error } = await supabase
+    .from('events')
+    .select('*')
+    .eq('series_id', series.id)
+    .eq('record_kind', 'occurrence')
+    .is('deleted_at', null)
+  if (error) throw error
+
+  let projected = 0
+  for (const occurrence of occurrences ?? []) {
+    if (!Array.isArray(occurrence.exception_paths) || occurrence.exception_paths.length === 0) continue
+    const originalStart = occurrence.original_start_time ?? occurrence.original_start_date
+    if (!originalStart) continue
+
+    const instances = await googleRequest(
+      accessToken,
+      eventInstancesUrl(connection.calendar_id, recurringEventId, originalStart),
+    )
+    const instance = Array.isArray(instances.items)
+      ? instances.items.find((item: Json) => item.status !== 'cancelled')
+      : null
+    if (!instance?.id) {
+      throw new Error(`Google did not return the ${originalStart} instance needed for a Casa one-off change.`)
+    }
+
+    const { data: bundle, error: bundleError } = await supabase.rpc('recurrence_build_reusable_patch', {
+      p_event_id: occurrence.id,
+    })
+    if (bundleError) throw bundleError
+    const payload = serializeGoogleRecurrenceProjection({
+      event: occurrence,
+      series,
+      bundle,
+      existingGoogleDescription: instance.description ?? '',
+    })
+    delete payload.recurrence
+    const projectedInstance = await googleRequest(
+      accessToken,
+      eventUrl(connection.calendar_id, instance.id),
+      'PATCH',
+      payload,
+    )
+    const { error: identityError } = await supabase.from('events').update({
+      google_event_id: projectedInstance.id,
+      google_calendar_id: series.google_calendar_id,
+      google_connection_id: operation.connection_id,
+      google_ical_uid: projectedInstance.iCalUID ?? null,
+      google_etag: projectedInstance.etag ?? null,
+      google_updated_at: projectedInstance.updated ?? null,
+    }).eq('id', occurrence.id)
+    if (identityError) throw identityError
+    projected += 1
+  }
+  return projected
+}
+
 async function executeOperation(
   supabase: ReturnType<typeof createClient>,
   operation: Operation,
@@ -146,6 +218,7 @@ async function executeOperation(
     && operation.payload_snapshot.changed_paths[0] === 'event.title'
   let googleEvent: Json | null = null
   let conflictDetected = false
+  let projectedExceptions = 0
 
   const obsoleteMasterIds = Array.isArray(operation.payload_snapshot?.obsolete_google_master_ids)
     ? operation.payload_snapshot.obsolete_google_master_ids.filter((value): value is string => typeof value === 'string')
@@ -265,7 +338,17 @@ async function executeOperation(
       await saveGoogleIdentity(supabase, operation, series, event, googleEvent, false)
     }
   }
-  return { googleEvent, conflictDetected, steps }
+  if (steps.includes('create_master') && googleEvent?.id) {
+    projectedExceptions = await projectMaterializedExceptions(
+      supabase,
+      operation,
+      connection,
+      accessToken,
+      series,
+      googleEvent.id,
+    )
+  }
+  return { googleEvent, conflictDetected, projectedExceptions, steps }
 }
 
 Deno.serve(async (req) => {

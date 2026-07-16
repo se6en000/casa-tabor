@@ -84,16 +84,48 @@ try {
     original_start_time: '2026-08-24T13:00:00.000Z',
     series_revision_applied: 1,
     is_enriched: true,
+    is_exception: true,
+    exception_paths: ['transportationPlan'],
   }).select('id').single()
   if (occurrenceError) throw occurrenceError
   occurrenceId = occurrence.id
 
-  await db.from('event_checklist_items').insert({
-    event_id: templateId,
-    label: 'Bring projection proof',
-    checked: false,
-    template_revision: 1,
+  await db.from('event_plan_overrides').upsert({
+    event_id: occurrenceId,
+    transportation_plan: {
+      version: 1,
+      source: 'manual',
+      legs: [{
+        id: crypto.randomUUID(),
+        origin: { name: 'Home', address: '1 Main St' },
+        destination: { name: 'Casa Test Field', address: '1 Test Way', kind: 'event' },
+        driverId: null,
+        driverName: 'Fixture Driver',
+        passengers: ['Fixture Passenger'],
+        purpose: 'appointment',
+        timing: 'arrive_by',
+        time: '09:00',
+      }],
+    },
   })
+
+  const checklistKey = crypto.randomUUID()
+  await db.from('event_checklist_items').insert([
+    {
+      event_id: templateId,
+      label: 'Bring projection proof',
+      checked: false,
+      template_item_key: checklistKey,
+      template_revision: 1,
+    },
+    {
+      event_id: occurrenceId,
+      label: 'Bring projection proof',
+      checked: false,
+      template_item_key: checklistKey,
+      template_revision: 1,
+    },
+  ])
   const { data: mutation, error: mutationError } = await db.rpc('recurrence_apply_scoped_mutation_core', {
     p_action_id: actionIds[0],
     p_selected_event_id: occurrenceId,
@@ -102,7 +134,11 @@ try {
     p_expected_series_revision: 1,
     p_changed_paths: ['event.title'],
     p_detail_patch: { event: { title: `${prefix} projected` } },
-    p_series_patch: {},
+    p_series_patch: {
+      timezone: 'America/New_York',
+      recurrence_lines: ['RRULE:FREQ=WEEKLY;COUNT=2'],
+      preserve_exceptions: true,
+    },
     p_actor: { type: 'integration_fixture' },
     p_correlation_id: runId,
   })
@@ -124,6 +160,25 @@ try {
   assert.deepEqual(googleEvent.recurrence, ['RRULE:FREQ=WEEKLY;COUNT=2'])
   assert.equal(googleEvent.extendedProperties.private.casaSeriesId, seriesId)
   assert.match(googleEvent.description, /Bring projection proof/)
+  const { data: projectedOccurrence } = await db
+    .from('events')
+    .select('google_event_id,exception_paths')
+    .eq('id', occurrenceId)
+    .single()
+  assert.deepEqual(projectedOccurrence.exception_paths, ['transportationPlan'])
+  assert.ok(projectedOccurrence.google_event_id)
+  const { data: token } = await db
+    .from('google_tokens')
+    .select('access_token')
+    .eq('google_email', 'jacobrtabor@gmail.com')
+    .single()
+  const instanceResponse = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(connection.calendar_id)}/events/${encodeURIComponent(projectedOccurrence.google_event_id)}`,
+    { headers: { authorization: 'Bearer ' + token.access_token } },
+  )
+  const projectedGoogleOccurrence = await instanceResponse.json()
+  assert.equal(instanceResponse.ok, true, JSON.stringify(projectedGoogleOccurrence))
+  assert.match(projectedGoogleOccurrence.description, /Driver: Fixture Driver/)
 
   const { data: deletion, error: deletionError } = await db.rpc('recurrence_delete_scoped_core', {
     p_action_id: actionIds[1],
@@ -149,6 +204,7 @@ try {
     success: true,
     googleMasterCreated: true,
     fullCasaDetailsProjected: true,
+    oneOffTransportationProjected: true,
     privateIdentityProjected: true,
     deleteConfirmed: true,
   }))
@@ -168,8 +224,12 @@ try {
   }
   await db.from('calendar_sync_operations').delete().in('action_id', actionIds)
   await db.from('recurrence_mutation_history').delete().in('action_id', actionIds)
-  if (occurrenceId) await db.from('events').delete().eq('id', occurrenceId)
-  if (seriesId) await db.from('event_series').delete().eq('id', seriesId)
+  if (seriesId) {
+    await db.from('events').delete().eq('series_id', seriesId)
+    await db.from('event_series').delete().eq('id', seriesId)
+  } else if (occurrenceId) {
+    await db.from('events').delete().eq('id', occurrenceId)
+  }
   if (templateId) await db.from('events').delete().eq('id', templateId)
   await db.from('events').delete().ilike('title', `${prefix}%`)
 }

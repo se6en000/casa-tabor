@@ -54,3 +54,15 @@ test('recurrence decision surface exposes sync, invitation, radio, and busy-stat
   assert.match(dialog, /closeOnEscape=\{!loading\}/)
   assert.match(dialog, /role="alert"/)
 })
+
+test('recurring updates expose a default-safe one-off exception choice', () => {
+  const dialog = readFileSync(resolve('src/components/calendar/RecurrenceScopeDialog.tsx'), 'utf8')
+
+  assert.match(dialog, /useState\(true\)/)
+  assert.match(dialog, /selectedScope !== 'this'/)
+  assert.match(dialog, /Keep existing one-off changes/)
+  assert.match(dialog, /replace one-off changes only for the details you are updating/)
+  assert.match(dialog, /setPreserveExceptions\(true\)/)
+  assert.match(dialog, /await onSelect\(selectedScope, \{ preserveExceptions \}\)/)
+  assert.match(dialog, /succeeded === false/)
+})

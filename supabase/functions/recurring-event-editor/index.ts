@@ -24,6 +24,7 @@ type SaveBody = {
   changed_paths: string[]
   detail_patch: Record<string, unknown>
   series_patch: Record<string, unknown>
+  preserve_exceptions?: boolean
 }
 
 type DeleteBody = {
@@ -98,7 +99,10 @@ Deno.serve(async (req) => {
         p_selected_event_id: body.selected_event_id,
         p_scope: body.scope,
         p_expected_series_revision: body.expected_series_revision,
-        p_series_patch: body.series_patch,
+        p_series_patch: {
+          ...body.series_patch,
+          preserve_exceptions: body.preserve_exceptions !== false,
+        },
         p_actor: { source: 'event-editor-delete' },
         p_correlation_id: correlationId,
       })

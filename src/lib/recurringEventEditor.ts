@@ -39,6 +39,7 @@ export interface RecurringEditorMutation {
   changed_paths: string[]
   detail_patch: Record<string, unknown>
   series_patch: Record<string, unknown>
+  preserve_exceptions: boolean
 }
 
 export interface RecurringDeleteMutation {

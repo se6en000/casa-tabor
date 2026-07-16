@@ -11,6 +11,7 @@ import {
 
 const migration = readFileSync('supabase/migrations/20260715240000_google_recurrence_outbox.sql', 'utf8')
 const worker = readFileSync('supabase/functions/process-google-recurrence-outbox/index.ts', 'utf8')
+const liveFixture = readFileSync('scripts/google-recurrence-projection-integration.mjs', 'utf8')
 
 test('outbox plans every supported operation and split dependencies', () => {
   assert.deepEqual(operationPlan({ operation_type: 'patch_master' }, { google_recurring_event_id: null }), ['create_master'])
@@ -64,4 +65,16 @@ test('worker is service-only, dark-launch gated, and uses the canonical serializ
   assert.match(worker, /Read-only imported series cannot be projected/)
   assert.match(worker, /recurrence_finish_google_sync_operation/)
   assert.match(worker, /markGoogleConnectionFailure/)
+})
+
+test('new Google masters restore Casa one-off event projections', () => {
+  assert.match(worker, /projectMaterializedExceptions/)
+  assert.match(worker, /record_kind', 'occurrence'/)
+  assert.match(worker, /exception_paths/)
+  assert.match(worker, /eventInstancesUrl/)
+  assert.match(worker, /steps\.includes\('create_master'\)/)
+  assert.match(worker, /Google did not return the .* instance needed for a Casa one-off change/)
+  assert.match(liveFixture, /oneOffTransportationProjected: true/)
+  assert.match(liveFixture, /Driver: Fixture Driver/)
+  assert.match(liveFixture, /\.delete\(\)\.eq\('series_id', seriesId\)/)
 })

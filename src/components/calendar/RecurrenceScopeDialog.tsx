@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { CalendarRange, Cloud, ShieldCheck, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
-import { Button, Modal, Radio } from '../ui'
+import { Button, Checkbox, Modal, Radio } from '../ui'
 import type { EventLocationScope } from '../../lib/eventLocation'
 import {
   buildRecurrenceScopeChoices,
@@ -35,9 +35,13 @@ export default function RecurrenceScopeDialog({
   loading?: boolean
   error?: string | null
   onClose: () => void
-  onSelect: (scope: EventLocationScope) => void
+  onSelect: (
+    scope: EventLocationScope,
+    options: { preserveExceptions: boolean },
+  ) => boolean | void | Promise<boolean | void>
 }) {
   const [selectedScope, setSelectedScope] = useState<EventLocationScope>('this')
+  const [preserveExceptions, setPreserveExceptions] = useState(true)
   const choices = useMemo(
     () => buildRecurrenceScopeChoices({ operation, impacts }),
     [impacts, operation],
@@ -50,12 +54,15 @@ export default function RecurrenceScopeDialog({
 
   const handleClose = () => {
     setSelectedScope('this')
+    setPreserveExceptions(true)
     onClose()
   }
 
-  const handleSelect = () => {
-    onSelect(selectedScope)
+  const handleSelect = async () => {
+    const succeeded = await onSelect(selectedScope, { preserveExceptions })
+    if (succeeded === false) return
     setSelectedScope('this')
+    setPreserveExceptions(true)
   }
 
   return (
@@ -115,6 +122,21 @@ export default function RecurrenceScopeDialog({
           )
         })}
       </fieldset>
+
+      {operation !== 'delete' && selectedScope !== 'this' && (
+        <div className="mt-4 rounded-card border border-casa-border bg-casa-surface p-3">
+          <Checkbox
+            checked={preserveExceptions}
+            disabled={loading}
+            onChange={(event) => setPreserveExceptions(event.target.checked)}
+            label="Keep existing one-off changes"
+          />
+          <p className="mt-1 pl-7 text-caption text-content-secondary">
+            Turn this off to replace one-off changes only for the details you are updating.
+            Other one-off details always stay unchanged.
+          </p>
+        </div>
+      )}
 
       <div className="mt-4 space-y-2 rounded-card border border-casa-border bg-casa-surface-subtle p-3">
         <div className="flex items-start gap-2 text-caption text-content-secondary">

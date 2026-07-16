@@ -586,19 +586,23 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
     await doSave('all')
   }
 
-  const handleScopeChoice = async (scope: RecurScope) => {
+  const handleScopeChoice = async (
+    scope: RecurScope,
+    { preserveExceptions }: { preserveExceptions: boolean },
+  ) => {
     if (recurringEditorEnabled && recurrenceTouched && scope === 'this') {
       setSaveError('A repeat-pattern change must apply to this and following events or the entire series.')
-      return
+      return false
     }
-    const saved = await doSave(scope)
+    const saved = await doSave(scope, preserveExceptions)
     if (saved) {
       setShowScopeModal(false)
       setPendingSave(false)
     }
+    return saved
   }
 
-  const doSave = async (scope: RecurScope): Promise<boolean> => {
+  const doSave = async (scope: RecurScope, preserveExceptions = true): Promise<boolean> => {
     setIsSaving(true)
     setSaveStatus('saving')
     setSaveError(null)
@@ -611,7 +615,7 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
     const slowTimer = setTimeout(() => setSaveStatus('slow'), 5000)
 
     try {
-      await Promise.race([doSaveInner(scope), saveTimeout])
+      await Promise.race([doSaveInner(scope, false, preserveExceptions), saveTimeout])
       return true
     } catch (err) {
       console.error('[EventEditSheet] doSave error:', err)
@@ -627,6 +631,7 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
   const doCanonicalSave = async (
     scope: RecurScope,
     titleToSave: string,
+    preserveExceptions: boolean,
   ) => {
     if (!recurringContext) throw new Error('Recurring event details are not available yet.')
     if (recurrenceTouched && recur.freq === 'none') {
@@ -751,6 +756,7 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
       changed_paths: changedPaths,
       detail_patch: detailPatch,
       series_patch: seriesPatch,
+      preserve_exceptions: preserveExceptions,
     })
     recurringActionIdRef.current = null
     announceRecurringSave({
@@ -768,14 +774,18 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
     onClose()
   }
 
-  const doSaveInner = async (scope: RecurScope, autoSave = false) => {
+  const doSaveInner = async (
+    scope: RecurScope,
+    autoSave = false,
+    preserveExceptions = true,
+  ) => {
     // Use pendingTitleRef when available (set in handleSave to flush DOM composition state)
     const titleToSave = pendingTitleRef.current ?? displayTitle
     pendingTitleRef.current = null
 
     if (isCanonicalOccurrence && recurringEditorEnabled) {
       if (autoSave) return
-      await doCanonicalSave(scope, titleToSave)
+      await doCanonicalSave(scope, titleToSave, preserveExceptions)
       return
     }
 
