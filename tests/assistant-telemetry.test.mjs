@@ -40,7 +40,7 @@ test('assistant telemetry spans deterministic, streaming, fallback, and failure 
 
 test('voice telemetry covers wake through final ASR without recording transcript text', () => {
   assert.match(wake, /traceId, wakeAt/)
-  for (const event of ['asr_connect_started', 'asr_listening_ready', 'asr_first_interim', 'asr_final', 'asr_error']) {
+  for (const event of ['asr_connect_started', 'asr_capture_ready', 'asr_listening_ready', 'asr_first_interim', 'asr_final', 'asr_error']) {
     assert.match(speech, new RegExp(`onTraceRef\\.current\\?\\.\\('${event}'`))
   }
   assert.doesNotMatch(speech, /onTraceRef\.current\?\.\('asr_final',\s*\{[^}]*transcript/s)

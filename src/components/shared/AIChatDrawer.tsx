@@ -1093,6 +1093,15 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                 )}
               </AnimatePresence>
 
+              <LiveTranscript
+                committed={voiceTranscript.committed}
+                interim={voiceTranscript.interim}
+                active={speech.listening || speech.connecting || speech.phase === 'processing'}
+                phase={speech.phase}
+                volume={speech.volume}
+                className="mb-2"
+              />
+
               <div
                 className={cn(
                   'ai-presence-composer relative overflow-hidden flex items-end gap-2 bg-casa-bg rounded-xl border border-casa-border px-3 py-2 transition-all duration-300',
@@ -1128,11 +1137,6 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                 </Button>
 
                 <div className="relative min-w-0 flex-1">
-                  <LiveTranscript
-                    committed={voiceTranscript.committed}
-                    interim={voiceTranscript.interim}
-                    active={speech.listening && Boolean(input.trim())}
-                  />
                   <textarea
                     ref={textareaRef}
                     value={input}

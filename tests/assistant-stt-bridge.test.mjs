@@ -37,6 +37,14 @@ test('candidate protocol keeps segment finals separate from turn commits', () =>
   assert.match(bridge, /'type': 'committed'/)
 })
 
+test('wake prewarm captures immediately without discarding post-wake audio', () => {
+  assert.match(bridge, /PRIMARY_STT_MODEL = os\.environ\.get\('STT_PRIMARY_MODEL', 'nova-3'\)/)
+  assert.match(bridge, /kwargs=\{'reason': 'wake_prewarm'\}/)
+  assert.match(bridge, /'type': 'capturing'/)
+  assert.match(bridge, /if not initial_buffer and warmup <= WARMUP_CHUNKS:/)
+  assert.match(bridge, /_start_lock\.acquire\(blocking=False\)/)
+})
+
 test('legacy dictation protocol retains final messages', () => {
   assert.match(bridge, /_stt_protocol = 'legacy'/)
   assert.match(bridge, /'type': 'final'/)

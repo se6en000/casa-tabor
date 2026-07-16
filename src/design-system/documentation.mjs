@@ -1,4 +1,4 @@
-export const DESIGN_SYSTEM_VERSION = '1.3.0'
+export const DESIGN_SYSTEM_VERSION = '1.4.0'
 export const DESIGN_SYSTEM_RELEASE_DATE = '2026-07-12'
 export const DESIGN_SYSTEM_SCHEMA_VERSION = 1
 
@@ -150,14 +150,14 @@ export const COMPONENT_MANIFEST = [
   component({
     name: 'LiveTranscript',
     category: 'feedback',
-    purpose: 'Shows finalized speech as a stable prefix while the recognizer revises only the live suffix.',
-    useWhen: 'Use over a voice-input control that receives separate committed and interim transcript parts.',
+    purpose: 'Acknowledges local capture immediately and shows finalized speech as a stable prefix while the recognizer revises only the live suffix.',
+    useWhen: 'Use above a voice-input control that receives capture phase, level, committed text, and interim text.',
     avoid: 'Do not use for static text, final assistant responses, or as a replacement for the editable control.',
-    variants: ['committed-prefix', 'revisable-suffix'],
-    states: ['listening', 'segment-final', 'hidden'],
+    variants: ['capture-status', 'level-meter', 'committed-prefix', 'revisable-suffix'],
+    states: ['connecting', 'capturing', 'listening', 'processing', 'hidden'],
     accessibility: 'The visual stream is presentation-only; finalized speech is announced politely without reading every interim correction.',
     responsive: 'Inherits semantic body typography and wraps within phone, desktop, and kiosk composers.',
-    example: '<LiveTranscript committed="Add milk" interim="and eggs" active={listening} />',
+    example: '<LiveTranscript committed="Add milk" interim="and eggs" phase="listening" volume={42} active />',
   }),
   component({
     name: 'Modal',
@@ -498,6 +498,14 @@ export const COMPONENT_MANIFEST = [
 ]
 
 export const DESIGN_SYSTEM_CHANGELOG = [
+  {
+    version: '1.4.0',
+    date: '2026-07-12',
+    changes: [
+      'Expanded LiveTranscript into an immediate capture-status surface with a reactive level meter.',
+      'Added truthful connecting, capturing, listening, and processing states with reduced-motion support.',
+    ],
+  },
   {
     version: '1.3.0',
     date: '2026-07-12',

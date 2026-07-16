@@ -17,7 +17,7 @@ const BRIDGE_WS = 'ws://127.0.0.1:8767'
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
 export const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
 
-export type VoicePhase = 'idle' | 'connecting' | 'listening' | 'processing'
+export type VoicePhase = 'idle' | 'connecting' | 'capturing' | 'listening' | 'processing'
 export type STTMode = 'unknown' | 'bridge' | 'webspeech'
 export type VoiceTranscriptRevision = {
   committed: string
@@ -27,7 +27,7 @@ export type VoiceTranscriptRevision = {
 
 const SILENCE_MS = 2500
 const CONNECT_TIMEOUT_MS = 5000
-const TURN_COMMIT_GRACE_MS = 700
+const TURN_COMMIT_GRACE_MS = 350
 const MANUAL_FINALIZE_TIMEOUT_MS = 1800
 
 function createUtteranceId() {
@@ -430,11 +430,23 @@ export function useSpeechInput({
         const msg = normalizeBridgeTurnMessage(JSON.parse(evt.data as string))
         if (!msg) return
         switch (msg.type) {
+          case 'capturing':
+            if (listeningStartRef.current === 0) listeningStartRef.current = Date.now()
+            onTraceRef.current?.('asr_capture_ready', {
+              connect_ms: connectStartRef.current > 0 ? Date.now() - connectStartRef.current : null,
+              pre_roll_ms: msg.pre_roll_ms ?? 0,
+              mode: 'bridge',
+              utterance_id: utteranceIdRef.current,
+            })
+            setPhaseSync('capturing')
+            setBridgeDown(false)
+            break
           case 'ready':
-            listeningStartRef.current = Date.now()
+            if (listeningStartRef.current === 0) listeningStartRef.current = Date.now()
             onTraceRef.current?.('asr_listening_ready', {
               connect_ms: connectStartRef.current > 0 ? Date.now() - connectStartRef.current : null,
               mode: 'bridge',
+              model: msg.model ?? null,
               utterance_id: utteranceIdRef.current,
             })
             setPhaseSync('listening')
@@ -731,7 +743,8 @@ export function useSpeechInput({
     unsuppress,
     ensureRunning,
     active: activeRef,
-    listening: phase === 'listening',
+    listening: phase === 'capturing' || phase === 'listening',
+    capturing: phase === 'capturing',
     connecting: phase === 'connecting',
   }
 }

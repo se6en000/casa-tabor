@@ -14,6 +14,8 @@ export interface BridgeTurnMessage {
   utterance_id?: string
   next_utterance_id?: string
   provider?: string
+  model?: string
+  pre_roll_ms?: number
   status?: string
   session_id?: string
   turn_index?: number

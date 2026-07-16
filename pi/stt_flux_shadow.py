@@ -62,6 +62,7 @@ class FluxShadow:
         self._update_audio_ends = {}
         self._flux_turns = {}
         self._primary_turns = {}
+        self._next_flux_turn_index = 0
         self._comparison_lock = threading.Lock()
 
     @property
@@ -90,6 +91,7 @@ class FluxShadow:
         self._update_audio_ends = {}
         self._flux_turns = {}
         self._primary_turns = {}
+        self._next_flux_turn_index = 0
         self._active = True
 
         url = (
@@ -219,10 +221,17 @@ class FluxShadow:
             for word in words
             if isinstance(word, dict) and isinstance(word.get('confidence'), (int, float))
         ]
+        transcript = str(data.get('transcript', ''))
+        normalized_transcript = self._normalize_transcript(transcript)
+        if not normalized_transcript:
+            self._emit_metric('empty_turn_ignored')
+            return
+        comparison_index = self._next_flux_turn_index
+        self._next_flux_turn_index += 1
         with self._comparison_lock:
-            self._flux_turns[turn_index] = {
-                'transcript': str(data.get('transcript', '')),
-                'word_count': len(words) or len(str(data.get('transcript', '')).split()),
+            self._flux_turns[comparison_index] = {
+                'transcript': transcript,
+                'word_count': len(words) or len(transcript.split()),
                 'average_confidence': round(sum(confidences) / len(confidences), 4) if confidences else None,
                 'end_of_turn_confidence': data.get('end_of_turn_confidence'),
                 'speech_to_first_update_ms': self._first_update_latency.get(turn_index),
@@ -233,7 +242,7 @@ class FluxShadow:
                 'last_word_to_eot_ms': round(max(0.0, audio_window_end - last_word_end) * 1000),
                 'turn_resumed_count': self._resumed_by_turn.get(turn_index, 0),
             }
-        self._emit_comparison_if_ready(turn_index)
+        self._emit_comparison_if_ready(comparison_index)
 
     def _on_error(self, _ws, _error):
         self._emit_metric('error')

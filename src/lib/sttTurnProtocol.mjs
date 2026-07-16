@@ -1,6 +1,7 @@
 export const STT_TURN_PROTOCOL = 'candidate-v1'
 
 const MESSAGE_TYPES = new Set([
+  'capturing',
   'ready',
   'volume',
   'speech_started',

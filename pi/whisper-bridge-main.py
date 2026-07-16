@@ -15,13 +15,16 @@ WARMUP_CHUNKS = 2
 DEEPGRAM_KEY  = os.environ.get('DEEPGRAM_API_KEY', '').strip()
 if not DEEPGRAM_KEY:
     raise RuntimeError('DEEPGRAM_API_KEY is required')
+PRIMARY_STT_MODEL = os.environ.get('STT_PRIMARY_MODEL', 'nova-3').strip() or 'nova-3'
 DG_URL = (
     'wss://api.deepgram.com/v1/listen'
     '?encoding=linear16'
     f'&sample_rate={RATE}'
     '&channels=1'
-    '&model=nova-2'
+    f'&model={PRIMARY_STT_MODEL}'
     '&interim_results=true'
+    '&smart_format=true'
+    '&punctuate=true'
     '&endpointing=500'
     '&utterance_end_ms=1800'
     '&vad_events=true'
@@ -62,6 +65,7 @@ _ws_gen     = 0             # incremented on each start_recording(); guards stal
 _finals     = []
 _final_conf = []
 _recording_lock = threading.Lock()
+_start_lock = threading.Lock()
 _recording_started_at = 0.0
 
 def _push_voice_level(level: int):
@@ -140,8 +144,13 @@ def _handle_ws_client(ws):
                     _turn_id = str(msg.get('utterance_id', ''))
                     _turn_index = 0
                 started = start_recording(reason='ws_start')
-                if not started and _get().get('recording') and _get().get('ready'):
-                    _ws_push_stt({'type': 'ready'})
+                if not started and _get().get('recording'):
+                    _ws_push_stt({
+                        'type': 'capturing',
+                        'pre_roll_ms': round(BUFFER_SECS * 1000),
+                    })
+                    if _get().get('ready'):
+                        _ws_push_stt({'type': 'ready', 'model': PRIMARY_STT_MODEL})
             elif cmd == 'commit':
                 committed_turn_id = _turn_id
                 _flux_shadow.observe_primary_commit(_turn_index, committed_turn_id, _turn_text())
@@ -451,9 +460,14 @@ def _wake_word_loop():
                             'threshold': float(WAKE_SCORE),
                         }
                         _ws_push_all(msg)
-                        
-                        # If an STT client gets created immediately, the buffer will be
-                        # sent as initial audio before any new chunks
+
+                        # Prewarm capture and transcription before React opens.
+                        # The browser adopts this active session over its STT socket.
+                        threading.Thread(
+                            target=start_recording,
+                            kwargs={'reason': 'wake_prewarm'},
+                            daemon=True,
+                        ).start()
                 else:
                     high_score_streak = 0
         except Exception as e:
@@ -662,7 +676,7 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
                 break
             short_reads = 0
             warmup += 1
-            if warmup <= WARMUP_CHUNKS:
+            if not initial_buffer and warmup <= WARMUP_CHUNKS:
                 continue
             samples = struct.unpack(f'<{len(raw)//2}h', raw)
             rms = math.sqrt(sum(s*s for s in samples) / len(samples))
@@ -698,7 +712,7 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
         _push_voice_level(0)
         log.info('[stream_audio] thread exited')
 
-def start_recording(force_restart=False, reason='manual'):
+def _start_recording_locked(force_restart=False, reason='manual'):
     global _rec_proc, _ws, _finals, _final_conf, _wake_proc, _ws_gen, _recording_started_at, _turn_index
 
     now = time.time()
@@ -757,7 +771,7 @@ def start_recording(force_restart=False, reason='manual'):
             for offset in range(0, len(initial_buffer), shadow_chunk_bytes):
                 _flux_shadow.offer_audio(initial_buffer[offset:offset + shadow_chunk_bytes])
         ws_ready.set()
-        _ws_push_stt({'type': 'ready'})
+        _ws_push_stt({'type': 'ready', 'model': PRIMARY_STT_MODEL})
 
     ws = websocket.WebSocketApp(
         DG_URL,
@@ -775,6 +789,10 @@ def start_recording(force_restart=False, reason='manual'):
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
         )
     _rec_proc = proc
+    _ws_push_stt({
+        'type': 'capturing',
+        'pre_roll_ms': round(BUFFER_SECS * 1000) if initial_buffer else 0,
+    })
 
     threading.Thread(target=ws.run_forever, daemon=True).start()
 
@@ -790,6 +808,15 @@ def start_recording(force_restart=False, reason='manual'):
     threading.Thread(target=_deferred_stream, daemon=True).start()
     log.info('[bridge] started — waiting for WS...')
     return True
+
+def start_recording(force_restart=False, reason='manual'):
+    if not _start_lock.acquire(blocking=False):
+        log.info(f'[start_recording] start already in progress (reason={reason})')
+        return False
+    try:
+        return _start_recording_locked(force_restart=force_restart, reason=reason)
+    finally:
+        _start_lock.release()
 
 def stop_recording():
     global _rec_proc, _ws, _wake_disarmed_until

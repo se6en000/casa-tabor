@@ -68,6 +68,7 @@ const REMOTE_CRITICAL_EVENTS = new Set([
   'voice_stage_ms',
   'wake_detected',
   'drawer_opened',
+  'asr_capture_ready',
   'asr_listening_ready',
   'asr_final',
   'asr_error',
