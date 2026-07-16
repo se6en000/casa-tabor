@@ -98,6 +98,17 @@ test('assistant buffers model text until output safety validation completes', ()
   assert.doesNotMatch(assistantFunction, /emitToken = \(delta: string\)/)
 })
 
+test('assistant image context is conversation-scoped and never salvages partial streams', () => {
+  assert.match(assistant, /const activeImageRef = useRef/)
+  assert.match(assistant, /image \?\? activeImageRef\.current/)
+  assert.match(assistant, /image_context: imageContext/)
+  assert.match(assistantFunction, /image_context: imageContext/)
+  assert.match(assistantFunction, /thought_tokens: usage\.thoughtTokens/)
+  assert.match(assistantFunction, /finish_reason:/)
+  assert.doesNotMatch(assistant, /salvagePartial/)
+  assert.doesNotMatch(assistant, /salvage rather than double-call/)
+})
+
 test('voice turns captured during loading are queued rather than dropped', () => {
   assert.match(drawer, /queuedVoiceTurnsRef\.current\.push/)
   assert.match(drawer, /voice_turn_queued/)

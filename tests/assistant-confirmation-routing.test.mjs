@@ -29,3 +29,10 @@ test('assistant errors never expose provider timeout codes', () => {
   )
   assert.doesNotMatch(assistantErrorMessage('llm_error', 'provider_socket_123'), /provider|socket|123/i)
 })
+
+test('assistant errors refuse incomplete recipes instead of presenting partial prose', () => {
+  assert.match(
+    assistantErrorMessage('incomplete_recipe', 'The recipe response was incomplete.'),
+    /left out the partial answer/i,
+  )
+})

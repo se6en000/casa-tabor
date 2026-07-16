@@ -10,6 +10,10 @@ import {
   parseCookingLanguage,
 } from '../supabase/functions/_shared/assistant-cooking-language.mjs'
 import {
+  isCompleteRecipeResponse,
+  missingCompleteRecipeSections,
+} from '../supabase/functions/_shared/assistant-recipe-completeness.mjs'
+import {
   cookingPolicyGuidance,
   cookingToolNames,
   formatAuthoritativeRecipes,
@@ -110,6 +114,26 @@ test('recipe generation guidance is explicitly read-only Markdown', () => {
   assert.match(guidance, /do not .*use code fences/i)
 })
 
+test('complete recipe responses require all user-visible sections', () => {
+  const complete = `# One-Pan Salmon Bake
+
+Serves: 4
+
+## Ingredients
+- 4 salmon fillets
+- 1 pound potatoes
+
+## Instructions
+1. Roast the potatoes.
+2. Add the salmon and finish baking.`
+  assert.equal(isCompleteRecipeResponse(complete), true)
+  assert.deepEqual(missingCompleteRecipeSections(complete), [])
+  assert.deepEqual(
+    missingCompleteRecipeSections('# Salmon\n\n## Ingredients\n- Salmon'),
+    ['servings', 'steps'],
+  )
+})
+
 test('cooking policy makes household allergies authoritative', () => {
   const policy = cookingPolicyGuidance(
     parseCookingLanguage('What can I use instead of buttermilk?'),
@@ -184,8 +208,12 @@ test('cooking authority outranks overlapping grocery parsing only in cooking con
   assert.match(source, /hasGroundedSemanticIntent: cookingMutationIntent/)
   assert.match(source, /intentRouting\.profile === 'recipe'\s+\? RECIPE_PRIMARY_HARD_TIMEOUT_MS/)
   assert.match(source, /'create_recipe', 'add_grocery_items'\]\.includes\(tool\.name\)/)
-  assert.match(source, /generation_config: \{\s+temperature: 0\.4,\s+max_output_tokens: 2048,/)
+  assert.match(source, /max_output_tokens: intentRouting\.profile === 'recipe' \? 4096 : 2048/)
+  assert.match(source, /thinking_config: \{ thinking_budget: 0 \}/)
   assert.match(source, /finishReason === 'MAX_TOKENS'/)
+  assert.match(source, /incomplete_stream_missing_finish_reason/)
+  assert.match(source, /server_ai_assistant_recipe_incomplete/)
+  assert.match(source, /RECIPE_REQUEST_HARD_TIMEOUT_MS = 15000/)
 
   const executeSource = fs.readFileSync(
     new URL('../supabase/functions/execute-ai-action/index.ts', import.meta.url),

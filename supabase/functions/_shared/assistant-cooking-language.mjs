@@ -278,6 +278,12 @@ export function parseCookingLanguage(text, options = {}) {
   if (ingredients) {
     return frame('cooking.from_ingredients', 0.95, { ingredients })
   }
+  if (
+    cookingContext &&
+    /\b(?:give|show|write)\s+me\s+(?:(?:a|the)\s+)?(?:full\s+)?recipe\b/.test(input)
+  ) {
+    return frame('cooking.recipe', 0.96)
+  }
   const recipe = extractAfter(input, /(?:how do i make|recipe for|walk me through)\s+(.+)$/)
   if (recipe) return frame('cooking.recipe', 0.95, { recipe })
   if (/\b(?:what should i make|dinner idea|lunch idea|breakfast idea|something quick for (?:dinner|lunch|breakfast)|what sounds good)\b/.test(input)) {
@@ -291,7 +297,7 @@ export function cookingFrameGuidance(frameValue) {
     return 'Search only the authoritative saved Recipe Library. Report matching saved recipe titles, or clearly say no saved match exists. Do not generate or suggest a new recipe.'
   }
   if (frameValue?.intent === 'cooking.recipe') {
-    return 'Return the proposed recipe as readable Markdown with ingredients and ordered steps. This is a read-only suggestion: do not call create_recipe, emit JSON or tool syntax, or use code fences. Save only after a separate explicit recipe.save request.'
+    return 'Return one complete recipe as readable Markdown. Include a Markdown title, a Servings line with a number, an Ingredients heading with a bulleted list, and an Instructions heading with every ordered step. Completeness overrides the normal concise-response rule. This is a read-only suggestion: do not call create_recipe, emit JSON or tool syntax, or use code fences. Save only after a separate explicit recipe.save request.'
   }
   if (frameValue?.intent === 'cooking.add_to_grocery') {
     return 'Use add_grocery_items exactly once with only the explicit missing or selected ingredients from the immediately preceding recipe. Preserve useful quantities and units. Do not add pantry staples unless the user selected them or the household food profile does not identify them as on hand.'

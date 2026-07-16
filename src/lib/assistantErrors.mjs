@@ -8,5 +8,8 @@ export function assistantErrorMessage(code, message) {
   ) {
     return 'Casa AI took too long to respond. Please try again.'
   }
+  if (code === 'incomplete_recipe') {
+    return 'Casa could not finish the full recipe, so it left out the partial answer. Please try again.'
+  }
   return 'Casa AI could not complete that request. Please try again.'
 }

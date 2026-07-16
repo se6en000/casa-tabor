@@ -131,6 +131,7 @@ export function useAIAssistant(ctx: AssistantContext) {
   const sessionRef = useRef(session)
   const messagesRef = useRef(messages)
   const ctxRef = useRef(ctx)
+  const activeImageRef = useRef<{ dataUrl: string; mimeType: string } | null>(null)
   useEffect(() => { sessionRef.current = session }, [session])
   useEffect(() => { messagesRef.current = messages }, [messages])
   useEffect(() => { ctxRef.current = ctx })
@@ -147,6 +148,7 @@ export function useAIAssistant(ctx: AssistantContext) {
 
   const startFresh = useCallback(() => {
     endSession()   // clear localStorage so next open is truly blank
+    activeImageRef.current = null
     setMessages([])
     startNewSession()
   }, [endSession, startNewSession])
@@ -161,6 +163,9 @@ export function useAIAssistant(ctx: AssistantContext) {
     image?: { dataUrl: string; mimeType: string },
     sendTrace?: AssistantSendTrace,
   ) => {
+    if (image) activeImageRef.current = image
+    const activeImage = image ?? activeImageRef.current ?? undefined
+    const imageContext = image ? 'current_turn' : activeImage ? 'conversation' : 'none'
     const trace = createAssistantTraceContext({
       traceId: sendTrace?.traceId,
       turnId: sendTrace?.turnId ?? genId(),
@@ -171,12 +176,14 @@ export function useAIAssistant(ctx: AssistantContext) {
     })
     emitAssistantTrace('turn_started', trace, {
       payload: {
-        has_image: Boolean(image),
+        has_image: Boolean(activeImage),
+        image_context: imageContext,
         word_count: text.trim().split(/\s+/).filter(Boolean).length,
       },
     })
     // Check for goodbye phrase → end session
     if (GOODBYE_PHRASES.test(text)) {
+      activeImageRef.current = null
       const farewell: AIMessage = { id: genId(), role: 'assistant', content: "You're welcome! Session saved. Say hi when you need me 👋" }
       setMessages(prev => {
         const updated = [...prev, { id: genId(), role: 'user' as const, content: text }, farewell]
@@ -236,8 +243,8 @@ export function useAIAssistant(ctx: AssistantContext) {
       activeSession = startNewSession()
     }
 
-    const imagePayload = image
-      ? { mimeType: image.mimeType, data: image.dataUrl.replace(/^data:[^;]+;base64,/, '') }
+    const imagePayload = activeImage
+      ? { mimeType: activeImage.mimeType, data: activeImage.dataUrl.replace(/^data:[^;]+;base64,/, '') }
       : undefined
 
     const currentMessages = [...messagesRef.current, userMsg]
@@ -246,6 +253,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       messages: allMsgsForApi,
       context: buildContext(ctxRef.current, currentMessages),
       image: imagePayload,
+      image_context: imageContext,
       session_id: activeSession.id,
       correlation_id: trace.correlationId ?? buildCorrelationId(userMsg.id, activeSession.id),
       trace_id: trace.traceId,
@@ -332,17 +340,9 @@ export function useAIAssistant(ctx: AssistantContext) {
       const timeout = setTimeout(() => controller.abort(), 35000)
       const streamMsgId = genId()
       let placeholderAdded = false
-      let sawToken = false
       let finalApplied = false
       let streamedText = ''
       let firstTokenSeen = false
-      const salvagePartial = () => {
-        setMessages(prev => {
-          const updated = prev.map(m => m.id === streamMsgId ? { ...m, content: streamedText, streaming: false } : m)
-          if (activeSession) saveMessages(activeSession.id, updated)
-          return updated
-        })
-      }
       const removePlaceholder = () => {
         if (placeholderAdded) setMessages(prev => prev.filter(m => m.id !== streamMsgId))
       }
@@ -375,7 +375,6 @@ export function useAIAssistant(ctx: AssistantContext) {
               placeholderAdded = true
               setMessages(prev => [...prev, { id: streamMsgId, role: 'assistant', content: '', streaming: true }])
             }
-            sawToken = true
             streamedText += payload.delta ?? ''
             const next = streamedText
             setMessages(prev => prev.map(m => m.id === streamMsgId ? { ...m, content: next } : m))
@@ -423,15 +422,10 @@ export function useAIAssistant(ctx: AssistantContext) {
           }
         }
         if (finalApplied) return true
-        // Stream ended without a `final` event but we have streamed text → salvage it
-        // (avoids a duplicate LLM round-trip).
-        if (sawToken && streamedText.trim()) { salvagePartial(); return true }
         removePlaceholder()
         return false
       } catch (err) {
         if (finalApplied) return true
-        // Mid-stream failure with visible partial text → salvage rather than double-call.
-        if (sawToken && streamedText.trim()) { salvagePartial(); return true }
         removePlaceholder()
         console.warn('[useAIAssistant] streaming failed, falling back', err)
         return false
@@ -503,7 +497,10 @@ export function useAIAssistant(ctx: AssistantContext) {
   }, [saveMessages])
 
   // Backward-compat reset alias
-  const reset = useCallback(() => setMessages([]), [])
+  const reset = useCallback(() => {
+    activeImageRef.current = null
+    setMessages([])
+  }, [])
 
   // Inject synthetic messages directly (no API call) — used for deterministic greetings
   const primeMessages = useCallback((msgs: AIMessage[]) => {

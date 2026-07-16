@@ -37,6 +37,7 @@ import {
   resolveGroceryClarificationSelection,
 } from '../_shared/assistant-conversation-grounding.mjs'
 import { secureAssistantResult } from '../_shared/assistant-output-safety.mjs'
+import { missingCompleteRecipeSections } from '../_shared/assistant-recipe-completeness.mjs'
 import { resolveCalendarDayRead } from '../_shared/assistant-calendar-read.mjs'
 import { resolveBringListEdit } from '../_shared/assistant-event-list-edit.mjs'
 import { resolveUniqueEventTitle } from '../_shared/assistant-event-selection.mjs'
@@ -92,6 +93,7 @@ interface ImagePayload { mimeType: string; data: string }
 type GeminiUsageMetadata = {
   promptTokenCount?: number
   candidatesTokenCount?: number
+  thoughtsTokenCount?: number
   totalTokenCount?: number
 }
 type LlmTelemetry = {
@@ -101,6 +103,7 @@ type LlmTelemetry = {
   llm_inference_ms: number
   input_tokens: number
   output_tokens: number
+  thought_tokens: number
   total_tokens: number
 }
 
@@ -127,11 +130,12 @@ function toNonNegativeInt(value: unknown): number {
  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : 0
 }
 
-function extractGeminiUsage(payload: unknown): { inputTokens: number; outputTokens: number; totalTokens: number } {
+function extractGeminiUsage(payload: unknown): { inputTokens: number; outputTokens: number; thoughtTokens: number; totalTokens: number } {
  const usage = (payload as { usageMetadata?: GeminiUsageMetadata } | null)?.usageMetadata
  return {
    inputTokens: toNonNegativeInt(usage?.promptTokenCount),
    outputTokens: toNonNegativeInt(usage?.candidatesTokenCount),
+   thoughtTokens: toNonNegativeInt(usage?.thoughtsTokenCount),
    totalTokens: toNonNegativeInt(usage?.totalTokenCount),
  }
 }
@@ -158,6 +162,7 @@ Deno.serve(async (req) => {
     dry_run: dryRunRaw,
     model_override: modelOverrideRaw,
     stream: streamRaw,
+    image_context: imageContextRaw,
   } = await req.json()
   const wantStream = streamRaw === true
   // Assigned by the SSE ReadableStream controller when streaming; no-op otherwise.
@@ -186,9 +191,10 @@ Deno.serve(async (req) => {
     ? clientTracePresentRaw
     : inferredClientTracePresent
   const requestStartMs = Date.now()
-  const REQUEST_HARD_TIMEOUT_MS = 9000
+  const NORMAL_REQUEST_HARD_TIMEOUT_MS = 9000
+  const RECIPE_REQUEST_HARD_TIMEOUT_MS = 15000
   const PRIMARY_HARD_TIMEOUT_MS = 6800
-  const RECIPE_PRIMARY_HARD_TIMEOUT_MS = 8200
+  const RECIPE_PRIMARY_HARD_TIMEOUT_MS = 14500
   const SECONDARY_HARD_TIMEOUT_MS = 5000
   const FALLBACK_HARD_TIMEOUT_MS = 2200
   const STAGE_SLO = {
@@ -201,8 +207,9 @@ Deno.serve(async (req) => {
       console.warn(`[ai-assistant][${cid}] slo_breach stage=${stage} elapsed=${elapsedMs} budget=${budgetMs}`)
     }
   }
+  let requestHardTimeoutMs = NORMAL_REQUEST_HARD_TIMEOUT_MS
   const remainingRequestBudgetMs = () =>
-    Math.max(0, REQUEST_HARD_TIMEOUT_MS - (Date.now() - requestStartMs))
+    Math.max(0, requestHardTimeoutMs - (Date.now() - requestStartMs))
   const appendServerTrace = (event: string, detail: string, payload?: Record<string, unknown>) => {
     const dedupeKey = `${cid}|${event}|${turnId ?? 'no-turn'}|${detail.slice(0, 80)}`
     sb.from('ai_drawer_debug_events').insert({
@@ -334,11 +341,19 @@ Deno.serve(async (req) => {
         ? { route: { profile: 'recipe', forceEventSearch: false }, source: 'cooking_semantic' }
         : { route: classifiedIntentRouting, source: 'lexical_fallback' }
   const intentRouting = intentRoutingDecision.route
+  requestHardTimeoutMs = intentRouting.profile === 'recipe'
+    ? RECIPE_REQUEST_HARD_TIMEOUT_MS
+    : NORMAL_REQUEST_HARD_TIMEOUT_MS
+  const imageContext = image
+    ? imageContextRaw === 'conversation' ? 'conversation' : 'current_turn'
+    : 'none'
+  const requiresCompleteRecipe = cookingFrame?.intent === 'cooking.recipe'
   const userRequestedWriteIntent = /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push|book|schedule|plan)\b/i
     .test(latestUserText ?? '') && (!authoritativeCookingContext || cookingMutationIntent)
   appendServerTrace('server_ai_assistant_start', `messages=${Array.isArray(messages) ? messages.length : 0}`, {
     message_count: Array.isArray(messages) ? messages.length : 0,
     has_image: Boolean(image),
+    image_context: imageContext,
     dry_run: dryRun,
     client_trace_present: clientTracePresent,
     client_build: clientBuild,
@@ -555,6 +570,7 @@ Deno.serve(async (req) => {
     llm_inference_ms: 0,
     input_tokens: 0,
     output_tokens: 0,
+    thought_tokens: 0,
     total_tokens: 0,
   }
   if (cookingFrame?.intent === 'recipe.find') {
@@ -1325,7 +1341,10 @@ Deno.serve(async (req) => {
     llmTelemetry.llm_inference_ms += elapsedMs
     llmTelemetry.input_tokens += usage.inputTokens
     llmTelemetry.output_tokens += usage.outputTokens
+    llmTelemetry.thought_tokens += usage.thoughtTokens
     llmTelemetry.total_tokens += usage.totalTokens
+    const finishReason = (payload as { candidates?: Array<{ finishReason?: unknown }> } | null)
+      ?.candidates?.[0]?.finishReason
     appendServerTrace('server_ai_assistant_llm_call', `${stage} ms=${elapsedMs} status=${status}`, {
       stage,
       elapsed_ms: elapsedMs,
@@ -1334,7 +1353,9 @@ Deno.serve(async (req) => {
       model: llmTelemetry.model,
       input_tokens: usage.inputTokens,
       output_tokens: usage.outputTokens,
+      thought_tokens: usage.thoughtTokens,
       total_tokens: usage.totalTokens,
+      finish_reason: typeof finishReason === 'string' ? finishReason : null,
       llm_calls: llmTelemetry.llm_calls,
     })
   }
@@ -1404,6 +1425,14 @@ Deno.serve(async (req) => {
     if (textAccum) parts.push({ text: textAccum })
     parts.push(...funcParts)
     const data = { candidates: [{ content: { parts }, finishReason }], usageMetadata }
+    if (!finishReason) {
+      return {
+        ok: false,
+        status: 502,
+        data,
+        errText: 'incomplete_stream_missing_finish_reason',
+      }
+    }
     return { ok: true, status: res.status, data, errText: '' }
     } catch (error) {
       const timedOut = controller.signal.aborted
@@ -2313,6 +2342,7 @@ ${includeEventContext ? `UPCOMING EVENTS SNAPSHOT (next ${PROMPT_EVENT_WINDOW_DA
 ${includeGroceryContext ? `\nGROCERY LIST (unchecked items):\n${groceryText}\n${defaultListId ? `Default list ID: ${defaultListId}` : ''}` : ''}
 ${includeRecipeContext ? `\nRECIPE LIBRARY SNAPSHOT (recent):\n${recipesText || 'No recipes saved yet.'}` : ''}
 ${includeFoodProfileContext && foodProfileText ? `\nFOOD PROFILE (household dietary needs & preferences — honor for all meal/grocery/recipe suggestions):\n${foodProfileText}` : ''}
+${image ? `\nIMAGE CONTEXT:\n- Casa supplied ${imageContext === 'conversation' ? 'the most recent image from this conversation' : 'an image attached to this turn'} for direct visual analysis.\n- You can analyze this image. Never claim that you cannot see, read, or interpret images.\n- If this specific image is too unclear to interpret reliably, say that the image could not be read clearly and ask for a clearer upload. Do not guess.` : ''}
 ${cookingFrame ? `\nCOOKING SEMANTIC FRAME (Casa's normalized interpretation; answer the concept, not the wording):\nIntent: ${cookingFrame.intent}\nSlots: ${JSON.stringify(cookingFrame.slots)}${cookingGuidance ? `\nRequired handling: ${cookingGuidance}` : ''}` : ''}
 ${cookingPolicy ? `\n${cookingPolicy}` : ''}
 ${includeAvailabilityContext && availabilityText ? `\nMEMBER AVAILABILITY (recurring rules + upcoming overrides — use to warn about conflicts and pick times people are free):\n${availabilityText}` : ''}
@@ -2357,7 +2387,7 @@ INSTRUCTIONS:
 - SAVED PLACES: when a place name matches, use its address directly — never ask for the address.
 - Conflict awareness: warn if a new event overlaps an existing one by >15 min.
 - Prefer edit over create: if a similar event exists at the same time, update it instead of creating a duplicate.
-- Tone: warm, concise (1–3 sentences). Be proactive — flag conflicts, drive-time buffers, busy days.
+- Tone: warm and proactive. Except when a semantic requirement explicitly calls for complete long-form output, stay concise (1–3 sentences).
 - AVAILABILITY AWARENESS: when scheduling or moving events, prefer times when the involved members are available per MEMBER AVAILABILITY, and warn (briefly) if a proposed time lands in someone's unavailable window or an upcoming day-off/block.
 - FOOD PROFILE AWARENESS: for any meal, recipe, or grocery suggestion, respect FOOD PROFILE — never suggest allergens, avoid disliked foods, honor dietary rules, and lean on preferred cuisines/proteins and pantry staples. Do not over-explain; just make good suggestions that fit.
 - For timeless facts and general knowledge (e.g., ages/biographies/math/history), answer directly from model knowledge and simple reasoning. Do not refuse just because live web access is unavailable.
@@ -2903,7 +2933,10 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       contents,
       generation_config: {
         temperature: 0.4,
-        max_output_tokens: 2048,
+        max_output_tokens: intentRouting.profile === 'recipe' ? 4096 : 2048,
+        ...(intentRouting.profile === 'recipe'
+          ? { thinking_config: { thinking_budget: 0 } }
+          : {}),
       },
       ...(primaryTools.length > 0 ? {
         tools: primaryTools,
@@ -2921,6 +2954,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         secondary_tool_count: secondaryToolDeclarations.length,
         system_instruction_chars: systemInstruction.length,
         history_turns: contents.length,
+        image_context: imageContext,
+        requires_complete_recipe: requiresCompleteRecipe,
+        request_budget_ms: requestHardTimeoutMs,
       },
     )
 
@@ -2947,7 +2983,12 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       .find((part) => part.length > 0)
 
     const runCompactFallback = async (reason: 'empty_response' | 'primary_timeout') => {
-      if (!latestUserTextForFallback || userLikelyRequestedWrite || remainingRequestBudgetMs() < 500) {
+      if (
+        intentRouting.profile === 'recipe' ||
+        !latestUserTextForFallback ||
+        userLikelyRequestedWrite ||
+        remainingRequestBudgetMs() < 500
+      ) {
         return null
       }
       const fallbackBody = {
@@ -3495,7 +3536,24 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
       const initialParts = candidate.content?.parts ?? []
       const initialResolved = await resolveModelParts(initialParts)
-      if (initialResolved) return initialResolved
+      if (initialResolved) {
+        if (requiresCompleteRecipe && initialResolved.type === 'text') {
+          const missingSections = missingCompleteRecipeSections(initialResolved.text)
+          if (missingSections.length > 0) {
+            appendServerTrace('server_ai_assistant_recipe_incomplete', `missing=${missingSections.join(',')}`, {
+              missing_sections: missingSections,
+              finish_reason: finishReason ?? null,
+              output_tokens: extractGeminiUsage(data).outputTokens,
+            })
+            return {
+              type: 'error',
+              code: 'incomplete_recipe',
+              message: 'The recipe response was incomplete. Please try again.',
+            }
+          }
+        }
+        return initialResolved
+      }
 
       // Rare provider edge case: use one compact, bounded fallback. Do not retry
       // the full tool prompt first; that compounds tail latency without new context.
@@ -3513,7 +3571,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       }
     }
     warnIfSlow('llm_primary', llmPrimaryMs, STAGE_SLO.llmPrimaryMs)
-    recordLlmCall('llm_primary', llmPrimaryMs, res.status)
+    recordLlmCall('llm_primary', llmPrimaryMs, res.status, res.data)
     if (!res.ok) {
       const errText = res.errText
       const isQuota = res.status === 429 || errText.includes('RESOURCE_EXHAUSTED')
@@ -4021,7 +4079,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         llm_inference_ms: llmTelemetry.llm_inference_ms,
         input_tokens: llmTelemetry.input_tokens,
         output_tokens: llmTelemetry.output_tokens,
+        thought_tokens: llmTelemetry.thought_tokens,
         total_tokens: llmTelemetry.total_tokens,
+        image_context: imageContext,
         response_text: typeof (result as { text?: unknown })?.text === 'string'
           ? String((result as { text?: string }).text).slice(0, 1200)
           : null,
