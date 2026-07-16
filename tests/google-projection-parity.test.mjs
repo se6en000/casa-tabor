@@ -52,6 +52,10 @@ test('automatically resolved unconfirmed addresses stay out of every Google proj
 test('updates preserve Google-owned description text before replacing Casa details', () => {
   assert.match(pushGoogle, /getGoogleEvent/)
   assert.match(pushGoogle, /existingDescription: current\.description/)
+  assert.equal(
+    (pushGoogle.match(/current\.eventType && current\.eventType !== 'default'/g) ?? []).length,
+    2,
+  )
   assert.match(updateRecurring, /getGoogleEvent/)
   assert.match(updateRecurring, /existingDescription: current\.description/)
 })

@@ -126,6 +126,14 @@ Deno.serve(async (req) => {
       calendarId,
       eventId: event.google_event_id,
     })
+    if (current.eventType && current.eventType !== 'default') {
+      return new Response(JSON.stringify({
+        ok: true,
+        skipped: 'immutable_google_event',
+        google_event_type: current.eventType,
+        verified_summary: current.summary,
+      }), { headers: { ...CORS, 'content-type': 'application/json' } })
+    }
     const patch = {
       ...projectionFields,
       description: buildGoogleEventDescription({
