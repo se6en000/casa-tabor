@@ -38,6 +38,13 @@
     ],
     "inlineStyleBlocks": [
       {
+        "path": "src/components/ui/PersonAvatarStack.tsx",
+        "reason": "Avatar colors are runtime family-member values supplied by calendar data.",
+        "snippets": [
+          "style={{ backgroundColor: person.color"
+        ]
+      },
+      {
         "path": "src/pages/HomePage.tsx",
         "reason": "Pull distance, Framer Motion position, and family-member colors are runtime-derived.",
         "snippets": [

@@ -25,6 +25,7 @@ import {
   PageFeedback,
   PageHeader,
   PageShell,
+  PersonAvatarStack,
   Progress,
   Radio,
   Select,
@@ -314,7 +315,7 @@ export default function DesignSystemGalleryPage() {
           <div>
             <Text role="caption" muted className="font-bold uppercase tracking-widest">Pills / Chips</Text>
             <Text role="body-sm" muted className="mt-1">
-              Chip covers touch-sized badges and actions. CalendarPill is the compact, read-only exception for dense schedules.
+              Chip covers touch-sized badges and actions. CalendarPill and PersonAvatarStack are compact, read-only exceptions for dense schedules.
             </Text>
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -338,6 +339,15 @@ export default function DesignSystemGalleryPage() {
                 <div className="mt-2 flex gap-2">
                   <CalendarPill color="var(--color-casa-navy)">Jake</CalendarPill>
                   <CalendarPill>+2</CalendarPill>
+                  <PersonAvatarStack
+                    people={[
+                      { id: 'giselle', name: 'Giselle', color: 'var(--color-person-giselle)' },
+                      { id: 'jake', name: 'Jake', color: 'var(--color-casa-navy)' },
+                      { id: 'kelly', name: 'Kelly', color: 'var(--color-casa-gold)' },
+                    ]}
+                    max={2}
+                    size="sm"
+                  />
                 </div>
               </div>
             </Card>

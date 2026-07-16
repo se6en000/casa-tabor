@@ -1,5 +1,5 @@
-export const DESIGN_SYSTEM_VERSION = '1.5.0'
-export const DESIGN_SYSTEM_RELEASE_DATE = '2026-07-12'
+export const DESIGN_SYSTEM_VERSION = '1.6.0'
+export const DESIGN_SYSTEM_RELEASE_DATE = '2026-07-16'
 export const DESIGN_SYSTEM_SCHEMA_VERSION = 1
 
 const component = ({
@@ -86,6 +86,18 @@ export const COMPONENT_MANIFEST = [
     accessibility: 'Include readable text and do not rely on color alone.',
     responsive: 'Keeps the established dense calendar scale across densities.',
     example: '<CalendarPill icon={<Clock />}>3:30 PM</CalendarPill>',
+  }),
+  component({
+    name: 'PersonAvatarStack',
+    category: 'data-display',
+    purpose: 'Shows one or more responsible people in a compact, read-only overlapping avatar group.',
+    useWhen: 'Use when a card must identify multiple people without expanding its height.',
+    avoid: 'Do not use as a person picker or rely on initials/colors without an accessible group label.',
+    variants: ['sm', 'md', 'lg'],
+    states: ['assigned', 'unassigned', 'overflow'],
+    accessibility: 'The group exposes every visible responsibility name as one readable image label; decorative initials are hidden.',
+    responsive: 'Overlap and avatar dimensions remain stable across touch and fine-pointer densities.',
+    example: '<PersonAvatarStack people={drivers} max={2} />',
   }),
   component({
     name: 'SegmentedControl',
@@ -498,6 +510,13 @@ export const COMPONENT_MANIFEST = [
 ]
 
 export const DESIGN_SYSTEM_CHANGELOG = [
+  {
+    version: '1.6.0',
+    date: '2026-07-16',
+    changes: [
+      'Added PersonAvatarStack for accessible compact multi-person responsibility displays.',
+    ],
+  },
   {
     version: '1.5.0',
     date: '2026-07-12',

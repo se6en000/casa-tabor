@@ -27,12 +27,13 @@ import {
   resolveEventMode,
 } from '../lib/eventPlanOverrides'
 import { derivePlan, type DerivedPerson } from '../lib/eventCommandCenter'
+import { projectHomeTransportation } from '../lib/homeTransportationProjection.mjs'
 import type { FamilyMember } from '../types'
 import { getEventEndDate, getEventStartDate } from '../utils/eventTime'
 import { formatDurationLabel, pickActiveHeroEvent, resolveRestingIndex } from '../lib/heroFocus.mjs'
 import { cleanEventTitle, isBirthdayEvent } from '../utils/eventTitle'
 import { buttonClassName } from '../design-system/variants.mjs'
-import { Button, CalendarPill, Card, Chip, EmptyState, Heading, IconButton, PrimaryRail, Sheet, Text } from '../components/ui'
+import { Button, CalendarPill, Card, Chip, EmptyState, Heading, IconButton, PersonAvatarStack, PrimaryRail, Sheet, Text } from '../components/ui'
 
 const SHARED_GOLD = 'var(--color-casa-gold)'
 
@@ -65,9 +66,54 @@ function fallbackResponsiblePerson(event: EventWithDetails): DerivedPerson | nul
   }
 }
 
-function deriveHomeCardResponsibility(event: EventWithDetails, mode: ReturnType<typeof resolveEventMode>, household: FamilyMember[]) {
-  const plan = derivePlan(event, mode, { household })
+function projectedDriverPerson(
+  driver: { id: string; name: string } | null | undefined,
+  household: FamilyMember[],
+): DerivedPerson | null {
+  if (!driver) return null
+  const member = household.find((candidate) => candidate.id === driver.id)
+    ?? household.find((candidate) => candidate.name.toLowerCase() === driver.name.toLowerCase())
+  return member
+    ? toDerivedPersonFromMember(member)
+    : {
+        id: driver.id,
+        name: driver.name,
+        initial: driver.name[0]?.toUpperCase() ?? '?',
+        color: 'var(--color-casa-navy)',
+      }
+}
+
+function deriveHomeCardResponsibility(
+  event: EventWithDetails,
+  mode: ReturnType<typeof resolveEventMode>,
+  household: FamilyMember[],
+  now: Date,
+) {
   const persisted = getPersistedPlanOverrides(event)
+  const explicit = projectHomeTransportation(event, persisted.transportationPlan, now)
+  if (explicit) {
+    const drivers = explicit.drivers
+      .map((driver) => projectedDriverPerson(driver, household))
+      .filter((driver): driver is DerivedPerson => driver !== null)
+    const responsible = projectedDriverPerson(explicit.nextDriver, household) ?? drivers[0] ?? null
+    const driverIds = new Set(drivers.map((driver) => driver.id))
+    const driverNames = new Set(drivers.map((driver) => driver.name.toLowerCase()))
+    const attendees = event.members.filter((member) => (
+      !driverIds.has(member.family_member.id) &&
+      !driverNames.has(member.family_member.name.toLowerCase())
+    ))
+    return {
+      responsible,
+      drivers,
+      attendees: attendees.length > 0 ? attendees : event.members,
+      summary: explicit.summary,
+      roleBadge: 'drive' as const,
+      nextLeg: explicit.nextLeg,
+      hasSavedTransportation: true,
+    }
+  }
+
+  const plan = derivePlan(event, mode, { household })
   const effectiveLegs = applyPersistedDriverOverrides(event, plan.legs, household, persisted.driverOverrides ?? {}, persisted.waits ?? null)
   const transportLeg = effectiveLegs.find((leg) => leg.kind === 'drop' || leg.kind === 'depart' || leg.kind === 'pickup' || leg.kind === 'return')
   const firstDriverLeg = transportLeg ?? effectiveLegs.find((leg) => leg.driver)
@@ -94,9 +140,12 @@ function deriveHomeCardResponsibility(event: EventWithDetails, mode: ReturnType<
             : `${name} drives`
   return {
     responsible,
+    drivers: responsible ? [responsible] : [],
     attendees,
     summary,
     roleBadge: mode === 'hosted' ? 'supervise' as const : 'drive' as const,
+    nextLeg: null,
+    hasSavedTransportation: false,
   }
 }
 
@@ -1137,11 +1186,16 @@ function TimelineRow({
   }, [event.id])
 
   const responsibility = useMemo(
-    () => deriveHomeCardResponsibility(event, mode, household),
+    () => deriveHomeCardResponsibility(event, mode, household, now),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [event, household, mode, overrideVersion],
+    [event, household, mode, now, overrideVersion],
   )
-  const showLiveLeaveBy = !event.all_day && !happening && !isHosted && Boolean(event.address || event.location_name)
+  const nextSavedLeg = responsibility.nextLeg
+  const showLiveLeaveBy = !event.all_day && !isHosted && (
+    responsibility.hasSavedTransportation
+      ? Boolean(nextSavedLeg?.destination && nextSavedLeg.timingIso)
+      : !happening && Boolean(event.address || event.location_name)
+  )
   const showFallbackLeaveBy = !event.all_day && !happening && !isHosted && !(event.address || event.location_name) && Boolean(event.enrichment?.departure_time)
   const fallbackDepartureAt = event.enrichment?.departure_time ? new Date(event.enrichment.departure_time) : null
 
@@ -1266,16 +1320,19 @@ function TimelineRow({
         />
         <div className="relative z-10 flex items-start gap-3">
           <div className="relative shrink-0 pl-1 pt-0.5">
-            <span
+            <PersonAvatarStack
+              people={responsibility.drivers.map((driver) => ({
+                id: driver.id,
+                name: driver.name,
+                color: driver.color,
+              }))}
+              max={2}
+              size="lg"
+              emptyLabel={responsibility.summary}
               className={cn(
-                'w-12 h-12 rounded-full text-white flex items-center justify-center text-body-sm font-bold shadow-card',
-                responsibility.responsible?.role === 'caregiver' && 'ring-2 ring-casa-gold/55 ring-offset-2 ring-offset-casa-surface',
+                responsibility.responsible?.role === 'caregiver' && 'rounded-full ring-2 ring-casa-gold/55 ring-offset-2 ring-offset-casa-surface',
               )}
-              style={{ backgroundColor: responsibility.responsible?.color ?? 'var(--color-casa-gold)' }}
-              aria-label={responsibility.responsible ? `${responsibility.responsible.name} is responsible` : 'Responsible adult'}
-            >
-              {responsibility.responsible?.initial ?? '?'}
-            </span>
+            />
             <span
               className={cn(
                 'absolute right-[-2px] bottom-[-2px] w-5 h-5 rounded-full border-2 border-casa-surface flex items-center justify-center',
@@ -1348,8 +1405,12 @@ function TimelineRow({
                 <>
                   <span className="text-casa-text-faint text-caption">·</span>
                   <LeaveByCard
-                    destination={event.address ?? event.location_name}
-                    eventStartIso={event.start_time}
+                    origin={nextSavedLeg?.origin}
+                    destination={nextSavedLeg?.destination ?? event.address ?? event.location_name}
+                    eventStartIso={nextSavedLeg
+                      ? nextSavedLeg.leg.timing === 'arrive_by' ? nextSavedLeg.timingIso : null
+                      : event.start_time}
+                    departureTimeIso={nextSavedLeg?.leg.timing === 'depart_at' ? nextSavedLeg.timingIso : null}
                     compact
                     className="!text-casa-gold"
                   />

@@ -4,27 +4,34 @@ import { useTravelEta, type TravelEtaResult } from '../../hooks/useTravelEta'
 import { cn } from '../../utils/cn'
 
 export function LeaveByCard({
+  origin,
   destination,
   eventStartIso,
+  departureTimeIso,
   className,
   compact = false,
   travelEta,
   travelEtaLoading,
   travelEtaError,
 }: {
+  origin?: string | null
   destination: string | null
-  eventStartIso: string | null
+  eventStartIso?: string | null
+  departureTimeIso?: string | null
   className?: string
   compact?: boolean
   travelEta?: TravelEtaResult | null
   travelEtaLoading?: boolean
   travelEtaError?: boolean
 }) {
-  const start = eventStartIso ? new Date(eventStartIso) : null
-  const shouldRun = Boolean(destination && start && isAfter(start, new Date()))
+  const targetValue = departureTimeIso ?? eventStartIso
+  const target = targetValue ? new Date(targetValue) : null
+  const shouldRun = Boolean(destination && target && isAfter(target, new Date()))
   const query = useTravelEta({
+    origin,
     destination,
     eventStartIso,
+    departureTimeIso,
     enabled: shouldRun && !travelEta,
     bufferMins: 10,
   })
@@ -41,7 +48,8 @@ export function LeaveByCard({
       </div>
     )
   }
-  if (isError || !data?.found || !data.leave_by) {
+  const leaveByValue = data?.leave_by ?? data?.departure_time
+  if (isError || !data?.found || !leaveByValue) {
     return (
       <div className={cn('inline-flex items-center gap-1.5 text-caption text-casa-muted', className)}>
         <AlertTriangle size={12} />
@@ -50,7 +58,7 @@ export function LeaveByCard({
     )
   }
 
-  const leaveBy = new Date(data.leave_by)
+  const leaveBy = new Date(leaveByValue)
   const minsUntilLeave = differenceInMinutes(leaveBy, new Date())
   const urgency =
     minsUntilLeave <= 0 ? 'text-red-600' :
