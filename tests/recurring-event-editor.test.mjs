@@ -116,7 +116,7 @@ test('canonical editor loads inheritance, retains errors, and avoids legacy auto
   assert.match(editor, /saveRecurringEditorMutation/)
   assert.match(editor, /await qc\.refetchQueries/)
   assert.match(editor, /if \(isCanonicalOccurrence && recurringEditorEnabled\)[\s\S]*doCanonicalSave/)
-  assert.match(editor, /if \(isInstance\) return\s+\/\/ recurring: use manual Save/)
+  assert.doesNotMatch(editor, /autoSave/)
   assert.match(editor, /error=\{saveError\}/)
 })
 

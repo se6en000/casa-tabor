@@ -301,13 +301,6 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
   // Clean up mic on unmount
   useEffect(() => () => { if (micPollRef.current) clearInterval(micPollRef.current) }, [])
 
-  // Autosave state
-  const [_autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'scheduled' | 'saving' | 'saved'>('idle')
-  const isDirtyRef = useRef(false)
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const autoSaveInFlightRef = useRef<Promise<void> | null>(null)
-  const runAutoSaveRef = useRef<() => Promise<void>>(async () => {})
-
   // All-day toggle
   const [isAllDay, setIsAllDay] = useState(event.all_day ?? false)
 
@@ -399,9 +392,6 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
   // Reset everything when sheet opens or when masterData loads for instances
   useEffect(() => {
     if (!open) return
-    isDirtyRef.current = false
-    setAutoSaveStatus('idle')
-    if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null }
     const activeEnr = isInstance ? (masterData?.enrichment ?? enr) : enr
     const cat = activeEnr?.category ?? 'other'
     setCategory(cat)
@@ -445,7 +435,6 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
     setCategoryLocked(true) // user manually picked — lock it
     const newFields = getFieldsForCategory(cat)
     setForm(prev => buildForm({ ...effectiveEnr, ...objectFromForm(prev, fields), category: cat } as typeof enr, newFields))
-    markDirty()
   }
 
   function objectFromForm(f: Record<string, string>, flds: EnrichmentFieldKey[]) {
@@ -458,58 +447,11 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
     return out
   }
 
-  const set = (field: string, value: string) => { setForm(f => ({ ...f, [field]: value })); markDirty() }
-
-  // Autosave: schedule a debounced save 1.5s after last change (non-recurring only)
-  const markDirty = () => {
-    isDirtyRef.current = true
-    if (isInstance) return  // recurring: use manual Save for scope control
-    setAutoSaveStatus('scheduled')
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
-    autoSaveTimerRef.current = setTimeout(() => void runAutoSaveRef.current(), 1500)
-  }
-
-  const runAutoSave = async () => {
-    if (autoSaveInFlightRef.current) {
-      await autoSaveInFlightRef.current
-      if (isDirtyRef.current) await runAutoSaveRef.current()
-      return
-    }
-    isDirtyRef.current = false
-    if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null }
-    setAutoSaveStatus('saving')
-    setIsSaving(true)
-    setSaveStatus('saving')
-    const slowTimer = setTimeout(() => setSaveStatus('slow'), 5000)
-    const savePromise = doSaveInner('all', true)
-    autoSaveInFlightRef.current = savePromise
-    try {
-      await savePromise
-      setAutoSaveStatus('saved')
-      setTimeout(() => setAutoSaveStatus('idle'), 2000)
-    } catch (err) {
-      console.error('[autosave] failed:', err)
-      setAutoSaveStatus('idle')
-    } finally {
-      clearTimeout(slowTimer)
-      if (autoSaveInFlightRef.current === savePromise) autoSaveInFlightRef.current = null
-      setIsSaving(false)
-      setSaveStatus('saving')
-    }
-  }
-  runAutoSaveRef.current = runAutoSave
+  const markDirty = () => {}
+  const set = (field: string, value: string) => { setForm(f => ({ ...f, [field]: value })) }
 
   const handleClose = () => {
-    if (!isInstance && (isSaving || isDirtyRef.current)) {
-      if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null }
-      const flushLatestSave = async () => {
-        if (autoSaveInFlightRef.current) await autoSaveInFlightRef.current
-        if (isDirtyRef.current) await runAutoSaveRef.current()
-      }
-      void flushLatestSave().finally(() => onClose())
-    } else {
-      onClose()
-    }
+    onClose()
   }
 
   const handleReenrich = async () => {
@@ -632,7 +574,7 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
     const slowTimer = setTimeout(() => setSaveStatus('slow'), 5000)
 
     try {
-      await Promise.race([doSaveInner(scope, false, preserveExceptions), saveTimeout])
+      await Promise.race([doSaveInner(scope, preserveExceptions), saveTimeout])
       return true
     } catch (err) {
       console.error('[EventEditSheet] doSave error:', err)
@@ -791,17 +733,12 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
     onClose()
   }
 
-  const doSaveInner = async (
-    scope: RecurScope,
-    autoSave = false,
-    preserveExceptions = true,
-  ) => {
+  const doSaveInner = async (scope: RecurScope, preserveExceptions = true) => {
     // Use pendingTitleRef when available (set in handleSave to flush DOM composition state)
     const titleToSave = pendingTitleRef.current ?? displayTitle
     pendingTitleRef.current = null
 
     if (isCanonicalOccurrence && recurringEditorEnabled) {
-      if (autoSave) return
       await doCanonicalSave(scope, titleToSave, preserveExceptions)
       return
     }
@@ -1063,7 +1000,7 @@ export default function EventEditSheet({ event, open, onClose, initialDelete = f
     }
     // analyze-conflicts + analyze-prep removed from save — they run on the scheduled HomePage cadence (5x/day)
 
-    if (!autoSave) onClose()
+    onClose()
   }
 
   const requestDelete = useCallback(() => {
