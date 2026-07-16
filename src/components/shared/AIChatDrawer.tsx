@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { useAIAssistant, type AIMessage } from '../../hooks/useAIAssistant'
@@ -74,6 +74,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
   const idleAutoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hadUserInteractionRef = useRef(false)
   const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; mimeType: string } | null>(null)
+  const [mobileAddOpen, setMobileAddOpen] = useState(false)
   const [nudgeDismissed, setNudgeDismissed] = useState(false)
   const [conversationMode, setConversationMode] = useState<boolean>(() => {
     // Conversational by default: opening the assistant starts listening and
@@ -497,11 +498,9 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
         }
       }, NO_ACTIVITY_AUTO_CLOSE_MS)
       if (IS_SAFE_MODE) return
-      // Auto-start mic when opened by wake word, or when hands-free conversation
-      // mode is enabled (the default) — otherwise the user taps the mic button
-      // (press-to-talk). Skip auto-start for text-first opens that pre-fill a
-      // prompt for the user to review, so the mic doesn't fight the typed text.
-      if ((launchContext?.source === 'wake_word' || conversationModeRef.current) && !launchContext?.prompt) {
+      // Launch intent controls the initial mode: wake word is voice-first;
+      // manual opens remain text-first even when conversation mode is enabled.
+      if (launchContext?.source === 'wake_word' && !launchContext?.prompt) {
         speech.start()
       }
       // Focus textarea slightly after animation settles (UI only, doesn't affect mic)
@@ -517,6 +516,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
       pendingLowConfidenceRef.current = null
       latestVoiceConfidenceRef.current = null
       setAttachedImage(null)
+      setMobileAddOpen(false)
       freshStartedRef.current = null  // allow fresh start next time this event is opened
       firedChefGreetRef.current = null
     }
@@ -718,6 +718,19 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     }))
   }, [markUserInteraction])
 
+  const handleTypeInstead = useCallback(() => {
+    markUserInteraction()
+    void speech.stop()
+    setTimeout(() => {
+      textareaRef.current?.focus()
+      if (document.documentElement.dataset.density === 'kiosk') {
+        document.dispatchEvent(new CustomEvent('touch-keyboard:control', {
+          detail: { target: textareaRef.current, open: true },
+        }))
+      }
+    }, 80)
+  }, [markUserInteraction, speech.stop])
+
   // Conversation mode: hands-free loop that keeps the mic armed between turns.
   // Enabling it immediately starts listening; disabling stops the mic.
   const handleConversationToggle = useCallback(() => {
@@ -737,6 +750,8 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
   const voiceLevel = Math.max(0, Math.min(1, speech.volume / 100))
   const isVoiceActive = speech.listening && voiceLevel > 0.12
   const hasTypedInput = input.trim().length > 0 && !loading && !speech.listening
+  const voiceComposerActive = speech.listening || speech.connecting || speech.phase === 'processing'
+  const voiceDisplayPhase = loading ? 'processing' : speech.phase
   const aiPresence: 'off' | 'idle' | 'listening' | 'voice_active' | 'processing' | 'typing' =
     !open
       ? 'off'
@@ -1094,18 +1109,10 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                 )}
               </AnimatePresence>
 
-              <LiveTranscript
-                committed={voiceTranscript.committed}
-                interim={voiceTranscript.interim}
-                active={speech.listening || speech.connecting || speech.phase === 'processing'}
-                phase={speech.phase}
-                volume={speech.volume}
-                className="mb-2"
-              />
-
               <div
                 className={cn(
-                  'ai-presence-composer relative overflow-hidden flex items-end gap-2 bg-casa-bg rounded-xl border border-casa-border px-3 py-2 transition-all duration-300',
+                  'ai-presence-composer relative overflow-hidden bg-casa-bg rounded-xl border border-casa-border transition-all duration-300',
+                  voiceComposerActive ? 'p-4' : 'px-3 py-2',
                   aiPresence === 'listening' && 'ai-presence-listening',
                   aiPresence === 'voice_active' && 'ai-presence-voice',
                   aiPresence === 'processing' && 'ai-presence-processing',
@@ -1117,106 +1124,149 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
                 <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
 
-                <Button variant="ghost"
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Attach image from library"
-                  className="size-control rounded-button text-casa-muted hover:text-casa-gold outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold"
-                  aria-label="Attach image from library"
-                >
-                  <Paperclip size={16} />
-                </Button>
-
-                <Button variant="ghost"
-                  type="button"
-                  onClick={() => cameraInputRef.current?.click()}
-                  title="Take a photo"
-                  className="size-control rounded-button text-casa-muted hover:text-casa-gold outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold"
-                  aria-label="Take a photo"
-                >
-                  <Camera size={16} />
-                </Button>
-
-                <div className="relative min-w-0 flex-1">
-                  <textarea
-                    ref={textareaRef}
-                    value={input}
-                    onChange={e => handleInputChange(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder={speech.listening ? 'Listening… speak now' : attachedImage ? 'Ask about this image…' : "Ask anything or say 'add an event…'"}
-                    rows={1}
-                    aria-label="Assistant message"
-                    className={cn(
-                      'w-full min-h-6 max-h-30 bg-transparent text-body text-casa-navy placeholder:text-casa-muted outline-none resize-none leading-relaxed',
-                      speech.listening && input.trim() && 'text-transparent caret-transparent',
-                    )}
-                  />
-                </div>
-
-                {speech.supported && (
-                  <Button variant="ghost"
-                    type="button"
-                    onClick={() => { markUserInteraction(); speech.toggle() }}
-                    title={speech.listening ? 'Stop listening' : speech.connecting ? 'Connecting…' : 'Start voice input'}
-                    className={cn(
-                      'size-control rounded-button flex items-center justify-center outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold',
-                      speech.listening
-                        ? 'bg-casa-navy text-casa-gold animate-pulse'
-                        : speech.connecting
-                          ? 'bg-casa-navy/60 text-casa-gold/60'
-                          : 'bg-casa-divider text-casa-muted hover:text-casa-gold'
-                    )}
-                    aria-label={speech.listening ? 'Stop listening' : speech.connecting ? 'Connecting' : 'Start voice input'}
-                  >
-                    {speech.connecting
-                      ? <Loader2 size={14} className="animate-spin" />
-                      : <Mic size={14} />}
-                  </Button>
+                {voiceComposerActive ? (
+                  <div className="w-full">
+                    <LiveTranscript
+                      committed={voiceTranscript.committed}
+                      interim={voiceTranscript.interim}
+                      phase={voiceDisplayPhase}
+                      volume={speech.volume}
+                      className="rounded-none border-0 bg-transparent p-0 shadow-none"
+                    />
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <Button
+                        variant="subtle"
+                        type="button"
+                        onClick={handleTypeInstead}
+                        className="min-h-control gap-2"
+                      >
+                        <Keyboard size={16} />
+                        Type instead
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        type="button"
+                        onClick={() => { markUserInteraction(); speech.finish() }}
+                        className="min-h-control gap-2"
+                      >
+                        <Square size={14} />
+                        Stop
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full">
+                    <AnimatePresence initial={false}>
+                      {mobileAddOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 4 }}
+                          className="mb-2 flex gap-2 sm:hidden"
+                        >
+                          <Button variant="subtle" type="button" onClick={() => fileInputRef.current?.click()} className="min-h-control flex-1 gap-2">
+                            <Paperclip size={16} /> Attach
+                          </Button>
+                          <Button variant="subtle" type="button" onClick={() => cameraInputRef.current?.click()} className="min-h-control flex-1 gap-2">
+                            <Camera size={16} /> Camera
+                          </Button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                    <div className="flex items-end gap-2">
+                      <Button variant="ghost"
+                        type="button"
+                        onClick={() => setMobileAddOpen(value => !value)}
+                        title="Add attachment"
+                        className="size-control rounded-button text-casa-muted outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold sm:hidden"
+                        aria-label="Add attachment"
+                        aria-expanded={mobileAddOpen}
+                      >
+                        <Plus size={16} />
+                      </Button>
+                      <Button variant="ghost"
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        title="Attach image from library"
+                        className="hidden size-control rounded-button text-casa-muted hover:text-casa-gold outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold sm:flex"
+                        aria-label="Attach image from library"
+                      >
+                        <Paperclip size={16} />
+                      </Button>
+                      <Button variant="ghost"
+                        type="button"
+                        onClick={() => cameraInputRef.current?.click()}
+                        title="Take a photo"
+                        className="hidden size-control rounded-button text-casa-muted hover:text-casa-gold outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold sm:flex"
+                        aria-label="Take a photo"
+                      >
+                        <Camera size={16} />
+                      </Button>
+                      <div className="relative min-w-0 flex-1">
+                        <textarea
+                          ref={textareaRef}
+                          value={input}
+                          onChange={e => handleInputChange(e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          placeholder={attachedImage ? 'Ask about this image…' : 'Ask Casa anything…'}
+                          rows={1}
+                          aria-label="Assistant message"
+                          className="w-full min-h-6 max-h-30 bg-transparent text-body text-casa-navy placeholder:text-casa-muted outline-none resize-none leading-relaxed"
+                        />
+                      </div>
+                      {speech.supported && (
+                        <Button variant="ghost"
+                          type="button"
+                          onClick={() => { markUserInteraction(); speech.start() }}
+                          title="Start voice input"
+                          className="min-h-control min-w-control rounded-button flex items-center justify-center gap-2 px-3 outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold bg-casa-divider text-casa-muted hover:text-casa-gold"
+                          aria-label="Start voice input"
+                        >
+                          <Mic size={14} />
+                          <span className="hidden md:inline">Speak</span>
+                        </Button>
+                      )}
+                      <Button variant="ghost"
+                        type="button"
+                        onClick={handleKeyboardToggle}
+                        title="Toggle on-screen keyboard"
+                        className="ai-composer-kiosk-only size-control rounded-button items-center justify-center outline-none transition-all shrink-0 bg-casa-divider text-casa-muted hover:text-casa-gold focus-visible:ring-2 focus-visible:ring-casa-gold"
+                        aria-label="Toggle on-screen keyboard"
+                      >
+                        <Keyboard size={14} />
+                      </Button>
+                      <Button variant="ghost"
+                        type="button"
+                        onClick={handleSend}
+                        disabled={(!input.trim() && !attachedImage) || loading}
+                        className={cn(
+                          'size-control rounded-button flex items-center justify-center outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold',
+                          (input.trim() || attachedImage) && !loading
+                            ? 'bg-casa-gold text-white hover:brightness-110'
+                            : 'bg-casa-divider text-casa-muted'
+                        )}
+                        aria-label="Send message"
+                      >
+                        <Send size={14} />
+                      </Button>
+                    </div>
+                  </div>
                 )}
-
-                <Button variant="ghost"
-                  type="button"
-                  onClick={handleKeyboardToggle}
-                  title="Toggle on-screen keyboard"
-                  className="size-control rounded-button flex items-center justify-center outline-none transition-all shrink-0 bg-casa-divider text-casa-muted hover:text-casa-gold focus-visible:ring-2 focus-visible:ring-casa-gold"
-                  aria-label="Toggle on-screen keyboard"
-                >
-                  <Keyboard size={14} />
-                </Button>
-
-                <Button variant="ghost"
-                  type="button"
-                  onClick={handleSend}
-                  disabled={(!input.trim() && !attachedImage) || loading}
-                  className={cn(
-                    'size-control rounded-button flex items-center justify-center outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold',
-                    (input.trim() || attachedImage) && !loading
-                      ? 'bg-casa-gold text-white hover:brightness-110'
-                      : 'bg-casa-divider text-casa-muted'
-                  )}
-                  aria-label="Send message"
-                >
-                  <Send size={14} />
-                </Button>
               </div>
               <p className="text-caption text-casa-muted mt-1.5 text-center opacity-60">
                 {IS_SAFE_MODE
                   ? 'Safe mode enabled: voice capture is disabled'
                   : speech.bridgeDown
                     ? 'Voice bridge offline — text input still works'
+                    : voiceComposerActive
+                      ? loading
+                        ? 'Sending automatically — Casa will listen again after replying'
+                        : 'Pause to send · say "goodbye" to close'
                     : speech.supported
-                  ? speech.connecting
-                    ? 'Connecting to mic…'
-                    : speech.listening
-                      ? conversationMode
-                        ? 'Conversation mode — listening · pause to send · say "goodbye" to close'
-                        : 'Listening — pause to send · say "goodbye" to close'
-                      : hasTypedInput
+                      ? hasTypedInput
                         ? 'Typing mode active — voice paused'
-                      : conversationMode
-                        ? 'Conversation mode on — mic re-arms after each reply'
-                        : 'Tap 🎙 to start voice · pause to send'
-                  : 'Tap ➤ to send · 📎 gallery · 📷 camera'}
+                        : 'Type a message or choose Speak'
+                      : 'Type a message and send'}
               </p>
 
 

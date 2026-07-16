@@ -382,12 +382,19 @@ export default function DesignSystemGalleryPage() {
           </Field>
           <div className="md:col-span-2">
             <Text role="body-sm" className="mb-1.5 font-medium">Live voice transcript</Text>
-            <LiveTranscript
-              committed="Add milk and eggs"
-              interim="for tomorrow morning"
-              phase="listening"
-              volume={48}
-            />
+            <div className="rounded-control border border-casa-border bg-casa-bg p-4">
+              <LiveTranscript
+                committed="Add milk and eggs"
+                interim="for tomorrow morning"
+                phase="listening"
+                volume={48}
+                className="rounded-none border-0 bg-transparent p-0 shadow-none"
+              />
+              <div className="mt-3 flex justify-between gap-3">
+                <Button variant="subtle">Type instead</Button>
+                <Button variant="secondary">Stop</Button>
+              </div>
+            </div>
           </div>
         </div>
         <div className="flex flex-wrap gap-3">

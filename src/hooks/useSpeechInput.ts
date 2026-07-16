@@ -534,6 +534,7 @@ export function useSpeechInput({
               utterance_id: String(msg.utterance_id ?? ''),
               next_utterance_id: String(msg.next_utterance_id ?? ''),
             })
+            if (activeRef.current) setPhaseSync('listening')
             break
           case 'discarded':
             onTraceRef.current?.('asr_discard_ack', {

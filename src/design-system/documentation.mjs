@@ -1,4 +1,4 @@
-export const DESIGN_SYSTEM_VERSION = '1.4.0'
+export const DESIGN_SYSTEM_VERSION = '1.5.0'
 export const DESIGN_SYSTEM_RELEASE_DATE = '2026-07-12'
 export const DESIGN_SYSTEM_SCHEMA_VERSION = 1
 
@@ -150,14 +150,14 @@ export const COMPONENT_MANIFEST = [
   component({
     name: 'LiveTranscript',
     category: 'feedback',
-    purpose: 'Acknowledges local capture immediately and shows finalized speech as a stable prefix while the recognizer revises only the live suffix.',
-    useWhen: 'Use above a voice-input control that receives capture phase, level, committed text, and interim text.',
-    avoid: 'Do not use for static text, final assistant responses, or as a replacement for the editable control.',
-    variants: ['capture-status', 'level-meter', 'committed-prefix', 'revisable-suffix'],
+    purpose: 'Provides the voice state of a single adaptive composer, acknowledging capture immediately while the recognizer revises only the live suffix.',
+    useWhen: 'Use inside the same composer shell that morphs between voice capture and editable text.',
+    avoid: 'Do not stack it above a simultaneously visible text composer or use it for final assistant responses.',
+    variants: ['standalone', 'embedded', 'capture-status', 'level-meter', 'committed-prefix', 'revisable-suffix'],
     states: ['connecting', 'capturing', 'listening', 'processing', 'hidden'],
     accessibility: 'The visual stream is presentation-only; finalized speech is announced politely without reading every interim correction.',
     responsive: 'Inherits semantic body typography and wraps within phone, desktop, and kiosk composers.',
-    example: '<LiveTranscript committed="Add milk" interim="and eggs" phase="listening" volume={42} active />',
+    example: '<LiveTranscript committed="Add milk" interim="and eggs" phase="listening" volume={42} className="border-0 bg-transparent p-0 shadow-none" />',
   }),
   component({
     name: 'Modal',
@@ -498,6 +498,14 @@ export const COMPONENT_MANIFEST = [
 ]
 
 export const DESIGN_SYSTEM_CHANGELOG = [
+  {
+    version: '1.5.0',
+    date: '2026-07-12',
+    changes: [
+      'Unified voice capture and editable text into one morphing assistant composer contract.',
+      'Defined launch-aware voice/text defaults and density-aware attachment and keyboard controls.',
+    ],
+  },
   {
     version: '1.4.0',
     date: '2026-07-12',
