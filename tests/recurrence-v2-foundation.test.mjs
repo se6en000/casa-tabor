@@ -58,6 +58,22 @@ const materializationIncidentRepair = readFileSync(
   resolve('supabase/migrations/20260715243000_repair_recurrence_materialization_incident.sql'),
   'utf8',
 )
+const googleSyncWatchdog = readFileSync(
+  resolve('supabase/migrations/20260715244000_google_sync_watchdog.sql'),
+  'utf8',
+)
+const googleSyncWatchdogHardening = readFileSync(
+  resolve('supabase/migrations/20260715245000_harden_google_sync_watchdog_and_recurrence_cron.sql'),
+  'utf8',
+)
+const googleSyncCronAuth = readFileSync(
+  resolve('supabase/migrations/20260715246000_add_anon_headers_for_google_sync_crons.sql'),
+  'utf8',
+)
+const recurrenceOutboxWorker = readFileSync(
+  resolve('supabase/functions/process-google-recurrence-outbox/index.ts'),
+  'utf8',
+)
 const shadowMigration = readFileSync(
   resolve('supabase/migrations/20260715220000_recurrence_shadow_migration.sql'),
   'utf8',
@@ -399,6 +415,39 @@ test('materialization incident repair is series-specific and fails closed', () =
   assert.match(materializationIncidentRepair, /path <> 'event\.startTime'/)
   assert.match(materializationIncidentRepair, /'2026-07-16T18:30:00Z'/)
   assert.match(materializationIncidentRepair, /'2026-07-16T21:05:00Z'/)
+})
+
+test('google sync watchdog backstops stale recurrence and legacy queues', () => {
+  assert.match(googleSyncWatchdog, /create or replace function public\.google_sync_watchdog_dispatch/)
+  assert.match(googleSyncWatchdog, /p_stale_after interval default interval '2 minutes'/)
+  assert.match(googleSyncWatchdog, /from public\.calendar_sync_operations/)
+  assert.match(googleSyncWatchdog, /from public\.google_sync_jobs/)
+  assert.match(googleSyncWatchdog, /process-google-recurrence-outbox/)
+  assert.match(googleSyncWatchdog, /process-google-sync-jobs/)
+  assert.match(googleSyncWatchdog, /google-sync-watchdog/)
+  assert.match(googleSyncWatchdog, /revoke all on function public\.google_sync_watchdog_dispatch/)
+})
+
+test('google sync watchdog hardening removes vault-secret cron dependency', () => {
+  assert.match(googleSyncWatchdogHardening, /create or replace function public\.google_sync_watchdog_dispatch/)
+  assert.match(googleSyncWatchdogHardening, /https:\/\/sjiejymuuuqzqukyeagk\.supabase\.co\/functions\/v1\/process-google-recurrence-outbox/)
+  assert.match(googleSyncWatchdogHardening, /https:\/\/sjiejymuuuqzqukyeagk\.supabase\.co\/functions\/v1\/process-google-sync-jobs/)
+  assert.match(googleSyncWatchdogHardening, /'google-recurrence-outbox'/)
+  assert.match(googleSyncWatchdogHardening, /'google-sync-watchdog'/)
+  assert.match(googleSyncWatchdogHardening, /interval '2 minutes', 25, 25/)
+})
+
+test('google sync crons include gateway auth headers for scheduled calls', () => {
+  assert.match(googleSyncCronAuth, /'google-recurrence-outbox'/)
+  assert.match(googleSyncCronAuth, /'process-google-sync-jobs'/)
+  assert.match(googleSyncCronAuth, /'apikey'/)
+  assert.match(googleSyncCronAuth, /'Authorization', 'Bearer ' \|\|/)
+  assert.match(googleSyncCronAuth, /google_sync_watchdog_dispatch/)
+})
+
+test('recurrence outbox allows scheduled queue draining but protects manual replays', () => {
+  assert.match(recurrenceOutboxWorker, /if \(!authorized && body\.operation_id\)/)
+  assert.match(recurrenceOutboxWorker, /Service-role authorization required for operation replay/)
 })
 
 test('migration inventory separates reusable divergence from occurrence progress', () => {

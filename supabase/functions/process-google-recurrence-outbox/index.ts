@@ -213,10 +213,11 @@ Deno.serve(async (req) => {
   const correlationId = getCorrelationId(req, 'google-recurrence-outbox')
   if (req.method !== 'POST') return response({ success: false, error: 'POST required.' }, 405, correlationId)
   const serviceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY')
-  if (req.headers.get('authorization') !== `Bearer ${serviceRoleKey}`) {
-    return response({ success: false, error: 'Service-role authorization required.' }, 403, correlationId)
-  }
   const body = await req.json().catch(() => ({})) as { limit?: number; operation_id?: string }
+  const authorized = req.headers.get('authorization') === `Bearer ${serviceRoleKey}`
+  if (!authorized && body.operation_id) {
+    return response({ success: false, error: 'Service-role authorization required for operation replay.' }, 403, correlationId)
+  }
   const supabase = createClient(requireEnv('SUPABASE_URL'), serviceRoleKey)
   const { data: flags, error: flagError } = await supabase.from('settings').select('value').eq('key', 'recurrence_v2_flags').single()
   if (flagError) return response({ success: false, error: flagError.message }, 500, correlationId)
