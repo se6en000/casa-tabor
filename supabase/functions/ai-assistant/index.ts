@@ -4303,6 +4303,12 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     return { status: 200, payload: {
       ...result,
       conversation_state: responseConversationState,
+      authoritative_provenance: cookingFrame
+        ? {
+            source: 'cooking_language_contract',
+            semantic_intent: cookingFrame.intent,
+          }
+        : undefined,
       correlation_id: cid,
       telemetry: {
         ...llmTelemetry,

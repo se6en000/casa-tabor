@@ -83,6 +83,7 @@ test('recipe generation has one bounded text-only provider recovery lane', () =>
   assert.match(assistantFunction, /server_ai_assistant_recipe_recovered/)
   assert.match(assistantFunction, /const inheritedCookingFrame = !latestCookingFrame/)
   assert.match(assistantFunction, /Original request to retry:/)
+  assert.match(assistantFunction, /source: 'cooking_language_contract',\s*semantic_intent: cookingFrame\.intent/)
 })
 
 test('cooking parser extracts useful open-class slots', () => {
