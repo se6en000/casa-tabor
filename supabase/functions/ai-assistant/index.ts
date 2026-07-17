@@ -86,6 +86,7 @@ import {
   isExplicitReminderRequest,
   isReminderCompletionFollowUp,
   reminderCreateClarification,
+  resolveExplicitReminderDaypartRange,
 } from '../_shared/assistant-reminder-intent.mjs'
 
 const CORS = {
@@ -263,6 +264,12 @@ Deno.serve(async (req) => {
   const reminderClarification = explicitReminderCreate
     ? reminderCreateClarification(reminderCreateRequestText)
     : null
+  const reminderDaypartRange = explicitReminderCreate
+    ? resolveExplicitReminderDaypartRange(reminderCreateRequestText, {
+        currentDate: context?.currentDate,
+        utcOffset: context?.utcOffset,
+      })
+    : null
   const parsedCalendarFrame = parseCalendarLanguage(latestUserText, {
     focusedEvent: Boolean(context?.focusedEvent),
     activeEntityType: incomingConversationState?.activeEntityType,
@@ -420,6 +427,8 @@ Deno.serve(async (req) => {
     cooking_retry_inherited: Boolean(inheritedCookingFrame),
     image_event_create_hint: imageEventCreateHint,
     image_event_create_followup: imageEventCreateFollowUp,
+    reminder_daypart: reminderDaypartRange?.label ?? null,
+    reminder_daypart_start: reminderDaypartRange?.start ?? null,
   })
   if (calendarFrame) {
     appendServerTrace('server_ai_assistant_calendar_language_match', `intent=${calendarFrame.intent}`, {
@@ -2376,7 +2385,7 @@ TEMPORAL ASSUMPTIONS (default unless user clearly overrides):
   - "10" should usually be treated as 10 AM unless context strongly indicates otherwise.
 
 INTENT PROFILE: ${intentRouting.profile}
-${directReminderCreateFlow ? 'REMINDER CREATE MODE: Create a new reminder with create_event and event_type="reminder". Never search for or update an appointment merely because the reminder text mentions changing, calling, cancelling, or rescheduling one. If the reminder task or timing is missing, ask one concise follow-up question instead of inventing it.' : ''}
+${directReminderCreateFlow ? `REMINDER CREATE MODE: Create a new reminder with create_event and event_type="reminder". Never search for or update an appointment merely because the reminder text mentions changing, calling, cancelling, or rescheduling one. Missing details were already checked before this model call, so call create_event rather than asking again.${reminderDaypartRange ? ` Casa deterministically resolved the vague local time to ${reminderDaypartRange.start} through ${reminderDaypartRange.end}; use those exact timestamps.` : ''}` : ''}
 FAMILY MEMBERS: ${familyNames}
 ${includePlaceContext && placesText ? `\nSAVED PLACES (use for location nicknames):\n${placesText}` : ''}
 ${includePlaceContext && contactsText ? `\nSAVED CONTACTS:\n${contactsText}` : ''}
@@ -3030,7 +3039,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       .filter((tool) => ['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'create_recipe', 'add_grocery_items'].includes(tool.name))
       .map((tool) => tool.name)
     const primaryToolConfig = directReminderCreateFlow
-      ? { function_calling_config: { mode: 'AUTO' } }
+      ? { function_calling_config: { mode: 'ANY', allowed_function_names: ['create_event'] } }
       : intentRouting.forceEventSearch
       ? { function_calling_config: { mode: 'ANY', allowed_function_names: ['search_events'] } }
       : userLikelyRequestedWrite && primaryWriteToolNames.length > 0
@@ -3588,6 +3597,11 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             const reminderSubject = explicitReminderSubject(reminderCreateRequestText)
             if (reminderSubject) args.title = reminderSubject
             args.event_type = 'reminder'
+            if (reminderDaypartRange) {
+              args.start = reminderDaypartRange.start
+              args.end = reminderDaypartRange.end
+              args.all_day = false
+            }
           }
           const title = typeof args.title === 'string' ? args.title.trim() : ''
           const start = typeof args.start === 'string' ? args.start : ''

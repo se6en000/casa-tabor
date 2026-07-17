@@ -384,6 +384,17 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames, recipeFixture) {
       ],
     },
     {
+      key: 'reminder-vague-times',
+      page: 'home',
+      assistantMode: 'general',
+      steps: [
+        { text: 'Remind me to mow the lawn this morning.', expect: { type: 'write', tool: 'create_event' } },
+        { text: 'Remind me at lunch to call the pharmacy.', expect: { type: 'write', tool: 'create_event' } },
+        { text: 'Remind me four days from now around noon to check the schedule.', expect: { type: 'write', tool: 'create_event' } },
+        { text: 'Remind me next Thursday evening to take out the bins.', expect: { type: 'write', tool: 'create_event' } },
+      ],
+    },
+    {
       key: 'calendar-update',
       page: 'calendar',
       assistantMode: 'general',

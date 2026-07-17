@@ -196,7 +196,10 @@ Deno.serve(async (req) => {
       plan = { kind: 'calendar_semantic', turn: fallbackReminderTurn }
     }
     if (plan?.kind === 'calendar_semantic') {
-      plan.turn = hardenExplicitReminderTurn(plan.turn, latestUserText)
+      plan.turn = hardenExplicitReminderTurn(plan.turn, latestUserText, {
+        currentDate: body?.context?.currentDate,
+        utcOffset: body?.context?.utcOffset,
+      })
       const resolved = resolveCalendarSemanticTurn(plan.turn, {
         currentDate: body?.context?.currentDate,
         utcOffset: body?.context?.utcOffset,

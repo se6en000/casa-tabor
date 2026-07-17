@@ -12,6 +12,7 @@ import {
   explicitReminderSearchForMessages,
   explicitReminderSearchOverride,
   reminderCreateClarification,
+  resolveExplicitReminderDaypartRange,
 } from '../supabase/functions/_shared/assistant-reminder-intent.mjs'
 
 test('natural reminder requests cover common typed and spoken phrasing', () => {
@@ -73,12 +74,89 @@ test('underspecified reminder creates ask for missing details instead of inventi
     null,
   )
   assert.equal(
+    reminderCreateClarification('Remind me at lunch to call the pharmacy'),
+    null,
+  )
+  assert.equal(
     explicitReminderSubject('Create a reminder for tomorrow at 10 AM to order Walmart groceries'),
     'Order Walmart groceries',
   )
   assert.equal(
     explicitReminderSubject('I need a reminder for the prescription'),
     'The prescription',
+  )
+})
+
+test('vague reminder dayparts resolve to future local times without clarification', () => {
+  const morning = resolveExplicitReminderDaypartRange(
+    'Remind me to mow the lawn this morning',
+    { currentDate: '2026-07-17T06:45:00-04:00', utcOffset: '-04:00' },
+  )
+  assert.deepEqual(morning, {
+    label: 'morning',
+    dateReference: { kind: 'today' },
+    time: { hour: 9, minute: 0, period: 'am' },
+    start: '2026-07-17T09:00:00-04:00',
+    end: '2026-07-17T09:30:00-04:00',
+  })
+
+  const lunch = resolveExplicitReminderDaypartRange(
+    'Remind me at lunch to call the pharmacy',
+    { currentDate: '2026-07-17T07:06:00-04:00', utcOffset: '-04:00' },
+  )
+  assert.equal(lunch.start, '2026-07-17T12:00:00-04:00')
+  assert.equal(lunch.dateReference.kind, 'today')
+
+  const laterThisMorning = resolveExplicitReminderDaypartRange(
+    'Remind me this morning to switch the laundry',
+    { currentDate: '2026-07-17T10:46:00-04:00', utcOffset: '-04:00' },
+  )
+  assert.equal(laterThisMorning.start, '2026-07-17T11:00:00-04:00')
+
+  const tomorrowMorning = resolveExplicitReminderDaypartRange(
+    'Remind me in the morning to switch the laundry',
+    { currentDate: '2026-07-17T12:01:00-04:00', utcOffset: '-04:00' },
+  )
+  assert.equal(tomorrowMorning.start, '2026-07-18T09:00:00-04:00')
+  assert.deepEqual(tomorrowMorning.dateReference, { kind: 'tomorrow' })
+})
+
+test('vague reminder dayparts preserve explicit future day references', () => {
+  const cases = [
+    ['tomorrow evening', '2026-07-18T18:00:00-04:00'],
+    ['four days from now around noon', '2026-07-21T12:00:00-04:00'],
+    ['a week from now at lunch', '2026-07-24T12:00:00-04:00'],
+    ['next Thursday morning', '2026-07-23T09:00:00-04:00'],
+    ['7/21 in the afternoon', '2026-07-21T15:00:00-04:00'],
+  ]
+  for (const [timing, expected] of cases) {
+    const range = resolveExplicitReminderDaypartRange(
+      `Remind me ${timing} to check the schedule`,
+      { currentDate: '2026-07-17T07:06:00-04:00', utcOffset: '-04:00' },
+    )
+    assert.equal(range?.start, expected, timing)
+  }
+})
+
+test('reminder subjects exclude trailing vague timing language', () => {
+  assert.equal(
+    explicitReminderSubject('Remind me to mow the lawn this morning'),
+    'Mow the lawn',
+  )
+  assert.equal(
+    explicitReminderSubject('Remind me to call the pharmacy at lunch'),
+    'Call the pharmacy',
+  )
+  assert.equal(
+    reminderCreateClarification('Remind me to turn on the night light'),
+    'When should I remind you?',
+  )
+  assert.equal(
+    resolveExplicitReminderDaypartRange(
+      'Remind me to turn on the night light',
+      { currentDate: '2026-07-17T07:06:00-04:00', utcOffset: '-04:00' },
+    ),
+    null,
   )
 })
 
