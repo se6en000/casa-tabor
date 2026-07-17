@@ -255,6 +255,14 @@ test('date-time wheel ignores programmatic scroll positioning', () => {
   assert.match(dial, /window\.clearTimeout\(settleTimer\.current\)/)
 })
 
+test('quick create keeps the end one hour after every start adjustment', () => {
+  const quickCreate = readFileSync(resolve('src/components/shared/QuickCreateSheet.tsx'), 'utf8')
+  const dial = readFileSync(resolve('src/components/ui/DateTimeDial.tsx'), 'utf8')
+  assert.match(quickCreate, /startChangeEndOffsetMinutes=\{60\}/)
+  assert.match(dial, /startChangeEndOffsetMinutes \* 60_000/)
+  assert.match(dial, /onEndChange\(toLocalValue\(new Date\(parseLocal\(value\)\.getTime\(\) \+ duration\)\)\)/)
+})
+
 test('calendar cards and event details use shared touch contracts', () => {
   const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
   const largeCard = readFileSync(resolve('src/components/calendar/LargeEventCard.tsx'), 'utf8')

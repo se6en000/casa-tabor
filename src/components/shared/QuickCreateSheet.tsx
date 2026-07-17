@@ -173,6 +173,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                 endValue={endDT}
                 onStartChange={setStartDT}
                 onEndChange={setEndDT}
+                startChangeEndOffsetMinutes={60}
                 defaultExpanded
               />
               {saveError && <Alert tone="danger" title="Event was not created">{saveError}</Alert>}

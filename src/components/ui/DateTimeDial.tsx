@@ -13,6 +13,7 @@ export interface DateTimeDialProps {
   endValue: string
   onStartChange: (value: string) => void
   onEndChange: (value: string) => void
+  startChangeEndOffsetMinutes?: number
   defaultExpanded?: boolean
   onInteraction?: () => void
 }
@@ -163,6 +164,7 @@ export function DateTimeDial({
   endValue,
   onStartChange,
   onEndChange,
+  startChangeEndOffsetMinutes,
   defaultExpanded = false,
   onInteraction,
 }: DateTimeDialProps) {
@@ -177,7 +179,9 @@ export function DateTimeDial({
   }, [startDayKey])
 
   const updateStart = (value: string) => {
-    const duration = Math.max(5 * 60_000, parseLocal(endValue).getTime() - parseLocal(startValue).getTime())
+    const duration = startChangeEndOffsetMinutes === undefined
+      ? Math.max(5 * 60_000, parseLocal(endValue).getTime() - parseLocal(startValue).getTime())
+      : startChangeEndOffsetMinutes * 60_000
     onStartChange(value)
     onEndChange(toLocalValue(new Date(parseLocal(value).getTime() + duration)))
     onInteraction?.()
