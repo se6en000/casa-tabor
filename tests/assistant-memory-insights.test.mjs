@@ -8,6 +8,7 @@ import {
   isBugTrackerReadRequest,
   isMemoryInsightsReadRequest,
   parseBugReportRequest,
+  resolveBugReportRequest,
 } from '../supabase/functions/_shared/assistant-memory-insights.mjs'
 
 test('memory and bug read intent detectors recognize natural phrasing', () => {
@@ -42,6 +43,15 @@ test('bug-report semantic boundary recognizes explicit creation language without
     parseBugReportRequest('Report a bug: BUG-FIXTURE-123 calendar wheel does not select').title,
     'BUG-FIXTURE-123 calendar wheel does not select',
   )
+  const followUp = resolveBugReportRequest(
+    'I need a way to jump multiple weeks or months on mobile without repeated taps.',
+    'Create a bug report.',
+  )
+  assert.equal(followUp.kind, 'create')
+  assert.equal(followUp.follow_up, true)
+  assert.match(followUp.title, /jump multiple weeks/i)
+  assert.equal(resolveBugReportRequest('Add milk to groceries.', 'Create a bug report.').kind, 'create')
+  assert.equal(resolveBugReportRequest('Add milk to groceries.', 'Report a bug: the wheel is slow.').kind, 'none')
 })
 
 test('memory and bug summaries are deterministic and truthful', () => {

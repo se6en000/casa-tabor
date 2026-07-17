@@ -52,6 +52,23 @@ export function parseBugReportRequest(text) {
   }
 }
 
+export function resolveBugReportRequest(latestText, previousUserText) {
+  const current = parseBugReportRequest(latestText)
+  if (current.kind !== 'none') return current
+  if (parseBugReportRequest(previousUserText).kind !== 'clarify') return current
+
+  const raw = String(latestText ?? '').trim()
+  const title = cleanBugTitle(raw)
+  if (!title) return { kind: 'clarify', follow_up: true }
+  return {
+    kind: 'create',
+    title,
+    details: raw.slice(0, 2000),
+    severity: bugSeverityFor(raw),
+    follow_up: true,
+  }
+}
+
 export function isMemoryInsightsReadRequest(text) {
   const value = compact(text)
   if (!value) return false

@@ -83,7 +83,7 @@ import {
   formatMemoryInsightsSummary,
   isBugTrackerReadRequest,
   isMemoryInsightsReadRequest,
-  parseBugReportRequest,
+  resolveBugReportRequest,
 } from '../_shared/assistant-memory-insights.mjs'
 import {
   explicitReminderCreateRequestForMessages,
@@ -284,7 +284,7 @@ Deno.serve(async (req) => {
     : []
   const latestUserText = userMessageTexts.at(-1) ?? null
   const previousUserText = userMessageTexts.at(-2) ?? null
-  const bugReportRequest = parseBugReportRequest(latestUserText)
+  const bugReportRequest = resolveBugReportRequest(latestUserText, previousUserText)
   const reminderDomainLanguage = hasReminderLanguage(latestUserText)
   const explicitReminderRead = explicitReminderSearchForMessages(messages)
   const reminderCreateRequestText = explicitReminderCreateRequestForMessages(messages)
@@ -625,6 +625,7 @@ Deno.serve(async (req) => {
       severity: createdBug.severity,
       status: createdBug.status,
       source: 'assistant',
+      follow_up: bugReportRequest.follow_up === true,
       request_ms: requestTotalMs,
       llm_calls: 0,
     })
