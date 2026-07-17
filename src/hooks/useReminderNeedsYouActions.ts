@@ -107,6 +107,20 @@ export function useReminderNeedsYouActions() {
     await invalidateReminderSurfaces()
   }, [ensureReminderInNeedsYou, invalidateReminderSurfaces])
 
+  const completeReminder = useCallback(async (
+    reminderId: string,
+    expectedUpdatedAt?: string,
+  ) => {
+    const { data, error } = await supabase.rpc('complete_reminder_with_linked_actions', {
+      p_reminder_id: reminderId,
+      p_expected_updated_at: expectedUpdatedAt ?? null,
+    })
+    if (error) throw error
+    if (!data?.ok) throw new Error('Casa could not complete this reminder.')
+    await invalidateReminderSurfaces()
+    return data
+  }, [invalidateReminderSurfaces])
+
   const queueMissedReminders = useCallback(async (events: EventWithDetails[], now: Date) => {
     const nowMs = now.getTime()
     const missed = events.filter((event) => {
@@ -158,6 +172,7 @@ export function useReminderNeedsYouActions() {
   }, [invalidateReminderSurfaces])
 
   return {
+    completeReminder,
     snoozeReminderOneHour,
     moveReminderToNeedsYou,
     queueMissedReminders,

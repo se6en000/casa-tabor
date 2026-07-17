@@ -18,14 +18,13 @@ import { isReminder, isAllDayReminder, isTimedReminder } from '../../utils/holid
 import SwipeableReminderPill from '../shared/SwipeableReminderPill'
 import EventContextMenu from '../shared/EventContextMenu'
 import { WeatherIcon } from '../shared/WeatherIcon'
-import { supabase } from '../../lib/supabase'
-import { useQueryClient } from '@tanstack/react-query'
 import BounceScroll from '../shared/BounceScroll'
 import { eventOverlapsDay, getEventDisplayStartDay } from '../../utils/eventTime'
 import type { FamilyMember } from '../../types'
 import { getPersistedPlanOverrides, resolveEventMode } from '../../lib/eventPlanOverrides'
 import { derivePlan } from '../../lib/eventCommandCenter'
 import { Button, CalendarPill, Chip } from '../ui'
+import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActions'
 
 const SHARED_COLOR = 'var(--color-casa-gold)'
 
@@ -141,17 +140,7 @@ export default function StackedView() {
   const selectedEvent = selectedEventId ? (events.find(e => e.id === selectedEventId) ?? null) : null
   const editEvent     = editEventId     ? (events.find(e => e.id === editEventId)     ?? null) : null
 
-  const qc = useQueryClient()
-
-  const completeReminder = useCallback(async (id: string) => {
-    await supabase.from('events').update({ status: 'cancelled' }).eq('id', id)
-    qc.invalidateQueries({ queryKey: ['events'] })
-  }, [qc])
-
-  const dismissReminder = useCallback(async (id: string) => {
-    await supabase.from('events').update({ status: 'cancelled' }).eq('id', id)
-    qc.invalidateQueries({ queryKey: ['events'] })
-  }, [qc])
+  const { completeReminder } = useReminderNeedsYouActions()
 
   const deleteEvent = useCallback((ev: EventWithDetails) => {
     setDeleteIntentEventId(ev.id)
@@ -217,7 +206,7 @@ export default function StackedView() {
                         members={r.members}
                         onClick={() => setSelectedEventId(r.id)}
                         onComplete={completeReminder}
-                        onDismiss={dismissReminder}
+                        onDismiss={completeReminder}
                       />
                     ) : (
                       <Chip
@@ -256,7 +245,7 @@ export default function StackedView() {
                             members={event.members}
                             onClick={() => setSelectedEventId(event.id)}
                             onComplete={completeReminder}
-                            onDismiss={dismissReminder}
+                            onDismiss={completeReminder}
                           />
                         </motion.div>
                       ) : (

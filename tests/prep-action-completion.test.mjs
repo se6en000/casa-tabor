@@ -6,6 +6,10 @@ const migration = readFileSync(
   new URL('../supabase/migrations/20260715251000_make_prep_completion_durable.sql', import.meta.url),
   'utf8',
 )
+const linkedCompletionMigration = readFileSync(
+  new URL('../supabase/migrations/20260717121000_complete_reminder_with_linked_actions.sql', import.meta.url),
+  'utf8',
+)
 const prepHooks = readFileSync(new URL('../src/hooks/usePrepItems.ts', import.meta.url), 'utf8')
 const reminderActions = readFileSync(new URL('../src/hooks/useReminderNeedsYouActions.ts', import.meta.url), 'utf8')
 const analyzePrep = readFileSync(new URL('../supabase/functions/analyze-prep/index.ts', import.meta.url), 'utf8')
@@ -14,6 +18,10 @@ const notificationAction = readFileSync(new URL('../supabase/functions/notificat
 const homeRightPanel = readFileSync(new URL('../src/components/home/HomeRightPanel.tsx', import.meta.url), 'utf8')
 const prepActionSection = readFileSync(new URL('../src/components/home/PrepActionSection.tsx', import.meta.url), 'utf8')
 const actionHub = readFileSync(new URL('../src/pages/ActionHubPage.tsx', import.meta.url), 'utf8')
+const homePage = readFileSync(new URL('../src/pages/HomePage.tsx', import.meta.url), 'utf8')
+const stackedView = readFileSync(new URL('../src/components/calendar/StackedView.tsx', import.meta.url), 'utf8')
+const dayView = readFileSync(new URL('../src/components/calendar/DayView.tsx', import.meta.url), 'utf8')
+const executor = readFileSync(new URL('../supabase/functions/execute-ai-action/index.ts', import.meta.url), 'utf8')
 
 test('database owns stable action identity and resolved identities cannot regenerate', () => {
   assert.match(migration, /create table if not exists public\.prep_item_resolutions/)
@@ -33,6 +41,15 @@ test('Done is transactional and completes only linked reminder sources', () => {
   assert.match(migration, /set\s+status = 'cancelled'/)
   assert.match(migration, /where related\.action_key = item\.action_key/)
   assert.match(migration, /on conflict \(action_key\) do update/)
+})
+
+test('reminder completion transactionally resolves linked prep actions in both directions', () => {
+  assert.match(linkedCompletionMigration, /create or replace function public\.complete_reminder_with_linked_actions/)
+  assert.match(linkedCompletionMigration, /reminder\.event_type <> 'reminder'/)
+  assert.match(linkedCompletionMigration, /item\.source_type in \('reminder_manual', 'reminder_missed'\)/)
+  assert.match(linkedCompletionMigration, /perform public\.resolve_prep_item\(linked_item\.id, 'done'\)/)
+  assert.match(linkedCompletionMigration, /reminder\.status = 'cancelled'/)
+  assert.match(linkedCompletionMigration, /perform public\.resolve_prep_item\(stale_item\.id, 'done'\)/)
 })
 
 test('Done and Dismiss use distinct authoritative client outcomes', () => {
@@ -62,6 +79,13 @@ test('interactive Done surfaces and push actions use completion, not dismissal',
   assert.match(notificationAction, /sb\.rpc\('resolve_prep_item'/)
   assert.match(notificationAction, /p_outcome: 'done'/)
   assert.match(notificationAction, /resolution\?\.reminder_completed/)
+  for (const source of [homePage, stackedView, dayView]) {
+    assert.match(source, /useReminderNeedsYouActions/)
+    assert.doesNotMatch(source, /from\('events'\)\.update\(\{ status: 'cancelled' \}\)/)
+  }
+  assert.match(reminderActions, /complete_reminder_with_linked_actions/)
+  assert.match(notificationAction, /complete_reminder_with_linked_actions/)
+  assert.match(executor, /complete_reminder_with_linked_actions/)
 })
 
 test('approved current reminder cleanup is narrow and explicit', () => {

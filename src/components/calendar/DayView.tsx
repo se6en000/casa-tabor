@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { format, isAfter, isBefore, isSameDay, parseISO } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -20,8 +20,6 @@ import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import { Button, CalendarPill, IconButton } from '../ui'
 import { differenceInDays } from 'date-fns'
 import { isHoliday, isReminder, isTimedReminder } from '../../utils/holidays'
-import { supabase } from '../../lib/supabase'
-import { useQueryClient } from '@tanstack/react-query'
 import BounceScroll from '../shared/BounceScroll'
 import { eventOverlapsDay, getEventEndDate, getEventStartDate } from '../../utils/eventTime'
 import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActions'
@@ -598,12 +596,10 @@ export default function DayView() {
   const { selectedDate, visibleMembers } = useCalendarStore()
   const now = useLiveClock(15_000)
   const { data: family } = useFamilyMembers()
-  const { snoozeReminderOneHour, moveReminderToNeedsYou } = useReminderNeedsYouActions()
+  const { completeReminder, snoozeReminderOneHour, moveReminderToNeedsYou } = useReminderNeedsYouActions()
 
   // Use the week that contains the selected date to get events
   const { data: weekEvents } = useWeekEvents(selectedDate)
-  const qc = useQueryClient()
-
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
 
   const allEvents = (weekEvents ?? []).filter(e =>
@@ -622,11 +618,6 @@ export default function DayView() {
     })
 
   const selectedEvent = selectedEventId ? (dayEvents.find(e => e.id === selectedEventId) ?? null) : null
-  const completeReminder = useCallback(async (id: string) => {
-    await supabase.from('events').update({ status: 'cancelled' }).eq('id', id)
-    qc.invalidateQueries({ queryKey: ['events'] })
-  }, [qc])
-
   return (
     <div className="flex h-full overflow-hidden" onClick={() => setSelectedEventId(null)}>
 

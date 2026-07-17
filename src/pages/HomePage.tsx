@@ -276,17 +276,12 @@ export default function HomePage() {
     ? (events.find(e => e.id === selectedEventId) ?? tomorrowEvents.find(e => e.id === selectedEventId) ?? reminders.find(e => e.id === selectedEventId) ?? null)
     : null
   const qc = useQueryClient()
-  const { snoozeReminderOneHour, moveReminderToNeedsYou, queueMissedReminders } = useReminderNeedsYouActions()
-
-  const completeReminder = useCallback(async (id: string) => {
-    await supabase.from('events').update({ status: 'cancelled' }).eq('id', id)
-    qc.invalidateQueries({ queryKey: ['today-events'] })
-  }, [qc])
-
-  const dismissReminder = useCallback(async (id: string) => {
-    await supabase.from('events').update({ status: 'cancelled' }).eq('id', id)
-    qc.invalidateQueries({ queryKey: ['today-events'] })
-  }, [qc])
+  const {
+    completeReminder,
+    snoozeReminderOneHour,
+    moveReminderToNeedsYou,
+    queueMissedReminders,
+  } = useReminderNeedsYouActions()
 
   const reminderSweepBucket = Math.floor(now.getTime() / 60_000)
   useEffect(() => {
@@ -565,7 +560,7 @@ export default function HomePage() {
                   members={r.members}
                   onClick={() => { setSelectedEventId(r.id) }}
                   onComplete={completeReminder}
-                  onDismiss={dismissReminder}
+                  onDismiss={completeReminder}
                 />
               ))}
             </div>

@@ -129,7 +129,10 @@ Deno.serve(async (req) => {
 
     if (action === 'done' || action === 'complete') {
       if (eventRow?.event_type === 'reminder') {
-        await sb.from('events').update({ status: 'cancelled' }).eq('id', event_id)
+        const { error: completionError } = await sb.rpc('complete_reminder_with_linked_actions', {
+          p_reminder_id: event_id,
+        })
+        if (completionError) return json({ ok: false, error: completionError.message }, 500)
       } else {
         await sb.from('events').update({ notified_at: new Date().toISOString() }).eq('id', event_id)
       }

@@ -958,7 +958,10 @@ Deno.serve(async (req) => {
       if (args.expected_updated_at && reminder.updated_at !== args.expected_updated_at) {
         throw new Error('Reminder changed before completion. Please review it again.')
       }
-      const { error } = await sb.from('events').update({ status: 'cancelled' }).eq('id', args.id)
+      const { error } = await sb.rpc('complete_reminder_with_linked_actions', {
+        p_reminder_id: args.id,
+        p_expected_updated_at: args.expected_updated_at ?? null,
+      })
       if (error) throw new Error(error.message)
       return new Response(JSON.stringify({ success: true, completed: true, event_id: args.id, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
