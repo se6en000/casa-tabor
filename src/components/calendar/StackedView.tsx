@@ -21,8 +21,7 @@ import { WeatherIcon } from '../shared/WeatherIcon'
 import BounceScroll from '../shared/BounceScroll'
 import { eventOverlapsDay, getEventDisplayStartDay } from '../../utils/eventTime'
 import type { FamilyMember } from '../../types'
-import { getPersistedPlanOverrides, resolveEventMode } from '../../lib/eventPlanOverrides'
-import { derivePlan } from '../../lib/eventCommandCenter'
+import { deriveCalendarCardResponsibility } from '../../lib/calendarResponsibility'
 import { Button, CalendarPill, Chip } from '../ui'
 import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActions'
 
@@ -58,61 +57,12 @@ function getGoingMembers(event: EventWithDetails): FamilyMember[] {
   return Array.from(deduped.values()).sort((a, b) => a.name.localeCompare(b.name))
 }
 
-function toDerivedPersonFromMember(member: FamilyMember | undefined | null) {
-  if (!member) return null
-  return {
-    id: member.id,
-    name: member.name,
-    initial: member.name?.[0]?.toUpperCase() ?? '?',
-    color: member.color_hex ?? SHARED_COLOR,
-    role: member.role,
-  }
-}
-
-function applyPersistedDriverOverrides(
-  event: EventWithDetails,
-  legs: ReturnType<typeof derivePlan>['legs'],
-  household: FamilyMember[],
-  driverOverrides: Record<number, string>,
-  waitsOverride: boolean | null,
-) {
-  const attendeeById = new Map(event.members.map((member) => [member.family_member.id, member.family_member]))
-  const householdById = new Map(household.map((member) => [member.id, member]))
-  const withDriverOverrides = legs.map((leg, index) => {
-    const overrideDriverId = driverOverrides[index]
-    if (!overrideDriverId || !leg.driver) return leg
-    const familyMember = attendeeById.get(overrideDriverId) ?? householdById.get(overrideDriverId)
-    const overrideDriver = toDerivedPersonFromMember(familyMember)
-    return overrideDriver ? { ...leg, driver: overrideDriver } : leg
-  })
-  const waits = waitsOverride ?? Boolean(withDriverOverrides.find((leg) => leg.kind === 'stay')?.waits)
-  return withDriverOverrides.map((leg) => {
-    if (leg.kind !== 'stay') return leg
-    if (!waits) return { ...leg, waits: false }
-    const driveLeg = withDriverOverrides.find((item) => item.kind === 'drop' || item.kind === 'depart')
-    return { ...leg, waits: true, title: `${driveLeg?.driver?.name ?? 'Driver'} waits on site` }
-  })
-}
-
 function deriveResponsibilityChip(event: EventWithDetails, household: FamilyMember[]) {
-  const mode = resolveEventMode(event)
-  const plan = derivePlan(event, mode, { household })
-  const persisted = getPersistedPlanOverrides(event)
-  const effectiveLegs = applyPersistedDriverOverrides(
-    event,
-    plan.legs,
-    household,
-    persisted.driverOverrides ?? {},
-    persisted.waits ?? null,
-  )
-  const transportLeg = effectiveLegs.find((leg) =>
-    leg.kind === 'drop' || leg.kind === 'depart' || leg.kind === 'pickup' || leg.kind === 'return',
-  )
-  const firstDriverLeg = transportLeg ?? effectiveLegs.find((leg) => leg.driver)
-  if (!firstDriverLeg?.driver) return null
+  const responsibility = deriveCalendarCardResponsibility(event, household, new Date())
+  if (!responsibility.responsible) return null
   return {
-    label: mode === 'hosted' ? 'SUPERVISOR' : 'DRIVER',
-    person: firstDriverLeg.driver,
+    label: responsibility.roleBadge === 'supervise' ? 'SUPERVISOR' : 'DRIVER',
+    person: responsibility.responsible,
   }
 }
 

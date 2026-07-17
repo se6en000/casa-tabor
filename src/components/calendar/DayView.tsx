@@ -24,12 +24,11 @@ import BounceScroll from '../shared/BounceScroll'
 import { eventOverlapsDay, getEventEndDate, getEventStartDate } from '../../utils/eventTime'
 import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActions'
 import {
-  getPersistedPlanOverrides,
   resolveEventMode,
 } from '../../lib/eventPlanOverrides'
-import { derivePlan, type DerivedPerson } from '../../lib/eventCommandCenter'
 import type { FamilyMember } from '../../types'
 import { cleanEventTitle, isBirthdayEvent } from '../../utils/eventTitle'
+import { deriveCalendarCardResponsibility } from '../../lib/calendarResponsibility'
 
 const SHARED_GOLD = 'var(--color-casa-gold)'
 
@@ -37,91 +36,6 @@ function eventColor(ev: EventWithDetails): string {
   if (!ev.members || ev.members.length === 0) return SHARED_GOLD
   if (ev.members.length >= 4) return SHARED_GOLD
   return ev.members[0].family_member?.color_hex ?? SHARED_GOLD
-}
-
-function fallbackResponsiblePerson(event: EventWithDetails): DerivedPerson | null {
-  const fallbackMember = event.members.find((m) => m.role === 'primary')?.family_member
-    ?? event.members[0]?.family_member
-    ?? null
-  if (!fallbackMember) return null
-  return {
-    id: fallbackMember.id,
-    name: fallbackMember.name,
-    initial: fallbackMember.name?.[0]?.toUpperCase() ?? '?',
-    color: fallbackMember.color_hex ?? SHARED_GOLD,
-    role: fallbackMember.role,
-  }
-}
-
-function toDerivedPersonFromMember(member: FamilyMember | undefined | null): DerivedPerson | null {
-  if (!member) return null
-  return {
-    id: member.id,
-    name: member.name,
-    initial: member.name?.[0]?.toUpperCase() ?? '?',
-    color: member.color_hex ?? SHARED_GOLD,
-    role: member.role,
-  }
-}
-
-function applyPersistedDriverOverrides(
-  event: EventWithDetails,
-  legs: ReturnType<typeof derivePlan>['legs'],
-  household: FamilyMember[],
-  driverOverrides: Record<number, string>,
-  waitsOverride: boolean | null,
-) {
-  const attendeeById = new Map(event.members.map((m) => [m.family_member.id, m.family_member]))
-  const householdById = new Map(household.map((m) => [m.id, m]))
-  const withDriverOverrides = legs.map((leg, index) => {
-    const overrideDriverId = driverOverrides[index]
-    if (!overrideDriverId || !leg.driver) return leg
-    const familyMember = attendeeById.get(overrideDriverId) ?? householdById.get(overrideDriverId)
-    const overrideDriver = toDerivedPersonFromMember(familyMember)
-    return overrideDriver ? { ...leg, driver: overrideDriver } : leg
-  })
-  const waits = waitsOverride ?? Boolean(withDriverOverrides.find((leg) => leg.kind === 'stay')?.waits)
-  return withDriverOverrides.map((leg) => {
-    if (leg.kind !== 'stay') return leg
-    if (!waits) return { ...leg, waits: false }
-    const driveLeg = withDriverOverrides.find((item) => item.kind === 'drop' || item.kind === 'depart')
-    return { ...leg, waits: true, title: `${driveLeg?.driver?.name ?? 'Driver'} waits on site` }
-  })
-}
-
-function deriveHomeCardResponsibility(event: EventWithDetails, mode: ReturnType<typeof resolveEventMode>, household: FamilyMember[]) {
-  const plan = derivePlan(event, mode, { household })
-  const persisted = getPersistedPlanOverrides(event)
-  const effectiveLegs = applyPersistedDriverOverrides(event, plan.legs, household, persisted.driverOverrides ?? {}, persisted.waits ?? null)
-  const transportLeg = effectiveLegs.find((leg) => leg.kind === 'drop' || leg.kind === 'depart' || leg.kind === 'pickup' || leg.kind === 'return')
-  const firstDriverLeg = transportLeg ?? effectiveLegs.find((leg) => leg.driver)
-  const responsible = firstDriverLeg?.driver ?? fallbackResponsiblePerson(event)
-  const attendees = (() => {
-    if (!responsible) return event.members
-    const withoutResponsible = event.members.filter((m) => m.family_member.id !== responsible.id)
-    return withoutResponsible.length > 0 ? withoutResponsible : event.members
-  })()
-  const name = responsible?.name ?? (mode === 'hosted' ? 'Caregiver' : 'Driver')
-  const stayLeg = effectiveLegs.find((leg) => leg.kind === 'stay')
-  const hasDropOrDepart = effectiveLegs.some((leg) => leg.kind === 'drop' || leg.kind === 'depart')
-  const hasPickupOrReturn = effectiveLegs.some((leg) => leg.kind === 'pickup' || leg.kind === 'return')
-  const summary = mode === 'hosted'
-    ? `${name} supervising`
-    : stayLeg?.waits
-      ? `${name} drives & stays`
-      : hasDropOrDepart && hasPickupOrReturn
-        ? `${name} drives`
-        : hasDropOrDepart
-          ? `${name} drops off`
-          : hasPickupOrReturn
-            ? `${name} picks up`
-            : `${name} drives`
-  return {
-    responsible,
-    attendees,
-    summary,
-    roleBadge: mode === 'hosted' ? 'supervise' as const : 'drive' as const,
-  }
 }
 
 // ── Day event card (matched to Home timeline cards) ─────────────────
@@ -173,8 +87,8 @@ function DayEventCard({
   }, [event.id])
 
   const responsibility = useMemo(
-    () => deriveHomeCardResponsibility(event, mode, household),
-    [event, household, mode, overrideVersion],
+    () => deriveCalendarCardResponsibility(event, household, now),
+    [event, household, now, overrideVersion],
   )
   const showLiveLeaveBy = !event.all_day && !happening && !isHosted && Boolean(event.address || event.location_name)
   const showFallbackLeaveBy = !event.all_day && !happening && !isHosted && !(event.address || event.location_name) && Boolean(event.enrichment?.departure_time)

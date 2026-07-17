@@ -21,6 +21,7 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
 
   function onTouchStart(e: React.TouchEvent) {
     if (committed.current) return
+    e.stopPropagation()
     startX.current = e.touches[0].clientX
     moved.current = false
     if (pillRef.current) pillRef.current.style.transition = ''
@@ -28,6 +29,7 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
 
   function onTouchMove(e: React.TouchEvent) {
     if (startX.current === null || committed.current) return
+    e.stopPropagation()
     const delta = e.touches[0].clientX - startX.current
     if (Math.abs(delta) < 4) return
     moved.current = true
@@ -50,8 +52,9 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
     }
   }
 
-  function onTouchEnd() {
+  function onTouchEnd(e: React.TouchEvent) {
     if (committed.current) return
+    e.stopPropagation()
     const startXVal = startX.current
     startX.current = null
     if (startXVal === null) return
@@ -123,7 +126,10 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
-        onClick={() => { if (!moved.current) onClick?.() }}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (!moved.current) onClick?.()
+        }}
         className="relative z-raised inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border-[1.5px] border-casa-gold bg-casa-accent-soft text-casa-navy text-caption font-semibold select-none cursor-pointer"
         style={{
           willChange: 'transform',
