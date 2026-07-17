@@ -14,11 +14,18 @@ import {
 import { VOICE_AUDIT_LOG_KEY } from '../lib/voiceAudit'
 import { Button, Chip, IconButton, SegmentedControl, SkeletonRow, Switch } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
+import type { AIMemoryObservation } from '../types'
 
 interface LLMConfig {
   provider: string
   model: string
   api_key: string
+}
+
+interface AIMemoryCaptureConfig {
+  enabled: boolean
+  passiveSignalsEnabled: boolean
+  autoCaptureBugs: boolean
 }
 
 type ModelOption = {
@@ -87,6 +94,11 @@ const DEFAULT_FAST_MODEL: Record<string, string> = {
 const VOICE_TELEMETRY_KEY = 'casa-voice-telemetry'
 const AI_LATENCY_METRICS_KEY = 'casa-ai-latency-rollup'
 const AI_REGRESSION_HISTORY_KEY = 'casa-ai-regression-history-v1'
+const DEFAULT_MEMORY_CAPTURE_CONFIG: AIMemoryCaptureConfig = {
+  enabled: false,
+  passiveSignalsEnabled: false,
+  autoCaptureBugs: false,
+}
 
 type ForensicsSnapshot = {
   windowHours: number
@@ -214,6 +226,12 @@ export default function AISettingsPage() {
   const [regressionResults, setRegressionResults] = useState<RegressionCaseResult[]>([])
   const [regressionHistory, setRegressionHistory] = useState<RegressionRun[]>([])
   const [regressionError, setRegressionError] = useState<string | null>(null)
+  const [memoryCapture, setMemoryCapture] = useState<AIMemoryCaptureConfig>(DEFAULT_MEMORY_CAPTURE_CONFIG)
+  const [memoryObservations, setMemoryObservations] = useState<AIMemoryObservation[]>([])
+  const [memoryLoading, setMemoryLoading] = useState(false)
+  const [memoryError, setMemoryError] = useState<string | null>(null)
+  const [newObservationTitle, setNewObservationTitle] = useState('')
+  const [newObservationDetails, setNewObservationDetails] = useState('')
   const [localLatencyRollup] = useState<{ p95?: number; p99?: number; sampleCount?: number } | null>(() => {
     try {
       const raw = localStorage.getItem(AI_LATENCY_METRICS_KEY)
@@ -246,17 +264,38 @@ export default function AISettingsPage() {
     }
   }, [])
 
+  const loadMemoryObservations = useCallback(async () => {
+    setMemoryLoading(true)
+    setMemoryError(null)
+    const obs = await supabase
+      .from('ai_memory_observations')
+      .select('*')
+      .order('observed_at', { ascending: false })
+      .limit(12)
+    if (obs.error) setMemoryError(obs.error.message)
+    else setMemoryObservations((obs.data ?? []) as AIMemoryObservation[])
+    setMemoryLoading(false)
+  }, [])
+
   useEffect(() => {
     Promise.all([
       supabase.from('settings').select('value').eq('key', 'llm_config').maybeSingle(),
       supabase.from('settings').select('value').eq('key', 'ai_custom_instructions').maybeSingle(),
-    ]).then(([cfg, ci]) => {
+      supabase.from('settings').select('value').eq('key', 'ai_memory_capture_config').maybeSingle(),
+    ]).then(([cfg, ci, memoryCfg]) => {
       if (cfg.data?.value) setConfig(cfg.data.value as LLMConfig)
       const ciVal = (ci.data?.value as { text?: string } | null)?.text
       if (ciVal) setCustomInstructions(ciVal)
+      if (memoryCfg.data?.value && typeof memoryCfg.data.value === 'object') {
+        setMemoryCapture({
+          ...DEFAULT_MEMORY_CAPTURE_CONFIG,
+          ...(memoryCfg.data.value as Partial<AIMemoryCaptureConfig>),
+        })
+      }
       setIsLoading(false)
+      void loadMemoryObservations()
     })
-  }, [])
+  }, [loadMemoryObservations])
 
   const loadForensics = useCallback(async () => {
     setForensicsLoading(true)
@@ -444,7 +483,7 @@ export default function AISettingsPage() {
   const handleSave = useCallback(async () => {
     setSaveStatus('saving')
     const updatedAt = new Date().toISOString()
-    const [a, b] = await Promise.all([
+    const [a, b, c] = await Promise.all([
       supabase.from('settings').upsert(
         { key: 'llm_config', value: config, updated_at: updatedAt },
         { onConflict: 'key' }
@@ -453,10 +492,14 @@ export default function AISettingsPage() {
         { key: 'ai_custom_instructions', value: { text: customInstructions.trim() }, updated_at: updatedAt },
         { onConflict: 'key' }
       ),
+      supabase.from('settings').upsert(
+        { key: 'ai_memory_capture_config', value: memoryCapture, updated_at: updatedAt },
+        { onConflict: 'key' }
+      ),
     ])
-    setSaveStatus(a.error || b.error ? 'error' : 'saved')
-    if (!a.error && !b.error) setTimeout(() => setSaveStatus('idle'), 3000)
-  }, [config, customInstructions])
+    setSaveStatus(a.error || b.error || c.error ? 'error' : 'saved')
+    if (!a.error && !b.error && !c.error) setTimeout(() => setSaveStatus('idle'), 3000)
+  }, [config, customInstructions, memoryCapture])
 
   useEffect(() => {
     if (isLoading) return
@@ -469,7 +512,7 @@ export default function AISettingsPage() {
       handleSave()
     }, 700)
     return () => clearTimeout(t)
-  }, [config, customInstructions, isLoading, handleSave])
+  }, [config, customInstructions, memoryCapture, isLoading, handleSave])
 
   async function handleTest() {
     setTestStatus('testing')
@@ -598,6 +641,40 @@ export default function AISettingsPage() {
     setVoiceRuntime(next)
   }
 
+  async function addObservation() {
+    const title = newObservationTitle.trim()
+    if (!title) return
+    setMemoryError(null)
+    const { error } = await supabase.from('ai_memory_observations').insert({
+      title,
+      details: newObservationDetails.trim() || null,
+      category: 'operational',
+      source: 'user',
+      status: 'review',
+      confidence: null,
+    })
+    if (error) {
+      setMemoryError(error.message)
+      return
+    }
+    setNewObservationTitle('')
+    setNewObservationDetails('')
+    await loadMemoryObservations()
+  }
+
+  async function updateObservationStatus(id: string, status: AIMemoryObservation['status']) {
+    setMemoryError(null)
+    const { error } = await supabase
+      .from('ai_memory_observations')
+      .update({ status })
+      .eq('id', id)
+    if (error) {
+      setMemoryError(error.message)
+      return
+    }
+    setMemoryObservations((rows) => rows.map((row) => (row.id === id ? { ...row, status } : row)))
+  }
+
 
   if (isLoading) return <div className="space-y-4"><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>
 
@@ -687,6 +764,82 @@ export default function AISettingsPage() {
             placeholder="One rule per line, in your own words. Saved instantly to every conversation."
             className="w-full rounded-button border border-casa-border bg-white px-3 py-2 text-body-sm text-casa-navy focus:outline-none focus:border-casa-gold resize-y font-mono"
           />
+        </div>
+
+        <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-body-sm font-semibold text-casa-navy">AI Memory</p>
+            <Button variant="secondary" size="sm" onClick={() => void loadMemoryObservations()} leadingIcon={<RefreshCw size={14} />}>
+              Refresh
+            </Button>
+          </div>
+          <p className="text-caption text-casa-muted">
+            Memory is explicit and reviewable: no hidden spying. Casa only keeps observations you approve.
+          </p>
+          <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3 space-y-3">
+            <Switch
+              label="Enable AI memory capture"
+              description="Allow Casa to store approved habits/preferences and operational observations."
+              checked={memoryCapture.enabled}
+              onCheckedChange={(enabled) => setMemoryCapture((current) => ({ ...current, enabled }))}
+            />
+            <Switch
+              label="Allow passive signal suggestions"
+              description="Surface suggested observations from app activity for your review."
+              checked={memoryCapture.passiveSignalsEnabled}
+              onCheckedChange={(passiveSignalsEnabled) => setMemoryCapture((current) => ({ ...current, passiveSignalsEnabled }))}
+            />
+          </div>
+          <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3 space-y-2">
+            <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">New learning observation</p>
+            <input
+              value={newObservationTitle}
+              onChange={(e) => setNewObservationTitle(e.target.value)}
+              placeholder="Example: Owen focuses better after snack + 20 min reset"
+              className="w-full px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-navy bg-white focus:outline-none focus:ring-2 focus:ring-casa-navy/20"
+            />
+            <textarea
+              value={newObservationDetails}
+              onChange={(e) => setNewObservationDetails(e.target.value)}
+              rows={3}
+              placeholder="Optional detail/context"
+              className="w-full rounded-button border border-casa-border bg-white px-3 py-2 text-body-sm text-casa-navy focus:outline-none focus:border-casa-gold resize-y"
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!newObservationTitle.trim()}
+              onClick={() => void addObservation()}
+            >
+              Save observation
+            </Button>
+            {memoryError && <p className="text-caption text-casa-error">{memoryError}</p>}
+            <div className="space-y-2 max-h-56 overflow-y-auto">
+              {memoryLoading ? (
+                <SkeletonRow />
+              ) : memoryObservations.length === 0 ? (
+                <p className="text-caption text-casa-muted">No observations yet.</p>
+              ) : memoryObservations.map((observation) => (
+                <div key={observation.id} className="rounded-button border border-casa-border bg-white p-2.5 space-y-1">
+                  <p className="text-body-sm font-semibold text-casa-navy">{observation.title}</p>
+                  {observation.details && <p className="text-caption text-casa-muted">{observation.details}</p>}
+                  <div className="flex items-center gap-1.5">
+                    <Chip size="sm" tone="neutral">{observation.status}</Chip>
+                    <Button variant="ghost" size="sm" onClick={() => void updateObservationStatus(observation.id, 'active')}>Active</Button>
+                    <Button variant="ghost" size="sm" onClick={() => void updateObservationStatus(observation.id, 'archived')}>Archive</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3">
+            <p className="text-caption text-casa-muted">
+              Bug intake/triage has moved to its own menu for cleaner workflow.
+            </p>
+            <Link to="/settings/bug-tracker" className="inline-flex mt-2 rounded-button border border-casa-border bg-white px-3 py-1.5 text-caption font-semibold text-casa-navy hover:bg-casa-bg">
+              Open Bug Tracker
+            </Link>
+          </div>
         </div>
 
         {/* Wake Word Sensitivity */}

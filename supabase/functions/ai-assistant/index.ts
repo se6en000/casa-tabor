@@ -79,6 +79,12 @@ import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
 import { getAgentToolByLegacyName } from '../_shared/assistant-agent-tools.mjs'
 import { isAgentWriteCompatible } from '../_shared/assistant-agent-write-compatibility.mjs'
 import {
+  formatBugTrackerSummary,
+  formatMemoryInsightsSummary,
+  isBugTrackerReadRequest,
+  isMemoryInsightsReadRequest,
+} from '../_shared/assistant-memory-insights.mjs'
+import {
   explicitReminderCreateRequestForMessages,
   explicitReminderSubject,
   explicitReminderSearchForMessages,
@@ -114,6 +120,22 @@ type LlmTelemetry = {
   output_tokens: number
   thought_tokens: number
   total_tokens: number
+}
+
+type MemoryObservationRow = {
+  id: string
+  title: string
+  details: string | null
+  status: 'active' | 'review' | 'archived'
+  observed_at: string
+}
+
+type BugReportRow = {
+  id: string
+  title: string
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  status: 'open' | 'in_progress' | 'blocked' | 'resolved' | 'wont_fix'
+  discovered_at: string
 }
 
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
@@ -567,6 +589,10 @@ Deno.serve(async (req) => {
   )
   const needsFoodProfileData = !requestAmbiguity && ['recipe', 'full'].includes(intentRouting.profile)
   const needsAvailabilityData = !requestAmbiguity && ['event', 'full'].includes(intentRouting.profile)
+  const memoryInsightsReadIntent = isMemoryInsightsReadRequest(latestUserText)
+  const bugTrackerReadIntent = isBugTrackerReadRequest(latestUserText)
+  const needsMemoryObservationData = !requestAmbiguity && memoryInsightsReadIntent
+  const needsBugReportData = !requestAmbiguity && bugTrackerReadIntent
   const skippedRows = Promise.resolve({ data: [], error: null })
   const skippedRow = Promise.resolve({ data: null, error: null })
 
@@ -587,6 +613,8 @@ Deno.serve(async (req) => {
     foodProfileResult,
     availabilityRulesResult,
     availabilityExceptionsResult,
+    memoryObservationsResult,
+    bugReportsResult,
   ] = await Promise.all([
     sb.from('settings').select('value').eq('key', 'llm_config').limit(1),
     sb.from('settings').select('value').eq('key', 'agent_runtime_config').maybeSingle()
@@ -641,6 +669,19 @@ Deno.serve(async (req) => {
     needsAvailabilityData
       ? sb.from('member_availability_exceptions').select('member_id, start_at, end_at, override_type, note').gte('end_at', windowStart.toISOString()).then(r => r).catch(() => ({ data: null, error: null }))
       : skippedRows,
+    needsMemoryObservationData
+      ? sb.from('ai_memory_observations')
+        .select('id, title, details, status, observed_at')
+        .in('status', ['active', 'review'])
+        .order('observed_at', { ascending: false })
+        .limit(12)
+      : skippedRows,
+    needsBugReportData
+      ? sb.from('ai_bug_reports')
+        .select('id, title, severity, status, discovered_at')
+        .order('discovered_at', { ascending: false })
+        .limit(25)
+      : skippedRows,
   ])
   const homeConfig = homeConfigResult?.data?.value as { address?: string; city?: string; state?: string; zip?: string } | null
   const homeAddress = [homeConfig?.address, homeConfig?.city, homeConfig?.state, homeConfig?.zip].filter(Boolean).join(', ')
@@ -687,6 +728,45 @@ Deno.serve(async (req) => {
     output_tokens: 0,
     thought_tokens: 0,
     total_tokens: 0,
+  }
+  if (memoryInsightsReadIntent || bugTrackerReadIntent) {
+    const observations = (memoryObservationsResult.data ?? []) as MemoryObservationRow[]
+    const bugs = (bugReportsResult.data ?? []) as BugReportRow[]
+    const textParts: string[] = []
+    if (memoryInsightsReadIntent) {
+      textParts.push(formatMemoryInsightsSummary(observations))
+    }
+    if (bugTrackerReadIntent) {
+      textParts.push(formatBugTrackerSummary(bugs))
+    }
+    const requestTotalMs = Date.now() - requestStartMs
+    appendServerTrace('server_ai_assistant_memory_bug_summary', `memory=${observations.length} bugs=${bugs.length}`, {
+      memory_requested: memoryInsightsReadIntent,
+      bug_requested: bugTrackerReadIntent,
+      memory_count: observations.length,
+      bug_count: bugs.length,
+      memory_error: memoryObservationsResult.error?.message ?? null,
+      bug_error: bugReportsResult.error?.message ?? null,
+      request_ms: requestTotalMs,
+    })
+    return {
+      status: 200,
+      payload: {
+        type: 'text',
+        text: textParts.join('\n\n'),
+        correlation_id: cid,
+        authoritative_provenance: {
+          source: 'ai_memory_observations+ai_bug_reports',
+          observation_ids: observations.map((row) => row.id),
+          bug_ids: bugs.map((row) => row.id),
+        },
+        telemetry: {
+          ...llmTelemetry,
+          request_total_ms: requestTotalMs,
+          context_load_ms: contextLoadMs,
+        },
+      },
+    }
   }
   if (cookingFrame?.intent === 'recipe.find') {
     const query = String(cookingFrame.slots?.query ?? '').trim()

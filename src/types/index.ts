@@ -221,3 +221,29 @@ export interface PrepItem {
 
 export type CalendarView = 'today' | 'week' | 'month' | 'agenda' | 'family-split' | 'stacked'
 export type AppMode = 'interactive' | 'ambient'
+
+export interface AIMemoryObservation {
+  id: string
+  title: string
+  details: string | null
+  category: 'habit' | 'preference' | 'family_pattern' | 'operational'
+  status: 'active' | 'review' | 'archived'
+  source: 'assistant' | 'user' | 'system'
+  confidence: number | null
+  observed_at: string
+  created_at: string
+  updated_at: string
+}
+
+export interface AIBugReport {
+  id: string
+  title: string
+  details: string | null
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  status: 'open' | 'in_progress' | 'blocked' | 'resolved' | 'wont_fix'
+  source: 'user' | 'assistant' | 'system'
+  discovered_at: string
+  created_at: string
+  updated_at: string
+  resolved_at: string | null
+}

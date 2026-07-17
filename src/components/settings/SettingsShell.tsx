@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useRef } from 'react'
 import {
   Users, Sun, MessageSquare, Bot, Home, Activity,
-  BookmarkCheck, Layers, ChevronRight, Music2, LineChart,
+  BookmarkCheck, Layers, ChevronRight, Music2, LineChart, Bug,
   Palette, ShoppingCart, ChefHat, Lock, LayoutGrid,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
@@ -41,6 +41,7 @@ const NAV_GROUPS = [
       { to: '/settings/grocery-intelligence', icon: ShoppingCart, label: 'Grocery Intelligence', desc: 'Smart aisle ordering and scan preferences' },
       { to: '/settings/music',   icon: Music2,        label: 'Spotify / Music',     desc: 'Connect music playback' },
       { to: '/settings/ai',      icon: Bot,           label: 'AI Provider',         desc: 'Vendor, model, API key' },
+      { to: '/settings/bug-tracker', icon: Bug,       label: 'Bug Tracker',         desc: 'Capture and triage defects' },
       { to: '/settings/sms',     icon: MessageSquare, label: 'Notifications',       desc: 'SMS briefings & alerts' },
     ],
   },
