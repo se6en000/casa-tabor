@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { addDays, format, isToday, isTomorrow, startOfDay } from 'date-fns'
 import { Clock } from 'lucide-react'
 import { cn } from '../../utils/cn'
@@ -66,47 +66,60 @@ function dayLabel(date: Date) {
   return format(date, 'EEE, MMM d')
 }
 
-function WheelColumn({ items, value, onChange, wide = false }: {
+function WheelColumn({ items, value, onChange, label, wide = false }: {
   items: WheelItem[]
   value: number | string
   onChange: (value: number | string) => void
+  label: string
   wide?: boolean
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const settleTimer = useRef<number | undefined>(undefined)
   const userScrolling = useRef(false)
   const selectedIndex = Math.max(0, items.findIndex(item => item.value === value))
+  const [highlightedIndex, setHighlightedIndex] = useState(selectedIndex)
+  const highlightedIndexRef = useRef(selectedIndex)
 
   useEffect(() => () => {
     if (settleTimer.current) window.clearTimeout(settleTimer.current)
   }, [])
 
-  useEffect(() => {
-    if (userScrolling.current || !scrollRef.current) return
+  useLayoutEffect(() => {
+    if (settleTimer.current) window.clearTimeout(settleTimer.current)
+    userScrolling.current = false
+    highlightedIndexRef.current = selectedIndex
+    setHighlightedIndex(selectedIndex)
+    if (!scrollRef.current) return
     scrollRef.current.scrollTop = selectedIndex * ITEM_HEIGHT
-  }, [selectedIndex])
+  }, [items, selectedIndex, value])
 
   const beginUserScroll = () => {
     userScrolling.current = true
     if (settleTimer.current) window.clearTimeout(settleTimer.current)
-    settleTimer.current = window.setTimeout(() => {
-      userScrolling.current = false
-    }, 250)
   }
 
   const handleScroll = () => {
     if (!userScrolling.current) return
+    if (!scrollRef.current) return
+    const index = Math.max(0, Math.min(items.length - 1, Math.round(scrollRef.current.scrollTop / ITEM_HEIGHT)))
+    if (index !== highlightedIndexRef.current) {
+      highlightedIndexRef.current = index
+      setHighlightedIndex(index)
+    }
     if (settleTimer.current) window.clearTimeout(settleTimer.current)
     settleTimer.current = window.setTimeout(() => {
-      userScrolling.current = false
       if (!scrollRef.current) return
       const index = Math.max(0, Math.min(items.length - 1, Math.round(scrollRef.current.scrollTop / ITEM_HEIGHT)))
       const picked = items[index]
+      userScrolling.current = false
+      highlightedIndexRef.current = index
+      setHighlightedIndex(index)
+      scrollRef.current.scrollTop = index * ITEM_HEIGHT
       if (picked && picked.value !== value) {
         navigator.vibrate?.(6)
         onChange(picked.value)
       }
-    }, 110)
+    }, 80)
   }
 
   return (
@@ -117,14 +130,18 @@ function WheelColumn({ items, value, onChange, wide = false }: {
         onWheel={beginUserScroll}
         onKeyDown={beginUserScroll}
         onScroll={handleScroll}
+        aria-label={label}
+        role="listbox"
         className="h-full snap-y snap-mandatory overflow-y-scroll overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         <div style={{ height: WHEEL_PADDING }} />
         {items.map((item, index) => {
-          const distance = Math.abs(index - selectedIndex)
+          const distance = Math.abs(index - highlightedIndex)
           return (
             <div
               key={String(item.value)}
+              role="option"
+              aria-selected={distance === 0}
               className="flex snap-center select-none items-center justify-center whitespace-nowrap text-heading transition-[opacity,transform]"
               style={{
                 height: ITEM_HEIGHT,
@@ -151,10 +168,10 @@ function WheelRow({ value, onChange, days }: { value: string; onChange: (value: 
   const patch = (next: Partial<WheelParts>) => onChange(toLocalValue(combine({ ...parts, ...next })))
   return (
     <div className="relative flex gap-1 rounded-card border border-casa-border bg-casa-bg px-2 text-content-heading">
-      <WheelColumn wide items={days} value={parts.dayTs} onChange={value => patch({ dayTs: value as number })} />
-      <WheelColumn items={HOURS} value={parts.hour12} onChange={value => patch({ hour12: value as number })} />
-      <WheelColumn items={MINUTES} value={parts.minute} onChange={value => patch({ minute: value as number })} />
-      <WheelColumn items={DAY_PERIODS} value={parts.ampm} onChange={value => patch({ ampm: value as 'AM' | 'PM' })} />
+      <WheelColumn wide label="Date" items={days} value={parts.dayTs} onChange={value => patch({ dayTs: value as number })} />
+      <WheelColumn label="Hour" items={HOURS} value={parts.hour12} onChange={value => patch({ hour12: value as number })} />
+      <WheelColumn label="Minute" items={MINUTES} value={parts.minute} onChange={value => patch({ minute: value as number })} />
+      <WheelColumn label="AM or PM" items={DAY_PERIODS} value={parts.ampm} onChange={value => patch({ ampm: value as 'AM' | 'PM' })} />
     </div>
   )
 }

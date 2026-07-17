@@ -247,12 +247,18 @@ test('event editor uses shared progressive disclosure and date-time dials', () =
   assert.match(exports, /export \{ FormSummaryCard/)
 })
 
-test('date-time wheel ignores programmatic scroll positioning', () => {
+test('date-time wheel follows live touch selection and synchronizes controlled values', () => {
   const dial = readFileSync(resolve('src/components/ui/DateTimeDial.tsx'), 'utf8')
   assert.match(dial, /onPointerDown=\{beginUserScroll\}/)
   assert.match(dial, /onWheel=\{beginUserScroll\}/)
   assert.match(dial, /if \(!userScrolling\.current\) return/)
   assert.match(dial, /window\.clearTimeout\(settleTimer\.current\)/)
+  assert.match(dial, /setHighlightedIndex\(index\)/)
+  assert.match(dial, /scrollRef\.current\.scrollTop = index \* ITEM_HEIGHT/)
+  assert.match(dial, /useLayoutEffect\(\(\) =>/)
+  assert.doesNotMatch(dial, /if \(userScrolling\.current \|\| !scrollRef\.current\) return/)
+  assert.match(dial, /role="listbox"/)
+  assert.match(dial, /aria-selected=\{distance === 0\}/)
 })
 
 test('quick create keeps the end one hour after every start adjustment', () => {
