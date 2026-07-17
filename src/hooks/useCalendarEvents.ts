@@ -304,6 +304,38 @@ export function useRollingEvents(today: Date) {
   return useEventsForRange(['events', 'rolling', start.toISOString()], start, end)
 }
 
+export interface WeekEventIndexItem {
+  id: string
+  start_time: string
+  end_time: string
+  all_day: boolean
+}
+
+/** Minimal seven-day index used only for Home's event-count buttons. */
+export function useWeekEventIndex(selectedDate: Date) {
+  const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 })
+  const weekEnd = addDays(endOfWeek(selectedDate, { weekStartsOn: 0 }), 1)
+  useRealtimeEventInvalidation()
+
+  return useQuery({
+    queryKey: ['events', 'week-index', weekStart.toISOString()],
+    queryFn: async (): Promise<WeekEventIndexItem[]> => {
+      const { data, error } = await supabase
+        .from('events')
+        .select('id, start_time, end_time, all_day')
+        .lt('start_time', weekEnd.toISOString())
+        .gt('end_time', weekStart.toISOString())
+        .is('deleted_at', null)
+        .neq('status', 'cancelled')
+        .order('start_time')
+
+      if (error) throw error
+      return data ?? []
+    },
+    staleTime: 60_000,
+  })
+}
+
 /**
  * Singleton realtime subscription — only one channel regardless of how many
  * components call useWeekEvents/useTodayEvents simultaneously.

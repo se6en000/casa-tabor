@@ -57,6 +57,7 @@ export const GROCERY_CATEGORIES = [
 const EMPTY_ITEMS: GroceryItem[] = []
 const NORMALIZATION_DEBOUNCE_MS = 1_500
 const NORMALIZATION_RETRY_MS = 15_000
+const GROCERY_RECOVERY_POLL_MS = 10 * 60_000
 
 let _groceryRealtimeSubscribers = 0
 let _groceryRealtimeChannel: ReturnType<typeof supabase.channel> | null = null
@@ -74,7 +75,34 @@ function fireGroceryInvalidation() {
 async function fetchGroceryData() {
   const [{ data: lists }, { data: items }] = await Promise.all([
     supabase.from('grocery_lists').select('id, name, created_at').order('created_at').limit(5),
-    supabase.from('grocery_items').select('*').is('deleted_at', null).order('category').order('name'),
+    supabase
+      .from('grocery_items')
+      .select(`
+        id,
+        list_id,
+        name,
+        quantity,
+        unit,
+        category,
+        checked,
+        notes,
+        created_at,
+        updated_at,
+        deleted_at,
+        ios_reminder_id,
+        ios_updated_at,
+        sync_version,
+        last_modified_source,
+        canonical_item_id,
+        subcategory,
+        brand,
+        store_section,
+        enhancement_confidence,
+        enhanced_at
+      `)
+      .is('deleted_at', null)
+      .order('category')
+      .order('name'),
   ])
   return { lists: lists ?? [], items: items ?? [] }
 }
@@ -177,9 +205,11 @@ export function useGroceryList() {
   const { data, isLoading, dataUpdatedAt } = useQuery({
     queryKey: ['grocery'],
     queryFn: fetchGroceryData,
-    staleTime: 30_000,
-    refetchInterval: 45_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: GROCERY_RECOVERY_POLL_MS,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   })
 
   const addItem = useMutation({

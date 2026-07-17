@@ -6,7 +6,7 @@ import { Check, CheckCircle2, ChevronLeft, ChevronRight, RefreshCw, MapPin, Cloc
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
-import { useTodayEvents } from '../hooks/useCalendarEvents'
+import { useRollingEvents } from '../hooks/useCalendarEvents'
 import { useLiveClock } from '../hooks/useLiveClock'
 import { useCalendarStore } from '../stores/calendarStore'
 import { cn } from '../utils/cn'
@@ -29,7 +29,7 @@ import {
 import { derivePlan, type DerivedPerson } from '../lib/eventCommandCenter'
 import { projectHomeTransportation } from '../lib/homeTransportationProjection.mjs'
 import type { FamilyMember } from '../types'
-import { getEventEndDate, getEventStartDate } from '../utils/eventTime'
+import { eventOverlapsDay, getEventEndDate, getEventStartDate } from '../utils/eventTime'
 import { formatDurationLabel, pickActiveHeroEvent, resolveRestingIndex } from '../lib/heroFocus.mjs'
 import { cleanEventTitle, isBirthdayEvent } from '../utils/eventTitle'
 import { buttonClassName } from '../design-system/variants.mjs'
@@ -188,13 +188,20 @@ function applyPersistedDriverOverrides(
 export default function HomePage() {
   const now = useLiveClock(15_000)
   const { data: family } = useFamilyMembers()
-  const { data: allTodayEvents, isLoading } = useTodayEvents(now)
+  const { data: rollingEvents, isLoading } = useRollingEvents(now)
   const currentDateKey = format(now, 'yyyy-MM-dd')
   const tomorrow = useMemo(
     () => addDays(new Date(`${currentDateKey}T12:00:00`), 1),
     [currentDateKey],
   )
-  const { data: allTomorrowEvents } = useTodayEvents(tomorrow)
+  const allTodayEvents = useMemo(
+    () => rollingEvents?.filter((event) => eventOverlapsDay(event, now)),
+    [rollingEvents, currentDateKey],
+  )
+  const allTomorrowEvents = useMemo(
+    () => rollingEvents?.filter((event) => eventOverlapsDay(event, tomorrow)),
+    [rollingEvents, tomorrow],
+  )
   const { visibleMembers } = useCalendarStore()
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [pastItemsOpen, setPastItemsOpen] = useState(false)

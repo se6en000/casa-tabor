@@ -8,7 +8,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ChevronRight, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
-import { useWeekEvents } from '../../hooks/useCalendarEvents'
+import { useWeekEventIndex } from '../../hooks/useCalendarEvents'
 import { useCompletePrepItem, useDownvotePrepItem, usePrepItems, useSnoozePrepItem } from '../../hooks/usePrepItems'
 import { supabase } from '../../lib/supabase'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
@@ -81,7 +81,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   const completePrepItem = useCompletePrepItem()
   const snoozePrepItem = useSnoozePrepItem()
   const downvotePrepItem = useDownvotePrepItem()
-  const { data: weekEvents } = useWeekEvents(now)
+  const { data: weekEventIndex = [] } = useWeekEventIndex(now)
   const setSelectedDate = useCalendarStore(s => s.setSelectedDate)
   const setActiveView = useCalendarStore(s => s.setActiveView)
   const [checkingItemId, setCheckingItemId] = useState<string | null>(null)
@@ -188,9 +188,9 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
           <div className="mt-3 grid grid-cols-7 gap-1.5">
             {days.map(day => {
               const isToday = day.toDateString() === now.toDateString()
-              const eventCount = weekEvents?.filter(event => (
+              const eventCount = weekEventIndex.filter(event => (
                 eventOverlapsDay(event, day)
-              )).length ?? 0
+              )).length
 
               return (
                 <Button
