@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   CALENDAR_SEMANTIC_TURN_VERSION,
+  hardenExplicitCalendarRangeTurn,
   resolveCalendarSemanticTurn,
   shouldPreferActiveCalendarEntity,
 } from '../supabase/functions/_shared/assistant-calendar-agent.mjs'
@@ -36,6 +37,41 @@ test('semantic calendar create resolves local date, time, and explicit duration 
     title: 'Dinner with Mom',
     start: '2026-07-19T18:00:00-04:00',
     end: '2026-07-19T19:30:00-04:00',
+  })
+
+  test('explicit spoken clock ranges override model-invented create durations', () => {
+    for (const text of [
+      '8 A.M to 8 P.M',
+      'from 8 AM until 8 PM',
+      'between 8:15 a.m. and 9:45 p.m.',
+    ]) {
+      const hardened = hardenExplicitCalendarRangeTurn(turn('create', {
+        title: "Olivia's birthday",
+        date_reference: { kind: 'absolute', month: 8, day: 2 },
+        time: { hour: 8, period: 'am' },
+        duration_minutes: 30,
+      }), text)
+      const result = resolveCalendarSemanticTurn(hardened, context)
+
+      assert.equal(result.kind, 'tool', text)
+      assert.equal(
+        Date.parse(result.args.end) - Date.parse(result.args.start),
+        text.includes('8:15') ? 13.5 * 60 * 60000 : 12 * 60 * 60000,
+        text,
+      )
+    }
+  })
+
+  test('explicit overnight clock ranges preserve the next-day end', () => {
+    const hardened = hardenExplicitCalendarRangeTurn(turn('create', {
+      title: 'Late airport pickup',
+      date_reference: { kind: 'weekday', weekday: 'friday' },
+      duration_minutes: 30,
+    }), '11:30 PM through 1 AM')
+    const result = resolveCalendarSemanticTurn(hardened, context)
+
+    assert.equal(result.kind, 'tool')
+    assert.equal(Date.parse(result.args.end) - Date.parse(result.args.start), 90 * 60000)
   })
 })
 

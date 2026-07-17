@@ -2,6 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.mjs'
 import { evaluateAgentToolCall } from '../_shared/assistant-agent-policy.mjs'
 import {
+  hardenExplicitCalendarRangeTurn,
   resolveCalendarSemanticTurn,
   shouldPreferActiveCalendarEntity,
 } from '../_shared/assistant-calendar-agent.mjs'
@@ -200,6 +201,7 @@ Deno.serve(async (req) => {
         currentDate: body?.context?.currentDate,
         utcOffset: body?.context?.utcOffset,
       })
+      plan.turn = hardenExplicitCalendarRangeTurn(plan.turn, latestUserText)
       const resolved = resolveCalendarSemanticTurn(plan.turn, {
         currentDate: body?.context?.currentDate,
         utcOffset: body?.context?.utcOffset,

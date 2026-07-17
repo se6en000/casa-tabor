@@ -200,6 +200,7 @@ test('shadow response parser maps provider function names to capability names', 
     assert.deepEqual(declarations.map((declaration) => declaration.name), ['assistant_interpret_write'])
     assert.ok(!declarations.some((declaration) => declaration.name === 'calendar_update'))
     assert.match(request.system_instruction.parts[0].text, /Never calculate or emit calendar timestamps/)
+    assert.match(request.system_instruction.parts[0].text, /Never replace an explicit range with a default duration/)
     assert.match(request.system_instruction.parts[0].text, /Resolve conversational identity clarifications/)
 
     assert.deepEqual(parseAgentShadowResponse({

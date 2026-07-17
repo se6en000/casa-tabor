@@ -2,6 +2,21 @@ export const CALENDAR_SEMANTIC_TURN_VERSION = 'calendar-semantic-turn-v1'
 
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
 
+export function hardenExplicitCalendarRangeTurn(turn, text) {
+  if (!turn || !['create', 'revise', 'update'].includes(turn.action)) return turn
+  const range = parseExplicitClockRange(text)
+  if (!range) return turn
+
+  return {
+    ...turn,
+    patch: {
+      ...(turn.patch && typeof turn.patch === 'object' ? turn.patch : {}),
+      time: range.start,
+      duration_minutes: range.durationMinutes,
+    },
+  }
+}
+
 export function resolveCalendarSemanticTurn(turn, context = {}) {
   if (!turn || turn.version !== CALENDAR_SEMANTIC_TURN_VERSION) {
     return reject('invalid_calendar_semantic_turn')
@@ -350,6 +365,43 @@ function normalizeTime(value) {
     return null
   }
   return { hour, minute, period }
+}
+
+function parseExplicitClockRange(value) {
+  const input = String(value ?? '').replace(/\s+/g, ' ').trim()
+  const match = input.match(
+    /\b(?:from\s+|between\s+)?(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)\s*(?:to|until|through|thru|and|-)\s*(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)\b/i,
+  )
+  if (!match) return null
+
+  const start = normalizeExplicitClock(match[1], match[2], match[3])
+  const end = normalizeExplicitClock(match[4], match[5], match[6])
+  if (!start || !end) return null
+
+  const startMinutes = clockMinutes(start)
+  let endMinutes = clockMinutes(end)
+  if (endMinutes <= startMinutes) endMinutes += 24 * 60
+  return {
+    start,
+    durationMinutes: endMinutes - startMinutes,
+  }
+}
+
+function normalizeExplicitClock(hourValue, minuteValue, periodValue) {
+  const hour = Number(hourValue)
+  const minute = Number(minuteValue ?? 0)
+  if (!Number.isInteger(hour) || hour < 1 || hour > 12 || !Number.isInteger(minute) || minute < 0 || minute > 59) {
+    return null
+  }
+  return {
+    hour,
+    minute,
+    period: String(periodValue).toLowerCase().startsWith('p') ? 'pm' : 'am',
+  }
+}
+
+function clockMinutes(clock) {
+  return ((clock.hour % 12) + (clock.period === 'pm' ? 12 : 0)) * 60 + clock.minute
 }
 
 function resolveClock(time, baseStart) {
