@@ -2,7 +2,7 @@
  * HomeRightPanel — redesigned desktop rail with week-jump, needs-you cards,
  * and inbox intelligence while reusing existing data/actions.
  */
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { addDays, differenceInDays, format, parseISO, startOfWeek } from 'date-fns'
 import { Link, useNavigate } from 'react-router-dom'
 import { ChevronRight, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react'
@@ -60,6 +60,13 @@ function urgencyLabel(days: number) {
   return { section: 'LATER', badge: `in ${days}d`, tone: 'success' as const }
 }
 
+function urgencyRank(days: number): number {
+  if (days <= 0) return 0
+  if (days <= 1) return 1
+  if (days <= 4) return 2
+  return 3
+}
+
 function sourceBadge(item: PrepItem) {
   if (item.source_type === 'reminder_manual') return { label: 'Reminder', tone: 'warning' as const }
   if (item.source_type === 'reminder_missed') return { label: 'Missed reminder', tone: 'danger' as const }
@@ -80,6 +87,27 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   const [checkingItemId, setCheckingItemId] = useState<string | null>(null)
   const [downvotingItemId, setDownvotingItemId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const prioritizedPrepItems = useMemo(() => {
+    return [...prepItems].sort((a, b) => {
+      const aDays = daysUntil(a.event_date)
+      const bDays = daysUntil(b.event_date)
+      const aUrgency = urgencyRank(aDays)
+      const bUrgency = urgencyRank(bDays)
+      if (aUrgency !== bUrgency) return aUrgency - bUrgency
+
+      if (a.priority !== b.priority) return b.priority - a.priority
+
+      if (aDays !== bDays) return aDays - bDays
+
+      const aDate = a.event_date ? parseISO(a.event_date).getTime() : Number.POSITIVE_INFINITY
+      const bDate = b.event_date ? parseISO(b.event_date).getTime() : Number.POSITIVE_INFINITY
+      if (aDate !== bDate) return aDate - bDate
+
+      const aCreatedAt = a.created_at ? parseISO(a.created_at).getTime() : Number.POSITIVE_INFINITY
+      const bCreatedAt = b.created_at ? parseISO(b.created_at).getTime() : Number.POSITIVE_INFINITY
+      return aCreatedAt - bCreatedAt
+    })
+  }, [prepItems])
 
   const weekStart = startOfWeek(now, { weekStartsOn: 0 })
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
@@ -212,7 +240,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                   {actionError} The action is still active.
                 </p>
               )}
-              {prepItems.slice(0, 4).map(item => {
+              {prioritizedPrepItems.slice(0, 4).map(item => {
                 const urgency = urgencyLabel(daysUntil(item.event_date))
                 const source = sourceBadge(item)
                 const isDone = checkingItemId === item.id
