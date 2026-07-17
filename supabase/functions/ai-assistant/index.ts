@@ -83,6 +83,7 @@ import {
   formatMemoryInsightsSummary,
   isBugTrackerReadRequest,
   isMemoryInsightsReadRequest,
+  parseBugReportRequest,
 } from '../_shared/assistant-memory-insights.mjs'
 import {
   explicitReminderCreateRequestForMessages,
@@ -283,6 +284,7 @@ Deno.serve(async (req) => {
     : []
   const latestUserText = userMessageTexts.at(-1) ?? null
   const previousUserText = userMessageTexts.at(-2) ?? null
+  const bugReportRequest = parseBugReportRequest(latestUserText)
   const reminderDomainLanguage = hasReminderLanguage(latestUserText)
   const explicitReminderRead = explicitReminderSearchForMessages(messages)
   const reminderCreateRequestText = explicitReminderCreateRequestForMessages(messages)
@@ -549,6 +551,98 @@ Deno.serve(async (req) => {
       },
     }
   }
+  if (bugReportRequest.kind === 'clarify') {
+    const requestTotalMs = Date.now() - requestStartMs
+    const text = 'What happened? Include the problem you want me to put in the bug tracker.'
+    appendServerTrace('server_ai_assistant_bug_report_clarification', 'missing_report_details', {
+      request_ms: requestTotalMs,
+      llm_calls: 0,
+    })
+    return {
+      status: 200,
+      payload: {
+        type: 'text',
+        text,
+        correlation_id: cid,
+        telemetry: { llm_calls: 0, request_total_ms: requestTotalMs, context_load_ms: 0 },
+      },
+    }
+  }
+  if (bugReportRequest.kind === 'create') {
+    if (dryRun) {
+      const requestTotalMs = Date.now() - requestStartMs
+      appendServerTrace('server_ai_assistant_bug_report_dry_run', bugReportRequest.title, {
+        title: bugReportRequest.title,
+        severity: bugReportRequest.severity,
+        request_ms: requestTotalMs,
+        llm_calls: 0,
+      })
+      return {
+        status: 200,
+        payload: {
+          type: 'text',
+          text: `Dry run: I would save bug report "${bugReportRequest.title}".`,
+          correlation_id: cid,
+          write_verified: false,
+          telemetry: { llm_calls: 0, request_total_ms: requestTotalMs, context_load_ms: 0 },
+        },
+      }
+    }
+    const { data: createdBug, error: createBugError } = await sb
+      .from('ai_bug_reports')
+      .insert({
+        title: bugReportRequest.title,
+        details: bugReportRequest.details,
+        severity: bugReportRequest.severity,
+        status: 'open',
+        source: 'assistant',
+      })
+      .select('id, title, severity, status')
+      .single()
+    const requestTotalMs = Date.now() - requestStartMs
+    if (createBugError || !createdBug) {
+      console.error(`[ai-assistant][${cid}] bug_report_insert_error:`, createBugError)
+      appendServerTrace('server_ai_assistant_bug_report_failed', createBugError?.message ?? 'missing_inserted_row', {
+        title: bugReportRequest.title,
+        severity: bugReportRequest.severity,
+        request_ms: requestTotalMs,
+        llm_calls: 0,
+      })
+      return {
+        status: 500,
+        payload: {
+          type: 'text',
+          text: 'I could not save that bug report. Please try again.',
+          correlation_id: cid,
+          write_verified: false,
+          telemetry: { llm_calls: 0, request_total_ms: requestTotalMs, context_load_ms: 0 },
+        },
+      }
+    }
+    appendServerTrace('server_ai_assistant_bug_report_created', createdBug.id, {
+      bug_id: createdBug.id,
+      title: createdBug.title,
+      severity: createdBug.severity,
+      status: createdBug.status,
+      source: 'assistant',
+      request_ms: requestTotalMs,
+      llm_calls: 0,
+    })
+    return {
+      status: 200,
+      payload: {
+        type: 'text',
+        text: `Saved bug report "${createdBug.title}" as ${createdBug.severity} priority.`,
+        correlation_id: cid,
+        write_verified: true,
+        authoritative_provenance: {
+          source: 'ai_bug_reports',
+          bug_id: createdBug.id,
+        },
+        telemetry: { llm_calls: 0, request_total_ms: requestTotalMs, context_load_ms: 0 },
+      },
+    }
+  }
 
   // Load config, saved places, contacts, grocery list, events in parallel
   const now = new Date()
@@ -590,7 +684,7 @@ Deno.serve(async (req) => {
   const needsFoodProfileData = !requestAmbiguity && ['recipe', 'full'].includes(intentRouting.profile)
   const needsAvailabilityData = !requestAmbiguity && ['event', 'full'].includes(intentRouting.profile)
   const memoryInsightsReadIntent = isMemoryInsightsReadRequest(latestUserText)
-  const bugTrackerReadIntent = isBugTrackerReadRequest(latestUserText)
+  const bugTrackerReadIntent = bugReportRequest.kind === 'none' && isBugTrackerReadRequest(latestUserText)
   const needsMemoryObservationData = !requestAmbiguity && memoryInsightsReadIntent
   const needsBugReportData = !requestAmbiguity && bugTrackerReadIntent
   const skippedRows = Promise.resolve({ data: [], error: null })

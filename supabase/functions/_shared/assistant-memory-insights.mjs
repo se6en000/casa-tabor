@@ -2,6 +2,56 @@ function compact(text) {
   return String(text ?? '').toLowerCase().replace(/\s+/g, ' ').trim()
 }
 
+const BUG_SEVERITY_PATTERNS = [
+  ['critical', /\b(?:critical|urgent|outage|down|data loss|security|cannot use)\b/i],
+  ['high', /\b(?:high priority|major|blocking|blocked|broken|fails?|failure|error|crash(?:es|ed|ing)?)\b/i],
+  ['low', /\b(?:minor|small|cosmetic|nit|typo|low priority)\b/i],
+]
+
+function bugSeverityFor(text) {
+  return BUG_SEVERITY_PATTERNS.find(([, pattern]) => pattern.test(text))?.[0] ?? 'medium'
+}
+
+function cleanBugTitle(text) {
+  const raw = String(text ?? '')
+  const submissionPrefix = /^\s*(?:please\s+)?(?:can you\s+)?(?:(?:report|submit|file|log|track|open|create|add|save|record|capture)\s+(?:this\s+|a\s+|the\s+)?(?:bug|issue|defect|problem)\s*(?:report)?|(?:put|add|save)\s+(?:this|it)\s+(?:in|to)\s+(?:the\s+)?(?:bug\s+tracker|bugs?))\s*[:\-–—]?\s*/i
+  const withoutPrefix = submissionPrefix.test(raw)
+    ? raw.replace(submissionPrefix, '')
+    : /^(?:this|that|it)\s+(?:is|has)\s+(?:a\s+)?(?:bug|issue|defect|problem)\s*[:\-–—]?\s*/i.test(raw)
+      ? raw.replace(/^\s*(?:this|that|it)\s+(?:is|has)\s+(?:a\s+)?(?:bug|issue|defect|problem)\s*[:\-–—]?\s*/i, '')
+      : raw.replace(/^\s*(?:bug|issue|defect)\s*(?:report)?\s*[:\-–—]\s*/i, '')
+  return withoutPrefix
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[.?!]+$/, '')
+    .slice(0, 240)
+}
+
+export function parseBugReportRequest(text) {
+  const raw = String(text ?? '').trim()
+  const value = compact(raw)
+  if (!value) return { kind: 'none' }
+
+  const explicitSubmission = /\b(?:report|submit|file|log|track|open|create|add|save|record|capture)\s+(?:this\s+|a\s+|the\s+)?(?:bug|issue|defect|problem)(?:\s+report)?\b/i.test(raw) ||
+    /\b(?:put|add|save)\s+(?:this|it)\s+(?:in|to)\s+(?:the\s+)?(?:bug\s+tracker|bugs?)\b/i.test(raw)
+  const directDeclaration = /^(?:this|that|it)\s+(?:is|has)\s+(?:a\s+)?(?:bug|issue|defect|problem)\b/i.test(raw) ||
+    /^(?:bug|issue|defect)\s*(?:report)?\s*[:\-–—]/i.test(raw)
+  const discoveryDeclaration = /\b(?:i\s+(?:found|noticed|hit)|we\s+(?:found|noticed|hit))\s+(?:a\s+)?(?:bug|issue|defect)\b/i.test(raw)
+  if (!explicitSubmission && isBugTrackerReadRequest(raw)) return { kind: 'none' }
+  if (!explicitSubmission && !directDeclaration && !discoveryDeclaration) return { kind: 'none' }
+
+  const title = cleanBugTitle(raw)
+  if (!title || /^(?:a |this |the )?(?:bug|issue|defect|problem)(?: report)?$/i.test(title)) {
+    return { kind: 'clarify' }
+  }
+  return {
+    kind: 'create',
+    title,
+    details: raw.length > title.length + 8 ? raw.slice(0, 2000) : null,
+    severity: bugSeverityFor(raw),
+  }
+}
+
 export function isMemoryInsightsReadRequest(text) {
   const value = compact(text)
   if (!value) return false
@@ -14,7 +64,8 @@ export function isMemoryInsightsReadRequest(text) {
 export function isBugTrackerReadRequest(text) {
   const value = compact(text)
   if (!value) return false
-  return /\b(open|tracked|tracking|active|current)?\s*bugs?\b/.test(value) ||
+  return /\b(?:what|show|list|summarize|how many|any)\b[\w\s]{0,30}\b(?:open|tracked|tracking|active|current)?\s*bugs?\b/.test(value) ||
+    /\b(?:open|tracked|tracking|active|current)\s+bugs?\b/.test(value) ||
     /\bbug tracker\b/.test(value) ||
     /\bbug list\b/.test(value) ||
     /\bwhat bugs?\b/.test(value)
