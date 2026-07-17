@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  X, Save, Sparkles, Trash2,
+  X, Save, Sparkles, Trash2, Loader2,
   MapPin, ChevronDown, Users, Lock, Clock, Repeat, Mic, MicOff,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
-import type { EventWithDetails } from '../../hooks/useCalendarEvents'
+import { useEventDetails, type EventWithDetails } from '../../hooks/useCalendarEvents'
 import {
   getFieldsForCategory, FIELD_CONFIG, CATEGORY_LABEL,
   type EnrichmentFieldKey,
@@ -131,7 +131,60 @@ interface Props {
   initialDelete?: boolean
 }
 
-export default function EventEditSheet({ event, open, onClose, initialDelete = false }: Props) {
+export default function EventEditSheet(props: Props) {
+  const detailQuery = useEventDetails(props.event)
+
+  if (!props.open || detailQuery.data) {
+    return <EventEditSheetContent {...props} event={detailQuery.data ?? props.event} />
+  }
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        key="edit-detail-backdrop"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-scrim bg-black/50"
+        onClick={props.onClose}
+      />
+      <motion.div
+        key="edit-detail-loading"
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 32, stiffness: 260 }}
+        className="fixed bottom-0 left-0 right-0 z-modal flex h-[90vh] flex-col overflow-hidden rounded-t-modal bg-casa-surface shadow-modal sm:bottom-8 sm:left-1/2 sm:h-[85vh] sm:w-full sm:max-w-2xl sm:-translate-x-1/2 sm:rounded-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Loading event editor: ${props.event.title}`}
+      >
+        <div className="flex items-center justify-between border-b border-casa-border px-6 py-4">
+          <h3 className="font-display text-display-sm text-casa-navy">Edit Details</h3>
+          <IconButton icon={<X size={18} />} aria-label="Close editor" onClick={props.onClose} />
+        </div>
+        <div className="flex flex-1 items-center justify-center p-6">
+          {detailQuery.isError ? (
+            <Alert tone="danger" title="Event details could not be loaded" className="max-w-md">
+              <div className="mt-2">
+                <Button variant="secondary" size="sm" onClick={() => void detailQuery.refetch()}>
+                  Try again
+                </Button>
+              </div>
+            </Alert>
+          ) : (
+            <div className="inline-flex items-center gap-2 text-body-sm text-casa-muted" role="status">
+              <Loader2 size={18} className="animate-spin" />
+              Loading complete event details…
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+
+function EventEditSheetContent({ event, open, onClose, initialDelete = false }: Props) {
   const enr = event.enrichment
   const save = useSaveEnrichmentBatch()
   const enrich = useEnrichEvent()

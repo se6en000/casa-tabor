@@ -8,7 +8,7 @@ import {
 import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
-import { useTodayEvents, type EventWithDetails } from '../../hooks/useCalendarEvents'
+import { useEventDetails, useTodayEvents, type EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { EventChecklistItem, EventEnrichment, EventActionItem, EventLogistic } from '../../types'
 import { getFieldsForCategory, CATEGORY_LABEL } from './categoryFields'
 import { useSaveEnrichmentBatch } from '../../hooks/useEnrichEvent'
@@ -36,7 +36,7 @@ import { getPersistedPlanOverrides, locationSignature, overridesStorageKey } fro
 import { getEventDisplayStartDay } from '../../utils/eventTime'
 import { cleanEventTitle, isBirthdayEvent } from '../../utils/eventTitle'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
-import { Button, Card, Chip, IconButton, Switch } from '../ui'
+import { Alert, Button, Card, Chip, IconButton, Switch } from '../ui'
 import EventTransportationSection from './EventTransportationSection'
 import InlinePlaceEditor from './InlinePlaceEditor'
 import AddressReviewSummary, { AddressTechnicalStatusChip, type AddressTechnicalStatus } from './AddressReviewSummary'
@@ -129,7 +129,9 @@ function useIsMobile() {
 
 const stopTouch = (e: React.TouchEvent | React.PointerEvent) => e.stopPropagation()
 
-export default function EventDetailPanel({ event, onClose }: EventDetailPanelProps) {
+export default function EventDetailPanel({ event: eventSummary, onClose }: EventDetailPanelProps) {
+  const detailQuery = useEventDetails(eventSummary)
+  const event = detailQuery.data ?? eventSummary
   const [showEdit, setShowEdit] = useState(false)
   const [verifiedOverride, setVerifiedOverride] = useState<boolean | null>(null)
   const [waitsOverride, setWaitsOverride] = useState<boolean | null>(null)
@@ -460,6 +462,11 @@ export default function EventDetailPanel({ event, onClose }: EventDetailPanelPro
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain" data-native-drag data-ptr-ignore>
+                {detailQuery.isError && (
+                  <Alert tone="danger" title="Some event details could not be loaded" className="mx-4 mb-3">
+                    Check the connection, then reopen this event to try again.
+                  </Alert>
+                )}
                 <PanelHeader
                   event={event}
                   verified={addressReviewed}

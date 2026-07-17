@@ -329,7 +329,7 @@ test('calendar chrome uses shared controls while runtime event geometry stays in
 
   assert.match(day, /import \{ Button, CalendarPill, IconButton \} from '\.\.\/ui'/)
   assert.match(month, /import \{ Button, CalendarPill, IconButton \} from '\.\.\/ui'/)
-  assert.match(detail, /import \{ Button, Card, Chip, IconButton, Switch \} from '\.\.\/ui'/)
+  assert.match(detail, /import \{ Alert, Button, Card, Chip, IconButton, Switch \} from '\.\.\/ui'/)
   assert.match(page, /import \{ Button, IconButton, SegmentedControl \} from '\.\.\/components\/ui'/)
   assert.doesNotMatch(page, /<button\b/)
   assert.match(page, /<SegmentedControl[\s\S]*?aria-label="Calendar view"[\s\S]*?onChange=\{setActiveView\}/)
