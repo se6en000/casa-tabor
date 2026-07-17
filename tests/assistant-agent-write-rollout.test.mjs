@@ -15,6 +15,12 @@ test('additive agent writes are feature flagged and sampled', () => {
   assert.match(assistant, /context\?\.assistant_mode !== 'chef'/)
 })
 
+test('reminder vocabulary cannot enter the generic agent write lane', () => {
+  const writeGate = assistant.match(/const shouldRunAgentWrite[\s\S]*?if \(!shouldRunAgentWrite/)?.[0] ?? ''
+  assert.match(writeGate, /!reminderDomainLanguage/)
+  assert.match(writeGate, /!explicitReminderCreate/)
+})
+
 test('write rollout supports global drawer pages and pending-action corrections', () => {
   assert.match(assistant, /new Set\(\['app', 'briefing', 'calendar', 'grocery', 'home'\]\)/)
   assert.doesNotMatch(

@@ -19,6 +19,12 @@ test('agent reads are feature flagged, sampled, and limited to read surfaces', (
   assert.match(assistant, /!context\?\.pendingAction/)
 })
 
+test('explicit reminder creates cannot enter the generic read lane', () => {
+  const readGate = assistant.match(/const shouldRunAgentRead[\s\S]*?if \(shouldRunAgentRead\)/)?.[0] ?? ''
+  assert.match(readGate, /!explicitReminderCreate/)
+  assert.match(readGate, /\(!reminderDomainLanguage \|\| Boolean\(explicitReminderRead\)\)/)
+})
+
 test('mutation deferrals from the read planner fail closed', () => {
   assert.match(assistant, /agentReadData\?\.handled === true/)
   assert.match(assistant, /server_agent_mutation_blocked/)

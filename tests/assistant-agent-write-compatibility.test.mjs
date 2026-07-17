@@ -18,6 +18,21 @@ test('authoritative calendar mutation direction cannot be changed by the planner
   assert.equal(isAgentWriteCompatible('update_event', { calendarIntent: 'event.move' }), true)
 })
 
+test('explicit reminder creates can only adopt reminder-typed create actions', () => {
+  assert.equal(isAgentWriteCompatible('create_event', {
+    explicitReminderCreate: true,
+    args: { event_type: 'reminder' },
+  }), true)
+  assert.equal(isAgentWriteCompatible('create_event', {
+    explicitReminderCreate: true,
+    args: { event_type: 'event' },
+  }), false)
+  assert.equal(isAgentWriteCompatible('update_event', {
+    explicitReminderCreate: true,
+    args: { event_type: 'reminder' },
+  }), false)
+})
+
 test('unclassified reminder language remains available to semantic planning', () => {
   assert.equal(isAgentWriteCompatible('create_event'), true)
   assert.equal(isAgentWriteCompatible('complete_reminder'), true)

@@ -5,6 +5,7 @@ import {
   explicitReminderCreateRequestForMessages,
   explicitReminderSubject,
   fallbackExplicitRelativeReminderTurn,
+  hasReminderLanguage,
   hardenExplicitReminderTurn,
   isExplicitReminderCompletion,
   isExplicitReminderRequest,
@@ -39,9 +40,25 @@ test('natural reminder requests cover common typed and spoken phrasing', () => {
     'Could you please remind me to take the bins out',
     'Reminder to renew the registration',
     'Please remember to call the school',
+    'Remind Jake Monday at 9 AM to call the dentist',
+    'Reminder Monday at 9 AM to call the dentist',
   ]) {
     assert.equal(isExplicitReminderRequest(phrase), true, phrase)
   }
+})
+
+test('reminder vocabulary is recognized as a dedicated domain boundary', () => {
+  for (const phrase of [
+    'remind me tomorrow',
+    'please remind Jake',
+    'this reminder should move',
+    'show reminders',
+    'I was reminded yesterday',
+  ]) {
+    assert.equal(hasReminderLanguage(phrase), true, phrase)
+  }
+  assert.equal(hasReminderLanguage('Schedule a dentist appointment'), false)
+  assert.equal(hasReminderLanguage('Remember the dentist appointment'), false)
 })
 
 test('ordinary calendar edits and memory questions are not reminder creates', () => {

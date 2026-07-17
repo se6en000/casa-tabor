@@ -37,6 +37,8 @@ export function isExplicitReminderRequest(text) {
   const value = String(text ?? '').replace(/\s+/g, ' ').trim()
   if (!value) return false
   return (
+    /^(?:please\s+)?remind\b/i.test(value) ||
+    /^(?:please\s+)?(?:a\s+)?reminder\b/i.test(value) ||
     /\bremind\s+(?:me|us|him|her|them)\b/i.test(value) ||
     /\b(?:set|create|add|make|schedule)\s+(?:(?:me|us)\s+)?(?:a\s+)?reminder\b/i.test(value) ||
     /\b(?:give|send)\s+(?:me|us)\s+(?:a\s+)?reminder\b/i.test(value) ||
@@ -50,6 +52,10 @@ export function isExplicitReminderRequest(text) {
     /\breminder\s+(?:for|to)\b/i.test(value) ||
     /^(?:please\s+)?remember\s+to\b/i.test(value)
   )
+}
+
+export function hasReminderLanguage(text) {
+  return /\b(?:remind|reminded|reminding|reminder|reminders)\b/i.test(String(text ?? ''))
 }
 
 export function explicitReminderCreateRequestForMessages(messages) {

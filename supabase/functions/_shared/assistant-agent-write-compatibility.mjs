@@ -15,6 +15,10 @@ const GROCERY_TOOLS_BY_INTENT = Object.freeze({
 })
 
 export function isAgentWriteCompatible(tool, context = {}) {
+  if (context.explicitReminderCreate) {
+    return tool === 'create_event' && context.args?.event_type === 'reminder'
+  }
+
   const groceryTools = GROCERY_TOOLS_BY_INTENT[context.groceryIntent]
   if (groceryTools) return groceryTools.has(tool)
   if (String(context.groceryIntent ?? '').startsWith('grocery.')) return false

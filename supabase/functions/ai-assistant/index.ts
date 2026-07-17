@@ -82,6 +82,7 @@ import {
   explicitReminderCreateRequestForMessages,
   explicitReminderSubject,
   explicitReminderSearchForMessages,
+  hasReminderLanguage,
   isExplicitReminderCompletion,
   isExplicitReminderRequest,
   isReminderCompletionFollowUp,
@@ -260,6 +261,7 @@ Deno.serve(async (req) => {
     : []
   const latestUserText = userMessageTexts.at(-1) ?? null
   const previousUserText = userMessageTexts.at(-2) ?? null
+  const reminderDomainLanguage = hasReminderLanguage(latestUserText)
   const explicitReminderRead = explicitReminderSearchForMessages(messages)
   const reminderCreateRequestText = explicitReminderCreateRequestForMessages(messages)
   const incomingConversationState = normalizeConversationState(context?.conversationState)
@@ -771,6 +773,7 @@ Deno.serve(async (req) => {
     agentWriteConfig?.enabled === true &&
     agentWriteRate > 0 &&
     !isCalendarSemanticRead &&
+    !reminderDomainLanguage &&
     !explicitReminderCreate &&
     !groceryFrame &&
     AGENT_GENERAL_PAGES.has(String(context?.page ?? '')) &&
@@ -1091,6 +1094,8 @@ Deno.serve(async (req) => {
       isAgentWriteCompatible(String(agentWriteData.tool ?? ''), {
         calendarIntent: calendarFrame?.intent,
         groceryIntent: groceryFrame?.intent,
+        explicitReminderCreate,
+        args: agentWriteData.args,
       }) &&
       agentWriteData.args &&
       typeof agentWriteData.args === 'object'
@@ -1221,6 +1226,8 @@ Deno.serve(async (req) => {
     agentRuntimeEnabled &&
     agentReadConfig?.enabled === true &&
     agentReadRate > 0 &&
+    !explicitReminderCreate &&
+    (!reminderDomainLanguage || Boolean(explicitReminderRead)) &&
     AGENT_GENERAL_PAGES.has(String(context?.page ?? '')) &&
     context?.assistant_mode !== 'chef' &&
     !context?.pendingAction &&
