@@ -58,7 +58,11 @@ async function syncOne(sb: SupabaseClient, resolved: ResolvedGoogleConnection) {
   let upserted = 0
   try {
     do {
-      const params = new URLSearchParams({ singleEvents: 'true', maxResults: '250' })
+      const params = new URLSearchParams({
+        singleEvents: 'true',
+        showDeleted: 'true',
+        maxResults: '250',
+      })
       if (pageToken) params.set('pageToken', pageToken)
       else if (syncToken) params.set('syncToken', syncToken)
       else { params.set('timeMin', timeMin); params.set('timeMax', timeMax); params.set('orderBy', 'startTime') }

@@ -1,6 +1,11 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { deleteGoogleEvent } from '../_shared/google.ts'
-import { resolveGoogleConnection, markGoogleConnectionHealthy, type CalendarConnection } from '../_shared/google-connection.ts'
+import {
+  markGoogleConnectionFailure,
+  markGoogleConnectionHealthy,
+  resolveGoogleConnection,
+  type CalendarConnection,
+} from '../_shared/google-connection.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -39,13 +44,19 @@ Deno.serve(async (req) => {
   if (connection.access_mode !== 'writable') {
     return ok({ skipped: 'read-only Google source is never deleted by Casa' })
   }
-  const resolved = await resolveGoogleConnection(sb, connection as CalendarConnection)
-  await deleteGoogleEvent({
-    accessToken: resolved.accessToken,
-    calendarId: resolved.connection.calendar_id,
-    eventId: event.google_event_id,
-  })
-  await markGoogleConnectionHealthy(sb, resolved.connection.id)
+  try {
+    const resolved = await resolveGoogleConnection(sb, connection as CalendarConnection)
+    await deleteGoogleEvent({
+      accessToken: resolved.accessToken,
+      calendarId: resolved.connection.calendar_id,
+      eventId: event.google_event_id,
+    })
+    await markGoogleConnectionHealthy(sb, resolved.connection.id)
+  } catch (cause) {
+    const error = cause instanceof Error ? cause : new Error(String(cause))
+    await markGoogleConnectionFailure(sb, connection.id, error)
+    return err(error.message)
+  }
 
   return ok({ deleted: event.google_event_id })
 })

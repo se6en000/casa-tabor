@@ -76,13 +76,19 @@ test('all calendar sync paths resolve explicit database connections', () => {
   assert.match(resolver, /loadMemberGoogleConnection/)
   assert.match(inbound, /connection\.calendar_id/)
   assert.match(inbound, /existingAtTime\.is_enriched && connection\.access_mode === 'writable'/)
+  assert.match(inbound, /showDeleted: 'true'/)
   assert.doesNotMatch(inbound, /calendars\/primary/)
   for (const source of [create, update, recurring]) {
     assert.match(source, /loadWritableGoogleConnection/)
     assert.match(source, /google_connection_id: connection\.id/)
   }
   assert.match(remove, /read-only Google source is never deleted by Casa/)
+  assert.match(remove, /markGoogleConnectionFailure/)
   assert.doesNotMatch(remove, /google_calendar_id \?\? 'primary'/)
+  assert.match(
+    readFileSync(resolve('supabase/functions/_shared/google.ts'), 'utf8'),
+    /res\.status !== 404 && res\.status !== 410/,
+  )
 })
 
 test('flattened Google sync links canonical recurrence instances instead of inserting duplicates', () => {

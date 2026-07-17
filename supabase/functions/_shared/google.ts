@@ -175,8 +175,10 @@ export async function deleteGoogleEvent(opts: {
       headers: { authorization: `Bearer ${opts.accessToken}` },
     },
   )
-  // 404 = already gone — treat as success
-  if (!res.ok && res.status !== 404) throw new Error(`Calendar delete failed: ${res.status} ${await res.text()}`)
+  // Google returns 410 for cancelled events retained as tombstones.
+  if (!res.ok && res.status !== 404 && res.status !== 410) {
+    throw new Error(`Calendar delete failed: ${res.status} ${await res.text()}`)
+  }
 }
 
 export async function createGoogleEvent(opts: {
