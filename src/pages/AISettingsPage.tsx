@@ -12,7 +12,7 @@ import {
   type VoiceRuntimeConfig,
 } from '../lib/voiceRuntimeConfig'
 import { VOICE_AUDIT_LOG_KEY } from '../lib/voiceAudit'
-import { Button, IconButton, SegmentedControl, SkeletonRow, Switch } from '../components/ui'
+import { Button, Chip, IconButton, SegmentedControl, SkeletonRow, Switch } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
 interface LLMConfig {
@@ -21,14 +21,31 @@ interface LLMConfig {
   api_key: string
 }
 
-const VENDORS: Record<string, { label: string; models: { id: string; label: string; fast?: boolean }[] }> = {
+type ModelOption = {
+  id: string
+  label: string
+  group?: 'Recommended' | 'Advanced / Preview' | 'Latest aliases' | 'Legacy'
+  speed?: 'Fastest' | 'Fast' | 'Balanced'
+  reasoning?: 'Everyday' | 'Advanced' | 'Deep'
+  description?: string
+  fast?: boolean
+}
+
+const VENDORS: Record<string, { label: string; models: ModelOption[] }> = {
   gemini: {
     label: 'Google Gemini',
     models: [
-      { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', fast: true },
-      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', fast: true },
-      { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite ⚡', fast: true },
-      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', group: 'Recommended', speed: 'Fast', reasoning: 'Advanced', description: 'Best production balance for Casa voice, tools, and everyday planning.' },
+      { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', group: 'Recommended', speed: 'Fastest', reasoning: 'Everyday', description: 'Lowest latency and cost for simple household requests.' },
+      { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', group: 'Advanced / Preview', speed: 'Fast', reasoning: 'Advanced', description: 'Newest Flash reasoning; monitor behavior before production voice use.' },
+      { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview', group: 'Advanced / Preview', speed: 'Fast', reasoning: 'Advanced', description: 'Preview Flash model for low-latency reasoning and tool use.' },
+      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview', group: 'Advanced / Preview', speed: 'Balanced', reasoning: 'Deep', description: 'Newer preview Pro model for deep reasoning.' },
+      { id: 'gemini-3.1-pro-preview-customtools', label: 'Gemini 3.1 Pro Custom Tools', group: 'Advanced / Preview', speed: 'Balanced', reasoning: 'Deep', description: 'Preview variant specialized for custom tool workflows.' },
+      { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite', group: 'Advanced / Preview', speed: 'Fastest', reasoning: 'Everyday', description: 'Newer lightweight model optimized for speed and efficiency.' },
+      { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite Preview', group: 'Advanced / Preview', speed: 'Fastest', reasoning: 'Everyday', description: 'Preview track of the lightweight 3.1 model.' },
+      { id: 'gemini-flash-latest', label: 'Gemini Flash Latest', group: 'Latest aliases', speed: 'Fast', reasoning: 'Advanced', description: 'Auto-updating Flash alias; behavior can change without a Casa release.' },
+      { id: 'gemini-flash-lite-latest', label: 'Gemini Flash Lite Latest', group: 'Latest aliases', speed: 'Fastest', reasoning: 'Everyday', description: 'Auto-updating Lite alias; behavior can change without a Casa release.' },
+      { id: 'gemini-pro-latest', label: 'Gemini Pro Latest', group: 'Latest aliases', speed: 'Balanced', reasoning: 'Deep', description: 'Auto-updating Pro alias; behavior can change without a Casa release.' },
     ],
   },
   openai: {
@@ -560,6 +577,7 @@ export default function AISettingsPage() {
 
   const vendor = VENDORS[config.provider]
   const models = vendor?.models ?? []
+  const modelGroups = Array.from(new Set(models.map(model => model.group).filter(Boolean))) as NonNullable<ModelOption['group']>[]
 
   function setWakeWordSensitivity(next: number) {
     updateScreensaver({ wakeWordSensitivity: next })
@@ -603,26 +621,38 @@ export default function AISettingsPage() {
         {/* Model */}
         <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-3">
           <label className="block text-body-sm font-semibold text-casa-navy">Model</label>
-          <div className="space-y-2">
-            {models.map(m => (
-              <Button
-                key={m.id}
-                variant={config.model === m.id ? 'strong' : 'secondary'}
-                onClick={() => handleModelChange(m.id)}
-                fullWidth
-                align="between"
-                aria-pressed={config.model === m.id}
-              >
-                <span className="text-body-sm font-medium">{m.label}</span>
-                {m.fast && (
-                  <span className={cn(
-                    'text-caption px-1.5 py-0.5 rounded font-semibold',
-                    config.model === m.id ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-700',
-                  )}>
-                    ⚡ Fast
-                  </span>
-                )}
-              </Button>
+          {config.provider === 'gemini' && (
+            <p className="text-caption text-casa-muted">
+              Models shown here support Casa's conversational API and tool contract. Image, TTS, robotics, and computer-use models are intentionally excluded.
+            </p>
+          )}
+          <div className="space-y-4">
+            {(modelGroups.length > 0 ? modelGroups : [undefined]).map(group => (
+              <div key={group ?? 'models'} className="space-y-2">
+                {group && <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">{group}</p>}
+                {models.filter(model => model.group === group || !group).map(m => (
+                  <Button
+                    key={m.id}
+                    variant={config.model === m.id ? 'strong' : 'secondary'}
+                    onClick={() => handleModelChange(m.id)}
+                    fullWidth
+                    align="between"
+                    aria-pressed={config.model === m.id}
+                    className="h-auto min-h-control py-3"
+                  >
+                    <span className="min-w-0 text-left">
+                      <span className="block text-body-sm font-medium">{m.label}</span>
+                      {m.description && <span className="mt-0.5 block text-caption font-normal opacity-80">{m.description}</span>}
+                    </span>
+                    {(m.speed || m.reasoning) && (
+                      <span className="ml-3 flex shrink-0 flex-wrap justify-end gap-1">
+                        {m.speed && <Chip size="sm" tone={m.speed === 'Fastest' ? 'success' : 'neutral'}>{m.speed}</Chip>}
+                        {m.reasoning && <Chip size="sm" tone={m.reasoning === 'Deep' ? 'accent' : 'info'}>{m.reasoning}</Chip>}
+                      </span>
+                    )}
+                  </Button>
+                ))}
+              </div>
             ))}
           </div>
         </div>

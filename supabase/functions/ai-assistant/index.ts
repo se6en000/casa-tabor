@@ -99,6 +99,7 @@ interface ImagePayload { mimeType: string; data: string }
 type GeminiUsageMetadata = {
   promptTokenCount?: number
   candidatesTokenCount?: number
+  cachedContentTokenCount?: number
   thoughtsTokenCount?: number
   totalTokenCount?: number
 }
@@ -108,6 +109,7 @@ type LlmTelemetry = {
   llm_calls: number
   llm_inference_ms: number
   input_tokens: number
+  cached_input_tokens: number
   output_tokens: number
   thought_tokens: number
   total_tokens: number
@@ -118,6 +120,14 @@ const AGENT_GENERAL_PAGES = new Set(['app', 'briefing', 'calendar', 'grocery', '
 const SUPPORTED_GEMINI_MODELS = new Set([
   'gemini-2.5-flash-lite',
   'gemini-2.5-flash',
+  'gemini-flash-latest',
+  'gemini-flash-lite-latest',
+  'gemini-pro-latest',
+  'gemini-3-flash-preview',
+  'gemini-3.1-flash-lite',
+  'gemini-3.1-flash-lite-preview',
+  'gemini-3.1-pro-preview',
+  'gemini-3.1-pro-preview-customtools',
   'gemini-3.5-flash',
 ])
 
@@ -136,10 +146,11 @@ function toNonNegativeInt(value: unknown): number {
  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : 0
 }
 
-function extractGeminiUsage(payload: unknown): { inputTokens: number; outputTokens: number; thoughtTokens: number; totalTokens: number } {
+function extractGeminiUsage(payload: unknown): { inputTokens: number; cachedInputTokens: number; outputTokens: number; thoughtTokens: number; totalTokens: number } {
  const usage = (payload as { usageMetadata?: GeminiUsageMetadata } | null)?.usageMetadata
  return {
    inputTokens: toNonNegativeInt(usage?.promptTokenCount),
+   cachedInputTokens: toNonNegativeInt(usage?.cachedContentTokenCount),
    outputTokens: toNonNegativeInt(usage?.candidatesTokenCount),
    thoughtTokens: toNonNegativeInt(usage?.thoughtsTokenCount),
    totalTokens: toNonNegativeInt(usage?.totalTokenCount),
@@ -670,6 +681,7 @@ Deno.serve(async (req) => {
     llm_calls: 0,
     llm_inference_ms: 0,
     input_tokens: 0,
+    cached_input_tokens: 0,
     output_tokens: 0,
     thought_tokens: 0,
     total_tokens: 0,
@@ -1446,6 +1458,7 @@ Deno.serve(async (req) => {
     llmTelemetry.llm_calls += 1
     llmTelemetry.llm_inference_ms += elapsedMs
     llmTelemetry.input_tokens += usage.inputTokens
+    llmTelemetry.cached_input_tokens += usage.cachedInputTokens
     llmTelemetry.output_tokens += usage.outputTokens
     llmTelemetry.thought_tokens += usage.thoughtTokens
     llmTelemetry.total_tokens += usage.totalTokens
@@ -1458,6 +1471,7 @@ Deno.serve(async (req) => {
       provider: llmTelemetry.provider,
       model: llmTelemetry.model,
       input_tokens: usage.inputTokens,
+      cached_input_tokens: usage.cachedInputTokens,
       output_tokens: usage.outputTokens,
       thought_tokens: usage.thoughtTokens,
       total_tokens: usage.totalTokens,
@@ -3866,6 +3880,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       provider: llmTelemetry.provider,
       model: llmTelemetry.model,
       input_tokens: llmTelemetry.input_tokens,
+      cached_input_tokens: llmTelemetry.cached_input_tokens,
       output_tokens: llmTelemetry.output_tokens,
       cached: false,
     }).then(() => {}).catch(() => {})
@@ -4293,6 +4308,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         llm_calls: llmTelemetry.llm_calls,
         llm_inference_ms: llmTelemetry.llm_inference_ms,
         input_tokens: llmTelemetry.input_tokens,
+        cached_input_tokens: llmTelemetry.cached_input_tokens,
         output_tokens: llmTelemetry.output_tokens,
         thought_tokens: llmTelemetry.thought_tokens,
         total_tokens: llmTelemetry.total_tokens,

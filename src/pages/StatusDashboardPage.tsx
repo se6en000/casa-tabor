@@ -11,6 +11,7 @@ interface UsageRow {
   provider: string
   model: string
   input_tokens: number
+  cached_input_tokens: number
   output_tokens: number
   cached: boolean
   created_at: string
@@ -74,7 +75,7 @@ export default function StatusDashboardPage() {
     const [usageRes, cfgRes] = await Promise.all([
       supabase
         .from('ai_usage_log')
-        .select('function_name,provider,model,input_tokens,output_tokens,cached,created_at')
+        .select('function_name,provider,model,input_tokens,cached_input_tokens,output_tokens,cached,created_at')
         .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
         .order('created_at', { ascending: false }),
       supabase.from('settings').select('value').eq('key', 'llm_config').single(),
@@ -97,17 +98,19 @@ export default function StatusDashboardPage() {
     const cached = rs.filter(r => r.cached)
     const calls = actual.length
     const inputTokens = actual.reduce((s, r) => s + (r.input_tokens ?? 0), 0)
+    const providerCachedInputTokens = actual.reduce((s, r) => s + (r.cached_input_tokens ?? 0), 0)
     const outputTokens = actual.reduce((s, r) => s + (r.output_tokens ?? 0), 0)
     const cost = actual.reduce((s, r) => s + estimateCost(r.model, r.input_tokens ?? 0, r.output_tokens ?? 0), 0)
-    return { calls, inputTokens, outputTokens, cost, cached: cached.length }
+    return { calls, inputTokens, providerCachedInputTokens, outputTokens, cost, dedupedCalls: cached.length }
   }
 
   const today = sumStats(todayRows)
   const month = sumStats(monthRows)
 
-  // Cache hit rate
-  const totalToday = todayRows.length
-  const hitRateToday = totalToday > 0 ? Math.round((today.cached / totalToday) * 100) : 0
+  // Provider prompt-cache coverage is token based; application dedup is call based.
+  const promptCacheRateToday = today.inputTokens > 0
+    ? Math.round((today.providerCachedInputTokens / today.inputTokens) * 100)
+    : 0
 
   // By function breakdown (last 30 days, non-cached only)
   const byFunction: Record<string, { calls: number; tokens: number; cost: number }> = {}
@@ -187,11 +190,11 @@ export default function StatusDashboardPage() {
             icon={<DollarSign size={16} />}
           />
           <StatCard
-            label="Cache Hits"
-            value={`${hitRateToday}%`}
-            sub={`${today.cached} saved / ${totalToday} total`}
+            label="Prompt Cache"
+            value={`${promptCacheRateToday}%`}
+            sub={`${fmt(today.providerCachedInputTokens)} Gemini input tokens reused`}
             icon={<TrendingUp size={16} />}
-            accent={hitRateToday >= 50}
+            accent={promptCacheRateToday >= 50}
           />
         </div>
       </div>
@@ -215,8 +218,12 @@ export default function StatusDashboardPage() {
               <span className="font-semibold text-casa-navy">{fmt(month.outputTokens)}</span>
             </div>
             <div className="flex justify-between text-body-sm">
-              <span className="text-casa-muted">Cache hits saved</span>
-              <span className="font-semibold text-emerald-700">{fmt(month.cached)} calls</span>
+              <span className="text-casa-muted">Gemini prompt tokens reused</span>
+              <span className="font-semibold text-emerald-700">{fmt(month.providerCachedInputTokens)}</span>
+            </div>
+            <div className="flex justify-between text-body-sm">
+              <span className="text-casa-muted">Application calls deduplicated</span>
+              <span className="font-semibold text-casa-navy">{fmt(month.dedupedCalls)}</span>
             </div>
             <div className="h-px bg-casa-border" />
             <div className="flex justify-between text-body-sm">
@@ -293,8 +300,8 @@ export default function StatusDashboardPage() {
           <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">Cost Control Tips</p>
           <div className="bg-casa-bg/60 rounded-card border border-casa-border/50 p-4 space-y-2">
             <ul className="text-caption text-casa-muted space-y-2 list-disc list-inside">
-              <li>Gemini 2.5 Flash is the cheapest capable model (~$0.075/1M input)</li>
-              <li>Cache hits are free — high hit rate means dedup is working well</li>
+              <li>Gemini may automatically reuse eligible prompt tokens; this dashboard reports the provider's actual reused-token count.</li>
+              <li>Application dedup skips repeated work and is tracked separately from provider prompt caching.</li>
               <li>AI chat replies are capped at ~600 tokens each</li>
               <li>Enrichment only re-runs if the event content actually changes</li>
             </ul>
