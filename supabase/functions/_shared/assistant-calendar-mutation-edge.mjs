@@ -50,7 +50,7 @@ export function resolveDefaultCalendarCreate(text, options = {}) {
     /\b(?:today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}\/\d{1,2}|january|february|march|april|may|june|july|august|september|october|november|december)\b/i.test(input)
   ) return null
 
-  const match = input.match(/\b(?:for|at)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s+(?:to\s+)?(?:go\s+to\s+|visit\s+|attend\s+)?(.+?)(?:[.?!]+)?$/i)
+  const match = input.match(/\b(?:for|at)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*[,.;:!?-]?\s*(?:to\s+)?(?:go\s+to\s+|visit\s+|attend\s+)?(.+?)(?:[.?!]+)?$/i)
   if (!match) return null
   const hour12 = Number(match[1])
   const minute = Number(match[2] ?? 0)

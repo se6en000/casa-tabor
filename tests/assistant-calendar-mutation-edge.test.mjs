@@ -53,6 +53,19 @@ test('complete appointment requests default to today, AM, and one hour', () => {
     ),
     null,
   )
+  assert.deepEqual(
+    resolveDefaultCalendarCreate(
+      'create an appointment at 10:30. To go to Skyzone.',
+      { now: new Date('2026-07-19T13:52:46.000Z'), utcOffset: '-04:00' },
+    ).args,
+    {
+      title: 'Skyzone',
+      start: '2026-07-19T14:30:00.000Z',
+      end: '2026-07-19T15:30:00.000Z',
+      members: [],
+      event_type: 'event',
+    },
+  )
 })
 
 test('active event shifts preserve duration and support relational scheduling', () => {

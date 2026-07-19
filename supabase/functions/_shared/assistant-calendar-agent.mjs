@@ -21,6 +21,7 @@ export function hardenExplicitCalendarTemporalTurn(turn, text) {
   if (!turn || !['create', 'revise', 'update'].includes(turn.action)) return turn
   const patch = normalizePatch(turn.patch)
   const input = String(text ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
+  const spokenClock = patch.time ? null : parseExplicitClock(input)
   const inferredDate = patch.dateReference
     ? null
     : /\btomorrow\b/.test(input)
@@ -28,9 +29,10 @@ export function hardenExplicitCalendarTemporalTurn(turn, text) {
       : /\btoday\b|\btonight\b/.test(input)
         ? { kind: 'today' }
         : null
-  const inferredTime = patch.time?.period === 'ambiguous' && /\btonight\b/.test(input)
-    ? { ...patch.time, period: 'pm' }
-    : null
+  const inferredTime = spokenClock
+    ?? (patch.time?.period === 'ambiguous' && /\btonight\b/.test(input)
+      ? { ...patch.time, period: 'pm' }
+      : null)
   if (!inferredDate && !inferredTime) return turn
   return {
     ...turn,
@@ -39,6 +41,22 @@ export function hardenExplicitCalendarTemporalTurn(turn, text) {
       ...(inferredDate ? { date_reference: inferredDate } : {}),
       ...(inferredTime ? { time: inferredTime } : {}),
     },
+  }
+}
+
+function parseExplicitClock(input) {
+  const match = String(input ?? '').match(
+    /\b(?:at|for|around|by)\s+(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)?\b/i,
+  )
+  if (!match) return null
+  const hour = Number(match[1])
+  const minute = Number(match[2] ?? 0)
+  if (!Number.isInteger(hour) || hour < 1 || hour > 12 || minute < 0 || minute > 59) return null
+  const periodText = match[3]?.replace(/[^apm]/gi, '').toLowerCase()
+  return {
+    hour,
+    minute,
+    period: periodText === 'am' || periodText === 'pm' ? periodText : 'ambiguous',
   }
 }
 

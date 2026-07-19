@@ -493,3 +493,17 @@ test('explicit temporal words harden semantic create turns before bounded resolu
   assert.equal(hardenedTonight.patch.time.period, 'pm')
   assert.deepEqual(hardenedTonight.patch.date_reference, { kind: 'today' })
 })
+
+test('explicit spoken clock survives provider omission and defaults to today AM', () => {
+  const hardened = hardenExplicitCalendarTemporalTurn(turn('create', {
+    title: 'Sky Zone',
+  }), 'Create an appointment at 10:30. To go to Skyzone.')
+  const result = resolveCalendarSemanticTurn(hardened, {
+    ...context,
+    currentDate: '2026-07-19T09:52:46-04:00',
+  })
+
+  assert.equal(result.kind, 'tool')
+  assert.equal(result.args.start, '2026-07-19T10:30:00-04:00')
+  assert.equal(result.args.end, '2026-07-19T11:30:00-04:00')
+})
