@@ -249,7 +249,7 @@ test('event editor uses shared progressive disclosure and date-time dials', () =
 
 test('date-time wheel follows live touch selection and synchronizes controlled values', () => {
   const dial = readFileSync(resolve('src/components/ui/DateTimeDial.tsx'), 'utf8')
-  assert.match(dial, /onPointerDown=\{beginUserScroll\}/)
+  assert.match(dial, /onPointerDown=\{handlePointerDown\}/)
   assert.match(dial, /onWheel=\{beginUserScroll\}/)
   assert.match(dial, /if \(!userScrolling\.current\) return/)
   assert.match(dial, /window\.clearTimeout\(settleTimer\.current\)/)
@@ -267,6 +267,17 @@ test('quick create keeps the end one hour after every start adjustment', () => {
   assert.match(quickCreate, /startChangeEndOffsetMinutes=\{60\}/)
   assert.match(dial, /startChangeEndOffsetMinutes \* 60_000/)
   assert.match(dial, /onEndChange\(toLocalValue\(new Date\(parseLocal\(value\)\.getTime\(\) \+ duration\)\)\)/)
+})
+
+test('date-time wheels commit the final AM or PM selection after touch scrolling settles', () => {
+  const dial = readFileSync(resolve('src/components/ui/DateTimeDial.tsx'), 'utf8')
+
+  assert.match(dial, /const commitSelection = \(\) =>/)
+  assert.match(dial, /const pointerActive = useRef\(false\)/)
+  assert.match(dial, /if \(!pointerActive\.current\) scheduleSelectionCommit\(\)/)
+  assert.match(dial, /onPointerUp=\{handlePointerUp\}/)
+  assert.match(dial, /onPointerCancel=\{handlePointerUp\}/)
+  assert.match(dial, /onBlur=\{handlePointerUp\}/)
 })
 
 test('quick create handles core household event context without exposing the full editor', () => {

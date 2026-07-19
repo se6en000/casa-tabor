@@ -76,6 +76,7 @@ function WheelColumn({ items, value, onChange, label, wide = false }: {
   const scrollRef = useRef<HTMLDivElement>(null)
   const settleTimer = useRef<number | undefined>(undefined)
   const userScrolling = useRef(false)
+  const pointerActive = useRef(false)
   const selectedIndex = Math.max(0, items.findIndex(item => item.value === value))
   const [highlightedIndex, setHighlightedIndex] = useState(selectedIndex)
   const highlightedIndexRef = useRef(selectedIndex)
@@ -98,6 +99,41 @@ function WheelColumn({ items, value, onChange, label, wide = false }: {
     if (settleTimer.current) window.clearTimeout(settleTimer.current)
   }
 
+  const scheduleSelectionCommit = () => {
+    if (settleTimer.current) window.clearTimeout(settleTimer.current)
+    settleTimer.current = window.setTimeout(() => {
+      commitSelection()
+    }, 80)
+  }
+
+  const commitSelection = () => {
+    if (!scrollRef.current || !userScrolling.current) return
+    if (settleTimer.current) {
+      window.clearTimeout(settleTimer.current)
+      settleTimer.current = undefined
+    }
+    const index = Math.max(0, Math.min(items.length - 1, Math.round(scrollRef.current.scrollTop / ITEM_HEIGHT)))
+    const picked = items[index]
+    userScrolling.current = false
+    highlightedIndexRef.current = index
+    setHighlightedIndex(index)
+    scrollRef.current.scrollTop = index * ITEM_HEIGHT
+    if (picked && picked.value !== value) {
+      navigator.vibrate?.(6)
+      onChange(picked.value)
+    }
+  }
+
+  const handlePointerDown = () => {
+    pointerActive.current = true
+    beginUserScroll()
+  }
+
+  const handlePointerUp = () => {
+    pointerActive.current = false
+    scheduleSelectionCommit()
+  }
+
   const handleScroll = () => {
     if (!userScrolling.current) return
     if (!scrollRef.current) return
@@ -106,28 +142,20 @@ function WheelColumn({ items, value, onChange, label, wide = false }: {
       highlightedIndexRef.current = index
       setHighlightedIndex(index)
     }
-    if (settleTimer.current) window.clearTimeout(settleTimer.current)
-    settleTimer.current = window.setTimeout(() => {
-      if (!scrollRef.current) return
-      const index = Math.max(0, Math.min(items.length - 1, Math.round(scrollRef.current.scrollTop / ITEM_HEIGHT)))
-      const picked = items[index]
-      userScrolling.current = false
-      highlightedIndexRef.current = index
-      setHighlightedIndex(index)
-      scrollRef.current.scrollTop = index * ITEM_HEIGHT
-      if (picked && picked.value !== value) {
-        navigator.vibrate?.(6)
-        onChange(picked.value)
-      }
-    }, 80)
+    // Touch scrolling can pause for longer than the debounce while the finger is
+    // still down. Wait for release so a slow drag cannot commit the prior value.
+    if (!pointerActive.current) scheduleSelectionCommit()
   }
 
   return (
     <div className={cn('relative overflow-hidden', wide ? 'flex-[2.4]' : 'flex-1')} style={{ height: VISIBLE_ITEMS * ITEM_HEIGHT }}>
       <div
         ref={scrollRef}
-        onPointerDown={beginUserScroll}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         onWheel={beginUserScroll}
+        onBlur={handlePointerUp}
         onKeyDown={beginUserScroll}
         onScroll={handleScroll}
         aria-label={label}
