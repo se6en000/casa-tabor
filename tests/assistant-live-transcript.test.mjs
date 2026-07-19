@@ -55,3 +55,17 @@ test('speech hook preserves structured transcript revisions', () => {
   assert.match(speech, /phase === 'capturing' \|\| phase === 'listening'/)
   assert.match(speech, /case 'committed':[\s\S]{0,260}setPhaseSync\('listening'\)/)
 })
+
+test('wake sessions have bounded silence and unusable-speech dismissal paths', () => {
+  assert.match(speech, /WAKE_SILENCE_TIMEOUT_MS = 8000/)
+  assert.match(speech, /SPEECH_WITHOUT_TRANSCRIPT_TIMEOUT_MS = 6000/)
+  assert.match(speech, /MAX_UNUSABLE_FINALS = 2/)
+  assert.match(speech, /autoDismissOnFailure = false/)
+  assert.match(speech, /voice_session_auto_dismissed/)
+  assert.match(speech, /autoDismissSession\('wake_silence'\)/)
+  assert.match(speech, /autoDismissSession\('speech_without_transcript'\)/)
+  assert.match(speech, /autoDismissSession\('repeated_gibberish'\)/)
+  assert.match(drawer, /onAutoDismiss: \(\) => \{/)
+  assert.match(drawer, /autoDismissOnFailure: launchContext\?\.source === 'wake_word'/)
+  assert.match(drawer, /A failed wake session is not user activity or a conversation to resume/)
+})

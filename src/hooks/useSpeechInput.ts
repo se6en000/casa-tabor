@@ -5,7 +5,7 @@ import {
   reconcileTranscriptRevision,
   STT_TURN_PROTOCOL,
 } from '../lib/sttTurnProtocol.mjs'
-import { isIncompleteVoiceFragment } from '../lib/voiceTurnTaking.mjs'
+import { isIncompleteVoiceFragment, isLikelyUnusableVoiceTranscript } from '../lib/voiceTurnTaking.mjs'
 
 const DISMISS_PHRASES = /\b(goodbye|bye|go away|close|dismiss|that'?s all|all done|i(?:'| a)?m done|we(?:'| a)?re done|done for now|stop listening|end session|close session|never mind|nevermind|stop)\b/i
 const CONFIRM_PHRASES = /\b(yes|yeah|yep|confirm|ok|okay|go ahead|do it|sounds good|correct|right|affirmative|absolutely|sure|proceed)\b/i
@@ -29,6 +29,9 @@ const SILENCE_MS = 2500
 const CONNECT_TIMEOUT_MS = 5000
 const TURN_COMMIT_GRACE_MS = 350
 const MANUAL_FINALIZE_TIMEOUT_MS = 1800
+const WAKE_SILENCE_TIMEOUT_MS = 8000
+const SPEECH_WITHOUT_TRANSCRIPT_TIMEOUT_MS = 6000
+const MAX_UNUSABLE_FINALS = 2
 
 function createUtteranceId() {
   return typeof crypto !== 'undefined' && crypto.randomUUID
@@ -56,6 +59,8 @@ export function useSpeechInput({
   onConfirm,
   onCancel,
   onIncomplete,
+  onAutoDismiss,
+  autoDismissOnFailure = false,
   hasPendingAction,
   onTrace,
 }: {
@@ -65,6 +70,8 @@ export function useSpeechInput({
   onConfirm: () => void
   onCancel: () => void
   onIncomplete?: (text: string) => void
+  onAutoDismiss?: (reason: 'wake_silence' | 'speech_without_transcript' | 'repeated_gibberish') => void
+  autoDismissOnFailure?: boolean
   hasPendingAction: boolean
   onTrace?: (event: string, payload?: Record<string, unknown>) => void
 }) {
@@ -87,10 +94,13 @@ export function useSpeechInput({
   const fragmentTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const turnCandidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const manualFinalizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wakeSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const speechWithoutTranscriptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const turnCandidateAtRef = useRef(0)
   const speechStartedAtRef = useRef(0)
   const finalizingRef = useRef(false)
   const lastTranscriptAtRef = useRef(0)
+  const unusableFinalCountRef = useRef(0)
   const startWebSpeechRef = useRef<() => void>(() => {})
   const startBridgeRef = useRef<() => void>(() => {})
   const [phase, setPhase]  = useState<VoicePhase>('idle')
@@ -110,6 +120,8 @@ export function useSpeechInput({
   const onConfirmRef       = useRef(onConfirm)
   const onCancelRef        = useRef(onCancel)
   const onIncompleteRef    = useRef(onIncomplete)
+  const onAutoDismissRef   = useRef(onAutoDismiss)
+  const autoDismissOnFailureRef = useRef(autoDismissOnFailure)
   const onTraceRef         = useRef(onTrace)
   const hasPendingRef      = useRef(hasPendingAction)
   useEffect(() => { onInterimRef.current  = onInterim },        [onInterim])
@@ -118,6 +130,8 @@ export function useSpeechInput({
   useEffect(() => { onConfirmRef.current  = onConfirm },         [onConfirm])
   useEffect(() => { onCancelRef.current   = onCancel },          [onCancel])
   useEffect(() => { onIncompleteRef.current = onIncomplete },     [onIncomplete])
+  useEffect(() => { onAutoDismissRef.current = onAutoDismiss },   [onAutoDismiss])
+  useEffect(() => { autoDismissOnFailureRef.current = autoDismissOnFailure }, [autoDismissOnFailure])
   useEffect(() => { onTraceRef.current    = onTrace },           [onTrace])
   useEffect(() => { hasPendingRef.current = hasPendingAction },  [hasPendingAction])
 
@@ -151,6 +165,58 @@ export function useSpeechInput({
     if (manualFinalizeTimerRef.current) clearTimeout(manualFinalizeTimerRef.current)
     manualFinalizeTimerRef.current = null
     finalizingRef.current = false
+  }
+  const stopWakeSilenceTimer = () => {
+    if (wakeSilenceTimerRef.current) clearTimeout(wakeSilenceTimerRef.current)
+    wakeSilenceTimerRef.current = null
+  }
+  const stopSpeechWithoutTranscriptTimer = () => {
+    if (speechWithoutTranscriptTimerRef.current) clearTimeout(speechWithoutTranscriptTimerRef.current)
+    speechWithoutTranscriptTimerRef.current = null
+  }
+  const autoDismissSession = (reason: 'wake_silence' | 'speech_without_transcript' | 'repeated_gibberish') => {
+    if (!activeRef.current) return
+    activeRef.current = false
+    stopSilenceTimer()
+    stopFragmentTimer()
+    stopTurnCandidateTimer()
+    stopManualFinalizeTimer()
+    stopWakeSilenceTimer()
+    stopSpeechWithoutTranscriptTimer()
+    try { recognitionRef.current?.stop() } catch { /* ignore */ }
+    recognitionRef.current = null
+    if (wsRef.current) {
+      try { wsRef.current.send(JSON.stringify({ type: 'stop' })) } catch { /* ignore */ }
+    }
+    stopWS()
+    setPhaseSync('idle')
+    setVolume(0)
+    onInterimRef.current('')
+    onTraceRef.current?.('voice_session_auto_dismissed', {
+      reason,
+      utterance_id: utteranceIdRef.current,
+      unusable_final_count: unusableFinalCountRef.current,
+      session_elapsed_ms: listeningStartRef.current > 0 ? Date.now() - listeningStartRef.current : null,
+    })
+    onAutoDismissRef.current?.(reason)
+  }
+  const scheduleWakeSilenceTimeout = () => {
+    if (!autoDismissOnFailureRef.current) return
+    stopWakeSilenceTimer()
+    wakeSilenceTimerRef.current = setTimeout(() => {
+      if (activeRef.current && speechStartedAtRef.current === 0 && !lastInterimRef.current.trim()) {
+        autoDismissSession('wake_silence')
+      }
+    }, WAKE_SILENCE_TIMEOUT_MS)
+  }
+  const scheduleSpeechWithoutTranscriptTimeout = () => {
+    if (!autoDismissOnFailureRef.current) return
+    stopSpeechWithoutTranscriptTimer()
+    speechWithoutTranscriptTimerRef.current = setTimeout(() => {
+      if (activeRef.current && !lastInterimRef.current.trim() && !firstInterimRef.current) {
+        autoDismissSession('speech_without_transcript')
+      }
+    }, SPEECH_WITHOUT_TRANSCRIPT_TIMEOUT_MS)
   }
   const scheduleFragmentTimeout = () => {
     stopFragmentTimer()
@@ -189,6 +255,20 @@ export function useSpeechInput({
       onDismissRef.current()
       return
     }
+    if (autoDismissOnFailureRef.current && isLikelyUnusableVoiceTranscript(transcript, lastConfidenceRef.current)) {
+      unusableFinalCountRef.current += 1
+      onTraceRef.current?.('asr_unusable_final', {
+        utterance_id: utteranceIdRef.current,
+        confidence: lastConfidenceRef.current,
+        word_count: transcript.trim().split(/\s+/).filter(Boolean).length,
+        consecutive_count: unusableFinalCountRef.current,
+      })
+      if (unusableFinalCountRef.current >= MAX_UNUSABLE_FINALS) {
+        autoDismissSession('repeated_gibberish')
+      }
+      return
+    }
+    unusableFinalCountRef.current = 0
     const isShort = transcript.trim().split(/\s+/).length <= 5
     if (isShort && hasPendingRef.current && CONFIRM_PHRASES.test(transcript)) {
       onConfirmRef.current(); onInterimRef.current('')
@@ -206,6 +286,8 @@ export function useSpeechInput({
     stopSilenceTimer()
     stopTurnCandidateTimer()
     stopManualFinalizeTimer()
+    stopWakeSilenceTimer()
+    stopSpeechWithoutTranscriptTimer()
     const capturedText = text.trim() || lastInterimRef.current.trim()
     const pendingFragment = pendingFragmentRef.current.trim()
     const includesPending = pendingFragment
@@ -333,6 +415,8 @@ export function useSpeechInput({
       if (finalAccum.trim()) {
         lastConfidenceRef.current = finalConfidence
         stopSilenceTimer()
+        stopWakeSilenceTimer()
+        stopSpeechWithoutTranscriptTimer()
         lastInterimRef.current = ''
         onInterimRef.current(finalAccum.trim())
         try { recognition.stop() } catch { /* ignore */ }
@@ -343,6 +427,8 @@ export function useSpeechInput({
 
       const display = interim.trim()
       if (!display) return
+      stopWakeSilenceTimer()
+      stopSpeechWithoutTranscriptTimer()
 
       if (!firstInterimRef.current) {
         firstInterimRef.current = true
@@ -458,6 +544,8 @@ export function useSpeechInput({
             break
           case 'speech_started':
             if (speechStartedAtRef.current === 0) speechStartedAtRef.current = Date.now()
+            stopWakeSilenceTimer()
+            scheduleSpeechWithoutTranscriptTimeout()
             if (pendingFragmentRef.current) scheduleFragmentTimeout()
             cancelTurnCandidate('speech_started')
             onTraceRef.current?.('asr_speech_started', {
@@ -483,6 +571,7 @@ export function useSpeechInput({
                 interim_word_count: String(msg.interim ?? '').trim().split(/\s+/).filter(Boolean).length,
               })
               if (display === lastInterimRef.current) break
+              stopSpeechWithoutTranscriptTimer()
               if (pendingFragmentRef.current) scheduleFragmentTimeout()
               if (!firstInterimRef.current) {
                 firstInterimRef.current = true
@@ -510,6 +599,7 @@ export function useSpeechInput({
           case 'segment_final': {
             const text = String(msg.text ?? '')
             lastInterimRef.current = text
+            stopSpeechWithoutTranscriptTimer()
             lastConfidenceRef.current = normalizeConfidence(msg.confidence)
             onInterimRef.current(text, {
               committed: text,
@@ -570,6 +660,7 @@ export function useSpeechInput({
           case 'interim': {
             const text = String(msg.text ?? '')
             if (text !== lastInterimRef.current) {
+              stopSpeechWithoutTranscriptTimer()
               if (pendingFragmentRef.current) scheduleFragmentTimeout()
               if (!firstInterimRef.current) {
                 firstInterimRef.current = true
@@ -641,11 +732,14 @@ export function useSpeechInput({
     stopFragmentTimer()
     stopTurnCandidateTimer()
     stopManualFinalizeTimer()
+    stopWakeSilenceTimer()
+    stopSpeechWithoutTranscriptTimer()
     connectStartRef.current = 0
     listeningStartRef.current = 0
     firstInterimRef.current = false
     speechStartedAtRef.current = 0
     lastTranscriptAtRef.current = 0
+    unusableFinalCountRef.current = 0
     setPhaseSync('idle')
     setVolume(0)
     onInterimRef.current('')
@@ -684,6 +778,7 @@ export function useSpeechInput({
     activeRef.current = true
     setPhaseSync('connecting')
     utteranceIdRef.current = createUtteranceId()
+    scheduleWakeSilenceTimeout()
     onTraceRef.current?.('asr_start_requested', { utterance_id: utteranceIdRef.current })
 
     // Auto-detect once per component lifetime — don't re-probe on every open
@@ -726,6 +821,8 @@ export function useSpeechInput({
     return () => {
       activeRef.current = false
       stopSilenceTimer()
+      stopWakeSilenceTimer()
+      stopSpeechWithoutTranscriptTimer()
       stopWebSpeech()
       stopBridge()
     }

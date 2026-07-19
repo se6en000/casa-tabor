@@ -79,6 +79,7 @@ const REMOTE_CRITICAL_EVENTS = new Set([
   'assistant_result_received',
   'assistant_stream_fallback',
   'turn_failed',
+  'voice_session_auto_dismissed',
 ])
 
 let queue: RemoteQueueItem[] = []

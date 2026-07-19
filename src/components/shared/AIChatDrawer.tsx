@@ -463,6 +463,12 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
       startFresh()
       setTimeout(onClose, 400)
     },
+    onAutoDismiss: () => {
+      // A failed wake session is not user activity or a conversation to resume.
+      startFresh()
+      onClose()
+    },
+    autoDismissOnFailure: launchContext?.source === 'wake_word',
     onConfirm: () => {
       markUserInteraction()
       led.confirm()
