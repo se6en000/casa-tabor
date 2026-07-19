@@ -1,3 +1,5 @@
+import { normalizeAssistantSpeechPunctuation } from './assistant-language-normalization.mjs'
+
 export const CALENDAR_SEMANTIC_TURN_VERSION = 'calendar-semantic-turn-v1'
 
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
@@ -20,7 +22,7 @@ export function hardenExplicitCalendarRangeTurn(turn, text) {
 export function hardenExplicitCalendarTemporalTurn(turn, text) {
   if (!turn || !['create', 'revise', 'update'].includes(turn.action)) return turn
   const patch = normalizePatch(turn.patch)
-  const input = String(text ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
+  const input = normalizeAssistantSpeechPunctuation(text).toLowerCase()
   const spokenClock = patch.time ? null : parseExplicitClock(input)
   const inferredDate = patch.dateReference
     ? null

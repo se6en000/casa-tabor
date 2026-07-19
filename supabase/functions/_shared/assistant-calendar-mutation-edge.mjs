@@ -2,6 +2,7 @@ import {
   isCanonicalRecurringEvent,
   scopeCanonicalMutation,
 } from './assistant-recurring-mutation.mjs'
+import { normalizeAssistantSpeechPunctuation } from './assistant-language-normalization.mjs'
 
 const NUMBER_WORDS = new Map([
   ['one', 1],
@@ -43,14 +44,14 @@ function explicitDurationMinutes(input) {
 }
 
 export function resolveDefaultCalendarCreate(text, options = {}) {
-  const input = String(text ?? '').replace(/\s+/g, ' ').trim()
+  const input = normalizeAssistantSpeechPunctuation(text)
   if (
     !/\b(?:add|create|book|schedule)\b/i.test(input) ||
     !/\b(?:event|appointment|meeting)\b/i.test(input) ||
     /\b(?:today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}\/\d{1,2}|january|february|march|april|may|june|july|august|september|october|november|december)\b/i.test(input)
   ) return null
 
-  const match = input.match(/\b(?:for|at)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*[,.;:!?-]?\s*(?:to\s+)?(?:go\s+to\s+|visit\s+|attend\s+)?(.+?)(?:[.?!]+)?$/i)
+  const match = input.match(/\b(?:for|at)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:to\s+)?(?:go\s+to\s+|visit\s+|attend\s+)?(.+)$/i)
   if (!match) return null
   const hour12 = Number(match[1])
   const minute = Number(match[2] ?? 0)
@@ -134,7 +135,7 @@ function overlaps(candidate, events, ignoredId) {
 }
 
 function parseDeleteSelectionRequest(value) {
-  const input = String(value ?? '').replace(/\s+/g, ' ').trim()
+  const input = normalizeAssistantSpeechPunctuation(value)
   const match = input.match(
     /^(?:delete|cancel|remove)\s+(?:the\s+)?(.+?)(?:\s+(?:on\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday))?[.!]?$/i,
   )
@@ -162,7 +163,7 @@ function deleteSelectionMatches(request, events, utcOffset) {
 
 export function resolveActiveCalendarMutation(text, event, events, options = {}) {
   if (!event?.id) return null
-  const input = String(text ?? '').replace(/\s+/g, ' ').trim()
+  const input = normalizeAssistantSpeechPunctuation(text)
   const activeDeleteRequest = /^(?:delete|cancel|remove)\s+(?:it|this|that|this one|that one|the one)(?:[,;]?\s+(?:(?:for\s+)?(?:just|only)\s+(?:this|that|the)\s+(?:event|appointment|occurrence|one)|(?:for\s+)?(?:this|the)\s+(?:event|appointment|occurrence|one)\s+and\s+(?:all\s+)?(?:future|following|later|upcoming)\s*(?:events|appointments|occurrences|ones)?|(?:for\s+)?(?:all|every)\s+(?:event|appointment|occurrence|one)(?:\s+in\s+(?:the|this)\s+series)?|(?:for\s+)?(?:the\s+)?(?:entire|whole)\s+series))?[.!]?$/i.test(input)
 
   if (isCanonicalRecurringEvent(event)) {
@@ -345,7 +346,7 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
 }
 
 export function calendarMutationClarification(text) {
-  const input = String(text ?? '').replace(/\s+/g, ' ').trim()
+  const input = normalizeAssistantSpeechPunctuation(text)
   if (/\b(?:schedule|book|add|create)\b.*\b(?:at)\s+(?:ate|eight)\b/i.test(input) && !/\b(?:am|pm|morning|afternoon|evening|night)\b/i.test(input)) {
     return 'Did you mean 8 AM or 8 PM?'
   }
@@ -353,8 +354,8 @@ export function calendarMutationClarification(text) {
 }
 
 export function resolveClarifiedCalendarCreate(previousText, text, options = {}) {
-  const previous = String(previousText ?? '').replace(/\s+/g, ' ').trim()
-  const current = String(text ?? '').replace(/\s+/g, ' ').trim()
+  const previous = normalizeAssistantSpeechPunctuation(previousText)
+  const current = normalizeAssistantSpeechPunctuation(text)
   const scheduling = previous.match(/\b(?:schedule|book|add|create)\s+(?:an?\s+)?(?:event\s+called\s+)?(.+?)\s+(?:next\s+)?(sun(?:day)?|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?)\s+at\s+(?:ate|eight)\b/i)
   const clarifiedTime = current.match(/\b(eight|8)(?::(\d{2}))?\s+(?:in\s+the\s+)?(morning|evening|night|afternoon)\b/i)
   if (!scheduling || !clarifiedTime) return null
@@ -380,7 +381,7 @@ export function resolveClarifiedCalendarCreate(previousText, text, options = {})
 
 export function resolvePendingCalendarCorrection(text, pendingAction, options = {}) {
   if (pendingAction?.tool !== 'create_event') return null
-  const input = String(text ?? '').replace(/\s+/g, ' ').trim()
+  const input = normalizeAssistantSpeechPunctuation(text)
   const clarifiedMemberName = input.match(/\b(?:mom|mother|dad|father|grandma|grandmother|grandpa|grandfather)\s+is\s+([a-z][a-z'-]*)\b/i)?.[1]
   const clarifiedMember = clarifiedMemberName && Array.isArray(options.familyNames)
     ? options.familyNames.find((name) => name.toLowerCase() === clarifiedMemberName.toLowerCase())
@@ -465,7 +466,7 @@ export function singularBulkDeleteClarification(text, tool, args, events, format
 }
 
 export function resolveCalendarDeleteDisambiguation(previousText, text, events, options = {}) {
-  const current = String(text ?? '').replace(/\s+/g, ' ').trim()
+  const current = normalizeAssistantSpeechPunctuation(text)
   const request = parseDeleteSelectionRequest(previousText)
   const dayPart = /\bafternoon\b/i.test(current) ? 'afternoon' : /\bmorning\b/i.test(current) ? 'morning' : null
   if (!request || !dayPart) return null
@@ -482,14 +483,14 @@ export function resolveCalendarDeleteDisambiguation(previousText, text, events, 
 }
 
 export function isCalendarMutationDisambiguationFollowUp(previousText, text) {
-  const previous = String(previousText ?? '').replace(/\s+/g, ' ').trim()
-  const current = String(text ?? '').replace(/\s+/g, ' ').trim()
+  const previous = normalizeAssistantSpeechPunctuation(previousText)
+  const current = normalizeAssistantSpeechPunctuation(text)
   return /^(?:delete|cancel|remove|move|reschedule|shift|change)\b/i.test(previous)
     && /^(?:the\s+)?(?:(?:morning|afternoon|evening|earlier|later)\s+one|one\s+at\s+\d|first|second|last)(?:\s+one)?[.!]?$/i.test(current)
 }
 
 export function calendarDeleteAmbiguityClarification(text, events, options = {}, formatTime = (value) => value) {
-  const input = String(text ?? '').replace(/\s+/g, ' ').trim()
+  const input = normalizeAssistantSpeechPunctuation(text)
   if (/\b(?:all|every|both|each)\b/i.test(input)) return null
   const request = parseDeleteSelectionRequest(input)
   if (!request) return null
@@ -500,7 +501,7 @@ export function calendarDeleteAmbiguityClarification(text, events, options = {},
 }
 
 export function answerPendingSelectiveClear(text, pendingAction) {
-  const input = String(text ?? '').replace(/\s+/g, ' ').trim()
+  const input = normalizeAssistantSpeechPunctuation(text)
   if (
     pendingAction?.tool !== 'delete_events_by_title'
     || !/\b(?:what|which)\b.*\bremain|what exactly would remain/i.test(input)

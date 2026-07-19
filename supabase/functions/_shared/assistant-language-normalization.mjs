@@ -16,19 +16,37 @@ const COMMON_SPEECH_FORMS = Object.freeze([
   [/\bleft overs\b/g, 'leftovers'],
 ])
 
+export function normalizeAssistantSpeechPunctuation(value, options = {}) {
+  const protectedColon = '\uE000'
+  const protectedSlash = '\uE001'
+  const protectedApostrophe = '\uE002'
+  const protectedComma = '\uE003'
+
+  return String(value ?? '')
+    .normalize('NFKC')
+    .replace(/\b([ap])\s*\.\s*m\s*\.?\b/gi, '$1m')
+    .replace(/(\d)\s*[–—−-]\s*(\d)/g, '$1 to $2')
+    .replace(/(\d):(?=\d)/g, `$1${protectedColon}`)
+    .replace(/(\d)\/(?=\d)/g, `$1${protectedSlash}`)
+    .replace(/([a-z])['’](?=[a-z])/gi, `$1${protectedApostrophe}`)
+    .replace(options.preserveCommas ? /,/g : /$^/g, protectedComma)
+    .replace(/[\p{P}\p{S}]+/gu, ' ')
+    .replaceAll(protectedColon, ':')
+    .replaceAll(protectedSlash, '/')
+    .replaceAll(protectedApostrophe, "'")
+    .replaceAll(protectedComma, ',')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export function normalizeAssistantLanguage(value, options = {}) {
-  let normalized = String(value ?? '')
+  let normalized = normalizeAssistantSpeechPunctuation(value, options)
     .toLowerCase()
     .replace(/^(?:alexa|casa)[,\s]+/, '')
-    .replace(/[’']/g, "'")
-    .replace(/[“”]/g, '')
 
   for (const [pattern, replacement] of COMMON_SPEECH_FORMS) {
     normalized = normalized.replace(pattern, replacement)
   }
 
-  return normalized
-    .replace(options.preserveCommas ? /[?!.\u2026]+/g : /[?!.,\u2026]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+  return normalized.replace(/\s+/g, ' ').trim()
 }

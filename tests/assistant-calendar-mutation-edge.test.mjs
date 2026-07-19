@@ -66,6 +66,20 @@ test('complete appointment requests default to today, AM, and one hour', () => {
       event_type: 'event',
     },
   )
+  for (const phrase of [
+    'create an appointment at 10:30? To go to Skyzone!',
+    'create an appointment—at 10:30; to go to Skyzone…',
+    '(create an appointment) at 10:30, to go to Skyzone.',
+  ]) {
+    assert.equal(
+      resolveDefaultCalendarCreate(
+        phrase,
+        { now: new Date('2026-07-19T13:52:46.000Z'), utcOffset: '-04:00' },
+      ).args.start,
+      '2026-07-19T14:30:00.000Z',
+      phrase,
+    )
+  }
 })
 
 test('active event shifts preserve duration and support relational scheduling', () => {
