@@ -576,6 +576,7 @@ function MemberEditor({
   const { data: allMembers = [] } = useFamilyMembers()
   const [showPicker, setShowPicker] = useState(false)
   const [saving, setSaving] = useState<string | null>(null)
+  const [optimisticallyRemovedIds, setOptimisticallyRemovedIds] = useState<Set<string>>(() => new Set())
   const [mutationError, setMutationError] = useState<string | null>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
 
@@ -592,7 +593,8 @@ function MemberEditor({
     return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler) }
   }, [showPicker])
 
-  const sorted = [...event.members].sort((a, b) => (a.role === 'primary' ? -1 : b.role === 'primary' ? 1 : 0))
+  const visibleMembers = event.members.filter((member) => !optimisticallyRemovedIds.has(member.id))
+  const sorted = [...visibleMembers].sort((a, b) => (a.role === 'primary' ? -1 : b.role === 'primary' ? 1 : 0))
   const assignedIds = new Set(event.members.map(m => m.family_member?.id))
   const assignments = event.members.map((member) => ({
     family_member_id: member.family_member.id,
@@ -647,6 +649,7 @@ function MemberEditor({
   }
 
   async function removeMember(eventMemberId: string, memberName: string) {
+    setOptimisticallyRemovedIds((removedIds) => new Set(removedIds).add(eventMemberId))
     setSaving(eventMemberId)
     setMutationError(null)
     try {
@@ -658,7 +661,14 @@ function MemberEditor({
         .map((member) => member.family_member?.name?.trim())
         .filter((name): name is string => Boolean(name))
       const { result, nextPlan } = await saveAssignments(nextAssignments, nextNames)
-      if (result === 'cancelled') return
+      if (result === 'cancelled') {
+        setOptimisticallyRemovedIds((removedIds) => {
+          const restoredIds = new Set(removedIds)
+          restoredIds.delete(eventMemberId)
+          return restoredIds
+        })
+        return
+      }
       if (result === 'legacy') {
         const { error } = await supabase.from('event_members').delete().eq('id', eventMemberId)
         if (error) throw error
@@ -667,6 +677,11 @@ function MemberEditor({
       if (result === 'handled' && !nextPlan) await queryClient.invalidateQueries({ queryKey: ['events'] })
       await queryClient.invalidateQueries({ queryKey: ['events'] })
     } catch (cause) {
+      setOptimisticallyRemovedIds((removedIds) => {
+        const restoredIds = new Set(removedIds)
+        restoredIds.delete(eventMemberId)
+        return restoredIds
+      })
       setMutationError(`Could not remove ${memberName}. ${cause instanceof Error ? cause.message : ''}`)
     } finally {
       setSaving(null)
@@ -733,6 +748,7 @@ function MemberEditor({
             {!isPrimary ? (
               <IconButton
                 onClick={() => makeOwner(m.family_member!.id)}
+                disabled={saving !== null}
                 icon={<Crown size={14} />}
                 variant="ghost"
                 size="sm"
@@ -753,6 +769,7 @@ function MemberEditor({
             {(event.members.length > 1 || !isPrimary) && (
               <IconButton
                 onClick={() => removeMember(m.id, m.family_member?.name ?? 'member')}
+                disabled={saving !== null}
                 icon={<X size={14} />}
                 variant="ghost"
                 size="sm"
@@ -769,6 +786,7 @@ function MemberEditor({
       <div className="relative" ref={pickerRef}>
         <Button
           onClick={() => setShowPicker(p => !p)}
+          disabled={saving !== null}
           variant="secondary"
           size="sm"
           leadingIcon={<Plus size={14} />}
