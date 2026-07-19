@@ -29,6 +29,8 @@ import {
 import type { FamilyMember } from '../../types'
 import { cleanEventTitle, isBirthdayEvent } from '../../utils/eventTitle'
 import { deriveCalendarCardResponsibility } from '../../lib/calendarResponsibility'
+import { useCalendarQuickCreateGesture } from '../../hooks/useCalendarQuickCreateGesture'
+import QuickCreateSheet from '../shared/QuickCreateSheet'
 
 const SHARED_GOLD = 'var(--color-casa-gold)'
 
@@ -130,6 +132,7 @@ function DayEventCard({
         exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
         transition={{ duration: 0.3, delay: index * 0.04 }}
         className="cursor-pointer list-none"
+        data-calendar-event
         onClick={(e) => { e.stopPropagation(); onOpen() }}
       >
         <div className="relative w-full overflow-hidden rounded-card border border-casa-accent-soft-border bg-casa-accent-subtle px-4 py-2.5">
@@ -196,6 +199,7 @@ function DayEventCard({
       animate={{ opacity: past ? 0.45 : 1, x: 0 }}
       transition={{ duration: 0.3, delay: index * 0.04 }}
       className="cursor-pointer list-none"
+      data-calendar-event
       onClick={(e) => { e.stopPropagation(); onOpen() }}
     >
       <div className={cn(
@@ -515,6 +519,15 @@ export default function DayView() {
   // Use the week that contains the selected date to get events
   const { data: weekEvents } = useWeekEvents(selectedDate)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [quickCreate, setQuickCreate] = useState<{ open: boolean; start?: Date }>({ open: false })
+  const quickCreateGesture = useCalendarQuickCreateGesture<Date>({
+    resolveStart: (day) => {
+      const start = new Date(day)
+      start.setHours(9, 0, 0, 0)
+      return start
+    },
+    onCreate: (start) => setQuickCreate({ open: true, start }),
+  })
 
   const allEvents = (weekEvents ?? []).filter(e =>
     isHoliday(e) || isReminder(e) || visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
@@ -536,7 +549,14 @@ export default function DayView() {
     <div className="flex h-full overflow-hidden" onClick={() => setSelectedEventId(null)}>
 
       {/* ── Main column ─────────────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div
+        className="flex-1 flex flex-col overflow-hidden touch-pan-y"
+        onPointerDown={(event) => quickCreateGesture.onPointerDown(event, selectedDate)}
+        onPointerMove={quickCreateGesture.onPointerMove}
+        onPointerUp={quickCreateGesture.onPointerUp}
+        onPointerCancel={quickCreateGesture.onPointerCancel}
+        onDoubleClick={(event) => quickCreateGesture.onDoubleClick(event, selectedDate)}
+      >
 
         {/* Events list */}
         <BounceScroll
@@ -593,6 +613,11 @@ export default function DayView() {
           onClose={() => setSelectedEventId(null)}
         />
       </div>
+      <QuickCreateSheet
+        open={quickCreate.open}
+        initialStart={quickCreate.start}
+        onClose={() => setQuickCreate({ open: false })}
+      />
     </div>
   )
 }

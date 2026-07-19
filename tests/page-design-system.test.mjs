@@ -290,6 +290,28 @@ test('quick create handles core household event context without exposing the ful
   assert.match(quickCreate, /Created\. Connected calendars and event details will update shortly\./)
 })
 
+test('all calendar views provide a non-conflicting quick-create gesture for their active date', () => {
+  const month = readFileSync(resolve('src/components/calendar/MonthView.tsx'), 'utf8')
+  const week = readFileSync(resolve('src/components/calendar/WeekView.tsx'), 'utf8')
+  const day = readFileSync(resolve('src/components/calendar/DayView.tsx'), 'utf8')
+  const stacked = readFileSync(resolve('src/components/calendar/StackedView.tsx'), 'utf8')
+  const gesture = readFileSync(resolve('src/hooks/useCalendarQuickCreateGesture.ts'), 'utf8')
+
+  assert.match(month, /quickCreateGesture\.onDoubleClick\(event, day\)/)
+  assert.match(week, /handleSlotTouchStart/)
+  assert.match(week, /handleSlotMouseDown/)
+  assert.match(week, /handleSlotDoubleClick/)
+  assert.match(day, /useCalendarQuickCreateGesture/)
+  assert.match(day, /<QuickCreateSheet/)
+  assert.match(stacked, /useCalendarQuickCreateGesture/)
+  assert.match(stacked, /<QuickCreateSheet/)
+  assert.match(gesture, /LONG_PRESS_MS = 550/)
+  assert.match(gesture, /MOVE_TOLERANCE_PX = 12/)
+  assert.match(gesture, /ignoreSelector = '\[data-calendar-event\]'/)
+  assert.match(stacked, /data-calendar-event/)
+  assert.match(day, /data-calendar-event/)
+})
+
 test('calendar cards and event details use shared touch contracts', () => {
   const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
   const largeCard = readFileSync(resolve('src/components/calendar/LargeEventCard.tsx'), 'utf8')

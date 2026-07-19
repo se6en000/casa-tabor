@@ -11,6 +11,7 @@ import { useMonthEvents } from '../../hooks/useCalendarEvents'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, REMINDER_COLOR } from '../../utils/holidays'
 import { cleanEventTitle } from '../../utils/eventTitle'
+import { useCalendarQuickCreateGesture } from '../../hooks/useCalendarQuickCreateGesture'
 import EventDetailPanel from './EventDetailPanel'
 import QuickCreateSheet from '../shared/QuickCreateSheet'
 import { Button, CalendarPill, IconButton } from '../ui'
@@ -169,9 +170,10 @@ interface DayCellProps {
   onMouseDown: (e: React.MouseEvent) => void
   onMouseUp: () => void
   onContextMenu: (e: React.MouseEvent) => void
+  onDoubleClick: (e: React.MouseEvent) => void
 }
 
-function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, onDrillIn, onSelectEvent, onTouchStart, onTouchMove, onTouchEnd, onMouseDown, onMouseUp, onContextMenu }: DayCellProps) {
+function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, onDrillIn, onSelectEvent, onTouchStart, onTouchMove, onTouchEnd, onMouseDown, onMouseUp, onContextMenu, onDoubleClick }: DayCellProps) {
   const todayDay = isToday(day)
   const visible = events.slice(0, MAX_VISIBLE_EVENTS)
   const overflow = events.length - MAX_VISIBLE_EVENTS
@@ -191,6 +193,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
         onContextMenu={onContextMenu}
+        onDoubleClick={onDoubleClick}
       >
         {/* Date number */}
         <div className="flex items-start justify-end mb-1">
@@ -262,6 +265,18 @@ export default function MonthView() {
   const [openPopoverKey, setOpenPopoverKey] = useState<string | null>(null)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [quickCreate, setQuickCreate] = useState<{ open: boolean; start?: Date }>({ open: false })
+  const quickCreateGesture = useCalendarQuickCreateGesture<Date>({
+    resolveStart: (day) => {
+      const start = new Date(day)
+      start.setHours(9, 0, 0, 0)
+      return start
+    },
+    onCreate: (start) => {
+      setOpenPopoverKey(null)
+      setQuickCreate({ open: true, start })
+    },
+    ignoreSelector: '[data-event-pill]',
+  })
 
   // Long-press to create event — shared timer for both touch and mouse
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -367,6 +382,7 @@ export default function MonthView() {
                 onMouseDown={e => handleCellMouseDown(e, day)}
                 onMouseUp={cancelLongPress}
                 onContextMenu={handleCellContextMenu}
+                onDoubleClick={(event) => quickCreateGesture.onDoubleClick(event, day)}
               />
             )
           })}

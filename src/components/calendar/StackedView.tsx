@@ -22,6 +22,8 @@ import BounceScroll from '../shared/BounceScroll'
 import { eventOverlapsDay, getEventDisplayStartDay } from '../../utils/eventTime'
 import type { FamilyMember } from '../../types'
 import { deriveCalendarCardResponsibility } from '../../lib/calendarResponsibility'
+import { useCalendarQuickCreateGesture } from '../../hooks/useCalendarQuickCreateGesture'
+import QuickCreateSheet from '../shared/QuickCreateSheet'
 import { Button, CalendarPill, Chip } from '../ui'
 import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActions'
 
@@ -82,6 +84,15 @@ export default function StackedView() {
   const [editEventId,     setEditEventId]     = useState<string | null>(null)
   const [deleteIntentEventId, setDeleteIntentEventId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ event: EventWithDetails; x: number; y: number } | null>(null)
+  const [quickCreate, setQuickCreate] = useState<{ open: boolean; start?: Date }>({ open: false })
+  const quickCreateGesture = useCalendarQuickCreateGesture<Date>({
+    resolveStart: (day) => {
+      const start = new Date(day)
+      start.setHours(9, 0, 0, 0)
+      return start
+    },
+    onCreate: (start) => setQuickCreate({ open: true, start }),
+  })
 
   const events = (allEvents ?? []).filter(e =>
     isReminder(e) || visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
@@ -119,11 +130,16 @@ export default function StackedView() {
               <div
                 key={format(day, 'yyyy-MM-dd')}
                 className={cn(
-                  'flex flex-col rounded-xl border overflow-hidden transition-colors',
+                  'flex flex-col rounded-xl border overflow-hidden transition-colors touch-pan-y',
                   today_
                     ? 'bg-casa-accent-subtle/70 border-casa-accent-subtle-border'
                     : 'bg-casa-bg-2/65 border-casa-divider',
                 )}
+                onPointerDown={(event) => quickCreateGesture.onPointerDown(event, day)}
+                onPointerMove={quickCreateGesture.onPointerMove}
+                onPointerUp={quickCreateGesture.onPointerUp}
+                onPointerCancel={quickCreateGesture.onPointerCancel}
+                onDoubleClick={(event) => quickCreateGesture.onDoubleClick(event, day)}
               >
                 {/* Day header — compact inline layout */}
                 <div className={cn(
@@ -149,30 +165,32 @@ export default function StackedView() {
                   {/* All-day reminders */}
                   {dayAllDay.map(r => (
                     isReminder(r) ? (
-                      <SwipeableReminderPill
-                        key={r.id}
-                        id={r.id}
-                        title={r.title}
-                        members={r.members}
-                        onClick={() => setSelectedEventId(r.id)}
-                        onComplete={completeReminder}
-                        onDismiss={completeReminder}
-                      />
+                      <div key={r.id} data-calendar-event>
+                        <SwipeableReminderPill
+                          id={r.id}
+                          title={r.title}
+                          members={r.members}
+                          onClick={() => setSelectedEventId(r.id)}
+                          onComplete={completeReminder}
+                          onDismiss={completeReminder}
+                        />
+                      </div>
                     ) : (
-                      <Chip
-                        key={r.id}
-                        onClick={(e) => { e.stopPropagation(); setSelectedEventId(r.id) }}
-                        tone="accent"
-                        size="sm"
-                        className="w-full justify-between"
-                      >
-                        <span className="truncate text-caption font-semibold text-casa-navy">
-                          {r.title}
-                        </span>
-                        <span className="shrink-0 text-caption font-semibold text-casa-gold">
-                          All day
-                        </span>
-                      </Chip>
+                      <div key={r.id} data-calendar-event>
+                        <Chip
+                          onClick={(e) => { e.stopPropagation(); setSelectedEventId(r.id) }}
+                          tone="accent"
+                          size="sm"
+                          className="w-full justify-between"
+                        >
+                          <span className="truncate text-caption font-semibold text-casa-navy">
+                            {r.title}
+                          </span>
+                          <span className="shrink-0 text-caption font-semibold text-casa-gold">
+                            All day
+                          </span>
+                        </Chip>
+                      </div>
                     )
                   ))}
 
@@ -183,6 +201,7 @@ export default function StackedView() {
                       .map(event => isTimedReminder(event) ? (
                         <motion.div
                           key={event.id}
+                          data-calendar-event
                           layout
                           initial={{ opacity: 0, y: 4 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -245,6 +264,11 @@ export default function StackedView() {
         onEdit={ev => setEditEventId(ev.id)}
         onDelete={deleteEvent}
         onComplete={ev => completeReminder(ev.id)}
+      />
+      <QuickCreateSheet
+        open={quickCreate.open}
+        initialStart={quickCreate.start}
+        onClose={() => setQuickCreate({ open: false })}
       />
     </BounceScroll>
   )
@@ -335,6 +359,7 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
         'hover:shadow-card-hover transition-all duration-200',
         isSelected ? 'border-casa-gold shadow-card' : 'border-casa-border'
       )}
+      data-calendar-event
     >
       {/* Left color bar */}
       <div

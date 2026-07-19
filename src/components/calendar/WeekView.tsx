@@ -168,6 +168,19 @@ export default function WeekView() {
     slotLongPressOrigin.current = null
   }, [])
 
+  const handleSlotDoubleClick = useCallback((e: React.MouseEvent, day: Date) => {
+    if ((e.target as Element).closest('[data-event-block]') || !gridScrollRef.current) return
+    const rect = gridScrollRef.current.getBoundingClientRect()
+    const gridY = e.clientY - rect.top + gridScrollRef.current.scrollTop
+    const rawHour = START_HOUR + gridY / HOUR_HEIGHT
+    const snapped = Math.round(rawHour * 2) / 2
+    const hours = Math.floor(Math.max(START_HOUR, Math.min(END_HOUR - 0.5, snapped)))
+    const minutes = snapped % 1 === 0.5 ? 30 : 0
+    const start = new Date(day)
+    start.setHours(hours, minutes, 0, 0)
+    setQuickCreate({ open: true, start })
+  }, [])
+
   // Prevent browser context menu on right-click over the calendar grid
   const handleSlotContextMenu = useCallback((e: React.MouseEvent) => {
     if ((e.target as Element).closest('[data-event-block]')) return
@@ -461,6 +474,7 @@ export default function WeekView() {
                 onMouseUp={handleSlotMouseUp}
                 onMouseLeave={handleSlotMouseUp}
                 onContextMenu={handleSlotContextMenu}
+                onDoubleClick={e => handleSlotDoubleClick(e, day)}
                 onTouchStart={e => handleSlotTouchStart(e, day)}
                 onTouchMove={handleSlotTouchMove}
                 onTouchEnd={handleSlotTouchEnd}
