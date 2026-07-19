@@ -253,7 +253,7 @@ test('date-time wheel follows live touch selection and synchronizes controlled v
   assert.match(dial, /onWheel=\{beginUserScroll\}/)
   assert.match(dial, /if \(!userScrolling\.current\) return/)
   assert.match(dial, /window\.clearTimeout\(settleTimer\.current\)/)
-  assert.match(dial, /setHighlightedIndex\(index\)/)
+  assert.match(dial, /updateHighlightedOption\(index\)/)
   assert.match(dial, /scrollRef\.current\.scrollTop = index \* ITEM_HEIGHT/)
   assert.match(dial, /useLayoutEffect\(\(\) =>/)
   assert.doesNotMatch(dial, /if \(userScrolling\.current \|\| !scrollRef\.current\) return/)
@@ -266,7 +266,7 @@ test('quick create keeps the end one hour after every start adjustment', () => {
   const dial = readFileSync(resolve('src/components/ui/DateTimeDial.tsx'), 'utf8')
   assert.match(quickCreate, /startChangeEndOffsetMinutes=\{60\}/)
   assert.match(dial, /startChangeEndOffsetMinutes \* 60_000/)
-  assert.match(dial, /onEndChange\(toLocalValue\(new Date\(parseLocal\(value\)\.getTime\(\) \+ duration\)\)\)/)
+  assert.match(dial, /onEndChange\(toLocalValue\(new Date\(parseLocal\(value\)\.getTime\(\) \+ durationMs\)\)\)/)
 })
 
 test('date-time wheels commit the final AM or PM selection after touch scrolling settles', () => {
@@ -286,8 +286,18 @@ test('date-time dial previews the active wheel selection in its schedule header'
   assert.match(dial, /const \[previewStart, setPreviewStart\] = useState<string \| null>\(null\)/)
   assert.match(dial, /const previewStartValue = previewStart \?\? startValue/)
   assert.match(dial, /detail=\{durationLabel\(previewStartValue, previewEndValue\)\}/)
-  assert.match(dial, /onPreview=\{value => preview\(\{ ampm: value as 'AM' \| 'PM' \}\)\}/)
-  assert.match(dial, /setPreviewEnd\(toLocalValue\(new Date\(parseLocal\(value\)\.getTime\(\) \+ duration\)\)\)/)
+  assert.match(dial, /onPreview=\{handlePeriodPreview\}/)
+  assert.match(dial, /setPreviewEnd\(toLocalValue\(new Date\(parseLocal\(value\)\.getTime\(\) \+ durationMs\)\)\)/)
+})
+
+test('date-time wheels avoid re-rendering the full option list while scrolling', () => {
+  const dial = readFileSync(resolve('src/components/ui/DateTimeDial.tsx'), 'utf8')
+
+  assert.match(dial, /const WheelColumn = memo\(/)
+  assert.match(dial, /const WheelRow = memo\(/)
+  assert.match(dial, /const optionRefs = useRef\(new Map<number, HTMLDivElement>\(\)\)/)
+  assert.match(dial, /option\.style\.transform = distance === 0 \? 'scale\(1\)' : 'scale\(0\.9\)'/)
+  assert.match(dial, /updateHighlightedOption\(index\)/)
 })
 
 test('quick create handles core household event context without exposing the full editor', () => {

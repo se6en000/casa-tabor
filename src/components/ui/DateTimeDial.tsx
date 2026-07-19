@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { addDays, format, isToday, isTomorrow, startOfDay } from 'date-fns'
 import { Clock } from 'lucide-react'
 import { cn } from '../../utils/cn'
@@ -66,7 +66,7 @@ function dayLabel(date: Date) {
   return format(date, 'EEE, MMM d')
 }
 
-function WheelColumn({ items, value, onChange, onPreview, label, wide = false }: {
+const WheelColumn = memo(function WheelColumn({ items, value, onChange, onPreview, label, wide = false }: {
   items: WheelItem[]
   value: number | string
   onChange: (value: number | string) => void
@@ -79,8 +79,29 @@ function WheelColumn({ items, value, onChange, onPreview, label, wide = false }:
   const userScrolling = useRef(false)
   const pointerActive = useRef(false)
   const selectedIndex = Math.max(0, items.findIndex(item => item.value === value))
-  const [highlightedIndex, setHighlightedIndex] = useState(selectedIndex)
   const highlightedIndexRef = useRef(selectedIndex)
+  const optionRefs = useRef(new Map<number, HTMLDivElement>())
+
+  const applyOptionAppearance = useCallback((index: number, selected: number) => {
+    const option = optionRefs.current.get(index)
+    if (!option) return
+    const distance = Math.abs(index - selected)
+    option.setAttribute('aria-selected', String(distance === 0))
+    option.style.opacity = String(distance === 0 ? 1 : distance === 1 ? 0.5 : 0.2)
+    option.style.fontWeight = String(distance === 0 ? 700 : 500)
+    option.style.transform = distance === 0 ? 'scale(1)' : 'scale(0.9)'
+  }, [])
+
+  const updateHighlightedOption = useCallback((nextIndex: number) => {
+    const previousIndex = highlightedIndexRef.current
+    for (const index of new Set([
+      ...Array.from({ length: 5 }, (_, offset) => previousIndex + offset - 2),
+      ...Array.from({ length: 5 }, (_, offset) => nextIndex + offset - 2),
+    ])) {
+      applyOptionAppearance(index, nextIndex)
+    }
+    highlightedIndexRef.current = nextIndex
+  }, [applyOptionAppearance])
 
   useEffect(() => () => {
     if (settleTimer.current) window.clearTimeout(settleTimer.current)
@@ -89,11 +110,10 @@ function WheelColumn({ items, value, onChange, onPreview, label, wide = false }:
   useLayoutEffect(() => {
     if (settleTimer.current) window.clearTimeout(settleTimer.current)
     userScrolling.current = false
-    highlightedIndexRef.current = selectedIndex
-    setHighlightedIndex(selectedIndex)
+    updateHighlightedOption(selectedIndex)
     if (!scrollRef.current) return
     scrollRef.current.scrollTop = selectedIndex * ITEM_HEIGHT
-  }, [items, selectedIndex, value])
+  }, [items, selectedIndex, updateHighlightedOption, value])
 
   const beginUserScroll = () => {
     userScrolling.current = true
@@ -116,8 +136,7 @@ function WheelColumn({ items, value, onChange, onPreview, label, wide = false }:
     const index = Math.max(0, Math.min(items.length - 1, Math.round(scrollRef.current.scrollTop / ITEM_HEIGHT)))
     const picked = items[index]
     userScrolling.current = false
-    highlightedIndexRef.current = index
-    setHighlightedIndex(index)
+    updateHighlightedOption(index)
     scrollRef.current.scrollTop = index * ITEM_HEIGHT
     if (picked && picked.value !== value) {
       navigator.vibrate?.(6)
@@ -140,8 +159,7 @@ function WheelColumn({ items, value, onChange, onPreview, label, wide = false }:
     if (!scrollRef.current) return
     const index = Math.max(0, Math.min(items.length - 1, Math.round(scrollRef.current.scrollTop / ITEM_HEIGHT)))
     if (index !== highlightedIndexRef.current) {
-      highlightedIndexRef.current = index
-      setHighlightedIndex(index)
+      updateHighlightedOption(index)
       onPreview?.(items[index].value)
     }
     // Touch scrolling can pause for longer than the debounce while the finger is
@@ -166,10 +184,14 @@ function WheelColumn({ items, value, onChange, onPreview, label, wide = false }:
       >
         <div style={{ height: WHEEL_PADDING }} />
         {items.map((item, index) => {
-          const distance = Math.abs(index - highlightedIndex)
+          const distance = Math.abs(index - selectedIndex)
           return (
             <div
               key={String(item.value)}
+              ref={(element) => {
+                if (element) optionRefs.current.set(index, element)
+                else optionRefs.current.delete(index)
+              }}
               role="option"
               aria-selected={distance === 0}
               className="flex snap-center select-none items-center justify-center whitespace-nowrap text-heading transition-[opacity,transform]"
@@ -191,26 +213,35 @@ function WheelColumn({ items, value, onChange, onPreview, label, wide = false }:
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-casa-bg to-transparent" />
     </div>
   )
-}
+})
 
-function WheelRow({ value, onChange, onPreview, days }: {
+const WheelRow = memo(function WheelRow({ value, onChange, onPreview, days }: {
   value: string
   onChange: (value: string) => void
   onPreview: (value: string) => void
   days: WheelItem[]
 }) {
-  const parts = wheelParts(value)
-  const patch = (next: Partial<WheelParts>) => onChange(toLocalValue(combine({ ...parts, ...next })))
-  const preview = (next: Partial<WheelParts>) => onPreview(toLocalValue(combine({ ...parts, ...next })))
+  const { dayTs, hour12, minute, ampm } = wheelParts(value)
+  const parts = { dayTs, hour12, minute, ampm }
+  const patch = useCallback((next: Partial<WheelParts>) => onChange(toLocalValue(combine({ dayTs, hour12, minute, ampm, ...next }))), [ampm, dayTs, hour12, minute, onChange])
+  const preview = useCallback((next: Partial<WheelParts>) => onPreview(toLocalValue(combine({ dayTs, hour12, minute, ampm, ...next }))), [ampm, dayTs, hour12, minute, onPreview])
+  const handleDayChange = useCallback((next: number | string) => patch({ dayTs: next as number }), [patch])
+  const handleHourChange = useCallback((next: number | string) => patch({ hour12: next as number }), [patch])
+  const handleMinuteChange = useCallback((next: number | string) => patch({ minute: next as number }), [patch])
+  const handlePeriodChange = useCallback((next: number | string) => patch({ ampm: next as 'AM' | 'PM' }), [patch])
+  const handleDayPreview = useCallback((next: number | string) => preview({ dayTs: next as number }), [preview])
+  const handleHourPreview = useCallback((next: number | string) => preview({ hour12: next as number }), [preview])
+  const handleMinutePreview = useCallback((next: number | string) => preview({ minute: next as number }), [preview])
+  const handlePeriodPreview = useCallback((next: number | string) => preview({ ampm: next as 'AM' | 'PM' }), [preview])
   return (
     <div className="relative flex gap-1 rounded-card border border-casa-border bg-casa-bg px-2 text-content-heading">
-      <WheelColumn wide label="Date" items={days} value={parts.dayTs} onChange={value => patch({ dayTs: value as number })} onPreview={value => preview({ dayTs: value as number })} />
-      <WheelColumn label="Hour" items={HOURS} value={parts.hour12} onChange={value => patch({ hour12: value as number })} onPreview={value => preview({ hour12: value as number })} />
-      <WheelColumn label="Minute" items={MINUTES} value={parts.minute} onChange={value => patch({ minute: value as number })} onPreview={value => preview({ minute: value as number })} />
-      <WheelColumn label="AM or PM" items={DAY_PERIODS} value={parts.ampm} onChange={value => patch({ ampm: value as 'AM' | 'PM' })} onPreview={value => preview({ ampm: value as 'AM' | 'PM' })} />
+      <WheelColumn wide label="Date" items={days} value={parts.dayTs} onChange={handleDayChange} onPreview={handleDayPreview} />
+      <WheelColumn label="Hour" items={HOURS} value={parts.hour12} onChange={handleHourChange} onPreview={handleHourPreview} />
+      <WheelColumn label="Minute" items={MINUTES} value={parts.minute} onChange={handleMinuteChange} onPreview={handleMinutePreview} />
+      <WheelColumn label="AM or PM" items={DAY_PERIODS} value={parts.ampm} onChange={handlePeriodChange} onPreview={handlePeriodPreview} />
     </div>
   )
-}
+})
 
 export function DateTimeDial({
   startValue,
@@ -233,21 +264,25 @@ export function DateTimeDial({
     })
   }, [startDayKey])
 
-  const updateStart = (value: string) => {
-    const duration = startChangeEndOffsetMinutes === undefined
-      ? Math.max(5 * 60_000, parseLocal(endValue).getTime() - parseLocal(startValue).getTime())
-      : startChangeEndOffsetMinutes * 60_000
+  const durationMs = startChangeEndOffsetMinutes === undefined
+    ? Math.max(5 * 60_000, parseLocal(endValue).getTime() - parseLocal(startValue).getTime())
+    : startChangeEndOffsetMinutes * 60_000
+  const updateStart = useCallback((value: string) => {
     onStartChange(value)
-    onEndChange(toLocalValue(new Date(parseLocal(value).getTime() + duration)))
+    onEndChange(toLocalValue(new Date(parseLocal(value).getTime() + durationMs)))
     setPreviewStart(null)
     setPreviewEnd(null)
     onInteraction?.()
-  }
-  const updateEnd = (value: string) => {
+  }, [durationMs, onEndChange, onInteraction, onStartChange])
+  const updateEnd = useCallback((value: string) => {
     onEndChange(value)
     setPreviewEnd(null)
     onInteraction?.()
-  }
+  }, [onEndChange, onInteraction])
+  const previewStartChange = useCallback((value: string) => {
+    setPreviewStart(value)
+    setPreviewEnd(toLocalValue(new Date(parseLocal(value).getTime() + durationMs)))
+  }, [durationMs])
   const previewStartValue = previewStart ?? startValue
   const previewEndValue = previewEnd ?? endValue
   const start = parseLocal(previewStartValue)
@@ -269,13 +304,7 @@ export function DateTimeDial({
             <WheelRow
               value={startValue}
               onChange={updateStart}
-              onPreview={(value) => {
-                const duration = startChangeEndOffsetMinutes === undefined
-                  ? Math.max(5 * 60_000, parseLocal(endValue).getTime() - parseLocal(startValue).getTime())
-                  : startChangeEndOffsetMinutes * 60_000
-                setPreviewStart(value)
-                setPreviewEnd(toLocalValue(new Date(parseLocal(value).getTime() + duration)))
-              }}
+              onPreview={previewStartChange}
               days={days}
             />
           </div>
