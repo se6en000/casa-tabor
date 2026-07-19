@@ -3,6 +3,7 @@ import { requireEnv } from '../_shared/env.mjs'
 import { evaluateAgentToolCall } from '../_shared/assistant-agent-policy.mjs'
 import {
   hardenExplicitCalendarRangeTurn,
+  hardenExplicitCalendarTemporalTurn,
   resolveCalendarSemanticTurn,
   shouldPreferActiveCalendarEntity,
 } from '../_shared/assistant-calendar-agent.mjs'
@@ -201,6 +202,7 @@ Deno.serve(async (req) => {
         currentDate: body?.context?.currentDate,
         utcOffset: body?.context?.utcOffset,
       })
+      plan.turn = hardenExplicitCalendarTemporalTurn(plan.turn, latestUserText)
       plan.turn = hardenExplicitCalendarRangeTurn(plan.turn, latestUserText)
       const resolved = resolveCalendarSemanticTurn(plan.turn, {
         currentDate: body?.context?.currentDate,

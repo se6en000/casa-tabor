@@ -17,6 +17,31 @@ export function hardenExplicitCalendarRangeTurn(turn, text) {
   }
 }
 
+export function hardenExplicitCalendarTemporalTurn(turn, text) {
+  if (!turn || !['create', 'revise', 'update'].includes(turn.action)) return turn
+  const patch = normalizePatch(turn.patch)
+  const input = String(text ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
+  const inferredDate = patch.dateReference
+    ? null
+    : /\btomorrow\b/.test(input)
+      ? { kind: 'tomorrow' }
+      : /\btoday\b|\btonight\b/.test(input)
+        ? { kind: 'today' }
+        : null
+  const inferredTime = patch.time?.period === 'ambiguous' && /\btonight\b/.test(input)
+    ? { ...patch.time, period: 'pm' }
+    : null
+  if (!inferredDate && !inferredTime) return turn
+  return {
+    ...turn,
+    patch: {
+      ...(turn.patch && typeof turn.patch === 'object' ? turn.patch : {}),
+      ...(inferredDate ? { date_reference: inferredDate } : {}),
+      ...(inferredTime ? { time: inferredTime } : {}),
+    },
+  }
+}
+
 export function resolveCalendarSemanticTurn(turn, context = {}) {
   if (!turn || turn.version !== CALENDAR_SEMANTIC_TURN_VERSION) {
     return reject('invalid_calendar_semantic_turn')
@@ -149,16 +174,22 @@ function resolveRange(patch, baseArgs, context, options) {
   }
   const baseStart = parseLocalDateTime(baseArgs?.start, offset)
   const baseEnd = parseLocalDateTime(baseArgs?.end, offset)
-  const date = patch.dateReference
-    ? resolveDateReference(patch.dateReference, context.currentDate, offset.minutes)
-    : baseStart?.date ?? null
-  if (!date) return clarify('What day should I use?', 'date')
-
   const time = patch.time
     ? resolveClock(patch.time, baseStart)
     : baseStart
       ? { hour: baseStart.hour, minute: baseStart.minute }
       : null
+  const date = patch.dateReference
+    ? resolveDateReference(patch.dateReference, context.currentDate, offset.minutes)
+    : baseStart?.date ??
+      inferCalendarCreateDateFromTime(
+        time,
+        context.currentDate,
+        offset.minutes,
+        context.temporalAssumptions?.nearFutureCutoffMinutes,
+      )
+  if (!date) return clarify('What day should I use?', 'date')
+
   if (!time && options.requireTime && patch.allDay !== true) {
     return clarify('What time should I use?', 'time')
   }
@@ -420,7 +451,30 @@ function resolveClock(time, baseStart) {
       : morning
     return { hour: selected, minute: time.minute }
   }
+  if (time.period === 'ambiguous') {
+    return { hour: time.hour % 12, minute: time.minute }
+  }
   return null
+}
+
+function inferCalendarCreateDateFromTime(time, currentDate, offsetMinutes, nearFutureCutoffMinutes) {
+  if (!time) return null
+  const now = new Date(currentDate)
+  if (!Number.isFinite(now.getTime())) return null
+  const localNow = new Date(now.getTime() + offsetMinutes * 60000)
+  const cutoffMinutes = Number.isFinite(nearFutureCutoffMinutes)
+    ? Math.max(0, Math.min(6 * 60, Number(nearFutureCutoffMinutes)))
+    : 90
+  const localStart = new Date(Date.UTC(
+    localNow.getUTCFullYear(),
+    localNow.getUTCMonth(),
+    localNow.getUTCDate(),
+    time.hour,
+    time.minute,
+  ))
+  const deltaMinutes = Math.round((localStart.getTime() - localNow.getTime()) / 60000)
+  if (deltaMinutes < -cutoffMinutes) localStart.setUTCDate(localStart.getUTCDate() + 1)
+  return formatDate(localStart)
 }
 
 function resolveDateReference(reference, currentDate, offsetMinutes) {

@@ -1210,6 +1210,7 @@ Deno.serve(async (req) => {
           assistant_mode: context?.assistant_mode,
           currentDate: now.toISOString(),
           utcOffset: context?.utcOffset,
+          temporalAssumptions: context?.temporalAssumptions,
           family: context?.family,
           activeEntity: activeConversationEvent
             ? {

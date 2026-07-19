@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   CALENDAR_SEMANTIC_TURN_VERSION,
   hardenExplicitCalendarRangeTurn,
+  hardenExplicitCalendarTemporalTurn,
   resolveCalendarSemanticTurn,
   shouldPreferActiveCalendarEntity,
 } from '../supabase/functions/_shared/assistant-calendar-agent.mjs'
@@ -464,4 +465,31 @@ test('semantic calendar turns fail closed on invented event IDs and invalid vers
     kind: 'reject',
     code: 'invalid_calendar_semantic_turn',
   })
+})
+
+test('calendar semantic create defaults missing day from current local time and nudges past slots to tomorrow', () => {
+  const result = resolveCalendarSemanticTurn(turn('create', {
+    title: 'Sky Zone',
+    time: { hour: 10, minute: 30, period: 'ambiguous' },
+  }), context)
+
+  assert.equal(result.kind, 'tool')
+  assert.equal(result.toolName, 'calendar.create')
+  assert.equal(result.args.start, '2026-07-15T10:30:00-04:00')
+  assert.equal(result.args.end, '2026-07-15T11:30:00-04:00')
+})
+
+test('explicit temporal words harden semantic create turns before bounded resolution', () => {
+  const hardenedTomorrow = hardenExplicitCalendarTemporalTurn(turn('create', {
+    title: 'Dentist',
+    time: { hour: 9, minute: 0, period: 'ambiguous' },
+  }), 'book a dentist appointment tomorrow at 9')
+  assert.deepEqual(hardenedTomorrow.patch.date_reference, { kind: 'tomorrow' })
+
+  const hardenedTonight = hardenExplicitCalendarTemporalTurn(turn('create', {
+    title: 'Gym',
+    time: { hour: 8, minute: 0, period: 'ambiguous' },
+  }), 'create a gym event tonight at 8')
+  assert.equal(hardenedTonight.patch.time.period, 'pm')
+  assert.deepEqual(hardenedTonight.patch.date_reference, { kind: 'today' })
 })
