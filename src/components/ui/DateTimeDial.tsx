@@ -66,10 +66,11 @@ function dayLabel(date: Date) {
   return format(date, 'EEE, MMM d')
 }
 
-function WheelColumn({ items, value, onChange, label, wide = false }: {
+function WheelColumn({ items, value, onChange, onPreview, label, wide = false }: {
   items: WheelItem[]
   value: number | string
   onChange: (value: number | string) => void
+  onPreview?: (value: number | string) => void
   label: string
   wide?: boolean
 }) {
@@ -141,6 +142,7 @@ function WheelColumn({ items, value, onChange, label, wide = false }: {
     if (index !== highlightedIndexRef.current) {
       highlightedIndexRef.current = index
       setHighlightedIndex(index)
+      onPreview?.(items[index].value)
     }
     // Touch scrolling can pause for longer than the debounce while the finger is
     // still down. Wait for release so a slow drag cannot commit the prior value.
@@ -191,15 +193,21 @@ function WheelColumn({ items, value, onChange, label, wide = false }: {
   )
 }
 
-function WheelRow({ value, onChange, days }: { value: string; onChange: (value: string) => void; days: WheelItem[] }) {
+function WheelRow({ value, onChange, onPreview, days }: {
+  value: string
+  onChange: (value: string) => void
+  onPreview: (value: string) => void
+  days: WheelItem[]
+}) {
   const parts = wheelParts(value)
   const patch = (next: Partial<WheelParts>) => onChange(toLocalValue(combine({ ...parts, ...next })))
+  const preview = (next: Partial<WheelParts>) => onPreview(toLocalValue(combine({ ...parts, ...next })))
   return (
     <div className="relative flex gap-1 rounded-card border border-casa-border bg-casa-bg px-2 text-content-heading">
-      <WheelColumn wide label="Date" items={days} value={parts.dayTs} onChange={value => patch({ dayTs: value as number })} />
-      <WheelColumn label="Hour" items={HOURS} value={parts.hour12} onChange={value => patch({ hour12: value as number })} />
-      <WheelColumn label="Minute" items={MINUTES} value={parts.minute} onChange={value => patch({ minute: value as number })} />
-      <WheelColumn label="AM or PM" items={DAY_PERIODS} value={parts.ampm} onChange={value => patch({ ampm: value as 'AM' | 'PM' })} />
+      <WheelColumn wide label="Date" items={days} value={parts.dayTs} onChange={value => patch({ dayTs: value as number })} onPreview={value => preview({ dayTs: value as number })} />
+      <WheelColumn label="Hour" items={HOURS} value={parts.hour12} onChange={value => patch({ hour12: value as number })} onPreview={value => preview({ hour12: value as number })} />
+      <WheelColumn label="Minute" items={MINUTES} value={parts.minute} onChange={value => patch({ minute: value as number })} onPreview={value => preview({ minute: value as number })} />
+      <WheelColumn label="AM or PM" items={DAY_PERIODS} value={parts.ampm} onChange={value => patch({ ampm: value as 'AM' | 'PM' })} onPreview={value => preview({ ampm: value as 'AM' | 'PM' })} />
     </div>
   )
 }
@@ -214,6 +222,8 @@ export function DateTimeDial({
   onInteraction,
 }: DateTimeDialProps) {
   const [expanded, setExpanded] = useState(defaultExpanded)
+  const [previewStart, setPreviewStart] = useState<string | null>(null)
+  const [previewEnd, setPreviewEnd] = useState<string | null>(null)
   const startDayKey = startValue.slice(0, 10)
   const days = useMemo(() => {
     const anchor = startOfDay(addDays(parseLocal(`${startDayKey}T00:00`), -30))
@@ -229,14 +239,19 @@ export function DateTimeDial({
       : startChangeEndOffsetMinutes * 60_000
     onStartChange(value)
     onEndChange(toLocalValue(new Date(parseLocal(value).getTime() + duration)))
+    setPreviewStart(null)
+    setPreviewEnd(null)
     onInteraction?.()
   }
   const updateEnd = (value: string) => {
     onEndChange(value)
+    setPreviewEnd(null)
     onInteraction?.()
   }
-  const start = parseLocal(startValue)
-  const end = parseLocal(endValue)
+  const previewStartValue = previewStart ?? startValue
+  const previewEndValue = previewEnd ?? endValue
+  const start = parseLocal(previewStartValue)
+  const end = parseLocal(previewEndValue)
   const sameDay = start.toDateString() === end.toDateString()
 
   return (
@@ -244,18 +259,29 @@ export function DateTimeDial({
       <FormSummaryCard
         icon={<Clock size={20} />}
         title={`${format(start, 'EEE, MMM d · h:mm a')}–${format(end, sameDay ? 'h:mm a' : 'EEE, MMM d · h:mm a')}`}
-        detail={durationLabel(startValue, endValue)}
+        detail={durationLabel(previewStartValue, previewEndValue)}
         action={<Button variant="secondary" size="sm" onClick={() => setExpanded(value => !value)}>{expanded ? 'Done' : 'Change'}</Button>}
       />
       {expanded && (
         <div className="grid gap-4">
           <div>
             <p className="mb-1.5 text-caption font-semibold uppercase tracking-wide text-casa-muted">Start</p>
-            <WheelRow value={startValue} onChange={updateStart} days={days} />
+            <WheelRow
+              value={startValue}
+              onChange={updateStart}
+              onPreview={(value) => {
+                const duration = startChangeEndOffsetMinutes === undefined
+                  ? Math.max(5 * 60_000, parseLocal(endValue).getTime() - parseLocal(startValue).getTime())
+                  : startChangeEndOffsetMinutes * 60_000
+                setPreviewStart(value)
+                setPreviewEnd(toLocalValue(new Date(parseLocal(value).getTime() + duration)))
+              }}
+              days={days}
+            />
           </div>
           <div>
             <p className="mb-1.5 text-caption font-semibold uppercase tracking-wide text-casa-muted">End</p>
-            <WheelRow value={endValue} onChange={updateEnd} days={days} />
+            <WheelRow value={endValue} onChange={updateEnd} onPreview={setPreviewEnd} days={days} />
           </div>
         </div>
       )}

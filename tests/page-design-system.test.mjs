@@ -280,6 +280,16 @@ test('date-time wheels commit the final AM or PM selection after touch scrolling
   assert.match(dial, /onBlur=\{handlePointerUp\}/)
 })
 
+test('date-time dial previews the active wheel selection in its schedule header', () => {
+  const dial = readFileSync(resolve('src/components/ui/DateTimeDial.tsx'), 'utf8')
+
+  assert.match(dial, /const \[previewStart, setPreviewStart\] = useState<string \| null>\(null\)/)
+  assert.match(dial, /const previewStartValue = previewStart \?\? startValue/)
+  assert.match(dial, /detail=\{durationLabel\(previewStartValue, previewEndValue\)\}/)
+  assert.match(dial, /onPreview=\{value => preview\(\{ ampm: value as 'AM' \| 'PM' \}\)\}/)
+  assert.match(dial, /setPreviewEnd\(toLocalValue\(new Date\(parseLocal\(value\)\.getTime\(\) \+ duration\)\)\)/)
+})
+
 test('quick create handles core household event context without exposing the full editor', () => {
   const quickCreate = readFileSync(resolve('src/components/shared/QuickCreateSheet.tsx'), 'utf8')
 
