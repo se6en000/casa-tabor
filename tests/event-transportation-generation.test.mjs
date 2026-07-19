@@ -57,6 +57,8 @@ test('event, member, and enrichment changes all reach the same idempotent genera
 
 test('Places matches remain unconfirmed and blocked from Google projection', () => {
   assert.match(edge, /maxResultCount: 1/)
+  assert.match(edge, /applyHomeStateBias\(query, homeConfig\?\.state\)/)
+  assert.match(edge, /const textQuery = applyHomeStateBias/)
   assert.match(edge, /\.eq\('title', event\.title\)[\s\S]*?\.eq\('location_name', event\.location_name\)/)
   assert.match(edge, /formattedAddress/)
   assert.match(edge, /verified: false/)

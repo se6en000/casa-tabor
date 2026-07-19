@@ -47,6 +47,18 @@ function locationSignature(event: {
   ].join('|')
 }
 
+function hasStateOrPostalHint(value: string) {
+  const normalized = value.trim()
+  return /,\s*[A-Z]{2}\b/.test(normalized)
+    || /\b(?:\d{5})(?:-\d{4})?\b/.test(normalized)
+}
+
+function applyHomeStateBias(query: string, homeState?: string | null) {
+  const state = homeState?.trim()
+  if (!state || hasStateOrPostalHint(query)) return query
+  return `${query}, ${state}`
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
@@ -161,6 +173,19 @@ Deno.serve(async (req) => {
     }
   }
 
+  const { data: homeSetting, error: homeError } = await sb
+    .from('settings')
+    .select('value')
+    .eq('key', 'home_config')
+    .maybeSingle()
+  if (homeError) return json({ error: homeError.message }, 500)
+  const homeConfig = homeSetting?.value as {
+    address?: string
+    city?: string
+    state?: string
+    zip?: string
+  } | null
+
   const initialClassification = classifyTransportationDefault(event, legacy)
   if (
     !event.address?.trim()
@@ -194,6 +219,7 @@ Deno.serve(async (req) => {
     if (!match) {
       const mapsApiKey = Deno.env.get('GOOGLE_MAPS_API_KEY')
       if (!mapsApiKey) return json({ error: 'GOOGLE_MAPS_API_KEY not set' }, 500)
+      const textQuery = applyHomeStateBias(query, homeConfig?.state)
       const placesResponse = await fetch('https://places.googleapis.com/v1/places:searchText', {
         method: 'POST',
         headers: {
@@ -201,7 +227,7 @@ Deno.serve(async (req) => {
           'X-Goog-Api-Key': mapsApiKey,
           'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location',
         },
-        body: JSON.stringify({ textQuery: query, maxResultCount: 1 }),
+        body: JSON.stringify({ textQuery, maxResultCount: 1 }),
       })
       const places = await placesResponse.json() as PlaceSearchResponse
       if (!placesResponse.ok) {
@@ -248,18 +274,6 @@ Deno.serve(async (req) => {
     if (reviewError) return json({ error: reviewError.message }, 500)
   }
 
-  const { data: homeSetting, error: homeError } = await sb
-    .from('settings')
-    .select('value')
-    .eq('key', 'home_config')
-    .maybeSingle()
-  if (homeError) return json({ error: homeError.message }, 500)
-  const homeConfig = homeSetting?.value as {
-    address?: string
-    city?: string
-    state?: string
-    zip?: string
-  } | null
   const homeAddress = [
     homeConfig?.address,
     homeConfig?.city,
