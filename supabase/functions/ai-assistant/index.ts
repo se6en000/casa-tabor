@@ -17,6 +17,7 @@ import {
   resolveActiveCalendarMutation,
   resolveCalendarDeleteDisambiguation,
   resolveClarifiedCalendarCreate,
+  resolveDefaultCalendarCreate,
   resolvePendingCalendarCorrection,
   singularBulkDeleteClarification,
 } from '../_shared/assistant-calendar-mutation-edge.mjs'
@@ -943,6 +944,32 @@ Deno.serve(async (req) => {
         typeof member?.name === 'string' ? [member.name] : []
       )
     : []
+  const defaultCalendarCreate = calendarFrame?.intent === 'event.create'
+    ? resolveDefaultCalendarCreate(latestUserText, { now, utcOffset: context?.utcOffset })
+    : null
+  if (defaultCalendarCreate) {
+    appendServerTrace('server_ai_assistant_default_calendar_create', defaultCalendarCreate.args.title, {
+      defaults: defaultCalendarCreate.defaults,
+      start: defaultCalendarCreate.args.start,
+      end: defaultCalendarCreate.args.end,
+    })
+    return {
+      status: 200,
+      payload: {
+        type: 'tool_action',
+        tool: defaultCalendarCreate.tool,
+        args: defaultCalendarCreate.args,
+        display_text: buildDisplayText(defaultCalendarCreate.tool, defaultCalendarCreate.args),
+        semantic_intent: 'calendar.default_create',
+        correlation_id: cid,
+        telemetry: {
+          ...llmTelemetry,
+          request_total_ms: Date.now() - requestStartMs,
+          context_load_ms: contextLoadMs,
+        },
+      },
+    }
+  }
   const shouldRunAgentWrite = !dryRun &&
     agentRuntimeEnabled &&
     agentWriteConfig?.enabled === true &&

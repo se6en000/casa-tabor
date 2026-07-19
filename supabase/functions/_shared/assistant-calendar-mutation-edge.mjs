@@ -18,6 +18,72 @@ const NUMBER_WORDS = new Map([
   ['twelve', 12],
 ])
 
+function localTimestamp(date, hour, minute, utcOffset) {
+  const offsetMatch = String(utcOffset ?? '').match(/^([+-])(\d{2}):(\d{2})$/)
+  if (!offsetMatch) return null
+  const offsetMinutes = (offsetMatch[1] === '+' ? 1 : -1) *
+    (Number(offsetMatch[2]) * 60 + Number(offsetMatch[3]))
+  const local = new Date(date.getTime() + offsetMinutes * 60000)
+  return Date.UTC(
+    local.getUTCFullYear(),
+    local.getUTCMonth(),
+    local.getUTCDate(),
+    hour,
+    minute,
+  ) - offsetMinutes * 60000
+}
+
+function explicitDurationMinutes(input) {
+  const duration = input.match(/\bfor\s+(an?\s+hour|(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(hours?|minutes?))\b/i)
+  if (!duration) return 60
+  if (/^an?\s+hour$/i.test(duration[1])) return 60
+  const amount = NUMBER_WORDS.get(duration[2].toLowerCase()) ?? Number(duration[2])
+  if (!Number.isFinite(amount) || amount <= 0) return 60
+  return amount * (/^hour/i.test(duration[3]) ? 60 : 1)
+}
+
+export function resolveDefaultCalendarCreate(text, options = {}) {
+  const input = String(text ?? '').replace(/\s+/g, ' ').trim()
+  if (
+    !/\b(?:add|create|book|schedule)\b/i.test(input) ||
+    !/\b(?:event|appointment|meeting)\b/i.test(input) ||
+    /\b(?:today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}\/\d{1,2}|january|february|march|april|may|june|july|august|september|october|november|december)\b/i.test(input)
+  ) return null
+
+  const match = input.match(/\b(?:for|at)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s+(?:to\s+)?(?:go\s+to\s+|visit\s+|attend\s+)?(.+?)(?:[.?!]+)?$/i)
+  if (!match) return null
+  const hour12 = Number(match[1])
+  const minute = Number(match[2] ?? 0)
+  if (hour12 < 1 || hour12 > 12 || minute > 59) return null
+  const meridiem = match[3]?.toLowerCase() ?? 'am'
+  const hour = (hour12 % 12) + (meridiem === 'pm' ? 12 : 0)
+  const title = match[4]
+    .replace(/^(?:an?\s+)?(?:event|appointment|meeting)\s+(?:for|at)\s+/i, '')
+    .replace(/\bfor\s+(?:an?\s+hour|\d+\s+(?:hours?|minutes?))$/i, '')
+    .trim()
+  if (!title || /^(?:an?\s+)?(?:event|appointment|meeting)$/i.test(title)) return null
+
+  const now = options.now instanceof Date ? options.now : new Date()
+  const startMs = localTimestamp(now, hour, minute, options.utcOffset)
+  if (!Number.isFinite(startMs)) return null
+  const durationMinutes = explicitDurationMinutes(input)
+  return {
+    tool: 'create_event',
+    args: {
+      title,
+      start: new Date(startMs).toISOString(),
+      end: new Date(startMs + durationMinutes * 60000).toISOString(),
+      members: [],
+      event_type: 'event',
+    },
+    defaults: {
+      date: 'today',
+      meridiem: match[3] ? meridiem : 'am',
+      duration_minutes: durationMinutes,
+    },
+  }
+}
+
 function durationMs(event) {
   const start = Date.parse(event?.start_time)
   const end = Date.parse(event?.end_time)

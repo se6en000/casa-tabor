@@ -8,6 +8,7 @@ import {
   isCalendarMutationDisambiguationFollowUp,
   resolveCalendarDeleteDisambiguation,
   resolveClarifiedCalendarCreate,
+  resolveDefaultCalendarCreate,
   resolvePendingCalendarCorrection,
   resolveActiveCalendarMutation,
   singularBulkDeleteClarification,
@@ -20,6 +21,39 @@ const event = {
   end_time: '2026-07-16T15:00:00.000Z',
   updated_at: '2026-07-13T12:00:00.000Z',
 }
+
+test('complete appointment requests default to today, AM, and one hour', () => {
+  const created = resolveDefaultCalendarCreate(
+    'Create an appointment for 10:30 to go to Sky Zone.',
+    { now: new Date('2026-07-19T12:53:07.000Z'), utcOffset: '-04:00' },
+  )
+  assert.deepEqual(created.args, {
+    title: 'Sky Zone',
+    start: '2026-07-19T14:30:00.000Z',
+    end: '2026-07-19T15:30:00.000Z',
+    members: [],
+    event_type: 'event',
+  })
+  assert.deepEqual(created.defaults, {
+    date: 'today',
+    meridiem: 'am',
+    duration_minutes: 60,
+  })
+  assert.equal(
+    resolveDefaultCalendarCreate(
+      'Create an appointment for 10:30 PM to go to Sky Zone.',
+      { now: new Date('2026-07-19T12:53:07.000Z'), utcOffset: '-04:00' },
+    ).args.start,
+    '2026-07-20T02:30:00.000Z',
+  )
+  assert.equal(
+    resolveDefaultCalendarCreate(
+      'Create an appointment tomorrow for 10:30 to go to Sky Zone.',
+      { now: new Date('2026-07-19T12:53:07.000Z'), utcOffset: '-04:00' },
+    ),
+    null,
+  )
+})
 
 test('active event shifts preserve duration and support relational scheduling', () => {
   const shifted = resolveActiveCalendarMutation('Move that trip back two days.', event, [event], { utcOffset: '-04:00' })
