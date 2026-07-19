@@ -1,4 +1,4 @@
-import { format } from 'date-fns'
+import { addDays, differenceInMinutes, format, isSameDay } from 'date-fns'
 import { formatAllDayRangeLabel } from './allDayEventRange.ts'
 
 type ConfirmEvent = {
@@ -15,18 +15,27 @@ function parseDate(value: string): Date {
   return new Date(value)
 }
 
-function formatTimedRange(startValue: string, endValue: string): string {
+function formatDayLabel(value: Date, relativeTo?: Date): string {
+  if (relativeTo && isSameDay(value, relativeTo)) return 'Today'
+  if (relativeTo && isSameDay(value, addDays(relativeTo, 1))) return 'Tomorrow'
+  return format(value, 'EEE, MMM d')
+}
+
+function formatTimedRange(startValue: string, endValue: string, relativeTo?: Date): string {
   const start = parseDate(startValue)
   const end = parseDate(endValue)
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 'Unknown time'
-  const startLabel = format(start, 'EEE, MMM d · h:mm a')
+  const startLabel = `${formatDayLabel(start, relativeTo)} · ${format(start, 'h:mm a')}`
   const endLabel = format(end, 'h:mm a')
   return `${startLabel} – ${endLabel}`
 }
 
-export function formatEventSpan(event: Pick<ConfirmEvent, 'start_time' | 'end_time' | 'all_day'>): string {
+export function formatEventSpan(
+  event: Pick<ConfirmEvent, 'start_time' | 'end_time' | 'all_day'>,
+  relativeTo?: Date,
+): string {
   if (event.all_day) return formatAllDayRangeLabel(event.start_time, event.end_time)
-  return formatTimedRange(event.start_time, event.end_time)
+  return formatTimedRange(event.start_time, event.end_time, relativeTo)
 }
 
 export function formatUpdateTargetSpan(args: Record<string, unknown>, fallbackEvent?: Pick<ConfirmEvent, 'start_time' | 'end_time' | 'all_day'>): string | null {
@@ -62,20 +71,34 @@ export function buildUpdatePreviewCopy(
 
 export function buildCreatePreviewCopy(
   args: Record<string, unknown>,
-): { heading: string; when: string | null; details: string[] } {
-  const heading = `Create "${String(args.title ?? 'new event')}"`
+  options: { now?: Date } = {},
+): { heading: string; when: string | null; details: string[]; impact: string } {
+  const heading = `Ready to add "${String(args.title ?? 'new event')}"?`
   const when = typeof args.start === 'string' && typeof args.end === 'string'
     ? formatEventSpan({
       start_time: args.start,
       end_time: args.end,
       all_day: args.all_day === true,
-    })
+    }, options.now)
     : null
   const details: string[] = []
   if (args.location !== undefined) details.push(`Location: ${String(args.location ?? '(clear)')}`)
-  if ((args.members as string[] | undefined)?.length) details.push(`Guests: ${(args.members as string[]).join(', ')}`)
+  if ((args.members as string[] | undefined)?.length) details.push(`People: ${(args.members as string[]).join(', ')}`)
   if (args.all_day === true) details.push('All day')
-  return { heading, when, details }
+  if (args.all_day !== true && typeof args.start === 'string' && typeof args.end === 'string') {
+    const duration = differenceInMinutes(parseDate(args.end), parseDate(args.start))
+    if (duration > 0) {
+      details.push(duration % 60 === 0
+        ? `Duration: ${duration / 60} hour${duration === 60 ? '' : 's'}`
+        : `Duration: ${duration} minutes`)
+    }
+  }
+  return {
+    heading,
+    when,
+    details,
+    impact: 'Adds to Casa Calendar now; connected calendar sync follows automatically.',
+  }
 }
 
 export function buildDeletePreviewCopy(

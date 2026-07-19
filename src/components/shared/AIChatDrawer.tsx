@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { useAIAssistant, type AIMessage } from '../../hooks/useAIAssistant'
@@ -962,13 +962,14 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                 </div>
               )}
 
-              {messages.map((msg) => (
+              {messages.map((msg, messageIndex) => (
                 <MessageBubble
                   key={msg.id}
                   msg={msg}
                   isActivePending={msg.id === activePendingToolMessageId}
                   events={events}
                   enableQuickSaveRecipe={page === 'cook' || launchContext?.agent === 'chef'}
+                  editSeed={messages.slice(0, messageIndex).findLast((message) => message.role === 'user')?.content ?? ''}
                   onQuickSaveRecipe={quickSaveRecipeSuggestion}
                   onConfirmToolAction={async (messageId, tool, args) => {
                     updateMessageToolStatus(messageId, 'loading')
@@ -1321,10 +1322,11 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
 
 /* ── Message Bubble ─────────────────────────────────────────── */
 
-function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, events, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onEditMessage }: {
+function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, events, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onEditMessage }: {
   msg: AIMessage
   isActivePending: boolean
   enableQuickSaveRecipe?: boolean
+  editSeed?: string
   events: EventWithDetails[]
   onQuickSaveRecipe?: (recipeMessage: string) => Promise<void>
   onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<boolean>
@@ -1388,7 +1390,7 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, events, on
         {msg.imageDataUrl && (
           <img src={msg.imageDataUrl} alt="Attached" className="max-h-40 w-auto rounded-lg mb-2 object-cover" />
         )}
-        {msg.content !== '(see attached image)' && msg.content && (
+        {!ta && msg.content !== '(see attached image)' && msg.content && (
           isUser
             ? <p className="whitespace-pre-wrap">{msg.content}</p>
             : <MarkdownContent content={formatTextForMarkdown(msg.content)} />
@@ -1503,13 +1505,13 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, events, on
             ) : (
               <>
                 <ToolActionPreview tool={ta.tool} args={ta.args} events={events} />
-                <div className="flex gap-2 mt-2">
+                <div className="flex flex-wrap gap-2 mt-3">
                   <Button variant="ghost"
                     type="button"
                     disabled={ta.status === 'loading'}
                     onClick={doConfirm}
                     className={cn(
-                      'flex items-center gap-1.5 px-3 py-1 rounded-button text-caption font-semibold transition-all disabled:opacity-50',
+                      'min-h-control flex items-center gap-2 px-4 rounded-button text-body-sm font-semibold transition-colors disabled:opacity-50',
                       isDestructiveAction
                         ? 'bg-red-600 text-white hover:brightness-110'
                         : 'bg-casa-gold text-white hover:brightness-110',
@@ -1528,12 +1530,26 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, events, on
                           ? 'Apply change'
                           : ta.tool === 'create_event'
                             ? 'Create event'
-                            : 'Confirm'}
+                            : confirmActionLabel(ta.tool)}
                   </Button>
+                  {!isDestructiveAction && onEditMessage && editSeed?.trim() && (
+                    <Button
+                      variant="secondary"
+                      type="button"
+                      disabled={ta.status === 'loading'}
+                      onClick={() => {
+                        void doCancel()
+                        onEditMessage(editSeed ?? '')
+                      }}
+                      className="min-h-control flex items-center gap-2 px-4 text-body-sm font-semibold"
+                    >
+                      <Pencil size={16} /> Change
+                    </Button>
+                  )}
                   <Button variant="ghost"
                     type="button"
                     onClick={doCancel}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-button border border-casa-border text-caption text-casa-muted hover:bg-casa-divider transition-colors"
+                    className="min-h-control flex items-center gap-2 px-4 rounded-button border border-casa-border text-body-sm text-casa-navy hover:bg-casa-divider transition-colors"
                   >
                     <XCircle size={12} /> Cancel
                   </Button>
@@ -1562,25 +1578,64 @@ function recurrenceScopeLabel(scope: unknown) {
   return null
 }
 
+function confirmActionLabel(tool: string) {
+  if (tool === 'create_recipe') return 'Save recipe'
+  if (tool === 'add_grocery_items') return 'Add items'
+  if (tool === 'check_grocery_item') return 'Update item'
+  if (tool === 'remove_grocery_item') return 'Remove item'
+  if (tool === 'update_grocery_item_quantity') return 'Update quantity'
+  if (tool === 'bulk_update_events') return 'Apply updates'
+  return 'Confirm action'
+}
+
+function ConfirmationHeading({ kind, children }: { kind: 'calendar' | 'grocery' | 'recipe' | 'warning'; children: React.ReactNode }) {
+  const Icon = kind === 'calendar'
+    ? CalendarDays
+    : kind === 'grocery'
+      ? ShoppingCart
+      : kind === 'recipe'
+        ? ChefHat
+        : AlertTriangle
+  const label = kind === 'calendar'
+    ? 'Calendar'
+    : kind === 'grocery'
+      ? 'Grocery list'
+      : kind === 'recipe'
+        ? 'Recipe library'
+        : 'Review carefully'
+  return (
+    <div className="space-y-1">
+      <div className={cn(
+        'flex items-center gap-2 text-caption font-semibold uppercase tracking-wide',
+        kind === 'warning' ? 'text-casa-error' : 'text-casa-navy',
+      )}>
+        <Icon size={15} aria-hidden="true" />
+        {label}
+      </div>
+      <h3 className="text-body font-semibold leading-snug text-casa-navy">{children}</h3>
+    </div>
+  )
+}
+
 function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<string, unknown>; events: EventWithDetails[] }) {
   const [expanded, setExpanded] = useState(false)
 
   if (tool === 'create_event') {
-    const preview = buildCreatePreviewCopy(args)
+    const preview = buildCreatePreviewCopy(args, { now: new Date() })
     return (
-      <div className="space-y-2">
-        <p className="font-semibold text-casa-navy text-body-sm">{preview.heading}</p>
-        {preview.when && <p className="text-caption text-casa-muted">{preview.when}</p>}
+      <div className="space-y-3">
+        <ConfirmationHeading kind="calendar">{preview.heading}</ConfirmationHeading>
+        {preview.when && <p className="text-body-sm font-semibold text-casa-navy">{preview.when}</p>}
         {preview.details.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {preview.details.map((detail) => (
-              <span key={detail} className="inline-flex items-center rounded-full bg-casa-surface border border-casa-border px-2 py-0.5 text-caption text-casa-muted">
+              <span key={detail} className="inline-flex items-center rounded-full bg-casa-surface border border-casa-border px-2.5 py-1 text-caption font-medium text-casa-navy">
                 {detail}
               </span>
             ))}
           </div>
         )}
-        <p className="text-caption text-casa-muted">This will add 1 event to the calendar.</p>
+        <p className="text-caption text-casa-navy">{preview.impact}</p>
       </div>
     )
   }
@@ -1593,12 +1648,12 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
     const visibleChanges = expanded ? changes : changes.slice(0, MAX_VISIBLE)
     return (
       <div className="space-y-2">
-        <p className="font-semibold text-casa-navy text-body-sm">{preview.heading}</p>
+        <ConfirmationHeading kind="calendar">{preview.heading}?</ConfirmationHeading>
         {scopeLabel && (
           <p className="text-caption font-semibold text-casa-gold">{scopeLabel}</p>
         )}
         {preview.currentSpan && preview.nextSpan && (
-          <div className="rounded-lg border border-casa-border bg-casa-surface px-2.5 py-2 text-caption text-casa-muted space-y-1">
+          <div className="rounded-lg border border-casa-border bg-casa-surface px-3 py-2.5 text-caption text-casa-navy space-y-1">
             <p><span className="font-semibold text-casa-navy">Current:</span> {preview.currentSpan}</p>
             <p><span className="font-semibold text-casa-navy">New:</span> {preview.nextSpan}</p>
           </div>
@@ -1606,7 +1661,7 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
         {!preview.currentSpan && preview.nextSpan && (
           <p className="text-caption text-casa-muted">{preview.nextSpan}</p>
         )}
-        <p className="text-caption text-casa-muted">
+        <p className="text-caption text-casa-navy">
           {changes.length > 0
             ? `Updating ${changes.length} field${changes.length === 1 ? '' : 's'} for ${scopeLabel?.toLowerCase() ?? 'one event'}.`
             : `Updating ${scopeLabel?.toLowerCase() ?? 'one event'}.`}
@@ -1615,7 +1670,7 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
           {visibleChanges.map((change) => (
             <span
               key={change}
-              className="inline-flex items-center rounded-full bg-casa-surface border border-casa-border px-2 py-0.5 text-caption text-casa-muted"
+              className="inline-flex items-center rounded-full bg-casa-surface border border-casa-border px-2.5 py-1 text-caption font-medium text-casa-navy"
             >
               {change}
             </span>
@@ -1641,15 +1696,15 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
     const changes = summarizeUpdateArgs(args).filter((change) => change !== 'id')
     return (
       <div className="space-y-2">
-        <p className="text-caption font-semibold text-casa-navy">
+        <ConfirmationHeading kind="calendar">
           Update {count} matching event{count === 1 ? '' : 's'}{titleQuery ? ` for "${titleQuery}"` : ''}
-        </p>
+        </ConfirmationHeading>
         {changes.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {changes.slice(0, 8).map((change) => (
               <span
                 key={change}
-                className="inline-flex items-center rounded-full bg-casa-surface border border-casa-border px-2 py-0.5 text-caption text-casa-muted"
+                className="inline-flex items-center rounded-full bg-casa-surface border border-casa-border px-2.5 py-1 text-caption font-medium text-casa-navy"
               >
                 {change}
               </span>
@@ -1664,20 +1719,20 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
     const preview = buildDeletePreviewCopy(matchedEvent, args)
     const scopeLabel = recurrenceScopeLabel(args.recurrence_scope)
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 space-y-1">
-        <p className="font-semibold text-red-700 text-body-sm">{preview.heading}</p>
+      <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 space-y-2">
+        <ConfirmationHeading kind="warning">{preview.heading}?</ConfirmationHeading>
         {scopeLabel && <p className="text-caption font-semibold text-red-700">{scopeLabel}</p>}
-        {preview.when && <p className="text-caption text-red-600">{preview.when}</p>}
-        <p className="text-caption text-red-600">{preview.note}</p>
+        {preview.when && <p className="text-body-sm font-semibold text-red-800">{preview.when}</p>}
+        <p className="text-caption text-red-800">{preview.note}</p>
       </div>
     )
   }
   if (tool === 'delete_events_by_title') {
     const preview = buildDeleteManyPreviewCopy(events, args)
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 space-y-1.5">
-        <p className="font-semibold text-red-700 text-body-sm">{preview.heading}</p>
-        <p className="text-caption text-red-600">{preview.note}</p>
+      <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 space-y-2">
+        <ConfirmationHeading kind="warning">{preview.heading}</ConfirmationHeading>
+        <p className="text-caption text-red-800">{preview.note}</p>
         {preview.matches.length > 0 && (
           <div className="space-y-1 rounded-lg border border-red-200 bg-white/70 px-2.5 py-2 text-caption text-red-700">
             {preview.matches.map((line) => (
@@ -1692,12 +1747,20 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
     )
   }
   if (tool === 'add_grocery_items') {
-    const items = args.items as { name: string; quantity?: string }[]
+    const items = Array.isArray(args.items) ? args.items as { name: string; quantity?: string }[] : []
     return (
-      <div className="space-y-0.5 text-caption text-casa-muted">
-        {items.map((i, idx) => (
-          <p key={idx}>+ {i.name}{i.quantity ? ` (${i.quantity})` : ''}</p>
-        ))}
+      <div className="space-y-3">
+        <ConfirmationHeading kind="grocery">
+          Add {items.length} item{items.length === 1 ? '' : 's'}?
+        </ConfirmationHeading>
+        <div className="space-y-1 text-body-sm text-casa-navy">
+          {items.map((item, index) => (
+            <p key={`${item.name}-${index}`} className="font-medium">
+              {item.name}{item.quantity ? ` · ${item.quantity}` : ''}
+            </p>
+          ))}
+        </div>
+        <p className="text-caption text-casa-navy">Saves to Casa now; iOS Reminders sync follows asynchronously.</p>
       </div>
     )
   }
@@ -1705,22 +1768,35 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
     const ingredients = Array.isArray(args.ingredients) ? args.ingredients : []
     const steps = Array.isArray(args.steps) ? args.steps : []
     return (
-      <div className="space-y-1 text-caption text-casa-muted">
-        <p className="font-semibold text-casa-navy text-body-sm">{String(args.name ?? 'Untitled recipe')}</p>
-        <p>{ingredients.length} ingredient{ingredients.length === 1 ? '' : 's'} · {steps.length} step{steps.length === 1 ? '' : 's'}</p>
-        {typeof args.cook_time === 'string' && args.cook_time.trim().length > 0 && <p>⏱ {args.cook_time}</p>}
-        {typeof args.servings === 'string' && args.servings.trim().length > 0 && <p>🍽 {args.servings}</p>}
+      <div className="space-y-3">
+        <ConfirmationHeading kind="recipe">Save "{String(args.name ?? 'Untitled recipe')}"?</ConfirmationHeading>
+        <div className="flex flex-wrap gap-2 text-caption font-medium text-casa-navy">
+          <span>{ingredients.length} ingredient{ingredients.length === 1 ? '' : 's'}</span>
+          <span aria-hidden="true">·</span>
+          <span>{steps.length} step{steps.length === 1 ? '' : 's'}</span>
+        </div>
+        {typeof args.cook_time === 'string' && args.cook_time.trim().length > 0 && (
+          <p className="flex items-center gap-2 text-caption text-casa-navy"><Clock3 size={15} aria-hidden="true" /> {args.cook_time}</p>
+        )}
+        {typeof args.servings === 'string' && args.servings.trim().length > 0 && (
+          <p className="flex items-center gap-2 text-caption text-casa-navy"><Utensils size={15} aria-hidden="true" /> {args.servings}</p>
+        )}
       </div>
     )
   }
   if (tool === 'check_grocery_item') {
-    return <p className="text-caption text-casa-muted">Mark item as {args.checked ? 'done ✓' : 'undone'}</p>
+    return (
+      <div className="space-y-2">
+        <ConfirmationHeading kind="grocery">Mark this item {args.checked ? 'complete' : 'not complete'}?</ConfirmationHeading>
+        <p className="text-caption text-casa-navy">The status change syncs to iOS Reminders asynchronously.</p>
+      </div>
+    )
   }
   if (tool === 'remove_grocery_item') {
     return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2">
-        <p className="text-caption text-amber-800 font-semibold">Remove this grocery item?</p>
-        <p className="text-caption text-amber-700 mt-0.5">The deletion will sync to iOS Reminders asynchronously.</p>
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 space-y-2">
+        <ConfirmationHeading kind="warning">Remove this grocery item?</ConfirmationHeading>
+        <p className="text-caption text-amber-900">Removes it from Casa now; iOS Reminders sync follows asynchronously.</p>
       </div>
     )
   }
@@ -1728,13 +1804,18 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
     const amount = [args.quantity, args.unit].filter((value) =>
       typeof value === 'string' && value.trim().length > 0
     ).join(' ')
-    return <p className="text-caption text-casa-muted">Set quantity to {amount}</p>
+    return (
+      <div className="space-y-2">
+        <ConfirmationHeading kind="grocery">Set the quantity to {amount || 'the new amount'}?</ConfirmationHeading>
+        <p className="text-caption text-casa-navy">Updates the item now; iOS Reminders sync follows asynchronously.</p>
+      </div>
+    )
   }
   if (tool === 'clear_checked_grocery_items') {
     return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2">
-        <p className="text-caption text-amber-800 font-semibold">Clear all checked grocery items?</p>
-        <p className="text-caption text-amber-700 mt-0.5">This removes completed items from the list.</p>
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 space-y-2">
+        <ConfirmationHeading kind="warning">Clear all checked grocery items?</ConfirmationHeading>
+        <p className="text-caption text-amber-900">Removes every completed item from Casa now; iOS Reminders sync follows asynchronously.</p>
       </div>
     )
   }
