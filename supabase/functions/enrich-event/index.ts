@@ -3,8 +3,19 @@ import {
   ENRICHMENT_FIELDS,
   normalizeEnrichmentFieldList,
 } from '../_shared/enrichment-impact.mjs'
+import {
+  findSavedEventPlace,
+  selectConfidentEventPlace,
+} from '../_shared/event-place-resolution.mjs'
 
 interface UsageAccum { inputTokens: number; outputTokens: number }
+interface ResolvedDestination {
+  name: string
+  address: string
+  lat: number | null
+  lng: number | null
+  source: 'saved_place' | 'google_places'
+}
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -14,6 +25,29 @@ const CORS = {
 
 function normalizePossessiveSuffixCasing(value: string): string {
   return value.replace(/([a-z])(['’])S\b/g, '$1$2s')
+}
+
+async function appendEnrichmentDebug(
+  sb: ReturnType<typeof createClient>,
+  eventId: string,
+  event: string,
+  detail: string,
+  payload: Record<string, unknown> = {},
+) {
+  const { error } = await sb.from('ai_drawer_debug_events').insert({
+    event,
+    detail: detail.slice(0, 2000),
+    channel: 'debug',
+    session_id: `enrich:${eventId}`,
+    correlation_id: eventId,
+    lane: 'event_enrichment',
+    payload: { event_id: eventId, ...payload },
+    page: 'calendar',
+    source_component: 'server:enrich-event',
+    source_origin: 'event-enrichment',
+    dedupe_key: `${eventId}|${event}|${Date.now()}`,
+  })
+  if (error) console.error('[enrich-event] debug telemetry failed:', error.message)
 }
 
 Deno.serve(async (req) => {
@@ -35,7 +69,7 @@ Deno.serve(async (req) => {
   // Load everything in parallel
   const [eventRes, llmRes, familyRes, homeRes, placesRes] = await Promise.all([
     sb.from('events')
-      .select('id, title, description, start_time, end_time, all_day, location_name, address, source_member_id, leg_type, event_members(family_members(id, name, full_name, role)), event_enrichments(source_hash, category, category_locked, confidence, what_to_bring, outfit_suggestion, parking_notes, contact_name, contact_phone, cost_estimate, dietary_notes, meal_impact, prep_notes, departure_time, drive_time_mins, route_summary, weather_at_event, weather_summary)')
+      .select('id, title, description, start_time, end_time, all_day, location_name, address, lat, lng, source_member_id, leg_type, event_members(family_members(id, name, full_name, role)), event_enrichments(source_hash, category, category_locked, confidence, what_to_bring, outfit_suggestion, parking_notes, contact_name, contact_phone, cost_estimate, dietary_notes, meal_impact, prep_notes, departure_time, drive_time_mins, route_summary, weather_at_event, weather_summary)')
       .eq('id', event_id)
       .single(),
     sb.from('settings').select('value').eq('key', 'llm_config').single(),
@@ -53,6 +87,82 @@ Deno.serve(async (req) => {
   const familyMembers = (familyRes.data ?? []) as { id: string; name: string; full_name: string | null; role: string; phone: string | null; email: string | null; is_admin: boolean }[]
   const homeConfig = homeRes.data?.value as { address?: string; city?: string; state?: string; zip?: string } | null
   const savedPlaces = (placesRes.data ?? []) as { id: string; name: string; aliases: string[]; address: string | null; city: string | null; state: string | null; zip: string | null; category: string; notes: string | null }[]
+  let resolvedDestination: ResolvedDestination | null = null
+
+  const destinationQuery = normalizeText(event.location_name)
+  if (targetFields.length === 0 && destinationQuery && !normalizeText(event.address)) {
+    const savedPlace = findSavedEventPlace(destinationQuery, savedPlaces)
+    const savedAddress = savedPlace
+      ? [savedPlace.address, savedPlace.city, savedPlace.state, savedPlace.zip].filter(Boolean).join(', ')
+      : ''
+    if (savedPlace && savedAddress) {
+      resolvedDestination = {
+        name: savedPlace.name,
+        address: savedAddress,
+        lat: null,
+        lng: null,
+        source: 'saved_place',
+      }
+    } else {
+      const cityBias = homeConfig?.state || undefined
+      const placeRes = await sb.functions.invoke('place-search', {
+        body: { query: destinationQuery, city: cityBias },
+      })
+      if (placeRes.error) {
+        await appendEnrichmentDebug(
+          sb,
+          event_id,
+          'event_enrichment_place_lookup_failed',
+          placeRes.error.message,
+          { query: destinationQuery },
+        )
+      } else {
+        const match = selectConfidentEventPlace(
+          destinationQuery,
+          (placeRes.data as { places?: unknown[] } | null)?.places,
+        ) as {
+          name?: string
+          address?: string
+          lat?: number | null
+          lng?: number | null
+        } | null
+        if (match?.name && match.address) {
+          resolvedDestination = {
+            name: match.name,
+            address: match.address,
+            lat: match.lat ?? null,
+            lng: match.lng ?? null,
+            source: 'google_places',
+          }
+        }
+      }
+    }
+  }
+
+  if (resolvedDestination) {
+    const destinationPatch = {
+      location_name: resolvedDestination.name,
+      address: resolvedDestination.address,
+      lat: resolvedDestination.lat,
+      lng: resolvedDestination.lng,
+      updated_at: new Date().toISOString(),
+    }
+    const { error: destinationError } = await sb.from('events').update(destinationPatch).eq('id', event_id)
+    if (destinationError) {
+      return new Response(JSON.stringify({ error: destinationError.message }), {
+        status: 500,
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+    Object.assign(event, destinationPatch)
+    await appendEnrichmentDebug(
+      sb,
+      event_id,
+      'event_enrichment_place_resolved',
+      `${resolvedDestination.name} — ${resolvedDestination.address}`,
+      { query: destinationQuery, source: resolvedDestination.source },
+    )
+  }
 
   // ── Content-hash dedup: skip all LLM calls if event hasn't meaningfully changed ──
   const contentHash = [
@@ -86,20 +196,51 @@ Deno.serve(async (req) => {
   const defaultOwnerName = adminMember?.name ?? 'Jake'
 
   const usageAccum: UsageAccum = { inputTokens: 0, outputTokens: 0 }
-  const enrichment = await enrichEvent(
-    llmConfig,
-    event,
-    familyMembers,
-    homeConfig,
-    defaultOwnerName,
-    extra_context,
-    effectiveLockedCategory,
-    usageAccum,
-    savedPlaces,
-    existingEnrichment ?? null,
-    targetFields,
-    lockedFields,
-  )
+  let enrichment
+  try {
+    enrichment = await enrichEvent(
+      llmConfig,
+      event,
+      familyMembers,
+      homeConfig,
+      defaultOwnerName,
+      extra_context,
+      effectiveLockedCategory,
+      usageAccum,
+      savedPlaces,
+      existingEnrichment ?? null,
+      targetFields,
+      lockedFields,
+      resolvedDestination,
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await appendEnrichmentDebug(
+      sb,
+      event_id,
+      'event_enrichment_provider_failed',
+      message,
+      {
+        provider: llmConfig.provider,
+        model: llmConfig.model,
+        input_tokens: usageAccum.inputTokens,
+        output_tokens: usageAccum.outputTokens,
+        destination_resolved: Boolean(resolvedDestination),
+      },
+    )
+    await sb.from('ai_usage_log').insert({
+      function_name: 'enrich-event',
+      provider: llmConfig.provider,
+      model: llmConfig.model,
+      input_tokens: usageAccum.inputTokens,
+      output_tokens: usageAccum.outputTokens,
+      cached: false,
+    })
+    return new Response(JSON.stringify({ error: message, retryable: true }), {
+      status: 502,
+      headers: { ...CORS, 'content-type': 'application/json' },
+    })
+  }
 
   const row = { ...enrichment, event_id, enriched_by: `${llmConfig.provider}/${llmConfig.model}`, enriched_at: new Date().toISOString(), updated_at: new Date().toISOString() }
 
@@ -420,6 +561,7 @@ async function enrichEvent(
   existingEnrichment?: Record<string, unknown> | null,
   targetFields?: string[],
   lockedFields?: string[],
+  resolvedDestination?: ResolvedDestination | null,
 ) {
   const start = new Date(event.start_time as string)
   const timeStr = (event.all_day as boolean)
@@ -493,6 +635,9 @@ ${allCategoryFields}`
   const targetedPromptLine = targetFieldList.length > 0
     ? `Targeted re-enrichment mode: ONLY update these enrichment fields if better evidence exists: ${targetFieldList.join(', ')}. Never change other enrichment fields.`
     : 'Full enrichment mode: update the full enrichment contract.'
+  const resolvedDestinationLine = resolvedDestination
+    ? `Canonical destination already resolved by Google Places: ${resolvedDestination.name}, ${resolvedDestination.address}. Treat this as ground truth and do not substitute another venue.`
+    : ''
 
   const lockedPromptLine = lockedFieldSet.size > 0
     ? `User-locked enrichment fields (never modify): ${[...lockedFieldSet].join(', ')}.`
@@ -512,6 +657,7 @@ ${eventBlock}
 ${categoryInstruction}
 ${targetedPromptLine}
 ${lockedPromptLine}
+${resolvedDestinationLine}
 
 Evidence priority (must follow this order):
 1) Household context in this prompt (family roster + saved places + explicit event details)
@@ -577,8 +723,8 @@ Return ONLY this JSON object (no markdown, no prose):
     primary_attendee: normalizeText(result.primary_attendee),
     concise_description: normalizeText(result.concise_description),
     attendees: normalizedAttendees,
-    location_name: normalizeText(result.location_name),
-    address: normalizeText(result.address),
+    location_name: resolvedDestination?.name ?? normalizeText(result.location_name),
+    address: resolvedDestination?.address ?? normalizeText(result.address),
   }
 }
 
@@ -595,8 +741,7 @@ function parseJSON(text: string): Record<string, unknown> {
     const clean = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
     return JSON.parse(clean)
   } catch {
-    console.error('Failed to parse LLM response:', text)
-    return { category: 'other', what_to_bring: [], confidence: 'low' }
+    throw new Error(`enrichment_invalid_provider_output: ${text.slice(0, 300) || '<empty>'}`)
   }
 }
 
@@ -608,7 +753,11 @@ async function callLLM(config: { provider: string; model: string; api_key: strin
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         tools: [{ google_search: {} }],
-        generationConfig: { maxOutputTokens: 1000, temperature: 0.3 },
+        generationConfig: {
+          maxOutputTokens: 2048,
+          temperature: 0.3,
+          thinkingConfig: { thinkingBudget: 0 },
+        },
       }),
     })
     const data = await res.json()
@@ -616,7 +765,11 @@ async function callLLM(config: { provider: string; model: string; api_key: strin
     if (accum) { accum.inputTokens += data.usageMetadata?.promptTokenCount ?? 0; accum.outputTokens += data.usageMetadata?.candidatesTokenCount ?? 0 }
     // Search grounding splits response across multiple parts — join text parts only
     const parts = data.candidates?.[0]?.content?.parts ?? []
-    return parts.map((p: { text?: string }) => p.text ?? '').join('')
+    const text = parts.map((p: { text?: string }) => p.text ?? '').join('').trim()
+    if (!text) {
+      throw new Error(`enrichment_empty_provider_output: finish_reason=${data.candidates?.[0]?.finishReason ?? 'unknown'}`)
+    }
+    return text
   }
   if (config.provider === 'openai') {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -627,7 +780,9 @@ async function callLLM(config: { provider: string; model: string; api_key: strin
     const data = await res.json()
     if (!res.ok) throw new Error(res.status === 429 ? `quota_exceeded: ${data?.error?.message ?? 'OpenAI quota exceeded'}` : (data?.error?.message ?? `OpenAI error ${res.status}`))
     if (accum) { accum.inputTokens += data.usage?.prompt_tokens ?? 0; accum.outputTokens += data.usage?.completion_tokens ?? 0 }
-    return data.choices?.[0]?.message?.content ?? ''
+    const text = String(data.choices?.[0]?.message?.content ?? '').trim()
+    if (!text) throw new Error('enrichment_empty_provider_output: provider=openai')
+    return text
   }
   if (config.provider === 'anthropic') {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -638,9 +793,11 @@ async function callLLM(config: { provider: string; model: string; api_key: strin
     const data = await res.json()
     if (!res.ok) throw new Error(res.status === 429 ? `quota_exceeded: ${data?.error?.message ?? 'Anthropic quota exceeded'}` : (data?.error?.message ?? `Anthropic error ${res.status}`))
     if (accum) { accum.inputTokens += data.usage?.input_tokens ?? 0; accum.outputTokens += data.usage?.output_tokens ?? 0 }
-    return data.content?.[0]?.text ?? ''
+    const text = String(data.content?.[0]?.text ?? '').trim()
+    if (!text) throw new Error('enrichment_empty_provider_output: provider=anthropic')
+    return text
   }
-  return ''
+  throw new Error(`unsupported_enrichment_provider: ${config.provider}`)
 }
 
 // ── Logistics step generation for away events ────────────────────────────

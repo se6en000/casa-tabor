@@ -4,6 +4,7 @@ import {
   classifyTransportationDefault,
   mayReplaceTransportationPlan,
 } from '../_shared/event-transportation-defaults.mjs'
+import { selectConfidentEventPlace } from '../_shared/event-place-resolution.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -17,6 +18,7 @@ interface PlaceSearchResponse {
     displayName?: { text?: string }
     formattedAddress?: string
     location?: { latitude?: number; longitude?: number }
+    primaryType?: string
   }>
   error?: { message?: string }
 }
@@ -225,7 +227,7 @@ Deno.serve(async (req) => {
         headers: {
           'content-type': 'application/json',
           'X-Goog-Api-Key': mapsApiKey,
-          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location',
+          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.primaryType',
         },
         body: JSON.stringify({ textQuery, maxResultCount: 1 }),
       })
@@ -233,7 +235,14 @@ Deno.serve(async (req) => {
       if (!placesResponse.ok) {
         return json({ error: places.error?.message ?? 'Places API error' }, 502)
       }
-      match = places.places?.[0] ?? null
+      const candidate = places.places?.[0] ?? null
+      match = candidate && selectConfidentEventPlace(query, [{
+        name: candidate.displayName?.text,
+        address: candidate.formattedAddress,
+        primary_type: candidate.primaryType,
+      }])
+        ? candidate
+        : null
     }
     const address = match?.formattedAddress?.trim()
     if (!address) return complete({ ok: true, skipped: 'no_place_match' })
@@ -248,7 +257,7 @@ Deno.serve(async (req) => {
     if (blockError) return json({ error: blockError.message }, 500)
 
     const updatedLocation = {
-      location_name: event.location_name?.trim() || match?.displayName?.text?.trim() || address,
+      location_name: match?.displayName?.text?.trim() || event.location_name?.trim() || address,
       address,
       lat: match?.location?.latitude ?? null,
       lng: match?.location?.longitude ?? null,

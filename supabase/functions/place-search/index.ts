@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
     headers: {
       'content-type': 'application/json',
       'X-Goog-Api-Key': apiKey,
-      'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location,places.id,places.nationalPhoneNumber',
+      'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location,places.id,places.nationalPhoneNumber,places.primaryType',
     },
     body: JSON.stringify({ textQuery, maxResultCount: 5 }),
   })
@@ -40,6 +40,7 @@ Deno.serve(async (req) => {
     formattedAddress?: string
     location?: { latitude: number; longitude: number }
     nationalPhoneNumber?: string
+    primaryType?: string
   }) => ({
     place_id: p.id,
     name: p.displayName?.text ?? '',
@@ -47,6 +48,7 @@ Deno.serve(async (req) => {
     lat: p.location?.latitude ?? null,
     lng: p.location?.longitude ?? null,
     phone: p.nationalPhoneNumber ?? null,
+    primary_type: p.primaryType ?? null,
   }))
 
   return new Response(JSON.stringify({ places }), {

@@ -35,23 +35,6 @@ function normalizeCreateEventType(value: unknown): 'event' | 'reminder' {
   return 'event'
 }
 
-function resolveCreateTitleAndLocation(args: Record<string, unknown>) {
-  const explicitTitle = normalizeOptionalText(args.title, 220)
-  const explicitLocation = normalizeOptionalText(args.location, 220)
-  if (!explicitTitle) return { title: '', location: explicitLocation }
-  if (explicitLocation) return { title: explicitTitle, location: explicitLocation }
-
-  const inferred = explicitTitle.match(/^(.+?)\s+(?:in|at)\s+([a-z0-9][a-z0-9 .,'-]{2,})$/i)
-  if (!inferred) return { title: explicitTitle, location: null }
-  const candidateTitle = inferred[1].replace(/\s+/g, ' ').trim()
-  const candidateLocation = inferred[2].replace(/\s+/g, ' ').trim()
-  if (!candidateTitle || !candidateLocation) return { title: explicitTitle, location: null }
-  if (/^(?:with|for|to|from|and|or|my|our|your|their)\b/i.test(candidateLocation)) {
-    return { title: explicitTitle, location: null }
-  }
-  return { title: candidateTitle, location: candidateLocation }
-}
-
 function toIngredientRawText(input: {
   rawText: string | null
   quantity: string | null
@@ -372,9 +355,8 @@ Deno.serve(async (req) => {
   try {
     if (tool === 'create_event') {
       const normalizedEventType = normalizeCreateEventType(args.event_type)
-      const { title: normalizedTitle, location: normalizedLocation } = resolveCreateTitleAndLocation(
-        args as Record<string, unknown>,
-      )
+      const normalizedTitle = normalizeOptionalText(args.title, 220)
+      const normalizedLocation = normalizeOptionalText(args.location, 220)
       if (!normalizedTitle) throw new Error('title is required for create_event')
       const { data: event, error } = await sb.from('events').insert({
         title: normalizedTitle,
@@ -401,13 +383,6 @@ Deno.serve(async (req) => {
             memberIds.map((id, i) => ({ event_id: event.id, family_member_id: id, role: i === 0 ? 'primary' : 'attendee' }))
           )
         }
-      }
-
-      // Fire enrichment async (slow — Gemini AI, don't block)
-      sb.functions.invoke('enrich-event', { body: { event_id: event.id } }).catch(() => {})
-      if (normalizedEventType !== 'reminder') {
-        // Keep transportation defaults deterministic even when the assistant inferred location from title.
-        sb.functions.invoke('ensure-event-transportation-plan', { body: { event_id: event.id } }).catch(() => {})
       }
 
       if (normalizedEventType !== 'reminder') {
