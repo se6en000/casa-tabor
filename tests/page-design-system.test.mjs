@@ -269,6 +269,27 @@ test('quick create keeps the end one hour after every start adjustment', () => {
   assert.match(dial, /onEndChange\(toLocalValue\(new Date\(parseLocal\(value\)\.getTime\(\) \+ duration\)\)\)/)
 })
 
+test('quick create handles core household event context without exposing the full editor', () => {
+  const quickCreate = readFileSync(resolve('src/components/shared/QuickCreateSheet.tsx'), 'utf8')
+
+  assert.match(quickCreate, /useFamilyMembers/)
+  assert.match(quickCreate, /<Field\s+label="People"/)
+  assert.match(quickCreate, /<Field\s+label="Where"/)
+  assert.match(quickCreate, /<DisclosureSection/)
+  assert.match(quickCreate, /title="More details"/)
+  assert.match(quickCreate, /<Switch[\s\S]*label="All day"/)
+  assert.match(quickCreate, /<Switch[\s\S]*label="Reminder"/)
+  assert.match(quickCreate, /<Field label="Repeat"/)
+  assert.match(quickCreate, /<Field label="Notes"/)
+  assert.match(quickCreate, /event_members'\)\.insert/)
+  assert.match(quickCreate, /location_name: location\.trim\(\) \|\| null/)
+  assert.match(quickCreate, /rrule: repeatRule/)
+  assert.match(quickCreate, /record_kind: repeatRule \? 'series_template' : 'single'/)
+  assert.match(quickCreate, /from\('event_series'\)\.insert/)
+  assert.match(quickCreate, /recurrence_lines: \[`RRULE:\$\{repeatRule\}`\]/)
+  assert.match(quickCreate, /Created\. Connected calendars and event details will update shortly\./)
+})
+
 test('calendar cards and event details use shared touch contracts', () => {
   const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
   const largeCard = readFileSync(resolve('src/components/calendar/LargeEventCard.tsx'), 'utf8')
