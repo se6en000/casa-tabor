@@ -371,7 +371,9 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
               animate={{ opacity: 1, transition: { duration: 0.26, ease: PANEL_ENTER_EASE } }}
               exit={{ opacity: 0, transition: { duration: 0.18, ease: PANEL_EXIT_EASE } }}
               className="fixed inset-0 z-scrim"
-              style={{ background: 'var(--casa-scrim)' }}
+              style={{
+                background: 'linear-gradient(color-mix(in srgb, var(--color-casa-navy) 8%, transparent), color-mix(in srgb, var(--color-casa-navy) 8%, transparent)), var(--casa-scrim)',
+              }}
               data-panel-overlay
               onClick={onClose}
               onTouchStart={stopTouch}
@@ -408,7 +410,11 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
               onDragEnd={(_e, info) => {
                 if (info.velocity.y > dragDismissVelocity || info.offset.y > dragDismissOffset) onClose()
               }}
-              style={{ willChange: 'transform', backfaceVisibility: 'hidden' }}
+              style={{
+                willChange: 'transform',
+                backfaceVisibility: 'hidden',
+                boxShadow: 'var(--shadow-modal), 0 20px 56px color-mix(in srgb, var(--color-casa-navy) 20%, transparent)',
+              }}
               className="event-command-center fixed inset-x-2 bottom-2 top-[5vh] z-modal flex flex-col overflow-hidden rounded-modal bg-casa-surface shadow-modal transform-gpu lg:bottom-4 lg:left-auto lg:right-4 lg:top-[6vh] lg:w-[40vw]"
               data-panel-overlay
               data-native-drag
