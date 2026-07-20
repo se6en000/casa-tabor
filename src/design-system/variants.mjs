@@ -196,12 +196,13 @@ export function fieldControlClassName(options = {}) {
   ].join(' ')
 }
 
-export const MODAL_SIZES = ['sm', 'md', 'lg']
+export const MODAL_SIZES = ['sm', 'md', 'lg', 'xl']
 
 const MODAL_SIZE_CLASSES = {
   sm: 'max-w-xs',
   md: 'max-w-sm',
   lg: 'max-w-lg',
+  xl: 'max-w-2xl',
 }
 
 /**

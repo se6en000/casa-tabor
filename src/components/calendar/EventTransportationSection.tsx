@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { BookmarkPlus, Car, Check, ChevronDown, House, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
@@ -29,7 +29,7 @@ import {
   type TransportationLeg,
   type TransportationPlace,
 } from '../../lib/eventTransportation'
-import { Button, Card, Checkbox, ConfirmationDialog, Field, IconButton, Input, Select, Sheet, Switch } from '../ui'
+import { Button, Card, Checkbox, ConfirmationDialog, Field, IconButton, Input, Modal, Select, Sheet, Switch } from '../ui'
 import InlinePlaceEditor from './InlinePlaceEditor'
 import SmartPlaceInput from './SmartPlaceInput'
 import PassengerChipSelector from './PassengerChipSelector'
@@ -67,6 +67,36 @@ function formatClock(iso: string | null | undefined): string | null {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return null
   return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
+function formatTimeInput(value: string): string {
+  const [hoursText, minutes = '00'] = value.split(':')
+  const hours = Number(hoursText)
+  if (!Number.isFinite(hours)) return 'Time needed'
+  const period = hours >= 12 ? 'PM' : 'AM'
+  const displayHour = hours % 12 || 12
+  return `${displayHour}:${minutes} ${period}`
+}
+
+function transportationLegSummary(leg: TransportationLeg): string {
+  const driver = leg.driverName.trim() || 'Driver needed'
+  const origin = leg.origin.name.trim() || 'Starting place needed'
+  const destination = leg.destination.name.trim() || 'Destination needed'
+  const timing = leg.timing === 'arrive_by' ? 'Arrive' : 'Leave'
+  return `${driver} · ${origin} → ${destination} · ${timing} ${formatTimeInput(leg.time)}`
+}
+
+function useDesktopTransportationEditor(): boolean {
+  const [desktop, setDesktop] = useState(() => window.matchMedia('(min-width: 768px)').matches)
+
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 768px)')
+    const update = (event: MediaQueryListEvent) => setDesktop(event.matches)
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
+
+  return desktop
 }
 
 function QuickDriverPicker({
@@ -357,7 +387,9 @@ export default function EventTransportationSection({
   const [tripError, setTripError] = useState<string | null>(null)
   const [savingPassenger, setSavingPassenger] = useState<string | null>(null)
   const [savingQuickChange, setSavingQuickChange] = useState(false)
+  const [expandedLegId, setExpandedLegId] = useState<string | null>(null)
   const sheetExitResolverRef = useRef<(() => void) | null>(null)
+  const desktopEditor = useDesktopTransportationEditor()
   const { data: household = [] } = useFamilyMembers()
   const { data: savedPlaces = [] } = useSavedPlaces()
   const queryClient = useQueryClient()
@@ -404,7 +436,9 @@ export default function EventTransportationSection({
   )
 
   const openEditor = () => {
-    setDraft(hydratedPlan ?? createDefaultTransportationPlan(event, homeAddress, defaultDriver))
+    const nextDraft = hydratedPlan ?? createDefaultTransportationPlan(event, homeAddress, defaultDriver)
+    setDraft(nextDraft)
+    setExpandedLegId(nextDraft.legs[0]?.id ?? null)
     setTripError(null)
     setEditorOpen(true)
   }
@@ -413,20 +447,22 @@ export default function EventTransportationSection({
     if (!draft) return
     const previous = draft.legs.at(-1)
     const origin = previous?.destination ?? { name: 'Home', address: homeAddress }
+    const nextLeg: TransportationLeg = {
+      id: crypto.randomUUID(),
+      origin,
+      destination: { name: '', address: '' },
+      driverId: previous?.driverId ?? defaultDriver?.id ?? null,
+      driverName: previous?.driverName ?? defaultDriver?.name ?? '',
+      passengers: previous ? [...previous.passengers] : [],
+      purpose: 'drive',
+      timing: 'arrive_by',
+      time: '',
+    }
     setDraft({
       ...draft,
-      legs: [...draft.legs, {
-        id: crypto.randomUUID(),
-        origin,
-        destination: { name: '', address: '' },
-        driverId: previous?.driverId ?? defaultDriver?.id ?? null,
-        driverName: previous?.driverName ?? defaultDriver?.name ?? '',
-        passengers: previous ? [...previous.passengers] : [],
-        purpose: 'drive',
-        timing: 'arrive_by',
-        time: '',
-      }],
+      legs: [...draft.legs, nextLeg],
     })
+    setExpandedLegId(nextLeg.id)
   }
 
   const closeEditorBeforeScope = () => new Promise<void>((resolve) => {
@@ -542,6 +578,227 @@ export default function EventTransportationSection({
     queryClient.invalidateQueries({ queryKey: ['events'] })
   }
 
+  const handleEditorExitComplete = () => {
+    sheetExitResolverRef.current?.()
+    sheetExitResolverRef.current = null
+  }
+
+  const removeDraftLeg = (legId: string) => {
+    if (!draft) return
+    const nextLegs = draft.legs.filter((leg) => leg.id !== legId)
+    setDraft({ ...draft, legs: nextLegs })
+    if (expandedLegId === legId) setExpandedLegId(nextLegs[0]?.id ?? null)
+  }
+
+  const addReturnHome = () => {
+    if (!draft) return
+    const nextDraft = appendReturnHomeLeg(draft, event, homeAddress)
+    setDraft(nextDraft)
+    setExpandedLegId(nextDraft.legs.at(-1)?.id ?? null)
+  }
+
+  const saveDraft = async () => {
+    if (!draft) return
+    setSavingTrip(true)
+    setTripError(null)
+    try {
+      const eventPlace = draft.legs
+        .flatMap((leg) => [leg.origin, leg.destination])
+        .find(isTransportationEventPlace)
+      await closeEditorBeforeScope()
+      const result = await onSave(
+        draft,
+        eventPlace && !transportationPlaceMatchesEvent(eventPlace, event)
+          ? eventPlace
+          : undefined,
+      )
+      if (result === 'cancelled') setEditorOpen(true)
+    } catch (cause) {
+      setTripError(cause instanceof Error ? cause.message : 'Could not save this trip.')
+      setEditorOpen(true)
+    } finally {
+      setSavingTrip(false)
+    }
+  }
+
+  const editorTitle = plan ? 'Edit transportation' : 'Add transportation'
+  const editorContent = draft && (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
+        <p className="text-body-sm text-casa-muted">
+          Add only the driving that needs coordination. Open a leg to change its driver, places, timing, or passengers.
+        </p>
+        <div className="space-y-3">
+          {draft.legs.map((leg, index) => {
+            const expanded = expandedLegId === leg.id
+            return (
+              <Card key={leg.id} padding="none" className="overflow-visible">
+                <div className="flex items-center gap-2 p-2">
+                  <Button
+                    variant="ghost"
+                    fullWidth
+                    align="start"
+                    className="min-w-0"
+                    contentClassName="min-w-0 flex-1 justify-between"
+                    aria-expanded={expanded}
+                    onClick={() => setExpandedLegId(expanded ? null : leg.id)}
+                  >
+                    <span className="min-w-0 text-left">
+                      <span className="block text-body font-semibold text-casa-navy">Leg {index + 1}</span>
+                      <span className="mt-0.5 block truncate text-caption font-normal text-casa-muted">
+                        {transportationLegSummary(leg)}
+                      </span>
+                    </span>
+                    <ChevronDown size={17} className={expanded ? 'rotate-180' : undefined} aria-hidden="true" />
+                  </Button>
+                  {draft.legs.length > 1 && (
+                    <IconButton
+                      icon={<Trash2 size={16} />}
+                      aria-label={`Remove leg ${index + 1}`}
+                      variant="danger"
+                      size="sm"
+                      onClick={() => removeDraftLeg(leg.id)}
+                    />
+                  )}
+                </div>
+
+                {expanded && (
+                  <div className="space-y-4 border-t border-casa-border p-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Field label="Driver">
+                        <Select
+                          value={leg.driverId ?? '__other__'}
+                          onChange={(changeEvent) => {
+                            const member = household.find((candidate) => candidate.id === changeEvent.target.value)
+                            setDraft(updateLeg(draft, leg.id, {
+                              driverId: member?.id ?? null,
+                              driverName: member?.name ?? '',
+                            }))
+                          }}
+                        >
+                          {household.filter((member) => member.can_drive).map((member) => (
+                            <option key={member.id} value={member.id}>{member.name}</option>
+                          ))}
+                          <option value="__other__">Someone else</option>
+                        </Select>
+                      </Field>
+                      {!leg.driverId && (
+                        <Field label="Driver name">
+                          <Input
+                            value={leg.driverName}
+                            placeholder="e.g. Giselle"
+                            onChange={(changeEvent) => setDraft(updateLeg(draft, leg.id, { driverName: changeEvent.target.value }))}
+                          />
+                        </Field>
+                      )}
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <TripPlaceFields
+                        label="From"
+                        value={leg.origin}
+                        savedPlaces={savedPlaces}
+                        onChange={(place) => updateDraftPlace(index, 'origin', place)}
+                      />
+                      <TripPlaceFields
+                        label="To"
+                        value={leg.destination}
+                        savedPlaces={savedPlaces}
+                        onChange={(place) => updateDraftPlace(index, 'destination', place)}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <Field label="Purpose">
+                        <Select
+                          value={leg.purpose}
+                          onChange={(changeEvent) => setDraft(updateLeg(draft, leg.id, { purpose: changeEvent.target.value as TransportationLeg['purpose'] }))}
+                        >
+                          {Object.entries(PURPOSE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </Select>
+                      </Field>
+                      <Field label="Schedule by">
+                        <Select
+                          value={leg.timing}
+                          onChange={(changeEvent) => setDraft(updateLeg(draft, leg.id, { timing: changeEvent.target.value as TransportationLeg['timing'] }))}
+                        >
+                          <option value="arrive_by">Arrive by</option>
+                          <option value="depart_at">Leave at</option>
+                        </Select>
+                      </Field>
+                      <Field label="Time">
+                        <Input
+                          type="time"
+                          value={leg.time}
+                          onChange={(changeEvent) => setDraft(updateLeg(draft, leg.id, { time: changeEvent.target.value }))}
+                        />
+                      </Field>
+                    </div>
+
+                    <Field label="Passengers" hint="Tap the people riding this leg. Event attendees are selected by default.">
+                      <PassengerChipSelector
+                        members={household}
+                        selectedNames={leg.passengers}
+                        disabledNames={savingPassenger ? [savingPassenger] : []}
+                        onToggle={(member, selected) => void togglePassenger(leg.id, member, selected)}
+                        onRemoveExternal={(name) => setDraft(updateLeg(draft, leg.id, {
+                          passengers: leg.passengers.filter((passenger) => passenger !== name),
+                        }))}
+                      />
+                    </Field>
+                  </div>
+                )}
+              </Card>
+            )
+          })}
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button variant="secondary" onClick={addLeg}>
+            <Plus size={16} /> Add another leg
+          </Button>
+          <Button variant="secondary" onClick={addReturnHome}>
+            <House size={16} /> Add return home
+          </Button>
+        </div>
+
+        {draft.legs.some((leg) => leg.purpose === 'appointment')
+          && draft.legs.some((leg) => leg.purpose === 'return') && (
+            <Switch
+              checked={draft.waitOnSite === true}
+              onCheckedChange={(checked) => setDraft(updateTransportationWait(draft, checked))}
+              label="Driver waits on site"
+              className="rounded-button border border-casa-border bg-casa-bg px-3"
+            />
+          )}
+        {tripError && <p role="alert" className="text-caption text-casa-error">{tripError}</p>}
+      </div>
+
+      <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-casa-border bg-casa-surface px-5 py-3 sm:flex-row sm:justify-between">
+        <Button variant="danger" onClick={() => setRemoveConfirmOpen(true)}>
+          Remove driving plan
+        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => setEditorOpen(false)}>Cancel</Button>
+          <Button
+            variant="primary"
+            loading={savingTrip}
+            disabled={draft.legs.some((leg) =>
+              !leg.origin.name.trim()
+              || !leg.destination.name.trim()
+              || !leg.time
+              || (isTransportationEventPlace(leg.origin) && !leg.origin.address.trim())
+              || (isTransportationEventPlace(leg.destination) && !leg.destination.address.trim()),
+            )}
+            onClick={() => void saveDraft()}
+          >
+            Save trip
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <>
       <section aria-label="The Plan">
@@ -628,202 +885,39 @@ export default function EventTransportationSection({
                 </p>
               </div>
               <Button variant="secondary" size="sm" onClick={openEditor}>
-                {suggestedPlan ? 'Set up now' : 'Add a trip'}
+                {suggestedPlan ? 'Set up trip' : 'Add a trip'}
               </Button>
             </div>
           </Card>
         )}
       </section>
 
-      <Sheet
-        open={editorOpen}
-        onClose={() => setEditorOpen(false)}
-        onExitComplete={() => {
-          sheetExitResolverRef.current?.()
-          sheetExitResolverRef.current = null
-        }}
-        title={plan ? 'Edit transportation' : 'Add transportation'}
-        side="bottom"
-        showHandle
-        panelClassName="max-h-[92vh]"
-      >
-        {draft && (
-          <div className="mx-auto max-w-3xl space-y-4">
-            <p className="text-body-sm text-casa-muted">
-              Add only the driving that needs coordination. Each leg can start and end somewhere different.
-            </p>
-            {draft.legs.map((leg, index) => (
-              <Card key={leg.id} padding="md" className="space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-body font-semibold text-casa-navy">Leg {index + 1}</p>
-                  {draft.legs.length > 1 && (
-                    <IconButton
-                      icon={<Trash2 size={16} />}
-                      aria-label={`Remove leg ${index + 1}`}
-                      variant="danger"
-                      size="sm"
-                      onClick={() => setDraft({ ...draft, legs: draft.legs.filter((item) => item.id !== leg.id) })}
-                    />
-                  )}
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="Driver">
-                    <Select
-                      value={leg.driverId ?? '__other__'}
-                      onChange={(event) => {
-                        const member = household.find((candidate) => candidate.id === event.target.value)
-                        setDraft(updateLeg(draft, leg.id, {
-                          driverId: member?.id ?? null,
-                          driverName: member?.name ?? '',
-                        }))
-                      }}
-                    >
-                      {household.filter((member) => member.can_drive).map((member) => (
-                        <option key={member.id} value={member.id}>{member.name}</option>
-                      ))}
-                      <option value="__other__">Someone else</option>
-                    </Select>
-                  </Field>
-                  {!leg.driverId && (
-                    <Field label="Driver name">
-                      <Input
-                        value={leg.driverName}
-                        placeholder="e.g. Giselle"
-                        onChange={(event) => setDraft(updateLeg(draft, leg.id, { driverName: event.target.value }))}
-                      />
-                    </Field>
-                  )}
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <TripPlaceFields
-                    label="From"
-                    value={leg.origin}
-                    savedPlaces={savedPlaces}
-                    onChange={(place) => updateDraftPlace(index, 'origin', place)}
-                  />
-                  <TripPlaceFields
-                    label="To"
-                    value={leg.destination}
-                    savedPlaces={savedPlaces}
-                    onChange={(place) => updateDraftPlace(index, 'destination', place)}
-                  />
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-3">
-                  <Field label="Purpose">
-                    <Select
-                      value={leg.purpose}
-                      onChange={(event) => setDraft(updateLeg(draft, leg.id, { purpose: event.target.value as TransportationLeg['purpose'] }))}
-                    >
-                      {Object.entries(PURPOSE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                    </Select>
-                  </Field>
-                  <Field label="Schedule by">
-                    <Select
-                      value={leg.timing}
-                      onChange={(event) => setDraft(updateLeg(draft, leg.id, { timing: event.target.value as TransportationLeg['timing'] }))}
-                    >
-                      <option value="arrive_by">Arrive by</option>
-                      <option value="depart_at">Leave at</option>
-                    </Select>
-                  </Field>
-                  <Field label="Time">
-                    <Input
-                      type="time"
-                      value={leg.time}
-                      onChange={(event) => setDraft(updateLeg(draft, leg.id, { time: event.target.value }))}
-                    />
-                  </Field>
-                </div>
-
-                <Field label="Passengers" hint="Tap the people riding this leg. Event attendees are selected by default.">
-                  <PassengerChipSelector
-                    members={household}
-                    selectedNames={leg.passengers}
-                    disabledNames={savingPassenger ? [savingPassenger] : []}
-                    onToggle={(member, selected) => void togglePassenger(leg.id, member, selected)}
-                    onRemoveExternal={(name) => setDraft(updateLeg(draft, leg.id, {
-                      passengers: leg.passengers.filter((passenger) => passenger !== name),
-                    }))}
-                  />
-                </Field>
-              </Card>
-            ))}
-
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Button variant="secondary" onClick={addLeg}>
-                <Plus size={16} /> Add another leg
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => setDraft(appendReturnHomeLeg(draft, event, homeAddress))}
-              >
-                <House size={16} /> Add return home
-              </Button>
-            </div>
-
-            {draft.legs.some((leg) => leg.purpose === 'appointment')
-              && draft.legs.some((leg) => leg.purpose === 'return') && (
-              <Switch
-                checked={draft.waitOnSite === true}
-                onCheckedChange={(checked) => setDraft(updateTransportationWait(draft, checked))}
-                label="Driver waits on site"
-                className="rounded-button border border-casa-border bg-casa-bg px-3"
-              />
-            )}
-
-            {tripError && <p role="alert" className="text-caption text-casa-error">{tripError}</p>}
-            <div className="flex flex-col-reverse gap-2 border-t border-casa-border pt-4 sm:flex-row sm:justify-between">
-              <Button
-                variant="danger"
-                onClick={() => setRemoveConfirmOpen(true)}
-              >
-                Remove driving plan
-              </Button>
-              <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => setEditorOpen(false)}>Cancel</Button>
-                <Button
-                  variant="primary"
-                  loading={savingTrip}
-                  disabled={draft.legs.some((leg) =>
-                    !leg.origin.name.trim()
-                    || !leg.destination.name.trim()
-                    || !leg.time
-                    || (isTransportationEventPlace(leg.origin) && !leg.origin.address.trim())
-                    || (isTransportationEventPlace(leg.destination) && !leg.destination.address.trim()),
-                  )}
-                  onClick={async () => {
-                    setSavingTrip(true)
-                    setTripError(null)
-                    try {
-                      const eventPlace = draft.legs
-                        .flatMap((leg) => [leg.origin, leg.destination])
-                        .find(isTransportationEventPlace)
-                      await closeEditorBeforeScope()
-                      const result = await onSave(
-                        draft,
-                        eventPlace && !transportationPlaceMatchesEvent(eventPlace, event)
-                          ? eventPlace
-                          : undefined,
-                      )
-                      if (result === 'cancelled') setEditorOpen(true)
-                    } catch (cause) {
-                      setTripError(cause instanceof Error ? cause.message : 'Could not save this trip.')
-                      setEditorOpen(true)
-                    } finally {
-                      setSavingTrip(false)
-                    }
-                  }}
-                >
-                  Save trip
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-      </Sheet>
+      {desktopEditor ? (
+        <Modal
+          open={editorOpen}
+          onClose={() => setEditorOpen(false)}
+          onExitComplete={handleEditorExitComplete}
+          title={editorTitle}
+          size="xl"
+          panelClassName="flex max-h-[85dvh] flex-col overflow-hidden"
+          contentClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
+        >
+          {editorContent}
+        </Modal>
+      ) : (
+        <Sheet
+          open={editorOpen}
+          onClose={() => setEditorOpen(false)}
+          onExitComplete={handleEditorExitComplete}
+          title={editorTitle}
+          side="bottom"
+          showHandle
+          panelClassName="max-h-[92dvh]"
+          contentClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
+        >
+          {editorContent}
+        </Sheet>
+      )}
       <ConfirmationDialog
         open={removeConfirmOpen}
         onClose={() => setRemoveConfirmOpen(false)}

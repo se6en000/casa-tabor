@@ -26,6 +26,7 @@ export interface ModalProps {
   className?: string
   panelClassName?: string
   contentClassName?: string
+  onExitComplete?: () => void
 }
 
 /**
@@ -47,13 +48,14 @@ export function Modal({
   className,
   panelClassName,
   contentClassName,
+  onExitComplete,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
   useDialogA11y(open, panelRef, onClose, closeOnEscape)
 
   return createPortal(
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={onExitComplete}>
       {open && (
         <div className={cn('fixed inset-0 z-modal flex items-center justify-center p-4', className)}>
           <motion.div

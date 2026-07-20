@@ -146,9 +146,12 @@ test('driving plan removal is truthful, editor-only, and confirmed', () => {
 
 test('full-plan recurrence handoff closes the sheet before scope and preserves drafts on cancellation', () => {
   const sheet = readFileSync(resolve('src/components/ui/Sheet.tsx'), 'utf8')
+  const modal = readFileSync(resolve('src/components/ui/Modal.tsx'), 'utf8')
 
   assert.match(sheet, /onExitComplete\?: \(\) => void/)
   assert.match(sheet, /<AnimatePresence onExitComplete=\{onExitComplete\}>/)
+  assert.match(modal, /onExitComplete\?: \(\) => void/)
+  assert.match(modal, /<AnimatePresence onExitComplete=\{onExitComplete\}>/)
   assert.match(transportation, /const closeEditorBeforeScope = \(\) => new Promise<void>/)
   assert.match(transportation, /await closeEditorBeforeScope\(\)[\s\S]*await onSave/)
   assert.match(transportation, /result === 'cancelled'\) setEditorOpen\(true\)/)
@@ -159,15 +162,28 @@ test('full-plan event-place changes share the scoped transportation mutation', (
   assert.match(detail, /'transportationPlan',[\s\S]*'event\.locationName'[\s\S]*'event\.address'[\s\S]*'event\.lat'[\s\S]*'event\.lng'/)
   assert.match(detail, /transportation_plan: durablePlan/)
   assert.match(detail, /event: \{[\s\S]*location_name:[\s\S]*address:[\s\S]*lat:[\s\S]*lng:/)
-  const eventPlaceIndex = transportation.indexOf('const eventPlace = draft')
+  const saveDraftIndex = transportation.indexOf('const saveDraft = async')
   const saveHandler = transportation.slice(
-    transportation.lastIndexOf('onClick={async () => {', eventPlaceIndex),
-    transportation.indexOf('Save trip', eventPlaceIndex),
+    saveDraftIndex,
+    transportation.indexOf('const editorTitle', saveDraftIndex),
   )
   assert.doesNotMatch(saveHandler, /persistEventLocation\(/)
   assert.match(saveHandler, /onSave\(/)
   assert.match(transportation, /await onQuickChange\([\s\S]*current && isTransportationEventPlace\(current\)/)
   assert.doesNotMatch(transportation, /const persistEventLocation = async/)
+})
+
+test('transportation editor is bounded on desktop and progressive on every viewport', () => {
+  assert.match(transportation, /useDesktopTransportationEditor/)
+  assert.match(transportation, /<Modal[\s\S]*size="xl"[\s\S]*max-h-\[85dvh\]/)
+  assert.match(transportation, /<Sheet[\s\S]*max-h-\[92dvh\][\s\S]*contentClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"/)
+  assert.match(transportation, /transportationLegSummary\(leg\)/)
+  assert.match(transportation, /aria-expanded=\{expanded\}/)
+  assert.match(transportation, /expandedLegId === leg\.id/)
+  assert.match(transportation, /Open a leg to change its driver, places, timing, or passengers\./)
+  assert.match(transportation, /shrink-0[\s\S]*border-t[\s\S]*Save trip/)
+  assert.match(transportation, /'Set up trip'/)
+  assert.doesNotMatch(transportation, /'Set up now'/)
 })
 
 test('event detail header uses a light semantic surface with compact event identity', () => {

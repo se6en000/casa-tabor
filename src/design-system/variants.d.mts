@@ -53,7 +53,7 @@ export function cardClassName(options?: {
 
 export function fieldControlClassName(options?: { invalid?: boolean }): string
 
-export type ModalSize = 'sm' | 'md' | 'lg'
+export type ModalSize = 'sm' | 'md' | 'lg' | 'xl'
 export const MODAL_SIZES: ModalSize[]
 
 export function modalPanelClassName(options?: { size?: ModalSize }): string

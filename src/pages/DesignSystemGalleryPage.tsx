@@ -547,7 +547,7 @@ export default function DesignSystemGalleryPage() {
         </div>
       </div>
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Accessible modal">
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Accessible modal" size="xl">
         <Text role="body-sm" muted>Focus is trapped, Escape closes, and focus returns to the trigger.</Text>
         <Button className="mt-4" fullWidth onClick={() => setModalOpen(false)}>Done</Button>
       </Modal>

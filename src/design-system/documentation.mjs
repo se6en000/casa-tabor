@@ -93,7 +93,7 @@ export const COMPONENT_MANIFEST = [
     purpose: 'Shows one or more responsible people in a compact, read-only overlapping avatar group.',
     useWhen: 'Use when a card must identify multiple people without expanding its height.',
     avoid: 'Do not use as a person picker or rely on initials/colors without an accessible group label.',
-    variants: ['sm', 'md', 'lg'],
+    variants: ['sm', 'md', 'lg', 'xl'],
     states: ['assigned', 'unassigned', 'overflow'],
     accessibility: 'The group exposes every visible responsibility name as one readable image label; decorative initials are hidden.',
     responsive: 'Overlap and avatar dimensions remain stable across touch and fine-pointer densities.',
