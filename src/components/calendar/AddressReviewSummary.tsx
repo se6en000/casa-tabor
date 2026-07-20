@@ -1,5 +1,4 @@
 import { CircleAlert, House, Loader2, MapPin, Route } from 'lucide-react'
-import { cn } from '../../utils/cn'
 import { Button, Chip } from '../ui'
 
 export type AddressTechnicalStatus = 'checking' | 'ready' | 'unavailable'
@@ -20,7 +19,6 @@ export default function AddressReviewSummary({
   reviewed,
   atHome,
   loading = false,
-  birthday = false,
   saveError,
   onConfirm,
   onEdit,
@@ -33,7 +31,6 @@ export default function AddressReviewSummary({
   reviewed: boolean
   atHome: boolean
   loading?: boolean
-  birthday?: boolean
   saveError?: string | null
   onConfirm: () => void
   onEdit: () => void
@@ -47,18 +44,12 @@ export default function AddressReviewSummary({
   const headline = normalizedName ?? (atHome ? 'Home' : 'Add event location')
   const needsReview = Boolean(normalizedAddress) && !atHome && !reviewed
   const addressMissing = !atHome && !normalizedAddress
-  const secondary = birthday ? 'text-casa-muted' : 'text-white/65'
-  const chipStyle = birthday ? undefined : {
-    background: 'rgba(255,255,255,0.10)',
-    color: 'rgba(255,255,255,0.92)',
-    border: '1px solid rgba(255,255,255,0.18)',
-  }
 
   return (
     <div className="min-w-0 flex-1">
       <div className="grid grid-cols-1 items-start gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,1fr)_auto]">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <Chip size="sm" className="max-w-full" style={chipStyle}>
+          <Chip size="sm" className="max-w-full">
             {atHome ? <House size={13} aria-hidden="true" /> : <MapPin size={13} aria-hidden="true" />}
             <span className="whitespace-normal text-left leading-snug">{headline}</span>
           </Chip>
@@ -73,7 +64,7 @@ export default function AddressReviewSummary({
             variant="ghost"
             size="sm"
             onClick={onEdit}
-            className={cn('justify-self-end', birthday ? 'text-casa-navy' : 'text-white/85 hover:bg-white/10 hover:text-white')}
+            className="justify-self-end"
           >
             {hasDestination ? 'Change address' : 'Add location'}
           </Button>
@@ -84,7 +75,7 @@ export default function AddressReviewSummary({
         <div className="mt-1 grid grid-cols-1 items-start gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,1fr)_auto]">
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
             {normalizedAddress && normalizedAddress !== normalizedName && (
-              <p className={cn('min-w-0 flex-1 text-body-sm leading-relaxed', secondary)}>
+              <p className="min-w-0 flex-1 text-body-sm leading-relaxed text-casa-muted">
                 {normalizedAddress}
               </p>
             )}
@@ -110,7 +101,7 @@ export default function AddressReviewSummary({
               variant="ghost"
               size="sm"
               onClick={onPeopleAction}
-              className={cn('justify-self-end', birthday ? 'text-casa-navy' : 'text-white/85 hover:bg-white/10 hover:text-white')}
+              className="justify-self-end"
             >
               {peopleActionLabel}
             </Button>
@@ -119,7 +110,7 @@ export default function AddressReviewSummary({
       )}
 
       {saveError && (
-        <p role="alert" className={cn('mt-2 text-caption', birthday ? 'text-casa-error' : 'text-red-200')}>
+        <p role="alert" className="mt-2 text-caption text-casa-error">
           {saveError}
           {onRetry && (
             <Button variant="ghost" size="sm" className="ml-2" onClick={onRetry}>Retry</Button>

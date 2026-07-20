@@ -546,8 +546,8 @@ export default function EventTransportationSection({
     <>
       <section aria-label="The Plan">
         {hydratedPlan ? (
-          <div className="overflow-visible rounded-2xl border border-casa-border">
-            <div className="flex items-center justify-between gap-3 rounded-t-2xl bg-casa-navy px-[18px] py-3.5">
+          <Card tone="surface" padding="none" className="overflow-visible">
+            <div className="flex items-center justify-between gap-3 rounded-t-card bg-casa-navy px-[18px] py-3.5">
               <div className="min-w-0">
                 <p className="text-caption font-bold uppercase tracking-widest text-white/70">The Plan</p>
                 <p className="mt-0.5 font-display text-body-lg font-semibold text-white">
@@ -601,10 +601,10 @@ export default function EventTransportationSection({
                 <Plus size={15} /> Add or reorder stops
               </Button>
             </div>
-          </div>
+          </Card>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-casa-border">
-            <div className="bg-casa-navy px-[18px] py-3.5">
+          <Card tone="surface" padding="none" className="overflow-hidden">
+            <div className="rounded-t-card bg-casa-navy px-[18px] py-3.5">
               <p className="text-caption font-bold uppercase tracking-widest text-white/70">The Plan</p>
               <p className="mt-0.5 font-display text-body-lg font-semibold text-white">
                 {suggestedPlan
@@ -631,7 +631,7 @@ export default function EventTransportationSection({
                 {suggestedPlan ? 'Set up now' : 'Add a trip'}
               </Button>
             </div>
-          </div>
+          </Card>
         )}
       </section>
 

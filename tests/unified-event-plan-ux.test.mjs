@@ -170,24 +170,29 @@ test('full-plan event-place changes share the scoped transportation mutation', (
   assert.doesNotMatch(transportation, /const persistEventLocation = async/)
 })
 
-test('event detail header uses editorial navy crown with compact avatars', () => {
+test('event detail header uses a light semantic surface with compact event identity', () => {
   assert.match(detail, /function CategoryPicker/)
   assert.match(detail, /aria-label=\{`Category:.*Tap to change`\}/)
   assert.match(detail, /aria-expanded=\{open\}/)
+  assert.match(detail, /className="min-h-control-lg capitalize text-casa-text"/)
+  assert.match(categoryPicker, /minHeight: 'var\(--ds-control-lg\)'/)
+  assert.doesNotMatch(categoryPicker, /color: S\.navy/)
   assert.match(detail, /category_locked: true/)
   assert.match(detail, /import \{ cleanEventTitle, isBirthdayEvent \} from '\.\.\/\.\.\/utils\/eventTitle'/)
   assert.match(detail, /const displayTitle = cleanedTitle \|\| rawTitle \|\|/)
-  // navy crown background
-  assert.match(detail, /background.*S\.navy/)
+  assert.match(detail, /Light editorial header/)
+  assert.match(detail, /border-b border-casa-border bg-casa-surface/)
+  assert.match(detail, /event-detail-accent-marker/)
+  assert.match(detail, /backgroundColor: accent/)
   // compact avatar circles in eyebrow row
   assert.match(detail, /avatarMembers\.map/)
   assert.match(detail, /avatarOverflow/)
   // title-first hero and meta line with category beneath title
   assert.match(detail, /Title hero/)
   assert.match(detail, /event-command-center-title/)
-  assert.match(detail, /casa-heading-on-dark/)
+  assert.match(detail, /event-command-center-title[\s\S]{0,120}text-casa-navy/)
   assert.match(detail, /Meta line: category \+ date \+ duration/)
-  assert.match(detail, /<CategoryPicker event=\{event\} category=\{category\} accent=\{accent\} dark=\{!isBirthday\} onQuickAction=\{onQuickAction\} \/>/)
+  assert.match(detail, /<CategoryPicker event=\{event\} category=\{category\} accent=\{accent\} onQuickAction=\{onQuickAction\} \/>/)
   // crown owns the location, full address, and review state
   assert.match(detail, /planKind === 'travel'/)
   assert.match(detail, /<AddressReviewSummary/)
@@ -200,21 +205,16 @@ test('event detail header uses editorial navy crown with compact avatars', () =>
   assert.match(detail, /aria-label="Close event details"/)
 })
 
-test('event detail drag cap and crown share one theme-aware treatment', () => {
-  assert.match(detail, /function eventCrownStyle\(event: EventWithDetails, region: 'cap' \| 'body'\): React\.CSSProperties/)
-  assert.match(detail, /eventCrownStyle\(event, 'cap'\)/)
-  assert.match(detail, /eventCrownStyle\(event, 'body'\)/)
-  assert.match(detail, /backgroundColor: 'var\(--color-casa-navy\)'/)
-  assert.match(detail, /var\(--color-casa-accent-subtle\), transparent 72%/)
-  assert.match(detail, /const glowOrigin = region === 'cap' \? '90% 100%' : '90% 0%'/)
-  assert.match(detail, /className="relative h-control-sm flex-shrink-0 px-3"/)
+test('event detail shell uses semantic light header, tinted workspace, and surface footer', () => {
+  assert.doesNotMatch(detail, /eventCrownStyle/)
+  assert.match(detail, /className="relative h-control-sm flex-shrink-0 border-b border-casa-border bg-casa-surface px-3"/)
   assert.match(detail, /className="absolute inset-x-0 top-0 z-10 mx-auto block h-control w-\[86px\]/)
   assert.match(detail, /h-\[5px\] w-control-sm rounded-full/)
   assert.match(detail, /aria-label="Drag down to dismiss panel"/)
-  assert.match(detail, /var\(--color-casa-on-dark\) 48%, transparent/)
   assert.match(detail, /var\(--color-casa-navy\) 38%, transparent/)
-  assert.doesNotMatch(detail, /borderBottom: '1px solid color-mix/)
-  assert.doesNotMatch(detail, /boxShadow: 'inset 0 -1px 0 color-mix/)
+  assert.match(detail, /overflow-y-auto overflow-x-hidden overscroll-contain bg-casa-bg-2/)
+  assert.match(detail, /event-command-center-content space-y-5 bg-casa-bg-2 p-6/)
+  assert.match(detail, /bg-casa-surface px-5 py-3\.5/)
   assert.doesNotMatch(detail, /background: '#(?:1b2a4a|1B2A4A)'/)
 })
 
@@ -258,7 +258,7 @@ test('month view uses shared cleanEventTitle helper for non-holiday non-reminder
   assert.doesNotMatch(month, /event\.title\.includes\(' \| '\) \? event\.title\.split/)
 })
 
-test('route stops and crown address editor reuse saved and Google place entry', () => {
+test('route stops and header address editor reuse saved and Google place entry', () => {
   assert.match(transportation, /<InlinePlaceEditor/)
   assert.match(detail, /<InlinePlaceEditor/)
   assert.match(smartPlace, /Saved/)
@@ -296,8 +296,10 @@ test('address review trusts exact household saved addresses but not automatic ro
   assert.doesNotMatch(savedPlaceAddressConfirmation, /insert into public\.event_plan_overrides/)
 })
 
-test('address review summary lives in the crown with a full address and truthful actions', () => {
-  assert.match(addressReview, /rgba\(255,255,255,0\.10\)/)
+test('address review summary lives in the header with a full address and truthful actions', () => {
+  assert.match(addressReview, /text-casa-muted/)
+  assert.doesNotMatch(addressReview, /rgba\(255,255,255/)
+  assert.doesNotMatch(addressReview, /text-white/)
   assert.doesNotMatch(addressReview, />Confirmed</)
   assert.doesNotMatch(addressReview, /Needs review/)
   assert.match(addressReview, /Address missing/)

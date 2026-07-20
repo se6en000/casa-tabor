@@ -95,22 +95,6 @@ const PANEL_ENTER_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1]
 const PANEL_EXIT_EASE: [number, number, number, number] = [0.4, 0, 1, 1]
 const ALL_CATEGORIES_FOR_PICKER = Object.keys(CATEGORY_LABEL) as string[]
 
-function eventCrownStyle(event: EventWithDetails, region: 'cap' | 'body'): React.CSSProperties {
-  if (isBirthdayEvent(event)) {
-    return {
-      backgroundColor: 'var(--color-casa-surface)',
-      backgroundImage: 'linear-gradient(to bottom right, var(--color-casa-accent-subtle), transparent 72%)',
-    }
-  }
-  const accent = eventAccentColor(event)
-  const glowOrigin = region === 'cap' ? '90% 100%' : '90% 0%'
-  const glowHeight = region === 'cap' ? '180%' : '100%'
-  return {
-    backgroundColor: 'var(--color-casa-navy)',
-    backgroundImage: `radial-gradient(ellipse 70% ${glowHeight} at ${glowOrigin}, color-mix(in srgb, ${accent} 28%, transparent), transparent 65%)`,
-  }
-}
-
 interface EventDetailPanelProps {
   event: EventWithDetails | null
   onClose: () => void
@@ -439,8 +423,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
               onTouchEnd={stopTouch}
             >
               <div
-                className="relative h-control-sm flex-shrink-0 px-3"
-                style={eventCrownStyle(event, 'cap')}
+                className="relative h-control-sm flex-shrink-0 border-b border-casa-border bg-casa-surface px-3"
               >
                 <button
                   type="button"
@@ -454,14 +437,12 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
                   <span
                     className="mx-auto mt-1.5 block h-[5px] w-control-sm rounded-full"
                     style={{
-                      background: isBirthdayEvent(event)
-                        ? 'color-mix(in srgb, var(--color-casa-navy) 38%, transparent)'
-                        : 'color-mix(in srgb, var(--color-casa-on-dark) 48%, transparent)',
+                      background: 'color-mix(in srgb, var(--color-casa-navy) 38%, transparent)',
                     }}
                   />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain" data-native-drag data-ptr-ignore>
+              <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain bg-casa-bg-2" data-native-drag data-ptr-ignore>
                 {detailQuery.isError && (
                   <Alert tone="danger" title="Some event details could not be loaded" className="mx-4 mb-3">
                     Check the connection, then reopen this event to try again.
@@ -842,13 +823,11 @@ function CategoryPicker({
   event,
   category,
   accent,
-  dark = false,
   onQuickAction,
 }: {
   event: EventWithDetails
   category: string | null | undefined
   accent: string
-  dark?: boolean
   onQuickAction: (request: RecurringQuickActionRequest) => Promise<RecurringQuickActionResult>
 }) {
   const [open, setOpen] = useState(false)
@@ -909,11 +888,13 @@ function CategoryPicker({
       <Chip
         size="sm"
         tone="accent"
-        className="capitalize"
-        style={dark
-          ? { background: `color-mix(in srgb, ${accent} 28%, rgba(255,255,255,0.10))`, color: 'rgba(255,255,255,0.95)', letterSpacing: '0.04em', gap: '0.25rem', border: `1px solid color-mix(in srgb, ${accent} 40%, rgba(255,255,255,0.20))` }
-          : { background: `color-mix(in srgb, ${accent} 14%, transparent)`, color: S.navy, letterSpacing: '0.04em', gap: '0.25rem' }
-        }
+        className="min-h-control-lg capitalize text-casa-text"
+        style={{
+          minHeight: 'var(--ds-control-lg)',
+          background: `color-mix(in srgb, ${accent} 14%, transparent)`,
+          letterSpacing: '0.04em',
+          gap: '0.25rem',
+        }}
         onClick={() => setOpen((wasOpen) => {
           if (!wasOpen) {
             setSaveError(null)
@@ -925,7 +906,7 @@ function CategoryPicker({
         aria-expanded={open}
       >
         {saving ? <Loader2 size={12} className="animate-spin" /> : label}
-        <ChevronDown size={11} className={cn('transition-transform duration-150', dark ? 'opacity-60' : 'opacity-50', open && 'rotate-180')} />
+        <ChevronDown size={11} className={cn('opacity-50 transition-transform duration-150', open && 'rotate-180')} />
       </Chip>
       <AnimatePresence>
         {open && (
@@ -1048,28 +1029,23 @@ function PanelHeader({
   }
 
   return (
-    <div>
-      {/* ── Navy editorial crown ───────────────────────────────── */}
+    <div className="bg-casa-surface">
+      {/* ── Light editorial header ──────────────────────────────── */}
       <div
-        className="relative overflow-visible px-6 pt-4 pb-5"
-        style={eventCrownStyle(event, 'body')}
+        className="relative overflow-visible border-b border-casa-border bg-casa-surface px-6 pb-5 pt-4"
       >
-        {isBirthday && <BirthdayCardDecoration className="opacity-60" />}
-
-        {/* Bottom fade — softens the cut to the white attendee strip */}
-        <div
-          className="pointer-events-none absolute bottom-0 inset-x-0 h-5"
-          style={{ background: isBirthday ? undefined : 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.18))' }}
-        />
+        {isBirthday && <BirthdayCardDecoration className="opacity-35" />}
 
         {/* Top row: owner + compact avatars + close */}
         <div className="relative z-10 flex items-center justify-between gap-3">
-          <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <span
+              className="event-detail-accent-marker block size-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: accent }}
+              aria-hidden="true"
+            />
             {eyebrow && (
-              <span
-                className="text-caption font-bold uppercase tracking-widest truncate"
-                style={{ color: isBirthday ? S.eyebrow : 'rgba(255,255,255,0.55)' }}
-              >
+              <span className="truncate text-caption font-bold uppercase tracking-widest text-casa-muted">
                 {eyebrow}
               </span>
             )}
@@ -1080,17 +1056,14 @@ function PanelHeader({
                 <span
                   key={m.id}
                   title={m.family_member?.name}
-                  className={cn('flex size-6 shrink-0 items-center justify-center rounded-full text-caption font-bold text-white ring-[2px]', isBirthday ? 'ring-white' : 'ring-casa-navy')}
+                  className="flex size-6 shrink-0 items-center justify-center rounded-full text-caption font-bold text-white ring-[2px] ring-casa-surface"
                   style={{ backgroundColor: m.family_member?.color_hex ?? 'var(--color-casa-muted)' }}
                 >
                   {m.family_member?.name?.[0]}
                 </span>
               ))}
               {avatarOverflow > 0 && (
-                <span
-                  className="ring-casa-navy flex size-6 shrink-0 items-center justify-center rounded-full text-caption font-bold ring-[2px]"
-                  style={{ background: 'rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.85)' }}
-                >
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-casa-bg text-caption font-bold text-casa-navy ring-[2px] ring-casa-surface">
                   +{avatarOverflow}
                 </span>
               )}
@@ -1101,13 +1074,12 @@ function PanelHeader({
               aria-label="Close event details"
               variant="ghost"
               size="sm"
-              className={cn(!isBirthday && 'text-white/70 hover:text-white hover:bg-white/10')}
             />
           </div>
         </div>
 
         {/* Title hero */}
-        <h2 className={cn('event-command-center-title relative z-10 mt-2 font-bold leading-tight', isBirthday ? 'text-casa-navy' : 'casa-heading-on-dark')}>
+        <h2 className="event-command-center-title relative z-10 mt-2 font-bold leading-tight text-casa-navy">
           {isBirthday && <span className="mr-1.5" aria-hidden="true">🎉</span>}
           {displayTitle}
         </h2>
@@ -1118,27 +1090,22 @@ function PanelHeader({
             <Chip
               size="sm"
               className="uppercase"
-              style={{
-                letterSpacing: '0.06em',
-                background: isBirthday ? S.chipFill : 'rgba(255,255,255,0.10)',
-                color: isBirthday ? S.navy : 'rgba(255,255,255,0.88)',
-                border: `1px solid ${isBirthday ? S.borderMed : 'rgba(255,255,255,0.18)'}`,
-              }}
+              style={{ letterSpacing: '0.06em' }}
             >
               <Bell size={12} aria-hidden="true" />
               Reminder
             </Chip>
           )}
-          <CategoryPicker event={event} category={category} accent={accent} dark={!isBirthday} onQuickAction={onQuickAction} />
-          <span className={cn('font-semibold', isBirthday ? '' : '')} style={{ color: isBirthday ? S.navy : S.planLabel }}>
+          <CategoryPicker event={event} category={category} accent={accent} onQuickAction={onQuickAction} />
+          <span className="font-semibold text-casa-navy">
             {headerWhen}
           </span>
-          <span style={{ color: isBirthday ? S.muted : 'rgba(255,255,255,0.35)' }}>·</span>
-          <span style={{ color: isBirthday ? S.muted : 'rgba(255,255,255,0.55)' }}>{headerDuration}</span>
+          <span className="text-casa-muted">·</span>
+          <span className="text-casa-muted">{headerDuration}</span>
           {isRecurring && (
             <>
-              <span style={{ color: isBirthday ? S.muted : 'rgba(255,255,255,0.35)' }}>·</span>
-              <span className="text-caption font-semibold" style={{ color: isBirthday ? S.muted : 'rgba(255,255,255,0.55)' }}>Repeats</span>
+              <span className="text-casa-muted">·</span>
+              <span className="text-caption font-semibold text-casa-muted">Repeats</span>
             </>
           )}
         </div>
@@ -1152,7 +1119,6 @@ function PanelHeader({
                 reviewed={verified}
                 atHome={hostedAtHome}
                 loading={addressReviewLoading}
-                birthday={isBirthday}
                 saveError={addressSaveError}
                 onConfirm={onConfirmAddress}
                 onEdit={() => {
@@ -1168,19 +1134,13 @@ function PanelHeader({
               <Chip
                 size="sm"
                 className="uppercase"
-                style={{
-                  letterSpacing: '0.06em',
-                  background: 'rgba(255,255,255,0.10)',
-                  color: 'rgba(255,255,255,0.82)',
-                  border: '1px solid rgba(255,255,255,0.18)',
-                }}
+                style={{ letterSpacing: '0.06em' }}
               >
                 {peopleCountLabel}
               </Chip>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-white/80 hover:text-white hover:bg-white/10"
                   onClick={() => setRosterOpen((open) => !open)}
                 >
                   {rosterOpen ? 'Done editing' : editPeopleLabel}
@@ -1191,9 +1151,9 @@ function PanelHeader({
         )}
       </div>
 
-      {/* ── White strip: attendee editor + destination ─────────── */}
+      {/* ── Header utilities: attendee editor + destination ────── */}
       {showLowerSection && (
-        <div style={{ borderBottom: `1px solid ${S.borderSoft}` }}>
+        <div className="bg-casa-surface" style={{ borderBottom: `1px solid ${S.borderSoft}` }}>
           {hasPeople && rosterOpen && (
             <div className="px-6 pt-3 pb-3">
               <div className="mb-2 text-caption font-bold uppercase tracking-wide" style={{ color: S.label }}>
@@ -1452,7 +1412,7 @@ function StandardPanelBody({
   const showMeanwhile = planKind === 'travel' && caregiversAway && coverageRows.length > 0
 
   return (
-    <div className="event-command-center-content p-6 space-y-5">
+    <div className="event-command-center-content space-y-5 bg-casa-bg-2 p-6">
       {/* ── Event overview ── */}
       {plan && plan.kind !== 'travel' && (
         <section>
@@ -1499,14 +1459,18 @@ function StandardPanelBody({
       {hasChecklist && (
         <section>
           <SectionLabel>{mode === 'trip' ? 'Pack' : 'Bring'}</SectionLabel>
-          <ChecklistSection items={event.checklist} eventId={event.id} />
+          <Card tone="surface" padding="sm">
+            <ChecklistSection items={event.checklist} eventId={event.id} />
+          </Card>
         </section>
       )}
 
       {!hasChecklist && enr?.what_to_bring && enr.what_to_bring.length > 0 && (
         <section>
           <SectionLabel>{mode === 'trip' ? 'Pack' : 'Bring'}</SectionLabel>
-          <FallbackBringChecklist eventId={event.id} items={enr.what_to_bring} />
+          <Card tone="surface" padding="sm">
+            <FallbackBringChecklist eventId={event.id} items={enr.what_to_bring} />
+          </Card>
         </section>
       )}
 
@@ -1584,7 +1548,7 @@ function NonTravelEventBlock({ event, plan, hasTransportation }: {
   if (!content) return null
 
   return (
-    <Card padding="md" className="flex items-start gap-4 border-casa-border bg-casa-bg shadow-none">
+    <Card tone="surface" padding="md" className="flex items-start gap-4">
       <span className="flex size-control shrink-0 items-center justify-center rounded-button bg-casa-surface text-casa-gold shadow-card">
         {content.icon}
       </span>
@@ -2458,7 +2422,7 @@ function LocationBlock({ eventId, locationName, address, lat, lng, parkingNotes,
   }
 
   return (
-    <div className="rounded-[14px] overflow-hidden" style={{ border: `1px solid ${S.borderMed}` }}>
+    <div className="overflow-hidden rounded-card bg-casa-surface shadow-card" style={{ border: `1px solid ${S.borderMed}` }}>
       <div
         style={{
           height: 'clamp(360px, 42vh, 400px)',
