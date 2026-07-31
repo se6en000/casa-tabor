@@ -754,7 +754,7 @@ export default function GroceryPage() {
   const [pantryReconcileError, setPantryReconcileError] = useState<string | null>(null)
   const [predictionDeferralError, setPredictionDeferralError] = useState<string | null>(null)
   const [smartPickSettingsError, setSmartPickSettingsError] = useState<string | null>(null)
-  const [settingsSavedToastDetail, setSettingsSavedToastDetail] = useState<string | null>(null)
+  const [groceryToastMessage, setGroceryToastMessage] = useState<string | null>(null)
   const [expandedReconcileQtyIds, setExpandedReconcileQtyIds] = useState<Set<string>>(new Set())
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => localStorage.getItem(SYNC_LAST_AT_KEY))
   const [lastSyncSummary, setLastSyncSummary] = useState<string>(() => localStorage.getItem(SYNC_LAST_SUMMARY_KEY) ?? 'Not synced yet')
@@ -955,10 +955,10 @@ export default function GroceryPage() {
   }, [cookView])
 
   useEffect(() => {
-    if (!settingsSavedToastDetail) return
-    const timer = window.setTimeout(() => setSettingsSavedToastDetail(null), 2400)
+    if (!groceryToastMessage) return
+    const timer = window.setTimeout(() => setGroceryToastMessage(null), 2400)
     return () => window.clearTimeout(timer)
-  }, [settingsSavedToastDetail])
+  }, [groceryToastMessage])
 
   const weeklyAutoListCandidates = useMemo(() => {
     const thirtyDaysAgo = analysisNow - 30 * 24 * 60 * 60 * 1000
@@ -1049,8 +1049,8 @@ export default function GroceryPage() {
         },
       }
       await persistPredictionDeferrals(nextDeferrals)
-      setSettingsSavedToastDetail(
-        `${mode === 'dismiss' ? 'Dismissed' : 'Pushed'} ${itemName} until ${new Date(nextDeferredUntil).toLocaleDateString([], { month: 'short', day: 'numeric' })}.`,
+      setGroceryToastMessage(
+        `Prediction updated — ${mode === 'dismiss' ? 'Dismissed' : 'Pushed'} ${itemName} until ${new Date(nextDeferredUntil).toLocaleDateString([], { month: 'short', day: 'numeric' })}.`,
       )
     } catch (error) {
       setPredictionDeferralError(formatSupabaseError(error, 'Could not defer pantry prediction'))
@@ -1061,7 +1061,7 @@ export default function GroceryPage() {
     setPredictionDeferralError(null)
     try {
       await persistPredictionDeferrals({})
-      setSettingsSavedToastDetail('Deferred pantry predictions are visible again.')
+      setGroceryToastMessage('Predictions visible again — deferred items restored.')
     } catch (error) {
       setPredictionDeferralError(formatSupabaseError(error, 'Could not reset deferred pantry predictions'))
     }
@@ -1101,10 +1101,18 @@ export default function GroceryPage() {
   }
 
   const handleGenerateWeeklyList = useCallback(() => {
+    let added = 0
     for (const candidate of weeklySmartPickCandidates) {
-      addItemByName(candidate.name, { spotlightOnDuplicate: false, clearInput: false })
+      const trimmed = candidate.name.trim()
+      if (!trimmed) continue
+      const existing = findMergeSuggestion(trimmed)
+      if (!existing) added += 1
+      addItemByName(trimmed, { spotlightOnDuplicate: false, clearInput: false })
     }
-  }, [addItemByName, weeklySmartPickCandidates])
+    if (added > 0) {
+      setGroceryToastMessage(added === 1 ? '1 item added to your list.' : `All ${added} added to your list.`)
+    }
+  }, [addItemByName, findMergeSuggestion, setGroceryToastMessage, weeklySmartPickCandidates])
 
   const handleHideSmartPick = useCallback(async (name: string) => {
     const normalized = normalizeItemName(name)
@@ -1117,7 +1125,7 @@ export default function GroceryPage() {
           hidden_at: new Date().toISOString(),
         },
       })
-      setSettingsSavedToastDetail(`Removed ${name} from weekly picks.`)
+      setGroceryToastMessage(`Removed ${name} from weekly picks.`)
     } catch (error) {
       setSmartPickSettingsError(formatSupabaseError(error, 'Could not save weekly pick preference'))
     }
@@ -3485,10 +3493,10 @@ export default function GroceryPage() {
         </div>
       )}
       <Toast
-        open={Boolean(settingsSavedToastDetail)}
+        open={Boolean(groceryToastMessage)}
         tone="success"
-        message={settingsSavedToastDetail ? `Settings saved — ${settingsSavedToastDetail}` : 'Settings saved'}
-        onClose={() => setSettingsSavedToastDetail(null)}
+        message={groceryToastMessage ?? ''}
+        onClose={() => setGroceryToastMessage(null)}
       />
     </div>
   )
