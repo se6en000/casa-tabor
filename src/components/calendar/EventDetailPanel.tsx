@@ -360,6 +360,13 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
     return () => { document.body.style.overflow = prev }
   }, [event])
 
+  useEffect(() => {
+    if (!event) return
+    const handleClose = () => onClose()
+    document.addEventListener('casa:close-event-details', handleClose)
+    return () => document.removeEventListener('casa:close-event-details', handleClose)
+  }, [event, onClose])
+
   return (
     <>
       <AnimatePresence initial={false}>
