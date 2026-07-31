@@ -1,8 +1,12 @@
 import type { ReactNode } from 'react'
 import { cn } from '../../utils/cn'
 
-function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
-  const tokenRegex = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\((https?:\/\/[^)\s]+)\))/g
+function renderInlineMarkdown(
+  text: string,
+  keyPrefix: string,
+  onLinkClick?: (href: string) => void,
+): ReactNode[] {
+  const tokenRegex = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\(((?:https?:\/\/|casa:\/\/event\/)[^)\s]+)\))/g
   const nodes: ReactNode[] = []
   let lastIndex = 0
   let match: RegExpExecArray | null
@@ -20,15 +24,23 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
         </code>,
       )
     } else {
-      const linkMatch = token.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/)
+      const linkMatch = token.match(/^\[([^\]]+)\]\(((?:https?:\/\/|casa:\/\/event\/)[^)\s]+)\)$/)
       if (linkMatch) {
+        const href = linkMatch[2]
+        const isCasaEventLink = href.startsWith('casa://event/')
         nodes.push(
           <a
             key={`${keyPrefix}-a-${tokenIndex}`}
-            href={linkMatch[2]}
-            target="_blank"
-            rel="noreferrer"
+            href={href}
+            target={isCasaEventLink ? undefined : '_blank'}
+            rel={isCasaEventLink ? undefined : 'noreferrer'}
             className="text-casa-gold underline underline-offset-2"
+            onClick={isCasaEventLink
+              ? (event) => {
+                  event.preventDefault()
+                  onLinkClick?.(href)
+                }
+              : undefined}
           >
             {linkMatch[1]}
           </a>,
@@ -56,7 +68,15 @@ function isMarkdownTableSeparator(line: string, columns: number): boolean {
   return cells.every((cell) => /^:?-{3,}:?$/.test(cell))
 }
 
-export default function MarkdownContent({ content, className }: { content: string; className?: string }) {
+export default function MarkdownContent({
+  content,
+  className,
+  onLinkClick,
+}: {
+  content: string
+  className?: string
+  onLinkClick?: (href: string) => void
+}) {
   const lines = content.replace(/\r\n/g, '\n').trim().split('\n')
   const blocks: ReactNode[] = []
   let index = 0
@@ -68,7 +88,7 @@ export default function MarkdownContent({ content, className }: { content: strin
     if (text) {
       blocks.push(
         <p key={`p-${blocks.length}`} className="whitespace-pre-wrap">
-          {renderInlineMarkdown(text, `p-${blocks.length}`)}
+          {renderInlineMarkdown(text, `p-${blocks.length}`, onLinkClick)}
         </p>,
       )
     }
@@ -106,7 +126,7 @@ export default function MarkdownContent({ content, className }: { content: strin
       flushParagraph()
       blocks.push(
         <p key={`h-${blocks.length}`} className="font-semibold text-casa-navy">
-          {renderInlineMarkdown(headingMatch[2], `h-${blocks.length}`)}
+        {renderInlineMarkdown(headingMatch[2], `h-${blocks.length}`, onLinkClick)}
         </p>,
       )
       index += 1
@@ -134,7 +154,7 @@ export default function MarkdownContent({ content, className }: { content: strin
                 <tr>
                   {headerCells.map((cell, cellIndex) => (
                     <th key={`th-${cellIndex}`} className="px-2 py-1 text-left border-b border-casa-border font-semibold text-casa-navy">
-                      {renderInlineMarkdown(cell, `th-${blocks.length}-${cellIndex}`)}
+                      {renderInlineMarkdown(cell, `th-${blocks.length}-${cellIndex}`, onLinkClick)}
                     </th>
                   ))}
                 </tr>
@@ -144,7 +164,7 @@ export default function MarkdownContent({ content, className }: { content: strin
                   <tr key={`tr-${rowIndex}`} className="border-b last:border-b-0 border-casa-border">
                     {row.map((cell, cellIndex) => (
                       <td key={`td-${rowIndex}-${cellIndex}`} className="px-2 py-1 align-top">
-                        {renderInlineMarkdown(cell, `td-${blocks.length}-${rowIndex}-${cellIndex}`)}
+                        {renderInlineMarkdown(cell, `td-${blocks.length}-${rowIndex}-${cellIndex}`, onLinkClick)}
                       </td>
                     ))}
                   </tr>
@@ -167,7 +187,7 @@ export default function MarkdownContent({ content, className }: { content: strin
       blocks.push(
         <ul key={`ul-${blocks.length}`} className="list-disc pl-5 space-y-1">
           {items.map((item, itemIndex) => (
-            <li key={`ul-${blocks.length}-${itemIndex}`}>{renderInlineMarkdown(item, `ul-${blocks.length}-${itemIndex}`)}</li>
+          <li key={`ul-${blocks.length}-${itemIndex}`}>{renderInlineMarkdown(item, `ul-${blocks.length}-${itemIndex}`, onLinkClick)}</li>
           ))}
         </ul>,
       )
@@ -184,7 +204,7 @@ export default function MarkdownContent({ content, className }: { content: strin
       blocks.push(
         <ol key={`ol-${blocks.length}`} className="list-decimal pl-5 space-y-1">
           {items.map((item, itemIndex) => (
-            <li key={`ol-${blocks.length}-${itemIndex}`}>{renderInlineMarkdown(item, `ol-${blocks.length}-${itemIndex}`)}</li>
+          <li key={`ol-${blocks.length}-${itemIndex}`}>{renderInlineMarkdown(item, `ol-${blocks.length}-${itemIndex}`, onLinkClick)}</li>
           ))}
         </ol>,
       )

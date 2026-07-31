@@ -17,6 +17,7 @@ import QuickCreateSheet from './components/shared/QuickCreateSheet'
 import AddEventFab from './components/shared/AddEventFab'
 import TouchKeyboard from './components/shared/TouchKeyboard'
 import { useRollingEvents } from './hooks/useCalendarEvents'
+import type { EventWithDetails } from './hooks/useCalendarEvents'
 import { useFamilyMembers } from './hooks/useFamilyMembers'
 import { Button } from './components/ui'
 import { useHomeWeather } from './hooks/useHomeWeather'
@@ -24,6 +25,7 @@ import { useLiveClock } from './hooks/useLiveClock'
 import { useWakeWord } from './hooks/useWakeWord'
 import { useIdleTimer } from './hooks/useIdleTimer'
 import { useScreensaverSettings } from './hooks/useScreensaverSettings'
+import EventDetailPanel from './components/calendar/EventDetailPanel'
 
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
 const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
@@ -93,6 +95,7 @@ function GlobalAIDrawer({
   safeMode,
   routePath,
   wakeWordEnabled,
+  onOpenEventDetails,
 }: {
   screensaverActive: boolean
   open: boolean
@@ -100,6 +103,7 @@ function GlobalAIDrawer({
   safeMode: boolean
   routePath: string
   wakeWordEnabled: boolean
+  onOpenEventDetails: (event: EventWithDetails) => void
 }) {
   const [anchor, setAnchor] = useState<{ right: number; top: number } | undefined>()
   const [launchContext, setLaunchContext] = useState<AIDrawerLaunchContext | undefined>()
@@ -158,6 +162,7 @@ function GlobalAIDrawer({
       homeCity={weather?.city}
       onSleepCommand={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
       launchContext={launchContext}
+      onOpenEventDetails={onOpenEventDetails}
     />
   )
 }
@@ -177,6 +182,7 @@ function AppShell() {
   const [screensaverActive, setScreensaverActive] = useState(false)
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
+  const [selectedDrawerEvent, setSelectedDrawerEvent] = useState<EventWithDetails | null>(null)
   const location = useLocation()
   // Grocery page has its own dedicated FAB for adding items.
   const hideFab = location.pathname.startsWith('/settings') || location.pathname.startsWith('/grocery') || screensaverActive
@@ -209,6 +215,12 @@ function AppShell() {
       body: JSON.stringify({ score: settings.wakeWordSensitivity }),
     }).catch(() => {})
   }, [settings.wakeWordSensitivity])
+
+  const openEventDetailsFromAssistant = (event: EventWithDetails) => {
+    document.dispatchEvent(new CustomEvent('casa:close-event-details'))
+    setAiDrawerOpen(false)
+    setSelectedDrawerEvent(event)
+  }
 
   return (
     <div className="app-shell flex flex-col overflow-hidden bg-casa-bg">
@@ -244,6 +256,12 @@ function AppShell() {
         safeMode={IS_SAFE_MODE}
         routePath={location.pathname}
         wakeWordEnabled={settings.wakeWordEnabled}
+        onOpenEventDetails={openEventDetailsFromAssistant}
+      />
+
+      <EventDetailPanel
+        event={selectedDrawerEvent}
+        onClose={() => setSelectedDrawerEvent(null)}
       />
 
       {/* Art screensaver overlay — always available when triggered manually; idle auto-fire respects settings.enabled */}

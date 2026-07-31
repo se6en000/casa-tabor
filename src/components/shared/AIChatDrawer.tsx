@@ -22,6 +22,7 @@ import { formatTextForMarkdown } from '../../lib/assistantMarkdown.mjs'
 import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId } from '../../lib/assistantTelemetry'
 import { classifyPendingConfirmation } from '../../lib/assistantConfirmation.mjs'
 import { conversationStateAfterCalendarAction } from '../../lib/assistantConversationState.mjs'
+import { linkAssistantEventMentions, parseAssistantEventHref } from '../../lib/assistantEventLinks'
 import { buildCreatePreviewCopy, buildDeleteManyPreviewCopy, buildDeletePreviewCopy, buildUpdatePreviewCopy } from '../../utils/aiConfirmPreview'
 
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
@@ -59,11 +60,24 @@ interface Props {
   homeCity?: string
   onSleepCommand?: () => void
   focusedEvent?: EventWithDetails
+  onOpenEventDetails?: (event: EventWithDetails) => void
 }
 
 const SLEEP_PHRASES = /\b(sleep|goodnight|good night|art mode|screen saver|screensaver|night mode)\b/i
 
-export default function AIChatDrawer({ open, onClose, anchor, page, launchContext, events, family, homeCity, onSleepCommand, focusedEvent }: Props) {
+export default function AIChatDrawer({
+  open,
+  onClose,
+  anchor,
+  page,
+  launchContext,
+  events,
+  family,
+  homeCity,
+  onSleepCommand,
+  focusedEvent,
+  onOpenEventDetails,
+}: Props) {
   const [input, setInput] = useState('')
   const [voiceTranscript, setVoiceTranscript] = useState<VoiceTranscriptRevision>({
     committed: '',
@@ -153,6 +167,10 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
     () => buildDynamicSuggestions(page, events, new Date()),
     [page, events],
   )
+  const eventById = useMemo(
+    () => new Map(events.map((event) => [event.id, event])),
+    [events],
+  )
 
   const pendingVoiceActionRef = useRef<PendingVoiceAction | null>(null)
   const pendingLowConfidenceRef = useRef<{ transcript: string; confidence: number } | null>(null)
@@ -184,6 +202,13 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
       idleAutoCloseTimerRef.current = null
     }
   }, [])
+
+  const handleOpenEventDetails = useCallback((eventId: string) => {
+    const event = eventById.get(eventId)
+    if (!event) return
+    onClose()
+    onOpenEventDetails?.(event)
+  }, [eventById, onClose, onOpenEventDetails])
 
   const markUserInteraction = useCallback(() => {
     hadUserInteractionRef.current = true
@@ -968,6 +993,7 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
                   msg={msg}
                   isActivePending={msg.id === activePendingToolMessageId}
                   events={events}
+                  onOpenEventDetails={handleOpenEventDetails}
                   enableQuickSaveRecipe={page === 'cook' || launchContext?.agent === 'chef'}
                   editSeed={messages.slice(0, messageIndex).findLast((message) => message.role === 'user')?.content ?? ''}
                   onQuickSaveRecipe={quickSaveRecipeSuggestion}
@@ -1322,12 +1348,13 @@ export default function AIChatDrawer({ open, onClose, anchor, page, launchContex
 
 /* ── Message Bubble ─────────────────────────────────────────── */
 
-function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, events, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onEditMessage }: {
+function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, events, onOpenEventDetails, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onEditMessage }: {
   msg: AIMessage
   isActivePending: boolean
   enableQuickSaveRecipe?: boolean
   editSeed?: string
   events: EventWithDetails[]
+  onOpenEventDetails?: (eventId: string) => void
   onQuickSaveRecipe?: (recipeMessage: string) => Promise<void>
   onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<boolean>
   onUndoToolAction: (messageId: string, actionId: string) => Promise<void>
@@ -1348,6 +1375,12 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
   // A plain user text message can be tapped to edit + resend (no images / tool actions).
   const canEdit = isUser && !ta && !msg.imageDataUrl && Boolean(onEditMessage) && msg.content !== '(see attached image)' && Boolean(msg.content?.trim())
   const isStaleError = !!ta?.errorMsg && ta.errorMsg.toLowerCase().includes('changed since')
+  const preferredEventId = msg.conversationState?.activeEntityType === 'event'
+    ? msg.conversationState.activeEventId
+    : ta?.resultEventId
+  const assistantContent = !isUser && !ta
+    ? formatTextForMarkdown(linkAssistantEventMentions(msg.content, events, { preferredEventId }))
+    : null
   const isDestructiveAction =
     ta?.tool === 'delete_event' ||
     ta?.tool === 'delete_events_by_title' ||
@@ -1393,7 +1426,16 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
         {!ta && msg.content !== '(see attached image)' && msg.content && (
           isUser
             ? <p className="whitespace-pre-wrap">{msg.content}</p>
-            : <MarkdownContent content={formatTextForMarkdown(msg.content)} />
+            : (
+              <MarkdownContent
+                content={assistantContent ?? formatTextForMarkdown(msg.content)}
+                onLinkClick={(href) => {
+                  const eventId = parseAssistantEventHref(href)
+                  if (!eventId) return
+                  onOpenEventDetails?.(eventId)
+                }}
+              />
+            )
         )}
         {msg.streaming && (
           <span className="inline-flex items-center gap-1 align-middle" aria-hidden="true">
@@ -1439,7 +1481,17 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                     : 'Done ✓'}
                 </div>
                 {ta.tool === 'create_event' && ta.resultEventId && (
-                  <p className="text-caption text-casa-muted">Visible on your calendar now</p>
+                  <div className="space-y-1">
+                    <p className="text-caption text-casa-muted">Visible on your calendar now</p>
+                    <Button
+                      variant="ghost"
+                      type="button"
+                      onClick={() => onOpenEventDetails?.(ta.resultEventId!)}
+                      className="min-h-11 px-0 text-caption font-semibold text-casa-gold underline underline-offset-2 hover:text-casa-navy"
+                    >
+                      Open appointment details
+                    </Button>
+                  </div>
                 )}
                 {ta.tool === 'create_recipe' && (
                   <p className="text-caption text-casa-muted">Visible in Cook → Recipe library now</p>
