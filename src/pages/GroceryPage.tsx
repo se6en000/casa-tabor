@@ -737,6 +737,7 @@ export default function GroceryPage() {
   const [reviewingItemId, setReviewingItemId] = useState<string | null>(null)
   const [spotlightedItemId, setSpotlightedItemId] = useState<string | null>(null)
   const [analysisNow, setAnalysisNow] = useState(() => Date.now())
+  const [hiddenSmartPickNames, setHiddenSmartPickNames] = useState<Set<string>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
   const recipeFileInputRef = useRef<HTMLInputElement>(null)
   const recipeCameraInputRef = useRef<HTMLInputElement>(null)
@@ -928,6 +929,19 @@ export default function GroceryPage() {
       .slice(0, 10)
   }, [analysisNow, predictiveMap])
 
+  const weeklySmartPickCandidates = useMemo(() => {
+    const combined = [...weeklyAutoListCandidates, ...smartPickSuggestions]
+    const seen = new Set<string>()
+    const visible: Array<{ name: string; category: string; count: number; lastAt: number }> = []
+    for (const entry of combined) {
+      const normalized = normalizeItemName(entry.name)
+      if (!normalized || seen.has(normalized) || hiddenSmartPickNames.has(normalized)) continue
+      seen.add(normalized)
+      visible.push(entry)
+    }
+    return visible
+  }, [hiddenSmartPickNames, smartPickSuggestions, weeklyAutoListCandidates])
+
   const mealPlanSlotsByRecipe = useMemo(() => {
     const byRecipe = new Map<string, Set<RecipeMealPlanSlot>>()
     for (const plan of recipeMealPlans) {
@@ -1021,10 +1035,20 @@ export default function GroceryPage() {
   }
 
   const handleGenerateWeeklyList = useCallback(() => {
-    for (const candidate of weeklyAutoListCandidates) {
+    for (const candidate of weeklySmartPickCandidates) {
       addItemByName(candidate.name, { spotlightOnDuplicate: false, clearInput: false })
     }
-  }, [addItemByName, weeklyAutoListCandidates])
+  }, [addItemByName, weeklySmartPickCandidates])
+
+  const handleHideSmartPick = useCallback((name: string) => {
+    const normalized = normalizeItemName(name)
+    if (!normalized) return
+    setHiddenSmartPickNames((current) => {
+      const next = new Set(current)
+      next.add(normalized)
+      return next
+    })
+  }, [])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -2043,8 +2067,7 @@ export default function GroceryPage() {
     items: sortItemsForShopping(items.filter(i => i.category === cat.key && i.checked && !visibleDismissIds.has(i.id))),
   })).filter(cat => cat.items.length > 0)
   const hasSmartPicks = (
-    smartPickSuggestions.length > 0
-    || weeklyAutoListCandidates.length > 0
+    weeklySmartPickCandidates.length > 0
     || pantryDepletionPredictions.length > 0
     || activePredictionDeferralCount > 0
   )
@@ -2058,8 +2081,6 @@ export default function GroceryPage() {
     : lastSyncTimeLabel
       ? `Updated ${lastSyncTimeLabel}`
       : 'Loading…'
-  const weeklyHeroPreviewItems = weeklyAutoListCandidates.slice(0, 7)
-  const weeklyHeroOverflowCount = Math.max(0, weeklyAutoListCandidates.length - weeklyHeroPreviewItems.length)
   const reviewingItem = reviewingItemId
     ? items.find((item) => item.id === reviewingItemId) ?? null
     : null
@@ -2422,7 +2443,7 @@ export default function GroceryPage() {
             <div className="pt-3 pb-6">
               {hasSmartPicks ? (
                 <div className="mt-2 space-y-3">
-                  {weeklyAutoListCandidates.length > 0 && (
+                  {weeklySmartPickCandidates.length > 0 && (
                     <Card padding="md" tone="accent" className="overflow-hidden sm:px-5">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="pr-1">
@@ -2431,27 +2452,49 @@ export default function GroceryPage() {
                             Auto weekly list
                           </Text>
                           <Heading role="display-sm" className="mt-1">Your usual week, ready to add</Heading>
-                          <Text role="body-sm" muted className="mt-1">Built from your last 30 days of repeat buys.</Text>
+                          <Text role="body-sm" muted className="mt-1">Combined from your repeat buys and regular restocks.</Text>
                         </div>
                         <Button
                           variant="strong"
                           size="sm"
                           onClick={handleGenerateWeeklyList}
                         >
-                          Add all {weeklyAutoListCandidates.length} →
+                          Add all {weeklySmartPickCandidates.length} →
                         </Button>
                       </div>
-                      <div className="mt-3 hidden flex-wrap gap-2 md:flex">
-                        {weeklyHeroPreviewItems.map((item) => (
-                          <Chip key={`weekly-${item.name}`} tone="accent">
-                            {item.name}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {weeklySmartPickCandidates.map((item) => (
+                          <Chip
+                            key={`weekly-smart-${item.name}`}
+                            tone="accent"
+                            onClick={() => addItemByName(item.name, { spotlightOnDuplicate: true, clearInput: true })}
+                            icon={<Plus size={13} className="text-casa-gold" />}
+                          >
+                            <span className="inline-flex items-center gap-1.5">
+                              <span>{item.name}</span>
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                aria-label={`Remove ${item.name} from weekly picks`}
+                                className="inline-flex h-4 w-4 items-center justify-center rounded-full text-casa-muted transition hover:bg-casa-bg/30 hover:text-casa-text"
+                                onClick={(event) => {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  handleHideSmartPick(item.name)
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    handleHideSmartPick(item.name)
+                                  }
+                                }}
+                              >
+                                <X size={11} />
+                              </span>
+                            </span>
                           </Chip>
                         ))}
-                        {weeklyHeroOverflowCount > 0 && (
-                          <Chip tone="accent">
-                            + {weeklyHeroOverflowCount} more
-                          </Chip>
-                        )}
                       </div>
                     </Card>
                   )}
@@ -2544,29 +2587,12 @@ export default function GroceryPage() {
                     </Card>
                   )}
 
-                  {smartPickSuggestions.length > 0 && (
-                    <Card padding="md" tone="surface">
-                      <Text role="caption" muted className="mb-2 font-bold uppercase tracking-[0.14em]">Your regulars</Text>
-                      <div className="flex flex-wrap gap-2">
-                        {smartPickSuggestions.map((item) => (
-                          <Chip
-                            key={`smartpick-${item.name}`}
-                            tone="neutral"
-                            onClick={() => addItemByName(item.name, { spotlightOnDuplicate: true, clearInput: true })}
-                            icon={<Plus size={13} className="text-casa-gold" />}
-                          >
-                            {item.name}
-                          </Chip>
-                        ))}
-                      </div>
-                    </Card>
-                  )}
                 </div>
               ) : (
                 <div className="mt-2 rounded-2xl border border-casa-border bg-casa-surface p-6 text-center">
                   <p className="text-body font-semibold text-casa-text">No smart picks yet</p>
                   <p className="mt-1 text-body-sm text-casa-muted">
-                    Keep checking items off — regulars you buy 2 or more times will appear here.
+                    Keep checking items off — weekly picks will appear here.
                   </p>
                 </div>
               )}
