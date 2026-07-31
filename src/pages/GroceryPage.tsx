@@ -49,11 +49,13 @@ const QUICK_ADD_TOUCH_ITEMS = ['Milk', 'Eggs', 'Bread', 'Bananas', 'Chicken', 'C
 const CHECKED_ITEM_DISMISS_MS = 3_000
 const CHECKED_ITEM_EXIT_ANIMATION_MS = 320
 const LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.82
-const SMART_BUNDLES: Array<{ name: string; items: string[] }> = [
-  { name: 'Taco Night', items: ['Ground Beef', 'Tortillas', 'Cheddar Cheese', 'Salsa', 'Lettuce'] },
-  { name: 'Breakfast Restock', items: ['Eggs', 'Milk', 'Bread', 'Bananas', 'Coffee'] },
-  { name: 'Pasta Dinner', items: ['Pasta', 'Marinara Sauce', 'Parmesan', 'Garlic Bread'] },
-]
+function smartPickRecencyMultiplier(daysSince: number): number {
+  if (daysSince <= 7) return 0.5   // bought very recently — probably still in stock
+  if (daysSince <= 30) return 1.0  // sweet spot: likely due for a restock
+  if (daysSince <= 60) return 0.75
+  if (daysSince <= 90) return 0.5
+  return 0.2
+}
 const STORE_SECTION_ORDER: Record<string, number> = {
   'Produce': 10,
   'Bakery': 20,
@@ -838,14 +840,16 @@ export default function GroceryPage() {
     return selected
   }, [activeNameSet, pantryLikelyOwnedNames])
 
-  const predictiveSuggestions = Array.from(predictiveMap.values())
-    .filter((entry) => entry.count >= 2)
-    .sort((a, b) => b.count - a.count || b.lastAt - a.lastAt)
-    .slice(0, 6)
-
-  const smartRebuySuggestions = Array.from(predictiveMap.values())
-    .sort((a, b) => b.lastAt - a.lastAt)
-    .slice(0, 6)
+  const smartPickSuggestions = useMemo(() => {
+    return Array.from(predictiveMap.values())
+      .filter((entry) => entry.count >= 2)
+      .map((entry) => {
+        const daysSince = (analysisNow - entry.lastAt) / (24 * 60 * 60 * 1000)
+        return { ...entry, score: entry.count * smartPickRecencyMultiplier(daysSince) }
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8)
+  }, [analysisNow, predictiveMap])
 
   const pantryDepletionPredictions = useMemo(() => {
     const dayMs = 24 * 60 * 60 * 1000
@@ -1015,24 +1019,6 @@ export default function GroceryPage() {
   const handleQuickAdd = (name: string) => {
     addItemByName(name, { spotlightOnDuplicate: true, clearInput: true })
   }
-
-  const handleAddBundle = useCallback((bundleItems: string[]) => {
-    let addedAny = false
-    for (const bundleItem of bundleItems) {
-      const trimmed = bundleItem.trim()
-      if (!trimmed) continue
-      const existing = findMergeSuggestion(trimmed)
-      if (existing) continue
-      addItemByName(trimmed, { spotlightOnDuplicate: false, clearInput: false })
-      addedAny = true
-    }
-    if (!addedAny) {
-      const firstExisting = bundleItems
-        .map((bundleItem) => findMergeSuggestion(bundleItem))
-        .find((value): value is GroceryItem => Boolean(value))
-      if (firstExisting) spotlightItem(firstExisting.id)
-    }
-  }, [addItemByName, findMergeSuggestion, spotlightItem])
 
   const handleGenerateWeeklyList = useCallback(() => {
     for (const candidate of weeklyAutoListCandidates) {
@@ -2057,9 +2043,7 @@ export default function GroceryPage() {
     items: sortItemsForShopping(items.filter(i => i.category === cat.key && i.checked && !visibleDismissIds.has(i.id))),
   })).filter(cat => cat.items.length > 0)
   const hasSmartPicks = (
-    predictiveSuggestions.length > 0
-    || smartRebuySuggestions.length > 0
-    || SMART_BUNDLES.length > 0
+    smartPickSuggestions.length > 0
     || weeklyAutoListCandidates.length > 0
     || pantryDepletionPredictions.length > 0
     || activePredictionDeferralCount > 0
@@ -2560,62 +2544,21 @@ export default function GroceryPage() {
                     </Card>
                   )}
 
-                  {(predictiveSuggestions.length > 0 || smartRebuySuggestions.length > 0 || SMART_BUNDLES.length > 0) && (
+                  {smartPickSuggestions.length > 0 && (
                     <Card padding="md" tone="surface">
-                      {predictiveSuggestions.length > 0 && (
-                        <div className="mb-4">
-                          <Text role="caption" muted className="mb-2 font-bold uppercase tracking-[0.14em]">Likely next adds</Text>
-                          <div className="flex flex-wrap gap-2">
-                            {predictiveSuggestions.map((item) => (
-                              <Chip
-                                key={`predictive-${item.name}`}
-                                tone="neutral"
-                                onClick={() => addItemByName(item.name, { spotlightOnDuplicate: true, clearInput: true })}
-                                icon={<Plus size={13} className="text-casa-gold" />}
-                              >
-                                {item.name}
-                              </Chip>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {smartRebuySuggestions.length > 0 && (
-                        <div className="mb-4">
-                          <Text role="caption" muted className="mb-2 font-bold uppercase tracking-[0.14em]">Rebuy from your history</Text>
-                          <div className="flex flex-wrap gap-2">
-                            {smartRebuySuggestions.map((item) => (
-                              <Chip
-                                key={`rebuy-${item.name}`}
-                                tone="neutral"
-                                onClick={() => addItemByName(item.name, { spotlightOnDuplicate: true, clearInput: true })}
-                                icon={<Plus size={13} className="text-casa-gold" />}
-                              >
-                                {item.name}
-                              </Chip>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {SMART_BUNDLES.length > 0 && (
-                        <div>
-                          <Text role="caption" muted className="mb-2 font-bold uppercase tracking-[0.14em]">1-tap bundles</Text>
-                          <div className="flex flex-wrap gap-2">
-                            {SMART_BUNDLES.map((bundle) => (
-                              <Chip
-                                key={bundle.name}
-                                tone="accent"
-                                onClick={() => handleAddBundle(bundle.items)}
-                                icon={<Plus size={13} />}
-                              >
-                                {bundle.name}
-                                <span className="ml-1.5 opacity-65">· {bundle.items.length}</span>
-                              </Chip>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      <Text role="caption" muted className="mb-2 font-bold uppercase tracking-[0.14em]">Your regulars</Text>
+                      <div className="flex flex-wrap gap-2">
+                        {smartPickSuggestions.map((item) => (
+                          <Chip
+                            key={`smartpick-${item.name}`}
+                            tone="neutral"
+                            onClick={() => addItemByName(item.name, { spotlightOnDuplicate: true, clearInput: true })}
+                            icon={<Plus size={13} className="text-casa-gold" />}
+                          >
+                            {item.name}
+                          </Chip>
+                        ))}
+                      </div>
                     </Card>
                   )}
                 </div>
@@ -2623,7 +2566,7 @@ export default function GroceryPage() {
                 <div className="mt-2 rounded-2xl border border-casa-border bg-casa-surface p-6 text-center">
                   <p className="text-body font-semibold text-casa-text">No smart picks yet</p>
                   <p className="mt-1 text-body-sm text-casa-muted">
-                    Keep checking items off and syncing — predictions, rebuys, and bundles will appear here.
+                    Keep checking items off — regulars you buy 2 or more times will appear here.
                   </p>
                 </div>
               )}
