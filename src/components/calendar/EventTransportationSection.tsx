@@ -868,7 +868,7 @@ export default function EventTransportationSection({
                   ? 'Casa is preparing the round trip'
                   : noRouteReason === 'trip'
                     ? 'No local driving route attached'
-                    : 'No driving logistics needed'}
+                    : 'No driving plan configured yet'}
               </p>
             </div>
             <div className="flex items-center gap-4 px-[18px] py-4">
@@ -881,7 +881,7 @@ export default function EventTransportationSection({
                     ? 'The driver, outbound leg, return leg, and waiting plan will appear here.'
                     : noRouteReason === 'trip'
                       ? 'Flights and destination trips stay truthful until someone adds the local driving that actually needs coordination.'
-                      : 'The event location stays visible without assigning a trip.'}
+                      : 'The destination is ready below. Add only the driving that needs coordination for this event.'}
                 </p>
               </div>
               <Button variant="secondary" size="sm" onClick={openEditor}>

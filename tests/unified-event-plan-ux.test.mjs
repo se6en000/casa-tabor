@@ -61,6 +61,14 @@ test('explicit transportation uses the navy The Plan command-center presentation
   assert.doesNotMatch(detail, /<PlanBlock/)
 })
 
+test('addressed non-reminder events still expose The Plan even when they are not travel-kind', () => {
+  assert.match(detail, /const showTransportationSection = hasDestination \|\| Boolean\(transportationPlan\)/)
+  assert.match(detail, /!reminder && showTransportationSection/)
+  assert.match(detail, /transportationNeeded=\{showTransportationSection\}/)
+  assert.match(transportation, /No driving plan configured yet/)
+  assert.match(transportation, /Add only the driving that needs coordination for this event\./)
+})
+
 test('transportation passengers use touch chips and synchronize with event attendees', () => {
   assert.match(transportation, /<PassengerChipSelector/)
   assert.match(passengerChips, /<Chip/)
