@@ -1281,6 +1281,7 @@ function StandardPanelBody({
   const mode = modeOverride ?? inferEventMode(event)
   const planKind = inferEventPlanKind(event, mode)
   const hasDestination = Boolean(event.location_name || event.address)
+  const showTransportationSection = hasDestination || Boolean(transportationPlan)
   const showLocation = hasDestination || mode === 'hosted'
   const showSuggestedTravel = planKind === 'travel' && !transportationPlan
   const hasChecklist = event.checklist?.length > 0
@@ -1433,7 +1434,7 @@ function StandardPanelBody({
         </section>
       )}
 
-      {!reminder && (transportationPlan || planKind === 'travel') && (
+      {!reminder && showTransportationSection && (
         <EventTransportationSection
           event={event}
           plan={transportationPlan}
@@ -1462,7 +1463,7 @@ function StandardPanelBody({
             contactPhone={shows('contact_phone') || hasText(enr?.contact_phone) ? enr?.contact_phone : null}
             weatherAtVenue={weatherAtVenue}
             mode={mode}
-            transportationNeeded={Boolean(transportationPlan) || planKind === 'travel'}
+            transportationNeeded={showTransportationSection}
             accent={eventAccentColor(event)}
           />
         </section>
