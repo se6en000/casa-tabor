@@ -154,12 +154,12 @@ export default function EventEditSheet(props: Props) {
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 32, stiffness: 260 }}
-        className="fixed bottom-0 left-0 right-0 z-modal flex h-[90vh] flex-col overflow-hidden rounded-t-modal bg-casa-surface shadow-modal sm:bottom-8 sm:left-1/2 sm:h-[85vh] sm:w-full sm:max-w-2xl sm:-translate-x-1/2 sm:rounded-modal"
+        className="fixed bottom-0 left-0 right-0 z-modal flex h-[90vh] flex-col overflow-hidden rounded-t-modal bg-casa-bg-2 shadow-modal sm:bottom-8 sm:left-1/2 sm:h-[85vh] sm:w-full sm:max-w-2xl sm:-translate-x-1/2 sm:rounded-modal"
         role="dialog"
         aria-modal="true"
         aria-label={`Loading event editor: ${props.event.title}`}
       >
-        <div className="flex items-center justify-between border-b border-casa-border px-6 py-4">
+        <div className="flex items-center justify-between border-b border-casa-border bg-casa-surface px-6 py-4">
           <h3 className="font-display text-display-sm text-casa-navy">Edit Details</h3>
           <IconButton icon={<X size={18} />} aria-label="Close editor" onClick={props.onClose} />
         </div>
@@ -1190,18 +1190,17 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 32, stiffness: 260 }}
-            className="fixed bottom-0 left-0 right-0 z-modal bg-casa-surface rounded-t-modal shadow-modal flex flex-col h-[90vh] overflow-hidden sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-2xl sm:rounded-modal sm:bottom-8 sm:h-[85vh]"
+            className="fixed bottom-0 left-0 right-0 z-modal flex h-[90vh] flex-col overflow-hidden rounded-t-modal bg-casa-bg-2 shadow-modal sm:bottom-8 sm:left-1/2 sm:h-[85vh] sm:w-full sm:max-w-2xl sm:-translate-x-1/2 sm:rounded-modal"
             onClick={e => e.stopPropagation()}
           >
             {/* Drag handle */}
-            <div className="flex justify-center pt-3 pb-1 shrink-0">
+            <div className="flex shrink-0 justify-center bg-casa-surface pb-1 pt-3">
               <div className="w-10 h-1 rounded-full bg-casa-border" />
             </div>
 
             {/* Header */}
-            <div className="px-6 py-4 shrink-0 border-b border-casa-border">
-              {/* Title row: label + save/close */}
-              <div className="flex items-center justify-between mb-2">
+            <div className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-casa-border bg-casa-surface px-6">
+              <div className="flex min-w-0 items-center gap-2">
                 <div className="flex items-center gap-2">
                   <h3 className="font-display text-display-sm text-casa-navy leading-tight">Edit Details</h3>
                   {isInstance && (
@@ -1210,50 +1209,41 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
                     </Chip>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <Button
-                    onClick={handleSave}
-                    loading={isSaving}
-                    disabled={recurringContextLoading}
-                    size="sm"
-                    leadingIcon={<Save size={14} />}
-                  >
-                    {saveStatus === 'slow' && isSaving ? 'Waking…' : 'Save'}
-                  </Button>
-                  <IconButton icon={<X size={18} />} aria-label="Close event editor" onClick={handleClose} size="sm" />
-                </div>
               </div>
-              {/* Full-width touch-friendly title input */}
-              <Input
-                ref={titleRef}
-                value={displayTitle}
-                onChange={e => { setDisplayTitle(e.target.value); markDirty() }}
-                className="font-display text-heading"
-                placeholder="Event title…"
-                style={{ touchAction: 'manipulation' }}
-              />
-              <p className="mt-2 truncate text-body-sm text-casa-muted">
-                {scheduleSummary}{location ? ` · ${location}` : ''}
-              </p>
-              {recurringContextLoading && (
-                <p className="mt-2 text-caption text-casa-muted">Loading recurring series details…</p>
-              )}
-              {recurringEditorEnabled && recurringContext && (
-                <p className="mt-2 text-caption text-content-secondary">
-                  {recurringContext.exception_paths.length > 0
-                    ? `${recurringContext.exception_paths.length} field group${recurringContext.exception_paths.length === 1 ? '' : 's'} changed only for this event; other details inherit from the series.`
-                    : 'This event currently inherits all editable details from the series.'}
-                </p>
-              )}
-              {saveError && !showScopeModal && (
-                <div className="mt-3">
-                  <Alert tone="danger" title="Could not save changes">{saveError}</Alert>
-                </div>
-              )}
+              <IconButton icon={<X size={18} />} aria-label="Close event editor" onClick={handleClose} size="sm" />
             </div>
 
             {/* Form */}
-            <BounceScroll className="flex-1 min-h-0">
+            <BounceScroll className="flex-1 min-h-0 bg-casa-bg-2">
+              <section className="mx-5 mt-5 rounded-card border border-casa-border/70 bg-casa-bg p-4" aria-label="Event identity">
+                <Input
+                  ref={titleRef}
+                  value={displayTitle}
+                  onChange={e => { setDisplayTitle(e.target.value); markDirty() }}
+                  aria-label="Event title"
+                  className="min-h-0 border-transparent bg-transparent px-0 py-0 font-display text-heading focus-visible:border-casa-gold focus-visible:bg-casa-surface focus-visible:px-2 focus-visible:py-1"
+                  placeholder="Event title…"
+                  style={{ touchAction: 'manipulation' }}
+                />
+                <p className="mt-2 truncate text-body-sm text-casa-muted">
+                  {scheduleSummary}{location ? ` · ${location}` : ''}
+                </p>
+                {recurringContextLoading && (
+                  <p className="mt-2 text-caption text-casa-muted">Loading recurring series details…</p>
+                )}
+                {recurringEditorEnabled && recurringContext && (
+                  <p className="mt-2 text-caption text-content-secondary">
+                    {recurringContext.exception_paths.length > 0
+                      ? `${recurringContext.exception_paths.length} field group${recurringContext.exception_paths.length === 1 ? '' : 's'} changed only for this event; other details inherit from the series.`
+                      : 'This event currently inherits all editable details from the series.'}
+                  </p>
+                )}
+                {saveError && !showScopeModal && (
+                  <div className="mt-3">
+                    <Alert tone="danger" title="Could not save changes">{saveError}</Alert>
+                  </div>
+                )}
+              </section>
 
               {/* ── Event Type Toggle + Delete ── */}
               <div className="px-6 pt-5 pb-4 border-b border-casa-divider">
@@ -1702,7 +1692,19 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
               </DisclosureSection>
             </BounceScroll>
 
-            {/* Footer removed — Save and Close are in the top bar */}
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-casa-border bg-casa-surface px-5 py-3 sm:flex-row sm:justify-end">
+              <Button variant="secondary" onClick={handleClose} disabled={isSaving}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSave}
+                loading={isSaving}
+                disabled={recurringContextLoading}
+                leadingIcon={<Save size={14} />}
+              >
+                {saveStatus === 'slow' && isSaving ? 'Waking…' : 'Save changes'}
+              </Button>
+            </div>
           </motion.div>
 
           <RecurrenceScopeDialog

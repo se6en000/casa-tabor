@@ -89,12 +89,12 @@ export function Sheet({
             style={panelStyle}
           >
             {showHandle && side === 'bottom' && (
-              <div className="flex shrink-0 justify-center pb-1 pt-3" aria-hidden="true">
+              <div className="flex shrink-0 justify-center bg-casa-surface pb-1 pt-3" aria-hidden="true">
                 <div className="h-1 w-10 rounded-pill bg-casa-border" />
               </div>
             )}
             {showHeader && (
-              <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3 border-b border-casa-border flex-shrink-0">
+              <div className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-casa-border bg-casa-surface px-5">
                 <h3 id={titleId} className="font-display text-heading text-content-heading">{title}</h3>
                 <IconButton icon={<X size={20} />} aria-label="Close" size="sm" variant="ghost" onClick={onClose} />
               </div>

@@ -455,6 +455,7 @@ const CATEGORY_FIELDS: Record<string, string[]> = {
   school:           ['what_to_bring', 'contact_name', 'contact_phone', 'parking_notes', 'prep_notes'],
   medical:          ['contact_name', 'contact_phone', 'cost_estimate', 'what_to_bring', 'dietary_notes', 'prep_notes'],
   appointment:      ['contact_name', 'contact_phone', 'cost_estimate', 'parking_notes', 'prep_notes'],
+  child_care:       ['what_to_bring', 'dietary_notes', 'contact_name', 'contact_phone', 'cost_estimate', 'prep_notes'],
   home_maintenance: ['contact_name', 'contact_phone', 'cost_estimate', 'prep_notes'],
   dining:           ['dietary_notes', 'cost_estimate', 'outfit_suggestion', 'contact_name', 'contact_phone', 'prep_notes'],
   travel:           ['what_to_bring', 'cost_estimate', 'parking_notes', 'prep_notes'],
@@ -622,7 +623,7 @@ Who: ${whoLine}${extraContextLine}`
   // If category is locked by user or not in targeted fields, skip detection and go straight to fill
   const categoryInstruction = (lockedCategory && CATEGORY_FIELDS[lockedCategory]) || !shouldTargetCategory
     ? `Category is fixed to: ${(lockedCategory && CATEGORY_FIELDS[lockedCategory]) ? lockedCategory : existingCategory} — do NOT change it.`
-    : `STEP 1 — Detect the best category from: appointment, school, sports, social, errand, travel, work, medical, birthday, holiday, home_maintenance, dining, other
+    : `STEP 1 — Detect the best category from: appointment, school, sports, child_care, social, errand, travel, work, medical, birthday, holiday, home_maintenance, dining, other
 Category → fields to fill:
 ${allCategoryFields}`
 

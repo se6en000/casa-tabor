@@ -40,6 +40,11 @@ test('Gemini enrichment reserves output budget for JSON instead of hidden reason
   assert.match(source, /thinkingConfig:\s*\{\s*thinkingBudget:\s*0\s*\}/)
 })
 
+test('enrichment recognizes Child Care with a dedicated field contract', () => {
+  assert.match(source, /child_care:\s+\['what_to_bring', 'dietary_notes', 'contact_name', 'contact_phone', 'cost_estimate', 'prep_notes'\]/)
+  assert.match(source, /appointment, school, sports, child_care, social/)
+})
+
 test('database inserts dispatch enrichment without depending on an unavailable vault token', () => {
   assert.match(dispatchMigration, /net\.http_post/)
   assert.doesNotMatch(dispatchMigration, /vault\.decrypted_secrets/)

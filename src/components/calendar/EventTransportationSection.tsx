@@ -623,7 +623,7 @@ export default function EventTransportationSection({
 
   const editorTitle = plan ? 'Edit transportation' : 'Add transportation'
   const editorContent = draft && (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col bg-casa-bg-2">
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
         <p className="text-body-sm text-casa-muted">
           Add only the driving that needs coordination. Open a leg to change its driver, places, timing, or passengers.
@@ -632,7 +632,7 @@ export default function EventTransportationSection({
           {draft.legs.map((leg, index) => {
             const expanded = expandedLegId === leg.id
             return (
-              <Card key={leg.id} padding="none" className="overflow-visible">
+              <Card key={leg.id} tone="subtle" padding="none" className="overflow-visible">
                 <div className="flex items-center gap-2 p-2">
                   <Button
                     variant="ghost"

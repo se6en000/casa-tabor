@@ -95,35 +95,16 @@ kill $(pgrep -f "matchbox-keyboard" 2>/dev/null) 2>/dev/null
 # Wait for network
 sleep 3
 
-# ── Kill stale bridges before starting new ones ─────────────────────────────
-# Prevents port conflicts and socket hang-ups when restarting
-kill $(pgrep -f "sensor-bridge.*main.py" 2>/dev/null) 2>/dev/null
-kill $(pgrep -f "whisper-bridge.*main.py" 2>/dev/null) 2>/dev/null
-sleep 3  # Wait for sockets to close (TIME_WAIT state)
-
-# ── Sensor bridge ──────────────────────────────────────────────────────────
-# Reads AS7343 via I²C and serves Room Tone data on 127.0.0.1:8765.
-# Starts in background; Chromium polls it for CCT/lux. Safe to run even if
-# sensor isn't wired yet — bridge starts in simulation mode.
-BRIDGE_DIR="$HOME/sensor-bridge"
-if [ -f "$BRIDGE_DIR/main.py" ]; then
-  (exec 9>&-; python3 "$BRIDGE_DIR/main.py" >> "$HOME/sensor-bridge.log" 2>&1 &)
-  sleep 1
-fi
-
-# ── Whisper speech-to-text bridge ─────────────────────────────────────────
-# Listens on 127.0.0.1:8766; Chromium POSTs audio blobs, gets transcript back.
-WHISPER_DIR="$HOME/whisper-bridge"
-if [ -f "$WHISPER_DIR/main.py" ]; then
-  WHISPER_ENV="$HOME/.config/casa/whisper-bridge.env"
-  if [ -r "$WHISPER_ENV" ]; then
-    set -a
-    . "$WHISPER_ENV"
-    set +a
+# ── Voice/sensor bridges are systemd user services ─────────────────────────
+for svc in casa-sensor-bridge.service casa-whisper-bridge.service; do
+  if systemctl --user cat "$svc" >/dev/null 2>&1; then
+    if ! systemctl --user restart "$svc"; then
+      echo "Casa Tabor: failed to restart ${svc}" >&2
+    fi
+  else
+    echo "Casa Tabor: ${svc} not installed; voice/sensor features may be degraded." >&2
   fi
-  (exec 9>&-; PATH="$HOME/.local/bin:$PATH" python3 "$WHISPER_DIR/main.py" >> "$HOME/whisper-bridge.log" 2>&1 &)
-  sleep 1
-fi
+done
 
 # Launch Chromium with full touch support.
 # Kiosk flag is added only when KIOSK=1; otherwise launch a normal window.

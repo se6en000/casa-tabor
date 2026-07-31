@@ -3,6 +3,7 @@ export const EVENT_CATEGORIES = [
   'school',
   'medical',
   'appointment',
+  'child_care',
   'home_maintenance',
   'dining',
   'travel',

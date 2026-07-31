@@ -429,7 +429,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
               onTouchEnd={stopTouch}
             >
               <div
-                className="relative h-control-sm flex-shrink-0 border-b border-casa-border bg-casa-surface px-3"
+                className="relative h-control-sm flex-shrink-0 border-b border-casa-border bg-casa-bg px-3"
               >
                 <button
                   type="button"
@@ -1035,10 +1035,10 @@ function PanelHeader({
   }
 
   return (
-    <div className="bg-casa-surface">
+    <div className="bg-casa-bg">
       {/* ── Light editorial header ──────────────────────────────── */}
       <div
-        className="relative overflow-visible border-b border-casa-border bg-casa-surface px-6 pb-5 pt-4"
+        className="relative overflow-visible border-b border-casa-border bg-casa-bg px-6 pb-5 pt-4"
       >
         {isBirthday && <BirthdayCardDecoration className="opacity-35" />}
 

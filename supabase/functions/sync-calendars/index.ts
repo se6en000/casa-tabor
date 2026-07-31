@@ -13,6 +13,13 @@ const CORS = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+// Cancellations per incremental sync that trigger quarantine. Kept intentionally
+// low to guard against rogue mass-deletes. When the limit is exceeded the code
+// falls back to a full reconciliation (see below) instead of hard-failing, so
+// legitimate large batches (e.g. deleting a recurring series) self-recover.
+const MAX_INCREMENTAL_CANCELLATIONS = 100
+const INITIAL_SYNC_PAST_DAYS = 7
+const INITIAL_SYNC_FUTURE_DAYS = 90
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
@@ -50,22 +57,22 @@ Deno.serve(async (req) => {
 async function syncOne(sb: SupabaseClient, resolved: ResolvedGoogleConnection) {
   const { connection, accessToken } = resolved
   const now = Date.now()
-  const timeMin = new Date(now - 7 * 86400000).toISOString()
-  const timeMax = new Date(now + 90 * 86400000).toISOString()
   let pageToken: string | undefined
   let syncToken: string | null = connection.sync_token
+  let isFullReconciliation = !syncToken
   let pulled = 0
   let upserted = 0
+  let pendingCancellations: Record<string, unknown>[] = []
+  let quarantineTripped = false
   try {
     do {
       const params = new URLSearchParams({
         singleEvents: 'true',
         showDeleted: 'true',
-        maxResults: '250',
+        maxResults: '2500',
       })
+      if (syncToken) params.set('syncToken', syncToken)
       if (pageToken) params.set('pageToken', pageToken)
-      else if (syncToken) params.set('syncToken', syncToken)
-      else { params.set('timeMin', timeMin); params.set('timeMax', timeMax); params.set('orderBy', 'startTime') }
       const r = await fetch(
         `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(connection.calendar_id)}/events?${params}`,
         { headers: { authorization: 'Bearer ' + accessToken } },
@@ -73,6 +80,8 @@ async function syncOne(sb: SupabaseClient, resolved: ResolvedGoogleConnection) {
       if (r.status === 410) {
         syncToken = null
         pageToken = undefined
+        isFullReconciliation = true
+        pendingCancellations = []
         const { error } = await sb.from('calendar_connections').update({ sync_token: null }).eq('id', connection.id)
         if (error) throw new Error(`Could not clear expired sync cursor: ${error.message}`)
         continue
@@ -81,23 +90,91 @@ async function syncOne(sb: SupabaseClient, resolved: ResolvedGoogleConnection) {
       const page = await r.json()
       pulled += page.items?.length ?? 0
       for (const ev of page.items ?? []) {
+        if (ev.status === 'cancelled') {
+          // A full scan includes historical tombstones, which are not new cancellation commands.
+          if (!isFullReconciliation) pendingCancellations.push(ev)
+          continue
+        }
+        if (isFullReconciliation && !isWithinInitialSyncWindow(ev, now)) continue
         await upsertEvent(sb, connection, ev, accessToken)
         upserted++
       }
       pageToken = page.nextPageToken
       if (page.nextSyncToken) syncToken = page.nextSyncToken
     } while (pageToken)
+
+    // Cancellation guard: if the incremental batch is unexpectedly large it may
+    // indicate stale/replayed data rather than genuine user deletes. When tripped,
+    // fall back to a fresh full reconciliation (discarding the stale cancellation
+    // batch) so the connection self-heals instead of staying permanently broken.
+    if (pendingCancellations.length > MAX_INCREMENTAL_CANCELLATIONS) {
+      quarantineTripped = true
+      console.warn(
+        `[sync-calendars] QUARANTINE: ${pendingCancellations.length} cancellations exceed limit ` +
+        `${MAX_INCREMENTAL_CANCELLATIONS} — discarding batch and falling back to full reconciliation ` +
+        `(connection ${connection.id})`
+      )
+      syncToken = null
+      pageToken = undefined
+      isFullReconciliation = true
+      pendingCancellations = []
+      pulled = 0
+      upserted = 0
+      // Clear stored sync token so the next scheduled sync also starts fresh
+      const { error: clearErr } = await sb.from('calendar_connections').update({ sync_token: null }).eq('id', connection.id)
+      if (clearErr) throw new Error(`Could not clear quarantined sync cursor: ${clearErr.message}`)
+      // Re-run inline as a full reconciliation, skipping all historical tombstones
+      do {
+        const params2 = new URLSearchParams({
+          singleEvents: 'true',
+          showDeleted: 'true',
+          maxResults: '2500',
+        })
+        if (pageToken) params2.set('pageToken', pageToken)
+        const r2 = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(connection.calendar_id)}/events?${params2}`,
+          { headers: { authorization: 'Bearer ' + accessToken } },
+        )
+        if (!r2.ok) { const t = await r2.text(); throw new Error('Calendar API (recovery) ' + r2.status + ': ' + t) }
+        const page2 = await r2.json()
+        pulled += page2.items?.length ?? 0
+        for (const ev of page2.items ?? []) {
+          if (ev.status === 'cancelled') continue
+          if (!isWithinInitialSyncWindow(ev, now)) continue
+          await upsertEvent(sb, connection, ev, accessToken)
+          upserted++
+        }
+        pageToken = page2.nextPageToken
+        if (page2.nextSyncToken) syncToken = page2.nextSyncToken
+      } while (pageToken)
+    }
+
+    for (const ev of pendingCancellations) {
+      await upsertEvent(sb, connection, ev, accessToken)
+      upserted++
+    }
     const syncedAt = new Date().toISOString()
     await markGoogleConnectionHealthy(sb, connection.id, {
       sync_token: syncToken,
       last_incremental_sync_at: syncedAt,
     })
-    return { pulled, upserted, connection_id: connection.id }
+    return { pulled, upserted, quarantine_recovery: quarantineTripped, connection_id: connection.id }
   } catch (cause) {
     const error = cause instanceof Error ? cause : new Error(String(cause))
     await markGoogleConnectionFailure(sb, connection.id, error)
     throw error
   }
+}
+
+function isWithinInitialSyncWindow(ev: Record<string, unknown>, now: number): boolean {
+  const start = ev.start as { dateTime?: string; date?: string } | undefined
+  const end = ev.end as { dateTime?: string; date?: string } | undefined
+  const startTime = start?.dateTime ?? start?.date
+  const endTime = end?.dateTime ?? end?.date
+  if (!startTime || !endTime) return false
+  const rangeStart = now - INITIAL_SYNC_PAST_DAYS * 86400000
+  const rangeEnd = now + INITIAL_SYNC_FUTURE_DAYS * 86400000
+  return new Date(endTime).getTime() >= rangeStart && new Date(startTime).getTime() <= rangeEnd
 }
 
 async function linkCanonicalOccurrence(

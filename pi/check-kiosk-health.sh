@@ -33,11 +33,13 @@ REMOTE_STATUS=$(ssh "$PI_HOST" "
 
   SENSOR_STATE=not-installed
   if [ -f /home/jake/sensor-bridge/main.py ]; then
+    XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user is-active casa-sensor-bridge.service >/dev/null
     curl -fsS http://127.0.0.1:8765/health | grep -q '\"ok\":true'
     SENSOR_STATE=healthy
   fi
   WHISPER_STATE=not-installed
   if [ -f /home/jake/whisper-bridge/main.py ]; then
+    XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user is-active casa-whisper-bridge.service >/dev/null
     ss -ltn | awk '\$4 ~ /:8766$/ {found=1} END {exit !found}'
     WHISPER_STATE=listening
   fi

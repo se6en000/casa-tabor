@@ -81,7 +81,7 @@ export function Modal({
             className={cn(modalPanelClassName({ size }), panelClassName)}
           >
             {showHeader && (
-              <div className="flex shrink-0 items-start justify-between gap-3 p-6 pb-3">
+              <div className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-casa-border bg-casa-surface px-6">
                 <h3 id={titleId} className="font-display text-display-sm text-content-heading leading-tight">{title}</h3>
                 <IconButton
                   icon={<X size={18} />}
@@ -90,7 +90,7 @@ export function Modal({
                   variant="ghost"
                   disabled={closeDisabled}
                   onClick={onClose}
-                  className="-mr-2 -mt-2"
+                  className="-mr-2"
                 />
               </div>
             )}

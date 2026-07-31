@@ -177,6 +177,8 @@ test('transportation editor is bounded on desktop and progressive on every viewp
   assert.match(transportation, /useDesktopTransportationEditor/)
   assert.match(transportation, /<Modal[\s\S]*size="xl"[\s\S]*max-h-\[85dvh\]/)
   assert.match(transportation, /<Sheet[\s\S]*max-h-\[92dvh\][\s\S]*contentClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"/)
+  assert.match(transportation, /flex min-h-0 flex-1 flex-col bg-casa-bg-2/)
+  assert.match(transportation, /<Card key=\{leg\.id\} tone="subtle" padding="none"/)
   assert.match(transportation, /transportationLegSummary\(leg\)/)
   assert.match(transportation, /aria-expanded=\{expanded\}/)
   assert.match(transportation, /expandedLegId === leg\.id/)
@@ -184,6 +186,18 @@ test('transportation editor is bounded on desktop and progressive on every viewp
   assert.match(transportation, /shrink-0[\s\S]*border-t[\s\S]*Save trip/)
   assert.match(transportation, /'Set up trip'/)
   assert.doesNotMatch(transportation, /'Set up now'/)
+})
+
+test('event editors use the event-detail canvas with distinct structural surfaces', () => {
+  assert.match(eventEdit, /rounded-t-modal bg-casa-bg-2 shadow-modal/)
+  assert.match(eventEdit, /h-16 shrink-0 items-center justify-between gap-3 border-b border-casa-border bg-casa-surface px-6/)
+  assert.match(eventEdit, /shrink-0 justify-center bg-casa-surface pb-1 pt-3/)
+  assert.match(eventEdit, /BounceScroll className="flex-1 min-h-0 bg-casa-bg-2"/)
+  assert.match(eventEdit, /section className="mx-5 mt-5 rounded-card border border-casa-border\/70 bg-casa-bg p-4"/)
+  assert.match(eventEdit, /aria-label="Event title"/)
+  assert.match(eventEdit, /flex shrink-0 flex-col-reverse gap-2 border-t border-casa-border bg-casa-surface/)
+  assert.match(eventEdit, />\s*Cancel\s*</)
+  assert.match(eventEdit, /: 'Save changes'/)
 })
 
 test('event detail header uses a light semantic surface with compact event identity', () => {
@@ -197,7 +211,7 @@ test('event detail header uses a light semantic surface with compact event ident
   assert.match(detail, /import \{ cleanEventTitle, isBirthdayEvent \} from '\.\.\/\.\.\/utils\/eventTitle'/)
   assert.match(detail, /const displayTitle = cleanedTitle \|\| rawTitle \|\|/)
   assert.match(detail, /Light editorial header/)
-  assert.match(detail, /border-b border-casa-border bg-casa-surface/)
+  assert.match(detail, /border-b border-casa-border bg-casa-bg/)
   assert.match(detail, /event-detail-accent-marker/)
   assert.match(detail, /backgroundColor: accent/)
   // compact avatar circles in eyebrow row
@@ -225,7 +239,7 @@ test('event detail shell uses semantic light header, tinted workspace, and surfa
   assert.doesNotMatch(detail, /eventCrownStyle/)
   assert.match(detail, /var\(--color-casa-navy\) 8%, transparent\)[\s\S]*var\(--casa-scrim\)/)
   assert.match(detail, /boxShadow: 'var\(--shadow-modal\), 0 20px 56px color-mix\(in srgb, var\(--color-casa-navy\) 20%, transparent\)'/)
-  assert.match(detail, /className="relative h-control-sm flex-shrink-0 border-b border-casa-border bg-casa-surface px-3"/)
+  assert.match(detail, /className="relative h-control-sm flex-shrink-0 border-b border-casa-border bg-casa-bg px-3"/)
   assert.match(detail, /className="absolute inset-x-0 top-0 z-10 mx-auto block h-control w-\[86px\]/)
   assert.match(detail, /h-\[5px\] w-control-sm rounded-full/)
   assert.match(detail, /aria-label="Drag down to dismiss panel"/)

@@ -11,8 +11,8 @@ test('member picker escapes the header and stacks above later event sections', (
   assert.match(panel, /showPicker && 'z-popover'/)
   // The header must remain overflow-visible so category and member popovers are
   // not clipped; BirthdayCardDecoration contains its own artwork overflow.
-  assert.match(panel, /overflow-visible border-b border-casa-border bg-casa-surface px-6 pb-5 pt-4/)
-  assert.doesNotMatch(panel, /overflow-hidden border-b border-casa-border bg-casa-surface px-6/)
+  assert.match(panel, /overflow-visible border-b border-casa-border bg-casa-bg px-6 pb-5 pt-4/)
+  assert.doesNotMatch(panel, /overflow-hidden border-b border-casa-border bg-casa-bg px-6/)
 })
 
 test('removing an attendee hides its pill before persistence completes and restores it on failure', () => {

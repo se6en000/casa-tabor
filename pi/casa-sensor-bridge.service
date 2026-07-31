@@ -1,0 +1,18 @@
+[Unit]
+Description=Casa Tabor Sensor Bridge
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=8
+
+[Service]
+Type=simple
+WorkingDirectory=/home/jake/sensor-bridge
+ExecStart=/usr/bin/python3 /home/jake/sensor-bridge/main.py
+Restart=on-failure
+RestartSec=2
+StandardOutput=append:/home/jake/sensor-bridge.log
+StandardError=append:/home/jake/sensor-bridge.log
+
+[Install]
+WantedBy=default.target

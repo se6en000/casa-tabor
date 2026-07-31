@@ -51,6 +51,13 @@ WAKE_SCORE_LOG_THROTTLE_SECS = 0.8
 MISFIRE_SUPPRESS_AFTER_SPEECH_STARTED_SECS = 8.0
 POST_STOP_WAKE_DISARM_SECS = 2.0
 SENSOR_BRIDGE  = 'http://127.0.0.1:8765'
+WAKE_RECORDER_RESTART_BASE_SECS = 0.5
+WAKE_RECORDER_RESTART_MAX_SECS = 8.0
+WAKE_RECORDER_FAIL_WINDOW_SECS = 30.0
+WAKE_RECORDER_FAIL_THRESHOLD = 20
+WAKE_RECORDER_CIRCUIT_BREAKER_SECS = 25.0
+WAKE_RECORDER_SUCCESS_RESET_SECS = 15.0
+AUDIO_STACK_RECOVERY_MIN_INTERVAL_SECS = 60.0
 
 # ── Audio buffering for wake word ─────────────────────────────────────────────
 # Keep a true pre-roll so users can speak naturally in one breath.
@@ -258,6 +265,10 @@ _last_speech_started_ts = 0.0
 _audio_buffer        = []  # Circular buffer of audio chunks
 _audio_buffer_lock   = threading.Lock()
 WAKE_CHUNK_SECS      = 0.08  # 2560 bytes @ 16kHz, 16-bit mono
+_wake_restart_delay_secs = WAKE_RECORDER_RESTART_BASE_SECS
+_wake_failure_timestamps = []
+_wake_last_success_ts = 0.0
+_last_audio_stack_recovery_ts = 0.0
 
 # ── Display sleep/wake ───────────────────────────────────────────────────────
 _DISPLAY = ':0'
@@ -281,6 +292,65 @@ def _clear_buffer():
     """Clear the audio buffer."""
     with _audio_buffer_lock:
         _audio_buffer.clear()
+
+def _record_wake_success():
+    global _wake_last_success_ts, _wake_restart_delay_secs, _wake_failure_timestamps
+    now = time.time()
+    _wake_last_success_ts = now
+    if _wake_restart_delay_secs != WAKE_RECORDER_RESTART_BASE_SECS:
+        _wake_restart_delay_secs = WAKE_RECORDER_RESTART_BASE_SECS
+    cutoff = now - WAKE_RECORDER_FAIL_WINDOW_SECS
+    _wake_failure_timestamps = [ts for ts in _wake_failure_timestamps if ts >= cutoff]
+    if _wake_failure_timestamps and now - _wake_failure_timestamps[-1] >= WAKE_RECORDER_SUCCESS_RESET_SECS:
+        _wake_failure_timestamps = []
+
+def _record_wake_failure(reason: str):
+    global _wake_restart_delay_secs, _wake_failure_timestamps
+    now = time.time()
+    _wake_failure_timestamps.append(now)
+    cutoff = now - WAKE_RECORDER_FAIL_WINDOW_SECS
+    _wake_failure_timestamps = [ts for ts in _wake_failure_timestamps if ts >= cutoff]
+    _wake_restart_delay_secs = min(
+        WAKE_RECORDER_RESTART_MAX_SECS,
+        max(WAKE_RECORDER_RESTART_BASE_SECS, _wake_restart_delay_secs * 2),
+    )
+    count = len(_wake_failure_timestamps)
+    log.warning(
+        f'[wake] recorder failure reason={reason} count={count}/{WAKE_RECORDER_FAIL_THRESHOLD} '
+        f'window={WAKE_RECORDER_FAIL_WINDOW_SECS:.0f}s next_retry={_wake_restart_delay_secs:.1f}s'
+    )
+    return count
+
+def _reset_wake_failure_state():
+    global _wake_restart_delay_secs, _wake_failure_timestamps
+    _wake_failure_timestamps = []
+    _wake_restart_delay_secs = WAKE_RECORDER_RESTART_BASE_SECS
+
+def _recover_audio_stack(reason: str):
+    global _last_audio_stack_recovery_ts
+    now = time.time()
+    since = now - _last_audio_stack_recovery_ts
+    if since < AUDIO_STACK_RECOVERY_MIN_INTERVAL_SECS:
+        log.warning(
+            f'[wake] audio recovery skipped (cooldown {AUDIO_STACK_RECOVERY_MIN_INTERVAL_SECS:.0f}s, '
+            f'last={since:.1f}s ago) reason={reason}'
+        )
+        return False
+    cmd = [
+        'systemctl', '--user', 'restart',
+        'pipewire.service', 'pipewire-pulse.service', 'wireplumber.service',
+    ]
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=12)
+    except subprocess.TimeoutExpired:
+        log.error('[wake] audio recovery timed out restarting user audio services')
+        return False
+    except subprocess.CalledProcessError as err:
+        log.error(f'[wake] audio recovery failed rc={err.returncode}')
+        return False
+    _last_audio_stack_recovery_ts = now
+    log.warning(f'[wake] audio recovery completed reason={reason}')
+    return True
 
 def _display_off():
     try:
@@ -381,6 +451,8 @@ def _wake_word_loop():
     WARMUP_CHUNKS = 3  # skip initial chunks (arecord startup pop)
 
     while True:
+        failure_reason = ''
+        circuit_breaker_armed = False
         while _get()['recording']:
             with _stt_lock:
                 has_stt_client = _stt_client is not None
@@ -424,13 +496,14 @@ def _wake_word_loop():
                 raw = proc.stdout.read(CHUNK_BYTES)
                 ret = proc.poll()
                 if ret is not None:
-                    log.warning(f'[wake] arecord exited early (rc={ret})')
+                    failure_reason = f'arecord_exit_rc_{ret}'
                     break
                 if not raw or len(raw) < CHUNK_BYTES:
-                    log.warning(f'[wake] short read ({len(raw) if raw else 0} bytes, expected {CHUNK_BYTES}) — restarting')
+                    failure_reason = 'short_read'
                     time.sleep(0.1)
                     break
                 _wake_last_chunk_ts = time.time()
+                _record_wake_success()
                 
                 # Add to rolling buffer
                 _add_to_buffer(raw)
@@ -487,6 +560,7 @@ def _wake_word_loop():
                     high_score_streak = 0
         except Exception as e:
             log.error(f'[wake] inner error: {e}')
+            failure_reason = failure_reason or 'wake_loop_exception'
         finally:
             _wake_proc = None
             try:
@@ -494,8 +568,23 @@ def _wake_word_loop():
                 proc.wait(timeout=1)
             except Exception:
                 pass
-        log.info('[wake] arecord stopped — restarting...')
-        time.sleep(0.5)
+        if failure_reason:
+            failure_count = _record_wake_failure(failure_reason)
+            if failure_count >= WAKE_RECORDER_FAIL_THRESHOLD:
+                circuit_breaker_armed = True
+                log.error(
+                    f'[wake] circuit breaker tripped after {failure_count} failures in '
+                    f'{WAKE_RECORDER_FAIL_WINDOW_SECS:.0f}s; pausing restarts for '
+                    f'{WAKE_RECORDER_CIRCUIT_BREAKER_SECS:.0f}s'
+                )
+                _recover_audio_stack(failure_reason)
+                _reset_wake_failure_state()
+                time.sleep(WAKE_RECORDER_CIRCUIT_BREAKER_SECS)
+        if circuit_breaker_armed:
+            continue
+        restart_delay = _wake_restart_delay_secs if failure_reason else WAKE_RECORDER_RESTART_BASE_SECS
+        log.info(f'[wake] recorder stopped — restarting in {restart_delay:.1f}s...')
+        time.sleep(restart_delay)
 
 # ── STT functions ─────────────────────────────────────────────────────────────
 import re as _re
