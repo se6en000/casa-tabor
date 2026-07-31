@@ -17,7 +17,7 @@ import {
 import { normalizeRecipeIngredientFields } from '../utils/recipeIngredientParsing'
 import { supabase } from '../lib/supabase'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
-import { Alert, Button, Checkbox, IconButton, Card, Chip, Input, Heading, Modal, Progress, SegmentedControl, Sheet, Text } from '../components/ui'
+import { Alert, Button, Checkbox, IconButton, Card, Chip, Input, Heading, Modal, Progress, SegmentedControl, Sheet, Text, Toast } from '../components/ui'
 import {
   appendPantryInventoryAudit,
   normalizePackageUnit,
@@ -38,6 +38,7 @@ import recipeFallbackHero from '../assets/hero.png'
 const SYNC_LAST_AT_KEY = 'grocery-sync-last-at-v1'
 const SYNC_LAST_SUMMARY_KEY = 'grocery-sync-last-summary-v1'
 const GROCERY_PREDICTION_DEFERRALS_SETTING_KEY = 'grocery_prediction_deferrals'
+const GROCERY_WEEKLY_HIDDEN_PICKS_SETTING_KEY = 'grocery_weekly_hidden_picks'
 // Background dedupe is a full-table scan + write. It only needs to catch
 // duplicates introduced by adds/imports/iOS merges, not run on every tick.
 // Throttle background dedupe to at most once per this interval; the manual
@@ -209,12 +210,29 @@ type PantryReconcileDraft = {
   audit_log: PantryInventoryAuditEntry[]
 }
 
+type GroceryWeeklyHiddenPicks = Record<string, { name: string; hidden_at: string }>
+
 function detectCategory(name: string): string {
   return inferCategoryFromName(name)
 }
 
 function normalizeItemName(name: string): string {
   return normalizeGroceryNameKey(name)
+}
+
+function sanitizeGroceryWeeklyHiddenPicks(value: unknown): GroceryWeeklyHiddenPicks {
+  if (!value || typeof value !== 'object') return {}
+  const sanitized: GroceryWeeklyHiddenPicks = {}
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    const normalized = normalizeItemName(key)
+    if (!normalized || !entry || typeof entry !== 'object') continue
+    const row = entry as Record<string, unknown>
+    const name = typeof row.name === 'string' && row.name.trim().length > 0 ? row.name.trim() : normalized
+    const hiddenAtRaw = typeof row.hidden_at === 'string' ? row.hidden_at : ''
+    const hiddenAt = Number.isNaN(Date.parse(hiddenAtRaw)) ? new Date().toISOString() : hiddenAtRaw
+    sanitized[normalized] = { name, hidden_at: hiddenAt }
+  }
+  return sanitized
 }
 
 function pantryInventoryKey(name: string, category: string): string {
@@ -566,6 +584,21 @@ export default function GroceryPage() {
     refetchInterval: 2 * 60_000,
   })
 
+  const { data: hiddenWeeklyPicks = {}, refetch: refetchHiddenWeeklyPicks } = useQuery({
+    queryKey: ['grocery-weekly-hidden-picks'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', GROCERY_WEEKLY_HIDDEN_PICKS_SETTING_KEY)
+        .maybeSingle()
+      if (error) throw error
+      return sanitizeGroceryWeeklyHiddenPicks(data?.value)
+    },
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000,
+  })
+
   const { data: recipeLibrary = [], refetch: refetchRecipeLibrary } = useQuery({
     queryKey: ['recipe-library'],
     queryFn: async () => {
@@ -719,8 +752,9 @@ export default function GroceryPage() {
   const [pantryReconcileDraft, setPantryReconcileDraft] = useState<PantryReconcileDraft | null>(null)
   const [pantryReconcileMessage, setPantryReconcileMessage] = useState<string | null>(null)
   const [pantryReconcileError, setPantryReconcileError] = useState<string | null>(null)
-  const [predictionDeferralMessage, setPredictionDeferralMessage] = useState<string | null>(null)
   const [predictionDeferralError, setPredictionDeferralError] = useState<string | null>(null)
+  const [smartPickSettingsError, setSmartPickSettingsError] = useState<string | null>(null)
+  const [settingsSavedToastDetail, setSettingsSavedToastDetail] = useState<string | null>(null)
   const [expandedReconcileQtyIds, setExpandedReconcileQtyIds] = useState<Set<string>>(new Set())
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => localStorage.getItem(SYNC_LAST_AT_KEY))
   const [lastSyncSummary, setLastSyncSummary] = useState<string>(() => localStorage.getItem(SYNC_LAST_SUMMARY_KEY) ?? 'Not synced yet')
@@ -737,7 +771,6 @@ export default function GroceryPage() {
   const [reviewingItemId, setReviewingItemId] = useState<string | null>(null)
   const [spotlightedItemId, setSpotlightedItemId] = useState<string | null>(null)
   const [analysisNow, setAnalysisNow] = useState(() => Date.now())
-  const [hiddenSmartPickNames, setHiddenSmartPickNames] = useState<Set<string>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
   const recipeFileInputRef = useRef<HTMLInputElement>(null)
   const recipeCameraInputRef = useRef<HTMLInputElement>(null)
@@ -921,6 +954,12 @@ export default function GroceryPage() {
     return extractTimerOptions(instruction)
   }, [cookView])
 
+  useEffect(() => {
+    if (!settingsSavedToastDetail) return
+    const timer = window.setTimeout(() => setSettingsSavedToastDetail(null), 2400)
+    return () => window.clearTimeout(timer)
+  }, [settingsSavedToastDetail])
+
   const weeklyAutoListCandidates = useMemo(() => {
     const thirtyDaysAgo = analysisNow - 30 * 24 * 60 * 60 * 1000
     return Array.from(predictiveMap.values())
@@ -928,6 +967,11 @@ export default function GroceryPage() {
       .sort((a, b) => b.count - a.count || b.lastAt - a.lastAt)
       .slice(0, 10)
   }, [analysisNow, predictiveMap])
+
+  const hiddenSmartPickNames = useMemo(
+    () => new Set(Object.keys(hiddenWeeklyPicks)),
+    [hiddenWeeklyPicks],
+  )
 
   const weeklySmartPickCandidates = useMemo(() => {
     const combined = [...weeklyAutoListCandidates, ...smartPickSuggestions]
@@ -967,6 +1011,28 @@ export default function GroceryPage() {
     await refetchPredictionDeferrals()
   }, [refetchPredictionDeferrals])
 
+  const persistHiddenWeeklyPicks = useCallback(async (nextEntries: GroceryWeeklyHiddenPicks) => {
+    const { data: existingRow, error: existingError } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', GROCERY_WEEKLY_HIDDEN_PICKS_SETTING_KEY)
+      .maybeSingle()
+    if (existingError) throw existingError
+    const existing = sanitizeGroceryWeeklyHiddenPicks(existingRow?.value)
+    const merged = { ...existing, ...nextEntries }
+    const nowIso = new Date().toISOString()
+    const { error } = await supabase.from('settings').upsert(
+      {
+        key: GROCERY_WEEKLY_HIDDEN_PICKS_SETTING_KEY,
+        value: merged,
+        updated_at: nowIso,
+      },
+      { onConflict: 'key' },
+    )
+    if (error) throw error
+    await refetchHiddenWeeklyPicks()
+  }, [refetchHiddenWeeklyPicks])
+
   const deferPantryPrediction = useCallback(async (itemName: string, daysToPush: number, mode: 'push' | 'dismiss') => {
     const normalizedName = normalizeItemName(itemName)
     if (!normalizedName) return
@@ -983,7 +1049,7 @@ export default function GroceryPage() {
         },
       }
       await persistPredictionDeferrals(nextDeferrals)
-      setPredictionDeferralMessage(
+      setSettingsSavedToastDetail(
         `${mode === 'dismiss' ? 'Dismissed' : 'Pushed'} ${itemName} until ${new Date(nextDeferredUntil).toLocaleDateString([], { month: 'short', day: 'numeric' })}.`,
       )
     } catch (error) {
@@ -995,7 +1061,7 @@ export default function GroceryPage() {
     setPredictionDeferralError(null)
     try {
       await persistPredictionDeferrals({})
-      setPredictionDeferralMessage('Deferred pantry predictions are visible again.')
+      setSettingsSavedToastDetail('Deferred pantry predictions are visible again.')
     } catch (error) {
       setPredictionDeferralError(formatSupabaseError(error, 'Could not reset deferred pantry predictions'))
     }
@@ -1040,15 +1106,22 @@ export default function GroceryPage() {
     }
   }, [addItemByName, weeklySmartPickCandidates])
 
-  const handleHideSmartPick = useCallback((name: string) => {
+  const handleHideSmartPick = useCallback(async (name: string) => {
     const normalized = normalizeItemName(name)
     if (!normalized) return
-    setHiddenSmartPickNames((current) => {
-      const next = new Set(current)
-      next.add(normalized)
-      return next
-    })
-  }, [])
+    setSmartPickSettingsError(null)
+    try {
+      await persistHiddenWeeklyPicks({
+        [normalized]: {
+          name: name.trim() || hiddenWeeklyPicks[normalized]?.name || name,
+          hidden_at: new Date().toISOString(),
+        },
+      })
+      setSettingsSavedToastDetail(`Removed ${name} from weekly picks.`)
+    } catch (error) {
+      setSmartPickSettingsError(formatSupabaseError(error, 'Could not save weekly pick preference'))
+    }
+  }, [hiddenWeeklyPicks, persistHiddenWeeklyPicks])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -2142,9 +2215,7 @@ export default function GroceryPage() {
           <Alert tone="success" title="Pantry restock updated" className="mb-3">{pantryReconcileMessage}</Alert>
         )}
         {predictionDeferralError && <Alert tone="danger" title="Prediction update failed" className="mb-3">{predictionDeferralError}</Alert>}
-        {!predictionDeferralError && predictionDeferralMessage && (
-          <Alert tone="success" title="Prediction updated" className="mb-3">{predictionDeferralMessage}</Alert>
-        )}
+        {smartPickSettingsError && <Alert tone="danger" title="Weekly picks update failed" className="mb-3">{smartPickSettingsError}</Alert>}
         {pantryReconcileDraft && (
           <div className="pb-3">
             <Card padding="sm" tone="subtle">
@@ -2480,13 +2551,13 @@ export default function GroceryPage() {
                                 onClick={(event) => {
                                   event.preventDefault()
                                   event.stopPropagation()
-                                  handleHideSmartPick(item.name)
+                                  void handleHideSmartPick(item.name)
                                 }}
                                 onKeyDown={(event) => {
                                   if (event.key === 'Enter' || event.key === ' ') {
                                     event.preventDefault()
                                     event.stopPropagation()
-                                    handleHideSmartPick(item.name)
+                                    void handleHideSmartPick(item.name)
                                   }
                                 }}
                               >
@@ -3413,6 +3484,12 @@ export default function GroceryPage() {
           Move “{dragState.itemName}”
         </div>
       )}
+      <Toast
+        open={Boolean(settingsSavedToastDetail)}
+        tone="success"
+        message={settingsSavedToastDetail ? `Settings saved — ${settingsSavedToastDetail}` : 'Settings saved'}
+        onClose={() => setSettingsSavedToastDetail(null)}
+      />
     </div>
   )
 }
