@@ -1,12 +1,18 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.ts'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
+import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+const providerFetch = createTrackedProviderFetch({
+  functionName: 'extract-recipe-content',
+  capability: 'recipe-extraction',
+  trafficClass: 'background',
+})
 
 type LlmConfig = {
   provider?: string
@@ -264,7 +270,7 @@ function readOgImage(html: string): string | null {
 }
 
 async function callGeminiJson(config: Required<LlmConfig>, parts: Array<Record<string, unknown>>): Promise<string> {
-  const res = await fetch(
+  const res = await providerFetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.api_key}`,
     {
       method: 'POST',

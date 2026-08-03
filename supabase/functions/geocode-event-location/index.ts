@@ -1,10 +1,17 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { createTrackedMapsFetch } from '../_shared/provider-call-ledger.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+const mapsFetch = createTrackedMapsFetch({
+  functionName: 'geocode-event-location',
+  service: 'places',
+  sku: 'Places Text Search',
+  callPurpose: 'event-geocode',
+})
 
 interface PlaceSearchResponse {
   places?: Array<{
@@ -142,7 +149,7 @@ Deno.serve(async (req) => {
     })
   }
 
-  const placesRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
+  const placesRes = await mapsFetch('https://places.googleapis.com/v1/places:searchText', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

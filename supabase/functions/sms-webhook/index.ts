@@ -10,6 +10,13 @@
  */
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
+import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
+
+const providerFetch = createTrackedProviderFetch({
+  functionName: 'sms-webhook',
+  capability: 'sms-assistant',
+  trafficClass: 'user',
+})
 
 Deno.serve(async (req) => {
   // Twilio sends form-encoded POST
@@ -226,7 +233,7 @@ async function callLLM(
   prompt: string,
 ): Promise<string> {
   if (config.provider === 'gemini') {
-    const res = await fetch(
+    const res = await providerFetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.api_key}`,
       {
         method: 'POST',
@@ -243,7 +250,7 @@ async function callLLM(
   }
 
   if (config.provider === 'openai') {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const res = await providerFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${config.api_key}` },
       body: JSON.stringify({ model: config.model, messages: [{ role: 'user', content: prompt }], max_tokens: 512, temperature: 0.3 }),
@@ -253,7 +260,7 @@ async function callLLM(
   }
 
   if (config.provider === 'anthropic') {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await providerFetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': config.api_key, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({ model: config.model, max_tokens: 512, messages: [{ role: 'user', content: prompt }] }),

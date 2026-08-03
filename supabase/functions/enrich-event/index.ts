@@ -8,6 +8,8 @@ import {
   selectConfidentEventPlace,
 } from '../_shared/event-place-resolution.mjs'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
+import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
+import { parseLastJsonObject } from '../_shared/json-output.mjs'
 
 interface UsageAccum { inputTokens: number; outputTokens: number }
 interface ResolvedDestination {
@@ -23,6 +25,11 @@ const CORS = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+const providerFetch = createTrackedProviderFetch({
+  functionName: 'enrich-event',
+  capability: 'event-enrichment',
+  trafficClass: 'background',
+})
 
 function normalizePossessiveSuffixCasing(value: string): string {
   return value.replace(/([a-z])(['’])S\b/g, '$1$2s')
@@ -735,16 +742,7 @@ Return ONLY this JSON object (no markdown, no prose):
 
 function parseJSON(text: string): Record<string, unknown> {
   try {
-    // Try to find a JSON object in the response (handles prose before/after from search grounding)
-    const firstBrace = text.indexOf('{')
-    const lastBrace = text.lastIndexOf('}')
-    if (firstBrace !== -1 && lastBrace !== -1) {
-      const jsonStr = text.slice(firstBrace, lastBrace + 1)
-      return JSON.parse(jsonStr)
-    }
-    // Strip markdown fences as fallback
-    const clean = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    return JSON.parse(clean)
+    return parseLastJsonObject(text) as Record<string, unknown>
   } catch {
     throw new Error(`enrichment_invalid_provider_output: ${text.slice(0, 300) || '<empty>'}`)
   }
@@ -752,7 +750,7 @@ function parseJSON(text: string): Record<string, unknown> {
 
 async function callLLM(config: { provider: string; model: string; api_key: string }, prompt: string, accum?: UsageAccum): Promise<string> {
   if (config.provider === 'gemini') {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.api_key}`, {
+    const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.api_key}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -777,7 +775,7 @@ async function callLLM(config: { provider: string; model: string; api_key: strin
     return text
   }
   if (config.provider === 'openai') {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const res = await providerFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${config.api_key}` },
       body: JSON.stringify({ model: config.model, messages: [{ role: 'user', content: prompt }], max_tokens: 1000, temperature: 0.3 }),
@@ -790,7 +788,7 @@ async function callLLM(config: { provider: string; model: string; api_key: strin
     return text
   }
   if (config.provider === 'anthropic') {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await providerFetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': config.api_key, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({ model: config.model, max_tokens: 1000, messages: [{ role: 'user', content: prompt }] }),
@@ -887,7 +885,7 @@ Return ONLY a JSON array (no markdown, no prose):
 // Separate LLM caller without Google Search tool (for structured JSON that must not have grounding prose)
 async function callLLMNoSearch(config: { provider: string; model: string; api_key: string }, prompt: string, accum?: UsageAccum): Promise<string> {
   if (config.provider === 'gemini') {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.api_key}`, {
+    const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.api_key}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -906,7 +904,7 @@ async function callLLMNoSearch(config: { provider: string; model: string; api_ke
     return parts.filter(p => !p.thought).map(p => p.text ?? '').join('')
   }
   if (config.provider === 'openai') {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const res = await providerFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${config.api_key}` },
       body: JSON.stringify({ model: config.model, messages: [{ role: 'user', content: prompt }], max_tokens: 1024, temperature: 0.2 }),
@@ -917,7 +915,7 @@ async function callLLMNoSearch(config: { provider: string; model: string; api_ke
     return data.choices?.[0]?.message?.content ?? ''
   }
   if (config.provider === 'anthropic') {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await providerFetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': config.api_key, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({ model: config.model, max_tokens: 1024, messages: [{ role: 'user', content: prompt }] }),

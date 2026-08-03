@@ -13,12 +13,18 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
+import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+const providerFetch = createTrackedProviderFetch({
+  functionName: 'scan-gmail-inbox',
+  capability: 'gmail-scan',
+  trafficClass: 'background',
+})
 
 const TRAVEL_SENDER_DOMAINS = [
   'mycwt.com', 'carlsonwagonlit.com', 'concur.com', 'egencia.com',
@@ -123,7 +129,7 @@ async function callLLM(
   const model = provider === 'gemini' ? 'gemini-2.5-flash-lite' : (llmConfig.model ?? 'gpt-4o-mini')
   const apiKey = llmConfig.api_key
   if (provider === 'openai') {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const res = await providerFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, temperature: 0.1, max_tokens: 500 }),
@@ -132,7 +138,7 @@ async function callLLM(
     const data = await res.json()
     return data.choices[0].message.content
   } else {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+    const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({

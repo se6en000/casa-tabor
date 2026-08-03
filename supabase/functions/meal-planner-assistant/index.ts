@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { requireEnv } from '../_shared/env.ts'
 
 const CORS = {
@@ -6,6 +7,11 @@ const CORS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+const providerFetch = createTrackedProviderFetch({
+  functionName: 'meal-planner-assistant',
+  capability: 'meal-planning',
+  trafficClass: 'user',
+})
 
 type FoodProfile = {
   householdSize: number
@@ -475,7 +481,7 @@ async function callGeminiSuggestion(apiKey: string, prompt: string, profile: Foo
     `Food profile: ${JSON.stringify(profile)}`,
     `Recipes: ${JSON.stringify(recipeSummaries)}`,
   ].join('\n')
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`, {
+  const response = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({

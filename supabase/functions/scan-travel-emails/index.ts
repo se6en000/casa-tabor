@@ -11,12 +11,18 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
+import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+const providerFetch = createTrackedProviderFetch({
+  functionName: 'scan-travel-emails',
+  capability: 'travel-email-scan',
+  trafficClass: 'background',
+})
 
 const TRAVEL_KEYWORDS = [
   'itinerary', 'e-ticket', 'eticket', 'boarding pass', 'flight confirmation',
@@ -129,7 +135,7 @@ async function callLLM(
   if (provider === 'gemini') {
     const model = llmConfig.model || 'gemini-2.0-flash'
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${llmConfig.api_key}`
-    const res = await fetch(url, {
+    const res = await providerFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -145,7 +151,7 @@ async function callLLM(
 
   if (provider === 'anthropic') {
     const url = 'https://api.anthropic.com/v1/messages'
-    const res = await fetch(url, {
+    const res = await providerFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': llmConfig.api_key, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
@@ -161,7 +167,7 @@ async function callLLM(
   }
 
   // Default: OpenAI
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const res = await providerFetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${llmConfig.api_key}` },
     body: JSON.stringify({

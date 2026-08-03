@@ -11,12 +11,18 @@
  */
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
+import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+const providerFetch = createTrackedProviderFetch({
+  functionName: 'analyze-prep',
+  capability: 'event-prep',
+  trafficClass: 'background',
+})
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
@@ -227,7 +233,7 @@ function err(msg: string) {
 
 async function callLLM(config: { provider: string; model: string; api_key: string }, prompt: string): Promise<string> {
   if (config.provider === 'gemini') {
-    const res = await fetch(
+    const res = await providerFetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.api_key}`,
       {
         method: 'POST',
@@ -254,7 +260,7 @@ async function callLLM(config: { provider: string; model: string; api_key: strin
     return text.replace(/^\s*```(?:json)?\s*\n?/i, '').replace(/\n?\s*```\s*$/i, '').trim()
   }
   if (config.provider === 'openai') {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const res = await providerFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${config.api_key}` },
       body: JSON.stringify({
@@ -268,7 +274,7 @@ async function callLLM(config: { provider: string; model: string; api_key: strin
     return (data.choices?.[0]?.message?.content ?? '').replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
   }
   if (config.provider === 'anthropic') {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await providerFetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',

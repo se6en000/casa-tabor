@@ -1,8 +1,16 @@
+import { createTrackedMapsFetch } from '../_shared/provider-call-ledger.mjs'
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+const mapsFetch = createTrackedMapsFetch({
+  functionName: 'place-search',
+  service: 'places',
+  sku: 'Places Text Search',
+  callPurpose: 'interactive-place-search',
+})
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
@@ -17,7 +25,7 @@ Deno.serve(async (req) => {
   const { query, city } = await req.json() as { query: string; city?: string }
   const textQuery = city ? `${query} in ${city}` : query
 
-  const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+  const res = await mapsFetch('https://places.googleapis.com/v1/places:searchText', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

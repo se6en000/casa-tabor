@@ -1,14 +1,21 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { createTrackedMapsFetch } from '../_shared/provider-call-ledger.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+const mapsFetch = createTrackedMapsFetch({
+  functionName: 'fetch-event-weather',
+  service: 'places',
+  sku: 'Places Text Search',
+  callPurpose: 'weather-geocode',
+})
 
 async function geocodeAddress(address: string, apiKey: string): Promise<{ lat: number; lng: number } | null> {
   try {
-    const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+    const res = await mapsFetch('https://places.googleapis.com/v1/places:searchText', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
