@@ -12,6 +12,11 @@ import {
 import { routeEtaCachePolicy } from '../supabase/functions/_shared/route-eta-cache.mjs'
 import { providerCallLedgerInternals } from '../supabase/functions/_shared/provider-call-ledger.mjs'
 import { parseLastJsonObject } from '../supabase/functions/_shared/json-output.mjs'
+import {
+  buildGoogleBillingQuery,
+  rowsFromBigQuery,
+  validateBillingTableIdentifier,
+} from '../supabase/functions/_shared/google-billing-query.mjs'
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 
@@ -220,4 +225,40 @@ test('enrichment selects the final grounded JSON object without merging search m
   })
   assert.throws(() => parseLastJsonObject(''), /provider_output_empty/)
   assert.throws(() => parseLastJsonObject('no structured result'), /provider_output_invalid_json/)
+})
+
+test('Google billing query imports net USD cost and parses BigQuery scalar rows', () => {
+  const table = validateBillingTableIdentifier('casa-tabor.billing.gcp_billing_export_resource_v1_123')
+  const query = buildGoogleBillingQuery(table)
+  assert.match(query, /sum\(cost\) \+ sum\(ifnull/)
+  assert.match(query, /currency = 'USD'/)
+  assert.match(query, /between @period_start and @period_end/)
+  assert.throws(() => validateBillingTableIdentifier('bad`; drop table events; --'), /invalid_google_billing_table/)
+
+  const [row] = rowsFromBigQuery({
+    schema: {
+      fields: [
+        { name: 'usage_date' },
+        { name: 'project_id' },
+        { name: 'service_name' },
+        { name: 'sku_name' },
+        { name: 'subtotal_usd' },
+        { name: 'credits_usd' },
+        { name: 'cost_usd' },
+      ],
+    },
+    rows: [{
+      f: [
+        { v: '2026-07-20' },
+        { v: 'gen-lang-client-0884609718' },
+        { v: 'Gemini API' },
+        { v: 'Gemini output tokens' },
+        { v: '7.99' },
+        { v: '0' },
+        { v: '7.99' },
+      ],
+    }],
+  })
+  assert.equal(row.cost_usd, 7.99)
+  assert.equal(row.project_id, 'gen-lang-client-0884609718')
 })
