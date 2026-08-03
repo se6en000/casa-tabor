@@ -1,6 +1,6 @@
 import { useMemo, useRef } from 'react'
 import { format, isAfter, isBefore } from 'date-fns'
-import { Cloud, Sparkles, ImageIcon, Mic } from 'lucide-react'
+import { Cloud, Sparkles, ImageIcon, Mic, RefreshCw } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useLiveClock, greetingFor } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
@@ -106,6 +106,16 @@ export function TopBarC() {
           {format(now, 'h:mm')}
           <span className="text-caption text-white/50 ml-0.5">{format(now, 'a')}</span>
         </div>
+
+        {/* Refresh button — reloads the kiosk/browser in place */}
+        <IconButton
+          icon={<RefreshCw size={16} strokeWidth={1.8} />}
+          aria-label="Refresh screen"
+          onClick={() => window.location.reload()}
+          title="Refresh screen"
+          size="sm"
+          className="bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+        />
 
         {/* Art Mode button */}
         <IconButton
