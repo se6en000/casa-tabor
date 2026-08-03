@@ -154,6 +154,10 @@ test('cost dashboard uses server aggregation and discloses incomplete billing co
   assert.match(statusDashboard, /Directional only/)
   assert.match(statusDashboard, /Actual Google cost/)
   assert.match(statusDashboard, /Estimated logged AI/)
+  assert.match(statusDashboard, /Current tracking coverage/)
+  assert.match(statusDashboard, /Historical estimate coverage/)
+  assert.match(statusDashboard, /Three checks required for billing decisions/)
+  assert.ok(statusDashboard.indexOf('id="today-heading"') < statusDashboard.indexOf('billing-confidence-heading'))
 })
 
 test('cost observability foundation keeps exact billing separate from live estimates', () => {
