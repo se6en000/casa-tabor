@@ -12,6 +12,7 @@
  */
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -113,21 +114,13 @@ function toNonNegativeInt(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : 0
 }
 
-function resolveGeminiModel(model?: string): string {
-  const normalized = (model ?? '').trim().toLowerCase()
-  if (!normalized) return 'gemini-2.5-flash-lite'
-  if (normalized === 'gemini-2.5-flash') return 'gemini-2.5-flash-lite'
-  if (normalized === 'gemini-2.5-pro') return 'gemini-2.5-flash-lite'
-  return model as string
-}
-
 async function callLLM(
   llmConfig: { provider?: string; model?: string; api_key: string },
   prompt: string,
   usage?: UsageAccumulator,
 ): Promise<string> {
   const provider = llmConfig.provider ?? 'gemini'
-  const model = provider === 'gemini' ? resolveGeminiModel(llmConfig.model) : (llmConfig.model ?? 'gpt-4o-mini')
+  const model = provider === 'gemini' ? 'gemini-2.5-flash-lite' : (llmConfig.model ?? 'gpt-4o-mini')
   const apiKey = llmConfig.api_key
   if (provider === 'openai') {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -406,7 +399,11 @@ Deno.serve(async (req) => {
     sb.from('settings').select('value').eq('key', 'llm_config').single(),
     sb.from('family_members').select('id, name, role').order('sort_order'),
   ])
-  const llm = llmRes.data?.value as { api_key: string; model?: string; provider?: string } | null
+  const llm = resolveBackgroundLlmConfig(llmRes.data?.value) as {
+    api_key?: string
+    model?: string
+    provider?: string
+  }
   if (!llm?.api_key) {
     return new Response(JSON.stringify({ error: 'AI not configured' }), { status: 400, headers: { ...CORS, 'content-type': 'application/json' } })
   }

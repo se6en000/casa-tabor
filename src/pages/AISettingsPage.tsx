@@ -44,15 +44,6 @@ const VENDORS: Record<string, { label: string; models: ModelOption[] }> = {
     models: [
       { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', group: 'Recommended', speed: 'Fast', reasoning: 'Advanced', description: 'Best production balance for Casa voice, tools, and everyday planning.' },
       { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', group: 'Recommended', speed: 'Fastest', reasoning: 'Everyday', description: 'Lowest latency and cost for simple household requests.' },
-      { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', group: 'Advanced / Preview', speed: 'Fast', reasoning: 'Advanced', description: 'Newest Flash reasoning; monitor behavior before production voice use.' },
-      { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview', group: 'Advanced / Preview', speed: 'Fast', reasoning: 'Advanced', description: 'Preview Flash model for low-latency reasoning and tool use.' },
-      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview', group: 'Advanced / Preview', speed: 'Balanced', reasoning: 'Deep', description: 'Newer preview Pro model for deep reasoning.' },
-      { id: 'gemini-3.1-pro-preview-customtools', label: 'Gemini 3.1 Pro Custom Tools', group: 'Advanced / Preview', speed: 'Balanced', reasoning: 'Deep', description: 'Preview variant specialized for custom tool workflows.' },
-      { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite', group: 'Advanced / Preview', speed: 'Fastest', reasoning: 'Everyday', description: 'Newer lightweight model optimized for speed and efficiency.' },
-      { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite Preview', group: 'Advanced / Preview', speed: 'Fastest', reasoning: 'Everyday', description: 'Preview track of the lightweight 3.1 model.' },
-      { id: 'gemini-flash-latest', label: 'Gemini Flash Latest', group: 'Latest aliases', speed: 'Fast', reasoning: 'Advanced', description: 'Auto-updating Flash alias; behavior can change without a Casa release.' },
-      { id: 'gemini-flash-lite-latest', label: 'Gemini Flash Lite Latest', group: 'Latest aliases', speed: 'Fastest', reasoning: 'Everyday', description: 'Auto-updating Lite alias; behavior can change without a Casa release.' },
-      { id: 'gemini-pro-latest', label: 'Gemini Pro Latest', group: 'Latest aliases', speed: 'Balanced', reasoning: 'Deep', description: 'Auto-updating Pro alias; behavior can change without a Casa release.' },
     ],
   },
   openai: {

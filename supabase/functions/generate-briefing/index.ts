@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { getCorrelationId, invocationHeaders, withCorrelationHeaders } from '../_shared/correlation.ts'
 import { requireEnv } from '../_shared/env.ts'
+import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -31,7 +32,11 @@ Deno.serve(async (req) => {
 
   // Load LLM config and weather config from settings
   const { data: settingRow } = await sb.from('settings').select('value').eq('key', 'llm_config').single()
-  const llmConfig = (settingRow?.value ?? {}) as { provider: string; model: string; api_key: string }
+  const llmConfig = resolveBackgroundLlmConfig(settingRow?.value) as {
+    provider: string
+    model: string
+    api_key?: string
+  }
   const { data: weatherSetting } = await sb.from('settings').select('value').eq('key', 'weather').maybeSingle()
   const weatherCity: string = weatherSetting?.value?.city ?? ''
 
@@ -123,7 +128,15 @@ Deno.serve(async (req) => {
   let summaryText = ''
   if (llmConfig?.api_key && llmConfig?.provider) {
     try {
-      summaryText = await callLLM(llmConfig, today, events ?? [], familyMembers ?? [], weatherCity, prepItems, actionQueue)
+      summaryText = await callLLM(
+        llmConfig as { provider: string; model: string; api_key: string },
+        today,
+        events ?? [],
+        familyMembers ?? [],
+        weatherCity,
+        prepItems,
+        actionQueue,
+      )
     } catch (err) {
       console.error(`[generate-briefing][${correlationId}] LLM error:`, err)
       summaryText = ''
@@ -250,7 +263,7 @@ Write in a warm, confident voice like a knowledgeable household manager. Use fam
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
-          maxOutputTokens: 1024,
+          maxOutputTokens: 512,
           temperature: 0.7,
           thinkingConfig: { thinkingBudget: 0 },
         },

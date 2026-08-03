@@ -22,5 +22,5 @@ test('event sheet uses a dedicated non-travel overview instead of the driver pla
 
 test('event location remains visible independently of travel classification', () => {
   assert.match(panel, /\{!reminder && showLocation && \(/)
-  assert.match(panel, /transportationNeeded=\{Boolean\(transportationPlan\) \|\| planKind === 'travel'\}/)
+  assert.match(panel, /transportationNeeded=\{showTransportationSection\}/)
 })

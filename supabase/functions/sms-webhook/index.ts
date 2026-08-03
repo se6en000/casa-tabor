@@ -9,6 +9,7 @@
  * Set this in Twilio Console → Phone Numbers → Active Numbers → Messaging → Webhook
  */
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 
 Deno.serve(async (req) => {
   // Twilio sends form-encoded POST
@@ -24,7 +25,11 @@ Deno.serve(async (req) => {
 
   // Load LLM config
   const { data: llmSetting } = await sb.from('settings').select('value').eq('key', 'llm_config').single()
-  const llmConfig = llmSetting?.value as { provider: string; model: string; api_key: string } | null
+  const llmConfig = resolveBackgroundLlmConfig(llmSetting?.value) as {
+    provider: string
+    model: string
+    api_key?: string
+  }
 
   // Identify sender by phone number
   // Normalize: strip spaces/dashes, ensure E.164

@@ -64,6 +64,18 @@ Deno.serve(async (req) => {
     })
   }
 
+  if (event.lat != null && event.lng != null) {
+    return new Response(JSON.stringify({
+      ok: true,
+      skipped: 'existing_coordinates',
+      event_id: eventId,
+      lat: event.lat,
+      lng: event.lng,
+    }), {
+      headers: { ...CORS, 'content-type': 'application/json' },
+    })
+  }
+
   const locationName = event.location_name?.trim() || null
   const address = event.address?.trim() || null
   const query = [locationName, address].filter(Boolean).join(', ')
@@ -80,6 +92,52 @@ Deno.serve(async (req) => {
       })
     }
     return new Response(JSON.stringify({ ok: true, skipped: 'no_location', event_id: eventId }), {
+      headers: { ...CORS, 'content-type': 'application/json' },
+    })
+  }
+
+  let cachedEventQuery = sb
+    .from('events')
+    .select('lat, lng')
+    .neq('id', eventId)
+    .not('lat', 'is', null)
+    .not('lng', 'is', null)
+    .limit(1)
+
+  cachedEventQuery = address
+    ? cachedEventQuery.eq('address', address)
+    : cachedEventQuery.eq('location_name', locationName)
+
+  const { data: cachedEvents, error: cacheError } = await cachedEventQuery
+  if (cacheError) {
+    console.error(`[geocode-event-location] coordinate cache lookup failed for ${eventId}:`, cacheError.message)
+  }
+
+  const cachedEvent = cachedEvents?.[0]
+  if (cachedEvent?.lat != null && cachedEvent.lng != null) {
+    const { error: cacheUpdateError } = await sb
+      .from('events')
+      .update({
+        lat: cachedEvent.lat,
+        lng: cachedEvent.lng,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', eventId)
+
+    if (cacheUpdateError) {
+      return new Response(JSON.stringify({ error: cacheUpdateError.message }), {
+        status: 500,
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
+    return new Response(JSON.stringify({
+      ok: true,
+      cached: true,
+      event_id: eventId,
+      lat: cachedEvent.lat,
+      lng: cachedEvent.lng,
+    }), {
       headers: { ...CORS, 'content-type': 'application/json' },
     })
   }

@@ -10,6 +10,7 @@
  *  📋  "Field trip tomorrow — permission slip needs to be returned today"
  */
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -59,7 +60,11 @@ Deno.serve(async (req) => {
 
   // ── Load LLM config ──
   const { data: cfgRow } = await sb.from('settings').select('value').eq('key', 'llm_config').single()
-  const config = cfgRow?.value ?? { provider: 'gemini', model: 'gemini-1.5-flash', api_key: '' }
+  const config = resolveBackgroundLlmConfig(cfgRow?.value) as {
+    provider: string
+    model: string
+    api_key: string
+  }
 
   // ── Build event context for LLM ──
   const familyNames = members.map((m: { name: string; role: string }) => `${m.name} (${m.role})`).join(', ')
@@ -230,7 +235,7 @@ async function callLLM(config: { provider: string; model: string; api_key: strin
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            maxOutputTokens: 8192,
+            maxOutputTokens: 1024,
             temperature: 0.4,
             thinkingConfig: { thinkingBudget: 0 },
           },

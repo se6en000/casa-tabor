@@ -1301,9 +1301,9 @@ function StandardPanelBody({
     !commuteDestination
       ? false
       : msUntilStart <= 90 * 60_000
-        ? 60_000
-        : msUntilStart <= 6 * 60 * 60_000
           ? 5 * 60_000
+        : msUntilStart <= 6 * 60 * 60_000
+            ? 15 * 60_000
           : false
   const commuteQuery = useTravelEta({
     destination: commuteDestination,

@@ -1,5 +1,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { computeTravelEta } from '../_shared/travel-eta.mjs'
+import {
+  computeCachedTravelEta,
+  createSupabaseRouteEtaCache,
+} from '../_shared/route-eta-cache.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -41,14 +44,14 @@ Deno.serve(async (req) => {
     const rawBuffer = Number(body?.buffer_mins ?? 10)
     const bufferMins = Number.isFinite(rawBuffer) ? Math.max(0, Math.min(45, Math.round(rawBuffer))) : 10
 
-    const result = await computeTravelEta({
+    const result = await computeCachedTravelEta({
       mapsKey,
       origin,
       destination,
       arrivalTimeIso: arrivalTime,
       departureTimeIso: departureTime,
       bufferMins,
-    })
+    }, createSupabaseRouteEtaCache(sb))
 
     return new Response(JSON.stringify(result), {
       status: result.found ? 200 : 502,
