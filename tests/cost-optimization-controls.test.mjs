@@ -154,6 +154,10 @@ test('cost dashboard uses server aggregation and discloses incomplete billing co
   assert.match(statusDashboard, /Directional only/)
   assert.match(statusDashboard, /Actual Google cost/)
   assert.match(statusDashboard, /Estimated logged AI/)
+  assert.match(statusDashboard, /Current tracking coverage/)
+  assert.match(statusDashboard, /Historical estimate coverage/)
+  assert.match(statusDashboard, /Three checks required for billing decisions/)
+  assert.ok(statusDashboard.indexOf('id="today-heading"') < statusDashboard.indexOf('billing-confidence-heading'))
 })
 
 test('cost observability foundation keeps exact billing separate from live estimates', () => {
@@ -230,9 +234,13 @@ test('enrichment selects the final grounded JSON object without merging search m
 test('Google billing query imports net USD cost and parses BigQuery scalar rows', () => {
   const table = validateBillingTableIdentifier('casa-tabor.billing.gcp_billing_export_resource_v1_123')
   const query = buildGoogleBillingQuery(table)
-  assert.match(query, /sum\(cost\) \+ sum\(ifnull/)
-  assert.match(query, /currency = 'USD'/)
+  assert.match(query, /sum\(BilledCost\) as cost_usd/)
+  assert.match(query, /BillingCurrency = 'USD'/)
   assert.match(query, /between @period_start and @period_end/)
+  const detailedQuery = buildGoogleBillingQuery(table, 'detailed')
+  assert.match(detailedQuery, /sum\(cost\) \+ sum\(ifnull/)
+  assert.match(detailedQuery, /currency = 'USD'/)
+  assert.throws(() => buildGoogleBillingQuery(table, 'unknown'), /unsupported_google_billing_schema/)
   assert.throws(() => validateBillingTableIdentifier('bad`; drop table events; --'), /invalid_google_billing_table/)
 
   const [row] = rowsFromBigQuery({

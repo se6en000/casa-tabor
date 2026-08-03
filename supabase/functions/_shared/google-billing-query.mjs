@@ -30,7 +30,30 @@ export function rowsFromBigQuery(payload) {
   })
 }
 
-export function buildGoogleBillingQuery(table) {
+export function buildGoogleBillingQuery(table, schema = 'focus') {
+  if (schema === 'focus') {
+    return `
+select
+  date(ChargePeriodStart) as usage_date,
+  coalesce(SubAccountId, 'unattributed') as project_id,
+  SubAccountName as project_name,
+  cast(null as string) as service_id,
+  ServiceName as service_name,
+  SkuId as sku_id,
+  ChargeDescription as sku_name,
+  sum(ConsumedQuantity) as usage_quantity,
+  ConsumedUnit as usage_unit,
+  sum(BilledCost) as subtotal_usd,
+  cast(0 as numeric) as credits_usd,
+  sum(BilledCost) as cost_usd
+from \`${table}\`
+where date(ChargePeriodStart) between @period_start and @period_end
+  and BillingCurrency = 'USD'
+group by usage_date, project_id, project_name, service_name, sku_id, sku_name, usage_unit
+order by usage_date, project_id, service_name, sku_name
+`.trim()
+  }
+  if (schema !== 'detailed') throw new Error('unsupported_google_billing_schema')
   return `
 select
   date(usage_start_time) as usage_date,
@@ -52,4 +75,3 @@ group by usage_date, project_id, project_name, service_id, service_name, sku_id,
 order by usage_date, project_id, service_name, sku_name
 `.trim()
 }
-

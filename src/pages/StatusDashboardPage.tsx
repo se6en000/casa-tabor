@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Activity,
   BarChart3,
   Bot,
+  CheckCircle2,
+  CircleDashed,
   CircleDollarSign,
-  Database,
+  Clock3,
   RefreshCw,
   ShieldAlert,
+  ShieldCheck,
   TrendingUp,
-  Zap,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
@@ -17,6 +19,7 @@ import {
   Button,
   Card,
   Chip,
+  DisclosureSection,
   IconButton,
   Progress,
   SkeletonRow,
@@ -76,7 +79,7 @@ interface StatCardProps {
   label: string
   value: string
   sub: string
-  icon: React.ReactNode
+  icon: ReactNode
 }
 
 const trustCopy: Record<TrustStatus, { label: string; tone: 'success' | 'info' | 'warning' | 'danger' }> = {
@@ -85,6 +88,12 @@ const trustCopy: Record<TrustStatus, { label: string; tone: 'success' | 'info' |
   incomplete: { label: 'Incomplete', tone: 'warning' },
   stale: { label: 'Stale', tone: 'warning' },
   error: { label: 'Error', tone: 'danger' },
+}
+
+const trustGateToneClass = {
+  success: 'text-casa-success-strong',
+  info: 'text-casa-info-strong',
+  warning: 'text-casa-warning',
 }
 
 function formatNumber(value: number) {
@@ -117,6 +126,40 @@ function StatCard({ label, value, sub, icon }: StatCardProps) {
         <p className="text-caption text-casa-muted mt-0.5">{sub}</p>
       </div>
     </Card>
+  )
+}
+
+function TodayMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-body-sm text-casa-text-secondary">{label}</p>
+      <p className="mt-1 text-heading font-display leading-tight text-content-heading">{value}</p>
+    </div>
+  )
+}
+
+function TrustGate({
+  icon,
+  label,
+  detail,
+  status,
+  tone,
+}: {
+  icon: ReactNode
+  label: string
+  detail: string
+  status: string
+  tone: 'success' | 'info' | 'warning'
+}) {
+  return (
+    <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-3">
+      <span className={trustGateToneClass[tone]} aria-hidden="true">{icon}</span>
+      <div className="min-w-0">
+        <p className="text-body-sm font-semibold text-content-heading">{label}</p>
+        <p className="text-body-sm text-casa-text-secondary">{detail}</p>
+      </div>
+      <Chip tone={tone} size="sm">{status}</Chip>
+    </div>
   )
 }
 
@@ -158,7 +201,8 @@ export default function StatusDashboardPage() {
   }, [load])
 
   const lastSevenDays = useMemo(() => summary?.daily.slice(-7) ?? [], [summary])
-  const maxCalls = Math.max(...lastSevenDays.map((day) => day.calls), 1)
+  const maxDailyCost = Math.max(...lastSevenDays.map((day) => day.estimated_cost_usd), 0.001)
+  const maxFunctionCost = Math.max(...(summary?.by_function.map((item) => item.estimated_cost_usd) ?? []), 0.001)
 
   if (loading && !summary) {
     return <div className="space-y-4"><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>
@@ -172,7 +216,7 @@ export default function StatusDashboardPage() {
           description="Google billing, AI usage, coverage, and reconciliation"
         />
         <IconButton
-          icon={<RefreshCw size={18} />}
+          icon={<RefreshCw size={18} className={loading ? 'animate-spin motion-reduce:animate-none' : ''} />}
           aria-label="Refresh cost and usage dashboard"
           onClick={() => void load()}
           variant="ghost"
@@ -197,68 +241,95 @@ export default function StatusDashboardPage() {
       )}
 
       {summary && (
-        <>
-          <Alert
-            tone={trustCopy[summary.trust.status].tone}
-            title={
-              <span className="inline-flex flex-wrap items-center gap-2">
-                <span>Billing decision status</span>
-                <Chip tone={trustCopy[summary.trust.status].tone}>
-                  {trustCopy[summary.trust.status].label}
-                </Chip>
-              </span>
-            }
-          >
-            {summary.trust.status === 'verified'
-              ? 'This closed period passed application-to-provider and provider-to-billing reconciliation.'
-              : 'Directional only — do not use the estimated total as the Google bill. Exact cost appears only after Google billing data is imported and reconciled.'}
-          </Alert>
+        <div className="space-y-3">
+          <section aria-labelledby="today-heading">
+            <h2 id="today-heading" className="text-subheading font-display text-content-heading mb-3">
+              Today
+            </h2>
+            <Card tone="accent" className="grid grid-cols-2 gap-x-5 gap-y-5 lg:grid-cols-4">
+              <TodayMetric
+                label="Provider-backed requests"
+                value={formatNumber(summary.today.calls)}
+              />
+              <TodayMetric
+                label="Input / output tokens"
+                value={`${formatNumber(summary.today.input_tokens)} / ${formatNumber(summary.today.output_tokens)}`}
+              />
+              <TodayMetric
+                label="Prompt tokens reused"
+                value={formatNumber(summary.today.cached_input_tokens)}
+              />
+              <TodayMetric
+                label="Estimated AI cost"
+                value={formatEstimatedCost(summary.today.estimated_cost_usd)}
+              />
+            </Card>
+          </section>
 
-          <Card tone="subtle" padding="sm" className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Database size={18} className="text-casa-muted" aria-hidden="true" />
-                <p className="text-body-sm font-semibold text-casa-navy">Displayed historical coverage</p>
+          <Card padding="sm" aria-labelledby="billing-confidence-heading">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b border-casa-divider pb-3">
+              <div className="flex items-center gap-3">
+                {summary.trust.status === 'verified'
+                  ? <ShieldCheck size={22} className="text-casa-success-strong" aria-hidden="true" />
+                  : <ShieldAlert size={22} className="text-casa-warning" aria-hidden="true" />}
+                <div>
+                  <h2 id="billing-confidence-heading" className="text-body font-bold text-content-heading">
+                    Billing confidence
+                  </h2>
+                  <p className="text-body-sm text-casa-text-secondary">Three checks required for billing decisions</p>
+                </div>
               </div>
-              <p className="text-body-sm font-semibold text-casa-navy">
-                {summary.trust.logged_paths} of {summary.trust.known_paths} AI paths
-              </p>
+              <Chip tone={trustCopy[summary.trust.status].tone}>
+                {trustCopy[summary.trust.status].label}
+              </Chip>
             </div>
-            <Progress
-              value={summary.trust.coverage_pct}
-              max={100}
-              label="Instrumented AI call-path coverage"
-              showValue
-            />
-            <p className="text-caption text-casa-muted">
-              New per-provider ledger: <strong className="text-casa-navy">
-                {summary.trust.provider_logged_paths} of {summary.trust.known_paths} paths instrumented
-              </strong>. It will replace the incomplete historical log after enough live validation.
+
+            <div className="divide-y divide-casa-divider">
+              <TrustGate
+                icon={summary.trust.provider_coverage_pct === 100
+                  ? <CheckCircle2 size={20} />
+                  : <CircleDashed size={20} />}
+                label="Application tracking"
+                detail={`${summary.trust.provider_logged_paths} of ${summary.trust.known_paths} current AI paths`}
+                status={summary.trust.provider_coverage_pct === 100 ? 'Complete' : 'Incomplete'}
+                tone={summary.trust.provider_coverage_pct === 100 ? 'success' : 'warning'}
+              />
+              <TrustGate
+                icon={summary.billing.line_count > 0 ? <CheckCircle2 size={20} /> : <Clock3 size={20} />}
+                label="Google billing"
+                detail={summary.billing.line_count > 0
+                  ? `Imported through ${formatFreshness(summary.billing.latest_usage_date)}`
+                  : 'Waiting for the first Google billing export'}
+                status={summary.billing.line_count > 0
+                  ? (summary.billing.finalized ? 'Finalized' : 'Imported')
+                  : 'Waiting'}
+                tone={summary.billing.line_count > 0
+                  ? (summary.billing.finalized ? 'success' : 'info')
+                  : 'warning'}
+              />
+              <TrustGate
+                icon={summary.trust.reconciled_at ? <CheckCircle2 size={20} /> : <CircleDashed size={20} />}
+                label="Reconciliation"
+                detail={summary.trust.reconciled_at
+                  ? `Last checked ${formatFreshness(summary.trust.reconciled_at)}`
+                  : 'Application usage has not been matched to a closed Google billing period'}
+                status={summary.trust.reconciled_at ? 'Checked' : 'Not run'}
+                tone={summary.trust.reconciled_at ? 'success' : 'warning'}
+              />
+            </div>
+
+            <p className="border-t border-casa-divider pt-3 text-body-sm text-casa-text-secondary">
+              {summary.trust.status === 'verified'
+                ? 'This closed period passed application-to-provider and provider-to-billing reconciliation.'
+                : 'Directional only — estimated AI cost is useful for trends, but it is not the Google bill.'}
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-caption text-casa-muted">
-              <p>Application fresh: <strong className="text-casa-navy">{formatFreshness(summary.trust.application_fresh_at)}</strong></p>
-              <p>Billing through: <strong className="text-casa-navy">{formatFreshness(summary.trust.billing_fresh_through)}</strong></p>
-              <p>Unpriced calls: <strong className="text-casa-navy">{formatNumber(summary.trust.unknown_pricing_calls)}</strong></p>
-            </div>
           </Card>
 
-          {llmConfig && (
-            <Card tone="subtle" padding="sm" className="flex items-center gap-3">
-              <Bot size={18} className="text-casa-gold shrink-0" aria-hidden="true" />
-              <p className="text-body-sm text-casa-navy font-medium">
-                Current model: {llmConfig.provider} — {llmConfig.model}
-              </p>
-              <Link to="/settings/ai" className="ml-auto text-body-sm text-casa-gold underline-offset-4 hover:underline">
-                Change
-              </Link>
-            </Card>
-          )}
-
           <section aria-labelledby="cost-summary-heading">
-            <h2 id="cost-summary-heading" className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">
+            <h2 id="cost-summary-heading" className="text-subheading font-display text-content-heading mb-3">
               Last 30 days
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <StatCard
                 label="Actual Google cost"
                 value={formatActualCost(summary.billing.actual_cost_usd)}
@@ -272,60 +343,28 @@ export default function StatusDashboardPage() {
                 icon={<TrendingUp size={18} />}
               />
               <StatCard
-                label="Logged AI calls"
+                label="Provider-backed requests"
                 value={formatNumber(summary.period.calls)}
-                sub={`${formatNumber(summary.period.deduplicated_calls)} Application calls deduplicated`}
-                icon={<Activity size={18} />}
-              />
-              <StatCard
-                label="Logged tokens"
-                value={formatNumber(summary.period.input_tokens + summary.period.output_tokens)}
-                sub={`${formatNumber(summary.period.input_tokens)} in / ${formatNumber(summary.period.output_tokens)} out`}
-                icon={<Zap size={18} />}
+                sub={`${formatNumber(summary.period.input_tokens + summary.period.output_tokens)} logged tokens`}
+                icon={<BarChart3 size={18} />}
               />
             </div>
           </section>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <section aria-labelledby="today-heading">
-              <h2 id="today-heading" className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">
-                Today
-              </h2>
-              <Card className="space-y-3">
-                <div className="flex justify-between gap-4 text-body-sm">
-                  <span className="text-casa-muted">Logged provider-backed requests</span>
-                  <strong className="text-casa-navy">{formatNumber(summary.today.calls)}</strong>
-                </div>
-                <div className="flex justify-between gap-4 text-body-sm">
-                  <span className="text-casa-muted">Input / output tokens</span>
-                  <strong className="text-casa-navy">
-                    {formatNumber(summary.today.input_tokens)} / {formatNumber(summary.today.output_tokens)}
-                  </strong>
-                </div>
-                <div className="flex justify-between gap-4 text-body-sm">
-                  <span className="text-casa-muted">Gemini prompt tokens reused</span>
-                  <strong className="text-casa-navy">{formatNumber(summary.today.cached_input_tokens)}</strong>
-                </div>
-                <div className="flex justify-between gap-4 text-body-sm">
-                  <span className="text-casa-muted">Estimated logged AI cost</span>
-                  <strong className="text-casa-navy">{formatEstimatedCost(summary.today.estimated_cost_usd)}</strong>
-                </div>
-              </Card>
-            </section>
-
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
             <section aria-labelledby="trend-heading">
-              <h2 id="trend-heading" className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">
+              <h2 id="trend-heading" className="text-subheading font-display text-content-heading mb-3">
                 <BarChart3 size={14} className="inline mr-1.5" aria-hidden="true" />
-                Calls by day
+                Estimated spend by day
               </h2>
               <Card>
                 <div className="flex items-end gap-2 h-36" aria-hidden="true">
                   {lastSevenDays.map((day) => (
                     <div key={day.date} className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
-                      <span className="text-caption text-casa-navy font-medium">{formatNumber(day.calls)}</span>
+                      <span className="text-caption text-casa-navy font-medium">{formatEstimatedCost(day.estimated_cost_usd)}</span>
                       <div
-                        className="w-full max-w-10 rounded-sm bg-casa-navy/25"
-                        style={{ height: `${Math.max(4, (day.calls / maxCalls) * 88)}px` }}
+                        className="w-full max-w-10 rounded-sm bg-casa-navy/70"
+                        style={{ height: `${Math.max(4, (day.estimated_cost_usd / maxDailyCost) * 88)}px` }}
                       />
                       <span className="text-caption text-casa-muted">
                         {new Date(`${day.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' })}
@@ -334,12 +373,13 @@ export default function StatusDashboardPage() {
                   ))}
                 </div>
                 <table className="sr-only">
-                  <caption>Logged AI calls by day for the last seven days</caption>
-                  <thead><tr><th>Date</th><th>Calls</th><th>Tokens</th></tr></thead>
+                  <caption>Estimated AI spend by day for the last seven days</caption>
+                  <thead><tr><th>Date</th><th>Estimated cost</th><th>Calls</th><th>Tokens</th></tr></thead>
                   <tbody>
                     {lastSevenDays.map((day) => (
                       <tr key={day.date}>
                         <td>{day.date}</td>
+                        <td>{formatEstimatedCost(day.estimated_cost_usd)}</td>
                         <td>{day.calls}</td>
                         <td>{day.tokens}</td>
                       </tr>
@@ -348,49 +388,104 @@ export default function StatusDashboardPage() {
                 </table>
               </Card>
             </section>
+
+            <section aria-labelledby="function-heading">
+              <h2 id="function-heading" className="text-subheading font-display text-content-heading mb-3">
+                Cost drivers
+              </h2>
+              {summary.by_function.length > 0 ? (
+                <Card padding="none" className="overflow-hidden">
+                  <div className="divide-y divide-casa-border">
+                    {summary.by_function.map((item) => (
+                      <div key={item.function_name} className="px-4 py-3">
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="text-body-sm font-semibold text-content-heading">{item.function_name}</p>
+                            <p className="text-caption text-casa-text-secondary">
+                              {formatNumber(item.calls)} calls · {formatNumber(item.tokens)} tokens
+                            </p>
+                          </div>
+                          <p className="shrink-0 text-body-sm font-semibold text-content-heading">
+                            {formatEstimatedCost(item.estimated_cost_usd)}
+                          </p>
+                        </div>
+                        <div className="mt-2 h-2 overflow-hidden rounded-pill bg-surface-inset" aria-hidden="true">
+                          <div
+                            className="h-full rounded-pill bg-casa-navy/70"
+                            style={{ width: `${Math.max(2, (item.estimated_cost_usd / maxFunctionCost) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              ) : (
+                <Alert tone="info" title="No logged AI usage in this period">
+                  This is not proof that no provider calls occurred while historical telemetry coverage is incomplete.
+                </Alert>
+              )}
+            </section>
           </div>
 
-          <section aria-labelledby="function-heading">
-            <h2 id="function-heading" className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">
-              Logged cost by function
-            </h2>
-            {summary.by_function.length > 0 ? (
-              <Card padding="none" className="overflow-hidden">
-                <div className="divide-y divide-casa-border">
-                  {summary.by_function.map((item) => (
-                    <div key={item.function_name} className="flex items-center justify-between gap-4 px-4 py-3">
-                      <div className="min-w-0">
-                        <p className="text-body-sm font-medium text-casa-navy">{item.function_name}</p>
-                        <p className="text-caption text-casa-muted">{formatNumber(item.tokens)} tokens</p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-body-sm font-semibold text-casa-navy">{formatNumber(item.calls)} calls</p>
-                        <p className="text-caption text-casa-muted">{formatEstimatedCost(item.estimated_cost_usd)} estimated</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+          {llmConfig && (
+            <section aria-labelledby="configuration-heading">
+              <h2 id="configuration-heading" className="text-subheading font-display text-content-heading mb-3">
+                Configuration
+              </h2>
+              <Card tone="subtle" padding="sm" className="flex items-center gap-3">
+                <Bot size={18} className="text-casa-gold shrink-0" aria-hidden="true" />
+                <p className="text-body-sm text-content-heading font-medium">
+                  Current model: {llmConfig.provider} — {llmConfig.model}
+                </p>
+                <Link
+                  to="/settings/ai"
+                  className="ml-auto inline-flex min-h-control items-center text-body-sm font-semibold text-casa-gold underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-casa-gold"
+                >
+                  Change
+                </Link>
               </Card>
-            ) : (
-              <Alert tone="info" title="No logged AI usage in this period">
-                This is not proof that no provider calls occurred while telemetry coverage is incomplete.
-              </Alert>
-            )}
-          </section>
+            </section>
+          )}
 
-          <Alert tone="info" title="What is exact and what is estimated">
-            <p>
-              Imported Google billing line items are shown to the cent and remain the source of truth.
-              Live application cost is an estimate from logged tokens and effective-date pricing; Google can
-              apply cached-token rules, SKU classification, credits, rounding, and delayed adjustments later.
-            </p>
-          </Alert>
+          <Card padding="none" className="overflow-hidden">
+            <DisclosureSection
+              title="Data details"
+              summary={`${summary.trust.provider_logged_paths}/${summary.trust.known_paths} current paths tracked · ${summary.trust.logged_paths}/${summary.trust.known_paths} historical paths`}
+              icon={<CircleDollarSign size={20} aria-hidden="true" />}
+              className="border-b-0"
+            >
+              <div className="space-y-5">
+                <Progress
+                  value={summary.trust.provider_coverage_pct}
+                  max={100}
+                  label="Current tracking coverage"
+                  showValue
+                />
+                <Progress
+                  value={summary.trust.coverage_pct}
+                  max={100}
+                  label="Historical estimate coverage"
+                  showValue
+                />
+                <div className="grid grid-cols-1 gap-3 text-body-sm text-casa-text-secondary sm:grid-cols-3">
+                  <p>Application fresh<br /><strong className="text-content-heading">{formatFreshness(summary.trust.application_fresh_at)}</strong></p>
+                  <p>Billing through<br /><strong className="text-content-heading">{formatFreshness(summary.trust.billing_fresh_through)}</strong></p>
+                  <p>Unpriced calls<br /><strong className="text-content-heading">{formatNumber(summary.trust.unknown_pricing_calls)}</strong></p>
+                </div>
+                <p className="text-body-sm text-casa-text-secondary">
+                  Imported Google billing line items are the exact source of truth. Live application cost is an estimate
+                  from logged tokens and effective-date pricing; Google can apply cached-token rules, SKU classification,
+                  credits, rounding, and delayed adjustments later.
+                </p>
+              </div>
+            </DisclosureSection>
+          </Card>
 
           <p className="text-caption text-casa-muted text-center pb-4">
-            <ShieldAlert size={14} className="inline mr-1" aria-hidden="true" />
+            <RefreshCw size={14} className="inline mr-1" aria-hidden="true" />
             {lastRefresh ? `Last refreshed ${lastRefresh.toLocaleTimeString()}` : 'Not refreshed'}
           </p>
-        </>
+        </div>
       )}
     </>
   )

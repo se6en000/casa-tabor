@@ -82,6 +82,7 @@ Deno.serve(async (req) => {
       throw new Error('invalid_google_billing_service_account')
     }
     const table = validateBillingTableIdentifier(requireEnv('GOOGLE_BILLING_TABLE'))
+    const billingSchema = Deno.env.get('GOOGLE_BILLING_SCHEMA')?.trim().toLowerCase() || 'focus'
     const queryProject = Deno.env.get('GOOGLE_BILLING_QUERY_PROJECT')?.trim() || serviceAccount.project_id
     const accessToken = await createGoogleServiceAccountToken(
       serviceAccount,
@@ -96,7 +97,7 @@ Deno.serve(async (req) => {
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          query: buildGoogleBillingQuery(table),
+          query: buildGoogleBillingQuery(table, billingSchema),
           useLegacySql: false,
           timeoutMs: 30000,
           parameterMode: 'NAMED',
@@ -124,7 +125,7 @@ Deno.serve(async (req) => {
         billing_state: 'provisional',
         row_count: rows.length,
         imported_at: new Date().toISOString(),
-        metadata: { query_project: queryProject },
+        metadata: { query_project: queryProject, billing_schema: billingSchema },
       }, { onConflict: 'source_checksum' })
       .select('id')
       .single()
