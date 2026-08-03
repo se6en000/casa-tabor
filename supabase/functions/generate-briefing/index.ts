@@ -2,12 +2,18 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { getCorrelationId, invocationHeaders, withCorrelationHeaders } from '../_shared/correlation.ts'
 import { requireEnv } from '../_shared/env.ts'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
+import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-correlation-id',
 }
+const providerFetch = createTrackedProviderFetch({
+  functionName: 'generate-briefing',
+  capability: 'briefing',
+  trafficClass: 'background',
+})
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
@@ -257,7 +263,7 @@ Write a single flowing paragraph (4–6 sentences) that covers:
 Write in a warm, confident voice like a knowledgeable household manager. Use family member names. No bullet points. No headers. Just one great paragraph.`
 
   if (config.provider === 'gemini') {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.api_key}`, {
+    const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.api_key}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -275,7 +281,7 @@ Write in a warm, confident voice like a knowledgeable household manager. Use fam
   }
 
   if (config.provider === 'openai') {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const res = await providerFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${config.api_key}` },
       body: JSON.stringify({ model: config.model, messages: [{ role: 'user', content: prompt }], max_tokens: 1024, temperature: 0.7 }),
@@ -285,7 +291,7 @@ Write in a warm, confident voice like a knowledgeable household manager. Use fam
   }
 
   if (config.provider === 'anthropic') {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await providerFetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': config.api_key, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({ model: config.model, max_tokens: 1024, messages: [{ role: 'user', content: prompt }] }),

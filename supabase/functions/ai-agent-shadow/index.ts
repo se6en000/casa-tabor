@@ -14,6 +14,7 @@ import {
   PRIMARY_GEMINI_MODEL,
   resolveProductionGeminiModel,
 } from '../_shared/llm-model-policy.mjs'
+import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -21,6 +22,12 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 const DEFAULT_MODEL = PRIMARY_GEMINI_MODEL
+const providerFetch = createTrackedProviderFetch({
+  functionName: 'ai-agent-shadow',
+  capability: 'assistant-shadow',
+  lane: 'agent-shadow',
+  trafficClass: 'shadow',
+})
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
@@ -185,7 +192,7 @@ async function callGemini(model: string, apiKey: string, requestBody: unknown) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 2500)
   try {
-    return await fetch(
+    return await providerFetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {
         method: 'POST',

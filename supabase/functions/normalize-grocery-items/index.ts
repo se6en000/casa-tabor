@@ -6,12 +6,18 @@ import {
   resolveGroceryFromCatalog,
 } from '../_shared/grocery-catalog.ts'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
+import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+const providerFetch = createTrackedProviderFetch({
+  functionName: 'normalize-grocery-items',
+  capability: 'grocery-normalization',
+  trafficClass: 'background',
+})
 
 type GroceryItemRow = {
   id: string
@@ -66,7 +72,7 @@ function parseJsonObject(raw: string): Record<string, unknown> {
 async function callLlm(config: Required<LlmConfig>, prompt: string): Promise<string> {
   const provider = (config.provider || 'gemini').toLowerCase()
   if (provider === 'gemini') {
-    const res = await fetch(
+    const res = await providerFetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.api_key}`,
       {
         method: 'POST',
@@ -87,7 +93,7 @@ async function callLlm(config: Required<LlmConfig>, prompt: string): Promise<str
   }
 
   if (provider === 'openai') {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const res = await providerFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${config.api_key}` },
       body: JSON.stringify({
@@ -102,7 +108,7 @@ async function callLlm(config: Required<LlmConfig>, prompt: string): Promise<str
   }
 
   if (provider === 'anthropic') {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await providerFetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',

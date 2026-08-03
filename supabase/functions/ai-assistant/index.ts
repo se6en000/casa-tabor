@@ -15,6 +15,7 @@ import {
   PRIMARY_GEMINI_MODEL,
   resolveProductionGeminiModel,
 } from '../_shared/llm-model-policy.mjs'
+import { createTrackedMapsFetch, createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { classifyAssistantIntent } from '../_shared/assistant-intent-profile.mjs'
 import { resolveDeterministicEventMutation } from '../_shared/deterministic-event-mutation.mjs'
 import {
@@ -149,6 +150,17 @@ type BugReportRow = {
 }
 
 const DEFAULT_GEMINI_MODEL = PRIMARY_GEMINI_MODEL
+const providerFetch = createTrackedProviderFetch({
+  functionName: 'ai-assistant',
+  capability: 'assistant',
+  trafficClass: 'user',
+})
+const mapsFetch = createTrackedMapsFetch({
+  functionName: 'ai-assistant',
+  service: 'places',
+  sku: 'Places Text Search',
+  callPurpose: 'assistant-place-search',
+})
 const AGENT_GENERAL_PAGES = new Set(['app', 'briefing', 'calendar', 'grocery', 'home'])
 
 function isSupportedGeminiModel(value: string): boolean {
@@ -1702,15 +1714,15 @@ Deno.serve(async (req) => {
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
     try {
     if (!opts.stream) {
-      const res = await fetch(`${base}:generateContent?key=${apiKey}`, {
+      const res = await providerFetch(`${base}:generateContent?key=${apiKey}`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(reqBody), signal: controller.signal,
-      })
+      }, { correlationId: cid, lane: intentRouting.profile, callIndex: llmTelemetry.llm_calls + 1 })
       if (!res.ok) return { ok: false, status: res.status, data: null, errText: await res.text().catch(() => '') }
       return { ok: true, status: res.status, data: await res.json(), errText: '' }
     }
-    const res = await fetch(`${base}:streamGenerateContent?alt=sse&key=${apiKey}`, {
+    const res = await providerFetch(`${base}:streamGenerateContent?alt=sse&key=${apiKey}`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(reqBody), signal: controller.signal,
-    })
+    }, { correlationId: cid, lane: intentRouting.profile, callIndex: llmTelemetry.llm_calls + 1 })
     if (!res.ok || !res.body) {
       return { ok: res.ok && Boolean(res.body), status: res.status, data: null, errText: await res.text().catch(() => '') }
     }
@@ -2971,7 +2983,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const query = args.query as string
       const city = (args.city as string) || (context.homeCity as string) || 'West Palm Beach'
       try {
-        const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+        const res = await mapsFetch('https://places.googleapis.com/v1/places:searchText', {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
@@ -2979,7 +2991,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.location',
           },
           body: JSON.stringify({ textQuery: `${query} near ${city}`, maxResultCount: 3 }),
-        })
+        }, { correlationId: cid })
         const data = await res.json()
         const places = (data.places ?? []).map((p: { displayName?: { text: string }; formattedAddress?: string; nationalPhoneNumber?: string }) => ({
           name: p.displayName?.text,

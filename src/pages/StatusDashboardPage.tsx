@@ -1,317 +1,397 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Activity, Zap, DollarSign, BarChart3, RefreshCw, Bot, TrendingUp } from 'lucide-react'
+import {
+  Activity,
+  BarChart3,
+  Bot,
+  CircleDollarSign,
+  Database,
+  RefreshCw,
+  ShieldAlert,
+  TrendingUp,
+  Zap,
+} from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { cn } from '../utils/cn'
-import { IconButton, SkeletonRow } from '../components/ui'
+import {
+  Alert,
+  Button,
+  Card,
+  Chip,
+  IconButton,
+  Progress,
+  SkeletonRow,
+} from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
-interface UsageRow {
-  function_name: string
-  provider: string
-  model: string
+type TrustStatus = 'verified' | 'provisional' | 'incomplete' | 'stale' | 'error'
+
+interface UsageTotals {
+  calls: number
   input_tokens: number
   cached_input_tokens: number
   output_tokens: number
-  cached: boolean
-  created_at: string
+  deduplicated_calls: number
+  estimated_cost_usd: number
+  unknown_pricing_calls?: number
 }
 
-interface DayBucket { date: string; calls: number; tokens: number }
-
-// Pricing per 1M tokens (input, output) — paid tier estimates.
-// These are directional estimates; Google Billing remains source of truth.
-const PRICING: Record<string, [number, number]> = {
-  'gemini-2.5-flash-lite': [0.25, 1.50],
-  'gemini-2.5-flash': [1.50, 9.00],
-  'gemini-2.0-flash': [0.10, 0.40],
-  'gemini-2.5-pro':   [2.00, 12.00],
-  'gemini-3.5-flash': [1.50, 9.00],
-  'gpt-4o-mini':      [0.15, 0.60],
-  'gpt-4.1-nano':     [0.10, 0.40],
-  'gpt-4o':           [2.50, 10],
-  'claude-haiku-4-5': [0.80, 4],
-  'claude-sonnet-4-5':[3,    15],
-  'claude-opus-4-5':  [15,   75],
+interface DashboardSummary {
+  trust: {
+    status: TrustStatus
+    coverage_pct: number
+    known_paths: number
+    logged_paths: number
+    provider_logged_paths: number
+    provider_coverage_pct: number
+    unknown_pricing_calls: number
+    application_fresh_at: string | null
+    billing_fresh_through: string | null
+    billing_finalized: boolean
+    reconciliation_variance_usd: number | null
+    reconciled_at: string | null
+  }
+  today: UsageTotals
+  period: UsageTotals
+  daily: Array<{
+    date: string
+    calls: number
+    tokens: number
+    estimated_cost_usd: number
+  }>
+  by_function: Array<{
+    function_name: string
+    calls: number
+    tokens: number
+    estimated_cost_usd: number
+  }>
+  billing: {
+    actual_cost_usd: number | null
+    line_count: number
+    finalized: boolean
+    latest_usage_date: string | null
+  }
 }
 
-function estimateCost(model: string, inputTokens: number, outputTokens: number): number {
-  const [inp, out] = PRICING[model] ?? [0.10, 0.40]
-  return (inputTokens * inp + outputTokens * out) / 1_000_000
+interface StatCardProps {
+  label: string
+  value: string
+  sub: string
+  icon: React.ReactNode
 }
 
-function fmt(n: number) { return n.toLocaleString() }
-function fmtCost(n: number) {
-  if (n < 0.001) return '<$0.001'
-  if (n < 0.01) return `$${n.toFixed(4)}`
-  return `$${n.toFixed(3)}`
+const trustCopy: Record<TrustStatus, { label: string; tone: 'success' | 'info' | 'warning' | 'danger' }> = {
+  verified: { label: 'Verified', tone: 'success' },
+  provisional: { label: 'Provisional', tone: 'info' },
+  incomplete: { label: 'Incomplete', tone: 'warning' },
+  stale: { label: 'Stale', tone: 'warning' },
+  error: { label: 'Error', tone: 'danger' },
 }
 
-interface StatCardProps { label: string; value: string; sub?: string; icon: React.ReactNode; accent?: boolean }
-function StatCard({ label, value, sub, icon, accent }: StatCardProps) {
+function formatNumber(value: number) {
+  return Number(value ?? 0).toLocaleString()
+}
+
+function formatEstimatedCost(value: number) {
+  const amount = Number(value ?? 0)
+  if (amount < 0.001) return '<$0.001'
+  if (amount < 0.01) return `$${amount.toFixed(4)}`
+  return `$${amount.toFixed(2)}`
+}
+
+function formatActualCost(value: number | null) {
+  return value === null ? 'Not imported' : `$${Number(value).toFixed(2)}`
+}
+
+function formatFreshness(value: string | null) {
+  if (!value) return 'No data'
+  return new Date(value).toLocaleString()
+}
+
+function StatCard({ label, value, sub, icon }: StatCardProps) {
   return (
-    <div className={cn(
-      'bg-casa-surface rounded-card border p-4 shadow-card flex items-start gap-3',
-      accent ? 'border-casa-gold/40' : 'border-casa-border',
-    )}>
-      <span className={cn('mt-0.5 shrink-0', accent ? 'text-casa-gold' : 'text-casa-muted')}>{icon}</span>
+    <Card padding="sm" className="flex items-start gap-3">
+      <span className="mt-0.5 shrink-0 text-casa-muted" aria-hidden="true">{icon}</span>
       <div className="min-w-0">
         <p className="text-caption text-casa-muted">{label}</p>
         <p className="text-heading font-display text-casa-navy leading-tight">{value}</p>
-        {sub && <p className="text-caption text-casa-muted mt-0.5">{sub}</p>}
+        <p className="text-caption text-casa-muted mt-0.5">{sub}</p>
       </div>
-    </div>
+    </Card>
   )
 }
 
 export default function StatusDashboardPage() {
-  const [rows, setRows] = useState<UsageRow[]>([])
+  const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [llmConfig, setLlmConfig] = useState<{ provider: string; model: string } | null>(null)
-  const [lastRefresh, setLastRefresh] = useState(new Date())
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
-    const [usageRes, cfgRes] = await Promise.all([
-      supabase
-        .from('ai_usage_log')
-        .select('function_name,provider,model,input_tokens,cached_input_tokens,output_tokens,cached,created_at')
-        .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-        .order('created_at', { ascending: false }),
+    setError(null)
+    const periodEnd = new Date()
+    const periodStart = new Date(periodEnd.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const [summaryRes, cfgRes] = await Promise.all([
+      supabase.rpc('get_cost_dashboard_summary', {
+        p_start: periodStart.toISOString(),
+        p_end: periodEnd.toISOString(),
+      }),
       supabase.from('settings').select('value').eq('key', 'llm_config').single(),
     ])
-    setRows((usageRes.data ?? []) as UsageRow[])
-    if (cfgRes.data?.value) setLlmConfig(cfgRes.data.value as { provider: string; model: string })
-    setLoading(false)
+
+    if (summaryRes.error) {
+      setSummary(null)
+      setError(`The cost summary could not be loaded: ${summaryRes.error.message}`)
+    } else {
+      setSummary(summaryRes.data as DashboardSummary)
+    }
+    if (cfgRes.data?.value) {
+      setLlmConfig(cfgRes.data.value as { provider: string; model: string })
+    }
     setLastRefresh(new Date())
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const lastSevenDays = useMemo(() => summary?.daily.slice(-7) ?? [], [summary])
+  const maxCalls = Math.max(...lastSevenDays.map((day) => day.calls), 1)
+
+  if (loading && !summary) {
+    return <div className="space-y-4"><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>
   }
-
-  useEffect(() => { load() }, [])
-
-  // ── Derived stats ──
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const todayRows = rows.filter(r => r.created_at.slice(0, 10) === todayStr)
-  const monthRows = rows  // already filtered to last 30 days
-
-  function sumStats(rs: UsageRow[]) {
-    const actual = rs.filter(r => !r.cached)
-    const cached = rs.filter(r => r.cached)
-    const calls = actual.length
-    const inputTokens = actual.reduce((s, r) => s + (r.input_tokens ?? 0), 0)
-    const providerCachedInputTokens = actual.reduce((s, r) => s + (r.cached_input_tokens ?? 0), 0)
-    const outputTokens = actual.reduce((s, r) => s + (r.output_tokens ?? 0), 0)
-    const cost = actual.reduce((s, r) => s + estimateCost(r.model, r.input_tokens ?? 0, r.output_tokens ?? 0), 0)
-    return { calls, inputTokens, providerCachedInputTokens, outputTokens, cost, dedupedCalls: cached.length }
-  }
-
-  const today = sumStats(todayRows)
-  const month = sumStats(monthRows)
-
-  // Provider prompt-cache coverage is token based; application dedup is call based.
-  const promptCacheRateToday = today.inputTokens > 0
-    ? Math.round((today.providerCachedInputTokens / today.inputTokens) * 100)
-    : 0
-
-  // By function breakdown (last 30 days, non-cached only)
-  const byFunction: Record<string, { calls: number; tokens: number; cost: number }> = {}
-  monthRows.filter(r => !r.cached).forEach(r => {
-    const fn = r.function_name
-    if (!byFunction[fn]) byFunction[fn] = { calls: 0, tokens: 0, cost: 0 }
-    byFunction[fn].calls++
-    byFunction[fn].tokens += (r.input_tokens ?? 0) + (r.output_tokens ?? 0)
-    byFunction[fn].cost += estimateCost(r.model, r.input_tokens ?? 0, r.output_tokens ?? 0)
-  })
-
-  // Last 7 days bar chart
-  const last7: DayBucket[] = []
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(); d.setDate(d.getDate() - i)
-    const dateStr = d.toISOString().slice(0, 10)
-    const dayRows = rows.filter(r => r.created_at.slice(0, 10) === dateStr && !r.cached)
-    last7.push({
-      date: d.toLocaleDateString('en-US', { weekday: 'short' }),
-      calls: dayRows.length,
-      tokens: dayRows.reduce((s, r) => s + (r.input_tokens ?? 0) + (r.output_tokens ?? 0), 0),
-    })
-  }
-  const maxCalls = Math.max(...last7.map(d => d.calls), 1)
-
-  if (loading) return <div className="space-y-4"><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>
 
   return (
     <>
-      {/* Header */}
-      <div>
-        <div className="flex items-center justify-between">
-          <SettingsPageHeader title="Status Dashboard" description="AI usage, tokens, and cost estimates" />
-          <IconButton
-            icon={<RefreshCw size={18} />}
-            aria-label="Refresh status dashboard"
-            onClick={load}
-            variant="ghost"
-          />
-        </div>
+      <div className="flex items-start justify-between gap-3">
+        <SettingsPageHeader
+          title="Cost & Usage"
+          description="Google billing, AI usage, coverage, and reconciliation"
+        />
+        <IconButton
+          icon={<RefreshCw size={18} />}
+          aria-label="Refresh cost and usage dashboard"
+          onClick={() => void load()}
+          variant="ghost"
+          disabled={loading}
+        />
       </div>
 
-      {/* Current config */}
-      {llmConfig && (
-        <div className="bg-casa-bg/60 rounded-card border border-casa-border/50 px-4 py-3 flex items-center gap-3">
-          <Bot size={16} className="text-casa-gold shrink-0" />
-          <div>
-            <p className="text-body-sm text-casa-navy font-medium">
-              {llmConfig.provider.charAt(0).toUpperCase() + llmConfig.provider.slice(1)} — {llmConfig.model}
-            </p>
-          </div>
-          <Link to="/settings/ai" className="ml-auto text-caption text-casa-gold hover:underline">Change →</Link>
-        </div>
+      {error && (
+        <Alert tone="danger" title="Dashboard data is unavailable">
+          <p>{error}</p>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mt-3"
+            leadingIcon={<RefreshCw size={16} />}
+            onClick={() => void load()}
+            loading={loading}
+          >
+            Try again
+          </Button>
+        </Alert>
       )}
 
-      {/* Today — 4 stat cards in a row on desktop, 2×2 on mobile */}
-      <div>
-        <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">Today</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard
-            label="AI Calls"
-            value={fmt(today.calls)}
-            icon={<Activity size={16} />}
-          />
-          <StatCard
-            label="Tokens Used"
-            value={today.inputTokens + today.outputTokens > 0
-              ? fmt(today.inputTokens + today.outputTokens)
-              : '—'}
-            sub={today.inputTokens > 0 ? `${fmt(today.inputTokens)} in / ${fmt(today.outputTokens)} out` : undefined}
-            icon={<Zap size={16} />}
-          />
-          <StatCard
-            label="Est. Cost"
-            value={today.calls > 0 ? fmtCost(today.cost) : '—'}
-            sub="Token estimate only"
-            icon={<DollarSign size={16} />}
-          />
-          <StatCard
-            label="Prompt Cache"
-            value={`${promptCacheRateToday}%`}
-            sub={`${fmt(today.providerCachedInputTokens)} Gemini input tokens reused`}
-            icon={<TrendingUp size={16} />}
-            accent={promptCacheRateToday >= 50}
-          />
-        </div>
-      </div>
+      {summary && (
+        <>
+          <Alert
+            tone={trustCopy[summary.trust.status].tone}
+            title={
+              <span className="inline-flex flex-wrap items-center gap-2">
+                <span>Billing decision status</span>
+                <Chip tone={trustCopy[summary.trust.status].tone}>
+                  {trustCopy[summary.trust.status].label}
+                </Chip>
+              </span>
+            }
+          >
+            {summary.trust.status === 'verified'
+              ? 'This closed period passed application-to-provider and provider-to-billing reconciliation.'
+              : 'Directional only — do not use the estimated total as the Google bill. Exact cost appears only after Google billing data is imported and reconciled.'}
+          </Alert>
 
-      {/* Middle row: Last 30 days table + 7-day bar chart side by side on desktop */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* This Month */}
-        <div>
-          <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">Last 30 Days</p>
-          <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-3 h-full">
-            <div className="flex justify-between text-body-sm">
-              <span className="text-casa-muted">Total AI calls</span>
-              <span className="font-semibold text-casa-navy">{fmt(month.calls)}</span>
+          <Card tone="subtle" padding="sm" className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Database size={18} className="text-casa-muted" aria-hidden="true" />
+                <p className="text-body-sm font-semibold text-casa-navy">Displayed historical coverage</p>
+              </div>
+              <p className="text-body-sm font-semibold text-casa-navy">
+                {summary.trust.logged_paths} of {summary.trust.known_paths} AI paths
+              </p>
             </div>
-            <div className="flex justify-between text-body-sm">
-              <span className="text-casa-muted">Input tokens</span>
-              <span className="font-semibold text-casa-navy">{fmt(month.inputTokens)}</span>
-            </div>
-            <div className="flex justify-between text-body-sm">
-              <span className="text-casa-muted">Output tokens</span>
-              <span className="font-semibold text-casa-navy">{fmt(month.outputTokens)}</span>
-            </div>
-            <div className="flex justify-between text-body-sm">
-              <span className="text-casa-muted">Gemini prompt tokens reused</span>
-              <span className="font-semibold text-emerald-700">{fmt(month.providerCachedInputTokens)}</span>
-            </div>
-            <div className="flex justify-between text-body-sm">
-              <span className="text-casa-muted">Application calls deduplicated</span>
-              <span className="font-semibold text-casa-navy">{fmt(month.dedupedCalls)}</span>
-            </div>
-            <div className="h-px bg-casa-border" />
-            <div className="flex justify-between text-body-sm">
-              <span className="text-casa-muted">Est. cost</span>
-              <span className="font-semibold text-casa-navy">{month.calls > 0 ? fmtCost(month.cost) : '—'}</span>
-            </div>
-            <p className="text-caption text-casa-muted bg-casa-bg/60 rounded px-2 py-1.5">
-              Estimated token spend from ai_usage_log only. Google Billing includes other SKUs (for example Search/Maps queries and any non-logged workloads).
+            <Progress
+              value={summary.trust.coverage_pct}
+              max={100}
+              label="Instrumented AI call-path coverage"
+              showValue
+            />
+            <p className="text-caption text-casa-muted">
+              New per-provider ledger: <strong className="text-casa-navy">
+                {summary.trust.provider_logged_paths} of {summary.trust.known_paths} paths instrumented
+              </strong>. It will replace the incomplete historical log after enough live validation.
             </p>
-          </div>
-        </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-caption text-casa-muted">
+              <p>Application fresh: <strong className="text-casa-navy">{formatFreshness(summary.trust.application_fresh_at)}</strong></p>
+              <p>Billing through: <strong className="text-casa-navy">{formatFreshness(summary.trust.billing_fresh_through)}</strong></p>
+              <p>Unpriced calls: <strong className="text-casa-navy">{formatNumber(summary.trust.unknown_pricing_calls)}</strong></p>
+            </div>
+          </Card>
 
-        {/* Last 7 days chart */}
-        <div>
-          <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">
-            <BarChart3 size={12} className="inline mr-1.5 mb-0.5" />Calls by Day (last 7)
-          </p>
-          <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card h-full flex flex-col justify-between">
-            <div className="flex items-end gap-2 h-32">
-              {last7.map(d => (
-                <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
-                  <div
-                    className={cn(
-                      'w-full rounded-sm transition-all',
-                      d.date === new Date().toLocaleDateString('en-US', { weekday: 'short' })
-                        ? 'bg-casa-gold'
-                        : 'bg-casa-navy/20',
-                    )}
-                    style={{ height: `${Math.max(4, (d.calls / maxCalls) * 100)}px` }}
-                    title={`${d.calls} calls`}
-                  />
-                  <span className="text-caption text-casa-muted">{d.date}</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-caption text-casa-muted mt-3 text-center">
-              {last7.reduce((s, d) => s + d.calls, 0)} total calls this week
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom row: By function + Tips side by side on desktop */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* By function */}
-        <div>
-          <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">By Function (30 days)</p>
-          {Object.keys(byFunction).length > 0 ? (
-            <div className="bg-casa-surface rounded-card border border-casa-border shadow-card divide-y divide-casa-border">
-              {Object.entries(byFunction)
-                .sort((a, b) => b[1].calls - a[1].calls)
-                .map(([fn, stats]) => (
-                  <div key={fn} className="flex items-center justify-between px-4 py-3">
-                    <div>
-                      <p className="text-body-sm font-medium text-casa-navy">{fn}</p>
-                      <p className="text-caption text-casa-muted">{fmt(stats.tokens)} tokens</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-body-sm font-semibold text-casa-navy">{stats.calls} calls</p>
-                      <p className="text-caption text-casa-muted">{fmtCost(stats.cost)}</p>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          ) : (
-            <div className="bg-casa-surface rounded-card border border-casa-border p-6 shadow-card text-center text-casa-muted text-body-sm">
-              No AI calls yet — data appears here after first use.
-            </div>
+          {llmConfig && (
+            <Card tone="subtle" padding="sm" className="flex items-center gap-3">
+              <Bot size={18} className="text-casa-gold shrink-0" aria-hidden="true" />
+              <p className="text-body-sm text-casa-navy font-medium">
+                Current model: {llmConfig.provider} — {llmConfig.model}
+              </p>
+              <Link to="/settings/ai" className="ml-auto text-body-sm text-casa-gold underline-offset-4 hover:underline">
+                Change
+              </Link>
+            </Card>
           )}
-        </div>
 
-        {/* Tips */}
-        <div>
-          <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">Cost Control Tips</p>
-          <div className="bg-casa-bg/60 rounded-card border border-casa-border/50 p-4 space-y-2">
-            <ul className="text-caption text-casa-muted space-y-2 list-disc list-inside">
-              <li>Gemini may automatically reuse eligible prompt tokens; this dashboard reports the provider's actual reused-token count.</li>
-              <li>Application dedup skips repeated work and is tracked separately from provider prompt caching.</li>
-              <li>AI chat replies are capped at ~600 tokens each</li>
-              <li>Enrichment only re-runs if the event content actually changes</li>
-            </ul>
+          <section aria-labelledby="cost-summary-heading">
+            <h2 id="cost-summary-heading" className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">
+              Last 30 days
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <StatCard
+                label="Actual Google cost"
+                value={formatActualCost(summary.billing.actual_cost_usd)}
+                sub={summary.billing.finalized ? 'Finalized billing import' : 'No finalized billing import'}
+                icon={<CircleDollarSign size={18} />}
+              />
+              <StatCard
+                label="Estimated logged AI"
+                value={formatEstimatedCost(summary.period.estimated_cost_usd)}
+                sub="Application telemetry only"
+                icon={<TrendingUp size={18} />}
+              />
+              <StatCard
+                label="Logged AI calls"
+                value={formatNumber(summary.period.calls)}
+                sub={`${formatNumber(summary.period.deduplicated_calls)} Application calls deduplicated`}
+                icon={<Activity size={18} />}
+              />
+              <StatCard
+                label="Logged tokens"
+                value={formatNumber(summary.period.input_tokens + summary.period.output_tokens)}
+                sub={`${formatNumber(summary.period.input_tokens)} in / ${formatNumber(summary.period.output_tokens)} out`}
+                icon={<Zap size={18} />}
+              />
+            </div>
+          </section>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <section aria-labelledby="today-heading">
+              <h2 id="today-heading" className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">
+                Today
+              </h2>
+              <Card className="space-y-3">
+                <div className="flex justify-between gap-4 text-body-sm">
+                  <span className="text-casa-muted">Logged provider-backed requests</span>
+                  <strong className="text-casa-navy">{formatNumber(summary.today.calls)}</strong>
+                </div>
+                <div className="flex justify-between gap-4 text-body-sm">
+                  <span className="text-casa-muted">Input / output tokens</span>
+                  <strong className="text-casa-navy">
+                    {formatNumber(summary.today.input_tokens)} / {formatNumber(summary.today.output_tokens)}
+                  </strong>
+                </div>
+                <div className="flex justify-between gap-4 text-body-sm">
+                  <span className="text-casa-muted">Gemini prompt tokens reused</span>
+                  <strong className="text-casa-navy">{formatNumber(summary.today.cached_input_tokens)}</strong>
+                </div>
+                <div className="flex justify-between gap-4 text-body-sm">
+                  <span className="text-casa-muted">Estimated logged AI cost</span>
+                  <strong className="text-casa-navy">{formatEstimatedCost(summary.today.estimated_cost_usd)}</strong>
+                </div>
+              </Card>
+            </section>
+
+            <section aria-labelledby="trend-heading">
+              <h2 id="trend-heading" className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">
+                <BarChart3 size={14} className="inline mr-1.5" aria-hidden="true" />
+                Calls by day
+              </h2>
+              <Card>
+                <div className="flex items-end gap-2 h-36" aria-hidden="true">
+                  {lastSevenDays.map((day) => (
+                    <div key={day.date} className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
+                      <span className="text-caption text-casa-navy font-medium">{formatNumber(day.calls)}</span>
+                      <div
+                        className="w-full max-w-10 rounded-sm bg-casa-navy/25"
+                        style={{ height: `${Math.max(4, (day.calls / maxCalls) * 88)}px` }}
+                      />
+                      <span className="text-caption text-casa-muted">
+                        {new Date(`${day.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <table className="sr-only">
+                  <caption>Logged AI calls by day for the last seven days</caption>
+                  <thead><tr><th>Date</th><th>Calls</th><th>Tokens</th></tr></thead>
+                  <tbody>
+                    {lastSevenDays.map((day) => (
+                      <tr key={day.date}>
+                        <td>{day.date}</td>
+                        <td>{day.calls}</td>
+                        <td>{day.tokens}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+            </section>
           </div>
-        </div>
-      </div>
 
-      <p className="text-caption text-casa-muted text-center pb-4">
-        Last refreshed {lastRefresh.toLocaleTimeString()}
-      </p>
+          <section aria-labelledby="function-heading">
+            <h2 id="function-heading" className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">
+              Logged cost by function
+            </h2>
+            {summary.by_function.length > 0 ? (
+              <Card padding="none" className="overflow-hidden">
+                <div className="divide-y divide-casa-border">
+                  {summary.by_function.map((item) => (
+                    <div key={item.function_name} className="flex items-center justify-between gap-4 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="text-body-sm font-medium text-casa-navy">{item.function_name}</p>
+                        <p className="text-caption text-casa-muted">{formatNumber(item.tokens)} tokens</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-body-sm font-semibold text-casa-navy">{formatNumber(item.calls)} calls</p>
+                        <p className="text-caption text-casa-muted">{formatEstimatedCost(item.estimated_cost_usd)} estimated</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ) : (
+              <Alert tone="info" title="No logged AI usage in this period">
+                This is not proof that no provider calls occurred while telemetry coverage is incomplete.
+              </Alert>
+            )}
+          </section>
+
+          <Alert tone="info" title="What is exact and what is estimated">
+            <p>
+              Imported Google billing line items are shown to the cent and remain the source of truth.
+              Live application cost is an estimate from logged tokens and effective-date pricing; Google can
+              apply cached-token rules, SKU classification, credits, rounding, and delayed adjustments later.
+            </p>
+          </Alert>
+
+          <p className="text-caption text-casa-muted text-center pb-4">
+            <ShieldAlert size={14} className="inline mr-1" aria-hidden="true" />
+            {lastRefresh ? `Last refreshed ${lastRefresh.toLocaleTimeString()}` : 'Not refreshed'}
+          </p>
+        </>
+      )}
     </>
   )
 }

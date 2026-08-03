@@ -10,6 +10,8 @@ import {
   resolveProductionGeminiModel,
 } from '../supabase/functions/_shared/llm-model-policy.mjs'
 import { routeEtaCachePolicy } from '../supabase/functions/_shared/route-eta-cache.mjs'
+import { providerCallLedgerInternals } from '../supabase/functions/_shared/provider-call-ledger.mjs'
+import { parseLastJsonObject } from '../supabase/functions/_shared/json-output.mjs'
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 
@@ -29,6 +31,23 @@ const routeEta = source('supabase/functions/route-eta/index.ts')
 const travelEta = source('supabase/functions/_shared/travel-eta.mjs')
 const routeCacheMigration = source('supabase/migrations/20260803150000_route_eta_cache.sql')
 const eventDetailPanel = source('src/components/calendar/EventDetailPanel.tsx')
+const costObservabilityMigration = source('supabase/migrations/20260803190000_cost_observability_foundation.sql')
+const statusDashboard = source('src/pages/StatusDashboardPage.tsx')
+const providerCallLedger = source('supabase/functions/_shared/provider-call-ledger.mjs')
+const providerCallingFunctions = [
+  aiAssistant,
+  source('supabase/functions/ai-agent-shadow/index.ts'),
+  analyzePrep,
+  enrichEvent,
+  recipeExtract,
+  generateBriefing,
+  source('supabase/functions/meal-planner-assistant/index.ts'),
+  normalizeGroceries,
+  recipeEdit,
+  scanGmail,
+  scanTravel,
+  smsWebhook,
+]
 
 test('Gemini background work uses Flash Lite without changing other providers', () => {
   assert.equal(BACKGROUND_GEMINI_MODEL, 'gemini-2.5-flash-lite')
@@ -122,4 +141,83 @@ test('travel ETA avoids standalone geocoding and uses a durable adaptive cache',
     arrivalTimeIso: new Date(Date.now() + 3 * 60 * 60_000).toISOString(),
   }), 15 * 60_000)
   assert.match(eventDetailPanel, /msUntilStart <= 90 \* 60_000\s+\? 5 \* 60_000/)
+})
+
+test('cost dashboard uses server aggregation and discloses incomplete billing coverage', () => {
+  assert.match(statusDashboard, /supabase\.rpc\('get_cost_dashboard_summary'/)
+  assert.doesNotMatch(statusDashboard, /\.from\('ai_usage_log'\)/)
+  assert.match(statusDashboard, /Directional only/)
+  assert.match(statusDashboard, /Actual Google cost/)
+  assert.match(statusDashboard, /Estimated logged AI/)
+})
+
+test('cost observability foundation keeps exact billing separate from live estimates', () => {
+  assert.match(costObservabilityMigration, /create table if not exists public\.ai_provider_calls/)
+  assert.match(costObservabilityMigration, /create table if not exists public\.maps_provider_calls/)
+  assert.match(costObservabilityMigration, /create table if not exists public\.app_ai_outcomes/)
+  assert.match(costObservabilityMigration, /create table if not exists public\.billing_line_items/)
+  assert.match(costObservabilityMigration, /create or replace function public\.get_cost_dashboard_summary/)
+  assert.match(costObservabilityMigration, /'gemini-2\.5-flash', 0\.30, null, 2\.50/)
+  assert.match(costObservabilityMigration, /count\(\*\) filter \(where legacy_usage_enabled\)/)
+  assert.match(costObservabilityMigration, /dashboard period cannot exceed 366 days/)
+})
+
+test('known July cost centers replay to the exact billed total', () => {
+  const gemini = 58.10
+  const routes = Math.max(12_334 - 5_000, 0) * 10 / 1_000
+  const geocoding = Math.max(12_766 - 10_000, 0) * 5 / 1_000
+
+  assert.equal(routes, 73.34)
+  assert.equal(geocoding, 13.83)
+  assert.equal(Number((gemini + routes + geocoding).toFixed(2)), 145.27)
+})
+
+test('provider ledger preserves provider token classes including Gemini thoughts', () => {
+  assert.deepEqual(providerCallLedgerInternals.extractUsage('gemini', {
+    usageMetadata: {
+      promptTokenCount: 120,
+      cachedContentTokenCount: 40,
+      thoughtsTokenCount: 15,
+      candidatesTokenCount: 25,
+      totalTokenCount: 160,
+    },
+  }), {
+    inputTokens: 120,
+    cachedInputTokens: 40,
+    thoughtTokens: 15,
+    outputTokens: 25,
+    totalTokens: 160,
+  })
+  assert.match(providerCallLedger, /response\.clone\(\)/)
+  assert.match(providerCallLedger, /runtime\?\.waitUntil/)
+})
+
+test('every known AI provider path uses the tracked provider gateway', () => {
+  for (const functionSource of providerCallingFunctions) {
+    assert.match(functionSource, /createTrackedProviderFetch/)
+    assert.doesNotMatch(
+      functionSource,
+      /await fetch\([\s\S]{0,120}(?:generativelanguage\.googleapis\.com|api\.openai\.com|api\.anthropic\.com)/,
+    )
+  }
+  assert.match(costObservabilityMigration, /set provider_ledger_enabled = true/)
+  assert.match(costObservabilityMigration, /before update or delete on public\.ai_provider_calls/)
+})
+
+test('enrichment selects the final grounded JSON object without merging search metadata', () => {
+  const parsed = parseLastJsonObject([
+    'Search request: {"query":"school address"}',
+    'The grounded result is:',
+    '```json',
+    '{"category":"school","address":"123 Main St","prep_notes":"Leave early"}',
+    '```',
+  ].join('\n'))
+
+  assert.deepEqual(parsed, {
+    category: 'school',
+    address: '123 Main St',
+    prep_notes: 'Leave early',
+  })
+  assert.throws(() => parseLastJsonObject(''), /provider_output_empty/)
+  assert.throws(() => parseLastJsonObject('no structured result'), /provider_output_invalid_json/)
 })

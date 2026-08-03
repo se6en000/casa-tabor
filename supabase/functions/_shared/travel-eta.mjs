@@ -1,3 +1,12 @@
+import { createTrackedMapsFetch } from './provider-call-ledger.mjs'
+
+const mapsFetch = createTrackedMapsFetch({
+  functionName: 'travel-eta',
+  service: 'routes',
+  sku: 'Compute Routes Pro',
+  callPurpose: 'driving-eta',
+})
+
 function parseDurationSeconds(value) {
   if (typeof value !== 'string') return 0
   const m = value.match(/^([0-9]+)s$/)
@@ -65,7 +74,7 @@ export async function computeTravelEta({
       computeAlternativeRoutes: false,
       departureTime: depIso,
     }
-    const res = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+    const res = await mapsFetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -81,7 +90,7 @@ export async function computeTravelEta({
       if (/future time/i.test(providerError)) {
         const retryDeparture = new Date(Math.max(Date.now() + 2 * 60 * 1000, new Date(depIso).getTime() + 2 * 60 * 1000)).toISOString()
         const retryBody = { ...body, departureTime: retryDeparture }
-        const retryRes = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+        const retryRes = await mapsFetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
@@ -90,7 +99,7 @@ export async function computeTravelEta({
           },
           body: JSON.stringify(retryBody),
           signal,
-        })
+        }, { retryIndex: 1 })
         const retryData = await retryRes.json()
         if (!retryRes.ok) {
           return {

@@ -5,12 +5,19 @@ import {
   mayReplaceTransportationPlan,
 } from '../_shared/event-transportation-defaults.mjs'
 import { selectConfidentEventPlace } from '../_shared/event-place-resolution.mjs'
+import { createTrackedMapsFetch } from '../_shared/provider-call-ledger.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-casa-transportation-trigger, x-client-info, apikey, content-type',
 }
+const mapsFetch = createTrackedMapsFetch({
+  functionName: 'ensure-event-transportation-plan',
+  service: 'places',
+  sku: 'Places Text Search',
+  callPurpose: 'transportation-place-resolution',
+})
 
 interface PlaceSearchResponse {
   places?: Array<{
@@ -222,7 +229,7 @@ Deno.serve(async (req) => {
       const mapsApiKey = Deno.env.get('GOOGLE_MAPS_API_KEY')
       if (!mapsApiKey) return json({ error: 'GOOGLE_MAPS_API_KEY not set' }, 500)
       const textQuery = applyHomeStateBias(query, homeConfig?.state)
-      const placesResponse = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      const placesResponse = await mapsFetch('https://places.googleapis.com/v1/places:searchText', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
