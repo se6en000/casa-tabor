@@ -35,8 +35,8 @@ test('empty or invalid provider output remains retryable instead of marking enri
   assert.doesNotMatch(source, /return \{ category: 'other', what_to_bring: \[\], confidence: 'low' \}/)
 })
 
-test('Gemini enrichment reserves output budget for JSON instead of hidden reasoning', () => {
-  assert.match(source, /maxOutputTokens:\s*2048/)
+test('Gemini enrichment uses a bounded JSON output budget without hidden reasoning', () => {
+  assert.match(source, /maxOutputTokens:\s*1024/)
   assert.match(source, /thinkingConfig:\s*\{\s*thinkingBudget:\s*0\s*\}/)
 })
 

@@ -41,31 +41,18 @@ export async function computeTravelEta({
     return parts.length >= 2 ? parts[1] : null
   }
 
-  const resolveAddress = async (input, cityHint = null) => {
+  const qualifyAddress = (input, cityHint = null) => {
     const raw = String(input ?? '').trim()
     if (!raw) return null
-    const attempt = async (query) => {
-      const url = new URL('https://maps.googleapis.com/maps/api/geocode/json')
-      url.searchParams.set('address', query)
-      url.searchParams.set('key', mapsKey)
-      const res = await fetch(url.toString(), { signal })
-      const data = await res.json()
-      if (!res.ok || data?.status !== 'OK') return null
-      const result = data?.results?.[0]
-      return typeof result?.formatted_address === 'string' ? result.formatted_address : null
-    }
-    const direct = await attempt(raw)
-    if (direct) return direct
     if (cityHint && !/,/.test(raw) && !/\d/.test(raw)) {
-      const withCity = await attempt(`${raw}, ${cityHint}`)
-      if (withCity) return withCity
+      return `${raw}, ${cityHint}`
     }
-    return null
+    return raw
   }
 
   const cityHint = extractCityHint(origin) ?? (String(origin).includes(',') ? null : String(origin).trim() || null)
-  const resolvedOrigin = await resolveAddress(origin, cityHint) ?? origin
-  const resolvedDestination = await resolveAddress(destination, cityHint) ?? destination
+  const resolvedOrigin = qualifyAddress(origin, cityHint) ?? origin
+  const resolvedDestination = qualifyAddress(destination, cityHint) ?? destination
 
   const callRoutes = async (depIso) => {
     const body = {

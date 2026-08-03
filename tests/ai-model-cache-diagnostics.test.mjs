@@ -6,28 +6,22 @@ const settings = readFileSync(new URL('../src/pages/AISettingsPage.tsx', import.
 const dashboard = readFileSync(new URL('../src/pages/StatusDashboardPage.tsx', import.meta.url), 'utf8')
 const assistant = readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
 const shadow = readFileSync(new URL('../supabase/functions/ai-agent-shadow/index.ts', import.meta.url), 'utf8')
+const modelPolicy = readFileSync(new URL('../supabase/functions/_shared/llm-model-policy.mjs', import.meta.url), 'utf8')
 const migration = readFileSync(new URL('../supabase/migrations/20260717000000_add_provider_cache_tokens.sql', import.meta.url), 'utf8')
 
 const conversationalModels = [
   'gemini-2.5-flash-lite',
   'gemini-2.5-flash',
-  'gemini-flash-latest',
-  'gemini-flash-lite-latest',
-  'gemini-pro-latest',
-  'gemini-3-flash-preview',
-  'gemini-3.1-flash-lite',
-  'gemini-3.1-flash-lite-preview',
-  'gemini-3.1-pro-preview',
-  'gemini-3.1-pro-preview-customtools',
-  'gemini-3.5-flash',
 ]
 
-test('Gemini conversational catalog stays selectable across authoritative and shadow assistants', () => {
+test('Gemini conversational catalog exposes only pinned production models', () => {
   for (const model of conversationalModels) {
     assert.match(settings, new RegExp(`id: '${model.replaceAll('.', '\\.')}'`))
-    assert.match(assistant, new RegExp(`'${model.replaceAll('.', '\\.')}'`))
-    assert.match(shadow, new RegExp(`'${model.replaceAll('.', '\\.')}'`))
+    assert.match(modelPolicy, new RegExp(`'${model.replaceAll('.', '\\.')}'`))
   }
+  assert.match(assistant, /resolveProductionGeminiModel/)
+  assert.match(shadow, /resolveProductionGeminiModel/)
+  assert.doesNotMatch(settings, /id: 'gemini-(?:3|[^']*-latest)/)
   assert.doesNotMatch(settings, /id: 'gemini-[^']*(?:image|tts|robotics|computer-use)/)
 })
 

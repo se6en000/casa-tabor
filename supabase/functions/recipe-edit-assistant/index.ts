@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.ts'
+import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -144,7 +145,7 @@ Deno.serve(async (req) => {
     const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
     const { data: cfgRows, error: cfgError } = await sb.from('settings').select('value').eq('key', 'llm_config').limit(1)
     if (cfgError) throw new Error(cfgError.message)
-    const config = (cfgRows?.[0]?.value ?? {}) as LlmConfig
+    const config = resolveBackgroundLlmConfig(cfgRows?.[0]?.value) as LlmConfig
     if (!config.api_key) throw new Error('No LLM API key configured')
     const provider = String(config.provider ?? 'gemini').toLowerCase()
     if (provider !== 'gemini') throw new Error('recipe-edit-assistant currently supports Gemini only')

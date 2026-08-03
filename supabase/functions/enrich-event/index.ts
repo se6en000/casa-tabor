@@ -7,6 +7,7 @@ import {
   findSavedEventPlace,
   selectConfidentEventPlace,
 } from '../_shared/event-place-resolution.mjs'
+import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 
 interface UsageAccum { inputTokens: number; outputTokens: number }
 interface ResolvedDestination {
@@ -81,7 +82,11 @@ Deno.serve(async (req) => {
   const event = eventRes.data
   if (eventRes.error || !event) return new Response(JSON.stringify({ error: eventRes.error?.message ?? 'event not found' }), { status: 404, headers: { ...CORS, 'content-type': 'application/json' } })
 
-  const llmConfig = llmRes.data?.value as { provider: string; model: string; api_key: string } | null
+  const llmConfig = resolveBackgroundLlmConfig(llmRes.data?.value) as {
+    provider: string
+    model: string
+    api_key?: string
+  }
   if (!llmConfig?.api_key) return new Response(JSON.stringify({ error: 'No LLM API key configured' }), { status: 422, headers: { ...CORS, 'content-type': 'application/json' } })
 
   const familyMembers = (familyRes.data ?? []) as { id: string; name: string; full_name: string | null; role: string; phone: string | null; email: string | null; is_admin: boolean }[]
@@ -754,7 +759,7 @@ async function callLLM(config: { provider: string; model: string; api_key: strin
         contents: [{ parts: [{ text: prompt }] }],
         tools: [{ google_search: {} }],
         generationConfig: {
-          maxOutputTokens: 2048,
+          maxOutputTokens: 1024,
           temperature: 0.3,
           thinkingConfig: { thinkingBudget: 0 },
         },
@@ -888,7 +893,7 @@ async function callLLMNoSearch(config: { provider: string; model: string; api_ke
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
-          maxOutputTokens: 1024,
+          maxOutputTokens: 768,
           temperature: 0.2,
           thinkingConfig: { thinkingBudget: 0 },
         },

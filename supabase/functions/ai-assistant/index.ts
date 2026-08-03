@@ -6,7 +6,15 @@ import {
   RECOVERY_AND_CONFLICT_GUARDRAILS,
 } from '../_shared/ai-prompt-guardrails.mjs'
 import { optionalEnv, requireEnv } from '../_shared/env.mjs'
-import { computeTravelEta } from '../_shared/travel-eta.mjs'
+import {
+  computeCachedTravelEta,
+  createSupabaseRouteEtaCache,
+} from '../_shared/route-eta-cache.mjs'
+import {
+  isProductionGeminiModel,
+  PRIMARY_GEMINI_MODEL,
+  resolveProductionGeminiModel,
+} from '../_shared/llm-model-policy.mjs'
 import { classifyAssistantIntent } from '../_shared/assistant-intent-profile.mjs'
 import { resolveDeterministicEventMutation } from '../_shared/deterministic-event-mutation.mjs'
 import {
@@ -140,24 +148,11 @@ type BugReportRow = {
   discovered_at: string
 }
 
-const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
+const DEFAULT_GEMINI_MODEL = PRIMARY_GEMINI_MODEL
 const AGENT_GENERAL_PAGES = new Set(['app', 'briefing', 'calendar', 'grocery', 'home'])
-const SUPPORTED_GEMINI_MODELS = new Set([
-  'gemini-2.5-flash-lite',
-  'gemini-2.5-flash',
-  'gemini-flash-latest',
-  'gemini-flash-lite-latest',
-  'gemini-pro-latest',
-  'gemini-3-flash-preview',
-  'gemini-3.1-flash-lite',
-  'gemini-3.1-flash-lite-preview',
-  'gemini-3.1-pro-preview',
-  'gemini-3.1-pro-preview-customtools',
-  'gemini-3.5-flash',
-])
 
 function isSupportedGeminiModel(value: string): boolean {
-  return SUPPORTED_GEMINI_MODELS.has(value)
+  return isProductionGeminiModel(value)
 }
 
 function sanitizeIngressText(value: unknown, maxLen = 1800): string | null {
@@ -186,6 +181,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
   const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
+  const routeEtaCache = createSupabaseRouteEtaCache(sb)
   const mapsKey = optionalEnv('GOOGLE_MAPS_API_KEY', '')
   const braveKey = optionalEnv('BRAVE_API_KEY', '')
 
@@ -807,8 +803,8 @@ Deno.serve(async (req) => {
   const apiKey = config.api_key as string
   const provider = String(config.provider ?? 'gemini')
   const configuredModel = ((config.model as string) || DEFAULT_GEMINI_MODEL).trim()
-  const validatedConfiguredModel = provider === 'gemini' && !isSupportedGeminiModel(configuredModel)
-    ? DEFAULT_GEMINI_MODEL
+  const validatedConfiguredModel = provider === 'gemini'
+    ? resolveProductionGeminiModel(configuredModel)
     : configuredModel
   const validatedOverrideModel = modelOverride && provider === 'gemini' && !isSupportedGeminiModel(modelOverride)
     ? null
@@ -3144,41 +3140,41 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const rawBuffer = Number(args.buffer_mins ?? 10)
       const bufferMins = Number.isFinite(rawBuffer) ? Math.max(0, Math.min(45, Math.round(rawBuffer))) : 10
 
-      let payload = await computeTravelEta({
+      let payload = await computeCachedTravelEta({
         mapsKey,
         origin,
         destination,
         arrivalTimeIso,
         departureTimeIso,
         bufferMins,
-      })
+      }, routeEtaCache)
       if (!payload.found && /no route found/i.test(String(payload.error ?? ''))) {
         const cleanedDestination = sanitizeTravelLocation(destination)
         const cleanedOriginRaw = sanitizeTravelLocation(origin)
         const cleanedOrigin = /^home$/i.test(cleanedOriginRaw) ? (homeAddress || String(context.homeCity ?? '')) : cleanedOriginRaw
         if ((cleanedDestination && cleanedDestination !== destination) || (cleanedOrigin && cleanedOrigin !== origin)) {
-          payload = await computeTravelEta({
+          payload = await computeCachedTravelEta({
             mapsKey,
             origin: cleanedOrigin || origin,
             destination: cleanedDestination || destination,
             arrivalTimeIso,
             departureTimeIso,
             bufferMins,
-          })
+          }, routeEtaCache)
         }
       }
       if (!payload.found && /no route found/i.test(String(payload.error ?? ''))) {
         const inferredDestination = inferTravelDestinationFromText(String(latestUserText ?? ''))
         if (inferredDestination) {
           const inferredOrigin = inferTravelOriginFromText(String(latestUserText ?? ''))
-          payload = await computeTravelEta({
+          payload = await computeCachedTravelEta({
             mapsKey,
             origin: inferredOrigin || homeAddress || String(context.homeCity ?? '') || origin,
             destination: inferredDestination,
             arrivalTimeIso,
             departureTimeIso,
             bufferMins,
-          })
+          }, routeEtaCache)
         }
       }
       console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} found=${payload.found ? 1 : 0}`)
@@ -3274,10 +3270,16 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       contents,
       generation_config: {
         temperature: 0.4,
-        max_output_tokens: intentRouting.profile === 'recipe' ? 4096 : 2048,
-        ...(intentRouting.profile === 'recipe'
-          ? { thinking_config: { thinking_budget: 0 } }
-          : {}),
+        max_output_tokens: intentRouting.profile === 'full'
+          ? 2048
+          : intentRouting.profile === 'recipe'
+            ? 1536
+            : intentRouting.profile === 'general'
+              ? 1024
+              : 768,
+        thinking_config: {
+          thinking_budget: intentRouting.profile === 'full' ? 512 : 0,
+        },
       },
       ...(primaryTools.length > 0 ? {
         tools: primaryTools,
@@ -3340,7 +3342,11 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           }],
         },
         contents: [{ role: 'user', parts: [{ text: latestUserTextForFallback }] }],
-        generation_config: { temperature: 0.2, max_output_tokens: 320 },
+        generation_config: {
+          temperature: 0.2,
+          max_output_tokens: 320,
+          thinking_config: { thinking_budget: 0 },
+        },
       }
       const fallbackStartMs = Date.now()
       const fallbackRes = await callModel(fallbackBody, {
@@ -3550,7 +3556,11 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             }],
           },
           contents: rescueContents,
-          generation_config: { temperature: 0.1, max_output_tokens: 512 },
+          generation_config: {
+            temperature: 0.1,
+            max_output_tokens: 512,
+            thinking_config: { thinking_budget: 0 },
+          },
           tools: writeTools,
           tool_config: { function_calling_config: { mode: 'ANY' } },
         }
@@ -4291,7 +4301,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           const timeoutId = setTimeout(() => controller.abort(), 5000)
           try {
             const eventStartMs = Date.parse(activeConversationEvent.start_time)
-            route = await computeTravelEta({
+            route = await computeCachedTravelEta({
               mapsKey,
               origin: homeAddress,
               destination,
@@ -4300,7 +4310,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
                 : null,
               bufferMins: 10,
               signal: controller.signal,
-            })
+            }, routeEtaCache)
             text = formatEventTravelAnswer(activeConversationEvent, route, toLocal)
               ?? `I could not calculate a reliable route to "${activeConversationEvent.title}" right now.`
           } catch (error) {

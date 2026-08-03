@@ -10,6 +10,7 @@
  */
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -1031,7 +1032,11 @@ Deno.serve(async (req) => {
 
   // Load LLM config (needed for all modes)
   const { data: llmRow } = await sb.from('settings').select('value').eq('key', 'llm_config').single()
-  const llmConfig = (llmRow?.value ?? {}) as { provider: string; model: string; api_key: string }
+  const llmConfig = resolveBackgroundLlmConfig(llmRow?.value) as {
+    provider: string
+    model: string
+    api_key: string
+  }
 
   // ── MODE 1: reprocess_trip_id — re-extract from stored email body ─────────
   // If no stored body, fall through to Gmail scan with reset flag

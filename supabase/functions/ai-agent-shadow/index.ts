@@ -9,26 +9,18 @@ import {
   shouldRetryAgentShadowPlan,
 } from '../_shared/assistant-agent-shadow.mjs'
 import { getAgentTool } from '../_shared/assistant-agent-tools.mjs'
+import {
+  isProductionGeminiModel,
+  PRIMARY_GEMINI_MODEL,
+  resolveProductionGeminiModel,
+} from '../_shared/llm-model-policy.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
-const DEFAULT_MODEL = 'gemini-2.5-flash'
-const SUPPORTED_MODELS = new Set([
-  'gemini-2.5-flash-lite',
-  'gemini-2.5-flash',
-  'gemini-flash-latest',
-  'gemini-flash-lite-latest',
-  'gemini-pro-latest',
-  'gemini-3-flash-preview',
-  'gemini-3.1-flash-lite',
-  'gemini-3.1-flash-lite-preview',
-  'gemini-3.1-pro-preview',
-  'gemini-3.1-pro-preview-customtools',
-  'gemini-3.5-flash',
-])
+const DEFAULT_MODEL = PRIMARY_GEMINI_MODEL
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
@@ -54,11 +46,9 @@ Deno.serve(async (req) => {
     const config = configRows?.[0]?.value ?? {}
     const modelOverride = text(body?.model_override, 80)
     const configuredModel = text(config.model, 80) ?? DEFAULT_MODEL
-    const model = modelOverride && SUPPORTED_MODELS.has(modelOverride)
+    const model = modelOverride && isProductionGeminiModel(modelOverride)
       ? modelOverride
-      : SUPPORTED_MODELS.has(configuredModel)
-        ? configuredModel
-        : DEFAULT_MODEL
+      : resolveProductionGeminiModel(configuredModel)
     const apiKey = text(config.api_key, 500)
     if (!apiKey) throw new Error('Gemini API key is not configured')
 

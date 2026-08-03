@@ -5,6 +5,7 @@ import {
   loadCatalogRows,
   resolveGroceryFromCatalog,
 } from '../_shared/grocery-catalog.ts'
+import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -162,7 +163,7 @@ Deno.serve(async (req) => {
 
     const { data: cfgRows, error: cfgError } = await sb.from('settings').select('value').eq('key', 'llm_config').limit(1)
     if (cfgError) throw new Error(cfgError.message)
-    const config = (cfgRows?.[0]?.value ?? {}) as LlmConfig
+    const config = resolveBackgroundLlmConfig(cfgRows?.[0]?.value) as LlmConfig
     if (!config.api_key) {
       return new Response(JSON.stringify({
         success: true,
