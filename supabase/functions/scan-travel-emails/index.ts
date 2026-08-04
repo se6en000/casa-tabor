@@ -1143,8 +1143,16 @@ Deno.serve(async (req) => {
   if (tokErr) return new Response(JSON.stringify({ error: tokErr.message }), { status: 500, headers: { ...CORS, 'content-type': 'application/json' } })
 
   const results: { member: string; trips_found: number; error?: string; debug?: string[] }[] = []
+  // Manual rescans and event-scoped scans need a long window — trips are often booked
+  // weeks/months before travel, so the confirmation email can be old relative to "now".
   const since = new Date()
   since.setDate(since.getDate() - 90) // look back 90 days to catch trip emails sent weeks in advance
+  // The truly-automatic daily scan runs frequently (throttled to once/day) and is now
+  // backed by the negative-result cache, so it only needs to look far enough back to
+  // catch anything since the last successful run — a short window keeps it cheap and fast.
+  const autoScanSince = new Date()
+  autoScanSince.setDate(autoScanSince.getDate() - 7)
+  const scanSince = isAutomaticFullScan ? autoScanSince : since
 
   for (const tokenRow of tokens ?? []) {
     const memberName = (tokenRow.family_members as { name: string } | null)?.name ?? 'Unknown'
@@ -1180,7 +1188,7 @@ Deno.serve(async (req) => {
     }
 
     try {
-      const messages = await searchTravelEmails(accessToken, since)
+      const messages = await searchTravelEmails(accessToken, scanSince)
       let tripsFound = 0
       const debugInfo: string[] = []
 
