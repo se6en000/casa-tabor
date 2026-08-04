@@ -214,6 +214,8 @@ export interface PrepItem {
   source_type?: string | null
   source_ref?: string | null
   source_pattern_key?: string | null
+  source_confidence?: number | null
+  assigned_to?: string | null
   action_key?: string
 }
 
