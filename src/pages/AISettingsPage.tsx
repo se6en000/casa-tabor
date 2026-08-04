@@ -19,6 +19,7 @@ import type { AIMemoryObservation } from '../types'
 interface LLMConfig {
   provider: string
   model: string
+  background_model?: string
   api_key: string
 }
 
@@ -78,6 +79,16 @@ const VOICE_DEBUG_OPTIONS = [
 
 const DEFAULT_FAST_MODEL: Record<string, string> = {
   gemini: 'gemini-2.5-flash',
+  openai: 'gpt-4o-mini',
+  anthropic: 'claude-haiku-4-5',
+}
+
+// Default background/automation model per provider when switching providers —
+// Gemini defaults to Flash Lite (cheapest/fastest), matching the prior
+// hardcoded behavior; other providers reuse their single "fast" model since
+// that's all that's offered today.
+const DEFAULT_BACKGROUND_MODEL: Record<string, string> = {
+  gemini: 'gemini-2.5-flash-lite',
   openai: 'gpt-4o-mini',
   anthropic: 'claude-haiku-4-5',
 }
@@ -201,7 +212,7 @@ const REGRESSION_CASES: RegressionCase[] = [
 ]
 
 export default function AISettingsPage() {
-  const [config, setConfig] = useState<LLMConfig>({ provider: 'gemini', model: 'gemini-2.0-flash', api_key: '' })
+  const [config, setConfig] = useState<LLMConfig>({ provider: 'gemini', model: 'gemini-2.0-flash', background_model: 'gemini-2.5-flash-lite', api_key: '' })
   const [customInstructions, setCustomInstructions] = useState('')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
@@ -274,7 +285,16 @@ export default function AISettingsPage() {
       supabase.from('settings').select('value').eq('key', 'ai_custom_instructions').maybeSingle(),
       supabase.from('settings').select('value').eq('key', 'ai_memory_capture_config').maybeSingle(),
     ]).then(([cfg, ci, memoryCfg]) => {
-      if (cfg.data?.value) setConfig(cfg.data.value as LLMConfig)
+      if (cfg.data?.value) {
+        const loaded = cfg.data.value as LLMConfig
+        // Older settings rows predate the background/automation model field —
+        // backfill it so the UI highlights the model that's actually running
+        // today (the previous hardcoded default) instead of nothing.
+        setConfig({
+          ...loaded,
+          background_model: loaded.background_model || DEFAULT_BACKGROUND_MODEL[loaded.provider] || '',
+        })
+      }
       const ciVal = (ci.data?.value as { text?: string } | null)?.text
       if (ciVal) setCustomInstructions(ciVal)
       if (memoryCfg.data?.value && typeof memoryCfg.data.value === 'object') {
@@ -460,13 +480,24 @@ export default function AISettingsPage() {
   }, [])
 
   function handleProviderChange(provider: string) {
-    setConfig(c => ({ ...c, provider, model: DEFAULT_FAST_MODEL[provider] ?? '' }))
+    setConfig(c => ({
+      ...c,
+      provider,
+      model: DEFAULT_FAST_MODEL[provider] ?? '',
+      background_model: DEFAULT_BACKGROUND_MODEL[provider] ?? '',
+    }))
     setSaveStatus('idle')
     setTestStatus('idle')
   }
 
   function handleModelChange(model: string) {
     setConfig(c => ({ ...c, model }))
+    setSaveStatus('idle')
+    setTestStatus('idle')
+  }
+
+  function handleBackgroundModelChange(background_model: string) {
+    setConfig(c => ({ ...c, background_model }))
     setSaveStatus('idle')
     setTestStatus('idle')
   }
@@ -671,7 +702,7 @@ export default function AISettingsPage() {
 
   return (
     <>
-      <SettingsPageHeader title="AI Settings" description="Choose the provider, model, and voice runtime. Fast, low-cost models work best for briefings." />
+      <SettingsPageHeader title="AI Settings" description="Choose the provider, and pick separate models for Alexa (voice/chat) and background automation. Fast, low-cost models work best for background work." />
 
       <div className="mt-6 space-y-4">
         {/* Vendor */}
@@ -686,9 +717,12 @@ export default function AISettingsPage() {
           />
         </div>
 
-        {/* Model */}
+        {/* Model — Alexa / Voice Assistant */}
         <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-3">
-          <label className="block text-body-sm font-semibold text-casa-navy">Model</label>
+          <label className="block text-body-sm font-semibold text-casa-navy">Alexa Model <span className="text-casa-muted font-normal">(voice &amp; chat)</span></label>
+          <p className="text-caption text-casa-muted">
+            Powers the conversational assistant — wake-word chat, calendar/grocery commands, and quick answers. Prioritize speed and tool-call reliability here.
+          </p>
           {config.provider === 'gemini' && (
             <p className="text-caption text-casa-muted">
               Models shown here support Casa's conversational API and tool contract. Image, TTS, robotics, and computer-use models are intentionally excluded.
@@ -706,6 +740,43 @@ export default function AISettingsPage() {
                     fullWidth
                     align="between"
                     aria-pressed={config.model === m.id}
+                    className="h-auto min-h-control py-3"
+                  >
+                    <span className="min-w-0 text-left">
+                      <span className="block text-body-sm font-medium">{m.label}</span>
+                      {m.description && <span className="mt-0.5 block text-caption font-normal opacity-80">{m.description}</span>}
+                    </span>
+                    {(m.speed || m.reasoning) && (
+                      <span className="ml-3 flex shrink-0 flex-wrap justify-end gap-1">
+                        {m.speed && <Chip size="sm" tone={m.speed === 'Fastest' ? 'success' : 'neutral'}>{m.speed}</Chip>}
+                        {m.reasoning && <Chip size="sm" tone={m.reasoning === 'Deep' ? 'accent' : 'info'}>{m.reasoning}</Chip>}
+                      </span>
+                    )}
+                  </Button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Model — Background & Automation */}
+        <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-3">
+          <label className="block text-body-sm font-semibold text-casa-navy">Background &amp; Automation Model</label>
+          <p className="text-caption text-casa-muted">
+            Powers everything that runs without you watching — daily briefings, Gmail/travel scanning, grocery normalization, event enrichment, recipe extraction, and SMS. These run far more often than voice chat, so cheaper/faster models here have an outsized effect on cost.
+          </p>
+          <div className="space-y-4">
+            {(modelGroups.length > 0 ? modelGroups : [undefined]).map(group => (
+              <div key={group ?? 'background-models'} className="space-y-2">
+                {group && <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">{group}</p>}
+                {models.filter(model => model.group === group || !group).map(m => (
+                  <Button
+                    key={m.id}
+                    variant={(config.background_model || DEFAULT_BACKGROUND_MODEL[config.provider]) === m.id ? 'strong' : 'secondary'}
+                    onClick={() => handleBackgroundModelChange(m.id)}
+                    fullWidth
+                    align="between"
+                    aria-pressed={(config.background_model || DEFAULT_BACKGROUND_MODEL[config.provider]) === m.id}
                     className="h-auto min-h-control py-3"
                   >
                     <span className="min-w-0 text-left">
