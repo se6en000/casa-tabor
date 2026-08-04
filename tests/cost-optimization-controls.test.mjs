@@ -231,6 +231,18 @@ test('scan-travel-emails throttles the automatic full scan server-side, not just
   assert.match(scanTravel, /timeZone: 'America\/New_York'/)
 })
 
+test('scan-travel-emails only shortens the lookback window for the automatic scan, not manual/event-scoped scans', () => {
+  // Trips are commonly booked weeks/months before travel, so the manual
+  // rescan button and event-scoped scans need the full 90-day window to find
+  // the original confirmation email. Only the truly-automatic daily scan
+  // (now throttled + backed by the negative-result cache) can safely use a
+  // short window, since it only needs to catch what's arrived recently.
+  assert.match(scanTravel, /since\.setDate\(since\.getDate\(\) - 90\)/)
+  assert.match(scanTravel, /autoScanSince\.setDate\(autoScanSince\.getDate\(\) - 7\)/)
+  assert.match(scanTravel, /const scanSince = isAutomaticFullScan \? autoScanSince : since/)
+  assert.match(scanTravel, /searchTravelEmails\(accessToken, scanSince\)/)
+})
+
 test('known July cost centers replay to the exact billed total', () => {
   const gemini = 58.10
   const routes = Math.max(12_334 - 5_000, 0) * 10 / 1_000
