@@ -5,7 +5,6 @@ import NavBar from './components/shared/NavBar'
 import AnimatedRoutes from './components/shared/AnimatedRoutes'
 import TabletSidebar from './components/layout/TabletSidebar'
 import { useRoomTone } from './hooks/useRoomTone'
-import { useTravelScan } from './hooks/useTravelScan'
 import { usePushNotifications } from './hooks/usePushNotifications'
 import { useAppUpdater } from './hooks/useAppUpdater'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
@@ -170,7 +169,6 @@ function GlobalAIDrawer({
 function AppShell() {
   const { currentZone } = useRoomTone()
   const { setRoomToneZone } = useTheme()
-  useTravelScan()
   usePushNotifications()
   useAppUpdater()
 
