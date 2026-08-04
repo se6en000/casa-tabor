@@ -38,6 +38,7 @@ const routeCacheMigration = source('supabase/migrations/20260803150000_route_eta
 const eventDetailPanel = source('src/components/calendar/EventDetailPanel.tsx')
 const costObservabilityMigration = source('supabase/migrations/20260803190000_cost_observability_foundation.sql')
 const costDashboardTimezoneFixMigration = source('supabase/migrations/20260803213000_fix_cost_dashboard_local_day_boundary.sql')
+const costDashboardProviderLedgerMigration = source('supabase/migrations/20260804020600_source_dashboard_from_provider_ledger.sql')
 const statusDashboard = source('src/pages/StatusDashboardPage.tsx')
 const providerCallLedger = source('supabase/functions/_shared/provider-call-ledger.mjs')
 const providerCallingFunctions = [
@@ -184,6 +185,23 @@ test('cost dashboard day boundaries use the household local timezone, not UTC', 
   assert.match(costDashboardTimezoneFixMigration, /\(d\.day at time zone v_tz\)::date as date/)
   assert.doesNotMatch(costDashboardTimezoneFixMigration, /where created_at >= date_trunc\('day', now\(\)\)/)
   assert.match(costDashboardTimezoneFixMigration, /create or replace function public\.get_cost_dashboard_summary/)
+})
+
+test('cost dashboard sources live usage from the provider ledger, not the legacy 3-function log', () => {
+  // Only ai-assistant, enrich-event, and scan-gmail-inbox write to
+  // ai_usage_log. Every AI-calling function (including generate-briefing)
+  // writes to ai_provider_calls via createTrackedProviderFetch, so the
+  // dashboard's Today/period/daily/by-function numbers must read from
+  // ai_provider_calls to reflect all AI usage, not just those 3 paths.
+  assert.match(costDashboardProviderLedgerMigration, /from public\.ai_provider_calls c/)
+  assert.doesNotMatch(costDashboardProviderLedgerMigration, /from public\.ai_usage_log u\b/)
+  assert.match(costDashboardProviderLedgerMigration, /c\.occurred_at >= p_start/)
+  assert.match(costDashboardProviderLedgerMigration, /and c\.status = 'success'/)
+  // The legacy "Historical estimate coverage" metric (legacy_usage_enabled)
+  // is a deliberate, separate banner field and must be left untouched.
+  assert.match(costDashboardProviderLedgerMigration, /'coverage_pct', coalesce\(c\.coverage_pct, 0\)/)
+  assert.match(costDashboardProviderLedgerMigration, /'logged_paths', coalesce\(c\.logged_paths, 0\)/)
+  assert.match(costDashboardProviderLedgerMigration, /when c\.coverage_pct < 100 then 'incomplete'/)
 })
 
 test('known July cost centers replay to the exact billed total', () => {
