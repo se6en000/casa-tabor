@@ -37,6 +37,7 @@ const travelEta = source('supabase/functions/_shared/travel-eta.mjs')
 const routeCacheMigration = source('supabase/migrations/20260803150000_route_eta_cache.sql')
 const eventDetailPanel = source('src/components/calendar/EventDetailPanel.tsx')
 const costObservabilityMigration = source('supabase/migrations/20260803190000_cost_observability_foundation.sql')
+const costDashboardTimezoneFixMigration = source('supabase/migrations/20260803213000_fix_cost_dashboard_local_day_boundary.sql')
 const statusDashboard = source('src/pages/StatusDashboardPage.tsx')
 const providerCallLedger = source('supabase/functions/_shared/provider-call-ledger.mjs')
 const providerCallingFunctions = [
@@ -169,6 +170,20 @@ test('cost observability foundation keeps exact billing separate from live estim
   assert.match(costObservabilityMigration, /'gemini-2\.5-flash', 0\.30, null, 2\.50/)
   assert.match(costObservabilityMigration, /count\(\*\) filter \(where legacy_usage_enabled\)/)
   assert.match(costObservabilityMigration, /dashboard period cannot exceed 366 days/)
+})
+
+test('cost dashboard day boundaries use the household local timezone, not UTC', () => {
+  // The database session timezone is UTC. America/New_York is 4-5 hours
+  // behind, so a bare date_trunc('day', now()) or date_trunc('day', <ts>)
+  // silently rolls "today" over hours before local midnight. Every day
+  // boundary the RPC computes must anchor to America/New_York explicitly.
+  assert.match(costDashboardTimezoneFixMigration, /v_tz constant text := 'America\/New_York'/)
+  assert.match(costDashboardTimezoneFixMigration, /date_trunc\('day', now\(\) at time zone v_tz\) at time zone v_tz/)
+  assert.match(costDashboardTimezoneFixMigration, /date_trunc\('day', p_start at time zone v_tz\) at time zone v_tz/)
+  assert.match(costDashboardTimezoneFixMigration, /date_trunc\('day', \(p_end - interval '1 microsecond'\) at time zone v_tz\) at time zone v_tz/)
+  assert.match(costDashboardTimezoneFixMigration, /\(d\.day at time zone v_tz\)::date as date/)
+  assert.doesNotMatch(costDashboardTimezoneFixMigration, /where created_at >= date_trunc\('day', now\(\)\)/)
+  assert.match(costDashboardTimezoneFixMigration, /create or replace function public\.get_cost_dashboard_summary/)
 })
 
 test('known July cost centers replay to the exact billed total', () => {
