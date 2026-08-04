@@ -102,3 +102,16 @@ export function getMultiDayBoundaryLabel(
   if (onEndDay) return `Ends ${format(end, 'h:mm a')}`
   return 'Continues'
 }
+
+// Formats an ISO/UTC timestamp for embedding in AI chat prompt text, spelling
+// out the date/time in Eastern Time explicitly (e.g. "Thursday, August 6,
+// 2026 at 12:00 PM Eastern Time"). A raw ISO string like
+// "2026-08-06T16:00:00.000Z" reads to the AI as a literal "16:00" — it has no
+// way to know that's UTC and needs converting, so it gets used as-is and the
+// resulting draft event/reminder lands ~4-5 hours off. This relies on the
+// same local-timezone Date parsing already used for on-screen display
+// (assumes the app runs in America/New_York, as it does today).
+export function formatDueByForAiPrompt(value: string | null | undefined): string {
+  if (!value) return 'unknown'
+  return `${format(new Date(value), "EEEE, MMMM d, yyyy 'at' h:mm a")} Eastern Time`
+}

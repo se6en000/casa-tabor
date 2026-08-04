@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import { AnimatePresence, motion } from 'framer-motion'
 import { X, Mail, ClipboardList, CalendarDays, Clock3, TimerReset, Ban, ThumbsDown, CalendarPlus, BellPlus } from 'lucide-react'
 import { cn } from '../../utils/cn'
+import { formatDueByForAiPrompt } from '../../utils/eventTime'
 import { useDismissPrepItem, useDownvotePrepItem, usePrepItemDetails, useSnoozePrepItem } from '../../hooks/usePrepItems'
 import type { PrepItem } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
@@ -109,9 +110,10 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
     if (!item || acting) return
     setActing(`create-${kind}`)
     const bodyContext = emailParagraphs.slice(0, 6).join('\n')
+    const dueByPrompt = formatDueByForAiPrompt(item.due_by)
     const prompt = kind === 'event'
-      ? `Create a calendar event from this prep/action item as a draft and ask me to confirm before saving.\n\nAction title: ${item.event_title ?? item.description}\nAction details: ${item.description}\nDue by: ${item.due_by ?? 'unknown'}\nSource: ${sourceLabel(item.source_type)}\nEmail context:\n${bodyContext || 'No email body available'}`
-      : `Create a reminder from this prep/action item as a draft and ask me to confirm before saving.\n\nReminder title: ${item.event_title ?? item.description}\nReminder details: ${item.description}\nDue by: ${item.due_by ?? 'unknown'}\nSource: ${sourceLabel(item.source_type)}\nEmail context:\n${bodyContext || 'No email body available'}`
+      ? `Create a calendar event from this prep/action item as a draft and ask me to confirm before saving.\n\nAction title: ${item.event_title ?? item.description}\nAction details: ${item.description}\nDue by: ${dueByPrompt} (this is already in Eastern Time — use it as-is, do not treat it as UTC)\nSource: ${sourceLabel(item.source_type)}\nEmail context:\n${bodyContext || 'No email body available'}`
+      : `Create a reminder from this prep/action item as a draft and ask me to confirm before saving.\n\nReminder title: ${item.event_title ?? item.description}\nReminder details: ${item.description}\nDue by: ${dueByPrompt} (this is already in Eastern Time — use it as-is, do not treat it as UTC)\nSource: ${sourceLabel(item.source_type)}\nEmail context:\n${bodyContext || 'No email body available'}`
     try {
       await dismiss(item.id)
       document.dispatchEvent(new CustomEvent('open-ai-chat', { detail: { prompt, autoSend: true } }))
