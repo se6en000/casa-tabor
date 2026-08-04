@@ -112,13 +112,22 @@ test('AI Settings can independently pick the background/automation model from th
     resolveBackgroundLlmConfig({ provider: 'gemini', background_model: 'gemini-flash-latest' }).model,
     'gemini-2.5-flash-lite',
   )
+  // A user can also opt background work into the premium Pro tier if desired
+  // (e.g. testing higher-quality briefings) — Pro is a pinned production
+  // model, not a rejected alias.
+  assert.equal(
+    resolveBackgroundLlmConfig({ provider: 'gemini', background_model: 'gemini-2.5-pro' }).model,
+    'gemini-2.5-pro',
+  )
 })
 
 test('production Gemini policy pins expensive and mutable aliases to 2.5 Flash', () => {
   assert.equal(PRIMARY_GEMINI_MODEL, 'gemini-2.5-flash')
   assert.equal(resolveProductionGeminiModel('gemini-2.5-flash-lite'), 'gemini-2.5-flash-lite')
+  assert.equal(resolveProductionGeminiModel('gemini-2.5-pro'), 'gemini-2.5-pro')
   assert.equal(resolveProductionGeminiModel('gemini-3.5-flash'), 'gemini-2.5-flash')
   assert.equal(resolveProductionGeminiModel('gemini-flash-latest'), 'gemini-2.5-flash')
+  assert.equal(resolveProductionGeminiModel('gemini-3-pro-preview'), 'gemini-2.5-flash')
 })
 
 test('low-risk background functions use the shared model resolver but ai-assistant does not', () => {
