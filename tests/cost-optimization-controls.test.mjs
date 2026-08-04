@@ -86,6 +86,34 @@ test('Gemini background work uses Flash Lite without changing other providers', 
   )
 })
 
+test('AI Settings can independently pick the background/automation model from the Alexa model', () => {
+  // background_model is a new, optional field on the same llm_config row.
+  // Existing rows without it keep exactly the prior hardcoded-Lite behavior
+  // (covered by the test above); when set, it overrides the background
+  // model choice while the primary `model` field keeps driving ai-assistant.
+  assert.deepEqual(
+    resolveBackgroundLlmConfig({
+      provider: 'gemini',
+      model: 'gemini-2.5-flash-lite', // Alexa/voice model
+      background_model: 'gemini-2.5-flash', // user chose Flash for back-office work
+      api_key: 'test-key',
+    }),
+    {
+      provider: 'gemini',
+      model: 'gemini-2.5-flash',
+      background_model: 'gemini-2.5-flash',
+      api_key: 'test-key',
+    },
+  )
+  // An unpinned/mutable/expensive Gemini alias in background_model must still
+  // fall back to the safe default — the production pinning guard applies to
+  // the background selection exactly like it does for the primary model.
+  assert.equal(
+    resolveBackgroundLlmConfig({ provider: 'gemini', background_model: 'gemini-flash-latest' }).model,
+    'gemini-2.5-flash-lite',
+  )
+})
+
 test('production Gemini policy pins expensive and mutable aliases to 2.5 Flash', () => {
   assert.equal(PRIMARY_GEMINI_MODEL, 'gemini-2.5-flash')
   assert.equal(resolveProductionGeminiModel('gemini-2.5-flash-lite'), 'gemini-2.5-flash-lite')
