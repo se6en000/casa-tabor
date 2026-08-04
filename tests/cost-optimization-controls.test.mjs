@@ -39,6 +39,7 @@ const eventDetailPanel = source('src/components/calendar/EventDetailPanel.tsx')
 const costObservabilityMigration = source('supabase/migrations/20260803190000_cost_observability_foundation.sql')
 const costDashboardTimezoneFixMigration = source('supabase/migrations/20260803213000_fix_cost_dashboard_local_day_boundary.sql')
 const costDashboardProviderLedgerMigration = source('supabase/migrations/20260804020600_source_dashboard_from_provider_ledger.sql')
+const travelScanDedupMigration = source('supabase/migrations/20260804021400_travel_scan_dedup_and_throttle.sql')
 const statusDashboard = source('src/pages/StatusDashboardPage.tsx')
 const providerCallLedger = source('supabase/functions/_shared/provider-call-ledger.mjs')
 const providerCallingFunctions = [
@@ -202,6 +203,32 @@ test('cost dashboard sources live usage from the provider ledger, not the legacy
   assert.match(costDashboardProviderLedgerMigration, /'coverage_pct', coalesce\(c\.coverage_pct, 0\)/)
   assert.match(costDashboardProviderLedgerMigration, /'logged_paths', coalesce\(c\.logged_paths, 0\)/)
   assert.match(costDashboardProviderLedgerMigration, /when c\.coverage_pct < 100 then 'incomplete'/)
+})
+
+test('scan-travel-emails caches negative extraction results so non-trip emails are never re-billed', () => {
+  // Previously only messages that produced a `trips` row were ever skipped.
+  // A message the LLM decided was not a real itinerary left no record, so it
+  // was re-sent to the LLM on every subsequent scan for the full 90-day
+  // lookback window. Every classification outcome must now be logged before
+  // the loop can move past it, and checked before calling the LLM again.
+  assert.match(travelScanDedupMigration, /create table if not exists public\.travel_email_scan_log/)
+  assert.match(travelScanDedupMigration, /outcome text not null check \(outcome in \('trip_created', 'trip_updated', 'no_trip', 'error'\)\)/)
+  assert.match(scanTravel, /from\('travel_email_scan_log'\)\s*\n\s*\.select\('outcome'\)/)
+  assert.match(scanTravel, /SKIP\(already-scanned:\$\{alreadyScanned\.outcome\}\)/)
+  assert.match(scanTravel, /travel_email_scan_log'\)\.upsert\(\{/)
+})
+
+test('scan-travel-emails throttles the automatic full scan server-side, not just via client localStorage', () => {
+  // useTravelScan.ts gates on localStorage, which is per-browser/device, so
+  // every device independently re-runs a full all-members scan once a day.
+  // The truly-automatic case (no member or event context) must also be
+  // throttled server-side to one run per local calendar day regardless of
+  // how many devices trigger it. Explicit rescans (member/event scoped) must
+  // never be throttled.
+  assert.match(travelScanDedupMigration, /create table if not exists public\.travel_auto_scan_state/)
+  assert.match(scanTravel, /const isAutomaticFullScan = !targetMemberId && !scanEventId/)
+  assert.match(scanTravel, /already scanned today/)
+  assert.match(scanTravel, /timeZone: 'America\/New_York'/)
 })
 
 test('known July cost centers replay to the exact billed total', () => {

@@ -1109,6 +1109,29 @@ Deno.serve(async (req) => {
   const scanEventDate: string | null = body.event_date ?? null
   const scanEventLocation: string | null = body.event_location ?? null
 
+  // The automatic daily trigger (useTravelScan.ts) calls this with no member/event
+  // context, once per device per calendar day via localStorage. That guard is
+  // per-browser, not per-household, so every device independently re-runs a full
+  // all-members scan. Throttle the truly-automatic case server-side so only one
+  // such scan actually runs per local calendar day, regardless of device count.
+  // Explicit calls (rescan button, event-scoped scan, reprocess fallthrough) always
+  // set targetMemberId or scanEventId and are never throttled.
+  const isAutomaticFullScan = !targetMemberId && !scanEventId
+  if (isAutomaticFullScan) {
+    const todayLocal = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date())
+    const { data: claimed } = await sb
+      .from('travel_auto_scan_state')
+      .update({ last_run_date: todayLocal, last_run_at: new Date().toISOString() })
+      .eq('id', true)
+      .neq('last_run_date', todayLocal)
+      .select('last_run_date')
+    if (!claimed || claimed.length === 0) {
+      return new Response(JSON.stringify({ ok: true, skipped: true, reason: 'already scanned today' }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+  }
+
   // Load google tokens — include any token not explicitly disabled for Gmail scanning
   const memberQuery = sb
     .from('google_tokens')
@@ -1229,6 +1252,23 @@ Deno.serve(async (req) => {
           continue
         }
 
+        // A message the LLM already classified (trip or not) on a prior scan is
+        // never re-sent to the LLM. Without this, a message that isn't a real
+        // itinerary (no confirmation number, ambiguous, parse error, etc.) never
+        // produces a `trips` row, so the "existing trip" check above can never
+        // skip it — it would otherwise be re-extracted via the LLM on every scan
+        // for the entire 90-day lookback window.
+        const { data: alreadyScanned } = await sb
+          .from('travel_email_scan_log')
+          .select('outcome')
+          .eq('gmail_message_id', msg.id)
+          .eq('family_member_id', tokenRow.family_member_id)
+          .maybeSingle()
+        if (alreadyScanned) {
+          debugInfo.push(`SKIP(already-scanned:${alreadyScanned.outcome}): ${subject.slice(0, 60)}`)
+          continue
+        }
+
         // Check if body mentions the event location (when scanning for a specific event)
         // to prioritize the right email
         if (scanEventLocation) {
@@ -1254,6 +1294,12 @@ Deno.serve(async (req) => {
         })
         if (result.ok) tripsFound++
         debugInfo.push(result.debug)
+        await sb.from('travel_email_scan_log').upsert({
+          gmail_message_id: msg.id,
+          family_member_id: tokenRow.family_member_id,
+          outcome: result.ok ? 'trip_created' : 'no_trip',
+          debug: result.debug ?? null,
+        }, { onConflict: 'gmail_message_id,family_member_id' }).then(() => {}).catch(() => {})
       }
 
       results.push({ member: memberName, trips_found: tripsFound, debug: debugInfo })
