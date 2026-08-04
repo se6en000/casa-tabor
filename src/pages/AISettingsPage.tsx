@@ -45,6 +45,7 @@ const VENDORS: Record<string, { label: string; models: ModelOption[] }> = {
     models: [
       { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', group: 'Recommended', speed: 'Fast', reasoning: 'Advanced', description: 'Best production balance for Casa voice, tools, and everyday planning.' },
       { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', group: 'Recommended', speed: 'Fastest', reasoning: 'Everyday', description: 'Lowest latency and cost for simple household requests.' },
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', group: 'Advanced / Preview', speed: 'Balanced', reasoning: 'Deep', description: 'Strongest reasoning and multimodal understanding — noticeably smarter on complex, multi-step, or ambiguous requests. Slower and costlier than Flash; pick this when quality matters more than speed.' },
     ],
   },
   openai: {
