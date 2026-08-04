@@ -40,6 +40,7 @@ const costObservabilityMigration = source('supabase/migrations/20260803190000_co
 const costDashboardTimezoneFixMigration = source('supabase/migrations/20260803213000_fix_cost_dashboard_local_day_boundary.sql')
 const costDashboardProviderLedgerMigration = source('supabase/migrations/20260804020600_source_dashboard_from_provider_ledger.sql')
 const travelScanDedupMigration = source('supabase/migrations/20260804021400_travel_scan_dedup_and_throttle.sql')
+const appTsx = source('src/App.tsx')
 const statusDashboard = source('src/pages/StatusDashboardPage.tsx')
 const providerCallLedger = source('supabase/functions/_shared/provider-call-ledger.mjs')
 const providerCallingFunctions = [
@@ -218,13 +219,12 @@ test('scan-travel-emails caches negative extraction results so non-trip emails a
   assert.match(scanTravel, /travel_email_scan_log'\)\.upsert\(\{/)
 })
 
-test('scan-travel-emails throttles the automatic full scan server-side, not just via client localStorage', () => {
-  // useTravelScan.ts gates on localStorage, which is per-browser/device, so
-  // every device independently re-runs a full all-members scan once a day.
-  // The truly-automatic case (no member or event context) must also be
-  // throttled server-side to one run per local calendar day regardless of
-  // how many devices trigger it. Explicit rescans (member/event scoped) must
-  // never be throttled.
+test('scan-travel-emails throttles the automatic full scan server-side, kept as a dormant safety net', () => {
+  // scan-gmail-inbox now covers continuous automatic travel-email discovery
+  // (see below), so nothing calls this path automatically anymore. The
+  // server-side throttle/cache stay in place as defense-in-depth in case the
+  // automatic path is ever re-enabled or manually triggered for a backfill.
+  // Explicit rescans (member/event scoped) must never be throttled.
   assert.match(travelScanDedupMigration, /create table if not exists public\.travel_auto_scan_state/)
   assert.match(scanTravel, /const isAutomaticFullScan = !targetMemberId && !scanEventId/)
   assert.match(scanTravel, /already scanned today/)
@@ -241,6 +241,23 @@ test('scan-travel-emails only shortens the lookback window for the automatic sca
   assert.match(scanTravel, /autoScanSince\.setDate\(autoScanSince\.getDate\(\) - 7\)/)
   assert.match(scanTravel, /const scanSince = isAutomaticFullScan \? autoScanSince : since/)
   assert.match(scanTravel, /searchTravelEmails\(accessToken, scanSince\)/)
+})
+
+test('the automatic daily full scan is no longer triggered from the client, since scan-gmail-inbox already covers it', () => {
+  // useTravelScan.ts used to fire scan-travel-emails with no member/event
+  // context once a day per device via localStorage. That duplicated
+  // scan-gmail-inbox's continuous (every 15 min, cron-driven) inbox scan,
+  // which already LLM-classifies every new email — including travel_detail
+  // — and hands off to scan-travel-emails's raw_text extraction mode. The
+  // daily full re-scan added no coverage scan-gmail-inbox didn't already
+  // provide, just redundant Gmail search + LLM cost. It has been removed
+  // from App.tsx; the hook file itself was deleted.
+  assert.doesNotMatch(appTsx, /useTravelScan/)
+  // scan-gmail-inbox must still forward travel_detail emails into the
+  // shared extraction engine (Mode 2 raw_text) so trip creation isn't lost.
+  assert.match(scanGmail, /travel_detail/)
+  assert.match(scanGmail, /functions\/v1\/scan-travel-emails/)
+  assert.match(scanTravel, /if \(body\.raw_text\)/)
 })
 
 test('known July cost centers replay to the exact billed total', () => {
