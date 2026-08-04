@@ -1,13 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X, Mail, ClipboardList, CalendarDays, Clock3, TimerReset, Ban, ThumbsDown, CalendarPlus, BellPlus } from 'lucide-react'
+import { X, Mail, ClipboardList, CalendarDays, Clock3, TimerReset, Ban, ThumbsDown, CalendarPlus, BellPlus, MapPin, Pencil, UserPlus } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { formatDueByForAiPrompt } from '../../utils/eventTime'
-import { useDismissPrepItem, useDownvotePrepItem, usePrepItemDetails, useSnoozePrepItem } from '../../hooks/usePrepItems'
+import {
+  useDismissPrepItem,
+  useDownvotePrepItem,
+  usePrepItemDetails,
+  useSetPrepItemAssignee,
+  useSnoozePrepItem,
+  useUpdatePrepItemDueBy,
+  prepItemConfidenceLabel,
+} from '../../hooks/usePrepItems'
+import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import type { PrepItem } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
-import { Button, CalendarPill, Heading, IconButton } from '../ui'
+import { Button, CalendarPill, Chip, Heading, IconButton, PersonAvatarStack } from '../ui'
 
 interface PrepItemDetailPanelProps {
   item: PrepItem | null
@@ -17,7 +26,29 @@ interface PrepItemDetailPanelProps {
 function sourceLabel(source: string | null | undefined): string {
   if (source === 'gmail') return 'Email'
   if (source === 'calendar_ai') return 'Calendar AI'
+  if (source === 'reminder_manual') return 'Manual reminder'
+  if (source === 'reminder_missed') return 'Missed reminder'
   return 'System'
+}
+
+/** Splits an ISO/local timestamp into native `<input type="date">` and `<input type="time">` values, in local (Eastern) time. */
+function toDateAndTimeInputs(value: string | null | undefined): { date: string; time: string } {
+  const parsed = value ? new Date(value) : new Date()
+  const safe = Number.isNaN(parsed.getTime()) ? new Date() : parsed
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return {
+    date: `${safe.getFullYear()}-${pad(safe.getMonth() + 1)}-${pad(safe.getDate())}`,
+    time: `${pad(safe.getHours())}:${pad(safe.getMinutes())}`,
+  }
+}
+
+/** Combines native date + time input values (local/Eastern) into an ISO timestamp for storage. */
+function combineDateAndTimeInputs(date: string, time: string): string | null {
+  if (!date || !time) return null
+  const [year, month, day] = date.split('-').map(Number)
+  const [hour, minute] = time.split(':').map(Number)
+  const combined = new Date(year, month - 1, day, hour, minute, 0, 0)
+  return Number.isNaN(combined.getTime()) ? null : combined.toISOString()
 }
 
 function formatWhen(value: string | null | undefined): string {
@@ -78,11 +109,20 @@ function useIsMobile() {
 export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPanelProps) {
   const isMobile = useIsMobile()
   const { data, isLoading } = usePrepItemDetails(item)
+  const { data: familyMembers = [] } = useFamilyMembers()
   const snooze = useSnoozePrepItem()
   const dismiss = useDismissPrepItem()
   const downvote = useDownvotePrepItem()
+  const setAssignee = useSetPrepItemAssignee()
+  const updateDueBy = useUpdatePrepItemDueBy()
   const [acting, setActing] = useState<string | null>(null)
+  const [editingDueBy, setEditingDueBy] = useState(false)
+  const [dueByDraft, setDueByDraft] = useState({ date: '', time: '' })
+  const [savingDueBy, setSavingDueBy] = useState(false)
   const emailParagraphs = useMemo(() => formatEmailBody(data?.gmailContext?.email_body), [data?.gmailContext?.email_body])
+  const confidence = useMemo(() => prepItemConfidenceLabel(data?.source_confidence ?? item?.source_confidence), [data?.source_confidence, item?.source_confidence])
+  const suggestedAssigneeId = data?.suggestedAssignees?.[0]?.id ?? null
+  const selectedAssigneeId = item?.assigned_to ?? suggestedAssigneeId
 
   useEffect(() => {
     if (!item) return
@@ -92,6 +132,10 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
       document.body.style.overflow = prev
     }
   }, [item])
+
+  useEffect(() => {
+    setEditingDueBy(false)
+  }, [item?.id])
 
   async function runAction(action: 'snooze' | 'dismiss' | 'downvote') {
     if (!item || acting) return
@@ -103,6 +147,30 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
       onClose()
     } finally {
       setActing(null)
+    }
+  }
+
+  async function handleAssign(memberId: string) {
+    if (!item) return
+    await setAssignee(item.id, selectedAssigneeId === memberId ? null : memberId)
+  }
+
+  function openDueByEditor() {
+    if (!item) return
+    setDueByDraft(toDateAndTimeInputs(item.due_by))
+    setEditingDueBy(true)
+  }
+
+  async function saveDueBy() {
+    if (!item) return
+    const iso = combineDateAndTimeInputs(dueByDraft.date, dueByDraft.time)
+    if (!iso) return
+    setSavingDueBy(true)
+    try {
+      await updateDueBy(item.id, iso)
+      setEditingDueBy(false)
+    } finally {
+      setSavingDueBy(false)
     }
   }
 
@@ -173,12 +241,72 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
                     <CalendarPill className="gap-1 bg-casa-surface">
                       <Mail size={11} /> {sourceLabel(item.source_type)}
                     </CalendarPill>
-                    <CalendarPill className="gap-1 bg-casa-surface">
-                      <CalendarDays size={11} /> Due {formatWhen(item.due_by)}
-                    </CalendarPill>
+                    {confidence && (
+                      <Chip tone={confidence.tone} size="sm">{confidence.label}</Chip>
+                    )}
+                    <Chip
+                      size="sm"
+                      onClick={openDueByEditor}
+                      icon={<CalendarDays size={11} />}
+                    >
+                      Due {formatWhen(item.due_by)} <Pencil size={10} className="opacity-60 ml-1" />
+                    </Chip>
                     <CalendarPill className="gap-1 bg-casa-surface">
                       <Clock3 size={11} /> Added {formatWhen(item.created_at)}
                     </CalendarPill>
+                  </div>
+
+                  {editingDueBy && (
+                    <div className="mt-3 rounded-card border border-casa-border bg-casa-surface p-3 space-y-2">
+                      <p className="text-caption text-casa-muted">
+                        Editing only updates this action's due date — it will not change any linked calendar event.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <input
+                          type="date"
+                          value={dueByDraft.date}
+                          onChange={(e) => setDueByDraft((prev) => ({ ...prev, date: e.target.value }))}
+                          className="rounded-input border border-casa-border bg-casa-bg px-3 py-2 text-body-sm text-casa-text"
+                        />
+                        <input
+                          type="time"
+                          value={dueByDraft.time}
+                          onChange={(e) => setDueByDraft((prev) => ({ ...prev, time: e.target.value }))}
+                          className="rounded-input border border-casa-border bg-casa-bg px-3 py-2 text-body-sm text-casa-text"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="primary" onClick={() => void saveDueBy()} disabled={savingDueBy}>
+                          Save
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => setEditingDueBy(false)} disabled={savingDueBy}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-3">
+                    <p className="text-caption font-semibold text-casa-muted mb-1.5 flex items-center gap-1">
+                      <UserPlus size={12} /> Assigned to
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {familyMembers.map((member) => {
+                        const selected = selectedAssigneeId === member.id
+                        const suggested = !item.assigned_to && suggestedAssigneeId === member.id
+                        return (
+                          <Chip
+                            key={member.id}
+                            size="sm"
+                            selected={selected}
+                            onClick={() => void handleAssign(member.id)}
+                            icon={<PersonAvatarStack people={[{ id: member.id, name: member.name, color: member.color_hex }]} size="sm" max={1} />}
+                          >
+                            {member.name}{suggested ? ' (suggested)' : ''}
+                          </Chip>
+                        )
+                      })}
+                    </div>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <Button
@@ -248,7 +376,9 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
                 </section>
 
                 <section className="rounded-card border border-casa-border p-4">
-                  <h3 className="font-semibold text-casa-navy text-body-sm mb-2">Email context</h3>
+                  <h3 className="font-semibold text-casa-navy text-body-sm mb-2">
+                    {item.source_type === 'gmail' ? 'Email context' : item.source_type === 'calendar_ai' ? 'Source event' : 'Source'}
+                  </h3>
                   {data?.gmailContext ? (
                     <div className="space-y-2">
                       <p className="text-body-sm text-casa-text">
@@ -272,8 +402,26 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
                         <p className="text-caption text-casa-muted">No email body was saved for this message.</p>
                       )}
                     </div>
+                  ) : data?.eventSnapshot ? (
+                    <div className="space-y-2">
+                      <p className="text-body-sm text-casa-text font-semibold">{data.eventSnapshot.title ?? item.event_title ?? 'Untitled event'}</p>
+                      <p className="text-caption text-casa-muted flex items-center gap-1">
+                        <CalendarDays size={11} />
+                        {data.eventSnapshot.all_day ? formatWhen(data.eventSnapshot.start_time).split(' · ')[0] : formatWhen(data.eventSnapshot.start_time)}
+                      </p>
+                      {(data.eventSnapshot.location_name || data.eventSnapshot.address) && (
+                        <p className="text-caption text-casa-muted flex items-center gap-1">
+                          <MapPin size={11} /> {data.eventSnapshot.location_name ?? data.eventSnapshot.address}
+                        </p>
+                      )}
+                      {data.eventSnapshot.description && (
+                        <p className="text-body-sm text-casa-text leading-relaxed mt-2">{data.eventSnapshot.description}</p>
+                      )}
+                    </div>
                   ) : (
-                    <p className="text-caption text-casa-muted">No linked email details for this action.</p>
+                    <p className="text-caption text-casa-muted">
+                      This item came from {sourceLabel(item.source_type).toLowerCase()}. No additional source details available.
+                    </p>
                   )}
                 </section>
               </div>

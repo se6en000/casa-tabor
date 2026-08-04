@@ -98,14 +98,135 @@ export function useDownvotePrepItem() {
   }
 }
 
-/** Fetches details for a single prep item (stub — returns the item as-is from cache) */
-export function usePrepItemDetails(_item: PrepItem | null) {
-  return {
-    data: _item ? {
-      ..._item,
-      relatedItems: [] as { id: string; description: string }[],
-      gmailContext: null as { email_body?: string; subject?: string; from?: string; from_email?: string; date?: string; received_at?: string } | null,
-    } : null,
-    isLoading: false,
+export interface PrepItemGmailContext {
+  subject: string | null
+  from_email: string | null
+  received_at: string | null
+  email_body: string | null
+}
+
+export interface PrepItemEventSnapshot {
+  title: string | null
+  start_time: string | null
+  end_time: string | null
+  all_day: boolean | null
+  location_name: string | null
+  address: string | null
+  description: string | null
+}
+
+export interface PrepItemAttendee {
+  id: string
+  name: string
+  color_hex: string | null
+}
+
+export interface PrepItemDetails extends PrepItem {
+  relatedItems: { id: string; description: string }[]
+  gmailContext: PrepItemGmailContext | null
+  eventSnapshot: PrepItemEventSnapshot | null
+  suggestedAssignees: PrepItemAttendee[]
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+/** The linked calendar event id for a prep item, if one can be resolved. */
+function resolveLinkedEventId(item: PrepItem): string | null {
+  if (item.event_id) return item.event_id
+  if (item.source_type !== 'gmail' && item.source_ref && UUID_RE.test(item.source_ref)) return item.source_ref
+  return null
+}
+
+/** Fetches real source context for a single prep item: gmail body, linked-event snapshot, and attendee suggestions. */
+export function usePrepItemDetails(item: PrepItem | null) {
+  return useQuery({
+    queryKey: ['prep-item-details', item?.id],
+    enabled: !!item,
+    staleTime: 30_000,
+    queryFn: async (): Promise<PrepItemDetails> => {
+      if (!item) throw new Error('No prep item selected')
+
+      let gmailContext: PrepItemGmailContext | null = null
+      if (item.source_type === 'gmail' && item.source_ref) {
+        const match = /^gmail:([^:]+):(.+)$/.exec(item.source_ref)
+        if (match) {
+          const [, memberId, messageId] = match
+          const { data } = await supabase
+            .from('gmail_processed_messages')
+            .select('subject, from_email, received_at, email_body')
+            .eq('family_member_id', memberId)
+            .eq('gmail_message_id', messageId)
+            .maybeSingle()
+          gmailContext = data ?? null
+        }
+      }
+
+      const linkedEventId = resolveLinkedEventId(item)
+      let eventSnapshot: PrepItemEventSnapshot | null = null
+      let suggestedAssignees: PrepItemAttendee[] = []
+
+      if (linkedEventId) {
+        if (item.source_type === 'calendar_ai') {
+          const { data } = await supabase
+            .from('events')
+            .select('title, start_time, end_time, all_day, location_name, address, description')
+            .eq('id', linkedEventId)
+            .maybeSingle()
+          eventSnapshot = data ?? null
+        }
+
+        const { data: members } = await supabase
+          .from('event_members')
+          .select('family_member:family_members(id, name, color_hex)')
+          .eq('event_id', linkedEventId)
+        suggestedAssignees = (members ?? [])
+          .map((row: any) => row.family_member)
+          .filter((member: PrepItemAttendee | null): member is PrepItemAttendee => !!member)
+      }
+
+      return {
+        ...item,
+        relatedItems: [],
+        gmailContext,
+        eventSnapshot,
+        suggestedAssignees,
+      }
+    },
+  })
+}
+
+/** High/Medium/Low label for a prep item's source_confidence score (0-1). */
+export function prepItemConfidenceLabel(confidence: number | null | undefined): { label: string; tone: 'success' | 'warning' | 'danger' } | null {
+  if (confidence == null || Number.isNaN(confidence)) return null
+  if (confidence >= 0.75) return { label: 'High confidence', tone: 'success' }
+  if (confidence >= 0.4) return { label: 'Medium confidence', tone: 'warning' }
+  return { label: 'Low confidence', tone: 'danger' }
+}
+
+/** Assigns (or clears) a single family member responsible for a prep item. */
+export function useSetPrepItemAssignee() {
+  const qc = useQueryClient()
+  return async (id: string, familyMemberId: string | null) => {
+    await supabase
+      .from('prep_items')
+      .update({ assigned_to: familyMemberId })
+      .eq('id', id)
+      .throwOnError()
+    qc.invalidateQueries({ queryKey: ['prep-items'] })
+    qc.invalidateQueries({ queryKey: ['prep-item-details', id] })
+  }
+}
+
+/** Updates only this prep item's own due_by — never cascades to a linked calendar event's start time. */
+export function useUpdatePrepItemDueBy() {
+  const qc = useQueryClient()
+  return async (id: string, dueByIso: string) => {
+    await supabase
+      .from('prep_items')
+      .update({ due_by: dueByIso })
+      .eq('id', id)
+      .throwOnError()
+    qc.invalidateQueries({ queryKey: ['prep-items'] })
+    qc.invalidateQueries({ queryKey: ['prep-item-details', id] })
   }
 }
