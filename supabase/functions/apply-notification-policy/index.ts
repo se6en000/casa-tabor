@@ -50,6 +50,32 @@ function isQuietHours(now: Date, cfg: SmsConfig): boolean {
   return nowMins >= start || nowMins < end
 }
 
+// Lead-time urgency curve for prep-item escalation. Returns a bucket name
+// (fires at most once per item, ever — see dedupe_key usage below) or null
+// if this item shouldn't notify yet. Replaces the old "priority>=3 notifies
+// every ~6h forever regardless of how far away it is" behavior, which is
+// what made a reminder due in 12 days look exactly as urgent as one due in
+// 20 minutes.
+function prepEscalationBucket(
+  dueInMins: number,
+  priority: number,
+  cfg: SmsConfig,
+  escalateMinutes: number,
+): string | null {
+  if (dueInMins < 0) return null // already past due — apply-notification-policy's prep query already excludes these, but guard anyway
+  const DAY = 24 * 60
+  if (priority >= 3) {
+    if (dueInMins <= escalateMinutes) return 'due_now'
+    if (dueInMins <= DAY) return 'day_of'
+    if (dueInMins <= 2 * DAY) return '48h'
+    return 'initial' // first time we saw this — one quiet heads-up, then wait for a real threshold
+  }
+  if (!cfg.escalation_enabled) return null
+  if (dueInMins <= escalateMinutes) return 'due_soon'
+  return null
+}
+
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const correlationId = getCorrelationId(req, 'policy')
@@ -166,20 +192,22 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Prep: only escalate when due soon or high priority.
+  // Prep: escalate on a lead-time curve instead of "priority>=3 notifies every
+  // cycle forever". Each bucket fires at most once per prep item (tracked via
+  // dedupe_key), so an item due in 12 days surfaces once early, then goes
+  // quiet until it crosses a meaningful threshold — not every ~6h regardless
+  // of distance to its due date.
   for (const p of prepItems) {
     if (!p.due_by) continue
     const dueMs = new Date(p.due_by).getTime() - now.getTime()
     const dueInMins = Math.floor(dueMs / 60000)
-    const shouldEscalate = p.priority >= 3 || (cfg.escalation_enabled && dueInMins <= escalateMinutes)
-    if (!shouldEscalate) continue
+    const bucket = prepEscalationBucket(dueInMins, p.priority, cfg, escalateMinutes)
+    if (!bucket) continue
 
-    const dedupeFrom = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString()
+    const dedupeKey = `policy_prep:${p.event_id}:${bucket}`
     const { data: existing } = await sb.from('notifications')
       .select('id')
-      .eq('type', 'policy_prep')
-      .eq('event_id', p.event_id)
-      .gte('created_at', dedupeFrom)
+      .eq('dedupe_key', dedupeKey)
       .limit(1)
     if ((existing?.length ?? 0) > 0) continue
 
@@ -190,6 +218,7 @@ Deno.serve(async (req) => {
       body: p.description,
       event_id: p.event_id,
       source: 'policy',
+      dedupe_key: dedupeKey,
     })
     createdNotifications++
     if (cfg.prep_alerts) await maybeSendSms(`Casa prep: ${p.description}`, p.priority >= 3 ? 3 : 2)

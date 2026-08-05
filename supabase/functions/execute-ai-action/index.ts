@@ -358,6 +358,38 @@ Deno.serve(async (req) => {
       const normalizedTitle = normalizeOptionalText(args.title, 220)
       const normalizedLocation = normalizeOptionalText(args.location, 220)
       if (!normalizedTitle) throw new Error('title is required for create_event')
+
+      // ── Duplicate guard ──
+      // AI chat/voice has no memory of what it already created, so the same
+      // request re-run (retry, re-heard voice command, user re-asking) would
+      // otherwise silently create a second near-identical event/reminder that
+      // then spawns its own prep item and notification stream forever. Treat
+      // "same normalized title + same exact start time, not deleted" as the
+      // same real-world thing and hand back the existing event instead.
+      if (args.start) {
+        const { data: possibleDupes } = await sb
+          .from('events')
+          .select('id, title, start_time, event_type, updated_at')
+          .is('deleted_at', null)
+          .eq('start_time', args.start)
+        const existing = (possibleDupes ?? []).find(
+          (e: { title: string }) => e.title.trim().toLowerCase() === normalizedTitle.toLowerCase()
+        )
+        if (existing) {
+          return new Response(JSON.stringify({
+            success: true,
+            duplicate: true,
+            event_id: existing.id,
+            event_updated_at: existing.updated_at,
+            sync_status: 'synced',
+            correlation_id: cid,
+            message: `"${normalizedTitle}" already exists on your calendar at this time — I didn't create a second one.`,
+          }), {
+            headers: { ...CORS, 'content-type': 'application/json' },
+          })
+        }
+      }
+
       const { data: event, error } = await sb.from('events').insert({
         title: normalizedTitle,
         start_time: args.start,
