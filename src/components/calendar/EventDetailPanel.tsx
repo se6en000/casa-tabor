@@ -150,26 +150,36 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
     if (!event) throw new Error('This event is no longer available.')
     setOverrideSaveError(null)
     const durablePlan = nextPlan ? markTransportationPlanManual(nextPlan) : null
-    if (eventPlace && !transportationPlaceMatchesEvent(eventPlace, event)) {
-      await persistScopedEventLocation({ event, place: eventPlace, scope: 'this' })
-      queryClient.removeQueries({ queryKey: ['travel-eta'] })
-    }
-    const { error } = await supabase
-      .from('event_plan_overrides')
-      .upsert({
-        event_id: event.id,
-        transportation_plan: durablePlan,
-      }, { onConflict: 'event_id' })
-    if (error) {
-      const message = `Could not save this driving plan: ${error.message}`
+    const previousPlan = transportationPlan
+
+    // Apply and broadcast the change immediately so every card/panel (driver chips,
+    // Needs You, stacked calendar) reflects it right away instead of waiting on the
+    // Supabase round trip below. On failure we roll this back and surface an error.
+    setTransportationPlan(durablePlan)
+    window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+
+    try {
+      if (eventPlace && !transportationPlaceMatchesEvent(eventPlace, event)) {
+        await persistScopedEventLocation({ event, place: eventPlace, scope: 'this' })
+        queryClient.removeQueries({ queryKey: ['travel-eta'] })
+      }
+      const { error } = await supabase
+        .from('event_plan_overrides')
+        .upsert({
+          event_id: event.id,
+          transportation_plan: durablePlan,
+        }, { onConflict: 'event_id' })
+      if (error) throw error
+    } catch (cause) {
+      setTransportationPlan(previousPlan)
+      window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+      const message = `Could not save this driving plan: ${cause instanceof Error ? cause.message : 'Unknown error'}`
       setOverrideSaveError(message)
       throw new Error(message)
     }
-    setTransportationPlan(durablePlan)
-    window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
     await queryClient.invalidateQueries({ queryKey: ['events'] })
     return durablePlan
-  }, [event, queryClient])
+  }, [event, queryClient, transportationPlan])
 
   const recurringTransportationRequest = useCallback((
     durablePlan: EventTransportationPlan | null,
@@ -209,14 +219,23 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
     const durablePlan = nextPlan ? markTransportationPlanManual(nextPlan) : null
     const request = recurringTransportationRequest(durablePlan, eventPlace)
     if (event.series_id && event.record_kind === 'occurrence') {
-      await executeRecurringQuickActionScope(request, 'this')
+      const previousPlan = transportationPlan
+      // Optimistic: show the new driver/plan immediately; the recurring-scope write
+      // happens in the background and rolls back on failure.
       setTransportationPlan(durablePlan)
       window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+      try {
+        await executeRecurringQuickActionScope(request, 'this')
+      } catch (cause) {
+        setTransportationPlan(previousPlan)
+        window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+        throw cause
+      }
       if (eventPlace) queryClient.removeQueries({ queryKey: ['travel-eta'] })
       return
     }
     await persistDirectTransportationPlan(durablePlan, eventPlace)
-  }, [event, executeRecurringQuickActionScope, persistDirectTransportationPlan, queryClient, recurringTransportationRequest])
+  }, [event, executeRecurringQuickActionScope, persistDirectTransportationPlan, queryClient, recurringTransportationRequest, transportationPlan])
 
   const persistFullTransportationPlan = useCallback(async (
     nextPlan: EventTransportationPlan | null,
@@ -306,6 +325,10 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
         } catch (error) {
           console.warn('EventDetailPanel: failed to clear persisted plan overrides', error)
         }
+        // Broadcast immediately: localStorage already reflects the cleared state, so every
+        // card/panel reading getPersistedPlanOverrides() can re-render now instead of waiting
+        // on the Supabase round trip below (this was the source of the 1-2s chip-update lag).
+        window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
         const { error } = await supabase
           .from('event_plan_overrides')
           .delete()
@@ -314,7 +337,6 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
           console.error('EventDetailPanel: failed to clear plan overrides in DB', error)
           setOverrideSaveError('Could not save this event detail across devices.')
         }
-        window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
         return
       }
 
@@ -336,6 +358,11 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
         console.warn('EventDetailPanel: failed to persist plan overrides locally', error)
       }
 
+      // Same optimistic-broadcast rule as above: fire the event the instant local state is
+      // durable, then sync to Supabase in the background so cross-device consistency still
+      // happens without blocking what the person in front of the screen sees.
+      window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+
       const { error } = await supabase
         .from('event_plan_overrides')
         .upsert({
@@ -351,7 +378,6 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
         console.error('EventDetailPanel: failed to persist plan overrides in DB', error)
         setOverrideSaveError('Could not save this event detail across devices.')
       }
-      window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
     }
     void persist()
   }, [event?.id, overridesHydratedEventId, verifiedOverride, waitsOverride, driverOverrides, modeOverride, twoDriverConfirmed, transportationPlan, overrideSaveRevision])

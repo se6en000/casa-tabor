@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { format, addDays, isToday, startOfDay } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -301,6 +301,21 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
   const goingMembers = getGoingMembers(event)
   const visibleGoingMembers = goingMembers.slice(0, 2)
   const goingOverflowCount = Math.max(0, goingMembers.length - visibleGoingMembers.length)
+
+  // Re-derive driver/attendee responsibility whenever the event detail panel writes a new
+  // driver override or transportation plan, so stacked-view cards update immediately
+  // instead of only after a full page reload.
+  const [, setOverrideVersion] = useState(0)
+  useEffect(() => {
+    function handleOverridesUpdated(e: Event) {
+      const detail = (e as CustomEvent<{ eventId?: string }>).detail
+      if (!detail?.eventId || detail.eventId === event.id) {
+        setOverrideVersion((v) => v + 1)
+      }
+    }
+    window.addEventListener('casa:overrides-updated', handleOverridesUpdated)
+    return () => window.removeEventListener('casa:overrides-updated', handleOverridesUpdated)
+  }, [event.id])
   const responsibilityChip = deriveResponsibilityChip(event, household)
 
   // Long-press detection
