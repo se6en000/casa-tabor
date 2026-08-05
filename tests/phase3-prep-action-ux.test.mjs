@@ -45,14 +45,19 @@ test('priorityVisual shows no chip for baseline priority (never a color-only sig
   assert.match(prepPriority, /chip: null/)
 })
 
-test('ActionHubPage and HomeRightPanel wire priorityVisual into their prep card borders and chips', () => {
+test('ActionHubPage wires priorityVisual into its prep card borders and chips', () => {
   assert.match(actionHubPage, /priorityVisual\(item\.priority\)/)
   assert.match(actionHubPage, /priority\.borderClass/)
   assert.match(actionHubPage, /priority\.chip/)
+})
 
+test('HomeRightPanel wires priorityVisual into a compact card face without the left-border eyebrow', () => {
+  // Needs You cards use their own bg-casa-surface card background (matching the center rail)
+  // and a small icon-only priority indicator instead of the left-border "eyebrow" + text chip —
+  // priority.borderClass is intentionally unused here (see priority.chip below for the icon).
   assert.match(homeRightPanel, /priorityVisual\(item\.priority\)/)
-  assert.match(homeRightPanel, /priority\.borderClass/)
   assert.match(homeRightPanel, /priority\.chip/)
+  assert.match(homeRightPanel, /rounded-card border border-casa-border bg-casa-surface/)
 })
 
 test('PrepItemAssigneeChip renders an avatar+name chip when assigned, and an Assign nudge when not', () => {
@@ -65,9 +70,13 @@ test('ActionHubPage and HomeRightPanel surface assignment directly on prep card 
   assert.match(actionHubPage, /PrepItemAssigneeChip/)
   // HomeRightPanel's compact row design (see home-needs-you-priority-order tests) inlines
   // assignment as an avatar-badge + name (or an "Assign" chip when unassigned) rather than
-  // reusing the ActionHubPage-style PrepItemAssigneeChip component.
+  // reusing the ActionHubPage-style PrepItemAssigneeChip component. Clicking either opens an
+  // inline PrepAssignPicker popover that assigns via useSetPrepItemAssignee immediately.
   assert.match(homeRightPanel, /PersonAvatarStack/)
-  assert.match(homeRightPanel, /icon=\{<UserPlus size=\{11\} \/>\}>Assign</)
+  assert.match(homeRightPanel, /icon=\{<UserPlus size=\{11\} \/>\}/)
+  assert.match(homeRightPanel, /Assign\s*<\/Chip>/)
+  assert.match(homeRightPanel, /function PrepAssignPicker/)
+  assert.match(homeRightPanel, /useSetPrepItemAssignee/)
 })
 
 test('clearAll excludes unread conflict/policy_conflict rows from the bulk delete', () => {

@@ -5,11 +5,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { addDays, differenceInDays, format, parseISO, startOfWeek } from 'date-fns'
 import { Link, useNavigate } from 'react-router-dom'
-import { Check, ChevronRight, MoreHorizontal, Sparkles, ThumbsDown, UserPlus } from 'lucide-react'
+import { AlertTriangle, Check, ChevronRight, MoreHorizontal, Sparkles, ThumbsDown, UserPlus } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useWeekEventIndex } from '../../hooks/useCalendarEvents'
-import { useCompletePrepItem, useDownvotePrepItem, usePrepItems, useSnoozePrepItem } from '../../hooks/usePrepItems'
+import { useCompletePrepItem, useDownvotePrepItem, usePrepItems, useSetPrepItemAssignee, useSnoozePrepItem } from '../../hooks/usePrepItems'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { supabase } from '../../lib/supabase'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
@@ -91,6 +92,103 @@ function sourceBadge(item: PrepItem) {
   return { label: 'System', tone: 'neutral' as const }
 }
 
+interface AssignPickerMember {
+  id: string
+  name: string
+  color_hex: string
+}
+
+/**
+ * Inline "Assign" control for a Needs You row: shows an Assign chip (unassigned) or the
+ * assignee's name (assigned) as the trigger, and opens a small anchored popover listing every
+ * family member so tapping one immediately assigns/reassigns the prep item — no full detail
+ * sheet required.
+ */
+function PrepAssignPicker({
+  assignee,
+  familyMembers,
+  onAssign,
+}: {
+  assignee: AssignPickerMember | null
+  familyMembers: AssignPickerMember[]
+  onAssign: (familyMemberId: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handlePointerDown = (evt: MouseEvent | TouchEvent) => {
+      if (!containerRef.current || containerRef.current.contains(evt.target as Node)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('touchstart', handlePointerDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('touchstart', handlePointerDown)
+    }
+  }, [open])
+
+  return (
+    <div className={cn('relative inline-flex', open && 'z-popover')} ref={containerRef}>
+      {assignee ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={(evt) => { evt.stopPropagation(); setOpen((prev) => !prev) }}
+          className="h-auto min-h-0 p-0 hover:bg-transparent"
+          contentClassName="text-caption text-casa-muted truncate hover:text-casa-text hover:underline underline-offset-2"
+        >
+          {assignee.name}
+        </Button>
+      ) : (
+        <Chip
+          size="sm"
+          tone="neutral"
+          icon={<UserPlus size={11} />}
+          onClick={(evt) => { evt.stopPropagation(); setOpen((prev) => !prev) }}
+        >
+          Assign
+        </Chip>
+      )}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.96 }}
+            transition={{ duration: 0.12 }}
+            className="absolute left-0 top-[calc(100%+6px)] z-popover min-w-[170px] max-h-64 overflow-y-auto overscroll-contain rounded-card border border-casa-border bg-casa-surface p-1.5 shadow-modal"
+          >
+            {familyMembers.map((member) => {
+              const selected = assignee?.id === member.id
+              return (
+                <Button
+                  key={member.id}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  fullWidth
+                  onClick={(evt) => { evt.stopPropagation(); onAssign(member.id); setOpen(false) }}
+                  className={cn('rounded-lg px-2 py-1.5 text-left', selected && 'bg-casa-bg')}
+                  contentClassName="w-full justify-start gap-2"
+                  aria-pressed={selected}
+                  title={selected ? `${member.name} (assigned — tap to unassign)` : member.name}
+                >
+                  <PersonAvatarStack people={[{ id: member.id, name: member.name, color: member.color_hex }]} size="sm" max={1} />
+                  {member.name}
+                </Button>
+              )
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }: Props) {
   const navigate = useNavigate()
   const { data: prepItems = [] } = usePrepItems()
@@ -98,6 +196,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   const completePrepItem = useCompletePrepItem()
   const snoozePrepItem = useSnoozePrepItem()
   const downvotePrepItem = useDownvotePrepItem()
+  const setPrepItemAssignee = useSetPrepItemAssignee()
   const { data: weekEventIndex = [] } = useWeekEventIndex(now)
   const setSelectedDate = useCalendarStore(s => s.setSelectedDate)
   const setActiveView = useCalendarStore(s => s.setActiveView)
@@ -300,9 +399,9 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
             </Link>
           </div>
           {prepItems.some(item => item.priority >= 2) && (
-            <p className="text-caption text-casa-muted mt-2">
-              <span className="inline-block w-2 h-2 rounded-full bg-casa-error align-middle mr-1" />Critical ·{' '}
-              <span className="inline-block w-2 h-2 rounded-full bg-casa-warning align-middle mr-1 ml-1" />Important
+            <p className="text-caption text-casa-muted mt-2 inline-flex items-center gap-1">
+              <AlertTriangle size={12} strokeWidth={2.3} className="text-casa-error" aria-hidden="true" />Critical ·{' '}
+              <AlertTriangle size={12} strokeWidth={2.3} className="text-casa-warning" aria-hidden="true" />Important
             </p>
           )}
 
@@ -330,7 +429,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                   {actionError} The action is still active.
                 </p>
               )}
-              <div className="divide-y divide-casa-border/70">
+              <div className="space-y-2">
                 {visiblePrepItems.slice(0, 4).map(item => {
                   const urgency = urgencyLabel(daysUntil(item.event_date))
                   const source = sourceBadge(item)
@@ -341,8 +440,8 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                   const urgencyDot = urgencyDotClass(urgency.tone)
 
                   return (
-                    <div key={item.id} className={priority.borderClass ? cn('pl-1.5 -ml-1.5', priority.borderClass) : undefined}>
-                      <div className="flex items-start gap-2.5 py-2.5">
+                    <div key={item.id} className="rounded-card border border-casa-border bg-casa-surface px-3 py-2.5">
+                      <div className="flex items-start gap-2.5">
                         <Button
                           type="button"
                           variant="ghost"
@@ -364,29 +463,43 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                           )}
                         </Button>
 
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          fullWidth
-                          onClick={() => onSelectPrepItem?.(item)}
-                          className="min-w-0 flex-1 h-auto min-h-0 p-0 text-left hover:bg-transparent"
-                          contentClassName="w-full flex-col items-stretch gap-0"
-                        >
-                          <p className="!text-body-sm leading-snug text-casa-text line-clamp-3">
-                            {item.description}
-                          </p>
+                        <div className="min-w-0 flex-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            fullWidth
+                            onClick={() => onSelectPrepItem?.(item)}
+                            className="h-auto min-h-0 p-0 text-left hover:bg-transparent"
+                            contentClassName="w-full justify-start"
+                          >
+                            <p className="!text-body-sm leading-snug text-casa-text line-clamp-3">
+                              {item.description}
+                            </p>
+                          </Button>
                           <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
                             <Chip size="sm" tone={source.tone}>{source.label}</Chip>
                             {priority.chip && (
-                              <Chip size="sm" tone={priority.chip.tone}>{priority.chip.label}</Chip>
+                              <span
+                                role="img"
+                                aria-label={priority.chip.label}
+                                title={priority.chip.label}
+                                className={cn(
+                                  'inline-flex shrink-0',
+                                  priority.chip.tone === 'danger' ? 'text-casa-error' : 'text-casa-warning',
+                                )}
+                              >
+                                <AlertTriangle size={13} strokeWidth={2.3} />
+                              </span>
                             )}
-                            {assignee ? (
-                              <span className="text-caption text-casa-muted truncate">{assignee.name}</span>
-                            ) : (
-                              <Chip size="sm" tone="neutral" icon={<UserPlus size={11} />}>Assign</Chip>
-                            )}
+                            <PrepAssignPicker
+                              assignee={assignee}
+                              familyMembers={familyMembers}
+                              onAssign={(familyMemberId) => {
+                                void setPrepItemAssignee(item.id, assignee?.id === familyMemberId ? null : familyMemberId)
+                              }}
+                            />
                           </div>
-                        </Button>
+                        </div>
 
                         <div className="flex shrink-0 items-center gap-1.5">
                           <IconButton
@@ -409,7 +522,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                       </div>
 
                       {isRevealed && (
-                        <div className="flex items-center gap-2 pb-2.5 pl-[2.375rem]">
+                        <div className="flex items-center gap-2 pt-2.5 pl-[2.375rem]">
                           <Button
                             onClick={() => { snoozePrepItem(item.id); setRevealedItemId(null) }}
                             variant="secondary"
