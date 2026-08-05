@@ -33,3 +33,4 @@ dist-ssr
 # Playwright transient output (approved screenshot baselines are committed).
 /playwright-report
 /test-results
+pi/__pycache__/

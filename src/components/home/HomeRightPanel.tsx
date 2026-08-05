@@ -440,7 +440,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                   const urgencyDot = urgencyDotClass(urgency.tone)
 
                   return (
-                    <div key={item.id} className="rounded-card border border-casa-border bg-casa-surface px-3 py-2.5">
+                    <div key={item.id} className="rounded-card border border-casa-border bg-casa-bg px-3 py-2.5">
                       <div className="flex items-start gap-2.5">
                         <Button
                           type="button"

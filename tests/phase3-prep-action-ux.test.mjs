@@ -52,12 +52,13 @@ test('ActionHubPage wires priorityVisual into its prep card borders and chips', 
 })
 
 test('HomeRightPanel wires priorityVisual into a compact card face without the left-border eyebrow', () => {
-  // Needs You cards use their own bg-casa-surface card background (matching the center rail)
-  // and a small icon-only priority indicator instead of the left-border "eyebrow" + text chip —
-  // priority.borderClass is intentionally unused here (see priority.chip below for the icon).
+  // Needs You cards use the same bg-casa-bg background as the "This week" day cells above them
+  // (rather than pure-white bg-casa-surface) and a small icon-only priority indicator instead of
+  // the left-border "eyebrow" + text chip — priority.borderClass is intentionally unused here
+  // (see priority.chip below for the icon).
   assert.match(homeRightPanel, /priorityVisual\(item\.priority\)/)
   assert.match(homeRightPanel, /priority\.chip/)
-  assert.match(homeRightPanel, /rounded-card border border-casa-border bg-casa-surface/)
+  assert.match(homeRightPanel, /rounded-card border border-casa-border bg-casa-bg/)
 })
 
 test('PrepItemAssigneeChip renders an avatar+name chip when assigned, and an Assign nudge when not', () => {
