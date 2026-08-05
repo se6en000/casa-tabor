@@ -180,6 +180,14 @@ test('assistant narrows prompt context and tools by intent profile', () => {
   assert.match(assistantFunction, /server_ai_assistant_calendar_semantic_read/)
 })
 
+test('household directory lookups load confirmed contacts and their primary places', () => {
+  assert.match(assistantFunction, /const referencesHouseholdDirectory =/)
+  assert.match(assistantFunction, /coach\|doctor\|dentist\|orthodontist/)
+  assert.match(assistantFunction, /primary_place:saved_places!saved_contacts_primary_place_id_fkey/)
+  assert.match(assistantFunction, /usually at \$\{c\.primary_place\.name\}/)
+  assert.match(assistantFunction, /includePlaceContext = [\s\S]{0,180}referencesHouseholdDirectory/)
+})
+
 test('confirmation state is atomic, self-clearing, and fully traced', () => {
   assert.match(drawer, /state: 'pending' \| 'executing'/)
   assert.match(drawer, /pending\.state = 'executing'/)

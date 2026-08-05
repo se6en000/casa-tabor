@@ -685,8 +685,18 @@ Deno.serve(async (req) => {
     ['event', 'full', 'travel', 'general'].includes(intentRouting.profile) &&
     !imageDirectEventCreateFlow &&
     !directReminderCreateFlow
-  const needsPlaceData = !requestAmbiguity && ['event', 'full', 'travel', 'places'].includes(intentRouting.profile)
-  const needsContactData = !requestAmbiguity && ['event', 'full', 'places'].includes(intentRouting.profile)
+  // A person/provider lookup ("where does Coach Danny meet?") often routes as
+  // general conversation, so profile-only loading would omit the very
+  // household directory context needed to answer it.
+  const referencesHouseholdDirectory = /\b(?:address|location|located|meet(?:ing)?|phone|number|contact|call|coach|doctor|dentist|orthodontist|teacher|provider|therapist|barber)\b/i.test(latestUserText)
+  const needsPlaceData = !requestAmbiguity && (
+    ['event', 'full', 'travel', 'places'].includes(intentRouting.profile) ||
+    referencesHouseholdDirectory
+  )
+  const needsContactData = !requestAmbiguity && (
+    ['event', 'full', 'places'].includes(intentRouting.profile) ||
+    referencesHouseholdDirectory
+  )
   const needsGroceryData = !requestAmbiguity && (
     context?.page === 'grocery' ||
     ['grocery', 'full'].includes(intentRouting.profile)
@@ -748,7 +758,12 @@ Deno.serve(async (req) => {
       ? sb.from('saved_places').select('name, aliases, address, city, state, zip, category, notes, phone').eq('confirmed', true).order('name')
       : skippedRows,
     needsContactData
-      ? sb.from('saved_contacts').select('name, aliases, phone, email, address, relationship, notes').eq('confirmed', true).order('name').then(r => r).catch(() => ({ data: null, error: null }))
+      ? sb.from('saved_contacts')
+        .select('name, aliases, phone, email, address, relationship, notes, primary_place:saved_places!saved_contacts_primary_place_id_fkey(name, address, city, state, zip, category)')
+        .eq('confirmed', true)
+        .order('name')
+        .then(r => r)
+        .catch(() => ({ data: null, error: null }))
       : skippedRows,
     needsEventData
       ? sb.from('events')
@@ -2182,9 +2197,31 @@ Deno.serve(async (req) => {
     : ''
 
   const contactsText = savedContacts && (savedContacts as unknown[]).length > 0
-    ? (savedContacts as {name: string; aliases?: string[]; phone?: string; email?: string; address?: string; relationship?: string; notes?: string}[]).map(c => {
+    ? (savedContacts as {
+      name: string
+      aliases?: string[]
+      phone?: string
+      email?: string
+      address?: string
+      relationship?: string
+      notes?: string
+      primary_place?: {
+        name?: string
+        address?: string
+        city?: string
+        state?: string
+        zip?: string
+        category?: string
+      } | null
+    }[]).map(c => {
         const aliases = c.aliases?.length ? ` (also: ${c.aliases.join(', ')})` : ''
-        const extra = [c.relationship, c.phone, c.email, c.address, c.notes].filter(Boolean).join(' | ')
+        const primaryPlaceAddress = c.primary_place
+          ? [c.primary_place.address, c.primary_place.city, c.primary_place.state, c.primary_place.zip].filter(Boolean).join(', ')
+          : ''
+        const primaryPlace = c.primary_place
+          ? `usually at ${c.primary_place.name}${primaryPlaceAddress ? ` (${primaryPlaceAddress})` : ''}`
+          : ''
+        const extra = [c.relationship, primaryPlace, c.phone, c.email, c.address, c.notes].filter(Boolean).join(' | ')
         return `- ${c.name}${aliases}${extra ? ': ' + extra : ''}`
       }).join('\n')
     : ''
@@ -2606,7 +2643,7 @@ Deno.serve(async (req) => {
   const includeGroceryContext = needsGroceryData
   const includeRecipeContext = needsRecipeData
   const includeFoodProfileContext = needsFoodProfileData
-  const includePlaceContext = ['full', 'event', 'places', 'travel'].includes(intentRouting.profile)
+  const includePlaceContext = ['full', 'event', 'places', 'travel'].includes(intentRouting.profile) || referencesHouseholdDirectory
   const includeAvailabilityContext = ['full', 'event'].includes(intentRouting.profile)
 
   // Build Gemini conversation with system instruction + history

@@ -3,32 +3,20 @@ import {
   Plus, Trash2, Save, X, MapPin, Phone, Mail,
   Search, BookmarkCheck, Home, Utensils, School, Dumbbell,
   Briefcase, HeartPulse, Star, Edit2, Users, User, Copy, Check,
+  Plane, ShoppingBag, Wrench, MessageCircle, MapPinned,
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
-import type { SavedPlace, SavedPlaceCategory } from '../types'
+import type { SavedContact, SavedPlace, SavedPlaceCategory } from '../types'
 import { savedPlaceAddress } from '../hooks/useSavedPlaces'
-import { Button, IconButton } from '../components/ui'
+import { Button, Combobox, IconButton } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface SavedContact {
-  id: string
-  name: string
-  aliases: string[]
-  relationship: string | null
-  phone: string | null
-  email: string | null
-  address: string | null
-  notes: string | null
-  confirmed: boolean
-  source: 'manual' | 'derived'
-  occurrence_count: number
-  created_at: string
-  updated_at: string
-}
+type SavedPlaceInput = Omit<SavedPlace, 'id' | 'lat' | 'lng' | 'google_place_id' | 'last_seen_at' | 'created_at' | 'updated_at'>
+type SavedContactInput = Omit<SavedContact, 'id' | 'primary_place' | 'last_seen_at' | 'created_at' | 'updated_at'>
 
 // ── Category metadata ─────────────────────────────────────────────────────────
 
@@ -39,6 +27,10 @@ const CATEGORIES: { value: SavedPlaceCategory; label: string; icon: React.Compon
   { value: 'sports',        label: 'Sports / Venue',  icon: Dumbbell },
   { value: 'work',          label: 'Work',            icon: Briefcase },
   { value: 'medical',       label: 'Medical',         icon: HeartPulse },
+  { value: 'travel',        label: 'Travel',          icon: Plane },
+  { value: 'errand',        label: 'Errand',          icon: ShoppingBag },
+  { value: 'home_service',  label: 'Home Service',    icon: Wrench },
+  { value: 'social',        label: 'Social / Venue',  icon: MessageCircle },
   { value: 'other',         label: 'Other',           icon: Star },
 ]
 
@@ -56,7 +48,7 @@ function blankPlace(): Partial<SavedPlace> & { _aliasText: string } {
 
 interface PlaceFormProps {
   initial?: (Partial<SavedPlace> & { _aliasText?: string }) | null
-  onSave: (place: Omit<SavedPlace, 'id' | 'lat' | 'lng' | 'google_place_id' | 'created_at' | 'updated_at'>) => void
+  onSave: (place: SavedPlaceInput) => void
   onCancel: () => void
   saving?: boolean
 }
@@ -199,28 +191,60 @@ function PlaceRow({ place, onEdit, onDelete }: { place: SavedPlace; onEdit: () =
 // ── Contact blank form ────────────────────────────────────────────────────────
 
 function blankContact(): Partial<SavedContact> & { _aliasText: string } {
-  return { name: '', aliases: [], _aliasText: '', relationship: '', phone: '', email: '', address: '', notes: '' }
+  return {
+    name: '',
+    aliases: [],
+    _aliasText: '',
+    relationship: '',
+    phone: '',
+    email: '',
+    address: '',
+    notes: '',
+    primary_place_id: null,
+    primary_place_source: null,
+  }
 }
 
 // ── Contact form ──────────────────────────────────────────────────────────────
 
 interface ContactFormProps {
   initial?: (Partial<SavedContact> & { _aliasText?: string }) | null
-  onSave: (c: Omit<SavedContact, 'id' | 'created_at' | 'updated_at'>) => void
+  places: SavedPlace[]
+  onSave: (c: SavedContactInput) => void
   onCancel: () => void
   saving?: boolean
 }
 
-function ContactForm({ initial, onSave, onCancel, saving }: ContactFormProps) {
+function ContactForm({ initial, places, onSave, onCancel, saving }: ContactFormProps) {
   const [form, setForm] = useState<Partial<SavedContact> & { _aliasText: string }>({
     ...blankContact(), ...initial, _aliasText: initial?.aliases?.join(', ') ?? '',
   })
+  const placeOptions = [
+    { value: '', label: 'No linked place' },
+    ...places.map(place => ({
+      value: place.id,
+      label: [place.name, savedPlaceAddress(place)].filter(Boolean).join(' — '),
+    })),
+  ]
   function set(key: string, value: unknown) { setForm(f => ({ ...f, [key]: value })) }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const aliases = form._aliasText.split(',').map(s => s.trim()).filter(Boolean)
-    onSave({ name: form.name ?? '', aliases, relationship: form.relationship || null, phone: form.phone || null, email: form.email || null, address: form.address || null, notes: form.notes || null, confirmed: true, source: 'manual', occurrence_count: form.occurrence_count ?? 1 })
+    onSave({
+      name: form.name ?? '',
+      aliases,
+      relationship: form.relationship || null,
+      phone: form.phone || null,
+      email: form.email || null,
+      address: form.address || null,
+      notes: form.notes || null,
+      primary_place_id: form.primary_place_id || null,
+      primary_place_source: form.primary_place_id ? 'manual' : null,
+      confirmed: true,
+      source: 'manual',
+      occurrence_count: form.occurrence_count ?? 1,
+    })
   }
 
   return (
@@ -255,7 +279,17 @@ function ContactForm({ initial, onSave, onCancel, saving }: ContactFormProps) {
         </div>
       </div>
       <div>
-        <label className="block text-caption font-semibold text-casa-muted mb-1">Address</label>
+        <Combobox
+          label="Primary place"
+          value={form.primary_place_id ?? ''}
+          onChange={value => set('primary_place_id', value || null)}
+          options={placeOptions}
+          placeholder="Search saved places"
+        />
+        <p className="mt-1 text-caption text-casa-muted">Where this person or provider is usually reached. Their address stays connected to the place.</p>
+      </div>
+      <div>
+        <label className="block text-caption font-semibold text-casa-muted mb-1">Custom address <span className="font-normal ml-1">(only if different)</span></label>
         <input value={form.address ?? ''} onChange={e => set('address', e.target.value)} placeholder="123 Oak St, Jupiter FL 33477"
           className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
       </div>
@@ -278,10 +312,14 @@ function ContactForm({ initial, onSave, onCancel, saving }: ContactFormProps) {
 
 function ContactRow({ contact, onEdit, onDelete }: { contact: SavedContact; onEdit: () => void; onDelete: () => void }) {
   const [copied, setCopied] = useState(false)
+  const primaryPlaceAddress = contact.primary_place ? savedPlaceAddress(contact.primary_place) : ''
+  const destination = contact.primary_place
+    ? [contact.primary_place.name, primaryPlaceAddress].filter(Boolean).join(' — ')
+    : contact.address
   const handleCopyAddress = useCallback(async () => {
-    if (!contact.address) return
-    try { await navigator.clipboard.writeText(contact.address); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch { /* ignore */ }
-  }, [contact.address])
+    if (!destination) return
+    try { await navigator.clipboard.writeText(destination); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch { /* ignore */ }
+  }, [destination])
   return (
     <div className="flex items-start gap-3 bg-casa-surface border border-casa-border rounded-card p-4 shadow-card hover:shadow-card-hover transition-shadow">
       <div className="w-9 h-9 rounded-full bg-casa-navy/10 flex items-center justify-center text-casa-navy shrink-0 mt-0.5">
@@ -295,19 +333,19 @@ function ContactRow({ contact, onEdit, onDelete }: { contact: SavedContact; onEd
         {contact.aliases.length > 0 && <p className="text-caption text-casa-gold mt-0.5 truncate">Also known as: {contact.aliases.join(', ')}</p>}
         {contact.phone && <p className="flex items-center gap-1 text-caption text-casa-muted mt-1"><Phone size={11} />{contact.phone}</p>}
         {contact.email && <p className="flex items-center gap-1 text-caption text-casa-muted mt-0.5"><Mail size={11} />{contact.email}</p>}
-        {contact.address && (
+        {destination && (
           <Button
             variant="subtle"
             size="sm"
             align="start"
             onClick={handleCopyAddress}
-            leadingIcon={<MapPin size={14} aria-hidden="true" />}
+            leadingIcon={<MapPinned size={14} aria-hidden="true" />}
             trailingIcon={copied ? <Check size={14} className="text-casa-success" aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
             className="mt-0.5 max-w-full px-3"
             contentClassName="min-w-0"
             aria-label={copied ? `Address copied for ${contact.name}` : `Copy address for ${contact.name}`}
           >
-            <span className="truncate">{contact.address}</span>
+            <span className="truncate">{contact.primary_place ? `Usually at ${destination}` : destination}</span>
             <span className="sr-only" aria-live="polite">{copied ? 'Address copied' : ''}</span>
           </Button>
         )}
@@ -323,10 +361,11 @@ function ContactRow({ contact, onEdit, onDelete }: { contact: SavedContact; onEd
 
 // ── Suggested (derived, unconfirmed) row ─────────────────────────────────────
 
-function SuggestedRow({ label, sublabel, occurrenceCount, onConfirm, onDismiss, confirming }: {
+function SuggestedRow({ label, sublabel, occurrenceCount, onReview, onConfirm, onDismiss, confirming }: {
   label: string
   sublabel: string
   occurrenceCount: number
+  onReview: () => void
   onConfirm: () => void
   onDismiss: () => void
   confirming?: boolean
@@ -342,10 +381,12 @@ function SuggestedRow({ label, sublabel, occurrenceCount, onConfirm, onDismiss, 
         </div>
         {sublabel && <p className="text-caption text-casa-muted mt-1">{sublabel}</p>}
       </div>
-      <div className="flex items-center gap-1 shrink-0">
-        <Button onClick={onConfirm} disabled={confirming}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-casa-gold text-white text-caption font-semibold hover:bg-casa-gold/90 transition-colors disabled:opacity-50">
-          <Check size={13} />Confirm
+      <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+        <Button variant="secondary" size="sm" onClick={onReview} leadingIcon={<Edit2 size={15} />}>
+          Review
+        </Button>
+        <Button size="sm" onClick={onConfirm} loading={confirming} leadingIcon={<Check size={15} />}>
+          Confirm
         </Button>
         <IconButton onClick={onDismiss} variant="ghost" size="sm" icon={<X size={16} />} aria-label="Dismiss suggestion" title="Dismiss" />
       </div>
@@ -378,7 +419,7 @@ export default function SavedPlacesSettingsPage() {
   })
 
   const savePlaceMutation = useMutation({
-    mutationFn: async (payload: { id?: string; data: Omit<SavedPlace, 'id' | 'lat' | 'lng' | 'google_place_id' | 'created_at' | 'updated_at'> }) => {
+    mutationFn: async (payload: { id?: string; data: SavedPlaceInput }) => {
       if (payload.id) {
         const { error } = await supabase.from('saved_places').update({ ...payload.data, updated_at: new Date().toISOString() }).eq('id', payload.id)
         if (error) throw error
@@ -410,14 +451,17 @@ export default function SavedPlacesSettingsPage() {
   const { data: contacts = [], isLoading: contactsLoading } = useQuery<SavedContact[]>({
     queryKey: ['saved_contacts'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('saved_contacts').select('*').order('name')
+      const { data, error } = await supabase
+        .from('saved_contacts')
+        .select('*, primary_place:saved_places!saved_contacts_primary_place_id_fkey(id, name, address, city, state, zip, category)')
+        .order('name')
       if (error) throw error
       return data as SavedContact[]
     },
   })
 
   const saveContactMutation = useMutation({
-    mutationFn: async (payload: { id?: string; data: Omit<SavedContact, 'id' | 'created_at' | 'updated_at'> }) => {
+    mutationFn: async (payload: { id?: string; data: SavedContactInput }) => {
       if (payload.id) {
         const { error } = await supabase.from('saved_contacts').update({ ...payload.data, updated_at: new Date().toISOString() }).eq('id', payload.id)
         if (error) throw error
@@ -468,7 +512,7 @@ export default function SavedPlacesSettingsPage() {
     <>
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
-          <SettingsPageHeader title="Saved Places & Contacts" description="The AI uses these to resolve nicknames and look up addresses." />
+          <SettingsPageHeader title="Household Directory" description="Places are destinations. People are contacts or providers who can be connected to a place." />
           {!isAdding && (
             <Button
               onClick={() => tab === 'places' ? setPlaceMode({ type: 'add' }) : setContactMode({ type: 'add' })}
@@ -518,7 +562,7 @@ export default function SavedPlacesSettingsPage() {
                 {suggestedPlaces.length > 0 && (
                   <div className="mb-6">
                     <p className="text-caption font-semibold text-casa-muted mb-2">
-                      Suggested from your event history — review and confirm
+                      Suggested from event history — review details before making a place part of your directory
                     </p>
                     <div className="space-y-2">
                       {suggestedPlaces.map(place => (
@@ -527,6 +571,7 @@ export default function SavedPlacesSettingsPage() {
                           sublabel={savedPlaceAddress(place)}
                           occurrenceCount={place.occurrence_count}
                           confirming={confirmPlaceMutation.isPending}
+                          onReview={() => setPlaceMode({ type: 'edit', place })}
                           onConfirm={() => confirmPlaceMutation.mutate(place.id)}
                           onDismiss={() => deletePlaceMutation.mutate(place.id)}
                         />
@@ -599,6 +644,7 @@ export default function SavedPlacesSettingsPage() {
                 </div>
                 <ContactForm
                   initial={contactMode.type === 'edit' ? contactMode.contact : null}
+                  places={places}
                   saving={saveContactMutation.isPending}
                   onCancel={() => setContactMode({ type: 'list' })}
                   onSave={data => saveContactMutation.mutate({ id: contactMode.type === 'edit' ? contactMode.contact.id : undefined, data })}
@@ -611,15 +657,20 @@ export default function SavedPlacesSettingsPage() {
                 {suggestedContacts.length > 0 && (
                   <div className="mb-6">
                     <p className="text-caption font-semibold text-casa-muted mb-2">
-                      Suggested from your event history — review and confirm
+                      Suggested from event history — link a person to where they are usually reached, then confirm
                     </p>
                     <div className="space-y-2">
                       {suggestedContacts.map(contact => (
                         <SuggestedRow key={contact.id}
                           label={contact.name}
-                          sublabel={[contact.relationship, contact.phone].filter(Boolean).join(' · ')}
+                          sublabel={[
+                            contact.relationship,
+                            contact.primary_place ? `Usually at ${contact.primary_place.name}` : null,
+                            contact.phone,
+                          ].filter(Boolean).join(' · ')}
                           occurrenceCount={contact.occurrence_count}
                           confirming={confirmContactMutation.isPending}
+                          onReview={() => setContactMode({ type: 'edit', contact })}
                           onConfirm={() => confirmContactMutation.mutate(contact.id)}
                           onDismiss={() => deleteContactMutation.mutate(contact.id)}
                         />

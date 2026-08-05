@@ -178,7 +178,18 @@ export interface Conflict {
   event_a?: { id: string; start_time: string; title: string } | null
 }
 
-export type SavedPlaceCategory = 'restaurant' | 'friends_house' | 'school' | 'sports' | 'work' | 'medical' | 'other'
+export type SavedPlaceCategory =
+  | 'restaurant'
+  | 'friends_house'
+  | 'school'
+  | 'sports'
+  | 'work'
+  | 'medical'
+  | 'travel'
+  | 'errand'
+  | 'home_service'
+  | 'social'
+  | 'other'
 
 export interface SavedPlace {
   id: string
@@ -197,6 +208,27 @@ export interface SavedPlace {
   confirmed: boolean
   source: 'manual' | 'derived'
   occurrence_count: number
+  last_seen_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SavedContact {
+  id: string
+  name: string
+  aliases: string[]
+  relationship: string | null
+  phone: string | null
+  email: string | null
+  address: string | null
+  notes: string | null
+  primary_place_id: string | null
+  primary_place_source: 'manual' | 'derived' | null
+  primary_place?: Pick<SavedPlace, 'id' | 'name' | 'address' | 'city' | 'state' | 'zip' | 'category'> | null
+  confirmed: boolean
+  source: 'manual' | 'derived'
+  occurrence_count: number
+  last_seen_at: string | null
   created_at: string
   updated_at: string
 }

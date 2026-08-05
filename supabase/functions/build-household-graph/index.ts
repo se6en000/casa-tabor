@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
   const [membersResult, placesResult, contactsResult, eventsResult] = await Promise.all([
     sb.from('family_members').select('id, name, role').order('sort_order'),
     sb.from('saved_places').select('id, name, aliases, address, category'),
-    sb.from('saved_contacts').select('id, name, aliases, relationship'),
+    sb.from('saved_contacts').select('id, name, aliases, relationship, primary_place_id, primary_place_source'),
     sb
       .from('events')
       .select('id, title, event_type, rrule, start_time, location_name, address, source_member_id, event_members(family_member_id), event_enrichments(category)')
@@ -134,7 +134,12 @@ Deno.serve(async (req) => {
       node_type: 'contact',
       ref_id: c.id,
       label: c.name,
-      metadata: { relationship: c.relationship ?? null, aliases: c.aliases ?? [] },
+      metadata: {
+        relationship: c.relationship ?? null,
+        aliases: c.aliases ?? [],
+        primary_place_id: c.primary_place_id ?? null,
+        primary_place_source: c.primary_place_source ?? null,
+      },
     })
 
     const contactTerms = [normalize(c.name), ...(c.aliases ?? []).map((a) => normalize(a))].filter(Boolean)
@@ -150,6 +155,16 @@ Deno.serve(async (req) => {
           metadata: { matched_on: 'name_or_alias' },
         })
       }
+    }
+
+    if (c.primary_place_id) {
+      addEdge(edges, {
+        edge_type: 'at_place',
+        from_key: contactKey,
+        to_key: `place:${c.primary_place_id}`,
+        weight: 1,
+        metadata: { relationship: 'primary_place', source: c.primary_place_source ?? 'manual' },
+      })
     }
   }
 
