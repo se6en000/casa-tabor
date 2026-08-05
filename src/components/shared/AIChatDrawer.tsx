@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { useAIAssistant, type AIMessage } from '../../hooks/useAIAssistant'
@@ -1581,7 +1581,9 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                         : ta.tool === 'update_event'
                           ? 'Apply change'
                           : ta.tool === 'create_event'
-                            ? 'Create event'
+                            ? (ta.args as { event_type?: string })?.event_type === 'reminder'
+                              ? 'Create reminder'
+                              : 'Create event'
                             : confirmActionLabel(ta.tool)}
                   </Button>
                   {!isDestructiveAction && onEditMessage && editSeed?.trim() && (
@@ -1640,21 +1642,25 @@ function confirmActionLabel(tool: string) {
   return 'Confirm action'
 }
 
-function ConfirmationHeading({ kind, children }: { kind: 'calendar' | 'grocery' | 'recipe' | 'warning'; children: React.ReactNode }) {
+function ConfirmationHeading({ kind, children }: { kind: 'calendar' | 'reminder' | 'grocery' | 'recipe' | 'warning'; children: React.ReactNode }) {
   const Icon = kind === 'calendar'
     ? CalendarDays
-    : kind === 'grocery'
-      ? ShoppingCart
-      : kind === 'recipe'
-        ? ChefHat
-        : AlertTriangle
+    : kind === 'reminder'
+      ? Bell
+      : kind === 'grocery'
+        ? ShoppingCart
+        : kind === 'recipe'
+          ? ChefHat
+          : AlertTriangle
   const label = kind === 'calendar'
     ? 'Calendar'
-    : kind === 'grocery'
-      ? 'Grocery list'
-      : kind === 'recipe'
-        ? 'Recipe library'
-        : 'Review carefully'
+    : kind === 'reminder'
+      ? 'Reminder'
+      : kind === 'grocery'
+        ? 'Grocery list'
+        : kind === 'recipe'
+          ? 'Recipe library'
+          : 'Review carefully'
   return (
     <div className="space-y-1">
       <div className={cn(
@@ -1674,9 +1680,10 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
 
   if (tool === 'create_event') {
     const preview = buildCreatePreviewCopy(args, { now: new Date() })
+    const isReminder = args.event_type === 'reminder'
     return (
       <div className="space-y-3">
-        <ConfirmationHeading kind="calendar">{preview.heading}</ConfirmationHeading>
+        <ConfirmationHeading kind={isReminder ? 'reminder' : 'calendar'}>{preview.heading}</ConfirmationHeading>
         {preview.when && <p className="text-body-sm font-semibold text-casa-navy">{preview.when}</p>}
         {preview.details.length > 0 && (
           <div className="flex flex-wrap gap-1.5">

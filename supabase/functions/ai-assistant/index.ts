@@ -103,8 +103,10 @@ import {
   isExplicitReminderCompletion,
   isExplicitReminderRequest,
   isReminderCompletionFollowUp,
+  parseExplicitReminderDurationMinutes,
   reminderCreateClarification,
   resolveExplicitReminderDaypartRange,
+  resolveStructuredReminderDueBy,
 } from '../_shared/assistant-reminder-intent.mjs'
 
 const CORS = {
@@ -315,6 +317,13 @@ Deno.serve(async (req) => {
         currentDate: context?.currentDate,
         utcOffset: context?.utcOffset,
       })
+    : null
+  // App-generated structured drafts (Prep & Action) embed an explicit
+  // "Due: YYYY-MM-DD H:MM AM/PM ET" stamp — parse it deterministically rather
+  // than letting the LLM convert the date, which was misresolving to the
+  // wrong week. Takes priority over the vague-daypart resolution above.
+  const structuredReminderDueBy = explicitReminderCreate
+    ? resolveStructuredReminderDueBy(reminderCreateRequestText, { utcOffset: context?.utcOffset })
     : null
   const parsedCalendarFrame = parseCalendarLanguage(latestUserText, {
     focusedEvent: Boolean(context?.focusedEvent),
@@ -2617,7 +2626,7 @@ TEMPORAL ASSUMPTIONS (default unless user clearly overrides):
   - "10" should usually be treated as 10 AM unless context strongly indicates otherwise.
 
 INTENT PROFILE: ${intentRouting.profile}
-${directReminderCreateFlow ? `REMINDER CREATE MODE: Create a new reminder with create_event and event_type="reminder". Never search for or update an appointment merely because the reminder text mentions changing, calling, cancelling, or rescheduling one. Missing details were already checked before this model call, so call create_event rather than asking again.${reminderDaypartRange ? ` Casa deterministically resolved the vague local time to ${reminderDaypartRange.start} through ${reminderDaypartRange.end}; use those exact timestamps.` : ''}` : ''}
+${directReminderCreateFlow ? `REMINDER CREATE MODE: Create a new reminder with create_event and event_type="reminder". Never search for or update an appointment merely because the reminder text mentions changing, calling, cancelling, or rescheduling one. Missing details were already checked before this model call, so call create_event rather than asking again.${(structuredReminderDueBy ?? reminderDaypartRange) ? ` Casa deterministically resolved the exact date/time to ${(structuredReminderDueBy ?? reminderDaypartRange)!.start} through ${(structuredReminderDueBy ?? reminderDaypartRange)!.end}; use those exact timestamps.` : ''}` : ''}
 FAMILY MEMBERS: ${familyNames}
 ${includePlaceContext && placesText ? `\nSAVED PLACES (use for location nicknames):\n${placesText}` : ''}
 ${includePlaceContext && contactsText ? `\nSAVED CONTACTS:\n${contactsText}` : ''}
@@ -3843,10 +3852,23 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             const reminderSubject = explicitReminderSubject(reminderCreateRequestText)
             if (reminderSubject) args.title = reminderSubject
             args.event_type = 'reminder'
-            if (reminderDaypartRange) {
-              args.start = reminderDaypartRange.start
-              args.end = reminderDaypartRange.end
+            const resolvedReminderRange = structuredReminderDueBy ?? reminderDaypartRange
+            if (resolvedReminderRange) {
+              args.start = resolvedReminderRange.start
+              args.end = resolvedReminderRange.end
               args.all_day = false
+            } else {
+              // No deterministic date range applied (e.g. a free-form "remind
+              // me at 3pm" request the LLM parsed itself) — still enforce the
+              // standard 15-minute reminder duration unless the user's own
+              // text explicitly requested a different length.
+              const explicitDurationMinutes = parseExplicitReminderDurationMinutes(reminderCreateRequestText)
+              const startMsForDuration = Date.parse(String(args.start ?? ''))
+              if (Number.isFinite(startMsForDuration)) {
+                args.end = new Date(
+                  startMsForDuration + (explicitDurationMinutes ?? 15) * 60000,
+                ).toISOString()
+              }
             }
           }
           const title = typeof args.title === 'string' ? args.title.trim() : ''

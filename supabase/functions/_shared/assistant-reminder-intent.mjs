@@ -27,6 +27,7 @@ const DAYPARTS = [
   { pattern: /\b(?:(?:this|tomorrow|the|in the|at|around|by)\s+evening|evening(?=\s+to\b|[.!?]*$)|dinner time|at dinner)\b/i, label: 'evening', minute: 18 * 60, endMinute: 21 * 60 },
   { pattern: /\b(?:tonight|bedtime|at night|around nightfall|(?:this|tomorrow|the|in the|at|around|by)\s+late evening|late evening(?=\s+to\b|[.!?]*$))\b/i, label: 'tonight', minute: 20 * 60, endMinute: 23 * 60 },
 ]
+const REMINDER_DEFAULT_DURATION_MINUTES = 15
 const REMINDER_CLARIFICATION_PROMPTS = new Set([
   'Sure — what should I remind you about, and when?',
   'What should I remind you about?',
@@ -108,6 +109,12 @@ export function reminderCreateClarification(text) {
 
 export function explicitReminderSubject(text) {
   if (!isExplicitReminderRequest(text)) return null
+  // App-generated structured drafts (e.g. from Prep & Action) carry an
+  // explicit "Title:" field — use it directly rather than running the
+  // generic "to/about/that X" clause matcher against the whole multi-line
+  // prompt, which can grab an unrelated clause from a Details/Context line.
+  const structuredTitle = String(text ?? '').match(/^\s*Title:\s*(.+?)\s*$/im)?.[1]?.trim()
+  if (structuredTitle) return structuredTitle
   const value = String(text ?? '').replace(/\s+/g, ' ').trim()
   const clauses = [...value.matchAll(/\b(?:to|about|that)\s+([^.!?]+?)(?=$|[.!?])/gi)]
   const subject = clauses
@@ -147,7 +154,7 @@ export function hardenExplicitReminderTurn(turn, text, options = {}) {
         }
       : daypartRange.dateReference
     patch.time = daypartRange.time
-    patch.duration_minutes = 30
+    patch.duration_minutes = REMINDER_DEFAULT_DURATION_MINUTES
     delete patch.all_day
   }
   if (patch.date_reference && !patch.time && !relativeMinutes) patch.all_day = true
@@ -212,8 +219,56 @@ export function resolveExplicitReminderDaypartRange(text, options = {}) {
       period: hour >= 12 ? 'pm' : 'am',
     },
     start: formatAtOffset(startMs, offset.text, offset.minutes),
-    end: formatAtOffset(startMs + 30 * 60000, offset.text, offset.minutes),
+    end: formatAtOffset(startMs + REMINDER_DEFAULT_DURATION_MINUTES * 60000, offset.text, offset.minutes),
   }
+}
+
+// App-generated structured drafts (Prep & Action "create reminder"/"create
+// event" buttons) embed an explicit, unambiguous "Due: YYYY-MM-DD H:MM AM/PM
+// ET" stamp instead of a spelled-out date. Parsing it deterministically here
+// avoids relying on the LLM to convert weekday/month names into the right
+// calendar date — which was observed to misresolve to the following week.
+export function resolveStructuredReminderDueBy(text, options = {}) {
+  const match = String(text ?? '').match(
+    /\bDue:\s*(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})\s*(AM|PM)\s*ET\b/i,
+  )
+  if (!match) return null
+  const offset = parseUtcOffset(options.utcOffset)
+  if (!offset) return null
+
+  const [, yearStr, monthStr, dayStr, hourStr, minuteStr, period] = match
+  const year = Number(yearStr)
+  const month = Number(monthStr) - 1
+  const day = Number(dayStr)
+  let hour = Number(hourStr) % 12
+  if (/pm/i.test(period)) hour += 12
+  const minute = Number(minuteStr)
+
+  const startMs = Date.UTC(year, month, day, hour, minute) - offset.minutes * 60000
+  if (!Number.isFinite(startMs)) return null
+
+  const durationMinutes = parseExplicitReminderDurationMinutes(text) ?? REMINDER_DEFAULT_DURATION_MINUTES
+  return {
+    start: formatAtOffset(startMs, offset.text, offset.minutes),
+    end: formatAtOffset(startMs + durationMinutes * 60000, offset.text, offset.minutes),
+  }
+}
+
+// Detects an explicit user-requested duration (e.g. "for 30 minutes", "for an
+// hour") so the reminder default (15 minutes) can be overridden when asked.
+export function parseExplicitReminderDurationMinutes(text) {
+  const match = String(text ?? '').match(/\bfor\s+(\d+|an?|half an?)\s+(minutes?|hours?)\b/i)
+  if (!match) return null
+  const [, amountRaw, unit] = match
+  const normalized = amountRaw.toLowerCase()
+  const amount = normalized === 'an' || normalized === 'a'
+    ? 1
+    : normalized === 'half an' || normalized === 'half a'
+      ? 0.5
+      : Number(amountRaw)
+  if (!Number.isFinite(amount) || amount <= 0) return null
+  const minutes = amount * (/^hour/i.test(unit) ? 60 : 1)
+  return minutes > 0 && minutes <= 24 * 60 ? minutes : null
 }
 
 export function fallbackExplicitRelativeReminderTurn(text) {

@@ -103,15 +103,41 @@ export function getMultiDayBoundaryLabel(
   return 'Continues'
 }
 
-// Formats an ISO/UTC timestamp for embedding in AI chat prompt text, spelling
-// out the date/time in Eastern Time explicitly (e.g. "Thursday, August 6,
-// 2026 at 12:00 PM Eastern Time"). A raw ISO string like
-// "2026-08-06T16:00:00.000Z" reads to the AI as a literal "16:00" — it has no
-// way to know that's UTC and needs converting, so it gets used as-is and the
-// resulting draft event/reminder lands ~4-5 hours off. This relies on the
-// same local-timezone Date parsing already used for on-screen display
-// (assumes the app runs in America/New_York, as it does today).
+// Compact "Due:" stamp embedded in AI draft prompts, e.g. "2026-08-05 11:32 AM ET".
+// Deliberately terse (vs. a spelled-out "Wednesday, August 5, 2026 at..." string)
+// so it reads cleanly in the chat bubble AND so the server can deterministically
+// regex-parse the exact year/month/day/time instead of asking the LLM to do its
+// own date arithmetic (which was misresolving weekday names to the wrong week).
+// This relies on the same local-timezone Date parsing already used for on-screen
+// display (assumes the app runs in America/New_York, as it does today).
 export function formatDueByForAiPrompt(value: string | null | undefined): string {
   if (!value) return 'unknown'
-  return `${format(new Date(value), "EEEE, MMMM d, yyyy 'at' h:mm a")} Eastern Time`
+  return `${format(new Date(value), 'yyyy-MM-dd h:mm a')} ET`
+}
+
+// Builds the prompt sent to the AI drawer when drafting an event/reminder from
+// a prep/action item. Kept short and structured (Title/Due/optional context)
+// rather than a long natural-language paragraph, per user request to drop
+// unnecessary words while keeping everything the assistant needs.
+export function buildAiDraftPrompt(params: {
+  kind: 'event' | 'reminder'
+  title: string
+  dueBy: string | null | undefined
+  details?: string | null
+  source?: string | null
+  bodyContext?: string | null
+}): string {
+  const { kind, title, dueBy, details, source, bodyContext } = params
+  const lead = kind === 'reminder'
+    ? 'Create a reminder draft for me to confirm.'
+    : 'Create a calendar event draft for me to confirm.'
+  const lines = [lead, '', `Title: ${title}`]
+  const trimmedDetails = details?.trim()
+  if (trimmedDetails && trimmedDetails !== title.trim()) {
+    lines.push(`Details: ${trimmedDetails}`)
+  }
+  lines.push(`Due: ${formatDueByForAiPrompt(dueBy)}`)
+  if (source) lines.push(`Source: ${source}`)
+  if (bodyContext) lines.push(`Context:\n${bodyContext}`)
+  return lines.join('\n')
 }

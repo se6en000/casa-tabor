@@ -4,7 +4,7 @@ import { format, formatDistanceToNow } from 'date-fns'
 import { ClipboardList, Bell, ChevronLeft, Mail, Bot, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle, ExternalLink } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../utils/cn'
-import { formatDueByForAiPrompt } from '../utils/eventTime'
+import { buildAiDraftPrompt } from '../utils/eventTime'
 import { supabase } from '../lib/supabase'
 import { usePrepItems, useCompletePrepItem, useDownvotePrepItem, useSnoozePrepItem } from '../hooks/usePrepItems'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
@@ -154,10 +154,12 @@ export default function ActionHubPage() {
   }
 
   function launchCreate(item: PrepItem, kind: 'event' | 'reminder') {
-    const dueByPrompt = formatDueByForAiPrompt(item.due_by)
-    const prompt = kind === 'event'
-      ? `Create a calendar event from this prep/action item as a draft and ask me to confirm before saving.\n\nTitle: ${item.event_title ?? item.description}\nDetails: ${item.description}\nDue by: ${dueByPrompt} (this is already in Eastern Time — use it as-is, do not treat it as UTC)`
-      : `Create a reminder from this prep/action item as a draft and ask me to confirm before saving.\n\nTitle: ${item.event_title ?? item.description}\nDetails: ${item.description}\nDue by: ${dueByPrompt} (this is already in Eastern Time — use it as-is, do not treat it as UTC)`
+    const prompt = buildAiDraftPrompt({
+      kind,
+      title: item.event_title ?? item.description,
+      details: item.description,
+      dueBy: item.due_by,
+    })
     document.dispatchEvent(new CustomEvent('open-ai-chat', { detail: { prompt, autoSend: true } }))
   }
 

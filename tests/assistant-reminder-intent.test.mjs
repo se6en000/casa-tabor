@@ -12,8 +12,10 @@ import {
   isReminderCompletionFollowUp,
   explicitReminderSearchForMessages,
   explicitReminderSearchOverride,
+  parseExplicitReminderDurationMinutes,
   reminderCreateClarification,
   resolveExplicitReminderDaypartRange,
+  resolveStructuredReminderDueBy,
 } from '../supabase/functions/_shared/assistant-reminder-intent.mjs'
 
 test('natural reminder requests cover common typed and spoken phrasing', () => {
@@ -114,7 +116,7 @@ test('vague reminder dayparts resolve to future local times without clarificatio
     dateReference: { kind: 'today' },
     time: { hour: 9, minute: 0, period: 'am' },
     start: '2026-07-17T09:00:00-04:00',
-    end: '2026-07-17T09:30:00-04:00',
+    end: '2026-07-17T09:15:00-04:00',
   })
 
   const lunch = resolveExplicitReminderDaypartRange(
@@ -326,4 +328,50 @@ test('completion follow-ups inherit only authoritative reminder context', () => 
     activeEntityType: 'event',
     eventType: 'event',
   }), false)
+})
+
+test('structured "Title:"/"Due:" draft prompts resolve the exact date deterministically, not the following week', () => {
+  const prompt = 'Create a reminder draft for me to confirm.\n\nTitle: Arrive by 11:32am\nDue: 2026-08-05 11:32 AM ET'
+  assert.equal(explicitReminderSubject(prompt), 'Arrive by 11:32am')
+  assert.deepEqual(resolveStructuredReminderDueBy(prompt, { utcOffset: '-04:00' }), {
+    start: '2026-08-05T11:32:00-04:00',
+    end: '2026-08-05T11:47:00-04:00',
+  })
+})
+
+test('structured due-by parsing never guesses the wrong week when the due date falls on today\'s weekday', () => {
+  // Regression: a naive "next occurrence of named weekday" parser would jump
+  // this exact same-weekday date forward by 7 days. The structured parser
+  // must use the explicit year/month/day instead of any weekday name.
+  const prompt = 'Create a reminder draft for me to confirm.\n\nTitle: Test\nDue: 2026-08-05 11:32 AM ET'
+  const range = resolveStructuredReminderDueBy(prompt, { utcOffset: '-04:00' })
+  assert.equal(range.start.slice(0, 10), '2026-08-05')
+})
+
+test('structured due-by parsing is correct across a month/year boundary', () => {
+  const prompt = 'Create a reminder draft for me to confirm.\n\nTitle: New Year task\nDue: 2026-12-31 11:59 PM ET'
+  assert.deepEqual(resolveStructuredReminderDueBy(prompt, { utcOffset: '-05:00' }), {
+    start: '2026-12-31T23:59:00-05:00',
+    end: '2027-01-01T00:14:00-05:00',
+  })
+})
+
+test('reminders default to a 15-minute duration unless an explicit duration is requested', () => {
+  assert.equal(parseExplicitReminderDurationMinutes('Remind me tomorrow to call the dentist'), null)
+  assert.equal(parseExplicitReminderDurationMinutes('Remind me for 30 minutes to review the packet'), 30)
+  assert.equal(parseExplicitReminderDurationMinutes('Remind me for an hour to study'), 60)
+  assert.equal(parseExplicitReminderDurationMinutes('Remind me for half an hour to nap'), 30)
+
+  const prompt = 'Create a reminder draft for me to confirm.\n\nTitle: Test\nDue: 2026-08-05 11:32 AM ET'
+  const range = resolveStructuredReminderDueBy(prompt, { utcOffset: '-04:00' })
+  assert.equal(range.start, '2026-08-05T11:32:00-04:00')
+  assert.equal(range.end, '2026-08-05T11:47:00-04:00')
+
+  const promptWithDuration = 'Create a reminder draft for me to confirm.\n\nTitle: Test\nDue: 2026-08-05 11:32 AM ET\nfor 1 hour'
+  const rangeWithDuration = resolveStructuredReminderDueBy(promptWithDuration, { utcOffset: '-04:00' })
+  assert.equal(rangeWithDuration.end, '2026-08-05T12:32:00-04:00')
+})
+
+test('resolveStructuredReminderDueBy returns null when no structured "Due:" field is present', () => {
+  assert.equal(resolveStructuredReminderDueBy('Remind me tomorrow morning to call the dentist', { utcOffset: '-04:00' }), null)
 })

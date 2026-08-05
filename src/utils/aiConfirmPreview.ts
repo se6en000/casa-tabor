@@ -73,7 +73,10 @@ export function buildCreatePreviewCopy(
   args: Record<string, unknown>,
   options: { now?: Date } = {},
 ): { heading: string; when: string | null; details: string[]; impact: string } {
-  const heading = `Ready to add "${String(args.title ?? 'new event')}"?`
+  const isReminder = args.event_type === 'reminder'
+  const heading = isReminder
+    ? `Ready to add reminder "${String(args.title ?? 'new reminder')}"?`
+    : `Ready to add "${String(args.title ?? 'new event')}"?`
   const when = typeof args.start === 'string' && typeof args.end === 'string'
     ? formatEventSpan({
       start_time: args.start,
@@ -97,7 +100,9 @@ export function buildCreatePreviewCopy(
     heading,
     when,
     details,
-    impact: 'Adds to Casa Calendar now; connected calendar sync follows automatically.',
+    impact: isReminder
+      ? 'Adds a reminder to Casa now; connected calendar sync follows automatically.'
+      : 'Adds to Casa Calendar now; connected calendar sync follows automatically.',
   }
 }
 
