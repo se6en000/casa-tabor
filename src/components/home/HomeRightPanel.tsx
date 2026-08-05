@@ -200,6 +200,9 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
       next.delete(id)
       return next
     })
+    // Only clear the toast if it's still showing for this item -- avoids clobbering
+    // a newer toast if the user marked a second item done before this timer fired.
+    setDoneToast(current => (current?.id === id ? null : current))
     setActionError(null)
     completePrepItem(id).catch(error => {
       setActionError(error instanceof Error ? error.message : 'Casa could not complete this action.')
