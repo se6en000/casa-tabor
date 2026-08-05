@@ -1,18 +1,9 @@
--- Unifies the three independent "downvote a prep item" code paths (ActionHubPage's
--- useDownvotePrepItem stub, HomeRightPanel's Needs You panel using the same stub, and
--- notification-action's push-notification thumbs_down branch) which had drifted:
--- pressing downvote inside the app just silently dismissed the item with zero
--- feedback recorded, while tapping "not relevant" on a push notification recorded
--- real prep_item_feedback + fed the prep_item_suppressions pattern-learning loop.
--- That meant downvoting meant two different things depending on which surface you
--- used it from -- a correctness bug, not just a UX inconsistency.
---
--- record_prep_item_downvote() is now the single source of truth for "downvote":
--- it reuses the existing, durable resolve_prep_item(..., 'not_relevant') for the
--- idempotent dismiss/resolution-log bookkeeping, then layers on the real feedback
--- signal (prep_item_feedback insert, prep_item_suppressions strength/hard-suppress
--- upsert, downvoted_count/relevance_score bump, and pattern-level mass-dismiss once
--- a pattern is downvoted twice) that previously only existed in the push-action path.
+-- Fixes a bug in record_prep_item_downvote() (20260805160000) found during live
+-- verification: the local variable `hard_suppressed` had the same name as the
+-- `prep_item_suppressions.hard_suppressed` column, causing Postgres to reject
+-- `set hard_suppressed = hard_suppressed` with "column reference is ambiguous"
+-- (every downvote call failed with HTTP 400/42702). Renamed the local variable
+-- to `v_hard_suppressed`; behavior is otherwise unchanged.
 
 create or replace function public.record_prep_item_downvote(
   p_prep_item_id uuid
