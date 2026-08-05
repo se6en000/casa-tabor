@@ -34,6 +34,36 @@ function dueBadge(item: PrepItem, now: Date): { label: string; tone: string } | 
   return { label: `Due ${format(due, 'EEE h:mm a')}`, tone: 'text-casa-muted bg-casa-bg border-casa-border' }
 }
 
+type PrepFilterKey = 'all' | 'bills' | 'forms' | 'rsvp' | 'deadlines' | 'deliveries' | 'renewals' | 'other'
+
+const PREP_FILTERS: { key: PrepFilterKey; label: string; match: (item: PrepItem) => boolean }[] = [
+  { key: 'all', label: 'All', match: () => true },
+  { key: 'bills', label: 'Bills & Payments', match: (item) => item.type === 'payment' || item.type === 'billing' },
+  { key: 'forms', label: 'Forms', match: (item) => item.type === 'forms' },
+  { key: 'rsvp', label: 'RSVP', match: (item) => item.type === 'rsvp' },
+  { key: 'deadlines', label: 'Deadlines', match: (item) => item.type === 'deadline' },
+  { key: 'deliveries', label: 'Deliveries', match: (item) => item.type === 'delivery' || item.type === 'return' },
+  { key: 'renewals', label: 'Renewals', match: (item) => item.type === 'renewal' },
+  {
+    key: 'other',
+    label: 'Other',
+    match: (item) => !['payment', 'billing', 'forms', 'rsvp', 'deadline', 'delivery', 'return', 'renewal'].includes(item.type ?? ''),
+  },
+]
+
+type PrepSourceKey = 'all' | 'gmail' | 'calendar_ai' | 'reminder'
+
+const PREP_SOURCE_FILTERS: { key: PrepSourceKey; label: string; match: (item: PrepItem) => boolean }[] = [
+  { key: 'all', label: 'All sources', match: () => true },
+  { key: 'gmail', label: 'Email', match: (item) => item.source_type === 'gmail' },
+  { key: 'calendar_ai', label: 'Calendar', match: (item) => (item.source_type ?? 'calendar_ai') === 'calendar_ai' },
+  {
+    key: 'reminder',
+    label: 'Reminders',
+    match: (item) => item.source_type === 'reminder_manual' || item.source_type === 'reminder_missed',
+  },
+]
+
 export default function ActionHubPage() {
   const now = useLiveClock(60_000)
   const { data: prepItems = [] } = usePrepItems()
@@ -45,6 +75,8 @@ export default function ActionHubPage() {
   const [selected, setSelected] = useState<PrepItem | null>(null)
   const [actingId, setActingId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [typeFilter, setTypeFilter] = useState<PrepFilterKey>('all')
+  const [sourceFilter, setSourceFilter] = useState<PrepSourceKey>('all')
 
   const { data: gmailHealth } = useQuery({
     queryKey: ['actions-hub-gmail-health'],
@@ -71,6 +103,12 @@ export default function ActionHubPage() {
     staleTime: 60_000,
     refetchInterval: 60_000,
   })
+
+  const filteredPrepItems = useMemo(() => {
+    const typeMatch = PREP_FILTERS.find(f => f.key === typeFilter)?.match ?? (() => true)
+    const sourceMatch = PREP_SOURCE_FILTERS.find(f => f.key === sourceFilter)?.match ?? (() => true)
+    return prepItems.filter(item => typeMatch(item) && sourceMatch(item))
+  }, [prepItems, typeFilter, sourceFilter])
 
   const suggestions = useMemo(() => {
     const nowTs = now.getTime()
@@ -138,7 +176,55 @@ export default function ActionHubPage() {
         <section id="recent-activity" className="rounded-[1.2rem] border border-casa-border bg-casa-surface p-4 scroll-mt-6 shadow-card">
           <div className="flex items-center justify-between mb-3.5">
             <h2 className="font-display text-heading text-casa-navy flex items-center gap-2"><ClipboardList size={16} className="text-casa-gold" /> Prep &amp; Action</h2>
-            <span className="text-caption font-semibold rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">{prepItems.length}</span>
+            <span className="text-caption font-semibold rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">
+              {typeFilter === 'all' && sourceFilter === 'all' ? prepItems.length : `${filteredPrepItems.length}/${prepItems.length}`}
+            </span>
+          </div>
+          <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter by type">
+            {PREP_FILTERS.map((f) => {
+              const count = f.key === 'all' ? prepItems.length : prepItems.filter(f.match).length
+              if (f.key !== 'all' && count === 0) return null
+              const active = typeFilter === f.key
+              return (
+                <Button
+                  key={f.key}
+                  variant="ghost"
+                  onClick={() => setTypeFilter(f.key)}
+                  aria-pressed={active}
+                  className={cn(
+                    'h-7 px-2.5 rounded-full border text-caption font-semibold transition-colors',
+                    active
+                      ? 'bg-casa-navy text-white border-casa-navy'
+                      : 'bg-white border-casa-border text-casa-muted hover:bg-casa-bg hover:text-casa-text',
+                  )}
+                >
+                  {f.label} <span className={cn('ml-1', active ? 'text-white/70' : 'text-casa-muted/70')}>{count}</span>
+                </Button>
+              )
+            })}
+          </div>
+          <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter by source">
+            {PREP_SOURCE_FILTERS.map((f) => {
+              const count = f.key === 'all' ? prepItems.length : prepItems.filter(f.match).length
+              if (f.key !== 'all' && count === 0) return null
+              const active = sourceFilter === f.key
+              return (
+                <Button
+                  key={f.key}
+                  variant="ghost"
+                  onClick={() => setSourceFilter(f.key)}
+                  aria-pressed={active}
+                  className={cn(
+                    'h-7 px-2.5 rounded-full border text-caption font-semibold transition-colors',
+                    active
+                      ? 'bg-casa-gold text-casa-navy border-casa-gold'
+                      : 'bg-white border-casa-border text-casa-muted hover:bg-casa-bg hover:text-casa-text',
+                  )}
+                >
+                  {f.label} <span className={cn('ml-1', active ? 'text-casa-navy/70' : 'text-casa-muted/70')}>{count}</span>
+                </Button>
+              )
+            })}
           </div>
           {actionError && (
             <p role="alert" className="mb-3 text-body-sm text-casa-error">
@@ -146,7 +232,7 @@ export default function ActionHubPage() {
             </p>
           )}
           <div className="space-y-2.5 pr-1 xl:max-h-[70vh] xl:overflow-y-auto">
-            {prepItems.map((item) => {
+            {filteredPrepItems.map((item) => {
               const src = sourceBadge(item)
               const SourceIcon = src.icon
               const busy = actingId === item.id
@@ -197,6 +283,9 @@ export default function ActionHubPage() {
               )
             })}
             {prepItems.length === 0 && <p className="text-body-sm text-casa-muted">No active prep items.</p>}
+            {prepItems.length > 0 && filteredPrepItems.length === 0 && (
+              <p className="text-body-sm text-casa-muted">No prep items match this filter.</p>
+            )}
           </div>
         </section>
 

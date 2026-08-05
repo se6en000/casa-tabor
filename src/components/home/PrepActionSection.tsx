@@ -5,7 +5,7 @@
 import { useMemo, useState, type ElementType } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ClipboardList, ChevronDown, Gift, Plane, Stethoscope, CreditCard, ShoppingBag, Ban, Moon, ThumbsDown, Mail, Bot, Check, Bell } from 'lucide-react'
+import { ClipboardList, ChevronDown, Gift, Plane, Stethoscope, CreditCard, ShoppingBag, Ban, Moon, ThumbsDown, Mail, Bot, Check, Bell, RefreshCw, FileText, CalendarClock, MessageSquareReply } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { usePrepItems, useCompletePrepItem, useSnoozePrepItem, useDownvotePrepItem } from '../../hooks/usePrepItems'
@@ -38,6 +38,10 @@ const TYPE_ICON: Record<string, ElementType> = {
   cancellation: Ban,
   delivery: ShoppingBag,
   return: ShoppingBag,
+  forms: FileText,
+  rsvp: MessageSquareReply,
+  deadline: CalendarClock,
+  renewal: RefreshCw,
 }
 
 function PrepTypeIcon({ type }: { type: string }) {
