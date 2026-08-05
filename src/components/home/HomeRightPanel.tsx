@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { addDays, differenceInDays, format, parseISO, startOfWeek } from 'date-fns'
 import { Link, useNavigate } from 'react-router-dom'
-import { AlertTriangle, Check, ChevronRight, MoreHorizontal, Sparkles, ThumbsDown, UserPlus } from 'lucide-react'
+import { AlertTriangle, Bell, BellOff, Calendar as CalendarIcon, Check, ChevronRight, Mail, MoreHorizontal, Sparkles, ThumbsDown, UserPlus } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
@@ -85,11 +85,11 @@ function urgencyRank(days: number): number {
 }
 
 function sourceBadge(item: PrepItem) {
-  if (item.source_type === 'reminder_manual') return { label: 'Reminder', tone: 'warning' as const }
-  if (item.source_type === 'reminder_missed') return { label: 'Missed reminder', tone: 'danger' as const }
-  if (item.source_type === 'gmail') return { label: 'Email', tone: 'info' as const }
-  if (item.source_type === 'calendar_ai') return { label: 'Calendar', tone: 'accent' as const }
-  return { label: 'System', tone: 'neutral' as const }
+  if (item.source_type === 'reminder_manual') return { label: 'Reminder', icon: Bell }
+  if (item.source_type === 'reminder_missed') return { label: 'Missed reminder', icon: BellOff }
+  if (item.source_type === 'gmail') return { label: 'Email', icon: Mail }
+  if (item.source_type === 'calendar_ai') return { label: 'Calendar', icon: CalendarIcon }
+  return { label: 'System', icon: Sparkles }
 }
 
 interface AssignPickerMember {
@@ -476,8 +476,15 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                               {item.description}
                             </p>
                           </Button>
-                          <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
-                            <Chip size="sm" tone={source.tone}>{source.label}</Chip>
+                          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                            <span
+                              role="img"
+                              aria-label={source.label}
+                              title={source.label}
+                              className="inline-flex shrink-0 text-casa-navy"
+                            >
+                              <source.icon size={14} strokeWidth={2.2} />
+                            </span>
                             {priority.chip && (
                               <span
                                 role="img"
@@ -488,7 +495,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                                   priority.chip.tone === 'danger' ? 'text-casa-error' : 'text-casa-warning',
                                 )}
                               >
-                                <AlertTriangle size={13} strokeWidth={2.3} />
+                                <AlertTriangle size={14} strokeWidth={2.2} />
                               </span>
                             )}
                             <PrepAssignPicker
