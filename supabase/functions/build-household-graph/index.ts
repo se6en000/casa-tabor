@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
     sb.from('saved_contacts').select('id, name, aliases, relationship'),
     sb
       .from('events')
-      .select('id, title, event_type, rrule, start_time, location_name, address, source_member_id, event_members(family_member_id)')
+      .select('id, title, event_type, rrule, start_time, location_name, address, source_member_id, event_members(family_member_id), event_enrichments(category)')
       .eq('status', 'confirmed')
       .gte('start_time', windowStart)
       .lte('start_time', windowEnd),
@@ -154,6 +154,27 @@ Deno.serve(async (req) => {
   }
 
   const memberPlaceCounts = new Map<string, number>()
+  // "who typically goes here" / "what happens here" summaries, merged into place
+  // node metadata below so the assistant can resolve e.g. "Liv's dentist" without
+  // re-deriving this from raw events on every request.
+  const placeVisitorCounts = new Map<string, Map<string, number>>()
+  const placeActivityCounts = new Map<string, Map<string, number>>()
+  const memberIdToName = new Map((membersResult.data ?? []).map((m) => [m.id, m.name]))
+
+  function bumpCount(map: Map<string, Map<string, number>>, placeKey: string, subKey: string) {
+    const inner = map.get(placeKey) ?? new Map<string, number>()
+    inner.set(subKey, (inner.get(subKey) ?? 0) + 1)
+    map.set(placeKey, inner)
+  }
+
+  function topEntries(map: Map<string, number> | undefined, limit: number) {
+    if (!map) return []
+    return [...map.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([name, count]) => ({ name, count }))
+  }
+
   type EventRow = {
     id: string
     title: string
@@ -164,6 +185,7 @@ Deno.serve(async (req) => {
     address: string | null
     source_member_id: string | null
     event_members: { family_member_id: string }[]
+    event_enrichments: { category: string | null }[] | { category: string | null } | null
   }
 
   for (const ev of (eventsResult.data ?? []) as EventRow[]) {
@@ -257,9 +279,12 @@ Deno.serve(async (req) => {
       })
 
       const placeCategory = placeCandidates.find((p) => p.key === matchedPlaceKey)?.category
+      const eventCategory = (Array.isArray(ev.event_enrichments) ? ev.event_enrichments[0] : ev.event_enrichments)?.category
+      bumpCount(placeActivityCounts, matchedPlaceKey, eventCategory || ev.title)
       for (const memberId of attendeeIds) {
         const key = `member:${memberId}::${matchedPlaceKey}`
         memberPlaceCounts.set(key, (memberPlaceCounts.get(key) ?? 0) + 1)
+        bumpCount(placeVisitorCounts, matchedPlaceKey, memberIdToName.get(memberId) ?? memberId)
         if (placeCategory && LOCATION_EDGE_TYPES.has(placeCategory)) {
           addEdge(edges, {
             edge_type: 'at_place',
@@ -281,6 +306,17 @@ Deno.serve(async (req) => {
       to_key: placeKey,
       weight: count,
       metadata: { frequency_window_days: 210 },
+    })
+  }
+
+  for (const [placeKey, node] of nodes.entries()) {
+    if (node.node_type !== 'place') continue
+    const commonVisitors = topEntries(placeVisitorCounts.get(placeKey), 6)
+    const commonActivities = topEntries(placeActivityCounts.get(placeKey), 4)
+    if (commonVisitors.length === 0 && commonActivities.length === 0) continue
+    nodes.set(placeKey, {
+      ...node,
+      metadata: { ...node.metadata, common_visitors: commonVisitors, common_activities: commonActivities },
     })
   }
 

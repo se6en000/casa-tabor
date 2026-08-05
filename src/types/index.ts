@@ -194,6 +194,9 @@ export interface SavedPlace {
   notes: string | null
   phone: string | null
   google_place_id: string | null
+  confirmed: boolean
+  source: 'manual' | 'derived'
+  occurrence_count: number
   created_at: string
   updated_at: string
 }

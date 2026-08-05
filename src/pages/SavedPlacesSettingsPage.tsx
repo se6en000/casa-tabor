@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import type { SavedPlace, SavedPlaceCategory } from '../types'
+import { savedPlaceAddress } from '../hooks/useSavedPlaces'
 import { Button, IconButton } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
@@ -22,6 +23,9 @@ interface SavedContact {
   email: string | null
   address: string | null
   notes: string | null
+  confirmed: boolean
+  source: 'manual' | 'derived'
+  occurrence_count: number
   created_at: string
   updated_at: string
 }
@@ -66,7 +70,7 @@ function PlaceForm({ initial, onSave, onCancel, saving }: PlaceFormProps) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const aliases = form._aliasText.split(',').map(s => s.trim()).filter(Boolean)
-    onSave({ name: form.name ?? '', aliases, address: form.address || null, city: form.city || null, state: form.state || null, zip: form.zip || null, phone: form.phone || null, notes: form.notes || null, category: form.category ?? 'other' })
+    onSave({ name: form.name ?? '', aliases, address: form.address || null, city: form.city || null, state: form.state || null, zip: form.zip || null, phone: form.phone || null, notes: form.notes || null, category: form.category ?? 'other', confirmed: true, source: 'manual', occurrence_count: form.occurrence_count ?? 1 })
   }
 
   return (
@@ -216,7 +220,7 @@ function ContactForm({ initial, onSave, onCancel, saving }: ContactFormProps) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const aliases = form._aliasText.split(',').map(s => s.trim()).filter(Boolean)
-    onSave({ name: form.name ?? '', aliases, relationship: form.relationship || null, phone: form.phone || null, email: form.email || null, address: form.address || null, notes: form.notes || null })
+    onSave({ name: form.name ?? '', aliases, relationship: form.relationship || null, phone: form.phone || null, email: form.email || null, address: form.address || null, notes: form.notes || null, confirmed: true, source: 'manual', occurrence_count: form.occurrence_count ?? 1 })
   }
 
   return (
@@ -317,6 +321,38 @@ function ContactRow({ contact, onEdit, onDelete }: { contact: SavedContact; onEd
   )
 }
 
+// ── Suggested (derived, unconfirmed) row ─────────────────────────────────────
+
+function SuggestedRow({ label, sublabel, occurrenceCount, onConfirm, onDismiss, confirming }: {
+  label: string
+  sublabel: string
+  occurrenceCount: number
+  onConfirm: () => void
+  onDismiss: () => void
+  confirming?: boolean
+}) {
+  return (
+    <div className="flex items-start gap-3 bg-casa-gold/5 border border-dashed border-casa-gold/40 rounded-card p-4">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="font-display text-heading text-casa-navy leading-none">{label}</p>
+          <span className="text-caption font-semibold text-casa-gold bg-casa-gold/10 px-2 py-0.5 rounded-full">
+            Seen {occurrenceCount}×
+          </span>
+        </div>
+        {sublabel && <p className="text-caption text-casa-muted mt-1">{sublabel}</p>}
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <Button onClick={onConfirm} disabled={confirming}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-casa-gold text-white text-caption font-semibold hover:bg-casa-gold/90 transition-colors disabled:opacity-50">
+          <Check size={13} />Confirm
+        </Button>
+        <IconButton onClick={onDismiss} variant="ghost" size="sm" icon={<X size={16} />} aria-label="Dismiss suggestion" title="Dismiss" />
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type Tab = 'places' | 'people'
@@ -362,6 +398,14 @@ export default function SavedPlacesSettingsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['saved_places'] }),
   })
 
+  const confirmPlaceMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('saved_places').update({ confirmed: true }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['saved_places'] }),
+  })
+
   // ── Contacts queries ─────────────────────────────────────────────────────────
   const { data: contacts = [], isLoading: contactsLoading } = useQuery<SavedContact[]>({
     queryKey: ['saved_contacts'],
@@ -393,18 +437,30 @@ export default function SavedPlacesSettingsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['saved_contacts'] }),
   })
 
+  const confirmContactMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('saved_contacts').update({ confirmed: true }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['saved_contacts'] }),
+  })
+
   // ── Filtered lists ───────────────────────────────────────────────────────────
   const filteredPlaces = places.filter(p => {
+    if (!p.confirmed) return false
     const matchesCat = filterCat === 'all' || p.category === filterCat
     const needle = search.toLowerCase()
     const matchesSearch = !needle || [p.name, ...p.aliases, p.address ?? '', p.city ?? '', p.notes ?? ''].some(s => s.toLowerCase().includes(needle))
     return matchesCat && matchesSearch
   })
+  const suggestedPlaces = places.filter(p => !p.confirmed).sort((a, b) => b.occurrence_count - a.occurrence_count)
 
   const filteredContacts = contacts.filter(c => {
+    if (!c.confirmed) return false
     const needle = search.toLowerCase()
     return !needle || [c.name, ...c.aliases, c.relationship ?? '', c.address ?? '', c.notes ?? ''].some(s => s.toLowerCase().includes(needle))
   })
+  const suggestedContacts = contacts.filter(c => !c.confirmed).sort((a, b) => b.occurrence_count - a.occurrence_count)
 
   const isAdding = tab === 'places' ? placeMode.type !== 'list' : contactMode.type !== 'list'
 
@@ -428,12 +484,12 @@ export default function SavedPlacesSettingsPage() {
           <Button onClick={() => { setTab('places'); setSearch('') }}
             className={cn('flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-body font-semibold transition-colors',
               tab === 'places' ? 'bg-casa-surface text-casa-navy shadow-card' : 'text-casa-muted hover:text-casa-navy')}>
-            <BookmarkCheck size={15} />Places ({places.length})
+            <BookmarkCheck size={15} />Places ({places.filter(p => p.confirmed).length}{suggestedPlaces.length > 0 ? ` +${suggestedPlaces.length}` : ''})
           </Button>
           <Button onClick={() => { setTab('people'); setSearch('') }}
             className={cn('flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-body font-semibold transition-colors',
               tab === 'people' ? 'bg-casa-surface text-casa-navy shadow-card' : 'text-casa-muted hover:text-casa-navy')}>
-            <Users size={15} />People ({contacts.length})
+            <Users size={15} />People ({contacts.filter(c => c.confirmed).length}{suggestedContacts.length > 0 ? ` +${suggestedContacts.length}` : ''})
           </Button>
         </div>
 
@@ -459,6 +515,25 @@ export default function SavedPlacesSettingsPage() {
 
             {placeMode.type === 'list' && (
               <>
+                {suggestedPlaces.length > 0 && (
+                  <div className="mb-6">
+                    <p className="text-caption font-semibold text-casa-muted mb-2">
+                      Suggested from your event history — review and confirm
+                    </p>
+                    <div className="space-y-2">
+                      {suggestedPlaces.map(place => (
+                        <SuggestedRow key={place.id}
+                          label={place.name}
+                          sublabel={savedPlaceAddress(place)}
+                          occurrenceCount={place.occurrence_count}
+                          confirming={confirmPlaceMutation.isPending}
+                          onConfirm={() => confirmPlaceMutation.mutate(place.id)}
+                          onDismiss={() => deletePlaceMutation.mutate(place.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="flex flex-col sm:flex-row gap-3 mb-4">
                   <div className="relative flex-1">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted" />
@@ -470,10 +545,10 @@ export default function SavedPlacesSettingsPage() {
                   <Button onClick={() => setFilterCat('all')}
                     className={cn('px-3 py-1 rounded-full text-caption font-semibold border transition-colors',
                       filterCat === 'all' ? 'bg-casa-gold text-white border-casa-gold' : 'bg-casa-bg text-casa-muted border-casa-border hover:border-casa-gold')}>
-                    All ({places.length})
+                    All ({places.filter(p => p.confirmed).length})
                   </Button>
                   {CATEGORIES.map(cat => {
-                    const count = places.filter(p => p.category === cat.value).length
+                    const count = places.filter(p => p.confirmed && p.category === cat.value).length
                     if (count === 0) return null
                     const Icon = cat.icon
                     return (
@@ -533,6 +608,25 @@ export default function SavedPlacesSettingsPage() {
 
             {contactMode.type === 'list' && (
               <>
+                {suggestedContacts.length > 0 && (
+                  <div className="mb-6">
+                    <p className="text-caption font-semibold text-casa-muted mb-2">
+                      Suggested from your event history — review and confirm
+                    </p>
+                    <div className="space-y-2">
+                      {suggestedContacts.map(contact => (
+                        <SuggestedRow key={contact.id}
+                          label={contact.name}
+                          sublabel={[contact.relationship, contact.phone].filter(Boolean).join(' · ')}
+                          occurrenceCount={contact.occurrence_count}
+                          confirming={confirmContactMutation.isPending}
+                          onConfirm={() => confirmContactMutation.mutate(contact.id)}
+                          onDismiss={() => deleteContactMutation.mutate(contact.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="relative mb-5">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted" />
                   <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, alias, relationship…"

@@ -742,10 +742,13 @@ Deno.serve(async (req) => {
       ? sb.from('settings').select('value').eq('key', 'home_config').maybeSingle()
       : skippedRow,
     needsPlaceData
-      ? sb.from('saved_places').select('name, aliases, address, city, state, zip, category, notes, phone').order('name')
+      // Only surface confirmed entries in prompt context — unconfirmed/derived
+      // candidates (auto-extracted from event history) await human review and
+      // must not be presented to the model as authoritative household facts.
+      ? sb.from('saved_places').select('name, aliases, address, city, state, zip, category, notes, phone').eq('confirmed', true).order('name')
       : skippedRows,
     needsContactData
-      ? sb.from('saved_contacts').select('name, aliases, phone, email, address, relationship, notes').order('name').then(r => r).catch(() => ({ data: null, error: null }))
+      ? sb.from('saved_contacts').select('name, aliases, phone, email, address, relationship, notes').eq('confirmed', true).order('name').then(r => r).catch(() => ({ data: null, error: null }))
       : skippedRows,
     needsEventData
       ? sb.from('events')
