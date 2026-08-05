@@ -68,7 +68,10 @@ do $$
 declare
   dupe_event_id uuid := 'af4cea6c-7383-4baa-916e-5a29c4b41616';
 begin
-  update public.events set deleted_at = now()
+  update public.events
+  set deleted_at = now(),
+      purge_after = now() + interval '30 days',
+      tombstone_origin = 'user'
   where id = dupe_event_id and deleted_at is null;
 
   delete from public.prep_items where event_id = dupe_event_id;
