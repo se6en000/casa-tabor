@@ -12,6 +12,8 @@ import type { Notification } from '../hooks/useNotifications'
 import { useWeekConflicts } from '../hooks/useConflicts'
 import type { PrepItem } from '../types'
 import { PREP_CATEGORIES, getPrepCategoryConfig } from '../utils/prepCategories'
+import { humanizeNotificationSource } from '../utils/notificationSource'
+import { summarizeGmailHealth } from '../utils/gmailHealth'
 import PrepItemDetailPanel from '../components/home/PrepItemDetailPanel'
 import { useLiveClock } from '../hooks/useLiveClock'
 import ConflictAlertsSection from '../components/shared/ConflictAlertsSection'
@@ -87,24 +89,10 @@ export default function ActionHubPage() {
   const { data: gmailHealth } = useQuery({
     queryKey: ['actions-hub-gmail-health'],
     queryFn: async () => {
-      const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
-      const [{ data: status }, { data: processed }] = await Promise.all([
-        supabase.from('google_connection_status').select('gmail_scan_enabled, last_sync_error, last_sync_at'),
-        supabase.from('gmail_processed_messages').select('id, processed_at').gte('processed_at', sixHoursAgo),
-      ])
-      const enabled = (status ?? []).filter((s: { gmail_scan_enabled?: boolean }) => !!s.gmail_scan_enabled)
-      const healthy = enabled.filter((s: { last_sync_error?: string | null }) => !s.last_sync_error).length
-      const lastSyncAt = (status ?? [])
-        .map((s: { last_sync_at?: string | null }) => s.last_sync_at)
-        .filter((v): v is string => !!v)
-        .sort()
-        .at(-1) ?? null
-      return {
-        enabled: enabled.length,
-        healthy,
-        recentProcessed: (processed ?? []).length,
-        lastSyncAt,
-      }
+      const { data: status } = await supabase
+        .from('google_connection_status')
+        .select('gmail_scan_enabled, health_status, reauthorization_required, last_sync_error, last_sync_at')
+      return summarizeGmailHealth(status ?? [])
     },
     staleTime: 60_000,
     refetchInterval: 60_000,
@@ -131,9 +119,8 @@ export default function ActionHubPage() {
       `${billingQueue} billing items`,
       `${conflicts.length} heads up`,
       `${unreadCount} unread activity`,
-      `${gmailHealth?.recentProcessed ?? 0} messages processed in 6h`,
     ].filter((s): s is string => s !== null)
-  }, [prepItems, unreadCount, gmailHealth?.recentProcessed, now, conflicts.length])
+  }, [prepItems, unreadCount, now, conflicts.length])
 
   async function run(action: 'complete' | 'snooze' | 'downvote', id: string) {
     setActingId(id)
@@ -173,13 +160,27 @@ export default function ActionHubPage() {
             ))}
           </div>
         </div>
-        <div className="rounded-[1.2rem] border border-casa-border bg-casa-surface px-4 py-3.5 min-w-[180px] shadow-card">
-          <p className="text-caption text-casa-muted">Scanner health</p>
-          <p className="text-body-sm font-semibold text-casa-text mt-0.5">{gmailHealth?.healthy ?? 0}/{gmailHealth?.enabled ?? 0} healthy</p>
-          <p className="text-caption text-casa-muted mt-1">
-            {gmailHealth?.lastSyncAt ? `Synced ${formatDistanceToNow(new Date(gmailHealth.lastSyncAt), { addSuffix: true })}` : 'Waiting for sync'}
+        <Link
+          to="/settings/google"
+          className={cn(
+            'rounded-[1.2rem] border px-4 py-3.5 min-w-[180px] shadow-card flex flex-col justify-center transition',
+            gmailHealth?.status === 'error'
+              ? 'border-casa-error/50 bg-casa-error/5 hover:bg-casa-error/10'
+              : gmailHealth?.status === 'stale'
+                ? 'border-casa-warning/50 bg-casa-warning/5 hover:bg-casa-warning/10'
+                : 'border-casa-border bg-casa-surface hover:bg-casa-bg',
+          )}
+        >
+          <p className="text-caption text-casa-muted">Email connection</p>
+          <div className="mt-0.5 flex items-center gap-1.5">
+            <Chip size="sm" tone={gmailHealth?.tone ?? 'neutral'}>
+              {gmailHealth?.label ?? 'Checking…'}
+            </Chip>
+          </div>
+          <p className="text-caption text-casa-muted mt-1.5">
+            {gmailHealth?.lastSyncAt ? `Synced ${formatDistanceToNow(new Date(gmailHealth.lastSyncAt), { addSuffix: true })}` : (gmailHealth?.status === 'off' ? 'Not connected' : 'Waiting for sync')}
           </p>
-        </div>
+        </Link>
       </div>
 
       <div className="mt-6 grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -323,7 +324,7 @@ export default function ActionHubPage() {
                 <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                   <span className="text-body-sm text-casa-muted">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}</span>
                   <span className="text-body-sm text-casa-muted">•</span>
-                  <span className="text-body-sm font-semibold px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border text-casa-muted leading-none">{n.source ?? 'system'}</span>
+                  <span className="text-body-sm font-semibold px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border text-casa-muted leading-none">{humanizeNotificationSource(n.source)}</span>
                   {badge && (
                     <span className={cn('text-body-sm font-semibold px-1.5 py-0.5 rounded-full border leading-none', badge.tone)}>
                       {badge.label}

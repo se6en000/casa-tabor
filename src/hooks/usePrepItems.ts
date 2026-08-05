@@ -99,15 +99,18 @@ export function useSnoozePrepItem() {
   }
 }
 
-/** Downvotes a prep item (stub — marks as dismissed with low priority) */
+/**
+ * Downvotes a prep item via the shared record_prep_item_downvote() RPC -- the
+ * single source of truth for "not relevant", also used by the push-notification
+ * thumbs_down action (see supabase/functions/notification-action). This records
+ * real prep_item_feedback and feeds the prep_item_suppressions pattern-learning
+ * loop, instead of silently dismissing with no signal.
+ */
 export function useDownvotePrepItem() {
   const qc = useQueryClient()
   return async (id: string) => {
-    await supabase
-      .from('prep_items')
-      .update({ dismissed: true, dismissed_at: new Date().toISOString() })
-      .eq('id', id)
-      .throwOnError()
+    const { error } = await supabase.rpc('record_prep_item_downvote', { p_prep_item_id: id })
+    if (error) throw error
     qc.invalidateQueries({ queryKey: ['prep-items'] })
   }
 }

@@ -5,7 +5,7 @@
 import { useMemo, useState } from 'react'
 import { addDays, differenceInDays, format, parseISO, startOfWeek } from 'date-fns'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronRight, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { ChevronRight, Sparkles, ThumbsDown } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useWeekEventIndex } from '../../hooks/useCalendarEvents'
@@ -16,6 +16,7 @@ import { useCalendarStore } from '../../stores/calendarStore'
 import BounceScroll from '../shared/BounceScroll'
 import type { PrepItem } from '../../types'
 import { eventOverlapsDay } from '../../utils/eventTime'
+import { summarizeGmailHealth, type GmailHealthSummary } from '../../utils/gmailHealth'
 import { Button, Card, Chip, EmptyState, Heading, IconButton, SecondaryRail, Text } from '../ui'
 
 interface Props {
@@ -29,6 +30,8 @@ interface GmailConnectionStatus {
   gmail_scan_enabled: boolean
   last_sync_at: string | null
   last_sync_error: string | null
+  health_status: 'connected' | 'healthy' | 'degraded' | 'reauthorization_required' | 'disabled' | null
+  reauthorization_required: boolean | null
 }
 
 interface GmailProcessedMessage {
@@ -46,6 +49,7 @@ interface GmailProcessedMessage {
 interface ActivityHealth {
   scanned: number
   skipped: number
+  gmailHealth: GmailHealthSummary
 }
 
 function daysUntil(eventDate: string | null): number {
@@ -119,7 +123,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
         { data: statuses, error: statusesError },
         { data: messages, error: messagesError },
       ] = await Promise.all([
-        supabase.from('google_connection_status').select('family_member_id, gmail_scan_enabled, last_sync_at, last_sync_error'),
+        supabase.from('google_connection_status').select('family_member_id, gmail_scan_enabled, last_sync_at, last_sync_error, health_status, reauthorization_required'),
         supabase
           .from('gmail_processed_messages')
           .select('id, family_member_id, subject, from_email, intent, created_event_id, updated_event_id, skipped_reason, processed_at')
@@ -143,6 +147,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
       return {
         scanned: recentMessages.length,
         skipped,
+        gmailHealth: summarizeGmailHealth(statusRows),
       }
     },
     refetchInterval: 60_000,
@@ -231,6 +236,21 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
             </Link>
           </div>
 
+          {gmailActivity?.gmailHealth && gmailActivity.gmailHealth.status !== 'healthy' && gmailActivity.gmailHealth.status !== 'off' && (
+            <Link
+              to="/settings/google"
+              className={cn(
+                'mt-3 flex items-center justify-between gap-2 rounded-modal border px-3.5 py-3 transition',
+                gmailActivity.gmailHealth.status === 'error'
+                  ? 'border-casa-error/45 bg-casa-error/5 hover:bg-casa-error/10'
+                  : 'border-casa-warning/45 bg-casa-warning/5 hover:bg-casa-warning/10',
+              )}
+            >
+              <span className="text-body-sm font-semibold text-casa-text">{gmailActivity.gmailHealth.label}</span>
+              <Chip size="sm" tone={gmailActivity.gmailHealth.tone}>Fix in Settings</Chip>
+            </Link>
+          )}
+
           {prepItems.length === 0 ? (
             <EmptyState className="mt-3" title="All clear" description="No urgent prep actions right now." />
           ) : (
@@ -289,7 +309,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                       </div>
                     </Button>
                     <div className="mt-3 border-t border-casa-border/80 pt-3">
-                      <div className="grid grid-cols-[1.7fr_0.85fr_auto_auto_auto] items-center gap-1.5">
+                      <div className="grid grid-cols-[1.7fr_0.85fr_auto_auto] items-center gap-1.5">
                         <Button
                           onClick={() => handleDone(item)}
                           variant="strong"
@@ -309,17 +329,10 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                         </Button>
                         <div className="h-7 w-px bg-casa-border/80 mx-1" />
                         <IconButton
-                          onClick={() => handleDone(item)}
-                          variant="secondary"
-                          size="sm"
-                          icon={<ThumbsUp size={15} strokeWidth={2.1} />}
-                          aria-label="Mark suggestion helpful"
-                          title="Helpful"
-                        />
-                        <IconButton
                           onClick={() => handleDownvote(item)}
                           variant="danger"
                           size="sm"
+                          disabled={isDownvoting}
                           icon={<ThumbsDown size={15} strokeWidth={2.1} />}
                           aria-label="Mark suggestion not relevant"
                           title="Not relevant"
