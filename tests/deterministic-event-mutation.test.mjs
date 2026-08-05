@@ -164,3 +164,37 @@ test('refuses create commands without an explicit title, date, or meridiem', () 
     assert.equal(resolveDeterministicEventMutation(input, events, options), null)
   }
 })
+
+test('regression: structured Title:/Due: draft prompts must not reach the naive create-command matcher', () => {
+  // The naive single-line matcher normalizes all whitespace (including
+  // newlines) before matching, so a multi-field structured draft like
+  // "Create a reminder draft...\n\nTitle: X\nDetails: ...\nDue: ..." collapses
+  // into one long line and gets misparsed: garbage title, wrong date pulled
+  // from an unrelated date mentioned in Details, and a hardcoded 60-minute
+  // duration. The ai-assistant edge function guards against this by skipping
+  // this matcher entirely whenever the text contains a "Title:" field
+  // (the structured-draft signature) and routing those requests through the
+  // dedicated reminder deterministic-date/duration handling instead. This
+  // test documents the underlying matcher's behavior so the guard's necessity
+  // stays visible even though the guard itself lives in ai-assistant/index.ts.
+  const structuredDraft = 'Create a reminder draft for me to confirm.\n\n' +
+    'Title: Your Model Y Lease Billing Statement is Available\n' +
+    'Details: Your monthly lease payment for the Tesla Model Y is due. ' +
+    'Auto-payment will be made on August 27, 2026. The amount is $579.52.\n' +
+    'Due: 2026-08-26 8:00 PM ET'
+  const result = resolveDeterministicEventMutation(structuredDraft, [], {
+    now: new Date('2026-08-05T16:38:00Z'),
+    utcOffset: '-04:00',
+    familyNames: [],
+  })
+  // Confirms the naive matcher DOES fire and DOES get it wrong (garbage
+  // title, wrong date, 60-minute duration) — proving the edge-function-level
+  // guard that skips this matcher for structured drafts is load-bearing.
+  assert.equal(result?.tool, 'create_event')
+  assert.notEqual(result?.args.title, 'Your Model Y Lease Billing Statement is Available')
+  assert.equal(result?.args.start, '2026-08-27T00:00:00.000Z')
+  assert.equal(
+    (new Date(result.args.end).getTime() - new Date(result.args.start).getTime()) / 60000,
+    60,
+  )
+})

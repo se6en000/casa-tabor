@@ -4458,7 +4458,15 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         }
       }
     }
-    if (intentRouting.profile === 'event' && latestUserText && !context.focusedEvent) {
+    // Skip the generic single-line deterministic fast path for app-generated
+    // structured drafts (Prep & Action "Title:"/"Due:" prompts) — its regex
+    // title/date/duration extraction assumes a short natural-language
+    // one-liner and mangles multi-field text, producing garbage titles and a
+    // hardcoded 60-minute duration. Structured drafts have their own correct
+    // deterministic handling (resolveStructuredReminderDueBy) inside the LLM
+    // tool-result path below, so let them fall through to that instead.
+    const isStructuredDraftText = /^\s*Title:\s*\S/im.test(String(latestUserText ?? ''))
+    if (intentRouting.profile === 'event' && latestUserText && !context.focusedEvent && !isStructuredDraftText) {
       const rawDeterministicMutation = resolveDeterministicEventMutation(
         latestUserText,
         allEvents ?? [],
