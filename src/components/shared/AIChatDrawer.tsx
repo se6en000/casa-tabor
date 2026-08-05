@@ -1046,7 +1046,7 @@ export default function AIChatDrawer({
                           new Date(),
                           msg.conversationState,
                         ),
-                        syncWarning: data?.sync_warning,
+                        syncWarning: data?.duplicate ? data?.message : data?.sync_warning,
                         syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
                         undoStatus: 'idle',
                         undoErrorMsg: undefined,
