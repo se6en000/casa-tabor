@@ -4,7 +4,7 @@
  * For each family member with gmail_scan_enabled:
  *   1. Fetch new inbox messages (incremental via historyId)
  *   2. Classify intent: new_event | update_event | travel_detail | skip
- *   2b. Extract non-calendar inbox actions: forms | payment | rsvp | deadline
+ *   2b. Extract non-calendar inbox actions: forms | payment | rsvp | deadline | delivery | renewal
  *   3. new_event    → fuzzy-dedup against existing events → create or skip
  *   4. update_event → patch existing event; surface conflict notification if times changed significantly
  *   5. travel_detail → hand off to scan-travel-emails pipeline inline
@@ -36,8 +36,12 @@ const TRAVEL_SENDER_DOMAINS = [
 const TRAVEL_KEYWORDS = /itinerary|e-ticket|eticket|boarding pass|flight confirmation|booking confirmation|reservation confirmed|hotel confirmation|your flight|trip receipt|travel itinerary|airline confirmation|ticket number|record locator|e-ticket and trip/i
 
 // Keywords that suggest calendar relevance
-const CALENDAR_KEYWORDS = /appointment|appt|booking|reservation|confirm|invite|invitation|reminder|rsvp|meeting|schedule|event|registration|playdate|dentist|doctor|physician|clinic|hospital|therapy|checkup|concert|show|performance|game|match|tournament|practice|party|birthday|celebration|dinner|lunch|brunch|flight|hotel|check-in|checkout|school|class|lesson|camp|workshop|conference/i
-const ACTION_KEYWORDS = /permission slip|consent form|waiver|due date|deadline|invoice|payment due|pay by|tuition|fee|balance due|rsvp|respond by|register by|submit by|application/i
+const CALENDAR_KEYWORDS = /appointment|appt|booking|reservation|confirm|invite|invitation|reminder|rsvp|meeting|schedule|event|registration|playdate|dentist|doctor|physician|clinic|hospital|therapy|checkup|concert|show|performance|game|match|tournament|practice|party|birthday|celebration|dinner|lunch|brunch|flight|hotel|check-in|checkout|school|class|lesson|camp|workshop|conference|orientation|pickup|pick-up|drop-off|drop off|parent-teacher|parent teacher|field trip|volunteer|carpool|open house/i
+
+// Keywords that suggest a family todo/action worth surfacing — deliberately broad so real
+// bills, forms, renewals, and deliveries don't fall through a "no keywords" gap. Extractable
+// action types are: forms | payment | rsvp | deadline | delivery | renewal | general.
+const ACTION_KEYWORDS = /permission slip|consent form|waiver|due date|deadline|invoice|payment due|payment reminder|pay by|pay \$|please pay|amount due|balance due|account balance|autopay|auto-pay|auto pay|past due|overdue|final notice|bill is ready|your bill|billing statement|statement is ready|statement (is )?ready|tuition|fee is due|late fee|rsvp|respond by|register by|registration deadline|submit by|application|renew by|renewal|membership expir|subscription|expires (on|soon)|expiring soon|card expiring|order confirmation|shipping confirmation|shipped|out for delivery|delivered|track(ing)? (your |this )?(package|order|shipment)|delivery confirmation|return by|return window|refund|please complete|complete (the )?attached|complete this form|fill out|sign and return|signature required|action required|response required|please sign|approval needed|verify your|update your payment|please review and (sign|complete|submit)/i
 
 // ── Gmail helpers ─────────────────────────────────────────────────
 
@@ -177,7 +181,7 @@ interface EmailIntent {
 }
 
 interface InboxActionItem {
-  type: 'forms' | 'payment' | 'rsvp' | 'deadline' | 'general'
+  type: 'forms' | 'payment' | 'rsvp' | 'deadline' | 'delivery' | 'renewal' | 'general'
   title: string
   description: string
   due_datetime?: string // ISO8601 or empty
@@ -246,10 +250,15 @@ async function extractInboxActions(
 Family members: ${familyMembers.map(m => `${m.name} (${m.role})`).join(', ')}
 
 Return ONLY tasks that require action to avoid problems:
-- forms (permission slips, waivers, docs)
-- payment (fee, tuition, invoice, balance due)
+- forms (permission slips, waivers, docs to complete/sign/return)
+- payment (bill, statement, balance due, invoice, tuition, fee, autopay notice)
 - rsvp (respond/confirm attendance)
-- deadline (submit/apply/register by date)
+- deadline (submit/apply/register by date, general due-by task)
+- delivery (package/order shipped, out for delivery, delivery confirmation, return window)
+- renewal (subscription/membership/license/card renewing or expiring)
+- general (anything else actionable that doesn't fit the above)
+
+Do NOT invent an action from routine marketing, newsletters, or receipts that need no follow-up.
 
 EMAIL:
 Subject: ${subject}
@@ -261,7 +270,7 @@ Respond ONLY JSON:
 {
   "actions": [
     {
-      "type": "forms|payment|rsvp|deadline|general",
+      "type": "forms|payment|rsvp|deadline|delivery|renewal|general",
       "title": "short title",
       "description": "what needs to be done and why",
       "due_datetime": "ISO8601 with timezone offset or empty",
@@ -318,6 +327,8 @@ async function persistInboxActions(
       : a.type === 'rsvp' ? '📩'
       : a.type === 'forms' ? '📝'
       : a.type === 'deadline' ? '⏰'
+      : a.type === 'delivery' ? '📦'
+      : a.type === 'renewal' ? '🔄'
       : '📌'
     const normalizedPriority: 1 | 2 | 3 = a.priority === 3 ? 3 : a.priority === 1 ? 1 : 2
     return {
