@@ -115,7 +115,7 @@ export default function StackedView() {
       onClick={() => setSelectedEventId(null)}
     >
       {[row1, row2].map((rowDays, rowIdx) => (
-        <div key={rowIdx} className="grid grid-cols-4 gap-2 min-h-[160px]">
+        <div key={rowIdx} className="grid grid-cols-4 gap-x-4 gap-y-2 min-h-[160px]">
           {rowDays.map(day => {
             const dayEvents = events
               .filter(e => eventOverlapsDay(e, day))
@@ -129,22 +129,17 @@ export default function StackedView() {
             return (
               <div
                 key={format(day, 'yyyy-MM-dd')}
-                className={cn(
-                  'flex flex-col rounded-xl border overflow-hidden transition-colors touch-pan-y',
-                  today_
-                    ? 'bg-casa-accent-subtle/70 border-casa-accent-subtle-border'
-                    : 'bg-casa-bg-2/65 border-casa-divider',
-                )}
+                className="flex flex-col touch-pan-y"
                 onPointerDown={(event) => quickCreateGesture.onPointerDown(event, day)}
                 onPointerMove={quickCreateGesture.onPointerMove}
                 onPointerUp={quickCreateGesture.onPointerUp}
                 onPointerCancel={quickCreateGesture.onPointerCancel}
                 onDoubleClick={(event) => quickCreateGesture.onDoubleClick(event, day)}
               >
-                {/* Day header — compact inline layout */}
+                {/* Day header — plain label, thin rule (gold when today) */}
                 <div className={cn(
-                  'flex items-center justify-center gap-1.5 py-1.5 border-b border-casa-divider shrink-0',
-                  today_ ? 'bg-casa-gold/20' : ''
+                  'flex items-baseline gap-1.5 pb-1.5 mb-1.5 border-b shrink-0',
+                  today_ ? 'border-casa-gold' : 'border-casa-divider'
                 )}>
                   <span className={cn(
                     'text-caption font-semibold uppercase tracking-wide',
@@ -161,7 +156,7 @@ export default function StackedView() {
                 </div>
 
                 {/* Events */}
-                <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
+                <div className="space-y-1.5">
                   {/* All-day reminders */}
                   {dayAllDay.map(r => (
                     isReminder(r) ? (
