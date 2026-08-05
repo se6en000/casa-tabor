@@ -19,8 +19,6 @@ Deno.serve(async (req) => {
     if (!action || (!event_id && !prep_item_id)) return json({ ok: false, error: 'Missing action or target id' }, 400)
 
     if (prep_item_id) {
-      const nowIso = new Date().toISOString()
-
       if (action === 'done' || action === 'complete') {
         const { data: resolution, error: resolutionError } = await sb.rpc('resolve_prep_item', {
           p_prep_item_id: prep_item_id,
@@ -40,74 +38,14 @@ Deno.serve(async (req) => {
       }
 
       if (action === 'thumbs_down' || action === 'downvote') {
-        const { data: item } = await sb
-          .from('prep_items')
-          .select('id, source_type, source_pattern_key, source_ref, downvoted_count')
-          .eq('id', prep_item_id)
-          .maybeSingle()
-
-        if (!item) return json({ ok: false, error: 'Prep item not found' }, 404)
-
-        const patternKey = item.source_pattern_key || 'action:general'
-
-        await sb.from('prep_item_feedback').insert({
-          prep_item_id,
-          source_type: item.source_type ?? 'unknown',
-          source_pattern_key: patternKey,
-          source_ref: item.source_ref ?? null,
-          feedback: 'not_relevant',
-          created_at: nowIso,
+        // Single source of truth for "downvote" -- shared with the web app's
+        // ActionHubPage and HomeRightPanel via useDownvotePrepItem(), so pressing
+        // downvote always records real feedback and feeds the suppression loop,
+        // regardless of which surface it's pressed from.
+        const { data: resolution, error: resolutionError } = await sb.rpc('record_prep_item_downvote', {
+          p_prep_item_id: prep_item_id,
         })
-
-        const { data: suppression } = await sb
-          .from('prep_item_suppressions')
-          .select('id, strength, hard_suppressed')
-          .eq('pattern_key', patternKey)
-          .maybeSingle()
-
-        const nextStrength = (suppression?.strength ?? 0) + 1
-        const hardSuppressed = (suppression?.hard_suppressed ?? false) || nextStrength >= 3
-
-        if (suppression?.id) {
-          await sb
-            .from('prep_item_suppressions')
-            .update({
-              strength: nextStrength,
-              hard_suppressed: hardSuppressed,
-              last_feedback_at: nowIso,
-              updated_at: nowIso,
-            })
-            .eq('id', suppression.id)
-        } else {
-          await sb
-            .from('prep_item_suppressions')
-            .insert({
-              pattern_key: patternKey,
-              strength: 1,
-              hard_suppressed: false,
-              last_feedback_at: nowIso,
-              updated_at: nowIso,
-            })
-        }
-
-        await sb
-          .from('prep_items')
-          .update({
-            dismissed: true,
-            dismissed_at: nowIso,
-            downvoted_count: (item.downvoted_count ?? 0) + 1,
-            last_feedback_at: nowIso,
-            relevance_score: -1,
-          })
-          .eq('id', prep_item_id)
-
-        if (nextStrength >= 2) {
-          await sb
-            .from('prep_items')
-            .update({ dismissed: true, dismissed_at: nowIso })
-            .eq('dismissed', false)
-            .eq('source_pattern_key', patternKey)
-        }
+        if (resolutionError) return json({ ok: false, error: resolutionError.message }, 500)
 
         await sb.from('notifications').insert({
           type: 'push_action_thumbs_down',
@@ -115,7 +53,7 @@ Deno.serve(async (req) => {
           body: 'Marked not relevant and dismissed.',
           source: 'system',
         })
-        return json({ ok: true, action: 'thumbs_down', prep_item_id })
+        return json({ ok: true, action: 'thumbs_down', prep_item_id, resolution })
       }
 
       return json({ ok: false, error: 'Unsupported action for prep item' }, 400)
