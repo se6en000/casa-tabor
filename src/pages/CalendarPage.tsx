@@ -28,32 +28,33 @@ export default function CalendarPage() {
   const isMonth = activeView === 'month'
   const isStacked = activeView === 'stacked'
 
-  // Stacked view always anchors to today — use today as header base so the
-  // label matches what StackedView actually renders (rolling 8-day window).
-  const headerBase = isStacked ? new Date() : selectedDate
-  const weekStart = startOfWeek(headerBase, { weekStartsOn: 0 })
-  const stackedEnd = addDays(new Date(), 7)
+  // Stacked view's 8-day window is anchored to selectedDate (same state driving swipe/prev/
+  // next), not always "today" — so the header label and navigation move together.
+  const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 })
+  const stackedEnd = addDays(selectedDate, 7)
 
   const goToToday = () => { setDirection(0); setSelectedDate(new Date()) }
   const goPrev = useCallback(() => {
     setDirection(-1)
     if (isDay) setSelectedDate(subDays(selectedDate, 1))
     else if (isMonth) setSelectedDate(subMonths(selectedDate, 1))
+    else if (isStacked) setSelectedDate(subDays(selectedDate, 8))
     else setSelectedDate(subWeeks(selectedDate, 1))
-  }, [isDay, isMonth, selectedDate, setSelectedDate])
+  }, [isDay, isMonth, isStacked, selectedDate, setSelectedDate])
   const goNext = useCallback(() => {
     setDirection(1)
     if (isDay) setSelectedDate(addDays(selectedDate, 1))
     else if (isMonth) setSelectedDate(addMonths(selectedDate, 1))
+    else if (isStacked) setSelectedDate(addDays(selectedDate, 8))
     else setSelectedDate(addWeeks(selectedDate, 1))
-  }, [isDay, isMonth, selectedDate, setSelectedDate])
+  }, [isDay, isMonth, isStacked, selectedDate, setSelectedDate])
 
   const headerLabel = isDay
     ? format(selectedDate, 'EEEE, MMMM d, yyyy')
     : isMonth
     ? format(selectedDate, 'MMMM yyyy')
     : isStacked
-    ? `${format(new Date(), 'MMM d')} – ${format(stackedEnd, stackedEnd.getMonth() === new Date().getMonth() ? 'd, yyyy' : 'MMM d, yyyy')}`
+    ? `${format(selectedDate, 'MMM d')} – ${format(stackedEnd, stackedEnd.getMonth() === selectedDate.getMonth() ? 'd, yyyy' : 'MMM d, yyyy')}`
     : `${format(weekStart, 'MMMM d')} – ${format(endOfWeek(selectedDate, { weekStartsOn: 0 }), 'd, yyyy')}`
 
   // Touch swipe detection — skip if a modal/panel is open (z-index overlay)

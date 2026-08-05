@@ -69,15 +69,18 @@ function deriveResponsibilityChip(event: EventWithDetails, household: FamilyMemb
 }
 
 export default function StackedView() {
-  const { visibleMembers } = useCalendarStore()
+  const { visibleMembers, selectedDate } = useCalendarStore()
   const { data: householdData } = useFamilyMembers()
-  const today = startOfDay(new Date())
-  // 8 days: today → today+7
-  const days  = Array.from({ length: 8 }, (_, i) => addDays(today, i))
+  // Anchor the 8-day window to the shared calendar selectedDate (not always "today") so
+  // swiping/prev/next in CalendarPage actually moves this view instead of always showing
+  // the same rolling window. "Today" resets selectedDate back to now.
+  const anchor = startOfDay(selectedDate)
+  // 8 days: anchor → anchor+7
+  const days  = Array.from({ length: 8 }, (_, i) => addDays(anchor, i))
   const row1  = days.slice(0, 4)
   const row2  = days.slice(4, 8)
 
-  const { data: allEvents } = useRollingEvents(today)
+  const { data: allEvents } = useRollingEvents(anchor)
   const household = householdData ?? []
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
