@@ -382,59 +382,65 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
           {urgentAction && <AlertTriangle size={11} className="text-amber-500 shrink-0" />}
         </div>
 
-        {/* Title — 1-line clamp, larger + bolder */}
+        {/* Title — wraps freely (up to 2 lines); role/going info moves to footer below */}
         {(() => {
           const cleanTitle = cleanEventTitle(event.title)
           const showGoingRow = visibleGoingMembers.length > 0
           const showResponsibilityRow = Boolean(responsibilityChip)
-          const showRoleRows = showGoingRow || showResponsibilityRow
+          const showFooter = showGoingRow || showResponsibilityRow
           return (
-            <div className="flex items-start justify-between gap-1.5">
-              <div className="min-w-0 flex-1">
-                <p
-                  className="stacked-event-title text-body-sm font-semibold text-casa-text leading-snug line-clamp-1"
-                  style={{ color: 'var(--color-casa-text)' }}
-                >
-                  {cleanTitle}
-                </p>
-              </div>
-              {showRoleRows && (
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  {showGoingRow && (
-                    <div className="flex items-center justify-end gap-1">
-                      <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted/75 leading-none">Going</span>
-                      {visibleGoingMembers.map((member) => (
-                        <CalendarPill
-                          key={member.id}
-                          color={member.color_hex ?? 'var(--color-casa-muted)'}
-                          className="shrink-0"
-                        >
-                          {member.name}
-                        </CalendarPill>
-                      ))}
-                      {goingOverflowCount > 0 && (
-                        <CalendarPill className="shrink-0">
-                          +{goingOverflowCount}
-                        </CalendarPill>
-                      )}
-                    </div>
-                  )}
-                  {showResponsibilityRow && responsibilityChip && (
-                    <div className="flex items-center justify-end gap-1">
-                      <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted/75 leading-none">
-                        {responsibilityChip.label}
-                      </span>
-                      <CalendarPill
-                        color={responsibilityChip.person.color ?? 'var(--color-casa-muted)'}
-                        className="shrink-0"
+            <>
+              <p
+                className="stacked-event-title text-body-sm font-semibold text-casa-text leading-snug line-clamp-2"
+                style={{ color: 'var(--color-casa-text)' }}
+              >
+                {cleanTitle}
+              </p>
+              {showFooter && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-casa-divider pt-1.5">
+                  {showResponsibilityRow && responsibilityChip && (() => {
+                    const label = responsibilityChip.label === 'SUPERVISOR' ? 'Supervising' : 'Drives'
+                    return (
+                      <span
+                        className={cn(
+                          'flex min-w-0 max-w-full items-center gap-1 text-caption font-bold leading-none',
+                          responsibilityChip.label === 'SUPERVISOR' ? 'text-casa-success' : 'text-casa-gold',
+                        )}
+                        title={`${responsibilityChip.person.name} ${label.toLowerCase()}`}
                       >
-                        {responsibilityChip.person.name}
-                      </CalendarPill>
-                    </div>
+                        <span
+                          className="flex size-5 shrink-0 items-center justify-center rounded-full text-caption font-extrabold leading-none text-white"
+                          style={{ backgroundColor: responsibilityChip.person.color ?? 'var(--color-casa-muted)' }}
+                        >
+                          {responsibilityChip.person.name[0]?.toUpperCase() || '?'}
+                        </span>
+                        <span className="truncate">{label}</span>
+                      </span>
+                    )
+                  })()}
+                  {visibleGoingMembers.map((member) => (
+                    <span
+                      key={member.id}
+                      className="flex min-w-0 max-w-full items-center gap-1 text-caption font-bold leading-none text-casa-muted"
+                      title={`${member.name} going`}
+                    >
+                      <span
+                        className="flex size-5 shrink-0 items-center justify-center rounded-full text-caption font-extrabold leading-none text-white"
+                        style={{ backgroundColor: member.color_hex ?? 'var(--color-casa-muted)' }}
+                      >
+                        {member.name[0]?.toUpperCase() || '?'}
+                      </span>
+                      <span className="truncate">Going</span>
+                    </span>
+                  ))}
+                  {goingOverflowCount > 0 && (
+                    <span className="text-caption font-bold leading-none text-casa-muted">
+                      +{goingOverflowCount}
+                    </span>
                   )}
                 </div>
               )}
-            </div>
+            </>
           )
         })()}
       </div>
