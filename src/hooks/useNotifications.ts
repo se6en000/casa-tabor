@@ -4,13 +4,14 @@ import { supabase } from '../lib/supabase'
 
 export interface Notification {
   id: string
-  type: 'event_added' | 'event_updated' | 'event_enriched' | 'gmail_import' | 'conflict' | 'briefing_ready'
+  type: 'event_added' | 'event_updated' | 'event_enriched' | 'gmail_import' | 'conflict' | 'briefing_ready' | 'policy_conflict' | 'policy_prep'
   title: string
   body: string | null
   event_id: string | null
   source: string | null
   read: boolean
   created_at: string
+  event: { start_time: string; title: string } | null
 }
 
 export function useNotifications() {
@@ -21,11 +22,11 @@ export function useNotifications() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('notifications')
-        .select('*')
+        .select('*, event:events(start_time, title)')
         .order('created_at', { ascending: false })
         .limit(50)
       if (error) throw error
-      return data as Notification[]
+      return data as unknown as Notification[]
     },
     refetchInterval: 60_000, // poll every 60s — avoids realtime StrictMode issues
     staleTime: 30_000,

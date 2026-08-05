@@ -67,12 +67,7 @@ Deno.serve(async (req) => {
   const applyQuietToPush = cfg.push_quiet_hours_enabled ?? true
 
   const [conflictsRes, prepRes, membersRes] = await Promise.all([
-    sb.from('conflicts')
-      .select('id, severity, description, event_a_id, event_a:events!event_a_id(id, title, start_time)')
-      .eq('resolved', false)
-      .or(`snoozed_until.is.null,snoozed_until.lte.${nowIso}`)
-      .order('severity', { ascending: false })
-      .limit(20),
+    sb.rpc('get_active_conflict_alerts'),
     sb.from('prep_items')
       .select('id, event_id, event_title, description, due_by, priority')
       .eq('dismissed', false)
@@ -91,7 +86,8 @@ Deno.serve(async (req) => {
     severity: number
     description: string
     event_a_id: string | null
-    event_a: { id: string; title: string; start_time: string } | null
+    event_a_title: string | null
+    event_a_start_time: string | null
   }[]
   const prepItems = (prepRes.data ?? []) as {
     id: string
@@ -146,7 +142,7 @@ Deno.serve(async (req) => {
 
   // Conflicts: notify immediately; SMS based on policy.
   for (const c of conflicts) {
-    const eventTitle = c.event_a?.title ?? 'Upcoming event'
+    const eventTitle = c.event_a_title ?? 'Upcoming event'
     const dedupeFrom = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString()
     const { data: existing } = await sb.from('notifications')
       .select('id')

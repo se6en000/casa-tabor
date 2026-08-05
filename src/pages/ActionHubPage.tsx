@@ -8,6 +8,7 @@ import { formatDueByForAiPrompt } from '../utils/eventTime'
 import { supabase } from '../lib/supabase'
 import { usePrepItems, useCompletePrepItem, useDownvotePrepItem, useSnoozePrepItem } from '../hooks/usePrepItems'
 import { useNotifications } from '../hooks/useNotifications'
+import type { Notification } from '../hooks/useNotifications'
 import { useWeekConflicts } from '../hooks/useConflicts'
 import type { PrepItem } from '../types'
 import PrepItemDetailPanel from '../components/home/PrepItemDetailPanel'
@@ -32,6 +33,16 @@ function dueBadge(item: PrepItem, now: Date): { label: string; tone: string } | 
   if (diff < 24 * 60 * 60 * 1000) return { label: 'Due today', tone: 'text-amber-700 bg-amber-50 border-amber-200' }
   if (diff < 48 * 60 * 60 * 1000) return { label: 'Due tomorrow', tone: 'text-casa-gold bg-casa-gold/15 border-casa-gold/35' }
   return { label: `Due ${format(due, 'EEE h:mm a')}`, tone: 'text-casa-muted bg-casa-bg border-casa-border' }
+}
+
+function eventDateBadge(n: Notification, now: Date): { label: string; tone: string } | null {
+  if (!n.event?.start_time) return null
+  const start = new Date(n.event.start_time)
+  const diff = start.getTime() - now.getTime()
+  if (diff < 0) return { label: `Was ${format(start, 'EEE, MMM d')}`, tone: 'text-casa-muted bg-casa-bg border-casa-border' }
+  if (diff < 24 * 60 * 60 * 1000) return { label: `Today ${format(start, 'h:mm a')}`, tone: 'text-amber-700 bg-amber-50 border-amber-200' }
+  if (diff < 48 * 60 * 60 * 1000) return { label: `Tomorrow ${format(start, 'h:mm a')}`, tone: 'text-casa-gold bg-casa-gold/15 border-casa-gold/35' }
+  return { label: format(start, 'EEE, MMM d · h:mm a'), tone: 'text-casa-muted bg-casa-bg border-casa-border' }
 }
 
 type PrepFilterKey = 'all' | 'bills' | 'forms' | 'rsvp' | 'deadlines' | 'deliveries' | 'renewals' | 'other'
@@ -300,13 +311,20 @@ export default function ActionHubPage() {
             </div>
           </div>
           <div className="space-y-2.5 pr-1 xl:max-h-[70vh] xl:overflow-y-auto">
-            {notifications.map((n) => (
+            {notifications.map((n) => {
+              const badge = eventDateBadge(n, now)
+              return (
               <div key={n.id} className={cn('border rounded-[1rem] p-3.5', n.read ? 'border-casa-border bg-casa-card' : 'border-casa-gold/45 bg-casa-gold/5')}>
                 <p className={cn('text-body-sm leading-relaxed', n.read ? 'text-casa-text' : 'text-casa-text font-semibold')}>{n.body ?? n.title}</p>
                 <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                   <span className="text-body-sm text-casa-muted">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}</span>
                   <span className="text-body-sm text-casa-muted">•</span>
                   <span className="text-body-sm font-semibold px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border text-casa-muted leading-none">{n.source ?? 'system'}</span>
+                  {badge && (
+                    <span className={cn('text-body-sm font-semibold px-1.5 py-0.5 rounded-full border leading-none', badge.tone)}>
+                      {badge.label}
+                    </span>
+                  )}
                 </div>
                 {!n.read && (
                   <Button variant="ghost" onClick={() => markRead.mutate(n.id)} className="mt-2 text-body-sm font-semibold text-casa-navy hover:text-casa-gold">
@@ -314,7 +332,8 @@ export default function ActionHubPage() {
                   </Button>
                 )}
               </div>
-            ))}
+              )
+            })}
             {notifications.length === 0 && <p className="text-body-sm text-casa-muted">No recent activity.</p>}
           </div>
         </section>
