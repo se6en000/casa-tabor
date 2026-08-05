@@ -116,6 +116,11 @@ const stopTouch = (e: React.TouchEvent | React.PointerEvent) => e.stopPropagatio
 export default function EventDetailPanel({ event: eventSummary, onClose }: EventDetailPanelProps) {
   const detailQuery = useEventDetails(eventSummary)
   const event = detailQuery.data ?? eventSummary
+  // Opening by id alone (e.g. from an AI-chat or Prep & Action link) passes a minimal
+  // { id } stub before the full row loads. Every date field below assumes a real event,
+  // so gate the header/body/footer on start_time being present to avoid formatting
+  // "Invalid Date" during that brief loading window.
+  const isHydrated = Boolean(event?.start_time)
   const [showEdit, setShowEdit] = useState(false)
   const [verifiedOverride, setVerifiedOverride] = useState<boolean | null>(null)
   const [waitsOverride, setWaitsOverride] = useState<boolean | null>(null)
@@ -461,84 +466,94 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
                     Check the connection, then reopen this event to try again.
                   </Alert>
                 )}
-                <PanelHeader
-                  event={event}
-                  verified={addressReviewed}
-                  modeOverride={modeOverride}
-                  transportationPlan={transportationPlan}
-                  onClose={onClose}
-                  onConfirmAddress={() => void confirmAddress()}
-                  addressReviewLoading={overridesHydratedEventId !== event.id || savedPlacesPending}
-                  addressSaveError={overrideSaveError}
-                  onRetryAddressSave={() => setOverrideSaveRevision((revision) => revision + 1)}
-                  onSaveAddress={async (place, scope) => {
-                    setOverridesHydratedEventId(null)
-                    const trusted = isTrustedPlaceSelection(place)
-                    const nextPlace: TransportationPlace = {
-                      ...place,
-                      name: place.name.trim() || place.address.trim(),
-                      address: place.address.trim(),
-                      kind: 'event',
-                    }
-                    const nextPlan = transportationPlan
-                      ? updateTransportationEventPlace(transportationPlan, nextPlace)
-                      : null
-                    const handled = await executeRecurringQuickActionScope({
-                      operation: 'location',
-                      changedPaths: [
-                        'event.locationName',
-                        'event.address',
-                        'event.lat',
-                        'event.lng',
-                        ...(nextPlan ? ['transportationPlan'] : []),
-                      ],
-                      detailPatch: {
-                        event: {
-                          location_name: place.name.trim() || null,
-                          address: place.address.trim() || null,
-                          lat: trusted ? (place.lat ?? null) : null,
-                          lng: trusted ? (place.lng ?? null) : null,
-                        },
-                        ...(nextPlan ? { transportation_plan: nextPlan } : {}),
-                      },
-                    }, scope)
-                    if (handled) {
-                      const { error: projectionError } = await supabase
-                        .from('event_plan_overrides')
-                        .update({ location_projection_blocked: false })
-                        .eq('event_id', event.id)
-                      if (projectionError) {
-                        throw new Error(`Address saved, but Google projection could not be enabled: ${projectionError.message}`)
-                      }
-                      setTransportationPlan(nextPlan)
-                      setVerifiedOverride(false)
-                      setOverridesHydratedEventId(event.id)
-                      queryClient.removeQueries({ queryKey: ['travel-eta'] })
-                      return
-                    }
-                    await persistScopedEventLocation({ event, place, scope })
-                    queryClient.removeQueries({ queryKey: ['travel-eta'] })
-                    await queryClient.invalidateQueries({ queryKey: ['events'] })
-                  }}
-                  onQuickAction={requestRecurringQuickAction}
-                  onRosterChange={(names, persist = true) => {
-                    const nextPlan = transportationPlan
-                      ? syncTransportationAttendees(transportationPlan, names)
-                      : null
-                    if (nextPlan === transportationPlan) return
-                    if (persist) void persistQuickTransportationPlan(nextPlan)
-                    else setTransportationPlan(nextPlan)
-                  }}
-                />
-                <PanelBody
-                  event={event}
-                  modeOverride={modeOverride}
-                  transportationPlan={transportationPlan}
-                  onQuickTransportationPlanChange={persistQuickTransportationPlan}
-                  onSaveTransportationPlan={persistFullTransportationPlan}
-                />
+                {!isHydrated ? (
+                  <div className="flex items-center justify-center gap-2 py-24 text-body-sm text-casa-muted">
+                    <Loader2 size={18} className="animate-spin" /> Loading event details…
+                  </div>
+                ) : (
+                  <>
+                    <PanelHeader
+                      event={event}
+                      verified={addressReviewed}
+                      modeOverride={modeOverride}
+                      transportationPlan={transportationPlan}
+                      onClose={onClose}
+                      onConfirmAddress={() => void confirmAddress()}
+                      addressReviewLoading={overridesHydratedEventId !== event.id || savedPlacesPending}
+                      addressSaveError={overrideSaveError}
+                      onRetryAddressSave={() => setOverrideSaveRevision((revision) => revision + 1)}
+                      onSaveAddress={async (place, scope) => {
+                        setOverridesHydratedEventId(null)
+                        const trusted = isTrustedPlaceSelection(place)
+                        const nextPlace: TransportationPlace = {
+                          ...place,
+                          name: place.name.trim() || place.address.trim(),
+                          address: place.address.trim(),
+                          kind: 'event',
+                        }
+                        const nextPlan = transportationPlan
+                          ? updateTransportationEventPlace(transportationPlan, nextPlace)
+                          : null
+                        const handled = await executeRecurringQuickActionScope({
+                          operation: 'location',
+                          changedPaths: [
+                            'event.locationName',
+                            'event.address',
+                            'event.lat',
+                            'event.lng',
+                            ...(nextPlan ? ['transportationPlan'] : []),
+                          ],
+                          detailPatch: {
+                            event: {
+                              location_name: place.name.trim() || null,
+                              address: place.address.trim() || null,
+                              lat: trusted ? (place.lat ?? null) : null,
+                              lng: trusted ? (place.lng ?? null) : null,
+                            },
+                            ...(nextPlan ? { transportation_plan: nextPlan } : {}),
+                          },
+                        }, scope)
+                        if (handled) {
+                          const { error: projectionError } = await supabase
+                            .from('event_plan_overrides')
+                            .update({ location_projection_blocked: false })
+                            .eq('event_id', event.id)
+                          if (projectionError) {
+                            throw new Error(`Address saved, but Google projection could not be enabled: ${projectionError.message}`)
+                          }
+                          setTransportationPlan(nextPlan)
+                          setVerifiedOverride(false)
+                          setOverridesHydratedEventId(event.id)
+                          queryClient.removeQueries({ queryKey: ['travel-eta'] })
+                          return
+                        }
+                        await persistScopedEventLocation({ event, place, scope })
+                        queryClient.removeQueries({ queryKey: ['travel-eta'] })
+                        await queryClient.invalidateQueries({ queryKey: ['events'] })
+                      }}
+                      onQuickAction={requestRecurringQuickAction}
+                      onRosterChange={(names, persist = true) => {
+                        const nextPlan = transportationPlan
+                          ? syncTransportationAttendees(transportationPlan, names)
+                          : null
+                        if (nextPlan === transportationPlan) return
+                        if (persist) void persistQuickTransportationPlan(nextPlan)
+                        else setTransportationPlan(nextPlan)
+                      }}
+                    />
+                    <PanelBody
+                      event={event}
+                      modeOverride={modeOverride}
+                      transportationPlan={transportationPlan}
+                      onQuickTransportationPlanChange={persistQuickTransportationPlan}
+                      onSaveTransportationPlan={persistFullTransportationPlan}
+                    />
+                  </>
+                )}
               </div>
-              <PanelFooter event={event} modeOverride={modeOverride} onEdit={() => setShowEdit(true)} />
+              {isHydrated && (
+                <PanelFooter event={event} modeOverride={modeOverride} onEdit={() => setShowEdit(true)} />
+              )}
             </motion.div>
           </>
         )}
