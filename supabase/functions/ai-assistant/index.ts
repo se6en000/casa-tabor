@@ -17,6 +17,7 @@ import {
 } from '../_shared/llm-model-policy.mjs'
 import { createTrackedMapsFetch, createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { classifyAssistantIntent } from '../_shared/assistant-intent-profile.mjs'
+import { isHouseholdDirectoryQuestion } from '../_shared/assistant-household-directory.mjs'
 import { resolveDeterministicEventMutation } from '../_shared/deterministic-event-mutation.mjs'
 import {
   answerPendingSelectiveClear,
@@ -343,7 +344,8 @@ Deno.serve(async (req) => {
         utcOffset: context?.utcOffset,
       })
     : null
-  const groceryFrame = isExplicitReminderCompletion(latestUserText) || reminderCompletionFollowUp
+  const householdDirectoryQuestion = isHouseholdDirectoryQuestion(latestUserText)
+  const groceryFrame = householdDirectoryQuestion || isExplicitReminderCompletion(latestUserText) || reminderCompletionFollowUp
     ? null
     : parseGroceryLanguage(latestUserText, {
     activeEntityType: incomingConversationState?.activeEntityType,
@@ -380,7 +382,7 @@ Deno.serve(async (req) => {
   const cookingMutationIntent = ['recipe.save', 'cooking.add_to_grocery'].includes(cookingFrame?.intent ?? '')
   const requestAmbiguity = classifyAssistantAmbiguity(latestUserText, {
     hasActiveEntity: Boolean(incomingConversationState?.activeEntityType || context?.focusedEvent),
-    hasGroundedSemanticIntent: cookingMutationIntent,
+    hasGroundedSemanticIntent: cookingMutationIntent || householdDirectoryQuestion,
   })
   const classifiedIntentRouting = classifyAssistantIntent(latestUserText, {
     focusedEvent: Boolean(context?.focusedEvent),
@@ -685,17 +687,13 @@ Deno.serve(async (req) => {
     ['event', 'full', 'travel', 'general'].includes(intentRouting.profile) &&
     !imageDirectEventCreateFlow &&
     !directReminderCreateFlow
-  // A person/provider lookup ("where does Coach Danny meet?") often routes as
-  // general conversation, so profile-only loading would omit the very
-  // household directory context needed to answer it.
-  const referencesHouseholdDirectory = /\b(?:address|location|located|meet(?:ing)?|phone|number|contact|call|coach|doctor|dentist|orthodontist|teacher|provider|therapist|barber)\b/i.test(latestUserText)
   const needsPlaceData = !requestAmbiguity && (
     ['event', 'full', 'travel', 'places'].includes(intentRouting.profile) ||
-    referencesHouseholdDirectory
+    householdDirectoryQuestion
   )
   const needsContactData = !requestAmbiguity && (
     ['event', 'full', 'places'].includes(intentRouting.profile) ||
-    referencesHouseholdDirectory
+    householdDirectoryQuestion
   )
   const needsGroceryData = !requestAmbiguity && (
     context?.page === 'grocery' ||
@@ -2606,7 +2604,9 @@ Deno.serve(async (req) => {
     recipe: recipeToolNames,
     general: [],
   }
-  const selectedToolNames = intentRouting.profile === 'full'
+  const selectedToolNames = householdDirectoryQuestion
+    ? new Set()
+    : intentRouting.profile === 'full'
     ? new Set(safeFullProfileToolNames(tools[0].function_declarations.map((tool) => tool.name)))
     : new Set(toolNamesByProfile[intentRouting.profile] ?? [])
   const selectedToolDeclarations = tools[0].function_declarations
@@ -2643,7 +2643,7 @@ Deno.serve(async (req) => {
   const includeGroceryContext = needsGroceryData
   const includeRecipeContext = needsRecipeData
   const includeFoodProfileContext = needsFoodProfileData
-  const includePlaceContext = ['full', 'event', 'places', 'travel'].includes(intentRouting.profile) || referencesHouseholdDirectory
+  const includePlaceContext = ['full', 'event', 'places', 'travel'].includes(intentRouting.profile) || householdDirectoryQuestion
   const includeAvailabilityContext = ['full', 'event'].includes(intentRouting.profile)
 
   // Build Gemini conversation with system instruction + history
@@ -2666,6 +2666,7 @@ TEMPORAL ASSUMPTIONS (default unless user clearly overrides):
   - "10" should usually be treated as 10 AM unless context strongly indicates otherwise.
 
 INTENT PROFILE: ${intentRouting.profile}
+${householdDirectoryQuestion ? `HOUSEHOLD DIRECTORY ANSWER MODE: Answer from the confirmed SAVED PLACES and SAVED CONTACTS below. Do not call external place or event search tools. If the user asks where to schedule something with a person or provider, give their usual place and full saved address first; only then ask for the missing event details needed to schedule it.` : ''}
 ${directReminderCreateFlow ? `REMINDER CREATE MODE: Create a new reminder with create_event and event_type="reminder". Never search for or update an appointment merely because the reminder text mentions changing, calling, cancelling, or rescheduling one. Missing details were already checked before this model call, so call create_event rather than asking again.${(structuredReminderDueBy ?? reminderDaypartRange) ? ` Casa deterministically resolved the exact date/time to ${(structuredReminderDueBy ?? reminderDaypartRange)!.start} through ${(structuredReminderDueBy ?? reminderDaypartRange)!.end}; use those exact timestamps.` : ''}` : ''}
 FAMILY MEMBERS: ${familyNames}
 ${includePlaceContext && placesText ? `\nSAVED PLACES (use for location nicknames):\n${placesText}` : ''}

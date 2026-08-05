@@ -9,6 +9,7 @@ const settings = readFileSync(new URL('../src/pages/AISettingsPage.tsx', import.
 const drawer = readFileSync(new URL('../src/components/shared/AIChatDrawer.tsx', import.meta.url), 'utf8')
 const assistantFunction = readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
 const actionFunction = readFileSync(new URL('../supabase/functions/execute-ai-action/index.ts', import.meta.url), 'utf8')
+const householdDirectory = readFileSync(new URL('../supabase/functions/_shared/assistant-household-directory.mjs', import.meta.url), 'utf8')
 
 test('assistant requests carry complete client trace provenance', () => {
   for (const field of [
@@ -181,11 +182,14 @@ test('assistant narrows prompt context and tools by intent profile', () => {
 })
 
 test('household directory lookups load confirmed contacts and their primary places', () => {
-  assert.match(assistantFunction, /const referencesHouseholdDirectory =/)
-  assert.match(assistantFunction, /coach\|doctor\|dentist\|orthodontist/)
+  assert.match(assistantFunction, /isHouseholdDirectoryQuestion\(latestUserText\)/)
+  assert.match(assistantFunction, /HOUSEHOLD DIRECTORY ANSWER MODE/)
+  assert.match(assistantFunction, /const groceryFrame = householdDirectoryQuestion \|\|/)
   assert.match(assistantFunction, /primary_place:saved_places!saved_contacts_primary_place_id_fkey/)
   assert.match(assistantFunction, /usually at \$\{c\.primary_place\.name\}/)
-  assert.match(assistantFunction, /includePlaceContext = [\s\S]{0,180}referencesHouseholdDirectory/)
+  assert.match(assistantFunction, /includePlaceContext = [\s\S]{0,180}householdDirectoryQuestion/)
+  assert.match(householdDirectory, /coach\|dentist\|doctor\|orthodontist/)
+  assert.match(householdDirectory, /what do you know about/)
 })
 
 test('confirmation state is atomic, self-clearing, and fully traced', () => {

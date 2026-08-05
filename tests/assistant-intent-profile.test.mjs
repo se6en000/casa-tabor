@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { classifyAssistantIntent } from '../supabase/functions/_shared/assistant-intent-profile.mjs'
+import { isHouseholdDirectoryQuestion } from '../supabase/functions/_shared/assistant-household-directory.mjs'
 
 test('calendar reads and edits require authoritative event search', () => {
   for (const input of [
@@ -92,6 +93,22 @@ test('common assistant domains select narrow profiles', () => {
   assert.equal(classifyAssistantIntent('Suggest a chicken dinner').profile, 'recipe')
   assert.equal(classifyAssistantIntent('What is the latest stock price?').profile, 'web')
   assert.equal(classifyAssistantIntent('Explain photosynthesis').profile, 'general')
+})
+
+test('household directory questions load confirmed person and place context before external search', () => {
+  for (const input of [
+    'Where does Coach Danny meet, and what number should I use?',
+    'What do you know about Shoot Straight?',
+    'Where do we usually go for pediatric appointments?',
+    'Who should I call about air conditioning, and where are they based?',
+    'Where is Liv’s orthodontist?',
+    'What sports places do Jake and Liv usually go to?',
+    'What address does Coach Danny use?',
+    'I need to schedule something with Coach Danny next week—where should I put it?',
+  ]) {
+    assert.equal(isHouseholdDirectoryQuestion(input), true, input)
+  }
+  assert.equal(isHouseholdDirectoryQuestion('Schedule a dentist appointment next Tuesday at 3 PM.'), false)
 })
 
 test('recipe words do not hide ambiguous calendar mutation targets', () => {
