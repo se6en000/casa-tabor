@@ -136,7 +136,7 @@ Return ONLY a JSON array (no markdown, no prose):
 [
   {
     "event_id": "<exact EVENT_ID from above>",
-    "type": "gift|dish|travel|forms|payment|rsvp|medical|general",
+    "category": "gift_occasion|food_hosting|forms_paperwork|bills_payments|travel_trips|medical_health|household_errands|rsvp_response|general_todo",
     "emoji": "<single relevant emoji>",
     "description": "<specific, 1-sentence alert using real names — what needs to happen and why it matters>",
     "priority": <1=low|2=medium|3=critical>
@@ -149,7 +149,12 @@ If nothing clears the bar, return [].`
   const text = rawText.trim()
   console.log('[analyze-prep] LLM raw response length:', text.length)
 
-  let prepItems: { event_id: string; type: string; emoji: string; description: string; priority: number }[] = []
+  const VALID_CATEGORIES = new Set([
+  'gift_occasion', 'food_hosting', 'forms_paperwork', 'bills_payments',
+  'travel_trips', 'medical_health', 'household_errands', 'rsvp_response', 'general_todo',
+])
+
+let prepItems: { event_id: string; category: string; emoji: string; description: string; priority: number }[] = []
   try {
     // Try direct parse first (cleanest path after code-fence stripping)
     if (text.startsWith('[')) {
@@ -169,21 +174,28 @@ If nothing clears the bar, return [].`
     return err(`Failed to parse AI response: ${String(e)} | text: ${text.slice(0, 200)}`)
   }
 
-  // Validate event IDs
+  // Validate event IDs and category (an LLM can still hallucinate an out-of-enum
+  // value; fall back to general_todo rather than letting the DB check constraint
+  // reject the whole insert).
   const validEventIds = new Set((events as EventRow[]).map((e) => e.id))
   const eventMap = new Map((events as EventRow[]).map((e) => [e.id, e]))
-  const validItems = prepItems.filter((item) => validEventIds.has(item.event_id))
+  const validItems = prepItems
+    .filter((item) => validEventIds.has(item.event_id))
+    .map((item) => ({
+      ...item,
+      category: VALID_CATEGORIES.has(item.category) ? item.category : 'general_todo',
+    }))
 
   // ── Find already-dismissed or snoozed items for these events ──
   // Don't re-create prep items the user has already dealt with.
   const { data: existingDismissed } = await sb
     .from('prep_items')
-    .select('event_id, type')
+    .select('event_id, category')
     .in('event_id', [...validEventIds])
     .eq('dismissed', true)
 
   const dismissedKeys = new Set(
-    (existingDismissed ?? []).map((r: { event_id: string; type: string }) => `${r.event_id}::${r.type}`)
+    (existingDismissed ?? []).map((r: { event_id: string; category: string | null }) => `${r.event_id}::${r.category ?? 'general_todo'}`)
   )
 
   // ── Clear old undismissed prep items for these events ──
@@ -196,7 +208,7 @@ If nothing clears the bar, return [].`
 
   // ── Insert new items, skipping anything already dismissed ──
   const newItems = validItems.filter(
-    (item) => !dismissedKeys.has(`${item.event_id}::${item.type}`)
+    (item) => !dismissedKeys.has(`${item.event_id}::${item.category}`)
   )
 
   if (newItems.length > 0) {
@@ -204,7 +216,11 @@ If nothing clears the bar, return [].`
       const ev = eventMap.get(item.event_id)!
       return {
         event_id: item.event_id,
-        type: item.type,
+        // `type` is kept in sync with `category` for backward compatibility (the column
+        // is NOT NULL and some legacy code paths still read it) -- `category` is the
+        // enforced, display-facing source of truth going forward.
+        type: item.category,
+        category: item.category,
         emoji: item.emoji,
         description: item.description,
         event_title: ev.title,

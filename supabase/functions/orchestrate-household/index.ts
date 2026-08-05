@@ -60,11 +60,10 @@ Deno.serve(async (req) => {
     .from('prep_items')
     .select('id, event_id, type, emoji, description, event_title, event_date, due_by, priority')
     .eq('dismissed', false)
-    .gte('due_by', nowIso)
     .or(`snoozed_until.is.null,snoozed_until.lte.${nowIso}`)
     .order('priority', { ascending: false })
-    .order('event_date', { ascending: true })
-    .limit(20)
+    .order('due_by', { ascending: true })
+    .limit(30)
 
   const horizon48h = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString()
   const { data: eventsRaw } = await sb

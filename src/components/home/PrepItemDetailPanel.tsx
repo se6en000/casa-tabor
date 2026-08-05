@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X, Mail, ClipboardList, CalendarDays, Clock3, TimerReset, Ban, ThumbsDown, CalendarPlus, BellPlus, MapPin, Pencil, UserPlus } from 'lucide-react'
+import { X, Mail, CalendarDays, Clock3, TimerReset, Ban, ThumbsDown, CalendarPlus, BellPlus, MapPin, Pencil, UserPlus } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { formatDueByForAiPrompt } from '../../utils/eventTime'
 import {
@@ -15,6 +15,7 @@ import {
 } from '../../hooks/usePrepItems'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import type { PrepItem } from '../../types'
+import { getPrepCategoryConfig } from '../../utils/prepCategories'
 import BounceScroll from '../shared/BounceScroll'
 import { Button, CalendarPill, Chip, Heading, IconButton, PersonAvatarStack } from '../ui'
 
@@ -236,7 +237,11 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
                   <p className="text-body text-casa-text leading-relaxed">{item.description}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <CalendarPill className="gap-1 bg-casa-surface">
-                      <ClipboardList size={11} /> {item.type}
+                      {(() => {
+                        const category = getPrepCategoryConfig(item)
+                        const CategoryIcon = category.icon
+                        return <><CategoryIcon size={11} /> {category.label}</>
+                      })()}
                     </CalendarPill>
                     <CalendarPill className="gap-1 bg-casa-surface">
                       <Mail size={11} /> {sourceLabel(item.source_type)}

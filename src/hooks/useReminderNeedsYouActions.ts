@@ -59,6 +59,7 @@ export function useReminderNeedsYouActions() {
       .insert({
         event_id: null,
         type: 'reminder',
+        category: 'general_todo',
         emoji: '🔔',
         description: buildReminderPrepDescription(event, sourceType, now),
         event_title: cleanEventTitle(event.title),
@@ -152,6 +153,7 @@ export function useReminderNeedsYouActions() {
       return {
         event_id: null,
         type: 'reminder',
+        category: 'general_todo',
         emoji: '🔔',
         description: buildReminderPrepDescription(event, REMINDER_SOURCE_MISSED, now),
         event_title: cleanEventTitle(event.title),
