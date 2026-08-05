@@ -100,19 +100,12 @@ Deno.serve(async (req) => {
   // ── Purge conflicts for past events before scanning ──
   // Any unresolved conflict whose event start_time is before today is stale — auto-resolve it.
   // This prevents yesterday's conflicts from lingering on the display indefinitely.
-  const { data: pastEvents } = await sb
-    .from('events')
-    .select('id')
-    .is('deleted_at', null)
-    .lt('start_time', rangeStart.toISOString())
-  const pastEventIds = (pastEvents ?? []).map((e: { id: string }) => e.id)
-  if (pastEventIds.length > 0) {
-    await sb
-      .from('conflicts')
-      .update({ resolved: true, resolution: 'auto-expired', resolved_at: now.toISOString() })
-      .eq('resolved', false)
-      .or(`event_a_id.in.(${pastEventIds.join(',')}),event_b_id.in.(${pastEventIds.join(',')})`)
-  }
+  // Done as a single set-based SQL statement (via RPC) rather than collecting every past
+  // event id into a client-side `.or(...in(...))` filter — at scale (hundreds of past events)
+  // that filter string exceeded request-size limits and failed silently, so stale conflicts
+  // never actually got marked resolved.
+  const { error: purgeError } = await sb.rpc('expire_past_conflicts', { p_before: rangeStart.toISOString() })
+  if (purgeError) console.error('[analyze-conflicts] Failed to purge past conflicts:', purgeError)
 
   // ── Load all family members ──
   const { data: members, error: memErr } = await sb

@@ -2,7 +2,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CalendarPlus, CalendarCheck, Sparkles, Mail, AlertTriangle,
-  Sun, X, CheckCheck, Trash2, ChevronRight,
+  Sun, X, CheckCheck, Trash2, ChevronRight, ClipboardList,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useNotifications, type Notification } from '../../hooks/useNotifications'
@@ -11,12 +11,14 @@ import BounceScroll from './BounceScroll'
 import { Button } from '../ui'
 
 const TYPE_CONFIG: Record<Notification['type'], { icon: React.ElementType; color: string; bg: string }> = {
-  event_added:    { icon: CalendarPlus,  color: 'text-emerald-600',  bg: 'bg-emerald-50' },
-  event_updated:  { icon: CalendarCheck, color: 'text-blue-600',     bg: 'bg-blue-50' },
-  event_enriched: { icon: Sparkles,      color: 'text-casa-gold',    bg: 'bg-amber-50' },
-  gmail_import:   { icon: Mail,          color: 'text-purple-600',   bg: 'bg-purple-50' },
-  conflict:       { icon: AlertTriangle, color: 'text-red-500',      bg: 'bg-red-50' },
-  briefing_ready: { icon: Sun,           color: 'text-orange-500',   bg: 'bg-orange-50' },
+  event_added:     { icon: CalendarPlus,  color: 'text-emerald-600',  bg: 'bg-emerald-50' },
+  event_updated:   { icon: CalendarCheck, color: 'text-blue-600',     bg: 'bg-blue-50' },
+  event_enriched:  { icon: Sparkles,      color: 'text-casa-gold',    bg: 'bg-amber-50' },
+  gmail_import:    { icon: Mail,          color: 'text-purple-600',   bg: 'bg-purple-50' },
+  conflict:        { icon: AlertTriangle, color: 'text-red-500',      bg: 'bg-red-50' },
+  policy_conflict: { icon: AlertTriangle, color: 'text-red-500',      bg: 'bg-red-50' },
+  policy_prep:     { icon: ClipboardList, color: 'text-sky-600',      bg: 'bg-sky-50' },
+  briefing_ready:  { icon: Sun,           color: 'text-orange-500',   bg: 'bg-orange-50' },
 }
 
 const SOURCE_LABEL: Record<string, string> = {
