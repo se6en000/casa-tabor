@@ -9,6 +9,7 @@ import {
 } from '../_shared/enrichment-impact.mjs'
 import { requireEnv } from '../_shared/env.mjs'
 import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
+import { resolveFamilyMemberByName } from '../_shared/family-identity.mjs'
 import {
   buildRecurringDetailMutation,
   buildRecurringSeriesPatch,
@@ -164,20 +165,18 @@ async function resolveFamilyMembersByName(
   names: string[],
 ) {
   if (names.length === 0) return { resolvedIds: new Map<string, string>(), unresolved: [] as string[] }
-  const { data: family, error } = await sb.from('family_members').select('id, name')
+  const { data: family, error } = await sb.from('family_members').select('id, name, full_name')
   if (error) throw new Error(error.message)
 
-  const familyByName = new Map((family ?? []).map((member: { id: string; name: string }) => [member.name.toLowerCase(), member.id]))
   const resolvedIds = new Map<string, string>()
   const unresolved: string[] = []
   for (const rawName of names) {
-    const key = rawName.toLowerCase()
-    const id = familyByName.get(key)
-    if (!id) {
+    const member = resolveFamilyMemberByName(family, rawName)
+    if (!member) {
       unresolved.push(rawName)
       continue
     }
-    resolvedIds.set(rawName, id)
+    resolvedIds.set(rawName, member.id)
   }
   return { resolvedIds, unresolved }
 }
@@ -406,9 +405,9 @@ Deno.serve(async (req) => {
 
       // Add members
       if (args.members?.length > 0) {
-        const { data: family } = await sb.from('family_members').select('id, name')
+        const { data: family } = await sb.from('family_members').select('id, name, full_name')
         const memberIds = (args.members as string[])
-          .map((name: string) => (family ?? []).find((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase())?.id)
+          .map((name: string) => resolveFamilyMemberByName(family, name)?.id)
           .filter(Boolean)
         if (memberIds.length > 0) {
           await sb.from('event_members').insert(
@@ -639,25 +638,25 @@ Deno.serve(async (req) => {
 
       let addIds: string[] = []
       if (normalized.membersAdd && normalized.membersAdd.length > 0) {
-        const { data: family } = await sb.from('family_members').select('id, name')
-        const unresolved = normalized.membersAdd.filter((name) => !(family ?? []).some((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase()))
+        const { data: family } = await sb.from('family_members').select('id, name, full_name')
+        const unresolved = normalized.membersAdd.filter((name) => !resolveFamilyMemberByName(family, name))
         if (unresolved.length > 0) {
           throw new Error(`Unknown family member(s): ${unresolved.join(', ')}`)
         }
         addIds = normalized.membersAdd
-          .map((name) => (family ?? []).find((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase())?.id)
+          .map((name) => resolveFamilyMemberByName(family, name)?.id)
           .filter(Boolean) as string[]
       }
 
       let removeIds: string[] = []
       if (normalized.membersRemove && normalized.membersRemove.length > 0) {
-        const { data: family } = await sb.from('family_members').select('id, name')
-        const unresolved = normalized.membersRemove.filter((name) => !(family ?? []).some((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase()))
+        const { data: family } = await sb.from('family_members').select('id, name, full_name')
+        const unresolved = normalized.membersRemove.filter((name) => !resolveFamilyMemberByName(family, name))
         if (unresolved.length > 0) {
           throw new Error(`Unknown family member(s): ${unresolved.join(', ')}`)
         }
         removeIds = normalized.membersRemove
-          .map((name) => (family ?? []).find((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase())?.id)
+          .map((name) => resolveFamilyMemberByName(family, name)?.id)
           .filter(Boolean) as string[]
       }
 
@@ -794,25 +793,25 @@ Deno.serve(async (req) => {
 
             let addIds: string[] = []
             if (normalized.membersAdd && normalized.membersAdd.length > 0) {
-              const { data: family } = await sb.from('family_members').select('id, name')
-              const unresolved = normalized.membersAdd.filter((name) => !(family ?? []).some((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase()))
+              const { data: family } = await sb.from('family_members').select('id, name, full_name')
+              const unresolved = normalized.membersAdd.filter((name) => !resolveFamilyMemberByName(family, name))
               if (unresolved.length > 0) {
                 throw new Error(`Unknown family member(s): ${unresolved.join(', ')}`)
               }
               addIds = normalized.membersAdd
-                .map((name) => (family ?? []).find((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase())?.id)
+                .map((name) => resolveFamilyMemberByName(family, name)?.id)
                 .filter(Boolean) as string[]
             }
 
             let removeIds: string[] = []
             if (normalized.membersRemove && normalized.membersRemove.length > 0) {
-              const { data: family } = await sb.from('family_members').select('id, name')
-              const unresolved = normalized.membersRemove.filter((name) => !(family ?? []).some((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase()))
+              const { data: family } = await sb.from('family_members').select('id, name, full_name')
+              const unresolved = normalized.membersRemove.filter((name) => !resolveFamilyMemberByName(family, name))
               if (unresolved.length > 0) {
                 throw new Error(`Unknown family member(s): ${unresolved.join(', ')}`)
               }
               removeIds = normalized.membersRemove
-                .map((name) => (family ?? []).find((f: { id: string; name: string }) => f.name.toLowerCase() === name.toLowerCase())?.id)
+                .map((name) => resolveFamilyMemberByName(family, name)?.id)
                 .filter(Boolean) as string[]
             }
 

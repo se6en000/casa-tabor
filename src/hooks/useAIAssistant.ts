@@ -75,7 +75,7 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[]) {
     assistant_mode: ctx.assistantMode ?? 'general',
     currentDate: now.toISOString(),
     utcOffset,
-    family: ctx.family.map(f => ({ id: f.id, name: f.name })),
+    family: ctx.family.map(f => ({ id: f.id, name: f.name, full_name: f.full_name })),
     homeCity: ctx.homeCity,
     lastContextReference: deriveLastContextReference(messages),
     conversationState,

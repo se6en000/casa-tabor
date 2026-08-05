@@ -10,6 +10,7 @@ const drawer = readFileSync(new URL('../src/components/shared/AIChatDrawer.tsx',
 const assistantFunction = readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
 const actionFunction = readFileSync(new URL('../supabase/functions/execute-ai-action/index.ts', import.meta.url), 'utf8')
 const householdDirectory = readFileSync(new URL('../supabase/functions/_shared/assistant-household-directory.mjs', import.meta.url), 'utf8')
+const familyIdentity = readFileSync(new URL('../supabase/functions/_shared/family-identity.mjs', import.meta.url), 'utf8')
 
 test('assistant requests carry complete client trace provenance', () => {
   for (const field of [
@@ -190,6 +191,14 @@ test('household directory lookups load confirmed contacts and their primary plac
   assert.match(assistantFunction, /includePlaceContext = [\s\S]{0,180}householdDirectoryQuestion/)
   assert.match(householdDirectory, /coach\|dentist\|doctor\|orthodontist/)
   assert.match(householdDirectory, /what do you know about/)
+})
+
+test('assistant preserves full family names for alias-aware identity resolution', () => {
+  assert.match(assistant, /full_name: f\.full_name/)
+  assert.match(assistantFunction, /canonicalizeFamilyReferences\(rawLatestUserText, familyMembers\)/)
+  assert.match(assistantFunction, /FAMILY IDENTITY ALIASES/)
+  assert.match(actionFunction, /resolveFamilyMemberByName\(family, name\)/)
+  assert.match(familyIdentity, /fullName\.split/)
 })
 
 test('confirmation state is atomic, self-clearing, and fully traced', () => {

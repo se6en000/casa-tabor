@@ -18,6 +18,10 @@ import {
 import { createTrackedMapsFetch, createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { classifyAssistantIntent } from '../_shared/assistant-intent-profile.mjs'
 import { isHouseholdDirectoryQuestion } from '../_shared/assistant-household-directory.mjs'
+import {
+  canonicalizeFamilyReferences,
+  formatFamilyIdentityAliases,
+} from '../_shared/family-identity.mjs'
 import { resolveDeterministicEventMutation } from '../_shared/deterministic-event-mutation.mjs'
 import {
   answerPendingSelectiveClear,
@@ -294,8 +298,14 @@ Deno.serve(async (req) => {
         : []
     ).filter((text): text is string => Boolean(text))
     : []
-  const latestUserText = userMessageTexts.at(-1) ?? null
-  const previousUserText = userMessageTexts.at(-2) ?? null
+  const familyMembers = Array.isArray(context?.family) ? context.family : []
+  const rawLatestUserText = userMessageTexts.at(-1) ?? null
+  const latestUserText = rawLatestUserText
+    ? canonicalizeFamilyReferences(rawLatestUserText, familyMembers)
+    : null
+  const previousUserText = userMessageTexts.at(-2)
+    ? canonicalizeFamilyReferences(userMessageTexts.at(-2), familyMembers)
+    : null
   const bugReportRequest = resolveBugReportRequest(latestUserText, previousUserText)
   const reminderDomainLanguage = hasReminderLanguage(latestUserText)
   const explicitReminderRead = explicitReminderSearchForMessages(messages)
@@ -2073,7 +2083,10 @@ Deno.serve(async (req) => {
   }
 
   // Build context strings
-  const familyNames = (context.family as {name: string}[]).map(f => f.name).join(', ')
+  const familyNames = familyMembers
+    .flatMap((member: { name?: unknown }) => typeof member?.name === 'string' ? [member.name] : [])
+    .join(', ')
+  const familyIdentityAliases = formatFamilyIdentityAliases(familyMembers)
   const recipesText = formatAuthoritativeRecipes(recipes ?? [])
 
   // ── Food profile (dietary rules, allergies, preferences) ──
@@ -2669,6 +2682,7 @@ INTENT PROFILE: ${intentRouting.profile}
 ${householdDirectoryQuestion ? `HOUSEHOLD DIRECTORY ANSWER MODE: Answer from the confirmed SAVED PLACES and SAVED CONTACTS below. Do not call external place or event search tools. If the user asks where to schedule something with a person or provider, give their usual place and full saved address first; only then ask for the missing event details needed to schedule it.` : ''}
 ${directReminderCreateFlow ? `REMINDER CREATE MODE: Create a new reminder with create_event and event_type="reminder". Never search for or update an appointment merely because the reminder text mentions changing, calling, cancelling, or rescheduling one. Missing details were already checked before this model call, so call create_event rather than asking again.${(structuredReminderDueBy ?? reminderDaypartRange) ? ` Casa deterministically resolved the exact date/time to ${(structuredReminderDueBy ?? reminderDaypartRange)!.start} through ${(structuredReminderDueBy ?? reminderDaypartRange)!.end}; use those exact timestamps.` : ''}` : ''}
 FAMILY MEMBERS: ${familyNames}
+${familyIdentityAliases ? `FAMILY IDENTITY ALIASES: ${familyIdentityAliases}. These names refer to the same person. Use the canonical short name in tool arguments and event-member updates, but mirror the user's wording in your reply.` : ''}
 ${includePlaceContext && placesText ? `\nSAVED PLACES (use for location nicknames):\n${placesText}` : ''}
 ${includePlaceContext && contactsText ? `\nSAVED CONTACTS:\n${contactsText}` : ''}
 ${context.focusedEvent ? `
