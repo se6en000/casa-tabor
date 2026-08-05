@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X, Mail, CalendarDays, Clock3, TimerReset, Ban, ThumbsDown, CalendarPlus, BellPlus, MapPin, Pencil, UserPlus } from 'lucide-react'
+import { X, Mail, CalendarDays, Clock3, TimerReset, Ban, ThumbsDown, CalendarPlus, BellPlus, MapPin, Pencil, UserPlus, ExternalLink } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { formatDueByForAiPrompt } from '../../utils/eventTime'
+import { openEventDetails } from '../../utils/openEventDetails'
 import {
   useDismissPrepItem,
   useDownvotePrepItem,
@@ -341,15 +342,26 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
                     >
                       Downvote
                     </Button>
-                    <Button
-                      onClick={() => launchCreate('event')}
-                      disabled={!!acting}
-                      variant="primary"
-                      size="sm"
-                      leadingIcon={<CalendarPlus size={13} />}
-                    >
-                      Create event
-                    </Button>
+                    {item.event_id ? (
+                      <Button
+                        onClick={() => { openEventDetails(item.event_id!); onClose() }}
+                        variant="primary"
+                        size="sm"
+                        leadingIcon={<ExternalLink size={13} />}
+                      >
+                        View event
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={() => launchCreate('event')}
+                        disabled={!!acting}
+                        variant="primary"
+                        size="sm"
+                        leadingIcon={<CalendarPlus size={13} />}
+                      >
+                        Create event
+                      </Button>
+                    )}
                     <Button
                       onClick={() => launchCreate('reminder')}
                       disabled={!!acting}

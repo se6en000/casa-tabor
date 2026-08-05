@@ -10,13 +10,16 @@ import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useWeekEventIndex } from '../../hooks/useCalendarEvents'
 import { useCompletePrepItem, useDownvotePrepItem, usePrepItems, useSnoozePrepItem } from '../../hooks/usePrepItems'
+import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { supabase } from '../../lib/supabase'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useCalendarStore } from '../../stores/calendarStore'
 import BounceScroll from '../shared/BounceScroll'
+import PrepItemAssigneeChip from '../shared/PrepItemAssigneeChip'
 import type { PrepItem } from '../../types'
 import { eventOverlapsDay } from '../../utils/eventTime'
 import { summarizeGmailHealth, type GmailHealthSummary } from '../../utils/gmailHealth'
+import { priorityVisual } from '../../utils/prepPriority'
 import { Button, Card, Chip, EmptyState, Heading, IconButton, SecondaryRail, Text } from '../ui'
 
 interface Props {
@@ -82,6 +85,7 @@ function sourceBadge(item: PrepItem) {
 export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }: Props) {
   const navigate = useNavigate()
   const { data: prepItems = [] } = usePrepItems()
+  const { data: familyMembers = [] } = useFamilyMembers()
   const completePrepItem = useCompletePrepItem()
   const snoozePrepItem = useSnoozePrepItem()
   const downvotePrepItem = useDownvotePrepItem()
@@ -235,6 +239,12 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
               See all
             </Link>
           </div>
+          {prepItems.some(item => item.priority >= 2) && (
+            <p className="text-caption text-casa-muted mt-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-casa-error align-middle mr-1" />Critical ·{' '}
+              <span className="inline-block w-2 h-2 rounded-full bg-casa-warning align-middle mr-1 ml-1" />Important
+            </p>
+          )}
 
           {gmailActivity?.gmailHealth && gmailActivity.gmailHealth.status !== 'healthy' && gmailActivity.gmailHealth.status !== 'off' && (
             <Link
@@ -265,12 +275,14 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                 const source = sourceBadge(item)
                 const isDone = checkingItemId === item.id
                 const isDownvoting = downvotingItemId === item.id
+                const priority = priorityVisual(item.priority)
 
                 return (
                   <Card
                     key={item.id}
                     padding="sm"
                     className={cn(
+                      priority.borderClass,
                       (isDone || isDownvoting) && 'opacity-60',
                     )}
                   >
@@ -299,15 +311,23 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                           {item.description}
                         </p>
                       </div>
-                      <div className="mt-2.5 flex items-center gap-2.5">
+                      <div className="mt-2.5 flex items-center gap-2.5 flex-wrap">
                         <Chip size="sm" tone={source.tone}>
                           {source.label}
                         </Chip>
+                        {priority.chip && (
+                          <Chip size="sm" tone={priority.chip.tone}>
+                            {priority.chip.label}
+                          </Chip>
+                        )}
                         <span className="!text-body-sm text-casa-muted truncate">
                           {item.event_title || 'Casa Tabor'}
                         </span>
                       </div>
                     </Button>
+                    <div className="mt-2 flex items-center">
+                      <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => onSelectPrepItem?.(item)} />
+                    </div>
                     <div className="mt-3 border-t border-casa-border/80 pt-3">
                       <div className="grid grid-cols-[1.7fr_0.85fr_auto_auto] items-center gap-1.5">
                         <Button

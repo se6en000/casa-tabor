@@ -214,6 +214,21 @@ function AppShell() {
     }).catch(() => {})
   }, [settings.wakeWordSensitivity])
 
+  // Global "open this event's details" primitive — any surface in the app (not just the
+  // AI chat drawer) can dispatch this with just an event id. We only need `{ id }` here;
+  // EventDetailPanel fetches the full record itself via useEventDetails().
+  useEffect(() => {
+    const onOpenEventById = (e: Event) => {
+      const eventId = (e as CustomEvent<{ eventId?: string }>).detail?.eventId
+      if (!eventId) return
+      document.dispatchEvent(new CustomEvent('casa:close-event-details'))
+      setAiDrawerOpen(false)
+      setSelectedDrawerEvent({ id: eventId } as EventWithDetails)
+    }
+    document.addEventListener('casa:open-event-details', onOpenEventById)
+    return () => document.removeEventListener('casa:open-event-details', onOpenEventById)
+  }, [])
+
   const openEventDetailsFromAssistant = (event: EventWithDetails) => {
     document.dispatchEvent(new CustomEvent('casa:close-event-details'))
     setAiDrawerOpen(false)

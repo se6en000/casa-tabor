@@ -50,7 +50,14 @@ export function useNotifications() {
 
   const clearAll = useMutation({
     mutationFn: async () => {
-      await supabase.from('notifications').delete().gte('created_at', '2000-01-01')
+      // Never bulk-delete unread conflict/policy_conflict rows — those are the "Needs Your
+      // Attention" bucket and must be explicitly acknowledged, not swept away with routine
+      // activity-log noise.
+      await supabase
+        .from('notifications')
+        .delete()
+        .gte('created_at', '2000-01-01')
+        .or('read.eq.true,type.not.in.(conflict,policy_conflict)')
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
   })

@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
-import { ClipboardList, Bell, ChevronLeft, Mail, Bot, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle } from 'lucide-react'
+import { ClipboardList, Bell, ChevronLeft, Mail, Bot, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle, ExternalLink } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../utils/cn'
 import { formatDueByForAiPrompt } from '../utils/eventTime'
 import { supabase } from '../lib/supabase'
 import { usePrepItems, useCompletePrepItem, useDownvotePrepItem, useSnoozePrepItem } from '../hooks/usePrepItems'
+import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { useNotifications } from '../hooks/useNotifications'
 import type { Notification } from '../hooks/useNotifications'
 import { useWeekConflicts } from '../hooks/useConflicts'
@@ -14,7 +15,10 @@ import type { PrepItem } from '../types'
 import { PREP_CATEGORIES, getPrepCategoryConfig } from '../utils/prepCategories'
 import { humanizeNotificationSource } from '../utils/notificationSource'
 import { summarizeGmailHealth } from '../utils/gmailHealth'
+import { openEventDetails } from '../utils/openEventDetails'
+import { priorityVisual } from '../utils/prepPriority'
 import PrepItemDetailPanel from '../components/home/PrepItemDetailPanel'
+import PrepItemAssigneeChip from '../components/shared/PrepItemAssigneeChip'
 import { useLiveClock } from '../hooks/useLiveClock'
 import ConflictAlertsSection from '../components/shared/ConflictAlertsSection'
 import { Button, Chip } from '../components/ui'
@@ -75,6 +79,7 @@ const PREP_SOURCE_FILTERS: { key: PrepSourceKey; label: string; match: (item: Pr
 export default function ActionHubPage() {
   const now = useLiveClock(60_000)
   const { data: prepItems = [] } = usePrepItems()
+  const { data: familyMembers = [] } = useFamilyMembers()
   const complete = useCompletePrepItem()
   const snooze = useSnoozePrepItem()
   const downvote = useDownvotePrepItem()
@@ -103,6 +108,17 @@ export default function ActionHubPage() {
     const sourceMatch = PREP_SOURCE_FILTERS.find(f => f.key === sourceFilter)?.match ?? (() => true)
     return prepItems.filter(item => typeMatch(item) && sourceMatch(item))
   }, [prepItems, typeFilter, sourceFilter])
+
+  // Conflicts/policy_conflict rows reference a decision that still needs to be made elsewhere
+  // (Heads Up section) — everything else in `notifications` is inherently FYI/audit history.
+  const needsAttentionNotifications = useMemo(
+    () => notifications.filter(n => !n.read && (n.type === 'conflict' || n.type === 'policy_conflict')),
+    [notifications],
+  )
+  const activityLogNotifications = useMemo(
+    () => notifications.filter(n => !(!n.read && (n.type === 'conflict' || n.type === 'policy_conflict'))),
+    [notifications],
+  )
 
   const suggestions = useMemo(() => {
     const nowTs = now.getTime()
@@ -191,6 +207,11 @@ export default function ActionHubPage() {
               {typeFilter === 'all' && sourceFilter === 'all' ? prepItems.length : `${filteredPrepItems.length}/${prepItems.length}`}
             </span>
           </div>
+          <p className="text-caption text-casa-muted mb-3 -mt-1.5">
+            Priority: <span className="inline-block w-2 h-2 rounded-full bg-casa-error align-middle mr-1" />Critical ·{' '}
+            <span className="inline-block w-2 h-2 rounded-full bg-casa-warning align-middle mr-1 ml-1" />Important ·{' '}
+            <span className="inline-block w-2 h-2 rounded-full bg-casa-border align-middle mr-1 ml-1" />Standard
+          </p>
           <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter by type">
             {PREP_FILTERS.map((f) => {
               const count = f.key === 'all' ? prepItems.length : prepItems.filter(f.match).length
@@ -250,11 +271,13 @@ export default function ActionHubPage() {
               const CategoryIcon = category.icon
               const busy = actingId === item.id
               const due = dueBadge(item, now)
+              const priority = priorityVisual(item.priority)
               return (
                 <div
                   key={item.id}
                   className={cn(
                     'rounded-[1rem] border border-casa-gold/35 bg-casa-gold/8 px-3.5 py-3',
+                    priority.borderClass,
                     'hover:shadow-card-hover transition-all',
                     busy && 'opacity-60',
                   )}
@@ -270,11 +293,17 @@ export default function ActionHubPage() {
                       <Chip size="sm" tone={category.tone} icon={<CategoryIcon size={10} />}>
                         {category.label}
                       </Chip>
+                      {priority.chip && (
+                        <Chip size="sm" tone={priority.chip.tone}>
+                          {priority.chip.label}
+                        </Chip>
+                      )}
                       {due && (
                         <span className={cn('text-body-sm font-semibold px-2 py-0.5 rounded-full border leading-none', due.tone)}>
                           {due.label}
                         </span>
                       )}
+                      <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => setSelected(item)} />
                       <span className="text-body-sm text-casa-muted truncate">{item.event_title || 'Casa Tabor'}</span>
                     </div>
                     <div className="mt-3 flex items-center gap-1.5 flex-wrap">
@@ -287,9 +316,15 @@ export default function ActionHubPage() {
                       <Button variant="ghost" onClick={() => run('downvote', item.id)} className="size-control rounded-button border border-casa-border bg-white text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold" title="Downvote" aria-label="Downvote">
                         <ThumbsDown size={15} />
                       </Button>
-                      <Button variant="ghost" onClick={() => launchCreate(item, 'event')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create event draft">
-                        <CalendarPlus size={14} /> Event
-                      </Button>
+                      {item.event_id ? (
+                        <Button variant="ghost" onClick={() => openEventDetails(item.event_id!)} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="View the linked calendar event">
+                          <ExternalLink size={14} /> View event
+                        </Button>
+                      ) : (
+                        <Button variant="ghost" onClick={() => launchCreate(item, 'event')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create event draft">
+                          <CalendarPlus size={14} /> Event
+                        </Button>
+                      )}
                       <Button variant="ghost" onClick={() => launchCreate(item, 'reminder')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create reminder draft">
                         <BellPlus size={14} /> Reminder
                       </Button>
@@ -310,41 +345,83 @@ export default function ActionHubPage() {
             <h2 className="font-display text-heading text-casa-navy flex items-center gap-2"><Bell size={16} className="text-casa-gold" /> Recent Activity</h2>
             <div className="flex items-center gap-2">
               <span className="text-caption font-semibold rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">{unreadCount}</span>
-              {notifications.length > 0 && (
+              {activityLogNotifications.length > 0 && (
                 <Button variant="ghost" onClick={() => clearAll.mutate()} className="h-8 px-2.5 rounded-button border border-casa-border text-caption text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors">Clear all</Button>
               )}
             </div>
           </div>
-          <div className="space-y-2.5 pr-1 xl:max-h-[70vh] xl:overflow-y-auto">
-            {notifications.map((n) => {
-              const badge = eventDateBadge(n, now)
-              return (
-              <div key={n.id} className={cn('border rounded-[1rem] p-3.5', n.read ? 'border-casa-border bg-casa-card' : 'border-casa-gold/45 bg-casa-gold/5')}>
-                <p className={cn('text-body-sm leading-relaxed', n.read ? 'text-casa-text' : 'text-casa-text font-semibold')}>{n.body ?? n.title}</p>
-                <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                  <span className="text-body-sm text-casa-muted">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}</span>
-                  <span className="text-body-sm text-casa-muted">•</span>
-                  <span className="text-body-sm font-semibold px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border text-casa-muted leading-none">{humanizeNotificationSource(n.source)}</span>
-                  {badge && (
-                    <span className={cn('text-body-sm font-semibold px-1.5 py-0.5 rounded-full border leading-none', badge.tone)}>
-                      {badge.label}
-                    </span>
-                  )}
+          <div className="space-y-4 pr-1 xl:max-h-[70vh] xl:overflow-y-auto">
+            {needsAttentionNotifications.length > 0 && (
+              <div>
+                <p className="text-caption font-semibold text-casa-error mb-2 flex items-center gap-1.5">
+                  <AlertTriangle size={12} /> Needs Your Attention
+                </p>
+                <div className="space-y-2.5">
+                  {needsAttentionNotifications.map((n) => {
+                    const badge = eventDateBadge(n, now)
+                    return (
+                      <div key={n.id} className="border border-casa-error/45 bg-casa-error/5 rounded-[1rem] p-3.5">
+                        <p className="text-body-sm leading-relaxed text-casa-text font-semibold">{n.body ?? n.title}</p>
+                        <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                          <span className="text-body-sm text-casa-muted">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}</span>
+                          <span className="text-body-sm text-casa-muted">•</span>
+                          <span className="text-body-sm font-semibold px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border text-casa-muted leading-none">{humanizeNotificationSource(n.source)}</span>
+                          {badge && (
+                            <span className={cn('text-body-sm font-semibold px-1.5 py-0.5 rounded-full border leading-none', badge.tone)}>
+                              {badge.label}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-2 flex items-center gap-3">
+                          <Link to="#heads-up" className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold">
+                            View in Heads Up
+                          </Link>
+                          <Button variant="ghost" onClick={() => markRead.mutate(n.id)} className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold">
+                            Acknowledge
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-                {!n.read && (
-                  <Button variant="ghost" onClick={() => markRead.mutate(n.id)} className="mt-2 text-body-sm font-semibold text-casa-navy hover:text-casa-gold">
-                    Mark read
-                  </Button>
-                )}
               </div>
-              )
-            })}
-            {notifications.length === 0 && <p className="text-body-sm text-casa-muted">No recent activity.</p>}
+            )}
+            <div>
+              {needsAttentionNotifications.length > 0 && (
+                <p className="text-caption font-semibold text-casa-muted mb-2">Activity Log</p>
+              )}
+              <div className="space-y-2.5">
+                {activityLogNotifications.map((n) => {
+                  const badge = eventDateBadge(n, now)
+                  return (
+                  <div key={n.id} className={cn('border rounded-[1rem] p-3.5', n.read ? 'border-casa-border bg-casa-card' : 'border-casa-gold/45 bg-casa-gold/5')}>
+                    <p className={cn('text-body-sm leading-relaxed', n.read ? 'text-casa-text' : 'text-casa-text font-semibold')}>{n.body ?? n.title}</p>
+                    <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                      <span className="text-body-sm text-casa-muted">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}</span>
+                      <span className="text-body-sm text-casa-muted">•</span>
+                      <span className="text-body-sm font-semibold px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border text-casa-muted leading-none">{humanizeNotificationSource(n.source)}</span>
+                      {badge && (
+                        <span className={cn('text-body-sm font-semibold px-1.5 py-0.5 rounded-full border leading-none', badge.tone)}>
+                          {badge.label}
+                        </span>
+                      )}
+                    </div>
+                    {!n.read && (
+                      <Button variant="ghost" onClick={() => markRead.mutate(n.id)} className="mt-2 text-body-sm font-semibold text-casa-navy hover:text-casa-gold">
+                        Mark read
+                      </Button>
+                    )}
+                  </div>
+                  )
+                })}
+                {notifications.length === 0 && <p className="text-body-sm text-casa-muted">No recent activity.</p>}
+              </div>
+            </div>
           </div>
         </section>
       </div>
 
-      <section className="mt-5 rounded-[1.2rem] border border-casa-border bg-casa-surface p-4 shadow-card">
+      <section id="heads-up" className="mt-5 rounded-[1.2rem] border border-casa-border bg-casa-surface p-4 shadow-card scroll-mt-6">
         <div className="flex items-center justify-between mb-3.5">
           <h2 className="font-display text-heading text-casa-navy flex items-center gap-2">
             <AlertTriangle size={16} className="text-amber-500" />
