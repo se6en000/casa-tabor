@@ -3,7 +3,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { PrepItem } from '../types'
 
-/** Returns all undismissed, un-snoozed prep items for upcoming events, ordered by priority desc then event date asc */
+/**
+ * Returns all undismissed, un-snoozed prep items, ordered overdue-first, then priority desc,
+ * then event date asc. Overdue items are NOT hidden once due_by passes -- they used to be
+ * silently dropped by a `.gte(due_by, now)` filter, which meant a task you never resolved
+ * simply vanished from every screen the moment its due date passed. That was the source of
+ * the "task graveyard" bug: real unresolved items just disappeared with no overdue state.
+ */
 export function usePrepItems() {
   const qc = useQueryClient()
   const channelId = useId()
@@ -30,12 +36,20 @@ export function usePrepItems() {
         .from('prep_items')
         .select('*')
         .eq('dismissed', false)
-        .gte('due_by', now)
         .or(`snoozed_until.is.null,snoozed_until.lte.${now}`)
         .order('priority', { ascending: false })
-        .order('event_date', { ascending: true })
+        .order('due_by', { ascending: true })
       if (error) throw error
-      return data ?? []
+      // Overdue items (due_by already passed) surface first regardless of priority --
+      // they're the most urgent thing on the list, not something to hide.
+      const nowMs = Date.now()
+      const rows = data ?? []
+      return [...rows].sort((a, b) => {
+        const aOverdue = a.due_by ? new Date(a.due_by).getTime() < nowMs : false
+        const bOverdue = b.due_by ? new Date(b.due_by).getTime() < nowMs : false
+        if (aOverdue !== bOverdue) return aOverdue ? -1 : 1
+        return 0 // preserve the priority/due_by ordering from the query within each group
+      })
     },
     staleTime: 30_000,
     refetchOnMount: false,

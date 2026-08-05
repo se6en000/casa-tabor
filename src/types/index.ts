@@ -202,6 +202,7 @@ export interface PrepItem {
   id: string
   event_id: string | null
   type: string
+  category?: PrepItemCategory | null
   emoji: string
   description: string
   event_title: string | null
@@ -218,6 +219,24 @@ export interface PrepItem {
   assigned_to?: string | null
   action_key?: string
 }
+
+/**
+ * Enforced 9-category taxonomy for prep items (replaces the free-text `type` field,
+ * which had drifted to 17 different values with zero DB enforcement). Kept in sync with
+ * the DB check constraint in supabase/migrations/20260805150000_prep_category_taxonomy_and_overdue_safety_valve.sql
+ * and the analyze-prep LLM prompt. See src/utils/prepCategories.ts for display metadata.
+ */
+export type PrepItemCategory =
+  | 'gift_occasion'
+  | 'food_hosting'
+  | 'forms_paperwork'
+  | 'bills_payments'
+  | 'travel_trips'
+  | 'medical_health'
+  | 'household_errands'
+  | 'rsvp_response'
+  | 'general_todo'
+
 
 // ── Views ───────────────────────────────────────────────────
 

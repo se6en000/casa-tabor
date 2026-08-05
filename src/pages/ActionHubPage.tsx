@@ -11,10 +11,11 @@ import { useNotifications } from '../hooks/useNotifications'
 import type { Notification } from '../hooks/useNotifications'
 import { useWeekConflicts } from '../hooks/useConflicts'
 import type { PrepItem } from '../types'
+import { PREP_CATEGORIES, getPrepCategoryConfig } from '../utils/prepCategories'
 import PrepItemDetailPanel from '../components/home/PrepItemDetailPanel'
 import { useLiveClock } from '../hooks/useLiveClock'
 import ConflictAlertsSection from '../components/shared/ConflictAlertsSection'
-import { Button } from '../components/ui'
+import { Button, Chip } from '../components/ui'
 
 function sourceBadge(item: PrepItem) {
   const source = item.source_type ?? 'calendar_ai'
@@ -45,21 +46,15 @@ function eventDateBadge(n: Notification, now: Date): { label: string; tone: stri
   return { label: format(start, 'EEE, MMM d · h:mm a'), tone: 'text-casa-muted bg-casa-bg border-casa-border' }
 }
 
-type PrepFilterKey = 'all' | 'bills' | 'forms' | 'rsvp' | 'deadlines' | 'deliveries' | 'renewals' | 'other'
+type PrepFilterKey = 'all' | (typeof PREP_CATEGORIES)[number]['key']
 
 const PREP_FILTERS: { key: PrepFilterKey; label: string; match: (item: PrepItem) => boolean }[] = [
   { key: 'all', label: 'All', match: () => true },
-  { key: 'bills', label: 'Bills & Payments', match: (item) => item.type === 'payment' || item.type === 'billing' },
-  { key: 'forms', label: 'Forms', match: (item) => item.type === 'forms' },
-  { key: 'rsvp', label: 'RSVP', match: (item) => item.type === 'rsvp' },
-  { key: 'deadlines', label: 'Deadlines', match: (item) => item.type === 'deadline' },
-  { key: 'deliveries', label: 'Deliveries', match: (item) => item.type === 'delivery' || item.type === 'return' },
-  { key: 'renewals', label: 'Renewals', match: (item) => item.type === 'renewal' },
-  {
-    key: 'other',
-    label: 'Other',
-    match: (item) => !['payment', 'billing', 'forms', 'rsvp', 'deadline', 'delivery', 'return', 'renewal'].includes(item.type ?? ''),
-  },
+  ...PREP_CATEGORIES.map((cat) => ({
+    key: cat.key as PrepFilterKey,
+    label: cat.label,
+    match: (item: PrepItem) => getPrepCategoryConfig(item).key === cat.key,
+  })),
 ]
 
 type PrepSourceKey = 'all' | 'gmail' | 'calendar_ai' | 'reminder'
@@ -123,17 +118,21 @@ export default function ActionHubPage() {
 
   const suggestions = useMemo(() => {
     const nowTs = now.getTime()
-    const dueSoon = prepItems.filter(item => item.due_by && +new Date(item.due_by) - nowTs < 48 * 60 * 60 * 1000).length
-    const billingQueue = prepItems.filter(item => item.type === 'billing' || item.type === 'payment').length
-    const cancellations = prepItems.filter(item => item.type === 'cancellation').length
+    const overdue = prepItems.filter(item => item.due_by && +new Date(item.due_by) - nowTs < 0).length
+    const dueSoon = prepItems.filter(item => {
+      if (!item.due_by) return false
+      const diff = +new Date(item.due_by) - nowTs
+      return diff >= 0 && diff < 48 * 60 * 60 * 1000
+    }).length
+    const billingQueue = prepItems.filter(item => getPrepCategoryConfig(item).key === 'bills_payments').length
     return [
+      overdue > 0 ? `${overdue} overdue` : null,
       `${dueSoon} due soon`,
       `${billingQueue} billing items`,
-      `${cancellations} cancellations`,
       `${conflicts.length} heads up`,
       `${unreadCount} unread activity`,
       `${gmailHealth?.recentProcessed ?? 0} messages processed in 6h`,
-    ]
+    ].filter((s): s is string => s !== null)
   }, [prepItems, unreadCount, gmailHealth?.recentProcessed, now, conflicts.length])
 
   async function run(action: 'complete' | 'snooze' | 'downvote', id: string) {
@@ -246,6 +245,8 @@ export default function ActionHubPage() {
             {filteredPrepItems.map((item) => {
               const src = sourceBadge(item)
               const SourceIcon = src.icon
+              const category = getPrepCategoryConfig(item)
+              const CategoryIcon = category.icon
               const busy = actingId === item.id
               const due = dueBadge(item, now)
               return (
@@ -265,6 +266,9 @@ export default function ActionHubPage() {
                       <span className={cn('inline-flex items-center gap-1 text-body-sm font-semibold px-2 py-0.5 rounded-full border leading-none', src.tone)}>
                         <SourceIcon size={10} /> {src.label}
                       </span>
+                      <Chip size="sm" tone={category.tone} icon={<CategoryIcon size={10} />}>
+                        {category.label}
+                      </Chip>
                       {due && (
                         <span className={cn('text-body-sm font-semibold px-2 py-0.5 rounded-full border leading-none', due.tone)}>
                           {due.label}

@@ -70,12 +70,18 @@ test('persistInboxActions maps delivery and renewal types to distinct emoji', ()
 
 const actionHubPage = readFileSync(new URL('../src/pages/ActionHubPage.tsx', import.meta.url), 'utf8')
 
-test('Action Hub renders type and source filter chips for the Prep & Action list', () => {
+const prepCategoriesModule = readFileSync(new URL('../src/utils/prepCategories.ts', import.meta.url), 'utf8')
+
+test('Action Hub renders category and source filter chips for the Prep & Action list', () => {
+  // The old hand-rolled "Deliveries"/"Renewals" filters matched a `type` value the
+  // real AI classifier never produced (dead filters). Category filter chips are now
+  // generated from the shared, enforced taxonomy in src/utils/prepCategories.ts —
+  // "delivery"/"renewal"-style items land under Household & Errands.
   assert.match(actionHubPage, /PREP_FILTERS/)
   assert.match(actionHubPage, /PREP_SOURCE_FILTERS/)
-  assert.match(actionHubPage, /Bills & Payments/)
-  assert.match(actionHubPage, /Deliveries/)
-  assert.match(actionHubPage, /Renewals/)
+  assert.match(actionHubPage, /PREP_CATEGORIES/)
   assert.match(actionHubPage, /filteredPrepItems/)
+  assert.match(prepCategoriesModule, /Bills & Payments/)
+  assert.match(prepCategoriesModule, /Household & Errands/)
 })
 

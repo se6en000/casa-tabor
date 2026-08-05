@@ -62,7 +62,10 @@ function prepEscalationBucket(
   cfg: SmsConfig,
   escalateMinutes: number,
 ): string | null {
-  if (dueInMins < 0) return null // already past due — apply-notification-policy's prep query already excludes these, but guard anyway
+  // Overdue prep items used to be excluded from this query entirely (silently never
+  // escalated). Now they're included and get a one-shot "past_due" notification --
+  // the most urgent bucket, fires once, then dedupe_key prevents re-firing forever.
+  if (dueInMins < 0) return 'past_due'
   const DAY = 24 * 60
   if (priority >= 3) {
     if (dueInMins <= escalateMinutes) return 'due_now'
@@ -97,10 +100,10 @@ Deno.serve(async (req) => {
     sb.from('prep_items')
       .select('id, event_id, event_title, description, due_by, priority')
       .eq('dismissed', false)
-      .gte('due_by', nowIso)
       .or(`snoozed_until.is.null,snoozed_until.lte.${nowIso}`)
       .order('priority', { ascending: false })
-      .limit(20),
+      .order('due_by', { ascending: true })
+      .limit(50),
     notifyMembers.length > 0
       ? sb.from('family_members').select('id, name, phone').in('id', notifyMembers)
       : Promise.resolve({ data: [] as { id: string; name: string; phone: string | null }[], error: null }),
