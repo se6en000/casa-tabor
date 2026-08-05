@@ -45,10 +45,15 @@ test('priorityVisual shows no chip for baseline priority (never a color-only sig
   assert.match(prepPriority, /chip: null/)
 })
 
-test('ActionHubPage wires priorityVisual into its prep card borders and chips', () => {
+test('ActionHubPage wires priorityVisual into its prep-item card face as a compact icon (unified with Needs You)', () => {
+  // Prep & Action's card face was redesigned to match the "Needs You" home rail:
+  // priority.borderClass (the left-border eyebrow) and the priority.chip text pill are
+  // no longer used here — priority now renders as a small AlertTriangle icon in the meta
+  // row, same as HomeRightPanel. priorityVisual() itself is unchanged (still exported for
+  // ActionHubPage's icon-tone lookup and any other consumer).
   assert.match(actionHubPage, /priorityVisual\(item\.priority\)/)
-  assert.match(actionHubPage, /priority\.borderClass/)
   assert.match(actionHubPage, /priority\.chip/)
+  assert.doesNotMatch(actionHubPage, /priority\.borderClass/)
 })
 
 test('HomeRightPanel wires priorityVisual into a compact card face without the left-border eyebrow', () => {

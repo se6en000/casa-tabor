@@ -70,9 +70,11 @@ test('ActionHubPage filter chips derive from PREP_CATEGORIES, not a hand-rolled 
   assert.doesNotMatch(actionHub, /item\.type === 'payment'/)
 })
 
-test('ActionHubPage prep cards render a category badge using the shared config', () => {
+test('ActionHubPage prep cards render a category indicator using the shared config', () => {
+  // Card face unified with the Needs You home rail: category is now a small icon (via
+  // getPrepCategoryConfig's icon field) in the meta row instead of a colored text Chip.
   assert.match(actionHub, /getPrepCategoryConfig\(item\)/)
-  assert.match(actionHub, /<Chip size="sm" tone={category\.tone}/)
+  assert.match(actionHub, /CategoryIcon/)
 })
 
 test('ActionHubPage surfaces an overdue count in its KPI strip instead of a dead cancellations count', () => {

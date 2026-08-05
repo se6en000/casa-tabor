@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
-import { ClipboardList, Bell, ChevronLeft, Mail, Bot, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle, ExternalLink } from 'lucide-react'
+import { ClipboardList, Bell, BellOff, ChevronLeft, Mail, Calendar as CalendarIcon, Sparkles, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle, ExternalLink } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../utils/cn'
 import { buildAiDraftPrompt } from '../utils/eventTime'
@@ -25,11 +25,11 @@ import { Button, Chip } from '../components/ui'
 
 function sourceBadge(item: PrepItem) {
   const source = item.source_type ?? 'calendar_ai'
-  if (source === 'reminder_manual') return { label: 'Reminder', icon: Bell, tone: 'text-amber-700 bg-amber-50 border-amber-200' }
-  if (source === 'reminder_missed') return { label: 'Missed', icon: Bell, tone: 'text-orange-700 bg-orange-50 border-orange-200' }
-  if (source === 'gmail') return { label: 'Email', icon: Mail, tone: 'text-purple-700 bg-purple-50 border-purple-200' }
-  if (source === 'calendar_ai') return { label: 'Calendar', icon: Bot, tone: 'text-sky-700 bg-sky-50 border-sky-200' }
-  return { label: 'System', icon: ClipboardList, tone: 'text-casa-muted bg-casa-bg border-casa-border' }
+  if (source === 'reminder_manual') return { label: 'Reminder', icon: Bell }
+  if (source === 'reminder_missed') return { label: 'Missed reminder', icon: BellOff }
+  if (source === 'gmail') return { label: 'Email', icon: Mail }
+  if (source === 'calendar_ai') return { label: 'Calendar', icon: CalendarIcon }
+  return { label: 'System', icon: Sparkles }
 }
 
 function dueBadge(item: PrepItem, now: Date): { label: string; tone: string } | null {
@@ -40,6 +40,12 @@ function dueBadge(item: PrepItem, now: Date): { label: string; tone: string } | 
   if (diff < 24 * 60 * 60 * 1000) return { label: 'Due today', tone: 'text-amber-700 bg-amber-50 border-amber-200' }
   if (diff < 48 * 60 * 60 * 1000) return { label: 'Due tomorrow', tone: 'text-casa-gold bg-casa-gold/15 border-casa-gold/35' }
   return { label: `Due ${format(due, 'EEE h:mm a')}`, tone: 'text-casa-muted bg-casa-bg border-casa-border' }
+}
+
+/** Pulls just the `text-*` utility out of a dueBadge tone string, for the plain-text
+ * (no pill) due label used on the unified prep-item card face. */
+function dueTextClass(tone: string): string {
+  return tone.split(' ').find((cls) => cls.startsWith('text-')) ?? 'text-casa-muted'
 }
 
 function eventDateBadge(n: Notification, now: Date): { label: string; tone: string } | null {
@@ -278,59 +284,62 @@ export default function ActionHubPage() {
                 <div
                   key={item.id}
                   className={cn(
-                    'rounded-[1rem] border border-casa-gold/35 bg-casa-gold/8 px-3.5 py-3',
-                    priority.borderClass,
-                    'hover:shadow-card-hover transition-all',
+                    'rounded-card border border-casa-border bg-casa-bg px-3.5 py-3 transition-opacity',
                     busy && 'opacity-60',
                   )}
                 >
-                  <div className="flex-1 min-w-0">
-                    <Button variant="ghost" className="w-full text-left" onClick={() => setSelected(item)}>
+                  <div className="flex items-start justify-between gap-2">
+                    <Button variant="ghost" className="min-w-0 flex-1 h-auto min-h-0 p-0 text-left hover:bg-transparent" contentClassName="w-full justify-start" onClick={() => setSelected(item)}>
                       <p className="text-body-sm font-semibold text-casa-text leading-snug line-clamp-2">{item.description}</p>
                     </Button>
-                    <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                      <span className={cn('inline-flex items-center gap-1 text-body-sm font-semibold px-2 py-0.5 rounded-full border leading-none', src.tone)}>
-                        <SourceIcon size={10} /> {src.label}
+                    {due && (
+                      <span className={cn('text-body-sm font-semibold whitespace-nowrap shrink-0 mt-0.5', dueTextClass(due.tone))}>
+                        {due.label}
                       </span>
-                      <Chip size="sm" tone={category.tone} icon={<CategoryIcon size={10} />}>
-                        {category.label}
-                      </Chip>
-                      {priority.chip && (
-                        <Chip size="sm" tone={priority.chip.tone}>
-                          {priority.chip.label}
-                        </Chip>
-                      )}
-                      {due && (
-                        <span className={cn('text-body-sm font-semibold px-2 py-0.5 rounded-full border leading-none', due.tone)}>
-                          {due.label}
-                        </span>
-                      )}
-                      <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => setSelected(item)} />
-                      <span className="text-body-sm text-casa-muted truncate">{item.event_title || 'Casa Tabor'}</span>
-                    </div>
-                    <div className="mt-3 flex items-center gap-1.5 flex-wrap">
-                      <Button variant="ghost" onClick={() => run('complete', item.id)} className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition" title="Done">
-                        Done
+                    )}
+                  </div>
+                  <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                    <span role="img" aria-label={src.label} title={src.label} className="inline-flex shrink-0 text-casa-navy">
+                      <SourceIcon size={14} strokeWidth={2.2} />
+                    </span>
+                    <span role="img" aria-label={category.label} title={category.label} className="inline-flex shrink-0 text-casa-navy">
+                      <CategoryIcon size={14} strokeWidth={2.2} />
+                    </span>
+                    {priority.chip && (
+                      <span
+                        role="img"
+                        aria-label={priority.chip.label}
+                        title={priority.chip.label}
+                        className={cn('inline-flex shrink-0', priority.chip.tone === 'danger' ? 'text-casa-error' : 'text-casa-warning')}
+                      >
+                        <AlertTriangle size={14} strokeWidth={2.2} />
+                      </span>
+                    )}
+                    <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => setSelected(item)} />
+                    <span className="text-body-sm text-casa-muted truncate">{item.event_title || 'Casa Tabor'}</span>
+                  </div>
+                  <div className="mt-2.5 pt-2.5 border-t border-casa-border/70 flex items-center gap-1.5 flex-wrap">
+                    <Button variant="ghost" onClick={() => run('complete', item.id)} className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition" title="Done">
+                      Done
+                    </Button>
+                    <Button variant="ghost" onClick={() => run('snooze', item.id)} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors" title="Snooze">
+                      Snooze
+                    </Button>
+                    {item.event_id ? (
+                      <Button variant="ghost" onClick={() => openEventDetails(item.event_id!)} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="View the linked calendar event">
+                        <ExternalLink size={14} /> View event
                       </Button>
-                      <Button variant="ghost" onClick={() => run('snooze', item.id)} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors" title="Snooze">
-                        Snooze
+                    ) : (
+                      <Button variant="ghost" onClick={() => launchCreate(item, 'event')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create event draft">
+                        <CalendarPlus size={14} /> Event
                       </Button>
-                      <Button variant="ghost" onClick={() => run('downvote', item.id)} className="size-control rounded-button border border-casa-border bg-white text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold" title="Downvote" aria-label="Downvote">
-                        <ThumbsDown size={15} />
-                      </Button>
-                      {item.event_id ? (
-                        <Button variant="ghost" onClick={() => openEventDetails(item.event_id!)} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="View the linked calendar event">
-                          <ExternalLink size={14} /> View event
-                        </Button>
-                      ) : (
-                        <Button variant="ghost" onClick={() => launchCreate(item, 'event')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create event draft">
-                          <CalendarPlus size={14} /> Event
-                        </Button>
-                      )}
-                      <Button variant="ghost" onClick={() => launchCreate(item, 'reminder')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create reminder draft">
-                        <BellPlus size={14} /> Reminder
-                      </Button>
-                    </div>
+                    )}
+                    <Button variant="ghost" onClick={() => launchCreate(item, 'reminder')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create reminder draft">
+                      <BellPlus size={14} /> Reminder
+                    </Button>
+                    <Button variant="ghost" onClick={() => run('downvote', item.id)} className="ml-auto size-control rounded-button border border-casa-border bg-white text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold" title="Downvote" aria-label="Downvote">
+                      <ThumbsDown size={15} />
+                    </Button>
                   </div>
                 </div>
               )
