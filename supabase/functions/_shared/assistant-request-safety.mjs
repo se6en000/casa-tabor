@@ -12,7 +12,15 @@ export function safeFullProfileToolNames(toolNames) {
   return toolNames.filter((toolName) => !GROCERY_MUTATION_TOOLS.has(toolName))
 }
 
+// App-generated draft prompts (e.g. "Create a reminder from this prep/action item…") always
+// include an explicit "Title:" field plus boilerplate like "use it as-is, do not treat it as
+// UTC" — that boilerplate "it" is not a vague pronoun reference, it's part of a fully-specified
+// structured request. Detect the labeled-field pattern on the raw (pre-normalization) text,
+// since normalization strips the colon.
+const STRUCTURED_DRAFT_FIELD = /\btitle\s*:\s*\S/i
+
 export function classifyAssistantAmbiguity(text, options = {}) {
+  if (STRUCTURED_DRAFT_FIELD.test(String(text ?? ''))) return null
   const input = normalizeAssistantLanguage(text)
   if (!input || options.hasActiveEntity === true || options.hasGroundedSemanticIntent === true) return null
 
