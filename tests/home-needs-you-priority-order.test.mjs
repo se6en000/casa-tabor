@@ -11,5 +11,8 @@ test('Needs you cards sort by urgency before lower-priority future items', () =>
   assert.match(source, /if \(days <= 4\) return 2/)
   assert.match(source, /const prioritizedPrepItems = useMemo\(/)
   assert.match(source, /if \(aUrgency !== bUrgency\) return aUrgency - bUrgency/)
-  assert.match(source, /prioritizedPrepItems\.slice\(0, 4\)\.map/)
+  // Rendered list is `visiblePrepItems` (prioritizedPrepItems minus items in their post-tap
+  // "mark done" undo window), sourced directly from the same urgency-sorted array.
+  assert.match(source, /const visiblePrepItems = useMemo\(\s*\(\) => prioritizedPrepItems\.filter/)
+  assert.match(source, /visiblePrepItems\.slice\(0, 4\)\.map/)
 })

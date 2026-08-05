@@ -63,7 +63,11 @@ test('PrepItemAssigneeChip renders an avatar+name chip when assigned, and an Ass
 
 test('ActionHubPage and HomeRightPanel surface assignment directly on prep card faces', () => {
   assert.match(actionHubPage, /PrepItemAssigneeChip/)
-  assert.match(homeRightPanel, /PrepItemAssigneeChip/)
+  // HomeRightPanel's compact row design (see home-needs-you-priority-order tests) inlines
+  // assignment as an avatar-badge + name (or an "Assign" chip when unassigned) rather than
+  // reusing the ActionHubPage-style PrepItemAssigneeChip component.
+  assert.match(homeRightPanel, /PersonAvatarStack/)
+  assert.match(homeRightPanel, /icon=\{<UserPlus size=\{11\} \/>\}>Assign</)
 })
 
 test('clearAll excludes unread conflict/policy_conflict rows from the bulk delete', () => {

@@ -12,6 +12,14 @@ export interface PersonAvatarStackProps extends HTMLAttributes<HTMLDivElement> {
   max?: number
   size?: 'sm' | 'md' | 'lg'
   emptyLabel?: string
+  /**
+   * Small status dot pinned to the avatar's bottom-right corner (e.g. a `bg-casa-error`
+   * urgency tone), matching the existing badge treatment in TabletSidebar/TopBar. Pass a
+   * background-color utility class, not a raw color, to stay off the inline-style audit.
+   * Only rendered when exactly one avatar is visible — on an overlapping stack the corner
+   * position is ambiguous.
+   */
+  badgeClassName?: string | null
 }
 
 const sizeClass = {
@@ -26,11 +34,18 @@ const overlapClass = {
   lg: '-ml-3',
 } as const
 
+const badgeSizeClass = {
+  sm: 'size-2.5',
+  md: 'size-3',
+  lg: 'size-3.5',
+} as const
+
 export function PersonAvatarStack({
   people,
   max = 2,
   size = 'md',
   emptyLabel = 'No person assigned',
+  badgeClassName,
   className,
   ...rest
 }: PersonAvatarStackProps) {
@@ -39,6 +54,7 @@ export function PersonAvatarStack({
   const label = people.length > 0
     ? people.map((person) => person.name).join(', ')
     : emptyLabel
+  const showBadge = !!badgeClassName && people.length === 1
 
   return (
     <div
@@ -52,13 +68,22 @@ export function PersonAvatarStack({
           key={person.id}
           aria-hidden="true"
           className={cn(
-            'flex shrink-0 items-center justify-center rounded-full border-2 border-casa-surface font-bold text-white shadow-card',
+            'relative flex shrink-0 items-center justify-center rounded-full border-2 border-casa-surface font-bold text-white shadow-card',
             sizeClass[size],
             index > 0 && overlapClass[size],
           )}
           style={{ backgroundColor: person.color || 'var(--color-casa-navy)' }}
         >
           {person.name[0]?.toUpperCase() || '?'}
+          {showBadge && (
+            <span
+              className={cn(
+                'absolute -bottom-0.5 -right-0.5 rounded-full border-2 border-casa-surface',
+                badgeSizeClass[size],
+                badgeClassName,
+              )}
+            />
+          )}
         </span>
       ))}
       {people.length === 0 && (

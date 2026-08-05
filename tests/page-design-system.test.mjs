@@ -493,7 +493,7 @@ test('Home and its right rail use shared touch-first design contracts', () => {
   for (const component of ['Button', 'CalendarPill', 'Card', 'Chip', 'EmptyState', 'Heading', 'IconButton', 'Text']) {
     assert.match(home, new RegExp(`<${component}`))
   }
-  for (const component of ['Button', 'Card', 'Chip', 'EmptyState', 'Heading', 'IconButton', 'Text']) {
+  for (const component of ['Button', 'Chip', 'EmptyState', 'Heading', 'IconButton', 'PersonAvatarStack', 'Toast']) {
     assert.match(rightRail, new RegExp(`<${component}`))
   }
   assert.match(home, /aria-label="Previous event"/)

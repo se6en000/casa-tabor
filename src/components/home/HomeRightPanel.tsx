@@ -2,10 +2,10 @@
  * HomeRightPanel — redesigned desktop rail with week-jump, needs-you cards,
  * and inbox intelligence while reusing existing data/actions.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { addDays, differenceInDays, format, parseISO, startOfWeek } from 'date-fns'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronRight, Sparkles, ThumbsDown } from 'lucide-react'
+import { Check, ChevronRight, MoreHorizontal, Sparkles, ThumbsDown, UserPlus } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useWeekEventIndex } from '../../hooks/useCalendarEvents'
@@ -15,12 +15,14 @@ import { supabase } from '../../lib/supabase'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useCalendarStore } from '../../stores/calendarStore'
 import BounceScroll from '../shared/BounceScroll'
-import PrepItemAssigneeChip from '../shared/PrepItemAssigneeChip'
 import type { PrepItem } from '../../types'
 import { eventOverlapsDay } from '../../utils/eventTime'
 import { summarizeGmailHealth, type GmailHealthSummary } from '../../utils/gmailHealth'
 import { priorityVisual } from '../../utils/prepPriority'
-import { Button, Card, Chip, EmptyState, Heading, IconButton, SecondaryRail, Text } from '../ui'
+import { Button, Chip, EmptyState, Heading, IconButton, PersonAvatarStack, SecondaryRail, Toast } from '../ui'
+
+/** Undo window (ms) between tapping the check and the completion actually being committed. */
+const MARK_DONE_UNDO_MS = 4000
 
 interface Props {
   now: Date
@@ -67,6 +69,13 @@ function urgencyLabel(days: number) {
   return { section: 'LATER', badge: `in ${days}d`, tone: 'success' as const }
 }
 
+/** Maps an urgency tone to its background-color utility class for the avatar corner badge / plain leading dot. */
+function urgencyDotClass(tone: 'danger' | 'warning' | 'success'): string {
+  if (tone === 'danger') return 'bg-casa-error'
+  if (tone === 'warning') return 'bg-casa-warning'
+  return 'bg-casa-success'
+}
+
 function urgencyRank(days: number): number {
   if (days <= 0) return 0
   if (days <= 1) return 1
@@ -92,9 +101,27 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   const { data: weekEventIndex = [] } = useWeekEventIndex(now)
   const setSelectedDate = useCalendarStore(s => s.setSelectedDate)
   const setActiveView = useCalendarStore(s => s.setActiveView)
-  const [checkingItemId, setCheckingItemId] = useState<string | null>(null)
   const [downvotingItemId, setDownvotingItemId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  // Optimistic "mark done": the row disappears immediately and an Undo toast appears;
+  // the actual completion only commits to the server after the undo window elapses.
+  const [pendingDoneIds, setPendingDoneIds] = useState<Set<string>>(new Set())
+  const [doneToast, setDoneToast] = useState<{ id: string; description: string } | null>(null)
+  const [revealedItemId, setRevealedItemId] = useState<string | null>(null)
+  const pendingDoneTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+
+  useEffect(() => {
+    const timers = pendingDoneTimers.current
+    return () => {
+      // Unmounting mid-undo-window shouldn't silently drop the action -- commit immediately.
+      timers.forEach((timer, id) => {
+        clearTimeout(timer)
+        completePrepItem(id).catch(() => {})
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const prioritizedPrepItems = useMemo(() => {
     return [...prepItems].sort((a, b) => {
       const aDays = daysUntil(a.event_date)
@@ -116,6 +143,12 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
       return aCreatedAt - bCreatedAt
     })
   }, [prepItems])
+
+  // Hides items whose "mark done" undo window is still counting down.
+  const visiblePrepItems = useMemo(
+    () => prioritizedPrepItems.filter(item => !pendingDoneIds.has(item.id)),
+    [prioritizedPrepItems, pendingDoneIds],
+  )
 
   const weekStart = startOfWeek(now, { weekStartsOn: 0 })
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
@@ -160,16 +193,40 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
 
   const nextEvent = allTodayEvents.find(event => new Date(event.end_time) >= now) ?? null
 
-  async function handleDone(item: PrepItem) {
-    setCheckingItemId(item.id)
+  function commitDone(id: string) {
+    pendingDoneTimers.current.delete(id)
+    setPendingDoneIds(prev => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
     setActionError(null)
-    try {
-      await completePrepItem(item.id)
-    } catch (error) {
+    completePrepItem(id).catch(error => {
       setActionError(error instanceof Error ? error.message : 'Casa could not complete this action.')
-    } finally {
-      setCheckingItemId(null)
-    }
+    })
+  }
+
+  function handleDone(item: PrepItem) {
+    // Clear any prior pending-done timer for this id (defensive; shouldn't normally recur).
+    const existing = pendingDoneTimers.current.get(item.id)
+    if (existing) clearTimeout(existing)
+    setPendingDoneIds(prev => new Set(prev).add(item.id))
+    setDoneToast({ id: item.id, description: item.description })
+    setRevealedItemId(current => (current === item.id ? null : current))
+    const timer = setTimeout(() => commitDone(item.id), MARK_DONE_UNDO_MS)
+    pendingDoneTimers.current.set(item.id, timer)
+  }
+
+  function undoDone(id: string) {
+    const timer = pendingDoneTimers.current.get(id)
+    if (timer) clearTimeout(timer)
+    pendingDoneTimers.current.delete(id)
+    setPendingDoneIds(prev => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+    setDoneToast(null)
   }
 
   async function handleDownvote(item: PrepItem) {
@@ -264,104 +321,116 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
           {prepItems.length === 0 ? (
             <EmptyState className="mt-3" title="All clear" description="No urgent prep actions right now." />
           ) : (
-            <div className="mt-3 space-y-2.5">
+            <div className="mt-3">
               {actionError && (
-                <p role="alert" className="text-caption text-casa-error">
+                <p role="alert" className="text-caption text-casa-error mb-2">
                   {actionError} The action is still active.
                 </p>
               )}
-              {prioritizedPrepItems.slice(0, 4).map(item => {
-                const urgency = urgencyLabel(daysUntil(item.event_date))
-                const source = sourceBadge(item)
-                const isDone = checkingItemId === item.id
-                const isDownvoting = downvotingItemId === item.id
-                const priority = priorityVisual(item.priority)
+              <div className="divide-y divide-casa-border/70">
+                {visiblePrepItems.slice(0, 4).map(item => {
+                  const urgency = urgencyLabel(daysUntil(item.event_date))
+                  const source = sourceBadge(item)
+                  const isDownvoting = downvotingItemId === item.id
+                  const priority = priorityVisual(item.priority)
+                  const isRevealed = revealedItemId === item.id
+                  const assignee = item.assigned_to ? familyMembers.find(m => m.id === item.assigned_to) ?? null : null
+                  const urgencyDot = urgencyDotClass(urgency.tone)
 
-                return (
-                  <Card
-                    key={item.id}
-                    padding="sm"
-                    className={cn(
-                      priority.borderClass,
-                      (isDone || isDownvoting) && 'opacity-60',
-                    )}
-                  >
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      fullWidth
-                      onClick={() => onSelectPrepItem?.(item)}
-                      className="p-0 text-left hover:bg-transparent"
-                      contentClassName="w-full flex-col items-stretch gap-0"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="inline-flex items-center gap-2">
-                          <span className={cn(
-                            'h-2.5 w-2.5 rounded-full',
-                            urgency.tone === 'danger' ? 'bg-casa-error' : urgency.tone === 'warning' ? 'bg-casa-warning' : 'bg-casa-success',
-                          )} />
-                          <Text role="body-sm" muted className="font-semibold">{urgency.section}</Text>
+                  return (
+                    <div key={item.id} className={priority.borderClass ? cn('pl-1.5 -ml-1.5', priority.borderClass) : undefined}>
+                      <div className="flex items-start gap-2.5 py-2.5">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => onSelectPrepItem?.(item)}
+                          className="shrink-0 mt-0.5 h-auto min-h-0 rounded-full p-0 hover:bg-transparent"
+                          aria-label={assignee ? `Open details, assigned to ${assignee.name}` : 'Open details, unassigned'}
+                        >
+                          {assignee ? (
+                            <PersonAvatarStack
+                              people={[{ id: assignee.id, name: assignee.name, color: assignee.color_hex }]}
+                              size="sm"
+                              max={1}
+                              badgeClassName={urgencyDot}
+                            />
+                          ) : (
+                            <span className="flex size-7 items-center justify-center">
+                              <span className={cn('size-2.5 rounded-full', urgencyDot)} />
+                            </span>
+                          )}
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          fullWidth
+                          onClick={() => onSelectPrepItem?.(item)}
+                          className="min-w-0 flex-1 h-auto min-h-0 p-0 text-left hover:bg-transparent"
+                          contentClassName="w-full flex-col items-stretch gap-0"
+                        >
+                          <p className="!text-body-sm leading-snug text-casa-text line-clamp-3">
+                            {item.description}
+                          </p>
+                          <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                            <Chip size="sm" tone={source.tone}>{source.label}</Chip>
+                            {priority.chip && (
+                              <Chip size="sm" tone={priority.chip.tone}>{priority.chip.label}</Chip>
+                            )}
+                            {assignee ? (
+                              <span className="text-caption text-casa-muted truncate">{assignee.name}</span>
+                            ) : (
+                              <Chip size="sm" tone="neutral" icon={<UserPlus size={11} />}>Assign</Chip>
+                            )}
+                          </div>
+                        </Button>
+
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <IconButton
+                            onClick={() => handleDone(item)}
+                            variant="strong"
+                            size="sm"
+                            icon={<Check size={16} strokeWidth={2.5} />}
+                            aria-label="Mark done"
+                            title="Mark done"
+                          />
+                          <IconButton
+                            onClick={() => setRevealedItemId(isRevealed ? null : item.id)}
+                            variant="secondary"
+                            size="sm"
+                            icon={<MoreHorizontal size={16} />}
+                            aria-label={isRevealed ? 'Hide more actions' : 'More actions'}
+                            title="More actions"
+                          />
                         </div>
-                        <Chip size="sm" tone={urgency.tone} className="capitalize">
-                          {urgency.badge}
-                        </Chip>
                       </div>
-                      <div className="mt-2.5">
-                        <p className={cn('!text-body-sm leading-snug text-casa-text', isDone && 'line-through text-casa-muted')}>
-                          {item.description}
-                        </p>
-                      </div>
-                      <div className="mt-2.5 flex items-center gap-2.5 flex-wrap">
-                        <Chip size="sm" tone={source.tone}>
-                          {source.label}
-                        </Chip>
-                        {priority.chip && (
-                          <Chip size="sm" tone={priority.chip.tone}>
-                            {priority.chip.label}
-                          </Chip>
-                        )}
-                        <span className="!text-body-sm text-casa-muted truncate">
-                          {item.event_title || 'Casa Tabor'}
-                        </span>
-                      </div>
-                    </Button>
-                    <div className="mt-2 flex items-center">
-                      <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => onSelectPrepItem?.(item)} />
+
+                      {isRevealed && (
+                        <div className="flex items-center gap-2 pb-2.5 pl-[2.375rem]">
+                          <Button
+                            onClick={() => { snoozePrepItem(item.id); setRevealedItemId(null) }}
+                            variant="secondary"
+                            size="sm"
+                            title="Snooze until tomorrow"
+                          >
+                            Snooze
+                          </Button>
+                          <IconButton
+                            onClick={() => handleDownvote(item)}
+                            variant="danger"
+                            size="sm"
+                            disabled={isDownvoting}
+                            icon={<ThumbsDown size={15} strokeWidth={2.1} />}
+                            aria-label="Mark suggestion not relevant"
+                            title="Not relevant"
+                          />
+                        </div>
+                      )}
                     </div>
-                    <div className="mt-3 border-t border-casa-border/80 pt-3">
-                      <div className="grid grid-cols-[1.7fr_0.85fr_auto_auto] items-center gap-1.5">
-                        <Button
-                          onClick={() => handleDone(item)}
-                          variant="strong"
-                          size="sm"
-                          loading={isDone}
-                          title="Mark done"
-                        >
-                          Mark done
-                        </Button>
-                        <Button
-                          onClick={() => snoozePrepItem(item.id)}
-                          variant="secondary"
-                          size="sm"
-                          title="Snooze until tomorrow"
-                        >
-                          Snooze
-                        </Button>
-                        <div className="h-7 w-px bg-casa-border/80 mx-1" />
-                        <IconButton
-                          onClick={() => handleDownvote(item)}
-                          variant="danger"
-                          size="sm"
-                          disabled={isDownvoting}
-                          icon={<ThumbsDown size={15} strokeWidth={2.1} />}
-                          aria-label="Mark suggestion not relevant"
-                          title="Not relevant"
-                        />
-                      </div>
-                    </div>
-                  </Card>
-                )
-              })}
+                  )
+                })}
+              </div>
+
               <div className="mt-4 pt-4 border-t border-casa-border">
                 <Link
                   to="/actions#recent-activity"
@@ -395,6 +464,14 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
         </section>
 
       </BounceScroll>
+      <Toast
+        open={!!doneToast}
+        message={doneToast ? `Marked "${doneToast.description}" done.` : ''}
+        tone="success"
+        onClose={() => setDoneToast(null)}
+        actionLabel="Undo"
+        onAction={() => { if (doneToast) undoDone(doneToast.id) }}
+      />
     </SecondaryRail>
   )
 }
