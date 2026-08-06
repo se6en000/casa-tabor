@@ -177,3 +177,17 @@ test('ContactForm uses DirectoryPlaceInput for the primary place field and resol
   assert.match(savedPlacesSettingsSource, /resolveDirectoryPlaceSave\(/)
   assert.match(savedPlacesSettingsSource, /onCreatePlace/)
 })
+
+// ── DirectoryPlaceInput: Google-verified addresses, not manual entry (dupe root cause) ──
+test('DirectoryPlaceInput searches Google Places directly on the main typed query (not a separate manual step)', () => {
+  assert.match(directoryPlaceInputSource, /shouldSearchGoogle = focused && normalizedQuery\.length >= 3/)
+})
+
+test('DirectoryPlaceInput surfaces Google-verified address suggestions inline, tagged as verified', () => {
+  assert.match(directoryPlaceInputSource, /source: 'google'/)
+  assert.match(directoryPlaceInputSource, /Verified address/)
+})
+
+test('DirectoryPlaceInput only allows unverified manual entry as an explicit, clearly-labeled fallback', () => {
+  assert.match(directoryPlaceInputSource, /without a verified address/)
+})
