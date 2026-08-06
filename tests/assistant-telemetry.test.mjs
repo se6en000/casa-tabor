@@ -190,7 +190,9 @@ test('household directory lookups load confirmed contacts and their primary plac
   assert.match(assistantFunction, /primary_place:saved_places!saved_contacts_primary_place_id_fkey/)
   assert.match(assistantFunction, /usually at \$\{c\.primary_place\.name\}/)
   assert.match(assistantFunction, /includePlaceContext = [\s\S]{0,180}householdDirectoryQuestion/)
-  assert.match(householdDirectory, /coach\|dentist\|doctor\|orthodontist/)
+  for (const role of ['coach', 'dentist', 'dermatologist', 'doctor', 'orthodontist']) {
+    assert.match(householdDirectory, new RegExp(role))
+  }
   assert.match(householdDirectory, /what do you know about/)
 })
 

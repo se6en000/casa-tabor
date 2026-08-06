@@ -102,6 +102,7 @@ test('household directory questions load confirmed person and place context befo
     'Where do we usually go for pediatric appointments?',
     'Who should I call about air conditioning, and where are they based?',
     'Where is Liv’s orthodontist?',
+    'Who is Olivia’s dermatologist, and where are they?',
     'What sports places do Jake and Liv usually go to?',
     'What address does Coach Danny use?',
     'I need to schedule something with Coach Danny next week—where should I put it?',
