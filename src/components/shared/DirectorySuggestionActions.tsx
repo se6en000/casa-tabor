@@ -4,8 +4,12 @@
  * useDirectorySuggestions.ts) with a per-entry Add/Skip so users don't blindly
  * bulk-confirm entries they never actually looked at (user-approved direction —
  * see needs-you-phase2-actions-TMP.html Option A).
+ *
+ * Unified action placement: the parent card owns the top-right expand toggle
+ * (MoreHorizontal, same icon/spot prep items and conflicts use). This component
+ * is only the expanded panel content — it's mounted by the parent once the
+ * shared reveal state is open for this item, so it always fetches immediately.
  */
-import { useState } from 'react'
 import { Check, X } from 'lucide-react'
 import {
   useConfirmDirectorySuggestionEntry,
@@ -15,20 +19,9 @@ import {
 import { Button } from '../ui'
 
 export default function DirectorySuggestionActions() {
-  const [expanded, setExpanded] = useState(false)
-  const { data: entries = [], isLoading } = useDirectorySuggestionEntries(expanded)
+  const { data: entries = [], isLoading } = useDirectorySuggestionEntries(true)
   const confirmEntry = useConfirmDirectorySuggestionEntry()
   const dismissEntry = useDismissDirectorySuggestionEntry()
-
-  if (!expanded) {
-    return (
-      <div className="pt-2.5 pl-[2.375rem]">
-        <Button type="button" variant="secondary" size="sm" onClick={() => setExpanded(true)}>
-          Review
-        </Button>
-      </div>
-    )
-  }
 
   return (
     <div className="pt-2.5 pl-[2.375rem]">

@@ -18,7 +18,7 @@ import { useWeekEventIndex } from '../../hooks/useCalendarEvents'
 import { useCompletePrepItem, useDownvotePrepItem, usePrepItems, useSetPrepItemAssignee, useSnoozePrepItem } from '../../hooks/usePrepItems'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useNotifications } from '../../hooks/useNotifications'
-import { useWeekConflicts } from '../../hooks/useConflicts'
+import { useResolveConflict, useWeekConflicts } from '../../hooks/useConflicts'
 import { supabase } from '../../lib/supabase'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useCalendarStore } from '../../stores/calendarStore'
@@ -32,12 +32,10 @@ import { Button, Chip, EmptyState, Heading, IconButton, PersonAvatarStack, Secon
 /** Undo window (ms) between tapping the check and the completion actually being committed. */
 const MARK_DONE_UNDO_MS = 4000
 
-// TEMPORARY (Phase 2 UX review): bumped from the normal 4-card home-rail limit so the
-// user can scroll through many real cards across all three Needs You categories
-// (prep/conflict/directory) at once and decide how many should actually show by
-// default once each action type's UX is dialed in. Revert to 4 (or whatever is
-// decided) once that review is done.
-const NEEDS_YOU_HOME_RAIL_LIMIT = 12
+/** Home rail shows only the top-N Needs You cards (already sorted by urgency); the
+ * rest are one tap away via the "More…" link so the rail stays glanceable and fits
+ * the kiosk screen without scrolling. */
+const NEEDS_YOU_HOME_RAIL_LIMIT = 5
 
 interface Props {
   now: Date
@@ -201,6 +199,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   const { data: familyMembers = [] } = useFamilyMembers()
   const { notifications } = useNotifications()
   const { data: conflicts = [] } = useWeekConflicts()
+  const resolveConflict = useResolveConflict()
   const completePrepItem = useCompletePrepItem()
   const snoozePrepItem = useSnoozePrepItem()
   const downvotePrepItem = useDownvotePrepItem()
@@ -543,10 +542,23 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                           </div>
                         </div>
 
-                        {/* Conflicts/directory suggestions get their own dedicated Phase 2
-                            inline actions below instead of the routine Done/More-actions row. */}
-                        {!readOnly && (
-                          <div className="flex shrink-0 items-center gap-1.5">
+                        {/* Unified header icon cluster: a primary "resolve" icon (when this
+                            item has one) plus a single expand/collapse toggle shared by every
+                            card type. The toggle's target content differs (prep's Snooze/
+                            Not-relevant row vs. the conflict Keep-picker vs. the directory
+                            suggestion list) but always renders in the same spot below. */}
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {item.source_type === 'conflict' && item.source_ref && (
+                            <IconButton
+                              onClick={() => resolveConflict(item.source_ref!, 'acknowledged_no_change')}
+                              variant="strong"
+                              size="sm"
+                              icon={<Check size={16} strokeWidth={2.5} />}
+                              aria-label="Resolved, no schedule change"
+                              title="Resolved, no schedule change"
+                            />
+                          )}
+                          {!readOnly && (
                             <IconButton
                               onClick={() => handleDone(item)}
                               variant="strong"
@@ -555,19 +567,34 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                               aria-label="Mark done"
                               title="Mark done"
                             />
-                            <IconButton
-                              onClick={() => setRevealedItemId(isRevealed ? null : item.id)}
-                              variant="secondary"
-                              size="sm"
-                              icon={<MoreHorizontal size={16} />}
-                              aria-label={isRevealed ? 'Hide more actions' : 'More actions'}
-                              title="More actions"
-                            />
-                          </div>
-                        )}
+                          )}
+                          <IconButton
+                            onClick={() => setRevealedItemId(isRevealed ? null : item.id)}
+                            variant="secondary"
+                            size="sm"
+                            icon={<MoreHorizontal size={16} />}
+                            aria-label={
+                              isRevealed
+                                ? 'Hide more actions'
+                                : item.source_type === 'conflict'
+                                  ? 'View both events'
+                                  : item.source_type === 'directory_suggestion'
+                                    ? 'Review suggestions'
+                                    : 'More actions'
+                            }
+                            title={isRevealed ? 'Hide more actions' : 'More actions'}
+                          />
+                        </div>
                       </div>
 
-                      {!readOnly && isRevealed && (
+                      {isRevealed && item.source_type === 'conflict' && (() => {
+                        const conflict = conflicts.find((c) => c.id === item.source_ref)
+                        return conflict ? <ConflictNeedsYouActions conflict={conflict} /> : null
+                      })()}
+
+                      {isRevealed && item.source_type === 'directory_suggestion' && <DirectorySuggestionActions />}
+
+                      {!readOnly && isRevealed && item.source_type !== 'conflict' && item.source_type !== 'directory_suggestion' && (
                         <div className="flex items-center gap-2 pt-2.5 pl-[2.375rem]">
                           <Button
                             onClick={() => { snoozePrepItem(item.id); setRevealedItemId(null) }}
@@ -588,17 +615,19 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                           />
                         </div>
                       )}
-
-                      {item.source_type === 'conflict' && (() => {
-                        const conflict = conflicts.find((c) => c.id === item.source_ref)
-                        return conflict ? <ConflictNeedsYouActions conflict={conflict} /> : null
-                      })()}
-
-                      {item.source_type === 'directory_suggestion' && <DirectorySuggestionActions />}
                     </div>
                   )
                 })}
               </div>
+
+              {visiblePrepItems.length > NEEDS_YOU_HOME_RAIL_LIMIT && (
+                <Link
+                  to="/actions"
+                  className="mt-2 flex items-center justify-center gap-1 rounded-card border border-casa-border py-2 text-caption font-semibold text-casa-muted hover:bg-casa-bg hover:text-casa-text transition-colors"
+                >
+                  More ({visiblePrepItems.length - NEEDS_YOU_HOME_RAIL_LIMIT}) <ChevronRight size={12} />
+                </Link>
+              )}
 
               <div className="mt-4 pt-4 border-t border-casa-border">
                 <Link

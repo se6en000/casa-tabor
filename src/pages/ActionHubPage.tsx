@@ -15,7 +15,7 @@ import { usePrepItems, useCompletePrepItem, useDownvotePrepItem, useSnoozePrepIt
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { useNotifications } from '../hooks/useNotifications'
 import type { Notification } from '../hooks/useNotifications'
-import { useWeekConflicts } from '../hooks/useConflicts'
+import { useResolveConflict, useWeekConflicts } from '../hooks/useConflicts'
 import type { PrepItem } from '../types'
 import { PREP_CATEGORIES, getPrepCategoryConfig } from '../utils/prepCategories'
 import { humanizeNotificationSource } from '../utils/notificationSource'
@@ -87,6 +87,8 @@ export default function ActionHubPage() {
   const downvote = useDownvotePrepItem()
   const { notifications, unreadCount, markRead, clearAll } = useNotifications()
   const { data: conflicts = [] } = useWeekConflicts()
+  const resolveConflict = useResolveConflict()
+  const [revealedItemId, setRevealedItemId] = useState<string | null>(null)
   const [selected, setSelected] = useState<PrepItem | null>(null)
   const [actingId, setActingId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -333,8 +335,9 @@ export default function ActionHubPage() {
                     {!readOnly && <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => setSelected(item)} />}
                     <span className="text-body-sm text-casa-muted truncate">{item.event_title || 'Casa Tabor'}</span>
                   </div>
-                  {/* Conflicts/directory suggestions get their own dedicated Phase 2 inline
-                      actions below instead of the routine Done/Snooze/Create/Downvote row. */}
+                  {/* Conflicts/directory suggestions get their own action row here, using the
+                      same primary-resolve + expand-toggle pattern as prep items — just with
+                      full-word buttons to match this page's established denser style. */}
                   {!readOnly && (
                     <div className="mt-2.5 pt-2.5 border-t border-casa-border/70 flex items-center gap-1.5 flex-wrap">
                       <Button variant="ghost" onClick={() => run('complete', item.id)} className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition" title="Done">
@@ -361,12 +364,40 @@ export default function ActionHubPage() {
                     </div>
                   )}
 
-                  {item.source_type === 'conflict' && (() => {
+                  {item.source_type === 'conflict' && item.source_ref && (() => {
+                    const isRevealed = revealedItemId === item.id
+                    const conflictId = item.source_ref!
+                    return (
+                      <div className="mt-2.5 pt-2.5 border-t border-casa-border/70 flex items-center gap-1.5 flex-wrap">
+                        <Button variant="ghost" onClick={() => resolveConflict(conflictId, 'acknowledged_no_change')} className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition" title="Resolved, no schedule change">
+                          Resolved
+                        </Button>
+                        <Button variant="ghost" onClick={() => setRevealedItemId(isRevealed ? null : item.id)} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors" title={isRevealed ? 'Hide' : 'View both events'}>
+                          {isRevealed ? 'Hide' : 'View both'}
+                        </Button>
+                      </div>
+                    )
+                  })()}
+
+                  {item.source_type === 'conflict' && revealedItemId === item.id && (() => {
                     const conflict = conflicts.find((c) => c.id === item.source_ref)
                     return conflict ? <ConflictNeedsYouActions conflict={conflict} /> : null
                   })()}
 
-                  {item.source_type === 'directory_suggestion' && <DirectorySuggestionActions />}
+                  {item.source_type === 'directory_suggestion' && (
+                    <div className="mt-2.5 pt-2.5 border-t border-casa-border/70 flex items-center gap-1.5 flex-wrap">
+                      <Button
+                        variant="ghost"
+                        onClick={() => setRevealedItemId(revealedItemId === item.id ? null : item.id)}
+                        className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors"
+                        title={revealedItemId === item.id ? 'Hide' : 'Review suggestions'}
+                      >
+                        {revealedItemId === item.id ? 'Hide' : 'Review'}
+                      </Button>
+                    </div>
+                  )}
+
+                  {item.source_type === 'directory_suggestion' && revealedItemId === item.id && <DirectorySuggestionActions />}
                 </div>
               )
             })}

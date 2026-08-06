@@ -5,24 +5,28 @@
  * Phase 0 sourceBadge() extraction, there's no established precedent here for the
  * two surfaces needing different action-row density.
  *
- * Staged flow (user-approved design, see needs-you-phase2-actions-TMP.html):
- *   Step 1 (landing): "View both" / "Resolved" / icon-only Snooze.
- *   Step 2 (after "View both"): both events as chips, each with "Keep this one".
- *     Picking one calls resolveConflict() and opens the *other* event's Event
- *     Details sheet so the user can reschedule/cancel it right there.
- *   "Resolved" from Step 1 acknowledges the conflict as-is — no schedule change.
+ * Unified action placement (matches the existing prep-item pattern instead of
+ * introducing a third layout): the card header owns a top-right icon-button
+ * cluster — [Resolved (Check, strong)] + [expand toggle (MoreHorizontal)] —
+ * rendered by the parent card, not this component. This component is only the
+ * *expanded* panel content, shown below the description when the parent's
+ * shared reveal state is open for this item (same spot/toggle prep already
+ * uses for its Snooze/Not-relevant row).
+ *
+ * Picking "Keep this one" resolves the conflict and opens the *other* event's
+ * Event Details sheet so the user can reschedule/cancel it right there.
+ * "Resolved" (the header's primary icon) acknowledges the conflict as-is — no
+ * schedule change — and lives in the header, not here.
  */
-import { useState } from 'react'
-import { Calendar, Check, ChevronDown, Clock, Eye } from 'lucide-react'
+import { Calendar, Clock } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import type { Conflict } from '../../types'
 import { useResolveConflict, useSnoozeConflict } from '../../hooks/useConflicts'
 import { pickConflictLoserEventId } from '../../utils/conflictResolution'
 import { openEventDetails } from '../../utils/openEventDetails'
-import { Button, IconButton } from '../ui'
+import { Button } from '../ui'
 
 export default function ConflictNeedsYouActions({ conflict }: { conflict: Conflict }) {
-  const [expanded, setExpanded] = useState(false)
   const resolveConflict = useResolveConflict()
   const snoozeConflict = useSnoozeConflict()
 
@@ -30,39 +34,6 @@ export default function ConflictNeedsYouActions({ conflict }: { conflict: Confli
     const loserEventId = pickConflictLoserEventId(conflict, keptEventId)
     await resolveConflict(conflict.id, `kept_${keptEventId}`)
     if (loserEventId) openEventDetails(loserEventId)
-  }
-
-  if (!expanded) {
-    return (
-      <div className="flex items-center gap-2 pt-2.5 pl-[2.375rem]">
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          leadingIcon={<Eye size={14} strokeWidth={2.2} />}
-          onClick={() => setExpanded(true)}
-        >
-          View both
-        </Button>
-        <Button
-          type="button"
-          variant="strong"
-          size="sm"
-          leadingIcon={<Check size={14} strokeWidth={2.5} />}
-          onClick={() => resolveConflict(conflict.id, 'acknowledged_no_change')}
-        >
-          Resolved
-        </Button>
-        <IconButton
-          onClick={() => snoozeConflict(conflict.id)}
-          variant="ghost"
-          size="sm"
-          icon={<Clock size={15} strokeWidth={2.2} />}
-          aria-label="Snooze until tomorrow"
-          title="Snooze until tomorrow"
-        />
-      </div>
-    )
   }
 
   return (
@@ -83,12 +54,12 @@ export default function ConflictNeedsYouActions({ conflict }: { conflict: Confli
       )}
       <Button
         type="button"
-        variant="ghost"
+        variant="secondary"
         size="sm"
-        leadingIcon={<ChevronDown size={14} className="rotate-180" />}
-        onClick={() => setExpanded(false)}
+        leadingIcon={<Clock size={14} strokeWidth={2.2} />}
+        onClick={() => snoozeConflict(conflict.id)}
       >
-        Collapse
+        Snooze until tomorrow
       </Button>
     </div>
   )
