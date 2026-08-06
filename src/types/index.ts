@@ -209,6 +209,7 @@ export interface SavedPlace {
   source: 'manual' | 'derived'
   occurrence_count: number
   last_seen_at: string | null
+  dismissed_at: string | null
   created_at: string
   updated_at: string
 }
@@ -229,6 +230,7 @@ export interface SavedContact {
   source: 'manual' | 'derived'
   occurrence_count: number
   last_seen_at: string | null
+  dismissed_at: string | null
   created_at: string
   updated_at: string
 }
@@ -244,6 +246,7 @@ export interface ContactPlaceRelationship {
   confidence: number
   evidence_count: number
   evidence_notes: string | null
+  dismissed_at: string | null
   contact?: Pick<SavedContact, 'id' | 'name' | 'phone' | 'relationship'> | null
   place?: Pick<SavedPlace, 'id' | 'name' | 'address' | 'city' | 'state' | 'zip' | 'category'> | null
   created_at: string
@@ -260,6 +263,7 @@ export interface FamilyContactRelationship {
   confidence: number
   evidence_count: number
   evidence_notes: string | null
+  dismissed_at: string | null
   family_member?: Pick<FamilyMember, 'id' | 'name'> | null
   contact?: Pick<SavedContact, 'id' | 'name' | 'phone' | 'relationship'> | null
   created_at: string

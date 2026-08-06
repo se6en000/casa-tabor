@@ -17,8 +17,8 @@ import { SettingsPageHeader } from '../components/settings'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type SavedPlaceInput = Omit<SavedPlace, 'id' | 'lat' | 'lng' | 'google_place_id' | 'last_seen_at' | 'created_at' | 'updated_at'>
-type SavedContactInput = Omit<SavedContact, 'id' | 'primary_place' | 'last_seen_at' | 'created_at' | 'updated_at'>
+type SavedPlaceInput = Omit<SavedPlace, 'id' | 'lat' | 'lng' | 'google_place_id' | 'last_seen_at' | 'dismissed_at' | 'created_at' | 'updated_at'>
+type SavedContactInput = Omit<SavedContact, 'id' | 'primary_place' | 'last_seen_at' | 'dismissed_at' | 'created_at' | 'updated_at'>
 
 // ── Category metadata ─────────────────────────────────────────────────────────
 
@@ -455,6 +455,14 @@ export default function SavedPlacesSettingsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['saved_places'] }),
   })
 
+  const dismissPlaceMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('saved_places').update({ dismissed_at: new Date().toISOString() }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['saved_places'] }),
+  })
+
   // ── Contacts queries ─────────────────────────────────────────────────────────
   const { data: contacts = [], isLoading: contactsLoading } = useQuery<SavedContact[]>({
     queryKey: ['saved_contacts'],
@@ -522,6 +530,14 @@ export default function SavedPlacesSettingsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['saved_contacts'] }),
   })
 
+  const dismissContactMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('saved_contacts').update({ dismissed_at: new Date().toISOString() }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['saved_contacts'] }),
+  })
+
   const { data: connections = [], isLoading: connectionsLoading } = useQuery<ContactPlaceRelationship[]>({
     queryKey: ['contact_place_relationships'],
     queryFn: async () => {
@@ -543,6 +559,7 @@ export default function SavedPlacesSettingsPage() {
         .from('contact_place_relationships')
         .select('*, contact:saved_contacts(id, name, phone, relationship), place:saved_places(id, name, address, city, state, zip, category)')
         .eq('confirmed', false)
+        .is('dismissed_at', null)
         .order('evidence_count', { ascending: false })
       if (error) throw error
       return data as ContactPlaceRelationship[]
@@ -625,6 +642,14 @@ export default function SavedPlacesSettingsPage() {
     },
   })
 
+  const dismissConnectionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('contact_place_relationships').update({ dismissed_at: new Date().toISOString() }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['contact_place_relationships'] }),
+  })
+
 
   // ── Family links queries ─────────────────────────────────────────────────────
   const { data: familyMembers = [] } = useFamilyMembers()
@@ -649,6 +674,7 @@ export default function SavedPlacesSettingsPage() {
         .from('family_contact_relationships')
         .select('*, family_member:family_members(id, name), contact:saved_contacts(id, name, phone, relationship)')
         .eq('confirmed', false)
+        .is('dismissed_at', null)
         .order('evidence_count', { ascending: false })
       if (error) throw error
       return data as FamilyContactRelationship[]
@@ -714,6 +740,14 @@ export default function SavedPlacesSettingsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['family_contact_relationships'] }),
   })
 
+  const dismissFamilyLinkMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('family_contact_relationships').update({ dismissed_at: new Date().toISOString() }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['family_contact_relationships'] }),
+  })
+
   // ── Filtered lists ───────────────────────────────────────────────────────────
   const filteredPlaces = places.filter(p => {
     if (!p.confirmed) return false
@@ -722,14 +756,14 @@ export default function SavedPlacesSettingsPage() {
     const matchesSearch = !needle || [p.name, ...p.aliases, p.address ?? '', p.city ?? '', p.notes ?? ''].some(s => s.toLowerCase().includes(needle))
     return matchesCat && matchesSearch
   })
-  const suggestedPlaces = places.filter(p => !p.confirmed).sort((a, b) => b.occurrence_count - a.occurrence_count)
+  const suggestedPlaces = places.filter(p => !p.confirmed && !p.dismissed_at).sort((a, b) => b.occurrence_count - a.occurrence_count)
 
   const filteredContacts = contacts.filter(c => {
     if (!c.confirmed) return false
     const needle = search.toLowerCase()
     return !needle || [c.name, ...c.aliases, c.relationship ?? '', c.address ?? '', c.notes ?? ''].some(s => s.toLowerCase().includes(needle))
   })
-  const suggestedContacts = contacts.filter(c => !c.confirmed).sort((a, b) => b.occurrence_count - a.occurrence_count)
+  const suggestedContacts = contacts.filter(c => !c.confirmed && !c.dismissed_at).sort((a, b) => b.occurrence_count - a.occurrence_count)
 
   const filteredConnections = connections.filter(connection => {
     const needle = search.toLowerCase()
@@ -832,7 +866,7 @@ export default function SavedPlacesSettingsPage() {
                           confirming={confirmPlaceMutation.isPending}
                           onReview={() => setPlaceMode({ type: 'edit', place })}
                           onConfirm={() => confirmPlaceMutation.mutate(place.id)}
-                          onDismiss={() => deletePlaceMutation.mutate(place.id)}
+                          onDismiss={() => dismissPlaceMutation.mutate(place.id)}
                         />
                       ))}
                     </div>
@@ -1001,7 +1035,7 @@ export default function SavedPlacesSettingsPage() {
                                 setConnectionMode('add')
                               }}
                               onConfirm={() => confirmConnectionMutation.mutate(connection.id)}
-                              onDismiss={() => deleteConnectionMutation.mutate(connection.id)}
+                              onDismiss={() => dismissConnectionMutation.mutate(connection.id)}
                             />
                           ))}
                         </div>
@@ -1131,7 +1165,7 @@ export default function SavedPlacesSettingsPage() {
                                 setFamilyLinkMode('add')
                               }}
                               onConfirm={() => confirmFamilyLinkMutation.mutate(link.id)}
-                              onDismiss={() => deleteFamilyLinkMutation.mutate(link.id)}
+                              onDismiss={() => dismissFamilyLinkMutation.mutate(link.id)}
                             />
                           ))}
                         </div>
@@ -1202,7 +1236,7 @@ export default function SavedPlacesSettingsPage() {
                           confirming={confirmContactMutation.isPending}
                           onReview={() => setContactMode({ type: 'edit', contact })}
                           onConfirm={() => confirmContactMutation.mutate(contact.id)}
-                          onDismiss={() => deleteContactMutation.mutate(contact.id)}
+                          onDismiss={() => dismissContactMutation.mutate(contact.id)}
                         />
                       ))}
                     </div>
