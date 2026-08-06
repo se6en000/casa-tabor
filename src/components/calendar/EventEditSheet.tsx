@@ -35,6 +35,7 @@ import type { EventLocationScope } from '../../lib/eventLocation'
 import type { TransportationPlace } from '../../lib/eventTransportation'
 import RecurrenceScopeDialog from './RecurrenceScopeDialog'
 import SmartPlaceInput from './SmartPlaceInput'
+import SmartContactInput from './SmartContactInput'
 import {
   loadRecurringEditorContext,
   announceRecurringDelete,
@@ -1669,7 +1670,18 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
                       <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">
                         {config.label}
                       </label>
-                      {config.multiline ? (
+                      {field === 'contact_name' ? (
+                        <SmartContactInput
+                          value={form[field] ?? ''}
+                          label={config.label}
+                          placeholder={config.placeholder}
+                          onChange={value => set(field, value)}
+                          onSelect={contact => {
+                            set('contact_name', contact.name)
+                            if (contact.phone) set('contact_phone', contact.phone)
+                          }}
+                        />
+                      ) : config.multiline ? (
                         <Textarea
                           rows={field === 'what_to_bring' ? 5 : 3}
                           value={form[field] ?? ''}

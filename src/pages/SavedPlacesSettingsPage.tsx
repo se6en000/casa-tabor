@@ -12,6 +12,7 @@ import { cn } from '../utils/cn'
 import type { ContactPlaceRelationship, FamilyContactRelationship, SavedContact, SavedPlace, SavedPlaceCategory } from '../types'
 import { savedPlaceAddress } from '../hooks/useSavedPlaces'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
+import { rankDirectorySuggestions } from '../utils/directorySuggestions'
 import { Button, Checkbox, Combobox, IconButton, SegmentedControl } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
@@ -50,16 +51,24 @@ function blankPlace(): Partial<SavedPlace> & { _aliasText: string } {
 
 interface PlaceFormProps {
   initial?: (Partial<SavedPlace> & { _aliasText?: string }) | null
+  places: SavedPlace[]
   onSave: (place: SavedPlaceInput) => void
   onCancel: () => void
+  onEditExisting: (place: SavedPlace) => void
   saving?: boolean
 }
 
-function PlaceForm({ initial, onSave, onCancel, saving }: PlaceFormProps) {
+function PlaceForm({ initial, places, onSave, onCancel, onEditExisting, saving }: PlaceFormProps) {
   const [form, setForm] = useState<Partial<SavedPlace> & { _aliasText: string }>({
     ...blankPlace(), ...initial, _aliasText: initial?.aliases?.join(', ') ?? '',
   })
   function set(key: string, value: unknown) { setForm(f => ({ ...f, [key]: value })) }
+
+  const isNew = !initial?.id
+  const nameQuery = (form.name ?? '').trim()
+  const possibleDuplicates = isNew && nameQuery.length >= 2
+    ? rankDirectorySuggestions(places.map(p => ({ id: p.id, primary: p.name, aliases: p.aliases, secondary: p.address ?? undefined })), nameQuery, 3)
+    : []
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -73,6 +82,23 @@ function PlaceForm({ initial, onSave, onCancel, saving }: PlaceFormProps) {
         <label className="block text-caption font-semibold text-casa-muted mb-1">Name *</label>
         <input required value={form.name ?? ''} onChange={e => set('name', e.target.value)} placeholder="e.g. Springmeyer's House"
           className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+        {possibleDuplicates.length > 0 && (
+          <div className="mt-2 rounded-lg border border-casa-gold/40 bg-casa-gold/5 p-3">
+            <p className="text-caption font-semibold text-casa-muted mb-1.5">This might already exist:</p>
+            <div className="space-y-1.5">
+              {possibleDuplicates.map(match => {
+                const existing = places.find(p => p.id === match.id)
+                if (!existing) return null
+                return (
+                  <Button key={match.id} type="button" variant="subtle" size="sm" fullWidth align="start"
+                    onClick={() => onEditExisting(existing)}>
+                    Use existing: {existing.name}{savedPlaceAddress(existing) ? ` — ${savedPlaceAddress(existing)}` : ''}
+                  </Button>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
       <div>
         <label className="block text-caption font-semibold text-casa-muted mb-1">
@@ -212,12 +238,14 @@ function blankContact(): Partial<SavedContact> & { _aliasText: string } {
 interface ContactFormProps {
   initial?: (Partial<SavedContact> & { _aliasText?: string }) | null
   places: SavedPlace[]
+  contacts: SavedContact[]
   onSave: (c: SavedContactInput) => void
   onCancel: () => void
+  onEditExisting: (contact: SavedContact) => void
   saving?: boolean
 }
 
-function ContactForm({ initial, places, onSave, onCancel, saving }: ContactFormProps) {
+function ContactForm({ initial, places, contacts, onSave, onCancel, onEditExisting, saving }: ContactFormProps) {
   const [form, setForm] = useState<Partial<SavedContact> & { _aliasText: string }>({
     ...blankContact(), ...initial, _aliasText: initial?.aliases?.join(', ') ?? '',
   })
@@ -229,6 +257,12 @@ function ContactForm({ initial, places, onSave, onCancel, saving }: ContactFormP
     })),
   ]
   function set(key: string, value: unknown) { setForm(f => ({ ...f, [key]: value })) }
+
+  const isNew = !initial?.id
+  const nameQuery = (form.name ?? '').trim()
+  const possibleDuplicates = isNew && nameQuery.length >= 2
+    ? rankDirectorySuggestions(contacts.map(c => ({ id: c.id, primary: c.name, aliases: c.aliases, secondary: c.phone ?? undefined })), nameQuery, 3)
+    : []
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -255,6 +289,23 @@ function ContactForm({ initial, places, onSave, onCancel, saving }: ContactFormP
         <label className="block text-caption font-semibold text-casa-muted mb-1">Name *</label>
         <input required value={form.name ?? ''} onChange={e => set('name', e.target.value)} placeholder='e.g. The Springmeyers'
           className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+        {possibleDuplicates.length > 0 && (
+          <div className="mt-2 rounded-lg border border-casa-gold/40 bg-casa-gold/5 p-3">
+            <p className="text-caption font-semibold text-casa-muted mb-1.5">This might already exist:</p>
+            <div className="space-y-1.5">
+              {possibleDuplicates.map(match => {
+                const existing = contacts.find(c => c.id === match.id)
+                if (!existing) return null
+                return (
+                  <Button key={match.id} type="button" variant="subtle" size="sm" fullWidth align="start"
+                    onClick={() => onEditExisting(existing)}>
+                    Use existing: {existing.name}{existing.phone ? ` — ${existing.phone}` : ''}
+                  </Button>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
       <div>
         <label className="block text-caption font-semibold text-casa-muted mb-1">
@@ -1257,8 +1308,10 @@ export default function SavedPlacesSettingsPage() {
                 </div>
                 <PlaceForm
                   initial={placeMode.type === 'edit' ? placeMode.place : null}
+                  places={places}
                   saving={savePlaceMutation.isPending}
                   onCancel={() => setPlaceMode({ type: 'list' })}
+                  onEditExisting={place => setPlaceMode({ type: 'edit', place })}
                   onSave={data => savePlaceMutation.mutate({ id: placeMode.type === 'edit' ? placeMode.place.id : undefined, data })}
                 />
               </div>
@@ -1358,8 +1411,10 @@ export default function SavedPlacesSettingsPage() {
                 <ContactForm
                   initial={contactMode.type === 'edit' ? contactMode.contact : null}
                   places={places}
+                  contacts={contacts}
                   saving={saveContactMutation.isPending}
                   onCancel={() => setContactMode({ type: 'list' })}
+                  onEditExisting={contact => setContactMode({ type: 'edit', contact })}
                   onSave={data => saveContactMutation.mutate({ id: contactMode.type === 'edit' ? contactMode.contact.id : undefined, data })}
                 />
               </div>
