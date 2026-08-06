@@ -12,6 +12,8 @@ const actionFunction = readFileSync(new URL('../supabase/functions/execute-ai-ac
 const householdDirectory = readFileSync(new URL('../supabase/functions/_shared/assistant-household-directory.mjs', import.meta.url), 'utf8')
 const familyIdentity = readFileSync(new URL('../supabase/functions/_shared/family-identity.mjs', import.meta.url), 'utf8')
 const householdGraph = readFileSync(new URL('../supabase/functions/build-household-graph/index.ts', import.meta.url), 'utf8')
+const familyContactMigration = readFileSync(new URL('../supabase/migrations/20260805200500_add_confirmed_family_contact_relationships.sql', import.meta.url), 'utf8')
+const contactPlaceMigration = readFileSync(new URL('../supabase/migrations/20260805201500_add_contact_place_relationships.sql', import.meta.url), 'utf8')
 
 test('assistant requests carry complete client trace provenance', () => {
   for (const field of [
@@ -233,6 +235,18 @@ test('provider-list questions use confirmed facts before calendar-backed guesses
   assert.match(assistantFunction, /My best calendar-based guess is/)
   assert.match(assistantFunction, /tool: 'associate_family_contact'/)
   assert.match(assistantFunction, /\.limit\(1000\)/)
+  assert.match(assistantFunction, /householdMembersByProvider/)
+  assert.match(assistantFunction, /shared household provider/)
+  assert.match(assistantFunction, /requestedRoleWord === 'coaches'/)
+  assert.match(assistantFunction, /Math\.min\(sharedWith\.length, 3\) \* 0\.1/)
+  assert.doesNotMatch(assistantFunction, /contactsConfirmedForOtherMembers/)
+})
+
+test('household relationships remain many-to-many across shared contacts and places', () => {
+  assert.match(familyContactMigration, /unique \(family_member_id, contact_id, relationship\)/)
+  assert.match(contactPlaceMigration, /unique \(contact_id, place_id, relationship\)/)
+  assert.doesNotMatch(familyContactMigration, /unique \(contact_id\)/)
+  assert.doesNotMatch(contactPlaceMigration, /unique \(place_id\)/)
 })
 
 test('assistant preserves full family names for alias-aware identity resolution', () => {

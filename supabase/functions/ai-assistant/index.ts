@@ -918,7 +918,11 @@ Deno.serve(async (req) => {
           .map(normalizeSearchText)
           .some((term) => normalizedQuestion.includes(term)),
       )
-    const requestedRole = normalizeSearchText(providerListRoleMatch[1]).replace(/s$/, '')
+    const requestedRoleWord = normalizeSearchText(providerListRoleMatch[1])
+    const requestedRole = requestedRoleWord === 'coaches'
+      ? 'coach'
+      : requestedRoleWord.replace(/s$/, '')
+    const requestedRolePlural = requestedRole === 'coach' ? 'coaches' : `${requestedRole}s`
     const roleMatches = (relationship: string | null | undefined) => {
       const normalized = normalizeSearchText(relationship ?? '')
       if (requestedRole === 'doctor' || requestedRole === 'provider') {
@@ -975,7 +979,7 @@ Deno.serve(async (req) => {
           status: 200,
           payload: {
             type: 'text',
-            text: `${member.name}'s confirmed ${requestedRole === 'doctor' ? 'doctors and specialists' : `${requestedRole}s`}: ${facts.join('; ')}.`,
+            text: `${member.name}'s confirmed ${requestedRole === 'doctor' ? 'doctors and specialists' : requestedRolePlural}: ${facts.join('; ')}.`,
             correlation_id: cid,
             telemetry: {
               ...llmTelemetry,
@@ -1028,18 +1032,23 @@ Deno.serve(async (req) => {
         ? new RegExp(`\\b(?:${otherMemberNames.join('|')})\\b`, 'i')
         : null
       const priorNormalized = normalizeSearchText(assistantHistory)
-      const contactsConfirmedForOtherMembers = new Set(
-        (confirmedFamilyContactRelationships as FamilyProviderRelationship[] ?? [])
-          .filter((association) =>
-            association.family_member?.name?.toLowerCase() !== member.name?.toLowerCase() &&
-            association.contact?.name)
-          .map((association) => normalizeSearchText(association.contact?.name ?? '')),
-      )
+      const providerIdentityKey = (contact: { name?: string; phone?: string | null } | null | undefined) =>
+        normalizeSearchText(contact?.phone ?? '') || normalizeSearchText(contact?.name ?? '')
+      const householdMembersByProvider = new Map<string, Set<string>>()
+      for (const association of confirmedFamilyContactRelationships as FamilyProviderRelationship[] ?? []) {
+        const key = providerIdentityKey(association.contact)
+        const familyName = association.family_member?.name
+        if (!key || !familyName || familyName.toLowerCase() === member.name.toLowerCase()) continue
+        const sharedMembers = householdMembersByProvider.get(key) ?? new Set<string>()
+        sharedMembers.add(familyName)
+        householdMembersByProvider.set(key, sharedMembers)
+      }
       const candidates = new Map<string, {
         contact: ProviderContact
         score: number
         count: number
         relationship: string
+        sharedWith: string[]
       }>()
       for (const event of providerHistory ?? []) {
         const enrichment = Array.isArray(event.event_enrichments)
@@ -1048,13 +1057,13 @@ Deno.serve(async (req) => {
         const contact = contactByName.get(normalizeSearchText(enrichment?.contact_name ?? ''))
         if (!contact || priorNormalized.includes(normalizeSearchText(contact.name))) continue
         const eventText = `${event.title ?? ''} ${event.description ?? ''}`
+        if (/\b(?:cancelled|canceled|declined|not attending|will not attend|won't attend)\b/i.test(eventText)) continue
         const explicitMember = memberPattern.test(eventText)
         const explicitOtherMember = otherMemberPattern?.test(eventText) ?? false
         const assignedMember = (event.event_members ?? []).some(
           (assignment: { family_member_id?: string }) => assignment.family_member_id === member.id,
         )
         if (!assignedMember || explicitOtherMember) continue
-        if (!explicitMember && contactsConfirmedForOtherMembers.has(normalizeSearchText(contact.name))) continue
         const evidenceText = `${eventText} ${enrichment?.category ?? ''} ${contact.relationship ?? ''}`
         if (!roleMatches(evidenceText)) continue
         const relationship = /\borthodont/i.test(evidenceText)
@@ -1067,11 +1076,13 @@ Deno.serve(async (req) => {
                 ? 'therapist'
                 : 'doctor'
         const candidateKey = normalizeSearchText(contact.phone ?? '') || contact.id
+        const sharedWith = [...(householdMembersByProvider.get(providerIdentityKey(contact)) ?? [])].sort()
         const current = candidates.get(candidateKey) ?? {
           contact,
-          score: 0,
+          score: Math.min(sharedWith.length, 3) * 0.1,
           count: 0,
           relationship,
+          sharedWith,
         }
         current.score += explicitMember ? 4 : 1
         current.count += 1
@@ -1104,9 +1115,9 @@ Deno.serve(async (req) => {
               contact_id: first.contact.id,
               relationship: first.relationship,
               evidence_count: first.count,
-              evidence_notes: 'Suggested from provider events assigned to this family member; explicit name matches are weighted highest.',
+              evidence_notes: 'Suggested from provider events assigned to this family member; explicit name matches are weighted highest and confirmed household sharing is positive supporting evidence.',
             },
-            display_text: `I don't have another confirmed ${requestedRole} saved for ${member.name}. My best calendar-based guess is ${first.contact.name}${location ? ` at ${location}` : ''}, based on ${first.count} ${first.count === 1 ? 'entry' : 'entries'}${alternative ? `. Another possibility is ${alternative.contact.name}` : ''}. Save ${first.contact.name} as ${member.name}'s ${first.relationship}?`,
+            display_text: `I don't have another confirmed ${requestedRole} saved for ${member.name}. My best calendar-based guess is ${first.contact.name}${location ? ` at ${location}` : ''}, based on ${first.count} ${first.count === 1 ? 'entry' : 'entries'}${first.sharedWith.length ? `. ${first.contact.name} is also confirmed for ${first.sharedWith.join(' and ')}, which supports this being a shared household provider` : ''}${alternative ? `. Another possibility is ${alternative.contact.name}` : ''}. Save ${first.contact.name} as ${member.name}'s ${first.relationship}?`,
             correlation_id: cid,
             telemetry: {
               ...llmTelemetry,
