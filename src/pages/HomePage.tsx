@@ -14,6 +14,7 @@ import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import EventDetailPanel from '../components/calendar/EventDetailPanel'
 import MiniPlayer from '../components/music/MiniPlayer'
 import HomeRightPanel from '../components/home/HomeRightPanel'
+import PrepItemDetailPanel from '../components/home/PrepItemDetailPanel'
 import { isAllDayReminder, isTimedReminder } from '../utils/holidays'
 import SwipeableReminderPill from '../components/shared/SwipeableReminderPill'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
@@ -28,7 +29,7 @@ import {
 } from '../lib/eventPlanOverrides'
 import { derivePlan, type DerivedPerson } from '../lib/eventCommandCenter'
 import { projectHomeTransportation } from '../lib/homeTransportationProjection.mjs'
-import type { FamilyMember } from '../types'
+import type { FamilyMember, PrepItem } from '../types'
 import { eventOverlapsDay, getEventEndDate, getEventStartDate } from '../utils/eventTime'
 import { formatDurationLabel, pickActiveHeroEvent, resolveRestingIndex } from '../lib/heroFocus.mjs'
 import { cleanEventTitle, isBirthdayEvent } from '../utils/eventTitle'
@@ -204,6 +205,7 @@ export default function HomePage() {
   )
   const { visibleMembers } = useCalendarStore()
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [selectedPrepItem, setSelectedPrepItem] = useState<PrepItem | null>(null)
   const [pastItemsOpen, setPastItemsOpen] = useState(false)
   const scrollRef = useRef<HTMLElement | null>(null)
   const nowLineRef = useRef<HTMLLIElement | null>(null)
@@ -613,7 +615,11 @@ export default function HomePage() {
       </PrimaryRail>
 
       {/* ── Right panel (tablet only) ──────────────────────── */}
-      <HomeRightPanel now={now} allTodayEvents={allTodayEvents ?? []} />
+      <HomeRightPanel now={now} allTodayEvents={allTodayEvents ?? []} onSelectPrepItem={setSelectedPrepItem} />
+
+      <div onClick={e => e.stopPropagation()}>
+        <PrepItemDetailPanel item={selectedPrepItem} onClose={() => setSelectedPrepItem(null)} />
+      </div>
     </div>
   )
 }

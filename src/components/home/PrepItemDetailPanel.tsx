@@ -18,6 +18,7 @@ import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import type { PrepItem } from '../../types'
 import { getPrepCategoryConfig } from '../../utils/prepCategories'
 import BounceScroll from '../shared/BounceScroll'
+import MarkdownContent from '../shared/MarkdownContent'
 import { Button, CalendarPill, Chip, Heading, IconButton, PersonAvatarStack } from '../ui'
 
 interface PrepItemDetailPanelProps {
@@ -89,12 +90,26 @@ function toReadableEmailText(raw: string): string {
     .trim()
 }
 
-function formatEmailBody(body: string | null | undefined): string[] {
-  if (!body) return []
-  return toReadableEmailText(body)
-    .split(/\n{2,}/)
-    .map(part => part.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
+function linkifyEmailBody(text: string): string {
+  return text.replace(/(https?:\/\/[^\s<>()]+)/g, (url) => {
+    const trailingMatch = url.match(/[),.;:!?\]]+$/)
+    const trailing = trailingMatch ? trailingMatch[0] : ''
+    const cleanUrl = trailing ? url.slice(0, -trailing.length) : url
+    let label = cleanUrl
+    try {
+      label = new URL(cleanUrl).hostname.replace(/^www\./, '')
+    } catch {
+      label = 'link'
+    }
+    return `[${label}](${cleanUrl})${trailing}`
+  })
+}
+
+function formatEmailBody(body: string | null | undefined): string {
+  if (!body) return ''
+  const readable = toReadableEmailText(body)
+  if (!readable) return ''
+  return linkifyEmailBody(readable)
 }
 
 function useIsMobile() {
@@ -121,7 +136,7 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
   const [editingDueBy, setEditingDueBy] = useState(false)
   const [dueByDraft, setDueByDraft] = useState({ date: '', time: '' })
   const [savingDueBy, setSavingDueBy] = useState(false)
-  const emailParagraphs = useMemo(() => formatEmailBody(data?.gmailContext?.email_body), [data?.gmailContext?.email_body])
+  const emailMarkdown = useMemo(() => formatEmailBody(data?.gmailContext?.email_body), [data?.gmailContext?.email_body])
   const confidence = useMemo(() => prepItemConfidenceLabel(data?.source_confidence ?? item?.source_confidence), [data?.source_confidence, item?.source_confidence])
   const suggestedAssigneeId = data?.suggestedAssignees?.[0]?.id ?? null
   const selectedAssigneeId = item?.assigned_to ?? suggestedAssigneeId
@@ -179,7 +194,7 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
   async function launchCreate(kind: 'event' | 'reminder') {
     if (!item || acting) return
     setActing(`create-${kind}`)
-    const bodyContext = emailParagraphs.slice(0, 6).join('\n')
+    const bodyContext = emailMarkdown.split('\n').slice(0, 12).join('\n')
     const prompt = buildAiDraftPrompt({
       kind,
       title: item.event_title ?? item.description,
@@ -411,13 +426,12 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
                       <p className="text-caption text-casa-muted">
                         Received {formatWhen(data.gmailContext.received_at)}
                       </p>
-                      {emailParagraphs.length > 0 ? (
-                        <div className="mt-3 space-y-2">
-                          {emailParagraphs.map((paragraph, idx) => (
-                            <p key={idx} className="text-body-sm text-casa-text leading-relaxed">
-                              {paragraph}
-                            </p>
-                          ))}
+                      {emailMarkdown ? (
+                        <div className="mt-3">
+                          <MarkdownContent
+                            content={emailMarkdown}
+                            className="text-body-sm text-casa-text leading-relaxed"
+                          />
                         </div>
                       ) : (
                         <p className="text-caption text-casa-muted">No email body was saved for this message.</p>
