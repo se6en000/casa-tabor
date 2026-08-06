@@ -215,6 +215,18 @@ test('unconfirmed provider lookups offer evidence-backed confirmation actions', 
   assert.match(actionFunction, /onConflict: 'family_member_id,contact_id,relationship'/)
 })
 
+test('directory suggestion tool actions expose structured names and alternatives for tappable UI cards', () => {
+  assert.match(assistantFunction, /family_member_name: member\.name/)
+  assert.match(assistantFunction, /contact_name: first\.contact\.name/)
+  assert.match(assistantFunction, /entity_name: candidate\.name/)
+  assert.match(assistantFunction, /entity_detail: detail \|\| undefined/)
+  assert.match(assistantFunction, /alternatives: alternative\s*\n?\s*\?\s*\[\{/)
+  assert.match(assistantFunction, /alternativeCandidates\.map\(\(candidate\) => \(\{/)
+  assert.match(drawer, /function DirectorySuggestionCard/)
+  assert.match(drawer, /function buildDirectoryCandidates/)
+  assert.match(drawer, /onAccept: \(candidateArgs: Record<string, unknown>\) => void/)
+})
+
 test('directory fallback can confirm entities and persist contact-place associations', () => {
   assert.match(assistantFunction, /confirm_directory_entity/)
   assert.match(assistantFunction, /associate_contact_place/)

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { useAIAssistant, type AIMessage } from '../../hooks/useAIAssistant'
@@ -1386,11 +1386,21 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
     ta?.tool === 'delete_events_by_title' ||
     ta?.tool === 'remove_grocery_item' ||
     ta?.tool === 'clear_checked_grocery_items'
+  const isDirectorySuggestion =
+    ta?.tool === 'associate_family_contact' ||
+    ta?.tool === 'associate_contact_place' ||
+    ta?.tool === 'confirm_directory_entity'
 
   const doConfirm = useCallback(async () => {
     if (!ta || actionTransitionRef.current) return false
     actionTransitionRef.current = true
     return onConfirmToolAction(msg.id, ta.tool, ta.args)
+  }, [msg.id, ta, onConfirmToolAction])
+
+  const doConfirmCandidate = useCallback(async (candidateArgs: Record<string, unknown>) => {
+    if (!ta || actionTransitionRef.current) return false
+    actionTransitionRef.current = true
+    return onConfirmToolAction(msg.id, ta.tool, candidateArgs)
   }, [msg.id, ta, onConfirmToolAction])
 
   const doCancel = useCallback(async () => {
@@ -1478,6 +1488,9 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                     : ta.tool === 'check_grocery_item' ? 'Grocery item updated ✓'
                     : ta.tool === 'remove_grocery_item' ? 'Removed from grocery list ✓'
                     : ta.tool === 'update_grocery_item_quantity' ? 'Grocery quantity updated ✓'
+                    : ta.tool === 'associate_family_contact' ? 'Saved to Household Directory ✓'
+                    : ta.tool === 'associate_contact_place' ? 'Location saved ✓'
+                    : ta.tool === 'confirm_directory_entity' ? 'Added to Household Directory ✓'
                     : 'Done ✓'}
                 </div>
                 {ta.tool === 'create_event' && ta.resultEventId && (
@@ -1554,6 +1567,14 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                   )}
                 </div>
               </div>
+            ) : isDirectorySuggestion ? (
+              <DirectorySuggestionCard
+                tool={ta.tool}
+                args={ta.args}
+                loading={ta.status === 'loading'}
+                onAccept={doConfirmCandidate}
+                onCancel={doCancel}
+              />
             ) : (
               <>
                 <ToolActionPreview tool={ta.tool} args={ta.args} events={events} />
@@ -1642,7 +1663,7 @@ function confirmActionLabel(tool: string) {
   return 'Confirm action'
 }
 
-function ConfirmationHeading({ kind, children }: { kind: 'calendar' | 'reminder' | 'grocery' | 'recipe' | 'warning'; children: React.ReactNode }) {
+function ConfirmationHeading({ kind, icon, children }: { kind: 'calendar' | 'reminder' | 'grocery' | 'recipe' | 'warning' | 'directory'; icon?: 'contact' | 'place'; children: React.ReactNode }) {
   const Icon = kind === 'calendar'
     ? CalendarDays
     : kind === 'reminder'
@@ -1651,7 +1672,9 @@ function ConfirmationHeading({ kind, children }: { kind: 'calendar' | 'reminder'
         ? ShoppingCart
         : kind === 'recipe'
           ? ChefHat
-          : AlertTriangle
+          : kind === 'directory'
+            ? (icon === 'place' ? MapPin : UserPlus)
+            : AlertTriangle
   const label = kind === 'calendar'
     ? 'Calendar'
     : kind === 'reminder'
@@ -1660,7 +1683,9 @@ function ConfirmationHeading({ kind, children }: { kind: 'calendar' | 'reminder'
         ? 'Grocery list'
         : kind === 'recipe'
           ? 'Recipe library'
-          : 'Review carefully'
+          : kind === 'directory'
+            ? 'Household Directory'
+            : 'Review carefully'
   return (
     <div className="space-y-1">
       <div className={cn(
@@ -1671,6 +1696,156 @@ function ConfirmationHeading({ kind, children }: { kind: 'calendar' | 'reminder'
         {label}
       </div>
       <h3 className="text-body font-semibold leading-snug text-casa-navy">{children}</h3>
+    </div>
+  )
+}
+
+type DirectoryCandidate = {
+  key: string
+  label: string
+  sublabel?: string
+  evidenceLabel?: string
+  confirmArgs: Record<string, unknown>
+}
+
+function buildDirectoryCandidates(tool: string, args: Record<string, unknown>): {
+  heading: string
+  icon: 'contact' | 'place'
+  candidates: DirectoryCandidate[]
+} {
+  const evidenceLabel = (count: unknown) => {
+    const n = typeof count === 'number' ? count : Number(count) || 0
+    return n > 0 ? `${n} calendar ${n === 1 ? 'entry' : 'entries'}` : undefined
+  }
+
+  if (tool === 'associate_family_contact') {
+    const familyMemberName = String(args.family_member_name ?? 'this family member')
+    const relationship = String(args.relationship ?? 'contact')
+    const sharedWith = Array.isArray(args.shared_with) ? (args.shared_with as string[]) : []
+    const alternatives = Array.isArray(args.alternatives) ? args.alternatives as Array<{
+      contact_id?: string
+      contact_name?: string
+      relationship?: string
+      evidence_count?: number
+    }> : []
+    const candidates: DirectoryCandidate[] = [{
+      key: 'primary',
+      label: String(args.contact_name ?? 'this contact'),
+      sublabel: [args.place_name, sharedWith.length ? `Also confirmed for ${sharedWith.join(', ')}` : null]
+        .filter(Boolean)
+        .join(' · ') || undefined,
+      evidenceLabel: evidenceLabel(args.evidence_count),
+      confirmArgs: args,
+    }]
+    for (const alt of alternatives) {
+      if (!alt.contact_id) continue
+      candidates.push({
+        key: alt.contact_id,
+        label: alt.contact_name ?? 'Another contact',
+        evidenceLabel: evidenceLabel(alt.evidence_count),
+        confirmArgs: {
+          ...args,
+          contact_id: alt.contact_id,
+          contact_name: alt.contact_name,
+          relationship: alt.relationship ?? args.relationship,
+          evidence_count: alt.evidence_count,
+        },
+      })
+    }
+    return { heading: `Save ${familyMemberName}'s ${relationship}?`, icon: 'contact', candidates }
+  }
+
+  if (tool === 'associate_contact_place') {
+    const contactName = String(args.contact_name ?? 'this contact')
+    const alternatives = Array.isArray(args.alternatives) ? args.alternatives as Array<{
+      place_id?: string
+      place_name?: string
+      place_address?: string
+      evidence_count?: number
+    }> : []
+    const candidates: DirectoryCandidate[] = [{
+      key: 'primary',
+      label: String(args.place_name ?? 'this location'),
+      sublabel: args.place_address ? String(args.place_address) : undefined,
+      evidenceLabel: evidenceLabel(args.evidence_count),
+      confirmArgs: args,
+    }]
+    for (const alt of alternatives) {
+      if (!alt.place_name) continue
+      candidates.push({
+        key: alt.place_id ?? alt.place_name,
+        label: alt.place_name,
+        sublabel: alt.place_address,
+        evidenceLabel: evidenceLabel(alt.evidence_count),
+        confirmArgs: {
+          ...args,
+          place_id: alt.place_id,
+          place_name: alt.place_name,
+          place_address: alt.place_address,
+          evidence_count: alt.evidence_count,
+        },
+      })
+    }
+    return { heading: `Where does ${contactName} go?`, icon: 'place', candidates }
+  }
+
+  // confirm_directory_entity
+  const entityType = args.entity_type === 'place' ? 'place' : 'contact'
+  return {
+    heading: `Add this ${entityType} to the Household Directory?`,
+    icon: entityType === 'place' ? 'place' : 'contact',
+    candidates: [{
+      key: 'primary',
+      label: String(args.entity_name ?? 'this entry'),
+      sublabel: args.entity_detail ? String(args.entity_detail) : undefined,
+      evidenceLabel: evidenceLabel(args.evidence_count),
+      confirmArgs: args,
+    }],
+  }
+}
+
+function DirectorySuggestionCard({ tool, args, loading, onAccept, onCancel }: {
+  tool: string
+  args: Record<string, unknown>
+  loading: boolean
+  onAccept: (candidateArgs: Record<string, unknown>) => void
+  onCancel: () => void
+}) {
+  const { heading, icon, candidates } = buildDirectoryCandidates(tool, args)
+  return (
+    <div className="space-y-3">
+      <ConfirmationHeading kind="directory" icon={icon}>{heading}</ConfirmationHeading>
+      <div className="space-y-2">
+        {candidates.map((candidate) => (
+          <Button
+            key={candidate.key}
+            variant="ghost"
+            type="button"
+            disabled={loading}
+            onClick={() => onAccept(candidate.confirmArgs)}
+            className="min-h-control w-full flex items-center justify-between gap-3 px-4 py-3 rounded-button bg-casa-gold/10 border border-casa-gold/40 text-left hover:bg-casa-gold/20 disabled:opacity-50 transition-colors"
+          >
+            <span className="min-w-0">
+              <span className="block text-body-sm font-semibold text-casa-navy truncate">{candidate.label}</span>
+              {(candidate.sublabel || candidate.evidenceLabel) && (
+                <span className="block text-caption text-casa-muted truncate">
+                  {[candidate.sublabel, candidate.evidenceLabel].filter(Boolean).join(' · ')}
+                </span>
+              )}
+            </span>
+            {loading ? <Loader2 size={16} className="animate-spin shrink-0" /> : <Check size={16} className="shrink-0 text-casa-gold" />}
+          </Button>
+        ))}
+      </div>
+      <Button
+        variant="ghost"
+        type="button"
+        disabled={loading}
+        onClick={onCancel}
+        className="min-h-control flex items-center gap-2 px-4 rounded-button border border-casa-border text-body-sm text-casa-navy hover:bg-casa-divider transition-colors disabled:opacity-50"
+      >
+        <XCircle size={12} /> None of these
+      </Button>
     </div>
   )
 }

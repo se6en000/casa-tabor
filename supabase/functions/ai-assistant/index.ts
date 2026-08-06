@@ -1112,10 +1112,22 @@ Deno.serve(async (req) => {
             tool: 'associate_family_contact',
             args: {
               family_member_id: member.id,
+              family_member_name: member.name,
               contact_id: first.contact.id,
+              contact_name: first.contact.name,
               relationship: first.relationship,
+              place_name: location || undefined,
               evidence_count: first.count,
+              shared_with: first.sharedWith,
               evidence_notes: 'Suggested from provider events assigned to this family member; explicit name matches are weighted highest and confirmed household sharing is positive supporting evidence.',
+              alternatives: alternative
+                ? [{
+                    contact_id: alternative.contact.id,
+                    contact_name: alternative.contact.name,
+                    relationship: alternative.relationship,
+                    evidence_count: alternative.count,
+                  }]
+                : [],
             },
             display_text: `I don't have another confirmed ${requestedRole} saved for ${member.name}. My best calendar-based guess is ${first.contact.name}${location ? ` at ${location}` : ''}, based on ${first.count} ${first.count === 1 ? 'entry' : 'entries'}${first.sharedWith.length ? `. ${first.contact.name} is also confirmed for ${first.sharedWith.join(' and ')}, which supports this being a shared household provider` : ''}${alternative ? `. Another possibility is ${alternative.contact.name}` : ''}. Save ${first.contact.name} as ${member.name}'s ${first.relationship}?`,
             correlation_id: cid,
@@ -1183,6 +1195,9 @@ Deno.serve(async (req) => {
           args: {
             entity_type: candidate.entity_type,
             entity_id: candidate.id,
+            entity_name: candidate.name,
+            entity_detail: detail || undefined,
+            evidence_count: candidate.occurrence_count ?? 1,
           },
           display_text: `I found a likely ${candidate.entity_type} from ${candidate.occurrence_count ?? 1} calendar ${(candidate.occurrence_count ?? 1) === 1 ? 'entry' : 'entries'}: ${candidate.name}${detail ? ` — ${detail}` : ''}. Add it to the confirmed Household Directory?`,
           correlation_id: cid,
@@ -1253,7 +1268,8 @@ Deno.serve(async (req) => {
         const best = [...candidates.values()].sort((a, b) => b.count - a.count).slice(0, 2)
         if (best.length > 0) {
           const first = best[0]
-          const alternatives = best.slice(1).map((candidate) => candidate.contact.name)
+          const alternativeCandidates = best.slice(1)
+          const alternatives = alternativeCandidates.map((candidate) => candidate.contact.name)
           const suggestion = `I found ${first.contact.name} as a likely ${relationship} for ${member.name} in ${first.count} calendar ${first.count === 1 ? 'entry' : 'entries'}${alternatives.length ? `. Another possibility is ${alternatives.join(', ')}` : ''}. Save ${first.contact.name} as ${member.name}'s ${relationship}?`
           return {
             status: 200,
@@ -1262,10 +1278,18 @@ Deno.serve(async (req) => {
               tool: 'associate_family_contact',
               args: {
                 family_member_id: member.id,
+                family_member_name: member.name,
                 contact_id: first.contact.id,
+                contact_name: first.contact.name,
                 relationship,
                 evidence_count: first.count,
                 evidence_notes: 'Suggested from explicit family-member and provider calendar evidence; confirmed by household.',
+                alternatives: alternativeCandidates.map((candidate) => ({
+                  contact_id: candidate.contact.id,
+                  contact_name: candidate.contact.name,
+                  relationship,
+                  evidence_count: candidate.count,
+                })),
               },
               display_text: suggestion,
               correlation_id: cid,
@@ -1395,6 +1419,7 @@ Deno.serve(async (req) => {
               tool: 'associate_contact_place',
               args: {
                 contact_id: mentionedContact.id,
+                contact_name: mentionedContact.name,
                 place_id: first.place?.id,
                 place_name: first.placeName,
                 place_address: first.address || undefined,
@@ -1403,6 +1428,14 @@ Deno.serve(async (req) => {
                 evidence_count: first.count,
                 evidence_notes: 'Suggested from exact contact and place matches in calendar history; confirmed by household.',
                 confirm_place: true,
+                alternatives: alternative
+                  ? [{
+                      place_id: alternative.place?.id,
+                      place_name: alternative.placeName,
+                      place_address: alternative.address || undefined,
+                      evidence_count: alternative.count,
+                    }]
+                  : [],
               },
               display_text: `I found ${first.placeName}${address ? ` at ${address}` : ''} as the likely location for ${mentionedContact.name} in ${first.count} calendar ${first.count === 1 ? 'entry' : 'entries'}${alternative ? `. Another possibility is ${alternative.placeName}` : ''}. Save this as the default location?`,
               correlation_id: cid,
