@@ -464,7 +464,7 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
                   </section>
 
                   {(data?.gmailContext || data?.eventSnapshot) && (
-                    <section className="rounded-card border border-casa-border p-4">
+                    <section className="rounded-card border border-casa-border bg-casa-bg p-4">
                       <h3 className="font-semibold text-casa-navy text-body-sm mb-2">
                         {data?.gmailContext ? 'Email context' : 'Source event'}
                       </h3>
