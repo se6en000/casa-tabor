@@ -14,7 +14,9 @@ const createEventSource = source.slice(
 test('create_event preserves semantic title and location without executor reinterpretation', () => {
   assert.doesNotMatch(source, /function resolveCreateTitleAndLocation/)
   assert.match(createEventSource, /title:\s*normalizedTitle/)
-  assert.match(createEventSource, /location_name:\s*normalizedLocation \?\? null/)
+  // Location resolves through the directory fuzzy-match first (falls back to
+  // the raw normalizedLocation text when no saved_places match is found).
+  assert.match(createEventSource, /location_name:\s*resolvedLocationName \?\? null/)
   assert.doesNotMatch(createEventSource, /functions\.invoke\('enrich-event'/)
   assert.doesNotMatch(createEventSource, /functions\.invoke\('ensure-event-transportation-plan'/)
 })

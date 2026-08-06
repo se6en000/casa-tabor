@@ -11,6 +11,7 @@ import { requireEnv, optionalEnv } from '../_shared/env.mjs'
 import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
 import { verifyPlaceAddress } from '../_shared/verify-place-address.mjs'
 import { resolveFamilyMemberByName } from '../_shared/family-identity.mjs'
+import { pickBestDirectoryMatch } from '../_shared/directory-match.mjs'
 import {
   buildRecurringDetailMutation,
   buildRecurringSeriesPatch,
@@ -574,11 +575,40 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Prefer an existing saved_places match over the raw typed/spoken
+      // location text so quick AI-created events link to the same directory
+      // entry instead of spawning a near-duplicate place, and so the event
+      // gets a real address up front (needed for the driving-plan feature).
+      let resolvedLocationName = normalizedLocation
+      let resolvedAddress: string | null = null
+      let resolvedLat: number | null = null
+      let resolvedLng: number | null = null
+      if (normalizedLocation) {
+        const { data: similarPlaces } = await sb.rpc('find_similar_places', { p_name: normalizedLocation, p_phone: null })
+        const matchedPlace = pickBestDirectoryMatch(similarPlaces)
+        if (matchedPlace) {
+          const { data: fullPlace } = await sb
+            .from('saved_places')
+            .select('name, address, city, state, zip, lat, lng')
+            .eq('id', matchedPlace.id)
+            .maybeSingle()
+          if (fullPlace) {
+            resolvedLocationName = fullPlace.name
+            resolvedAddress = [fullPlace.address, fullPlace.city, fullPlace.state, fullPlace.zip].filter(Boolean).join(', ') || null
+            resolvedLat = fullPlace.lat ?? null
+            resolvedLng = fullPlace.lng ?? null
+          }
+        }
+      }
+
       const { data: event, error } = await sb.from('events').insert({
         title: normalizedTitle,
         start_time: args.start,
         end_time: args.end,
-        location_name: normalizedLocation ?? null,
+        location_name: resolvedLocationName ?? null,
+        address: resolvedAddress,
+        lat: resolvedLat,
+        lng: resolvedLng,
         all_day: args.all_day ?? false,
         description: args.notes ?? null,
         status: 'confirmed',

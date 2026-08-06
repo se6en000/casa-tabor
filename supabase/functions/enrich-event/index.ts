@@ -10,6 +10,7 @@ import {
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { parseLastJsonObject } from '../_shared/json-output.mjs'
+import { pickBestDirectoryMatch } from '../_shared/directory-match.mjs'
 
 interface UsageAccum { inputTokens: number; outputTokens: number }
 interface ResolvedDestination {
@@ -261,6 +262,23 @@ Deno.serve(async (req) => {
   const contractFields = Object.fromEntries(
     ENRICHMENT_FIELDS.map((key) => [key, enrichmentFields[key]]),
   ) as Record<EnrichmentField, unknown>
+
+  // Prefer an existing confirmed saved_contacts row over the LLM's raw
+  // contact guess — this is the same real-world provider whether the AI
+  // wrote "Dr. Ledakis" or "Dr. John S. Ledakis, DDS, PA", and reusing the
+  // canonical name/phone avoids the household directory drifting into
+  // near-duplicate contacts every time an event gets enriched.
+  if (!lockedFields.includes('contact_name') && typeof contractFields.contact_name === 'string' && contractFields.contact_name) {
+    const { data: similarContacts } = await sb.rpc('find_similar_contacts', {
+      p_name: contractFields.contact_name,
+      p_phone: typeof contractFields.contact_phone === 'string' ? contractFields.contact_phone : null,
+    })
+    const matchedContact = pickBestDirectoryMatch(similarContacts, { requireConfirmed: true })
+    if (matchedContact) {
+      contractFields.contact_name = matchedContact.name
+      contractFields.contact_phone = matchedContact.phone ?? contractFields.contact_phone
+    }
+  }
 
   const nameToId = Object.fromEntries(familyMembers.map(m => [m.name.toLowerCase(), m.id]))
 
