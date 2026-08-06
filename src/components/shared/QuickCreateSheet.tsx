@@ -4,7 +4,10 @@ import { addHours } from 'date-fns'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
+import { useSavedPlaces, savedPlaceAddress } from '../../hooks/useSavedPlaces'
+import { resolveDirectoryPlaceSave, type DirectoryPlaceSelection } from '../../utils/directorySuggestions'
 import { normalizeAllDayEventRange } from '../../utils/allDayEventRange'
+import DirectoryPlaceInput from './DirectoryPlaceInput'
 import {
   Alert,
   Button,
@@ -53,7 +56,9 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
   const [allDay, setAllDay] = useState(false)
   const [eventType, setEventType] = useState<'event' | 'reminder'>('event')
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([])
-  const [location, setLocation] = useState('')
+  const [placeSelection, setPlaceSelection] = useState<DirectoryPlaceSelection>(null)
+  const [placeFieldKey, setPlaceFieldKey] = useState(0)
+  const { data: savedPlaces = [] } = useSavedPlaces()
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none')
   const [notes, setNotes] = useState('')
@@ -73,7 +78,8 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
       setAllDay(false)
       setEventType('event')
       setSelectedMemberIds([])
-      setLocation('')
+      setPlaceSelection(null)
+      setPlaceFieldKey((k) => k + 1)
       setDetailsOpen(false)
       setRepeat('none')
       setNotes('')
@@ -156,6 +162,52 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     const allDayRange = allDay ? normalizeAllDayEventRange(startDT, endDT) : null
     const repeatRule = repeat === 'none' ? null : `FREQ=${repeat.toUpperCase()}`
 
+    // Resolve the location against saved_places (lookup-first) instead of
+    // trusting free-typed text, so quick-created events dedupe/link to the
+    // household directory and get a real address up front for the driving
+    // plan instead of an unstructured location string.
+    const placeResolution = resolveDirectoryPlaceSave(
+      placeSelection,
+      savedPlaces.map((p) => ({ id: p.id, primary: p.name, aliases: p.aliases })),
+    )
+    let resolvedLocationName: string | null = null
+    let resolvedAddress: string | null = null
+    let resolvedLat: number | null = null
+    let resolvedLng: number | null = null
+    if (placeResolution.action === 'link') {
+      const place = savedPlaces.find((p) => p.id === placeResolution.placeId)
+      resolvedLocationName = place?.name ?? null
+      resolvedAddress = place ? savedPlaceAddress(place) || null : null
+      resolvedLat = place?.lat ?? null
+      resolvedLng = place?.lng ?? null
+    } else if (placeResolution.action === 'create-and-link') {
+      const input = placeResolution.createInput
+      const { error: createPlaceError } = await supabase.from('saved_places').insert({
+        name: input.name,
+        aliases: [],
+        address: input.address ?? null,
+        city: input.city ?? null,
+        state: input.state ?? null,
+        zip: input.zip ?? null,
+        lat: input.lat ?? null,
+        lng: input.lng ?? null,
+        category: 'other',
+        confirmed: true,
+        source: 'manual',
+        occurrence_count: 1,
+      })
+      if (createPlaceError) {
+        setSaveError(`Could not save the new place: ${createPlaceError.message}`)
+        setSaving(false)
+        return
+      }
+      void qc.invalidateQueries({ queryKey: ['saved_places'] })
+      resolvedLocationName = input.name
+      resolvedAddress = [input.address, input.city, input.state, input.zip].filter(Boolean).join(', ') || null
+      resolvedLat = input.lat ?? null
+      resolvedLng = input.lng ?? null
+    }
+
     const { data: inserted, error } = await supabase.from('events').insert({
       title: title.trim(),
       description: notes.trim() || null,
@@ -164,7 +216,10 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
       all_day: allDay,
       status: 'confirmed',
       event_type: eventType,
-      location_name: location.trim() || null,
+      location_name: resolvedLocationName,
+      address: resolvedAddress,
+      lat: resolvedLat,
+      lng: resolvedLng,
       rrule: repeatRule,
       record_kind: repeatRule ? 'series_template' : 'single',
       created_at: new Date().toISOString(),
@@ -326,13 +381,14 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
 
         <Field
           label="Where"
-          hint="Add a place or address. Casa will refine the destination after creation."
+          hint="Search saved places or add a new one — Casa links it to the household directory."
         >
-          <Input
-            value={location}
-            onChange={(event) => setLocation(event.target.value)}
+          <DirectoryPlaceInput
+            key={placeFieldKey}
+            label="Where"
             placeholder="Where is it?"
-            disabled={saving || Boolean(saveSuccess)}
+            onChange={setPlaceSelection}
+            onClear={() => setPlaceSelection(null)}
           />
         </Field>
 

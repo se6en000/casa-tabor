@@ -323,7 +323,7 @@ test('quick create handles core household event context without exposing the ful
   assert.match(quickCreate, /<Field label="Repeat"/)
   assert.match(quickCreate, /<Field label="Notes"/)
   assert.match(quickCreate, /event_members'\)\.insert/)
-  assert.match(quickCreate, /location_name: location\.trim\(\) \|\| null/)
+  assert.match(quickCreate, /location_name: resolvedLocationName/)
   assert.match(quickCreate, /rrule: repeatRule/)
   assert.match(quickCreate, /record_kind: repeatRule \? 'series_template' : 'single'/)
   assert.match(quickCreate, /from\('event_series'\)\.insert/)
