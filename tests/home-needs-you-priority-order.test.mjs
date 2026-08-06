@@ -14,5 +14,5 @@ test('Needs you cards sort by urgency before lower-priority future items', () =>
   // Rendered list is `visiblePrepItems` (prioritizedPrepItems minus items in their post-tap
   // "mark done" undo window), sourced directly from the same urgency-sorted array.
   assert.match(source, /const visiblePrepItems = useMemo\(\s*\(\) => prioritizedPrepItems\.filter/)
-  assert.match(source, /visiblePrepItems\.slice\(0, 4\)\.map/)
+  assert.match(source, /visiblePrepItems\.slice\(0, NEEDS_YOU_HOME_RAIL_LIMIT\)\.map/)
 })

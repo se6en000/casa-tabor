@@ -176,6 +176,7 @@ export interface Conflict {
   created_at: string
   // Joined
   event_a?: { id: string; start_time: string; title: string } | null
+  event_b?: { id: string; start_time: string; title: string } | null
 }
 
 export type SavedPlaceCategory =

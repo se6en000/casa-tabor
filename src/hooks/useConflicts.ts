@@ -25,7 +25,7 @@ export function useWeekConflicts() {
       const todayISO = now.toISOString()
       const { data, error } = await supabase
         .from('conflicts')
-        .select('*, event_a:events!event_a_id(id, start_time, title, event_type), event_b:events!event_b_id(id, event_type)')
+        .select('*, event_a:events!event_a_id(id, start_time, title, event_type), event_b:events!event_b_id(id, start_time, title, event_type)')
         .eq('resolved', false)
         .or(`snoozed_until.is.null,snoozed_until.lte.${todayISO}`)
         .order('severity', { ascending: false })

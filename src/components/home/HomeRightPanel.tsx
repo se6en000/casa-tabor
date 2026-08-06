@@ -9,6 +9,9 @@ import { AlertTriangle, Check, ChevronRight, MoreHorizontal, Sparkles, ThumbsDow
 import { AnimatePresence, motion } from 'framer-motion'
 import { sourceBadge } from '../../utils/prepSourceBadge'
 import { isReadOnlyNeedsYouItem, mergeNeedsYouItems } from '../../utils/needsYouFeed'
+import { shouldSuppressPriorityChipIcon } from '../../utils/conflictResolution'
+import ConflictNeedsYouActions from '../shared/ConflictNeedsYouActions'
+import DirectorySuggestionActions from '../shared/DirectorySuggestionActions'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useWeekEventIndex } from '../../hooks/useCalendarEvents'
@@ -28,6 +31,13 @@ import { Button, Chip, EmptyState, Heading, IconButton, PersonAvatarStack, Secon
 
 /** Undo window (ms) between tapping the check and the completion actually being committed. */
 const MARK_DONE_UNDO_MS = 4000
+
+// TEMPORARY (Phase 2 UX review): bumped from the normal 4-card home-rail limit so the
+// user can scroll through many real cards across all three Needs You categories
+// (prep/conflict/directory) at once and decide how many should actually show by
+// default once each action type's UX is dialed in. Revert to 4 (or whatever is
+// decided) once that review is done.
+const NEEDS_YOU_HOME_RAIL_LIMIT = 12
 
 interface Props {
   now: Date
@@ -440,7 +450,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                 </p>
               )}
               <div className="space-y-2">
-                {visiblePrepItems.slice(0, 4).map(item => {
+                {visiblePrepItems.slice(0, NEEDS_YOU_HOME_RAIL_LIMIT).map(item => {
                   const urgency = urgencyLabel(daysUntil(item.event_date))
                   const source = sourceBadge(item)
                   const isDownvoting = downvotingItemId === item.id
@@ -508,7 +518,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                             >
                               <source.icon size={14} strokeWidth={2.2} />
                             </span>
-                            {priority.chip && (
+                            {priority.chip && !shouldSuppressPriorityChipIcon(item) && (
                               <span
                                 role="img"
                                 aria-label={priority.chip.label}
@@ -533,8 +543,8 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                           </div>
                         </div>
 
-                        {/* Conflicts/directory suggestions are read-only until Phase 2 ships
-                            their dedicated inline actions — no Done/More-actions row for these yet. */}
+                        {/* Conflicts/directory suggestions get their own dedicated Phase 2
+                            inline actions below instead of the routine Done/More-actions row. */}
                         {!readOnly && (
                           <div className="flex shrink-0 items-center gap-1.5">
                             <IconButton
@@ -578,6 +588,13 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                           />
                         </div>
                       )}
+
+                      {item.source_type === 'conflict' && (() => {
+                        const conflict = conflicts.find((c) => c.id === item.source_ref)
+                        return conflict ? <ConflictNeedsYouActions conflict={conflict} /> : null
+                      })()}
+
+                      {item.source_type === 'directory_suggestion' && <DirectorySuggestionActions />}
                     </div>
                   )
                 })}

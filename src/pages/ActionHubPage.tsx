@@ -4,6 +4,9 @@ import { format, formatDistanceToNow } from 'date-fns'
 import { ClipboardList, Bell, ChevronLeft, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle, ExternalLink } from 'lucide-react'
 import { sourceBadge } from '../utils/prepSourceBadge'
 import { isReadOnlyNeedsYouItem, mergeNeedsYouItems } from '../utils/needsYouFeed'
+import { shouldSuppressPriorityChipIcon } from '../utils/conflictResolution'
+import ConflictNeedsYouActions from '../components/shared/ConflictNeedsYouActions'
+import DirectorySuggestionActions from '../components/shared/DirectorySuggestionActions'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../utils/cn'
 import { buildAiDraftPrompt } from '../utils/eventTime'
@@ -317,7 +320,7 @@ export default function ActionHubPage() {
                         <CategoryIcon size={14} strokeWidth={2.2} />
                       </span>
                     )}
-                    {priority.chip && (
+                    {priority.chip && !shouldSuppressPriorityChipIcon(item) && (
                       <span
                         role="img"
                         aria-label={priority.chip.label}
@@ -330,8 +333,8 @@ export default function ActionHubPage() {
                     {!readOnly && <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => setSelected(item)} />}
                     <span className="text-body-sm text-casa-muted truncate">{item.event_title || 'Casa Tabor'}</span>
                   </div>
-                  {/* Conflicts/directory suggestions are read-only until Phase 2 ships their
-                      dedicated inline actions — no Done/Snooze/Create/Downvote row for these yet. */}
+                  {/* Conflicts/directory suggestions get their own dedicated Phase 2 inline
+                      actions below instead of the routine Done/Snooze/Create/Downvote row. */}
                   {!readOnly && (
                     <div className="mt-2.5 pt-2.5 border-t border-casa-border/70 flex items-center gap-1.5 flex-wrap">
                       <Button variant="ghost" onClick={() => run('complete', item.id)} className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition" title="Done">
@@ -357,6 +360,13 @@ export default function ActionHubPage() {
                       </Button>
                     </div>
                   )}
+
+                  {item.source_type === 'conflict' && (() => {
+                    const conflict = conflicts.find((c) => c.id === item.source_ref)
+                    return conflict ? <ConflictNeedsYouActions conflict={conflict} /> : null
+                  })()}
+
+                  {item.source_type === 'directory_suggestion' && <DirectorySuggestionActions />}
                 </div>
               )
             })}
