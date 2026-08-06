@@ -5,7 +5,7 @@
 // source_type to 'Calendar', the other silently fell through to 'System') — a single
 // function is what keeps both surfaces showing the exact same label for the same item.
 import type { ComponentType } from 'react'
-import { Bell, BellOff, Calendar as CalendarIcon, Mail, Sparkles } from 'lucide-react'
+import { AlertTriangle, Bell, BellOff, Calendar as CalendarIcon, Mail, Sparkles, UserPlus } from 'lucide-react'
 
 type IconComponent = ComponentType<{ size?: number | string; className?: string; strokeWidth?: number }>
 
@@ -28,5 +28,7 @@ export function sourceBadge(item: PrepSourceBadgeInput): PrepSourceBadge {
   if (source === 'reminder_missed') return { label: 'Missed reminder', icon: BellOff }
   if (source === 'gmail') return { label: 'Email', icon: Mail }
   if (source === 'calendar_ai') return { label: 'Calendar', icon: CalendarIcon }
+  if (source === 'conflict') return { label: 'Scheduling conflict', icon: AlertTriangle }
+  if (source === 'directory_suggestion') return { label: 'Directory suggestion', icon: UserPlus }
   return { label: 'System', icon: Sparkles }
 }

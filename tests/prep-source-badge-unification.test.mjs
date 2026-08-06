@@ -32,6 +32,14 @@ test('sourceBadge falls back to System for a genuinely unrecognized source_type'
   assert.equal(sourceBadge({ source_type: 'something_new' }).label, 'System')
 })
 
+test('sourceBadge labels merged conflict items as Scheduling conflict', () => {
+  assert.equal(sourceBadge({ source_type: 'conflict' }).label, 'Scheduling conflict')
+})
+
+test('sourceBadge labels merged directory suggestion items as Directory suggestion', () => {
+  assert.equal(sourceBadge({ source_type: 'directory_suggestion' }).label, 'Directory suggestion')
+})
+
 test('HomeRightPanel imports the shared sourceBadge instead of defining its own copy', () => {
   assert.match(homeRightPanel, /import \{ sourceBadge \} from '..\/..\/utils\/prepSourceBadge'/)
   assert.doesNotMatch(homeRightPanel, /^function sourceBadge\(/m)

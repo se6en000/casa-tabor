@@ -8,11 +8,14 @@ import { Link, useNavigate } from 'react-router-dom'
 import { AlertTriangle, Check, ChevronRight, MoreHorizontal, Sparkles, ThumbsDown, UserPlus } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { sourceBadge } from '../../utils/prepSourceBadge'
+import { isReadOnlyNeedsYouItem, mergeNeedsYouItems } from '../../utils/needsYouFeed'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useWeekEventIndex } from '../../hooks/useCalendarEvents'
 import { useCompletePrepItem, useDownvotePrepItem, usePrepItems, useSetPrepItemAssignee, useSnoozePrepItem } from '../../hooks/usePrepItems'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
+import { useNotifications } from '../../hooks/useNotifications'
+import { useWeekConflicts } from '../../hooks/useConflicts'
 import { supabase } from '../../lib/supabase'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useCalendarStore } from '../../stores/calendarStore'
@@ -184,8 +187,10 @@ function PrepAssignPicker({
 
 export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }: Props) {
   const navigate = useNavigate()
-  const { data: prepItems = [] } = usePrepItems()
+  const { data: rawPrepItems = [] } = usePrepItems()
   const { data: familyMembers = [] } = useFamilyMembers()
+  const { notifications } = useNotifications()
+  const { data: conflicts = [] } = useWeekConflicts()
   const completePrepItem = useCompletePrepItem()
   const snoozePrepItem = useSnoozePrepItem()
   const downvotePrepItem = useDownvotePrepItem()
@@ -213,6 +218,18 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Merged Needs You feed: prep items plus unresolved conflicts and unseen directory
+  // suggestions, normalized into the same PrepItem shape (Phase 1 of feed unification).
+  // Conflicts/suggestions render read-only for now — see isReadOnlyNeedsYouItem.
+  const directorySuggestionNotifications = useMemo(
+    () => notifications.filter(n => n.type === 'directory_suggestions'),
+    [notifications],
+  )
+  const prepItems = useMemo(
+    () => mergeNeedsYouItems(rawPrepItems, conflicts, directorySuggestionNotifications),
+    [rawPrepItems, conflicts, directorySuggestionNotifications],
+  )
 
   const prioritizedPrepItems = useMemo(() => {
     return [...prepItems].sort((a, b) => {
@@ -431,44 +448,57 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                   const isRevealed = revealedItemId === item.id
                   const assignee = item.assigned_to ? familyMembers.find(m => m.id === item.assigned_to) ?? null : null
                   const urgencyDot = urgencyDotClass(urgency.tone)
+                  const readOnly = isReadOnlyNeedsYouItem(item)
 
                   return (
                     <div key={item.id} className="rounded-card border border-casa-border bg-casa-bg px-3 py-2.5">
                       <div className="flex items-start gap-2.5">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() => onSelectPrepItem?.(item)}
-                          className="shrink-0 mt-0.5 h-auto min-h-0 rounded-full p-0 hover:bg-transparent"
-                          aria-label={assignee ? `Open details, assigned to ${assignee.name}` : 'Open details, unassigned'}
-                        >
-                          {assignee ? (
-                            <PersonAvatarStack
-                              people={[{ id: assignee.id, name: assignee.name, color: assignee.color_hex }]}
-                              size="sm"
-                              max={1}
-                              badgeClassName={urgencyDot}
-                            />
-                          ) : (
-                            <span className="flex size-7 items-center justify-center">
-                              <span className={cn('size-2.5 rounded-full', urgencyDot)} />
-                            </span>
-                          )}
-                        </Button>
-
-                        <div className="min-w-0 flex-1">
+                        {readOnly ? (
+                          <span className="shrink-0 mt-0.5 flex size-7 items-center justify-center">
+                            <span className={cn('size-2.5 rounded-full', urgencyDot)} />
+                          </span>
+                        ) : (
                           <Button
                             type="button"
                             variant="ghost"
-                            fullWidth
                             onClick={() => onSelectPrepItem?.(item)}
-                            className="h-auto min-h-0 p-0 text-left hover:bg-transparent"
-                            contentClassName="w-full justify-start"
+                            className="shrink-0 mt-0.5 h-auto min-h-0 rounded-full p-0 hover:bg-transparent"
+                            aria-label={assignee ? `Open details, assigned to ${assignee.name}` : 'Open details, unassigned'}
                           >
+                            {assignee ? (
+                              <PersonAvatarStack
+                                people={[{ id: assignee.id, name: assignee.name, color: assignee.color_hex }]}
+                                size="sm"
+                                max={1}
+                                badgeClassName={urgencyDot}
+                              />
+                            ) : (
+                              <span className="flex size-7 items-center justify-center">
+                                <span className={cn('size-2.5 rounded-full', urgencyDot)} />
+                              </span>
+                            )}
+                          </Button>
+                        )}
+
+                        <div className="min-w-0 flex-1">
+                          {readOnly ? (
                             <p className="!text-body-sm leading-snug text-casa-text line-clamp-3">
                               {item.description}
                             </p>
-                          </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              fullWidth
+                              onClick={() => onSelectPrepItem?.(item)}
+                              className="h-auto min-h-0 p-0 text-left hover:bg-transparent"
+                              contentClassName="w-full justify-start"
+                            >
+                              <p className="!text-body-sm leading-snug text-casa-text line-clamp-3">
+                                {item.description}
+                              </p>
+                            </Button>
+                          )}
                           <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                             <span
                               role="img"
@@ -491,37 +521,43 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                                 <AlertTriangle size={14} strokeWidth={2.2} />
                               </span>
                             )}
-                            <PrepAssignPicker
-                              assignee={assignee}
-                              familyMembers={familyMembers}
-                              onAssign={(familyMemberId) => {
-                                void setPrepItemAssignee(item.id, assignee?.id === familyMemberId ? null : familyMemberId)
-                              }}
-                            />
+                            {!readOnly && (
+                              <PrepAssignPicker
+                                assignee={assignee}
+                                familyMembers={familyMembers}
+                                onAssign={(familyMemberId) => {
+                                  void setPrepItemAssignee(item.id, assignee?.id === familyMemberId ? null : familyMemberId)
+                                }}
+                              />
+                            )}
                           </div>
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-1.5">
-                          <IconButton
-                            onClick={() => handleDone(item)}
-                            variant="strong"
-                            size="sm"
-                            icon={<Check size={16} strokeWidth={2.5} />}
-                            aria-label="Mark done"
-                            title="Mark done"
-                          />
-                          <IconButton
-                            onClick={() => setRevealedItemId(isRevealed ? null : item.id)}
-                            variant="secondary"
-                            size="sm"
-                            icon={<MoreHorizontal size={16} />}
-                            aria-label={isRevealed ? 'Hide more actions' : 'More actions'}
-                            title="More actions"
-                          />
-                        </div>
+                        {/* Conflicts/directory suggestions are read-only until Phase 2 ships
+                            their dedicated inline actions — no Done/More-actions row for these yet. */}
+                        {!readOnly && (
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <IconButton
+                              onClick={() => handleDone(item)}
+                              variant="strong"
+                              size="sm"
+                              icon={<Check size={16} strokeWidth={2.5} />}
+                              aria-label="Mark done"
+                              title="Mark done"
+                            />
+                            <IconButton
+                              onClick={() => setRevealedItemId(isRevealed ? null : item.id)}
+                              variant="secondary"
+                              size="sm"
+                              icon={<MoreHorizontal size={16} />}
+                              aria-label={isRevealed ? 'Hide more actions' : 'More actions'}
+                              title="More actions"
+                            />
+                          </div>
+                        )}
                       </div>
 
-                      {isRevealed && (
+                      {!readOnly && isRevealed && (
                         <div className="flex items-center gap-2 pt-2.5 pl-[2.375rem]">
                           <Button
                             onClick={() => { snoozePrepItem(item.id); setRevealedItemId(null) }}

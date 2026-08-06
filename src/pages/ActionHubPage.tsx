@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
 import { ClipboardList, Bell, ChevronLeft, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle, ExternalLink } from 'lucide-react'
 import { sourceBadge } from '../utils/prepSourceBadge'
+import { isReadOnlyNeedsYouItem, mergeNeedsYouItems } from '../utils/needsYouFeed'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../utils/cn'
 import { buildAiDraftPrompt } from '../utils/eventTime'
@@ -76,7 +77,7 @@ const PREP_SOURCE_FILTERS: { key: PrepSourceKey; label: string; match: (item: Pr
 
 export default function ActionHubPage() {
   const now = useLiveClock(60_000)
-  const { data: prepItems = [] } = usePrepItems()
+  const { data: rawPrepItems = [] } = usePrepItems()
   const { data: familyMembers = [] } = useFamilyMembers()
   const complete = useCompletePrepItem()
   const snooze = useSnoozePrepItem()
@@ -88,6 +89,18 @@ export default function ActionHubPage() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<PrepFilterKey>('all')
   const [sourceFilter, setSourceFilter] = useState<PrepSourceKey>('all')
+
+  // Merged Needs You feed: prep items plus unresolved conflicts and unseen directory
+  // suggestions, normalized into the same PrepItem shape (Phase 1 of feed unification).
+  // Conflicts/suggestions render read-only for now — see isReadOnlyNeedsYouItem.
+  const directorySuggestionNotifications = useMemo(
+    () => notifications.filter(n => n.type === 'directory_suggestions'),
+    [notifications],
+  )
+  const prepItems = useMemo(
+    () => mergeNeedsYouItems(rawPrepItems, conflicts, directorySuggestionNotifications),
+    [rawPrepItems, conflicts, directorySuggestionNotifications],
+  )
 
   const { data: gmailHealth } = useQuery({
     queryKey: ['actions-hub-gmail-health'],
@@ -272,6 +285,7 @@ export default function ActionHubPage() {
               const busy = actingId === item.id
               const due = dueBadge(item, now)
               const priority = priorityVisual(item.priority)
+              const readOnly = isReadOnlyNeedsYouItem(item)
               return (
                 <div
                   key={item.id}
@@ -281,9 +295,13 @@ export default function ActionHubPage() {
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <Button variant="ghost" className="min-w-0 flex-1 h-auto min-h-0 p-0 text-left hover:bg-transparent" contentClassName="w-full justify-start" onClick={() => setSelected(item)}>
-                      <p className="text-body-sm font-semibold text-casa-text leading-snug line-clamp-2">{item.description}</p>
-                    </Button>
+                    {readOnly ? (
+                      <p className="min-w-0 flex-1 text-body-sm font-semibold text-casa-text leading-snug line-clamp-2">{item.description}</p>
+                    ) : (
+                      <Button variant="ghost" className="min-w-0 flex-1 h-auto min-h-0 p-0 text-left hover:bg-transparent" contentClassName="w-full justify-start" onClick={() => setSelected(item)}>
+                        <p className="text-body-sm font-semibold text-casa-text leading-snug line-clamp-2">{item.description}</p>
+                      </Button>
+                    )}
                     {due && (
                       <span className={cn('text-body-sm font-semibold whitespace-nowrap shrink-0 mt-0.5', dueTextClass(due.tone))}>
                         {due.label}
@@ -294,9 +312,11 @@ export default function ActionHubPage() {
                     <span role="img" aria-label={src.label} title={src.label} className="inline-flex shrink-0 text-casa-navy">
                       <SourceIcon size={14} strokeWidth={2.2} />
                     </span>
-                    <span role="img" aria-label={category.label} title={category.label} className="inline-flex shrink-0 text-casa-navy">
-                      <CategoryIcon size={14} strokeWidth={2.2} />
-                    </span>
+                    {!readOnly && (
+                      <span role="img" aria-label={category.label} title={category.label} className="inline-flex shrink-0 text-casa-navy">
+                        <CategoryIcon size={14} strokeWidth={2.2} />
+                      </span>
+                    )}
                     {priority.chip && (
                       <span
                         role="img"
@@ -307,32 +327,36 @@ export default function ActionHubPage() {
                         <AlertTriangle size={14} strokeWidth={2.2} />
                       </span>
                     )}
-                    <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => setSelected(item)} />
+                    {!readOnly && <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => setSelected(item)} />}
                     <span className="text-body-sm text-casa-muted truncate">{item.event_title || 'Casa Tabor'}</span>
                   </div>
-                  <div className="mt-2.5 pt-2.5 border-t border-casa-border/70 flex items-center gap-1.5 flex-wrap">
-                    <Button variant="ghost" onClick={() => run('complete', item.id)} className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition" title="Done">
-                      Done
-                    </Button>
-                    <Button variant="ghost" onClick={() => run('snooze', item.id)} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors" title="Snooze">
-                      Snooze
-                    </Button>
-                    {item.event_id ? (
-                      <Button variant="ghost" onClick={() => openEventDetails(item.event_id!)} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="View the linked calendar event">
-                        <ExternalLink size={14} /> View event
+                  {/* Conflicts/directory suggestions are read-only until Phase 2 ships their
+                      dedicated inline actions — no Done/Snooze/Create/Downvote row for these yet. */}
+                  {!readOnly && (
+                    <div className="mt-2.5 pt-2.5 border-t border-casa-border/70 flex items-center gap-1.5 flex-wrap">
+                      <Button variant="ghost" onClick={() => run('complete', item.id)} className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition" title="Done">
+                        Done
                       </Button>
-                    ) : (
-                      <Button variant="ghost" onClick={() => launchCreate(item, 'event')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create event draft">
-                        <CalendarPlus size={14} /> Event
+                      <Button variant="ghost" onClick={() => run('snooze', item.id)} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors" title="Snooze">
+                        Snooze
                       </Button>
-                    )}
-                    <Button variant="ghost" onClick={() => launchCreate(item, 'reminder')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create reminder draft">
-                      <BellPlus size={14} /> Reminder
-                    </Button>
-                    <Button variant="ghost" onClick={() => run('downvote', item.id)} className="ml-auto size-control rounded-button border border-casa-border bg-white text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold" title="Downvote" aria-label="Downvote">
-                      <ThumbsDown size={15} />
-                    </Button>
-                  </div>
+                      {item.event_id ? (
+                        <Button variant="ghost" onClick={() => openEventDetails(item.event_id!)} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="View the linked calendar event">
+                          <ExternalLink size={14} /> View event
+                        </Button>
+                      ) : (
+                        <Button variant="ghost" onClick={() => launchCreate(item, 'event')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create event draft">
+                          <CalendarPlus size={14} /> Event
+                        </Button>
+                      )}
+                      <Button variant="ghost" onClick={() => launchCreate(item, 'reminder')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create reminder draft">
+                        <BellPlus size={14} /> Reminder
+                      </Button>
+                      <Button variant="ghost" onClick={() => run('downvote', item.id)} className="ml-auto size-control rounded-button border border-casa-border bg-white text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold" title="Downvote" aria-label="Downvote">
+                        <ThumbsDown size={15} />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )
             })}
