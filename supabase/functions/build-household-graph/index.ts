@@ -435,6 +435,20 @@ Deno.serve(async (req) => {
       console.error('discover_directory_candidates failed', discoveryError.message)
     } else {
       discovery = discoveryData as Record<string, unknown>
+      const totalInserted = Object.values(discovery ?? {}).reduce(
+        (sum, v) => sum + (typeof v === 'number' ? v : 0),
+        0,
+      )
+      // Only notify when something actually needs review — a zero-result scan
+      // (the common case once the backlog is caught up) shouldn't spam the bell.
+      if (totalInserted > 0) {
+        await sb.from('notifications').insert({
+          type: 'directory_suggestions',
+          title: 'New directory suggestions ready to review',
+          body: `${totalInserted} new ${totalInserted === 1 ? 'entry' : 'entries'} detected from your calendar activity — review and confirm in Settings.`,
+          source: 'system',
+        })
+      }
     }
   } catch (discoveryCatchError) {
     console.error('discover_directory_candidates threw', discoveryCatchError)

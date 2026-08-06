@@ -12,6 +12,7 @@ import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
 import { verifyPlaceAddress } from '../_shared/verify-place-address.mjs'
 import { resolveFamilyMemberByName } from '../_shared/family-identity.mjs'
 import { pickBestDirectoryMatch } from '../_shared/directory-match.mjs'
+import { ENRICHMENT_FIELDS } from '../_shared/enrichment-impact.mjs'
 import {
   buildRecurringDetailMutation,
   buildRecurringSeriesPatch,
@@ -634,6 +635,25 @@ Deno.serve(async (req) => {
       if (normalizedEventType !== 'reminder') {
         // Await Google sync for calendar events — fire-and-forget can be killed before completion in Deno Deploy.
         await sb.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {})
+      }
+
+      // The auto_enrich_on_insert DB trigger (see
+      // supabase/migrations/20260719130000_harden_auto_enrichment_dispatch.sql)
+      // already fires enrich-event for every event insert except
+      // record_kind='series_template' and event_type='reminder' — so calendar
+      // events created here are already auto-enriched without any help from
+      // this handler. Reminders are the one gap that trigger leaves open, so
+      // only fire enrich-event here for reminders (avoids double-enriching,
+      // i.e. double LLM calls, for every other AI-chat-created event).
+      // Fire-and-forget so the response stays fast; enrich-event's own
+      // content-hash guard makes this safe even if something re-triggers it.
+      // Pass every ENRICHMENT_FIELDS entry as target_fields (targeted mode) so
+      // contact resolution + logistics still run, but location/address is
+      // never silently overwritten by the LLM's own guess (the "executor
+      // reinterpretation" bug this handler's title/location contract guards
+      // against).
+      if (normalizedEventType === 'reminder') {
+        sb.functions.invoke('enrich-event', { body: { event_id: event.id, target_fields: ENRICHMENT_FIELDS } }).catch(() => {})
       }
 
       return new Response(JSON.stringify({

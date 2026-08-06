@@ -72,3 +72,33 @@ test('create_event resolves location against find_similar_places before insertin
   assert.match(createEventSource, /lat:\s*resolvedLat/)
   assert.match(createEventSource, /lng:\s*resolvedLng/)
 })
+
+// ── execute-ai-action: create_event fires enrich-event only for reminders ──
+//
+// A pre-existing DB trigger (auto_enrich_on_insert →
+// public.trigger_enrich_event, see
+// supabase/migrations/20260719130000_harden_auto_enrichment_dispatch.sql)
+// already calls enrich-event on every event insert *except* record_kind =
+// 'series_template' and event_type = 'reminder'. So calendar events created
+// via create_event are already auto-enriched by that trigger — firing
+// enrich-event again here for them would just double the LLM call. Reminders
+// are the one gap the DB trigger leaves open, so this handler only needs to
+// cover that case.
+
+test('create_event fires enrich-event fire-and-forget only for reminders, without blocking the response', () => {
+  // Must invoke enrich-event with the new event's id
+  assert.match(createEventSource, /sb\.functions\.invoke\('enrich-event',\s*\{\s*body:\s*\{\s*event_id:\s*event\.id/)
+  // Must be gated to reminders only — the DB trigger already covers every other event type.
+  const invokeIndex = createEventSource.indexOf("sb.functions.invoke('enrich-event'")
+  const precedingLines = createEventSource.slice(Math.max(0, invokeIndex - 200), invokeIndex)
+  assert.match(precedingLines, /normalizedEventType\s*===\s*'reminder'/, 'enrich-event invoke must be gated to reminders — the DB trigger already auto-enriches all other event types')
+  // Must not be awaited (fire-and-forget), matching the update_event pattern elsewhere in this file
+  const precedingChars = createEventSource.slice(Math.max(0, invokeIndex - 10), invokeIndex)
+  assert.doesNotMatch(precedingChars, /await\s*$/, 'enrich-event invoke must not be awaited in create_event')
+  // Must have a .catch so a failed enrichment invoke can't throw and break create_event's response
+  assert.match(createEventSource.slice(invokeIndex, invokeIndex + 200), /\.catch\(/)
+  // Must pass target_fields (targeted mode) so enrich-event fills contact/logistics
+  // but never overwrites the location_name/address this handler already resolved
+  // above — see assistant-execute-ai-action.test.mjs for the location-protection contract.
+  assert.match(createEventSource.slice(invokeIndex, invokeIndex + 200), /target_fields:\s*ENRICHMENT_FIELDS/)
+})

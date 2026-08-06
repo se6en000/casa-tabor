@@ -1496,6 +1496,7 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                 {ta.tool === 'create_event' && ta.resultEventId && (
                   <div className="space-y-1">
                     <p className="text-caption text-casa-muted">Visible on your calendar now</p>
+                    <p className="text-caption text-casa-muted">Finalizing address, contact, and driving-plan details in the background — check back shortly</p>
                     <Button
                       variant="ghost"
                       type="button"

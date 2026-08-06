@@ -2,7 +2,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CalendarPlus, CalendarCheck, Sparkles, Mail, AlertTriangle,
-  Sun, X, CheckCheck, Trash2, ChevronRight, ClipboardList,
+  Sun, X, CheckCheck, Trash2, ChevronRight, ClipboardList, Users,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useNotifications, type Notification } from '../../hooks/useNotifications'
@@ -19,6 +19,7 @@ const TYPE_CONFIG: Record<Notification['type'], { icon: React.ElementType; color
   policy_conflict: { icon: AlertTriangle, color: 'text-red-500',      bg: 'bg-red-50' },
   policy_prep:     { icon: ClipboardList, color: 'text-sky-600',      bg: 'bg-sky-50' },
   briefing_ready:  { icon: Sun,           color: 'text-orange-500',   bg: 'bg-orange-50' },
+  directory_suggestions: { icon: Users,   color: 'text-emerald-600',  bg: 'bg-emerald-50' },
 }
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -52,6 +53,9 @@ export default function NotificationDrawer({ open, onClose }: Props) {
       onClose()
     } else if (n.type === 'conflict') {
       navigate('/')
+      onClose()
+    } else if (n.type === 'directory_suggestions') {
+      navigate('/settings/places')
       onClose()
     }
   }

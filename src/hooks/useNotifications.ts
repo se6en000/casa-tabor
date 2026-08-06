@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 
 export interface Notification {
   id: string
-  type: 'event_added' | 'event_updated' | 'event_enriched' | 'gmail_import' | 'conflict' | 'briefing_ready' | 'policy_conflict' | 'policy_prep'
+  type: 'event_added' | 'event_updated' | 'event_enriched' | 'gmail_import' | 'conflict' | 'briefing_ready' | 'policy_conflict' | 'policy_prep' | 'directory_suggestions'
   title: string
   body: string | null
   event_id: string | null
