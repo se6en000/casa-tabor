@@ -69,11 +69,15 @@ export default function ConflictNeedsYouActions({ conflict }: { conflict: Confli
 
 function EventChip({ title, startTime, onKeep }: { title: string; startTime: string; onKeep: () => void }) {
   return (
-    <div className="flex items-center justify-between gap-2 rounded-button border border-casa-border bg-casa-surface px-2.5 py-1.5">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <Calendar size={13} className="shrink-0 text-casa-muted" />
-        <span className="truncate text-body-sm font-semibold text-casa-text">{title}</span>
-        <span className="shrink-0 text-caption text-casa-muted">{format(parseISO(startTime), 'h:mm a')}</span>
+    <div className="flex items-start justify-between gap-2 rounded-button border border-casa-border bg-casa-surface px-2.5 py-1.5">
+      {/* Title wraps instead of truncating to one line so the user can actually read
+          which event is which before deciding what to keep. */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start gap-1.5">
+          <Calendar size={13} className="shrink-0 mt-0.5 text-casa-muted" />
+          <span className="text-body-sm font-semibold text-casa-text break-words">{title}</span>
+        </div>
+        <span className="pl-[19px] text-caption text-casa-muted">{format(parseISO(startTime), 'h:mm a')}</span>
       </div>
       <Button
         type="button"

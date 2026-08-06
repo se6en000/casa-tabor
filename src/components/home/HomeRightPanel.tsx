@@ -31,8 +31,9 @@ import { summarizeGmailHealth, type GmailHealthSummary } from '../../utils/gmail
 import { priorityVisual } from '../../utils/prepPriority'
 import { Button, Chip, EmptyState, Heading, IconButton, PersonAvatarStack, SecondaryRail, Toast } from '../ui'
 
-/** Undo window (ms) between tapping the check and the completion actually being committed. */
-const MARK_DONE_UNDO_MS = 4000
+/** Undo window (ms) between tapping an action (mark done / not relevant) and it
+ * actually being committed to the server. */
+const UNDO_WINDOW_MS = 4000
 
 /** Home rail shows only the top-N Needs You cards (already sorted by urgency); the
  * rest are one tap away via the "More…" link so the rail stays glanceable and fits
@@ -185,7 +186,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   const navigate = useNavigate()
   const { data: rawPrepItems = [] } = usePrepItems()
   const { data: familyMembers = [] } = useFamilyMembers()
-  const { notifications } = useNotifications()
+  const { notifications, markRead } = useNotifications()
   const { data: conflicts = [] } = useWeekConflicts()
   const resolveConflict = useResolveConflict()
   const completePrepItem = useCompletePrepItem()
@@ -195,22 +196,23 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   const { data: weekEventIndex = [] } = useWeekEventIndex(now)
   const setSelectedDate = useCalendarStore(s => s.setSelectedDate)
   const setActiveView = useCalendarStore(s => s.setActiveView)
-  const [downvotingItemId, setDownvotingItemId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-  // Optimistic "mark done": the row disappears immediately and an Undo toast appears;
-  // the actual completion only commits to the server after the undo window elapses.
-  const [pendingDoneIds, setPendingDoneIds] = useState<Set<string>>(new Set())
-  const [doneToast, setDoneToast] = useState<{ id: string; description: string } | null>(null)
+  // Optimistic "mark done" / "not relevant": the row disappears immediately and an
+  // Undo toast appears; the actual server action only commits after the undo window
+  // elapses, so a mis-tap is fully recoverable.
+  const [pendingRemovalIds, setPendingRemovalIds] = useState<Set<string>>(new Set())
+  const [actionToast, setActionToast] = useState<{ id: string; description: string; kind: 'done' | 'downvote' } | null>(null)
   const [revealedItemId, setRevealedItemId] = useState<string | null>(null)
-  const pendingDoneTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const pendingRemovalTimers = useRef<Map<string, { timer: ReturnType<typeof setTimeout>; kind: 'done' | 'downvote' }>>(new Map())
 
   useEffect(() => {
-    const timers = pendingDoneTimers.current
+    const timers = pendingRemovalTimers.current
     return () => {
       // Unmounting mid-undo-window shouldn't silently drop the action -- commit immediately.
-      timers.forEach((timer, id) => {
+      timers.forEach(({ timer, kind }, id) => {
         clearTimeout(timer)
-        completePrepItem(id).catch(() => {})
+        const commit = kind === 'done' ? completePrepItem : downvotePrepItem
+        commit(id).catch(() => {})
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -250,10 +252,10 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
     })
   }, [prepItems])
 
-  // Hides items whose "mark done" undo window is still counting down.
+  // Hides items whose "mark done" / "not relevant" undo window is still counting down.
   const visiblePrepItems = useMemo(
-    () => prioritizedPrepItems.filter(item => !pendingDoneIds.has(item.id)),
-    [prioritizedPrepItems, pendingDoneIds],
+    () => prioritizedPrepItems.filter(item => !pendingRemovalIds.has(item.id)),
+    [prioritizedPrepItems, pendingRemovalIds],
   )
 
   const weekStart = startOfWeek(now, { weekStartsOn: 0 })
@@ -299,49 +301,52 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
 
   const nextEvent = allTodayEvents.find(event => new Date(event.end_time) >= now) ?? null
 
-  function commitDone(id: string) {
-    pendingDoneTimers.current.delete(id)
-    setPendingDoneIds(prev => {
+  function commitRemoval(id: string, kind: 'done' | 'downvote') {
+    pendingRemovalTimers.current.delete(id)
+    setPendingRemovalIds(prev => {
       const next = new Set(prev)
       next.delete(id)
       return next
     })
     // Only clear the toast if it's still showing for this item -- avoids clobbering
-    // a newer toast if the user marked a second item done before this timer fired.
-    setDoneToast(current => (current?.id === id ? null : current))
+    // a newer toast if the user acted on a second item before this timer fired.
+    setActionToast(current => (current?.id === id ? null : current))
     setActionError(null)
-    completePrepItem(id).catch(error => {
+    const commit = kind === 'done' ? completePrepItem : downvotePrepItem
+    commit(id).catch(error => {
       setActionError(error instanceof Error ? error.message : 'Casa could not complete this action.')
     })
   }
 
-  function handleDone(item: PrepItem) {
-    // Clear any prior pending-done timer for this id (defensive; shouldn't normally recur).
-    const existing = pendingDoneTimers.current.get(item.id)
-    if (existing) clearTimeout(existing)
-    setPendingDoneIds(prev => new Set(prev).add(item.id))
-    setDoneToast({ id: item.id, description: item.description })
+  function scheduleRemoval(item: PrepItem, kind: 'done' | 'downvote') {
+    // Clear any prior pending timer for this id (defensive; shouldn't normally recur).
+    const existing = pendingRemovalTimers.current.get(item.id)
+    if (existing) clearTimeout(existing.timer)
+    setPendingRemovalIds(prev => new Set(prev).add(item.id))
+    setActionToast({ id: item.id, description: item.description, kind })
     setRevealedItemId(current => (current === item.id ? null : current))
-    const timer = setTimeout(() => commitDone(item.id), MARK_DONE_UNDO_MS)
-    pendingDoneTimers.current.set(item.id, timer)
+    const timer = setTimeout(() => commitRemoval(item.id, kind), UNDO_WINDOW_MS)
+    pendingRemovalTimers.current.set(item.id, { timer, kind })
   }
 
-  function undoDone(id: string) {
-    const timer = pendingDoneTimers.current.get(id)
-    if (timer) clearTimeout(timer)
-    pendingDoneTimers.current.delete(id)
-    setPendingDoneIds(prev => {
+  function handleDone(item: PrepItem) {
+    scheduleRemoval(item, 'done')
+  }
+
+  function undoRemoval(id: string) {
+    const existing = pendingRemovalTimers.current.get(id)
+    if (existing) clearTimeout(existing.timer)
+    pendingRemovalTimers.current.delete(id)
+    setPendingRemovalIds(prev => {
       const next = new Set(prev)
       next.delete(id)
       return next
     })
-    setDoneToast(null)
+    setActionToast(null)
   }
 
-  async function handleDownvote(item: PrepItem) {
-    setDownvotingItemId(item.id)
-    await downvotePrepItem(item.id)
-    setDownvotingItemId(null)
+  function handleDownvote(item: PrepItem) {
+    scheduleRemoval(item, 'downvote')
   }
 
   function handleWeekDayClick(day: Date) {
@@ -432,7 +437,6 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
               <div className="space-y-2">
                 {visiblePrepItems.slice(0, NEEDS_YOU_HOME_RAIL_LIMIT).map(item => {
                   const accent = needsYouAccent(item)
-                  const isDownvoting = downvotingItemId === item.id
                   const priority = priorityVisual(item.priority)
                   const isRevealed = revealedItemId === item.id
                   const assignee = item.assigned_to ? familyMembers.find(m => m.id === item.assigned_to) ?? null : null
@@ -492,7 +496,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                               </p>
                             </Button>
                           )}
-                          <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                          <div className="mt-1.5 flex items-center gap-1.5">
                             <span
                               role="img"
                               aria-label={meta.label}
@@ -501,7 +505,9 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                             >
                               <meta.icon size={13} strokeWidth={2.2} />
                             </span>
-                            <span className="text-body-sm text-casa-muted">{meta.text}</span>
+                            {/* Truncates instead of wrapping so the assignee control at the
+                                end of the row never gets pushed onto its own line. */}
+                            <span className="min-w-0 flex-1 truncate text-body-sm text-casa-muted">{meta.text}</span>
                             {priority.chip && !shouldSuppressPriorityChipIcon(item) && (
                               <span
                                 role="img"
@@ -516,13 +522,15 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                               </span>
                             )}
                             {!readOnly && (
-                              <PrepAssignPicker
-                                assignee={assignee}
-                                familyMembers={familyMembers}
-                                onAssign={(familyMemberId) => {
-                                  void setPrepItemAssignee(item.id, assignee?.id === familyMemberId ? null : familyMemberId)
-                                }}
-                              />
+                              <div className="shrink-0">
+                                <PrepAssignPicker
+                                  assignee={assignee}
+                                  familyMembers={familyMembers}
+                                  onAssign={(familyMemberId) => {
+                                    void setPrepItemAssignee(item.id, assignee?.id === familyMemberId ? null : familyMemberId)
+                                  }}
+                                />
+                              </div>
                             )}
                           </div>
                         </div>
@@ -590,7 +598,10 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                         })()}
 
                         {item.source_type === 'directory_suggestion' && (
-                          <DirectorySuggestionActions enabled={isRevealed} />
+                          <DirectorySuggestionActions
+                            enabled={isRevealed}
+                            onDismiss={item.source_ref ? () => markRead.mutate(item.source_ref!) : undefined}
+                          />
                         )}
 
                         {!readOnly && item.source_type !== 'conflict' && item.source_type !== 'directory_suggestion' && (
@@ -607,7 +618,6 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                               onClick={() => handleDownvote(item)}
                               variant="secondary"
                               size="sm"
-                              disabled={isDownvoting}
                               leadingIcon={<ThumbsDown size={13} strokeWidth={2.1} />}
                               className="border-transparent bg-casa-error/10 text-casa-error hover:bg-casa-error/15"
                               title="Not relevant"
@@ -665,12 +675,18 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
 
       </BounceScroll>
       <Toast
-        open={!!doneToast}
-        message={doneToast ? `Marked "${doneToast.description}" done.` : ''}
-        tone="success"
-        onClose={() => setDoneToast(null)}
+        open={!!actionToast}
+        message={
+          actionToast
+            ? actionToast.kind === 'done'
+              ? `Marked "${actionToast.description}" done.`
+              : `"${actionToast.description}" marked not relevant.`
+            : ''
+        }
+        tone={actionToast?.kind === 'downvote' ? 'info' : 'success'}
+        onClose={() => setActionToast(null)}
         actionLabel="Undo"
-        onAction={() => { if (doneToast) undoDone(doneToast.id) }}
+        onAction={() => { if (actionToast) undoRemoval(actionToast.id) }}
       />
     </SecondaryRail>
   )

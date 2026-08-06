@@ -19,7 +19,14 @@ import {
 } from '../../hooks/useDirectorySuggestions'
 import { Button } from '../ui'
 
-export default function DirectorySuggestionActions({ enabled = true }: { enabled?: boolean }) {
+export default function DirectorySuggestionActions({
+  enabled = true,
+  onDismiss,
+}: {
+  enabled?: boolean
+  /** Called when the user taps "Dismiss" after every entry has been reviewed. */
+  onDismiss?: () => void
+}) {
   const { data: entries = [], isLoading } = useDirectorySuggestionEntries(enabled)
   const confirmEntry = useConfirmDirectorySuggestionEntry()
   const dismissEntry = useDismissDirectorySuggestionEntry()
@@ -28,7 +35,14 @@ export default function DirectorySuggestionActions({ enabled = true }: { enabled
     <div className="pt-2.5 pl-[2.375rem]">
       {isLoading && <p className="text-body-sm text-casa-muted">Loading suggestions…</p>}
       {!isLoading && entries.length === 0 && (
-        <p className="text-body-sm text-casa-muted">All caught up — nothing left to review.</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-body-sm text-casa-muted">All caught up — nothing left to review.</p>
+          {onDismiss && (
+            <Button type="button" variant="secondary" size="sm" onClick={onDismiss}>
+              Dismiss
+            </Button>
+          )}
+        </div>
       )}
       <div className="divide-y divide-casa-border">
         {entries.map((entry) => (

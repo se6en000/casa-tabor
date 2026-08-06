@@ -330,14 +330,11 @@ export default function ActionHubPage() {
                           </span>
                         )}
                       </div>
-                      <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                      <div className="mt-1.5 flex items-center gap-2">
                         {readOnlyMeta ? (
-                          <>
-                            <span role="img" aria-label={readOnlyMeta.label} title={readOnlyMeta.label} className="inline-flex shrink-0 text-casa-muted">
-                              <readOnlyMeta.icon size={13} strokeWidth={2.2} />
-                            </span>
-                            <span className="text-body-sm text-casa-muted truncate">{readOnlyMeta.text}</span>
-                          </>
+                          <span role="img" aria-label={readOnlyMeta.label} title={readOnlyMeta.label} className="inline-flex shrink-0 text-casa-muted">
+                            <readOnlyMeta.icon size={13} strokeWidth={2.2} />
+                          </span>
                         ) : (
                           <span role="img" aria-label={src.label} title={src.label} className="inline-flex shrink-0 text-casa-navy">
                             <SourceIcon size={14} strokeWidth={2.2} />
@@ -348,6 +345,11 @@ export default function ActionHubPage() {
                             <CategoryIcon size={14} strokeWidth={2.2} />
                           </span>
                         )}
+                        {/* Truncates instead of wrapping so the assignee chip at the end of
+                            the row never gets pushed onto its own line. */}
+                        <span className="min-w-0 flex-1 truncate text-body-sm text-casa-muted">
+                          {readOnlyMeta ? readOnlyMeta.text : (item.event_title || 'Casa Tabor')}
+                        </span>
                         {priority.chip && !shouldSuppressPriorityChipIcon(item) && (
                           <span
                             role="img"
@@ -358,8 +360,11 @@ export default function ActionHubPage() {
                             <AlertTriangle size={14} strokeWidth={2.2} />
                           </span>
                         )}
-                        {!readOnly && <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => setSelected(item)} />}
-                        {!readOnlyMeta && <span className="text-body-sm text-casa-muted truncate">{item.event_title || 'Casa Tabor'}</span>}
+                        {!readOnly && (
+                          <div className="shrink-0">
+                            <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => setSelected(item)} />
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -440,7 +445,10 @@ export default function ActionHubPage() {
 
                   {item.source_type === 'directory_suggestion' && (
                     <ExpandPanel isOpen={isRevealed}>
-                      <DirectorySuggestionActions enabled={isRevealed} />
+                      <DirectorySuggestionActions
+                        enabled={isRevealed}
+                        onDismiss={item.source_ref ? () => markRead.mutate(item.source_ref!) : undefined}
+                      />
                     </ExpandPanel>
                   )}
                 </div>
