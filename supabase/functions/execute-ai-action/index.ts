@@ -404,15 +404,18 @@ Deno.serve(async (req) => {
         if (error) throw new Error(error.message)
         place = data
       } else if (placeName) {
-        const { data: existing, error: existingError } = await sb
-          .from('saved_places')
-          .select('id, name, confirmed')
-          .eq('name', placeName)
-          .maybeSingle()
-        if (existingError) throw new Error(existingError.message)
-        if (existing) {
-          place = existing
-          placeId = existing.id
+        // Fuzzy lookup first (name similarity + phone match) so STT-garbled or
+        // differently-formatted names ("Dr. John Ledakis" vs "John S. Ledakis,
+        // DDS, PA") match an existing place instead of creating a duplicate.
+        const { data: similar, error: similarError } = await sb
+          .rpc('find_similar_places', { p_name: placeName, p_phone: null })
+        if (similarError) throw new Error(similarError.message)
+        const bestMatch = Array.isArray(similar)
+          ? similar.find((row: { score?: number }) => (row.score ?? 0) >= 0.6) ?? null
+          : null
+        if (bestMatch) {
+          place = { id: bestMatch.id, name: bestMatch.name, confirmed: bestMatch.confirmed }
+          placeId = bestMatch.id
         } else {
           const { data: created, error: createError } = await sb
             .from('saved_places')

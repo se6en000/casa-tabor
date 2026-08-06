@@ -391,6 +391,324 @@ function SuggestedRow({ label, sublabel, occurrenceCount, onReview, onConfirm, o
   )
 }
 
+// ── Possible-duplicates review (merge / consolidate) ─────────────────────────
+//
+// Duplicate detection is heuristic (name similarity, phone/email match), so
+// every group is a *suggestion* the user reviews and either merges or marks
+// "Not a duplicate" — never auto-merged silently.
+
+function groupDuplicatePairs(pairs: { a: string; b: string }[]): string[][] {
+  const parent = new Map<string, string>()
+  function find(x: string): string {
+    if (!parent.has(x)) parent.set(x, x)
+    let root = x
+    while (parent.get(root) !== root) root = parent.get(root) as string
+    parent.set(x, root)
+    return root
+  }
+  function union(x: string, y: string) {
+    const rx = find(x)
+    const ry = find(y)
+    if (rx !== ry) parent.set(rx, ry)
+  }
+  pairs.forEach(pair => { find(pair.a); find(pair.b); union(pair.a, pair.b) })
+  const groups = new Map<string, Set<string>>()
+  for (const key of parent.keys()) {
+    const root = find(key)
+    if (!groups.has(root)) groups.set(root, new Set())
+    groups.get(root)?.add(key)
+  }
+  return [...groups.values()].map(set => [...set]).filter(group => group.length > 1)
+}
+
+function placeCompletenessScore(p: SavedPlace): number {
+  let score = 0
+  if (p.confirmed) score += 1000
+  if (p.source === 'manual') score += 500
+  score += (p.address ? 10 : 0) + (p.city ? 5 : 0) + (p.phone ? 10 : 0) + (p.notes ? 5 : 0) + (p.category !== 'other' ? 5 : 0)
+  score += p.occurrence_count
+  return score
+}
+
+function contactCompletenessScore(c: SavedContact): number {
+  let score = 0
+  if (c.confirmed) score += 1000
+  if (c.source === 'manual') score += 500
+  score += (c.phone ? 10 : 0) + (c.email ? 10 : 0) + (c.relationship ? 5 : 0) + (c.notes ? 5 : 0) + (c.primary_place_id ? 5 : 0)
+  score += c.occurrence_count
+  return score
+}
+
+interface PlaceDuplicatePair { place_a: string; place_b: string; name_a: string; name_b: string; score: number; reason: string }
+interface ContactDuplicatePair { contact_a: string; contact_b: string; name_a: string; name_b: string; score: number; reason: string }
+
+function PossibleDuplicatePlacesPanel({ places, onMerge, onNotDuplicate, merging }: {
+  places: SavedPlace[]
+  onMerge: (keepId: string, mergeIds: string[]) => void
+  onNotDuplicate: (ids: string[]) => void
+  merging: boolean
+}) {
+  const { data: pairs = [] } = useQuery<PlaceDuplicatePair[]>({
+    queryKey: ['duplicate_place_pairs'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('find_duplicate_place_pairs')
+      if (error) throw error
+      return (data ?? []) as PlaceDuplicatePair[]
+    },
+    staleTime: 60_000,
+  })
+  const [selected, setSelected] = useState<Record<string, string>>({})
+  const byId = new Map(places.map(p => [p.id, p]))
+  const groups = groupDuplicatePairs(pairs.map(pair => ({ a: pair.place_a, b: pair.place_b })))
+    .map(ids => ids.map(id => byId.get(id)).filter((p): p is SavedPlace => Boolean(p)))
+    .filter(group => group.length > 1)
+
+  if (groups.length === 0) return null
+
+  return (
+    <div className="mb-6">
+      <p className="text-caption font-semibold text-casa-muted mb-2">
+        Possible duplicates — the same place may be saved more than once
+      </p>
+      <div className="space-y-2">
+        {groups.map(group => {
+          const groupKey = group.map(p => p.id).sort().join('|')
+          const best = group.slice().sort((a, b) => placeCompletenessScore(b) - placeCompletenessScore(a))[0]
+          const keepId = selected[groupKey] ?? best.id
+          const keepPlace = group.find(p => p.id === keepId) ?? best
+          return (
+            <div key={groupKey} className="bg-casa-error/5 border border-dashed border-casa-error/30 rounded-card p-4">
+              <div className="flex flex-wrap gap-2 mb-3">
+                {group.map(p => (
+                  <label key={p.id} className={cn(
+                    'flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer text-body-sm',
+                    keepId === p.id ? 'border-casa-gold bg-casa-gold/10' : 'border-casa-border bg-casa-surface',
+                  )}>
+                    <input type="radio" name={`keep-place-${groupKey}`} checked={keepId === p.id}
+                      onChange={() => setSelected(s => ({ ...s, [groupKey]: p.id }))} />
+                    <span>
+                      <span className="font-semibold text-casa-navy">{p.name}</span>
+                      {savedPlaceAddress(p) && <span className="block text-caption text-casa-muted">{savedPlaceAddress(p)}</span>}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button variant="ghost" size="sm" onClick={() => onNotDuplicate(group.map(p => p.id))}>
+                  Not a duplicate
+                </Button>
+                <Button size="sm" loading={merging} leadingIcon={<Check size={15} />}
+                  onClick={() => onMerge(keepId, group.filter(p => p.id !== keepId).map(p => p.id))}>
+                  Merge into &ldquo;{keepPlace.name}&rdquo;
+                </Button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function PossibleDuplicateContactsPanel({ contacts, onMerge, onNotDuplicate, merging }: {
+  contacts: SavedContact[]
+  onMerge: (keepId: string, mergeIds: string[]) => void
+  onNotDuplicate: (ids: string[]) => void
+  merging: boolean
+}) {
+  const { data: pairs = [] } = useQuery<ContactDuplicatePair[]>({
+    queryKey: ['duplicate_contact_pairs'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('find_duplicate_contact_pairs')
+      if (error) throw error
+      return (data ?? []) as ContactDuplicatePair[]
+    },
+    staleTime: 60_000,
+  })
+  const [selected, setSelected] = useState<Record<string, string>>({})
+  const byId = new Map(contacts.map(c => [c.id, c]))
+  const groups = groupDuplicatePairs(pairs.map(pair => ({ a: pair.contact_a, b: pair.contact_b })))
+    .map(ids => ids.map(id => byId.get(id)).filter((c): c is SavedContact => Boolean(c)))
+    .filter(group => group.length > 1)
+
+  if (groups.length === 0) return null
+
+  return (
+    <div className="mb-6">
+      <p className="text-caption font-semibold text-casa-muted mb-2">
+        Possible duplicates — the same person may be saved more than once
+      </p>
+      <div className="space-y-2">
+        {groups.map(group => {
+          const groupKey = group.map(c => c.id).sort().join('|')
+          const best = group.slice().sort((a, b) => contactCompletenessScore(b) - contactCompletenessScore(a))[0]
+          const keepId = selected[groupKey] ?? best.id
+          const keepContact = group.find(c => c.id === keepId) ?? best
+          return (
+            <div key={groupKey} className="bg-casa-error/5 border border-dashed border-casa-error/30 rounded-card p-4">
+              <div className="flex flex-wrap gap-2 mb-3">
+                {group.map(c => (
+                  <label key={c.id} className={cn(
+                    'flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer text-body-sm',
+                    keepId === c.id ? 'border-casa-gold bg-casa-gold/10' : 'border-casa-border bg-casa-surface',
+                  )}>
+                    <input type="radio" name={`keep-contact-${groupKey}`} checked={keepId === c.id}
+                      onChange={() => setSelected(s => ({ ...s, [groupKey]: c.id }))} />
+                    <span>
+                      <span className="font-semibold text-casa-navy">{c.name}</span>
+                      {c.phone && <span className="block text-caption text-casa-muted">{c.phone}</span>}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button variant="ghost" size="sm" onClick={() => onNotDuplicate(group.map(c => c.id))}>
+                  Not a duplicate
+                </Button>
+                <Button size="sm" loading={merging} leadingIcon={<Check size={15} />}
+                  onClick={() => onMerge(keepId, group.filter(c => c.id !== keepId).map(c => c.id))}>
+                  Merge into &ldquo;{keepContact.name}&rdquo;
+                </Button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+interface FamilyLinkDuplicateGroup { family_member_id: string; contact_id: string; relationship_ids: string[]; relationships: string[] }
+interface ConnectionDuplicateGroup { contact_id: string; place_id: string; relationship_ids: string[]; relationships: string[] }
+
+function PossibleDuplicateFamilyLinksPanel({ familyMembers, contacts, onKeep, onNotDuplicate, deleting }: {
+  familyMembers: { id: string; name: string }[]
+  contacts: SavedContact[]
+  onKeep: (keepId: string, loserIds: string[]) => void
+  onNotDuplicate: (familyMemberId: string, contactId: string) => void
+  deleting: boolean
+}) {
+  const { data: groups = [] } = useQuery<FamilyLinkDuplicateGroup[]>({
+    queryKey: ['duplicate_family_link_groups'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('find_duplicate_family_link_groups')
+      if (error) throw error
+      return (data ?? []) as FamilyLinkDuplicateGroup[]
+    },
+    staleTime: 60_000,
+  })
+  const [selected, setSelected] = useState<Record<string, string>>({})
+  if (groups.length === 0) return null
+  const memberName = (id: string) => familyMembers.find(m => m.id === id)?.name ?? 'Family member'
+  const contactName = (id: string) => contacts.find(c => c.id === id)?.name ?? 'Contact'
+
+  return (
+    <div className="mb-6">
+      <p className="text-caption font-semibold text-casa-muted mb-2">
+        Possible duplicate relationships — the same link saved with different labels
+      </p>
+      <div className="space-y-2">
+        {groups.map(group => {
+          const groupKey = `${group.family_member_id}|${group.contact_id}`
+          const keepId = selected[groupKey] ?? group.relationship_ids[0]
+          return (
+            <div key={groupKey} className="bg-casa-error/5 border border-dashed border-casa-error/30 rounded-card p-4">
+              <p className="text-body-sm font-semibold text-casa-navy mb-2">
+                {memberName(group.family_member_id)} ↔ {contactName(group.contact_id)}
+              </p>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {group.relationship_ids.map((id, index) => (
+                  <label key={id} className={cn(
+                    'flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer text-body-sm',
+                    keepId === id ? 'border-casa-gold bg-casa-gold/10' : 'border-casa-border bg-casa-surface',
+                  )}>
+                    <input type="radio" name={`keep-familylink-${groupKey}`} checked={keepId === id}
+                      onChange={() => setSelected(s => ({ ...s, [groupKey]: id }))} />
+                    <span>{group.relationships[index]}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button variant="ghost" size="sm" onClick={() => onNotDuplicate(group.family_member_id, group.contact_id)}>
+                  Not a duplicate
+                </Button>
+                <Button size="sm" loading={deleting} leadingIcon={<Check size={15} />}
+                  onClick={() => onKeep(keepId, group.relationship_ids.filter(id => id !== keepId))}>
+                  Keep &ldquo;{group.relationships[group.relationship_ids.indexOf(keepId)]}&rdquo;
+                </Button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function PossibleDuplicateConnectionsPanel({ contacts, places, onKeep, onNotDuplicate, deleting }: {
+  contacts: SavedContact[]
+  places: SavedPlace[]
+  onKeep: (keepId: string, loserIds: string[]) => void
+  onNotDuplicate: (contactId: string, placeId: string) => void
+  deleting: boolean
+}) {
+  const { data: groups = [] } = useQuery<ConnectionDuplicateGroup[]>({
+    queryKey: ['duplicate_connection_groups'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('find_duplicate_connection_groups')
+      if (error) throw error
+      return (data ?? []) as ConnectionDuplicateGroup[]
+    },
+    staleTime: 60_000,
+  })
+  const [selected, setSelected] = useState<Record<string, string>>({})
+  if (groups.length === 0) return null
+  const contactName = (id: string) => contacts.find(c => c.id === id)?.name ?? 'Contact'
+  const placeName = (id: string) => places.find(p => p.id === id)?.name ?? 'Place'
+
+  return (
+    <div className="mb-6">
+      <p className="text-caption font-semibold text-casa-muted mb-2">
+        Possible duplicate connections — the same link saved with different labels
+      </p>
+      <div className="space-y-2">
+        {groups.map(group => {
+          const groupKey = `${group.contact_id}|${group.place_id}`
+          const keepId = selected[groupKey] ?? group.relationship_ids[0]
+          return (
+            <div key={groupKey} className="bg-casa-error/5 border border-dashed border-casa-error/30 rounded-card p-4">
+              <p className="text-body-sm font-semibold text-casa-navy mb-2">
+                {contactName(group.contact_id)} ↔ {placeName(group.place_id)}
+              </p>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {group.relationship_ids.map((id, index) => (
+                  <label key={id} className={cn(
+                    'flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer text-body-sm',
+                    keepId === id ? 'border-casa-gold bg-casa-gold/10' : 'border-casa-border bg-casa-surface',
+                  )}>
+                    <input type="radio" name={`keep-connection-${groupKey}`} checked={keepId === id}
+                      onChange={() => setSelected(s => ({ ...s, [groupKey]: id }))} />
+                    <span>{group.relationships[index]}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button variant="ghost" size="sm" onClick={() => onNotDuplicate(group.contact_id, group.place_id)}>
+                  Not a duplicate
+                </Button>
+                <Button size="sm" loading={deleting} leadingIcon={<Check size={15} />}
+                  onClick={() => onKeep(keepId, group.relationship_ids.filter(id => id !== keepId))}>
+                  Keep &ldquo;{group.relationships[group.relationship_ids.indexOf(keepId)]}&rdquo;
+                </Button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type Tab = 'places' | 'people' | 'connections' | 'family'
@@ -536,6 +854,102 @@ export default function SavedPlacesSettingsPage() {
       if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['saved_contacts'] }),
+  })
+
+  const mergePlacesMutation = useMutation({
+    mutationFn: async (payload: { keepId: string; mergeIds: string[] }) => {
+      const { error } = await supabase.rpc('merge_saved_places', { p_keep_id: payload.keepId, p_merge_ids: payload.mergeIds })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['saved_places'] })
+      qc.invalidateQueries({ queryKey: ['duplicate_place_pairs'] })
+      qc.invalidateQueries({ queryKey: ['saved_contacts'] })
+      qc.invalidateQueries({ queryKey: ['contact_place_relationships'] })
+    },
+  })
+
+  const mergeContactsMutation = useMutation({
+    mutationFn: async (payload: { keepId: string; mergeIds: string[] }) => {
+      const { error } = await supabase.rpc('merge_saved_contacts', { p_keep_id: payload.keepId, p_merge_ids: payload.mergeIds })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['saved_contacts'] })
+      qc.invalidateQueries({ queryKey: ['duplicate_contact_pairs'] })
+      qc.invalidateQueries({ queryKey: ['family_contact_relationships'] })
+      qc.invalidateQueries({ queryKey: ['contact_place_relationships'] })
+    },
+  })
+
+  const dismissPlaceDuplicateMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const { error } = await supabase.rpc('dismiss_directory_duplicate', { p_kind: 'place', p_entity_a: ids[i], p_entity_b: ids[j] })
+          if (error) throw error
+        }
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['duplicate_place_pairs'] }),
+  })
+
+  const dismissContactDuplicateMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const { error } = await supabase.rpc('dismiss_directory_duplicate', { p_kind: 'contact', p_entity_a: ids[i], p_entity_b: ids[j] })
+          if (error) throw error
+        }
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['duplicate_contact_pairs'] }),
+  })
+
+  const dismissFamilyLinkDuplicateMutation = useMutation({
+    mutationFn: async (payload: { familyMemberId: string; contactId: string }) => {
+      const { error } = await supabase.rpc('dismiss_directory_duplicate', {
+        p_kind: 'family_link', p_entity_a: payload.familyMemberId, p_entity_b: payload.contactId,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['duplicate_family_link_groups'] }),
+  })
+
+  const dismissConnectionDuplicateMutation = useMutation({
+    mutationFn: async (payload: { contactId: string; placeId: string }) => {
+      const { error } = await supabase.rpc('dismiss_directory_duplicate', {
+        p_kind: 'connection', p_entity_a: payload.contactId, p_entity_b: payload.placeId,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['duplicate_connection_groups'] }),
+  })
+
+  const keepFamilyLinkMutation = useMutation({
+    mutationFn: async (loserIds: string[]) => {
+      for (const id of loserIds) {
+        const { error } = await supabase.rpc('delete_family_contact_relationship', { p_relationship_id: id })
+        if (error) throw error
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['family_contact_relationships'] })
+      qc.invalidateQueries({ queryKey: ['duplicate_family_link_groups'] })
+    },
+  })
+
+  const keepConnectionMutation = useMutation({
+    mutationFn: async (loserIds: string[]) => {
+      for (const id of loserIds) {
+        const { error } = await supabase.rpc('delete_contact_place_relationship', { p_relationship_id: id })
+        if (error) throw error
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contact_place_relationships'] })
+      qc.invalidateQueries({ queryKey: ['duplicate_connection_groups'] })
+    },
   })
 
   const { data: connections = [], isLoading: connectionsLoading } = useQuery<ContactPlaceRelationship[]>({
@@ -852,6 +1266,12 @@ export default function SavedPlacesSettingsPage() {
 
             {placeMode.type === 'list' && (
               <>
+                <PossibleDuplicatePlacesPanel
+                  places={places}
+                  merging={mergePlacesMutation.isPending}
+                  onMerge={(keepId, mergeIds) => mergePlacesMutation.mutate({ keepId, mergeIds })}
+                  onNotDuplicate={ids => dismissPlaceDuplicateMutation.mutate(ids)}
+                />
                 {suggestedPlaces.length > 0 && (
                   <div className="mb-6">
                     <p className="text-caption font-semibold text-casa-muted mb-2">
@@ -1014,6 +1434,13 @@ export default function SavedPlacesSettingsPage() {
 
                 {connectionMode === 'list' && (
                   <>
+                    <PossibleDuplicateConnectionsPanel
+                      contacts={contacts}
+                      places={places}
+                      deleting={keepConnectionMutation.isPending}
+                      onKeep={(_keepId, loserIds) => keepConnectionMutation.mutate(loserIds)}
+                      onNotDuplicate={(contactId, placeId) => dismissConnectionDuplicateMutation.mutate({ contactId, placeId })}
+                    />
                     {suggestedConnections.length > 0 && (
                       <div className="mb-6">
                         <p className="text-caption font-semibold text-casa-muted mb-2">
@@ -1145,6 +1572,13 @@ export default function SavedPlacesSettingsPage() {
 
                 {familyLinkMode === 'list' && (
                   <>
+                    <PossibleDuplicateFamilyLinksPanel
+                      familyMembers={familyMembers}
+                      contacts={contacts}
+                      deleting={keepFamilyLinkMutation.isPending}
+                      onKeep={(_keepId, loserIds) => keepFamilyLinkMutation.mutate(loserIds)}
+                      onNotDuplicate={(familyMemberId, contactId) => dismissFamilyLinkDuplicateMutation.mutate({ familyMemberId, contactId })}
+                    />
                     {suggestedFamilyLinks.length > 0 && (
                       <div className="mb-6">
                         <p className="text-caption font-semibold text-casa-muted mb-2">
@@ -1218,6 +1652,12 @@ export default function SavedPlacesSettingsPage() {
           <>
             {contactMode.type === 'list' && (
               <>
+                <PossibleDuplicateContactsPanel
+                  contacts={contacts}
+                  merging={mergeContactsMutation.isPending}
+                  onMerge={(keepId, mergeIds) => mergeContactsMutation.mutate({ keepId, mergeIds })}
+                  onNotDuplicate={ids => dismissContactDuplicateMutation.mutate(ids)}
+                />
                 {suggestedContacts.length > 0 && (
                   <div className="mb-6">
                     <p className="text-caption font-semibold text-casa-muted mb-2">
