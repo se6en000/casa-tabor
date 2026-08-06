@@ -7,8 +7,9 @@ import {
   deriveImpactedEnrichmentFields,
   hasSmartEnrichmentInputs,
 } from '../_shared/enrichment-impact.mjs'
-import { requireEnv } from '../_shared/env.mjs'
+import { requireEnv, optionalEnv } from '../_shared/env.mjs'
 import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
+import { verifyPlaceAddress } from '../_shared/verify-place-address.mjs'
 import { resolveFamilyMemberByName } from '../_shared/family-identity.mjs'
 import {
   buildRecurringDetailMutation,
@@ -417,12 +418,27 @@ Deno.serve(async (req) => {
           place = { id: bestMatch.id, name: bestMatch.name, confirmed: bestMatch.confirmed }
           placeId = bestMatch.id
         } else {
+          // Verify and split the AI-provided address (calendar-evidence text,
+          // not an interactive Google-verified pick) through Google Places so
+          // saved_places gets structured city/state/zip instead of dumping
+          // the whole string into one field.
+          const mapsApiKey = optionalEnv('GOOGLE_MAPS_API_KEY', '')
+          const verified = await verifyPlaceAddress({
+            fetchImpl: fetch,
+            apiKey: mapsApiKey,
+            query: [placeName, placeAddress].filter(Boolean).join(', '),
+          })
           const { data: created, error: createError } = await sb
             .from('saved_places')
             .insert({
               name: placeName,
               aliases: [],
-              address: placeAddress,
+              address: verified.verified && verified.street ? verified.street : placeAddress,
+              city: verified.verified ? verified.city : null,
+              state: verified.verified ? verified.state : null,
+              zip: verified.verified ? verified.zip : null,
+              lat: verified.verified ? verified.lat : null,
+              lng: verified.verified ? verified.lng : null,
               category: 'other',
               confirmed: true,
               source: 'manual',
