@@ -902,6 +902,235 @@ Deno.serve(async (req) => {
     thought_tokens: 0,
     total_tokens: 0,
   }
+  const providerListRoleMatch = latestUserText?.match(
+    /\b(doctors?|dentists?|orthodontists?|dermatologists?|therapists?|coaches?|providers?|counselors?|tutors?|vets?|veterinarians?)\b/i,
+  )
+  const providerListRequest = householdDirectoryQuestion &&
+    providerListRoleMatch &&
+    /\b(?:list|name|other|what|which)\b/i.test(latestUserText ?? '')
+  if (providerListRequest && latestUserText) {
+    const normalizedQuestion = normalizeSearchText(latestUserText)
+    const member = (familyMembers as { id?: string; name?: string; full_name?: string | null }[])
+      .filter((candidate) => candidate.id && candidate.name)
+      .find((candidate) =>
+        [candidate.name, candidate.full_name]
+          .filter((value): value is string => Boolean(value))
+          .map(normalizeSearchText)
+          .some((term) => normalizedQuestion.includes(term)),
+      )
+    const requestedRole = normalizeSearchText(providerListRoleMatch[1]).replace(/s$/, '')
+    const roleMatches = (relationship: string | null | undefined) => {
+      const normalized = normalizeSearchText(relationship ?? '')
+      if (requestedRole === 'doctor' || requestedRole === 'provider') {
+        return /\b(?:dentist|dermatologist|doctor|orthodontist|physician|therapist)\b/.test(normalized)
+      }
+      if (requestedRole === 'vet') return /\b(?:vet|veterinarian)\b/.test(normalized)
+      return normalized.includes(requestedRole)
+    }
+    if (member?.id && member.name) {
+      type FamilyProviderRelationship = {
+        relationship?: string
+        family_member?: { name?: string } | null
+        contact?: {
+          name?: string
+          phone?: string | null
+          primary_place?: {
+            name?: string
+            address?: string | null
+            city?: string | null
+            state?: string | null
+            zip?: string | null
+          } | null
+        } | null
+      }
+      const assistantHistory = Array.isArray(messages)
+        ? messages
+          .flatMap((message) =>
+            message?.role === 'assistant' && typeof message.content === 'string' ? [message.content] : [])
+          .join(' ')
+        : ''
+      const confirmedProviders = (confirmedFamilyContactRelationships as FamilyProviderRelationship[] ?? [])
+        .filter((association) =>
+          association.family_member?.name?.toLowerCase() === member.name?.toLowerCase() &&
+          roleMatches(association.relationship),
+        )
+        .filter((association) =>
+          !/\bother\b/i.test(latestUserText) ||
+          !association.contact?.name ||
+          !normalizeSearchText(assistantHistory).includes(normalizeSearchText(association.contact.name)),
+        )
+      if (confirmedProviders.length > 0) {
+        const facts = confirmedProviders.map((association) => {
+          const contact = association.contact
+          const place = contact?.primary_place
+          const address = place
+            ? [place.address, place.city, place.state, place.zip].filter(Boolean).join(', ')
+            : ''
+          const location = place?.name && normalizeSearchText(place.name) !== normalizeSearchText(address)
+            ? `${place.name}${address ? `, ${address}` : ''}`
+            : place?.name || address
+          return `${contact?.name ?? 'Unknown provider'} (${association.relationship})${location ? ` at ${location}` : ''}${contact?.phone ? `, ${contact.phone}` : ''}`
+        })
+        return {
+          status: 200,
+          payload: {
+            type: 'text',
+            text: `${member.name}'s confirmed ${requestedRole === 'doctor' ? 'doctors and specialists' : `${requestedRole}s`}: ${facts.join('; ')}.`,
+            correlation_id: cid,
+            telemetry: {
+              ...llmTelemetry,
+              request_total_ms: Date.now() - requestStartMs,
+              context_load_ms: contextLoadMs,
+            },
+          },
+        }
+      }
+
+      const threeYearsAgo = new Date(now.getTime() - 3 * 365 * 24 * 60 * 60 * 1000).toISOString()
+      const { data: providerHistory, error: providerHistoryError } = await sb
+        .from('events')
+        .select('title, description, start_time, source_member_id, event_members(family_member_id), event_enrichments(category, contact_name)')
+        .is('deleted_at', null)
+        .eq('status', 'confirmed')
+        .gte('start_time', threeYearsAgo)
+        .order('start_time', { ascending: false })
+        .limit(1000)
+      if (providerHistoryError) throw new Error(providerHistoryError.message)
+
+      type ProviderContact = {
+        id: string
+        name: string
+        aliases?: string[]
+        phone?: string | null
+        relationship?: string | null
+        primary_place?: {
+          name?: string
+          address?: string | null
+          city?: string | null
+          state?: string | null
+          zip?: string | null
+        } | null
+      }
+      const contacts = (savedContacts as ProviderContact[] ?? []).filter((contact) =>
+        roleMatches(contact.relationship) || requestedRole === 'provider')
+      const contactByName = new Map<string, ProviderContact>()
+      for (const contact of contacts) {
+        for (const value of [contact.name, ...(contact.aliases ?? [])]) {
+          contactByName.set(normalizeSearchText(value), contact)
+        }
+      }
+      const memberPattern = new RegExp(`\\b${member.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+      const otherMemberNames = (familyMembers as { name?: string }[])
+        .map((candidate) => candidate.name)
+        .filter((name): name is string => Boolean(name) && name.toLowerCase() !== member.name!.toLowerCase())
+        .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      const otherMemberPattern = otherMemberNames.length > 0
+        ? new RegExp(`\\b(?:${otherMemberNames.join('|')})\\b`, 'i')
+        : null
+      const priorNormalized = normalizeSearchText(assistantHistory)
+      const contactsConfirmedForOtherMembers = new Set(
+        (confirmedFamilyContactRelationships as FamilyProviderRelationship[] ?? [])
+          .filter((association) =>
+            association.family_member?.name?.toLowerCase() !== member.name?.toLowerCase() &&
+            association.contact?.name)
+          .map((association) => normalizeSearchText(association.contact?.name ?? '')),
+      )
+      const candidates = new Map<string, {
+        contact: ProviderContact
+        score: number
+        count: number
+        relationship: string
+      }>()
+      for (const event of providerHistory ?? []) {
+        const enrichment = Array.isArray(event.event_enrichments)
+          ? event.event_enrichments[0]
+          : event.event_enrichments
+        const contact = contactByName.get(normalizeSearchText(enrichment?.contact_name ?? ''))
+        if (!contact || priorNormalized.includes(normalizeSearchText(contact.name))) continue
+        const eventText = `${event.title ?? ''} ${event.description ?? ''}`
+        const explicitMember = memberPattern.test(eventText)
+        const explicitOtherMember = otherMemberPattern?.test(eventText) ?? false
+        const assignedMember = (event.event_members ?? []).some(
+          (assignment: { family_member_id?: string }) => assignment.family_member_id === member.id,
+        )
+        if (!assignedMember || explicitOtherMember) continue
+        if (!explicitMember && contactsConfirmedForOtherMembers.has(normalizeSearchText(contact.name))) continue
+        const evidenceText = `${eventText} ${enrichment?.category ?? ''} ${contact.relationship ?? ''}`
+        if (!roleMatches(evidenceText)) continue
+        const relationship = /\borthodont/i.test(evidenceText)
+          ? 'orthodontist'
+          : /\bdermatolog/i.test(evidenceText)
+            ? 'dermatologist'
+            : /\bdent/i.test(evidenceText)
+              ? 'dentist'
+              : /\btherap/i.test(evidenceText)
+                ? 'therapist'
+                : 'doctor'
+        const candidateKey = normalizeSearchText(contact.phone ?? '') || contact.id
+        const current = candidates.get(candidateKey) ?? {
+          contact,
+          score: 0,
+          count: 0,
+          relationship,
+        }
+        current.score += explicitMember ? 4 : 1
+        current.count += 1
+        if (contact.name.length > current.contact.name.length) current.contact = contact
+        candidates.set(candidateKey, current)
+      }
+      const ranked = [...candidates.values()].sort((a, b) => b.score - a.score || b.count - a.count).slice(0, 2)
+      appendServerTrace('server_ai_directory_provider_fallback', `member=${member.name} candidates=${ranked.length}`, {
+        member_id: member.id,
+        requested_role: requestedRole,
+        candidate_count: ranked.length,
+      })
+      if (ranked.length > 0) {
+        const first = ranked[0]
+        const alternative = ranked[1]
+        const place = first.contact.primary_place
+        const address = place
+          ? [place.address, place.city, place.state, place.zip].filter(Boolean).join(', ')
+          : ''
+        const location = place?.name && normalizeSearchText(place.name) !== normalizeSearchText(address)
+          ? `${place.name}${address ? `, ${address}` : ''}`
+          : place?.name || address
+        return {
+          status: 200,
+          payload: {
+            type: 'tool_action',
+            tool: 'associate_family_contact',
+            args: {
+              family_member_id: member.id,
+              contact_id: first.contact.id,
+              relationship: first.relationship,
+              evidence_count: first.count,
+              evidence_notes: 'Suggested from provider events assigned to this family member; explicit name matches are weighted highest.',
+            },
+            display_text: `I don't have another confirmed ${requestedRole} saved for ${member.name}. My best calendar-based guess is ${first.contact.name}${location ? ` at ${location}` : ''}, based on ${first.count} ${first.count === 1 ? 'entry' : 'entries'}${alternative ? `. Another possibility is ${alternative.contact.name}` : ''}. Save ${first.contact.name} as ${member.name}'s ${first.relationship}?`,
+            correlation_id: cid,
+            telemetry: {
+              ...llmTelemetry,
+              request_total_ms: Date.now() - requestStartMs,
+              context_load_ms: contextLoadMs,
+            },
+          },
+        }
+      }
+      return {
+        status: 200,
+        payload: {
+          type: 'text',
+          text: `I don't have a confirmed ${requestedRole} saved for ${member.name}, and the calendar search didn't find enough member-specific evidence to make a safe guess.`,
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+  }
   if (householdDirectoryQuestion && latestUserText) {
     const normalizedQuestion = normalizeSearchText(latestUserText)
     const candidateEntities = [

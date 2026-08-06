@@ -227,6 +227,14 @@ test('directory fallback can confirm entities and persist contact-place associat
   assert.match(householdGraph, /nodeRows\.slice\(index \* 75/)
 })
 
+test('provider-list questions use confirmed facts before calendar-backed guesses', () => {
+  assert.match(assistantFunction, /providerListRequest/)
+  assert.match(assistantFunction, /server_ai_directory_provider_fallback/)
+  assert.match(assistantFunction, /My best calendar-based guess is/)
+  assert.match(assistantFunction, /tool: 'associate_family_contact'/)
+  assert.match(assistantFunction, /\.limit\(1000\)/)
+})
+
 test('assistant preserves full family names for alias-aware identity resolution', () => {
   assert.match(assistant, /full_name: f\.full_name/)
   assert.match(assistantFunction, /canonicalizeFamilyReferences\(rawLatestUserText, familyMembers\)/)
