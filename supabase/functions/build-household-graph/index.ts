@@ -423,6 +423,23 @@ Deno.serve(async (req) => {
   const { count: nodeCount } = await sb.from('household_graph_nodes').select('*', { count: 'exact', head: true })
   const { count: edgeCount } = await sb.from('household_graph_edges').select('*', { count: 'exact', head: true })
 
+  // Passive directory auto-discovery: now that the graph reflects the latest
+  // calendar activity, surface any newly-recurring unmatched places/contacts
+  // (and family-member/contact links) as unconfirmed suggestions for review
+  // in Settings. Additive-only, idempotent, never touches confirmed rows —
+  // safe to no-op or fail without affecting the graph rebuild itself.
+  let discovery: Record<string, unknown> | null = null
+  try {
+    const { data: discoveryData, error: discoveryError } = await sb.rpc('discover_directory_candidates')
+    if (discoveryError) {
+      console.error('discover_directory_candidates failed', discoveryError.message)
+    } else {
+      discovery = discoveryData as Record<string, unknown>
+    }
+  } catch (discoveryCatchError) {
+    console.error('discover_directory_candidates threw', discoveryCatchError)
+  }
+
     return new Response(
       JSON.stringify({
         ok: true,
@@ -434,6 +451,7 @@ Deno.serve(async (req) => {
           nodes_total: nodeCount ?? null,
           edges_total: edgeCount ?? null,
         },
+        directory_discovery: discovery,
       }),
       { headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
     )

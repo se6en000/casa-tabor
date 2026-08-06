@@ -413,6 +413,7 @@ export default function SavedPlacesSettingsPage() {
   const [familyLinkMemberId, setFamilyLinkMemberId] = useState('')
   const [familyLinkContactId, setFamilyLinkContactId] = useState('')
   const [familyLinkLabel, setFamilyLinkLabel] = useState('')
+  const [familyLinkReviewId, setFamilyLinkReviewId] = useState<string | null>(null)
 
   // ── Places queries ───────────────────────────────────────────────────────────
   const { data: places = [], isLoading: placesLoading } = useQuery<SavedPlace[]>({
@@ -590,10 +591,39 @@ export default function SavedPlacesSettingsPage() {
     },
   })
 
+  const { data: suggestedFamilyLinksRaw = [] } = useQuery<FamilyContactRelationship[]>({
+    queryKey: ['family_contact_relationships', 'suggested'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('family_contact_relationships')
+        .select('*, family_member:family_members(id, name), contact:saved_contacts(id, name, phone, relationship)')
+        .eq('confirmed', false)
+        .order('evidence_count', { ascending: false })
+      if (error) throw error
+      return data as FamilyContactRelationship[]
+    },
+  })
+
   const saveFamilyLinkMutation = useMutation({
     mutationFn: async () => {
       if (!familyLinkMemberId || !familyLinkContactId || !familyLinkLabel.trim()) {
         throw new Error('Choose a family member, a person, and a relationship.')
+      }
+      if (familyLinkReviewId) {
+        // Confirming a suggestion: update the existing derived row in place
+        // instead of inserting a new one, so it moves out of "suggested".
+        const { error } = await supabase
+          .from('family_contact_relationships')
+          .update({
+            family_member_id: familyLinkMemberId,
+            contact_id: familyLinkContactId,
+            relationship: familyLinkLabel.trim(),
+            source: 'manual',
+            confirmed: true,
+          })
+          .eq('id', familyLinkReviewId)
+        if (error) throw error
+        return
       }
       const { error } = await supabase.rpc('set_family_contact_relationship', {
         p_family_member_id: familyLinkMemberId,
@@ -613,12 +643,21 @@ export default function SavedPlacesSettingsPage() {
       setFamilyLinkMemberId('')
       setFamilyLinkContactId('')
       setFamilyLinkLabel('')
+      setFamilyLinkReviewId(null)
     },
   })
 
   const deleteFamilyLinkMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.rpc('delete_family_contact_relationship', { p_relationship_id: id })
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['family_contact_relationships'] }),
+  })
+
+  const confirmFamilyLinkMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('family_contact_relationships').update({ confirmed: true, source: 'manual' }).eq('id', id)
       if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['family_contact_relationships'] }),
@@ -650,6 +689,8 @@ export default function SavedPlacesSettingsPage() {
       connection.place ? savedPlaceAddress(connection.place) : '',
     ].some(value => value.toLowerCase().includes(needle))
   })
+
+  const suggestedFamilyLinks = suggestedFamilyLinksRaw.slice().sort((a, b) => b.evidence_count - a.evidence_count)
 
   const filteredFamilyLinks = familyLinks.filter(link => {
     const needle = search.toLowerCase()
@@ -936,7 +977,7 @@ export default function SavedPlacesSettingsPage() {
                         <h2 className="font-display text-heading text-casa-navy">Link a family member to a person</h2>
                         <p className="text-caption text-casa-muted mt-1">Tells Alexa exactly who a provider belongs to — e.g. "Dr George" is Liv's dermatologist, not Emme's.</p>
                       </div>
-                      <IconButton onClick={() => setFamilyLinkMode('list')} variant="ghost" size="sm" icon={<X size={16} />} aria-label="Close family link editor" />
+                      <IconButton onClick={() => { setFamilyLinkMode('list'); setFamilyLinkReviewId(null) }} variant="ghost" size="sm" icon={<X size={16} />} aria-label="Close family link editor" />
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <Combobox
@@ -950,7 +991,10 @@ export default function SavedPlacesSettingsPage() {
                         label="Person or provider"
                         value={familyLinkContactId}
                         onChange={setFamilyLinkContactId}
-                        options={contacts.filter(contact => contact.confirmed).map(contact => ({ value: contact.id, label: contact.name }))}
+                        options={[
+                          ...contacts.filter(contact => contact.confirmed),
+                          ...contacts.filter(contact => !contact.confirmed && contact.id === familyLinkContactId),
+                        ].map(contact => ({ value: contact.id, label: contact.name }))}
                         placeholder="Choose a person"
                       />
                       <div className="sm:col-span-2">
@@ -967,14 +1011,14 @@ export default function SavedPlacesSettingsPage() {
                       <p role="alert" className="text-caption text-casa-error mt-3">{saveFamilyLinkMutation.error.message}</p>
                     )}
                     <div className="flex justify-end gap-2 mt-5">
-                      <Button variant="secondary" onClick={() => setFamilyLinkMode('list')}>Cancel</Button>
+                      <Button variant="secondary" onClick={() => { setFamilyLinkMode('list'); setFamilyLinkReviewId(null) }}>Cancel</Button>
                       <Button
                         onClick={() => saveFamilyLinkMutation.mutate()}
                         loading={saveFamilyLinkMutation.isPending}
                         disabled={!familyLinkMemberId || !familyLinkContactId || !familyLinkLabel.trim()}
                         leadingIcon={<Save size={15} />}
                       >
-                        Save Family Link
+                        {familyLinkReviewId ? 'Confirm Family Link' : 'Save Family Link'}
                       </Button>
                     </div>
                   </div>
@@ -982,6 +1026,32 @@ export default function SavedPlacesSettingsPage() {
 
                 {familyLinkMode === 'list' && (
                   <>
+                    {suggestedFamilyLinks.length > 0 && (
+                      <div className="mb-6">
+                        <p className="text-caption font-semibold text-casa-muted mb-2">
+                          Suggested from event history — review who they belong to before confirming
+                        </p>
+                        <div className="space-y-2">
+                          {suggestedFamilyLinks.map(link => (
+                            <SuggestedRow key={link.id}
+                              label={`${link.family_member?.name ?? 'Someone'} → ${link.contact?.name ?? 'Unknown'}`}
+                              sublabel={link.relationship.replaceAll('_', ' ')}
+                              occurrenceCount={link.evidence_count}
+                              confirming={confirmFamilyLinkMutation.isPending}
+                              onReview={() => {
+                                setFamilyLinkReviewId(link.id)
+                                setFamilyLinkMemberId(link.family_member_id)
+                                setFamilyLinkContactId(link.contact_id)
+                                setFamilyLinkLabel(link.relationship)
+                                setFamilyLinkMode('add')
+                              }}
+                              onConfirm={() => confirmFamilyLinkMutation.mutate(link.id)}
+                              onDismiss={() => deleteFamilyLinkMutation.mutate(link.id)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="relative mb-5">
                       <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted" />
                       <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search family members, people, or relationship…"
