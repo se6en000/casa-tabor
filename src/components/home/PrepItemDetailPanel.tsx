@@ -502,61 +502,57 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
               </BounceScroll>
             </div>
 
-            <div className="flex flex-none flex-col gap-2 border-t border-casa-border bg-casa-surface px-5 py-3.5">
-              <div className="grid grid-cols-2 gap-2">
-                {item.event_id ? (
+            <div className="flex flex-none items-center gap-2 border-t border-casa-border bg-casa-surface px-5 py-3.5">
+              <IconButton
+                onClick={() => runAction('snooze')}
+                disabled={!!acting}
+                variant="secondary"
+                icon={<TimerReset size={16} />}
+                aria-label="Snooze until tomorrow"
+                title="Snooze until tomorrow"
+              />
+              <IconButton
+                onClick={() => runAction('dismiss')}
+                disabled={!!acting}
+                variant="secondary"
+                icon={<Ban size={16} />}
+                aria-label="Dismiss"
+                title="Dismiss"
+              />
+              {item.event_id ? (
+                <Button
+                  onClick={() => { openEventDetails(item.event_id!); onClose() }}
+                  variant="primary"
+                  size="sm"
+                  className="flex-1"
+                  leadingIcon={<ExternalLink size={13} />}
+                >
+                  View event
+                </Button>
+              ) : (
+                <>
                   <Button
-                    onClick={() => { openEventDetails(item.event_id!); onClose() }}
+                    onClick={() => launchCreate('event')}
+                    disabled={!!acting}
                     variant="primary"
                     size="sm"
-                    className="col-span-2"
-                    leadingIcon={<ExternalLink size={13} />}
+                    className="flex-1"
+                    leadingIcon={<CalendarPlus size={13} />}
                   >
-                    View event
+                    Create event
                   </Button>
-                ) : (
-                  <>
-                    <Button
-                      onClick={() => launchCreate('event')}
-                      disabled={!!acting}
-                      variant="primary"
-                      size="sm"
-                      leadingIcon={<CalendarPlus size={13} />}
-                    >
-                      Create event
-                    </Button>
-                    <Button
-                      onClick={() => launchCreate('reminder')}
-                      disabled={!!acting}
-                      variant="primary"
-                      size="sm"
-                      leadingIcon={<BellPlus size={13} />}
-                    >
-                      Create reminder
-                    </Button>
-                  </>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  onClick={() => runAction('snooze')}
-                  disabled={!!acting}
-                  variant="secondary"
-                  size="sm"
-                  leadingIcon={<TimerReset size={13} />}
-                >
-                  Snooze
-                </Button>
-                <Button
-                  onClick={() => runAction('dismiss')}
-                  disabled={!!acting}
-                  variant="secondary"
-                  size="sm"
-                  leadingIcon={<Ban size={13} />}
-                >
-                  Dismiss
-                </Button>
-              </div>
+                  <Button
+                    onClick={() => launchCreate('reminder')}
+                    disabled={!!acting}
+                    variant="primary"
+                    size="sm"
+                    className="flex-1"
+                    leadingIcon={<BellPlus size={13} />}
+                  >
+                    Create reminder
+                  </Button>
+                </>
+              )}
             </div>
           </motion.div>
         </>
