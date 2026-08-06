@@ -409,6 +409,7 @@ export default function SavedPlacesSettingsPage() {
   const [connectionPlaceId, setConnectionPlaceId] = useState('')
   const [connectionLabel, setConnectionLabel] = useState('provider_location')
   const [connectionDefault, setConnectionDefault] = useState(true)
+  const [connectionReviewId, setConnectionReviewId] = useState<string | null>(null)
   const [familyLinkMode, setFamilyLinkMode] = useState<'list' | 'add'>('list')
   const [familyLinkMemberId, setFamilyLinkMemberId] = useState('')
   const [familyLinkContactId, setFamilyLinkContactId] = useState('')
@@ -535,10 +536,47 @@ export default function SavedPlacesSettingsPage() {
     },
   })
 
+  const { data: suggestedConnectionsRaw = [] } = useQuery<ContactPlaceRelationship[]>({
+    queryKey: ['contact_place_relationships', 'suggested'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('contact_place_relationships')
+        .select('*, contact:saved_contacts(id, name, phone, relationship), place:saved_places(id, name, address, city, state, zip, category)')
+        .eq('confirmed', false)
+        .order('evidence_count', { ascending: false })
+      if (error) throw error
+      return data as ContactPlaceRelationship[]
+    },
+  })
+
   const saveConnectionMutation = useMutation({
     mutationFn: async () => {
       if (!connectionContactId || !connectionPlaceId || !connectionLabel.trim()) {
         throw new Error('Choose a person, place, and connection type.')
+      }
+      if (connectionReviewId) {
+        // Confirming a suggestion: update the existing derived row in place
+        // instead of inserting a new one, so it moves out of "suggested".
+        const { error } = await supabase
+          .from('contact_place_relationships')
+          .update({
+            contact_id: connectionContactId,
+            place_id: connectionPlaceId,
+            relationship: connectionLabel.trim(),
+            is_default: connectionDefault,
+            source: 'manual',
+            confirmed: true,
+          })
+          .eq('id', connectionReviewId)
+        if (error) throw error
+        if (connectionDefault) {
+          const { error: primaryError } = await supabase
+            .from('saved_contacts')
+            .update({ primary_place_id: connectionPlaceId, primary_place_source: 'manual' })
+            .eq('id', connectionContactId)
+          if (primaryError) throw primaryError
+        }
+        return
       }
       const { error } = await supabase.rpc('set_contact_place_relationship', {
         p_contact_id: connectionContactId,
@@ -561,6 +599,7 @@ export default function SavedPlacesSettingsPage() {
       setConnectionPlaceId('')
       setConnectionLabel('provider_location')
       setConnectionDefault(true)
+      setConnectionReviewId(null)
     },
   })
 
@@ -574,6 +613,18 @@ export default function SavedPlacesSettingsPage() {
       qc.invalidateQueries({ queryKey: ['saved_contacts'] })
     },
   })
+
+  const confirmConnectionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('contact_place_relationships').update({ confirmed: true, source: 'manual' }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contact_place_relationships'] })
+      qc.invalidateQueries({ queryKey: ['saved_contacts'] })
+    },
+  })
+
 
   // ── Family links queries ─────────────────────────────────────────────────────
   const { data: familyMembers = [] } = useFamilyMembers()
@@ -689,6 +740,7 @@ export default function SavedPlacesSettingsPage() {
       connection.place ? savedPlaceAddress(connection.place) : '',
     ].some(value => value.toLowerCase().includes(needle))
   })
+  const suggestedConnections = suggestedConnectionsRaw.slice().sort((a, b) => b.evidence_count - a.evidence_count)
 
   const suggestedFamilyLinks = suggestedFamilyLinksRaw.slice().sort((a, b) => b.evidence_count - a.evidence_count)
 
@@ -870,21 +922,27 @@ export default function SavedPlacesSettingsPage() {
                         <h2 className="font-display text-heading text-casa-navy">Connect a person to a place</h2>
                         <p className="text-caption text-casa-muted mt-1">The place owns the address. Alexa follows this connection instead of copying an address onto the person.</p>
                       </div>
-                      <IconButton onClick={() => setConnectionMode('list')} variant="ghost" size="sm" icon={<X size={16} />} aria-label="Close connection editor" />
+                      <IconButton onClick={() => { setConnectionMode('list'); setConnectionReviewId(null) }} variant="ghost" size="sm" icon={<X size={16} />} aria-label="Close connection editor" />
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <Combobox
                         label="Person or provider"
                         value={connectionContactId}
                         onChange={setConnectionContactId}
-                        options={contacts.filter(contact => contact.confirmed).map(contact => ({ value: contact.id, label: contact.name }))}
+                        options={[
+                          ...contacts.filter(contact => contact.confirmed),
+                          ...contacts.filter(contact => !contact.confirmed && contact.id === connectionContactId),
+                        ].map(contact => ({ value: contact.id, label: contact.name }))}
                         placeholder="Choose a person"
                       />
                       <Combobox
                         label="Place"
                         value={connectionPlaceId}
                         onChange={setConnectionPlaceId}
-                        options={places.filter(place => place.confirmed).map(place => ({ value: place.id, label: [place.name, savedPlaceAddress(place)].filter(Boolean).join(' — ') }))}
+                        options={[
+                          ...places.filter(place => place.confirmed),
+                          ...places.filter(place => !place.confirmed && place.id === connectionPlaceId),
+                        ].map(place => ({ value: place.id, label: [place.name, savedPlaceAddress(place)].filter(Boolean).join(' — ') }))}
                         placeholder="Choose a place"
                       />
                       <div>
@@ -907,14 +965,14 @@ export default function SavedPlacesSettingsPage() {
                       <p role="alert" className="text-caption text-casa-error mt-3">{saveConnectionMutation.error.message}</p>
                     )}
                     <div className="flex justify-end gap-2 mt-5">
-                      <Button variant="secondary" onClick={() => setConnectionMode('list')}>Cancel</Button>
+                      <Button variant="secondary" onClick={() => { setConnectionMode('list'); setConnectionReviewId(null) }}>Cancel</Button>
                       <Button
                         onClick={() => saveConnectionMutation.mutate()}
                         loading={saveConnectionMutation.isPending}
                         disabled={!connectionContactId || !connectionPlaceId || !connectionLabel.trim()}
                         leadingIcon={<Save size={15} />}
                       >
-                        Save Connection
+                        {connectionReviewId ? 'Confirm Connection' : 'Save Connection'}
                       </Button>
                     </div>
                   </div>
@@ -922,6 +980,33 @@ export default function SavedPlacesSettingsPage() {
 
                 {connectionMode === 'list' && (
                   <>
+                    {suggestedConnections.length > 0 && (
+                      <div className="mb-6">
+                        <p className="text-caption font-semibold text-casa-muted mb-2">
+                          Suggested from event history — review before connecting a person to a place
+                        </p>
+                        <div className="space-y-2">
+                          {suggestedConnections.map(connection => (
+                            <SuggestedRow key={connection.id}
+                              label={`${connection.contact?.name ?? 'Someone'} → ${connection.place?.name ?? 'Somewhere'}`}
+                              sublabel={connection.place ? savedPlaceAddress(connection.place) : ''}
+                              occurrenceCount={connection.evidence_count}
+                              confirming={confirmConnectionMutation.isPending}
+                              onReview={() => {
+                                setConnectionReviewId(connection.id)
+                                setConnectionContactId(connection.contact_id)
+                                setConnectionPlaceId(connection.place_id)
+                                setConnectionLabel(connection.relationship)
+                                setConnectionDefault(connection.is_default)
+                                setConnectionMode('add')
+                              }}
+                              onConfirm={() => confirmConnectionMutation.mutate(connection.id)}
+                              onDismiss={() => deleteConnectionMutation.mutate(connection.id)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="relative mb-5">
                       <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted" />
                       <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search people, places, or connection type…"
