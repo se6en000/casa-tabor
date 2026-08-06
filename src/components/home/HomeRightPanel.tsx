@@ -479,7 +479,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
 
                         <div className="min-w-0 flex-1">
                           {readOnly ? (
-                            <p className="!text-body-sm leading-snug text-casa-text line-clamp-2">
+                            <p className={cn('!text-body-sm leading-snug text-casa-text', !isRevealed && 'line-clamp-2')}>
                               {item.description}
                             </p>
                           ) : (
@@ -491,7 +491,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                               className="h-auto min-h-0 p-0 text-left hover:bg-transparent"
                               contentClassName="w-full justify-start"
                             >
-                              <p className="!text-body-sm leading-snug text-casa-text line-clamp-2">
+                              <p className={cn('!text-body-sm leading-snug text-casa-text', !isRevealed && 'line-clamp-2')}>
                                 {item.description}
                               </p>
                             </Button>
@@ -507,7 +507,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                             </span>
                             {/* Truncates instead of wrapping so the assignee control at the
                                 end of the row never gets pushed onto its own line. */}
-                            <span className="min-w-0 flex-1 truncate text-body-sm text-casa-muted">{meta.text}</span>
+                            <span className="min-w-0 flex-1 truncate text-caption text-casa-muted">{meta.text}</span>
                             {priority.chip && !shouldSuppressPriorityChipIcon(item) && (
                               <span
                                 role="img"

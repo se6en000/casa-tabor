@@ -318,10 +318,10 @@ export default function ActionHubPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
                         {readOnly ? (
-                          <p className="min-w-0 flex-1 text-body-sm font-semibold text-casa-text leading-snug line-clamp-2">{item.description}</p>
+                          <p className={cn('min-w-0 flex-1 text-body-sm font-semibold text-casa-text leading-snug', !isRevealed && 'line-clamp-2')}>{item.description}</p>
                         ) : (
                           <Button variant="ghost" className="min-w-0 flex-1 h-auto min-h-0 p-0 text-left hover:bg-transparent" contentClassName="w-full justify-start" onClick={() => setSelected(item)}>
-                            <p className="text-body-sm font-semibold text-casa-text leading-snug line-clamp-2">{item.description}</p>
+                            <p className={cn('text-body-sm font-semibold text-casa-text leading-snug', !isRevealed && 'line-clamp-2')}>{item.description}</p>
                           </Button>
                         )}
                         {due && (
@@ -347,7 +347,7 @@ export default function ActionHubPage() {
                         )}
                         {/* Truncates instead of wrapping so the assignee chip at the end of
                             the row never gets pushed onto its own line. */}
-                        <span className="min-w-0 flex-1 truncate text-body-sm text-casa-muted">
+                        <span className="min-w-0 flex-1 truncate text-caption text-casa-muted">
                           {readOnlyMeta ? readOnlyMeta.text : (item.event_title || 'Casa Tabor')}
                         </span>
                         {priority.chip && !shouldSuppressPriorityChipIcon(item) && (
