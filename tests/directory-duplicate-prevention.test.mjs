@@ -98,3 +98,12 @@ test('ContactForm warns about possible existing matches before creating a new co
   assert.match(savedPlacesSettingsSource, /function ContactForm\(\{ initial, places, contacts, onSave, onCancel, onEditExisting, saving \}: ContactFormProps\)/)
   assert.match(savedPlacesSettingsSource, /rankDirectorySuggestions\(contacts\.map/)
 })
+
+// ── Bug fix: PlaceForm/ContactForm remount on record switch so "Use existing" syncs ──
+test('PlaceForm is keyed by the editing record id so switching records remounts its local state', () => {
+  assert.match(savedPlacesSettingsSource, /<PlaceForm\s*\n\s*key=\{placeMode\.type === 'edit' \? placeMode\.place\.id : 'new'\}/)
+})
+
+test('ContactForm is keyed by the editing record id so switching records remounts its local state', () => {
+  assert.match(savedPlacesSettingsSource, /<ContactForm\s*\n\s*key=\{contactMode\.type === 'edit' \? contactMode\.contact\.id : 'new'\}/)
+})

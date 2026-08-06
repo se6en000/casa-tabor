@@ -1307,6 +1307,7 @@ export default function SavedPlacesSettingsPage() {
                   <IconButton onClick={() => setPlaceMode({ type: 'list' })} variant="ghost" size="sm" icon={<X size={16} />} aria-label="Close place editor" />
                 </div>
                 <PlaceForm
+                  key={placeMode.type === 'edit' ? placeMode.place.id : 'new'}
                   initial={placeMode.type === 'edit' ? placeMode.place : null}
                   places={places}
                   saving={savePlaceMutation.isPending}
@@ -1409,6 +1410,7 @@ export default function SavedPlacesSettingsPage() {
                   <IconButton onClick={() => setContactMode({ type: 'list' })} variant="ghost" size="sm" icon={<X size={16} />} aria-label="Close contact editor" />
                 </div>
                 <ContactForm
+                  key={contactMode.type === 'edit' ? contactMode.contact.id : 'new'}
                   initial={contactMode.type === 'edit' ? contactMode.contact : null}
                   places={places}
                   contacts={contacts}
