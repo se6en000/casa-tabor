@@ -5,8 +5,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { addDays, differenceInDays, format, parseISO, startOfWeek } from 'date-fns'
 import { Link, useNavigate } from 'react-router-dom'
-import { AlertTriangle, Bell, BellOff, Calendar as CalendarIcon, Check, ChevronRight, Mail, MoreHorizontal, Sparkles, ThumbsDown, UserPlus } from 'lucide-react'
+import { AlertTriangle, Check, ChevronRight, MoreHorizontal, Sparkles, ThumbsDown, UserPlus } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { sourceBadge } from '../../utils/prepSourceBadge'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useWeekEventIndex } from '../../hooks/useCalendarEvents'
@@ -82,14 +83,6 @@ function urgencyRank(days: number): number {
   if (days <= 1) return 1
   if (days <= 4) return 2
   return 3
-}
-
-function sourceBadge(item: PrepItem) {
-  if (item.source_type === 'reminder_manual') return { label: 'Reminder', icon: Bell }
-  if (item.source_type === 'reminder_missed') return { label: 'Missed reminder', icon: BellOff }
-  if (item.source_type === 'gmail') return { label: 'Email', icon: Mail }
-  if (item.source_type === 'calendar_ai') return { label: 'Calendar', icon: CalendarIcon }
-  return { label: 'System', icon: Sparkles }
 }
 
 interface AssignPickerMember {

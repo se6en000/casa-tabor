@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
-import { ClipboardList, Bell, BellOff, ChevronLeft, Mail, Calendar as CalendarIcon, Sparkles, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle, ExternalLink } from 'lucide-react'
+import { ClipboardList, Bell, ChevronLeft, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle, ExternalLink } from 'lucide-react'
+import { sourceBadge } from '../utils/prepSourceBadge'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../utils/cn'
 import { buildAiDraftPrompt } from '../utils/eventTime'
@@ -22,15 +23,6 @@ import PrepItemAssigneeChip from '../components/shared/PrepItemAssigneeChip'
 import { useLiveClock } from '../hooks/useLiveClock'
 import ConflictAlertsSection from '../components/shared/ConflictAlertsSection'
 import { Button, Chip } from '../components/ui'
-
-function sourceBadge(item: PrepItem) {
-  const source = item.source_type ?? 'calendar_ai'
-  if (source === 'reminder_manual') return { label: 'Reminder', icon: Bell }
-  if (source === 'reminder_missed') return { label: 'Missed reminder', icon: BellOff }
-  if (source === 'gmail') return { label: 'Email', icon: Mail }
-  if (source === 'calendar_ai') return { label: 'Calendar', icon: CalendarIcon }
-  return { label: 'System', icon: Sparkles }
-}
 
 function dueBadge(item: PrepItem, now: Date): { label: string; tone: string } | null {
   if (!item.due_by) return null
