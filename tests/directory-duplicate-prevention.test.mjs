@@ -86,7 +86,7 @@ const savedPlacesSettingsSource = readFileSyncSettingsPage(
 )
 
 test('SavedPlacesSettingsPage imports rankDirectorySuggestions for duplicate lookup', () => {
-  assert.match(savedPlacesSettingsSource, /import \{ rankDirectorySuggestions \} from '\.\.\/utils\/directorySuggestions'/)
+  assert.match(savedPlacesSettingsSource, /import \{ rankDirectorySuggestions, resolveDirectoryPlaceSave, type DirectoryPlaceSelection \} from '\.\.\/utils\/directorySuggestions'/)
 })
 
 test('PlaceForm warns about possible existing matches before creating a new place', () => {
@@ -95,7 +95,7 @@ test('PlaceForm warns about possible existing matches before creating a new plac
 })
 
 test('ContactForm warns about possible existing matches before creating a new contact', () => {
-  assert.match(savedPlacesSettingsSource, /function ContactForm\(\{ initial, places, contacts, onSave, onCancel, onEditExisting, saving \}: ContactFormProps\)/)
+  assert.match(savedPlacesSettingsSource, /function ContactForm\(\{ initial, places, contacts, onSave, onCancel, onEditExisting, onCreatePlace, saving \}: ContactFormProps\)/)
   assert.match(savedPlacesSettingsSource, /rankDirectorySuggestions\(contacts\.map/)
 })
 
@@ -106,4 +106,74 @@ test('PlaceForm is keyed by the editing record id so switching records remounts 
 
 test('ContactForm is keyed by the editing record id so switching records remounts its local state', () => {
   assert.match(savedPlacesSettingsSource, /<ContactForm\s*\n\s*key=\{contactMode\.type === 'edit' \? contactMode\.contact\.id : 'new'\}/)
+})
+
+// ── findExactDirectoryMatch: catches exact-name dupes even from the "add new" path ──
+import { findExactDirectoryMatch, resolveDirectoryPlaceSave } from '../src/utils/directorySuggestions.ts'
+
+const placeCandidates = [
+  { id: 'p1', primary: "Alice's House", aliases: ['Alice'], secondary: '8255 West Lake Drive' },
+  { id: 'p2', primary: 'Lake Charleston Park', aliases: [], secondary: '7001 Charleston Shores Blvd' },
+]
+
+test('findExactDirectoryMatch returns the candidate whose name or alias exactly equals the query', () => {
+  assert.equal(findExactDirectoryMatch(placeCandidates, 'alice')?.id, 'p1')
+  assert.equal(findExactDirectoryMatch(placeCandidates, "Alice's House")?.id, 'p1')
+})
+
+test('findExactDirectoryMatch returns null when nothing matches exactly', () => {
+  assert.equal(findExactDirectoryMatch(placeCandidates, 'Alice Cooper'), null)
+  assert.equal(findExactDirectoryMatch(placeCandidates, ''), null)
+})
+
+test('resolveDirectoryPlaceSave links to the selected existing place as-is', () => {
+  const result = resolveDirectoryPlaceSave({ mode: 'existing', placeId: 'p2' }, placeCandidates)
+  assert.deepEqual(result, { action: 'link', placeId: 'p2' })
+})
+
+test('resolveDirectoryPlaceSave creates and links a genuinely new place', () => {
+  const result = resolveDirectoryPlaceSave(
+    { mode: 'new', input: { name: 'Cooper House', address: '178 Greenwood Ave' } },
+    placeCandidates,
+  )
+  assert.deepEqual(result, { action: 'create-and-link', createInput: { name: 'Cooper House', address: '178 Greenwood Ave' } })
+})
+
+test('resolveDirectoryPlaceSave links instead of creating when the typed new-place name exactly matches an existing one', () => {
+  const result = resolveDirectoryPlaceSave(
+    { mode: 'new', input: { name: "Alice's House", address: '' } },
+    placeCandidates,
+  )
+  assert.deepEqual(result, { action: 'link', placeId: 'p1' })
+})
+
+test('resolveDirectoryPlaceSave does nothing when no selection was made', () => {
+  assert.deepEqual(resolveDirectoryPlaceSave(null, placeCandidates), { action: 'none' })
+})
+
+// ── DirectoryPlaceInput: shared search-or-create combobox ──
+import { readFileSync as readFileSyncDPI } from 'node:fs'
+const directoryPlaceInputSource = readFileSyncDPI(
+  new URL('../src/components/shared/DirectoryPlaceInput.tsx', import.meta.url),
+  'utf8',
+)
+
+test('DirectoryPlaceInput offers to add the typed query as a new place when nothing matches', () => {
+  assert.match(directoryPlaceInputSource, /Add &quot;.*as a new place/)
+})
+
+test('DirectoryPlaceInput uses rankDirectorySuggestions to search saved places', () => {
+  assert.match(directoryPlaceInputSource, /rankDirectorySuggestions/)
+})
+
+test('DirectoryPlaceInput emits a DirectoryPlaceSelection on choose/create', () => {
+  assert.match(directoryPlaceInputSource, /onChange\(\{ mode: 'existing'/)
+  assert.match(directoryPlaceInputSource, /onChange\(\{ mode: 'new'/)
+})
+
+// ── ContactForm wired to DirectoryPlaceInput (Phase 2) ──
+test('ContactForm uses DirectoryPlaceInput for the primary place field and resolves the save via resolveDirectoryPlaceSave', () => {
+  assert.match(savedPlacesSettingsSource, /<DirectoryPlaceInput/)
+  assert.match(savedPlacesSettingsSource, /resolveDirectoryPlaceSave\(/)
+  assert.match(savedPlacesSettingsSource, /onCreatePlace/)
 })

@@ -12,9 +12,10 @@ import { cn } from '../utils/cn'
 import type { ContactPlaceRelationship, FamilyContactRelationship, SavedContact, SavedPlace, SavedPlaceCategory } from '../types'
 import { savedPlaceAddress } from '../hooks/useSavedPlaces'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
-import { rankDirectorySuggestions } from '../utils/directorySuggestions'
+import { rankDirectorySuggestions, resolveDirectoryPlaceSave, type DirectoryPlaceSelection } from '../utils/directorySuggestions'
 import { Button, Checkbox, Combobox, IconButton, SegmentedControl } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
+import DirectoryPlaceInput from '../components/shared/DirectoryPlaceInput'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -242,20 +243,19 @@ interface ContactFormProps {
   onSave: (c: SavedContactInput) => void
   onCancel: () => void
   onEditExisting: (contact: SavedContact) => void
+  onCreatePlace: (input: { name: string; address?: string | null; city?: string | null; state?: string | null; zip?: string | null; lat?: number | null; lng?: number | null }) => Promise<string>
   saving?: boolean
 }
 
-function ContactForm({ initial, places, contacts, onSave, onCancel, onEditExisting, saving }: ContactFormProps) {
+function ContactForm({ initial, places, contacts, onSave, onCancel, onEditExisting, onCreatePlace, saving }: ContactFormProps) {
   const [form, setForm] = useState<Partial<SavedContact> & { _aliasText: string }>({
     ...blankContact(), ...initial, _aliasText: initial?.aliases?.join(', ') ?? '',
   })
-  const placeOptions = [
-    { value: '', label: 'No linked place' },
-    ...places.map(place => ({
-      value: place.id,
-      label: [place.name, savedPlaceAddress(place)].filter(Boolean).join(' — '),
-    })),
-  ]
+  const initialPlace = initial?.primary_place_id ? places.find(p => p.id === initial.primary_place_id) : null
+  const [placeSelection, setPlaceSelection] = useState<DirectoryPlaceSelection>(
+    initial?.primary_place_id ? { mode: 'existing', placeId: initial.primary_place_id } : null,
+  )
+  const [creatingPlace, setCreatingPlace] = useState(false)
   function set(key: string, value: unknown) { setForm(f => ({ ...f, [key]: value })) }
 
   const isNew = !initial?.id
@@ -264,9 +264,24 @@ function ContactForm({ initial, places, contacts, onSave, onCancel, onEditExisti
     ? rankDirectorySuggestions(contacts.map(c => ({ id: c.id, primary: c.name, aliases: c.aliases, secondary: c.phone ?? undefined })), nameQuery, 3)
     : []
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const aliases = form._aliasText.split(',').map(s => s.trim()).filter(Boolean)
+    const resolution = resolveDirectoryPlaceSave(
+      placeSelection,
+      places.map(p => ({ id: p.id, primary: p.name, aliases: p.aliases })),
+    )
+    let primaryPlaceId: string | null = null
+    if (resolution.action === 'link') {
+      primaryPlaceId = resolution.placeId
+    } else if (resolution.action === 'create-and-link') {
+      setCreatingPlace(true)
+      try {
+        primaryPlaceId = await onCreatePlace(resolution.createInput)
+      } finally {
+        setCreatingPlace(false)
+      }
+    }
     onSave({
       name: form.name ?? '',
       aliases,
@@ -275,8 +290,8 @@ function ContactForm({ initial, places, contacts, onSave, onCancel, onEditExisti
       email: form.email || null,
       address: null,
       notes: form.notes || null,
-      primary_place_id: form.primary_place_id || null,
-      primary_place_source: form.primary_place_id ? 'manual' : null,
+      primary_place_id: primaryPlaceId,
+      primary_place_source: primaryPlaceId ? 'manual' : null,
       confirmed: true,
       source: 'manual',
       occurrence_count: form.occurrence_count ?? 1,
@@ -332,12 +347,13 @@ function ContactForm({ initial, places, contacts, onSave, onCancel, onEditExisti
         </div>
       </div>
       <div>
-        <Combobox
+        <label className="block text-caption font-semibold text-casa-muted mb-1">Primary place</label>
+        <DirectoryPlaceInput
           label="Primary place"
-          value={form.primary_place_id ?? ''}
-          onChange={value => set('primary_place_id', value || null)}
-          options={placeOptions}
-          placeholder="Search saved places"
+          placeholder="Search saved places or add new"
+          displayLabel={initialPlace ? [initialPlace.name, savedPlaceAddress(initialPlace)].filter(Boolean).join(' — ') : ''}
+          onChange={setPlaceSelection}
+          onClear={() => setPlaceSelection(null)}
         />
         <p className="mt-1 text-caption text-casa-muted">Where this person or provider is usually reached. Their address stays connected to the place.</p>
       </div>
@@ -348,8 +364,8 @@ function ContactForm({ initial, places, contacts, onSave, onCancel, onEditExisti
       </div>
       <div className="flex gap-2 justify-end pt-1">
         <Button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-casa-border text-body text-casa-muted hover:bg-casa-divider transition-colors">Cancel</Button>
-        <Button type="submit" disabled={saving} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-casa-gold text-white text-body font-semibold hover:bg-casa-gold/90 transition-colors disabled:opacity-50">
-          <Save size={14} />{saving ? 'Saving…' : 'Save Contact'}
+        <Button type="submit" disabled={saving || creatingPlace} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-casa-gold text-white text-body font-semibold hover:bg-casa-gold/90 transition-colors disabled:opacity-50">
+          <Save size={14} />{creatingPlace ? 'Creating place…' : saving ? 'Saving…' : 'Save Contact'}
         </Button>
       </div>
     </form>
@@ -815,6 +831,35 @@ export default function SavedPlacesSettingsPage() {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['saved_places'] }),
   })
+
+  // Creates a new saved place inline (e.g. from DirectoryPlaceInput's "add new"
+  // affordance while editing a contact) and returns its id so the caller can
+  // link it without leaving the current form.
+  const createPlaceInline = useCallback(async (input: { name: string; address?: string | null; city?: string | null; state?: string | null; zip?: string | null; lat?: number | null; lng?: number | null }) => {
+    const { data, error } = await supabase
+      .from('saved_places')
+      .insert({
+        name: input.name,
+        aliases: [],
+        address: input.address ?? null,
+        city: input.city ?? null,
+        state: input.state ?? null,
+        zip: input.zip ?? null,
+        lat: input.lat ?? null,
+        lng: input.lng ?? null,
+        category: 'other',
+        notes: null,
+        phone: null,
+        confirmed: true,
+        source: 'manual',
+        occurrence_count: 1,
+      })
+      .select('id')
+      .single()
+    if (error) throw error
+    qc.invalidateQueries({ queryKey: ['saved_places'] })
+    return data.id as string
+  }, [qc])
 
   const confirmPlaceMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -1417,6 +1462,7 @@ export default function SavedPlacesSettingsPage() {
                   saving={saveContactMutation.isPending}
                   onCancel={() => setContactMode({ type: 'list' })}
                   onEditExisting={contact => setContactMode({ type: 'edit', contact })}
+                  onCreatePlace={createPlaceInline}
                   onSave={data => saveContactMutation.mutate({ id: contactMode.type === 'edit' ? contactMode.contact.id : undefined, data })}
                 />
               </div>

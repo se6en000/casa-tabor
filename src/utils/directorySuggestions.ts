@@ -44,3 +44,46 @@ export function rankDirectorySuggestions<T extends DirectorySuggestionCandidate>
     .slice(0, limit)
     .map(entry => entry.candidate)
 }
+
+/**
+ * Finds a candidate whose name or an alias exactly equals the query. Used to
+ * catch the case where a user types an "add new" entry that actually already
+ * exists verbatim, so we can link to it instead of creating a duplicate.
+ */
+export function findExactDirectoryMatch<T extends DirectorySuggestionCandidate>(
+  candidates: T[],
+  query: string,
+): T | null {
+  const needle = normalize(query)
+  if (!needle) return null
+  return candidates.find(candidate =>
+    normalize(candidate.primary) === needle || (candidate.aliases ?? []).some(a => normalize(a) === needle),
+  ) ?? null
+}
+
+export type DirectoryPlaceSelection =
+  | { mode: 'existing'; placeId: string }
+  | { mode: 'new'; input: { name: string; address?: string | null; city?: string | null; state?: string | null; zip?: string | null; lat?: number | null; lng?: number | null } }
+  | null
+
+export type DirectoryPlaceSaveResult =
+  | { action: 'none' }
+  | { action: 'link'; placeId: string }
+  | { action: 'create-and-link'; createInput: NonNullable<Extract<DirectoryPlaceSelection, { mode: 'new' }>>['input'] }
+
+/**
+ * Decides whether saving a contact/event's place selection should link to an
+ * existing place or create a new one — and catches the case where an
+ * "add new" entry's name exactly matches an existing place, linking to that
+ * instead of creating a duplicate.
+ */
+export function resolveDirectoryPlaceSave<T extends DirectorySuggestionCandidate>(
+  selection: DirectoryPlaceSelection,
+  existingPlaces: T[],
+): DirectoryPlaceSaveResult {
+  if (!selection) return { action: 'none' }
+  if (selection.mode === 'existing') return { action: 'link', placeId: selection.placeId }
+  const exact = findExactDirectoryMatch(existingPlaces, selection.input.name)
+  if (exact) return { action: 'link', placeId: exact.id }
+  return { action: 'create-and-link', createInput: selection.input }
+}
