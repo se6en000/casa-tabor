@@ -75,5 +75,5 @@ test('detail panel surfaces confidence chip, assignment picker, and inline due-b
 test('source-aware section shows event snapshot for calendar_ai and email for gmail', () => {
   assert.match(panel, /data\?\.eventSnapshot/)
   assert.match(panel, /data\?\.gmailContext/)
-  assert.match(panel, /item\.source_type === 'gmail' \? 'Email context' : item\.source_type === 'calendar_ai' \? 'Source event' : 'Source'/)
+  assert.match(panel, /data\?\.gmailContext \? 'Email context' : 'Source event'/)
 })

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { AnimatePresence, motion, useDragControls } from 'framer-motion'
-import { X, Mail, CalendarDays, Clock3, TimerReset, Ban, ThumbsDown, CalendarPlus, BellPlus, MapPin, Pencil, UserPlus, ExternalLink } from 'lucide-react'
+import { X, Mail, CalendarDays, TimerReset, Ban, CalendarPlus, BellPlus, MapPin, Pencil, UserPlus, ExternalLink } from 'lucide-react'
 import { buildAiDraftPrompt } from '../../utils/eventTime'
 import { openEventDetails } from '../../utils/openEventDetails'
 import {
-  useDismissPrepItem,
+  useCompletePrepItem,
   useDownvotePrepItem,
   usePrepItemDetails,
   useSetPrepItemAssignee,
@@ -18,7 +18,7 @@ import type { PrepItem } from '../../types'
 import { getPrepCategoryConfig } from '../../utils/prepCategories'
 import BounceScroll from '../shared/BounceScroll'
 import MarkdownContent from '../shared/MarkdownContent'
-import { Button, CalendarPill, Chip, Heading, IconButton, PersonAvatarStack } from '../ui'
+import { Button, Chip, Heading, IconButton, PersonAvatarStack } from '../ui'
 
 const PANEL_ENTER_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1]
 const PANEL_EXIT_EASE: [number, number, number, number] = [0.4, 0, 1, 1]
@@ -116,12 +116,20 @@ function formatEmailBody(body: string | null | undefined): string {
   return linkifyEmailBody(readable)
 }
 
+function fromDisplayName(value: string | null | undefined): string {
+  if (!value) return 'Unknown sender'
+  const quoted = value.match(/"([^"]+)"/)
+  if (quoted) return quoted[1]
+  const beforeAngle = value.split('<')[0].trim()
+  return beforeAngle || value
+}
+
 export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPanelProps) {
-  const { data, isLoading } = usePrepItemDetails(item)
+  const { data } = usePrepItemDetails(item)
   const { data: familyMembers = [] } = useFamilyMembers()
   const snooze = useSnoozePrepItem()
-  const dismiss = useDismissPrepItem()
   const downvote = useDownvotePrepItem()
+  const complete = useCompletePrepItem()
   const setAssignee = useSetPrepItemAssignee()
   const updateDueBy = useUpdatePrepItemDueBy()
   const panelDragControls = useDragControls()
@@ -129,6 +137,7 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
   const [editingDueBy, setEditingDueBy] = useState(false)
   const [dueByDraft, setDueByDraft] = useState({ date: '', time: '' })
   const [savingDueBy, setSavingDueBy] = useState(false)
+  const [assignPickerOpen, setAssignPickerOpen] = useState(false)
   const emailMarkdown = useMemo(() => formatEmailBody(data?.gmailContext?.email_body), [data?.gmailContext?.email_body])
   const confidence = useMemo(() => prepItemConfidenceLabel(data?.source_confidence ?? item?.source_confidence), [data?.source_confidence, item?.source_confidence])
   const suggestedAssigneeId = data?.suggestedAssignees?.[0]?.id ?? null
@@ -145,15 +154,18 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
 
   useEffect(() => {
     setEditingDueBy(false)
+    setAssignPickerOpen(false)
   }, [item?.id])
 
-  async function runAction(action: 'snooze' | 'dismiss' | 'downvote') {
+  async function runAction(action: 'snooze' | 'dismiss') {
     if (!item || acting) return
     setActing(action)
     try {
       if (action === 'snooze') await snooze(item.id)
-      if (action === 'dismiss') await dismiss(item.id)
-      if (action === 'downvote') await downvote(item.id)
+      // "Dismiss" records the same not-relevant signal used to train the
+      // relevance/suppression model — matching the inline dismiss action
+      // used elsewhere in the app (Home rail, Action Hub).
+      if (action === 'dismiss') await downvote(item.id)
       onClose()
     } finally {
       setActing(null)
@@ -197,7 +209,7 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
       bodyContext: bodyContext || 'No email body available',
     })
     try {
-      await dismiss(item.id)
+      await complete(item.id)
       document.dispatchEvent(new CustomEvent('open-ai-chat', { detail: { prompt, autoSend: true } }))
       onClose()
     } finally {
@@ -308,161 +320,222 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
                   })()}
                 </div>
                 <Heading role="display-sm" className="pr-8 leading-tight mt-1">
-                  {item.event_title ?? 'Prep item details'}
+                  {item.event_title ?? item.description}
                 </Heading>
-                {item.event_title && (
-                  <p className="text-body-sm text-casa-muted mt-1 line-clamp-1">{item.description}</p>
-                )}
               </div>
 
               <BounceScroll className="flex-1 min-h-0">
                 <div className="px-6 py-5 space-y-5">
                   <section className="rounded-card border border-casa-border bg-casa-bg p-4">
-                    <p className="text-body text-casa-text leading-relaxed">{item.description}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <CalendarPill className="gap-1 bg-casa-surface">
-                        <Mail size={11} /> {sourceLabel(item.source_type)}
-                      </CalendarPill>
-                      {confidence && (
-                        <Chip tone={confidence.tone} size="sm">{confidence.label}</Chip>
-                      )}
-                      <Chip
-                        size="sm"
-                        onClick={openDueByEditor}
-                        icon={<CalendarDays size={11} />}
-                      >
-                        Due {formatWhen(item.due_by)} <Pencil size={10} className="opacity-60 ml-1" />
-                      </Chip>
-                      <CalendarPill className="gap-1 bg-casa-surface">
-                        <Clock3 size={11} /> Added {formatWhen(item.created_at)}
-                      </CalendarPill>
-                    </div>
-
-                    {editingDueBy && (
-                      <div className="mt-3 rounded-card border border-casa-border bg-casa-surface p-3 space-y-2">
-                        <p className="text-caption text-casa-muted">
-                          Editing only updates this action's due date — it will not change any linked calendar event.
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          <input
-                            type="date"
-                            value={dueByDraft.date}
-                            onChange={(e) => setDueByDraft((prev) => ({ ...prev, date: e.target.value }))}
-                            className="rounded-input border border-casa-border bg-casa-bg px-3 py-2 text-body-sm text-casa-text"
-                          />
-                          <input
-                            type="time"
-                            value={dueByDraft.time}
-                            onChange={(e) => setDueByDraft((prev) => ({ ...prev, time: e.target.value }))}
-                            className="rounded-input border border-casa-border bg-casa-bg px-3 py-2 text-body-sm text-casa-text"
-                          />
+                    <ol className="space-y-4">
+                      <li className="flex gap-3">
+                        <div className="flex flex-col items-center pt-0.5">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-pill bg-casa-info-soft text-casa-info-strong">
+                            <Mail size={12} />
+                          </span>
+                          <span className="mt-1 w-px flex-1 bg-casa-border" />
                         </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="primary" onClick={() => void saveDueBy()} disabled={savingDueBy}>
-                            Save
-                          </Button>
-                          <Button size="sm" variant="secondary" onClick={() => setEditingDueBy(false)} disabled={savingDueBy}>
-                            Cancel
-                          </Button>
+                        <div className="flex-1 pb-1">
+                          <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">
+                            {data?.gmailContext ? 'Received' : data?.eventSnapshot ? 'Source event' : 'Source'}
+                          </p>
+                          <p className="text-body-sm text-casa-text mt-0.5">
+                            {data?.gmailContext
+                              ? `${formatWhen(data.gmailContext.received_at)} from ${fromDisplayName(data.gmailContext.from_email)}`
+                              : data?.eventSnapshot
+                                ? `${data.eventSnapshot.title ?? item.event_title ?? 'Untitled event'} · ${formatWhen(data.eventSnapshot.start_time)}`
+                                : `${sourceLabel(item.source_type)} · Added ${formatWhen(item.created_at)}`}
+                          </p>
+                          {confidence && (
+                            <Chip tone={confidence.tone} size="sm" className="mt-2">{confidence.label}</Chip>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      </li>
 
-                    <div className="mt-3">
-                      <p className="text-caption font-semibold text-casa-muted mb-1.5 flex items-center gap-1">
-                        <UserPlus size={12} /> Assigned to
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {familyMembers.map((member) => {
-                          const selected = selectedAssigneeId === member.id
-                          const suggested = !item.assigned_to && suggestedAssigneeId === member.id
-                          return (
-                            <Chip
-                              key={member.id}
-                              size="sm"
-                              selected={selected}
-                              onClick={() => void handleAssign(member.id)}
-                              icon={<PersonAvatarStack people={[{ id: member.id, name: member.name, color: member.color_hex }]} size="sm" max={1} />}
+                      <li className="flex gap-3">
+                        <div className="flex flex-col items-center pt-0.5">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-pill bg-casa-warning/10 text-casa-warning">
+                            <CalendarDays size={12} />
+                          </span>
+                          <span className="mt-1 w-px flex-1 bg-casa-border" />
+                        </div>
+                        <div className="flex-1 pb-1">
+                          <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">Due</p>
+                          <button
+                            type="button"
+                            onClick={openDueByEditor}
+                            className="mt-0.5 flex items-center gap-1 text-body-sm text-casa-text"
+                          >
+                            {formatWhen(item.due_by)}
+                            <Pencil size={11} className="opacity-60" />
+                          </button>
+
+                          {editingDueBy && (
+                            <div className="mt-3 rounded-card border border-casa-border bg-casa-surface p-3 space-y-2">
+                              <p className="text-caption text-casa-muted">
+                                Editing only updates this action's due date — it will not change any linked calendar event.
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                <input
+                                  type="date"
+                                  value={dueByDraft.date}
+                                  onChange={(e) => setDueByDraft((prev) => ({ ...prev, date: e.target.value }))}
+                                  className="rounded-input border border-casa-border bg-casa-bg px-3 py-2 text-body-sm text-casa-text"
+                                />
+                                <input
+                                  type="time"
+                                  value={dueByDraft.time}
+                                  onChange={(e) => setDueByDraft((prev) => ({ ...prev, time: e.target.value }))}
+                                  className="rounded-input border border-casa-border bg-casa-bg px-3 py-2 text-body-sm text-casa-text"
+                                />
+                              </div>
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="primary" onClick={() => void saveDueBy()} disabled={savingDueBy}>
+                                  Save
+                                </Button>
+                                <Button size="sm" variant="secondary" onClick={() => setEditingDueBy(false)} disabled={savingDueBy}>
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </li>
+
+                      <li className="flex gap-3">
+                        <div className="flex flex-col items-center pt-0.5">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-pill bg-casa-bg-2 text-casa-navy">
+                            <UserPlus size={12} />
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">Assigned to</p>
+                            <button
+                              type="button"
+                              onClick={() => setAssignPickerOpen((open) => !open)}
+                              className="text-caption font-semibold text-casa-info-strong underline underline-offset-2"
                             >
-                              {member.name}{suggested ? ' (suggested)' : ''}
-                            </Chip>
-                          )
-                        })}
-                      </div>
-                    </div>
+                              {assignPickerOpen ? 'Done' : 'Change'}
+                            </button>
+                          </div>
+                          <div className="mt-0.5 flex items-center gap-2">
+                            {selectedAssigneeId ? (
+                              <>
+                                <PersonAvatarStack
+                                  people={familyMembers
+                                    .filter((m) => m.id === selectedAssigneeId)
+                                    .map((m) => ({ id: m.id, name: m.name, color: m.color_hex }))}
+                                  size="sm"
+                                  max={1}
+                                />
+                                <span className="text-body-sm text-casa-text">
+                                  {familyMembers.find((m) => m.id === selectedAssigneeId)?.name ?? 'Assigned'}
+                                  {!item.assigned_to && suggestedAssigneeId === selectedAssigneeId ? ' (suggested)' : ''}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-body-sm text-casa-muted">Unassigned</span>
+                            )}
+                          </div>
+
+                          {assignPickerOpen && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {familyMembers.map((member) => {
+                                const selected = selectedAssigneeId === member.id
+                                const suggested = !item.assigned_to && suggestedAssigneeId === member.id
+                                return (
+                                  <Chip
+                                    key={member.id}
+                                    size="sm"
+                                    selected={selected}
+                                    onClick={() => void handleAssign(member.id)}
+                                    icon={<PersonAvatarStack people={[{ id: member.id, name: member.name, color: member.color_hex }]} size="sm" max={1} />}
+                                  >
+                                    {member.name}{suggested ? ' (suggested)' : ''}
+                                  </Chip>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    </ol>
                   </section>
 
-                  <section className="rounded-card border border-casa-border p-4">
-                    <h3 className="font-semibold text-casa-navy text-body-sm mb-2">Related action items</h3>
-                    {isLoading ? (
-                      <p className="text-caption text-casa-muted">Loading related actions…</p>
-                    ) : (data?.relatedItems ?? []).length > 0 ? (
-                      <ul className="space-y-2">
-                        {data!.relatedItems.map((related: { id: string; description: string }) => (
-                          <li key={related.id} className="text-body-sm text-casa-text leading-relaxed">
-                            • {related.description}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-caption text-casa-muted">No related actions found.</p>
-                    )}
-                  </section>
-
-                  <section className="rounded-card border border-casa-border p-4">
-                    <h3 className="font-semibold text-casa-navy text-body-sm mb-2">
-                      {item.source_type === 'gmail' ? 'Email context' : item.source_type === 'calendar_ai' ? 'Source event' : 'Source'}
-                    </h3>
-                    {data?.gmailContext ? (
-                      <div className="space-y-2">
-                        <p className="text-body-sm text-casa-text">
-                          <span className="font-semibold">Subject:</span> {data.gmailContext.subject ?? '(no subject)'}
-                        </p>
-                        <p className="text-body-sm text-casa-text">
-                          <span className="font-semibold">From:</span> {data.gmailContext.from_email ?? 'Unknown sender'}
-                        </p>
-                        <p className="text-caption text-casa-muted">
-                          Received {formatWhen(data.gmailContext.received_at)}
-                        </p>
-                        {emailMarkdown ? (
-                          <div className="mt-3">
+                  {(data?.gmailContext || data?.eventSnapshot) && (
+                    <section className="rounded-card border border-casa-border p-4">
+                      <h3 className="font-semibold text-casa-navy text-body-sm mb-2">
+                        {data?.gmailContext ? 'Email context' : 'Source event'}
+                      </h3>
+                      {data?.gmailContext ? (
+                        <div className="space-y-2">
+                          <p className="text-body-sm text-casa-text font-semibold">
+                            {data.gmailContext.subject ?? '(no subject)'}
+                          </p>
+                          {emailMarkdown ? (
                             <MarkdownContent
                               content={emailMarkdown}
                               className="text-body-sm text-casa-text leading-relaxed"
                             />
-                          </div>
-                        ) : (
-                          <p className="text-caption text-casa-muted">No email body was saved for this message.</p>
-                        )}
-                      </div>
-                    ) : data?.eventSnapshot ? (
-                      <div className="space-y-2">
-                        <p className="text-body-sm text-casa-text font-semibold">{data.eventSnapshot.title ?? item.event_title ?? 'Untitled event'}</p>
-                        <p className="text-caption text-casa-muted flex items-center gap-1">
-                          <CalendarDays size={11} />
-                          {data.eventSnapshot.all_day ? formatWhen(data.eventSnapshot.start_time).split(' · ')[0] : formatWhen(data.eventSnapshot.start_time)}
-                        </p>
-                        {(data.eventSnapshot.location_name || data.eventSnapshot.address) && (
-                          <p className="text-caption text-casa-muted flex items-center gap-1">
-                            <MapPin size={11} /> {data.eventSnapshot.location_name ?? data.eventSnapshot.address}
-                          </p>
-                        )}
-                        {data.eventSnapshot.description && (
-                          <p className="text-body-sm text-casa-text leading-relaxed mt-2">{data.eventSnapshot.description}</p>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-caption text-casa-muted">
-                        This item came from {sourceLabel(item.source_type).toLowerCase()}. No additional source details available.
-                      </p>
-                    )}
-                  </section>
+                          ) : (
+                            <p className="text-caption text-casa-muted">No email body was saved for this message.</p>
+                          )}
+                        </div>
+                      ) : data?.eventSnapshot ? (
+                        <div className="space-y-2">
+                          {(data.eventSnapshot.location_name || data.eventSnapshot.address) && (
+                            <p className="text-caption text-casa-muted flex items-center gap-1">
+                              <MapPin size={11} /> {data.eventSnapshot.location_name ?? data.eventSnapshot.address}
+                            </p>
+                          )}
+                          {data.eventSnapshot.description && (
+                            <p className="text-body-sm text-casa-text leading-relaxed">{data.eventSnapshot.description}</p>
+                          )}
+                        </div>
+                      ) : null}
+                    </section>
+                  )}
                 </div>
               </BounceScroll>
             </div>
 
             <div className="flex flex-none flex-col gap-2 border-t border-casa-border bg-casa-surface px-5 py-3.5">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                {item.event_id ? (
+                  <Button
+                    onClick={() => { openEventDetails(item.event_id!); onClose() }}
+                    variant="primary"
+                    size="sm"
+                    className="col-span-2"
+                    leadingIcon={<ExternalLink size={13} />}
+                  >
+                    View event
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      onClick={() => launchCreate('event')}
+                      disabled={!!acting}
+                      variant="primary"
+                      size="sm"
+                      leadingIcon={<CalendarPlus size={13} />}
+                    >
+                      Create event
+                    </Button>
+                    <Button
+                      onClick={() => launchCreate('reminder')}
+                      disabled={!!acting}
+                      variant="primary"
+                      size="sm"
+                      leadingIcon={<BellPlus size={13} />}
+                    >
+                      Create reminder
+                    </Button>
+                  </>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 <Button
                   onClick={() => runAction('snooze')}
                   disabled={!!acting}
@@ -481,49 +554,6 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
                 >
                   Dismiss
                 </Button>
-                <Button
-                  onClick={() => runAction('downvote')}
-                  disabled={!!acting}
-                  variant="danger"
-                  size="sm"
-                  leadingIcon={<ThumbsDown size={13} />}
-                >
-                  Downvote
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {item.event_id ? (
-                  <Button
-                    onClick={() => { openEventDetails(item.event_id!); onClose() }}
-                    variant="primary"
-                    size="sm"
-                    className="col-span-2"
-                    leadingIcon={<ExternalLink size={13} />}
-                  >
-                    View event
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() => launchCreate('event')}
-                    disabled={!!acting}
-                    variant="primary"
-                    size="sm"
-                    leadingIcon={<CalendarPlus size={13} />}
-                  >
-                    Create event
-                  </Button>
-                )}
-                {!item.event_id && (
-                  <Button
-                    onClick={() => launchCreate('reminder')}
-                    disabled={!!acting}
-                    variant="primary"
-                    size="sm"
-                    leadingIcon={<BellPlus size={13} />}
-                  >
-                    Create reminder
-                  </Button>
-                )}
               </div>
             </div>
           </motion.div>
