@@ -273,7 +273,7 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
               backfaceVisibility: 'hidden',
               boxShadow: 'var(--shadow-modal), 0 20px 56px color-mix(in srgb, var(--color-casa-navy) 20%, transparent)',
             }}
-            className="fixed inset-x-2 bottom-2 top-[5vh] z-modal flex flex-col overflow-hidden rounded-modal bg-casa-surface shadow-modal transform-gpu lg:bottom-4 lg:left-auto lg:right-4 lg:top-[6vh] lg:w-[40vw]"
+            className="fixed inset-x-2 bottom-2 z-modal flex max-h-[90vh] flex-col overflow-hidden rounded-modal bg-casa-surface shadow-modal transform-gpu lg:bottom-4 lg:left-auto lg:right-4 lg:w-[40vw]"
             data-native-drag
             data-ptr-ignore
             role="dialog"
