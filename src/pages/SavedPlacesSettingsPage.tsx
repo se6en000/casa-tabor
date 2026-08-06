@@ -4,12 +4,14 @@ import {
   Search, BookmarkCheck, Home, Utensils, School, Dumbbell,
   Briefcase, HeartPulse, Star, Edit2, Users, User, Copy, Check,
   Plane, ShoppingBag, Wrench, MessageCircle, MapPinned, Link2,
+  UserCheck,
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
-import type { ContactPlaceRelationship, SavedContact, SavedPlace, SavedPlaceCategory } from '../types'
+import type { ContactPlaceRelationship, FamilyContactRelationship, SavedContact, SavedPlace, SavedPlaceCategory } from '../types'
 import { savedPlaceAddress } from '../hooks/useSavedPlaces'
+import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { Button, Checkbox, Combobox, IconButton, SegmentedControl } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
@@ -391,7 +393,7 @@ function SuggestedRow({ label, sublabel, occurrenceCount, onReview, onConfirm, o
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type Tab = 'places' | 'people' | 'connections'
+type Tab = 'places' | 'people' | 'connections' | 'family'
 type PlaceMode = { type: 'list' } | { type: 'add' } | { type: 'edit'; place: SavedPlace }
 type ContactMode = { type: 'list' } | { type: 'add' } | { type: 'edit'; contact: SavedContact }
 
@@ -407,6 +409,10 @@ export default function SavedPlacesSettingsPage() {
   const [connectionPlaceId, setConnectionPlaceId] = useState('')
   const [connectionLabel, setConnectionLabel] = useState('provider_location')
   const [connectionDefault, setConnectionDefault] = useState(true)
+  const [familyLinkMode, setFamilyLinkMode] = useState<'list' | 'add'>('list')
+  const [familyLinkMemberId, setFamilyLinkMemberId] = useState('')
+  const [familyLinkContactId, setFamilyLinkContactId] = useState('')
+  const [familyLinkLabel, setFamilyLinkLabel] = useState('')
 
   // ── Places queries ───────────────────────────────────────────────────────────
   const { data: places = [], isLoading: placesLoading } = useQuery<SavedPlace[]>({
@@ -568,6 +574,56 @@ export default function SavedPlacesSettingsPage() {
     },
   })
 
+  // ── Family links queries ─────────────────────────────────────────────────────
+  const { data: familyMembers = [] } = useFamilyMembers()
+
+  const { data: familyLinks = [], isLoading: familyLinksLoading } = useQuery<FamilyContactRelationship[]>({
+    queryKey: ['family_contact_relationships'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('family_contact_relationships')
+        .select('*, family_member:family_members(id, name), contact:saved_contacts(id, name, phone, relationship)')
+        .eq('confirmed', true)
+        .order('created_at')
+      if (error) throw error
+      return data as FamilyContactRelationship[]
+    },
+  })
+
+  const saveFamilyLinkMutation = useMutation({
+    mutationFn: async () => {
+      if (!familyLinkMemberId || !familyLinkContactId || !familyLinkLabel.trim()) {
+        throw new Error('Choose a family member, a person, and a relationship.')
+      }
+      const { error } = await supabase.rpc('set_family_contact_relationship', {
+        p_family_member_id: familyLinkMemberId,
+        p_contact_id: familyLinkContactId,
+        p_relationship: familyLinkLabel.trim(),
+        p_source: 'manual',
+        p_confirmed: true,
+        p_confidence: 1,
+        p_evidence_count: 0,
+        p_evidence_notes: 'Created in Household Directory.',
+      })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['family_contact_relationships'] })
+      setFamilyLinkMode('list')
+      setFamilyLinkMemberId('')
+      setFamilyLinkContactId('')
+      setFamilyLinkLabel('')
+    },
+  })
+
+  const deleteFamilyLinkMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.rpc('delete_family_contact_relationship', { p_relationship_id: id })
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['family_contact_relationships'] }),
+  })
+
   // ── Filtered lists ───────────────────────────────────────────────────────────
   const filteredPlaces = places.filter(p => {
     if (!p.confirmed) return false
@@ -595,11 +651,22 @@ export default function SavedPlacesSettingsPage() {
     ].some(value => value.toLowerCase().includes(needle))
   })
 
+  const filteredFamilyLinks = familyLinks.filter(link => {
+    const needle = search.toLowerCase()
+    return !needle || [
+      link.family_member?.name ?? '',
+      link.contact?.name ?? '',
+      link.relationship,
+    ].some(value => value.toLowerCase().includes(needle))
+  })
+
   const isAdding = tab === 'places'
     ? placeMode.type !== 'list'
     : tab === 'people'
       ? contactMode.type !== 'list'
-      : connectionMode !== 'list'
+      : tab === 'connections'
+        ? connectionMode !== 'list'
+        : familyLinkMode !== 'list'
 
   return (
     <>
@@ -611,11 +678,12 @@ export default function SavedPlacesSettingsPage() {
               onClick={() => {
                 if (tab === 'places') setPlaceMode({ type: 'add' })
                 else if (tab === 'people') setContactMode({ type: 'add' })
-                else setConnectionMode('add')
+                else if (tab === 'connections') setConnectionMode('add')
+                else setFamilyLinkMode('add')
               }}
               leadingIcon={<Plus size={16} />}
             >
-              {tab === 'places' ? 'Add Place' : tab === 'people' ? 'Add Person' : 'Add Connection'}
+              {tab === 'places' ? 'Add Place' : tab === 'people' ? 'Add Person' : tab === 'connections' ? 'Add Connection' : 'Add Family Link'}
             </Button>
           )}
         </div>
@@ -631,6 +699,7 @@ export default function SavedPlacesSettingsPage() {
             { value: 'places', label: `Places (${places.filter(p => p.confirmed).length})`, icon: <BookmarkCheck size={15} /> },
             { value: 'people', label: `People (${contacts.filter(c => c.confirmed).length})`, icon: <Users size={15} /> },
             { value: 'connections', label: `Connections (${connections.length})`, icon: <Link2 size={15} /> },
+            { value: 'family', label: `Family Links (${familyLinks.length})`, icon: <UserCheck size={15} /> },
           ]}
         />
 
@@ -848,6 +917,105 @@ export default function SavedPlacesSettingsPage() {
                             icon={<Trash2 size={16} />}
                             aria-label="Delete connection"
                             title="Delete connection"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+
+        {/* ── FAMILY LINKS TAB ── */}
+        {tab === 'family' && (
+              <>
+                {familyLinkMode === 'add' && (
+                  <div className="bg-casa-surface border border-casa-border rounded-card p-5 shadow-card mb-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h2 className="font-display text-heading text-casa-navy">Link a family member to a person</h2>
+                        <p className="text-caption text-casa-muted mt-1">Tells Alexa exactly who a provider belongs to — e.g. "Dr George" is Liv's dermatologist, not Emme's.</p>
+                      </div>
+                      <IconButton onClick={() => setFamilyLinkMode('list')} variant="ghost" size="sm" icon={<X size={16} />} aria-label="Close family link editor" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Combobox
+                        label="Family member"
+                        value={familyLinkMemberId}
+                        onChange={setFamilyLinkMemberId}
+                        options={familyMembers.map(member => ({ value: member.id, label: member.name }))}
+                        placeholder="Choose a family member"
+                      />
+                      <Combobox
+                        label="Person or provider"
+                        value={familyLinkContactId}
+                        onChange={setFamilyLinkContactId}
+                        options={contacts.filter(contact => contact.confirmed).map(contact => ({ value: contact.id, label: contact.name }))}
+                        placeholder="Choose a person"
+                      />
+                      <div className="sm:col-span-2">
+                        <label className="block text-caption font-semibold text-casa-muted mb-1">Relationship</label>
+                        <input
+                          value={familyLinkLabel}
+                          onChange={event => setFamilyLinkLabel(event.target.value)}
+                          placeholder="dermatologist, coach, orthodontist…"
+                          className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold"
+                        />
+                      </div>
+                    </div>
+                    {saveFamilyLinkMutation.error && (
+                      <p role="alert" className="text-caption text-casa-error mt-3">{saveFamilyLinkMutation.error.message}</p>
+                    )}
+                    <div className="flex justify-end gap-2 mt-5">
+                      <Button variant="secondary" onClick={() => setFamilyLinkMode('list')}>Cancel</Button>
+                      <Button
+                        onClick={() => saveFamilyLinkMutation.mutate()}
+                        loading={saveFamilyLinkMutation.isPending}
+                        disabled={!familyLinkMemberId || !familyLinkContactId || !familyLinkLabel.trim()}
+                        leadingIcon={<Save size={15} />}
+                      >
+                        Save Family Link
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {familyLinkMode === 'list' && (
+                  <>
+                    <div className="relative mb-5">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted" />
+                      <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search family members, people, or relationship…"
+                        className="w-full border border-casa-border rounded-lg pl-8 pr-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+                    </div>
+                    {familyLinksLoading && <p className="text-body text-casa-muted text-center py-12">Loading…</p>}
+                    {!familyLinksLoading && filteredFamilyLinks.length === 0 && (
+                      <div className="flex flex-col items-center gap-3 py-16 text-casa-muted">
+                        <UserCheck size={36} className="opacity-30" />
+                        <p className="text-body font-semibold">{search ? 'No matching family links' : 'No family links yet'}</p>
+                        <p className="text-caption text-center max-w-sm">Link a family member to a person or provider so Alexa knows whose doctor, coach, or therapist they are.</p>
+                      </div>
+                    )}
+                    <div className="space-y-3">
+                      {filteredFamilyLinks.map(link => (
+                        <div key={link.id} className="flex items-center gap-3 bg-casa-surface border border-casa-border rounded-card p-4 shadow-card">
+                          <div className="w-9 h-9 rounded-full bg-casa-gold/10 flex items-center justify-center text-casa-gold shrink-0">
+                            <UserCheck size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-display text-heading text-casa-navy">
+                              {link.family_member?.name} <span className="text-casa-muted">→</span> {link.contact?.name}
+                            </p>
+                            <p className="text-caption text-casa-muted">
+                              {link.relationship.replaceAll('_', ' ')}
+                            </p>
+                          </div>
+                          <IconButton
+                            onClick={() => { if (confirm('Delete this family link?')) deleteFamilyLinkMutation.mutate(link.id) }}
+                            variant="danger"
+                            size="sm"
+                            icon={<Trash2 size={16} />}
+                            aria-label="Delete family link"
+                            title="Delete family link"
                           />
                         </div>
                       ))}

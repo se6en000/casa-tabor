@@ -250,6 +250,22 @@ export interface ContactPlaceRelationship {
   updated_at: string
 }
 
+export interface FamilyContactRelationship {
+  id: string
+  family_member_id: string
+  contact_id: string
+  relationship: string
+  source: 'manual' | 'derived'
+  confirmed: boolean
+  confidence: number
+  evidence_count: number
+  evidence_notes: string | null
+  family_member?: Pick<FamilyMember, 'id' | 'name'> | null
+  contact?: Pick<SavedContact, 'id' | 'name' | 'phone' | 'relationship'> | null
+  created_at: string
+  updated_at: string
+}
+
 export interface PrepItem {
   id: string
   event_id: string | null
