@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { classifyAssistantIntent } from '../supabase/functions/_shared/assistant-intent-profile.mjs'
-import { isHouseholdDirectoryQuestion } from '../supabase/functions/_shared/assistant-household-directory.mjs'
+import { isHouseholdDirectoryQuestion, isDirectoryFollowUpLanguage } from '../supabase/functions/_shared/assistant-household-directory.mjs'
 
 test('calendar reads and edits require authoritative event search', () => {
   for (const input of [
@@ -108,10 +108,23 @@ test('household directory questions load confirmed person and place context befo
     'What sports places do Jake and Liv usually go to?',
     'What address does Coach Danny use?',
     'I need to schedule something with Coach Danny next week—where should I put it?',
+    'Who are Liv’s doctors?',
+    'who are Jakes doctors',
+    'Who is Liv’s doctor?',
   ]) {
     assert.equal(isHouseholdDirectoryQuestion(input), true, input)
   }
   assert.equal(isHouseholdDirectoryQuestion('Schedule a dentist appointment next Tuesday at 3 PM.'), false)
+})
+
+test('bare follow-up phrases are recognized as directory continuations, not standalone directory questions', () => {
+  assert.equal(isDirectoryFollowUpLanguage('Can you guess?'), true)
+  assert.equal(isDirectoryFollowUpLanguage('Sure, take a guess'), true)
+  assert.equal(isDirectoryFollowUpLanguage('Go ahead'), true)
+  assert.equal(isDirectoryFollowUpLanguage('What time is it?'), false)
+  // A bare follow-up has no role word of its own, so it is not itself a
+  // directory question — callers must inherit context from the prior turn.
+  assert.equal(isHouseholdDirectoryQuestion('Can you guess?'), false)
 })
 
 test('recipe words do not hide ambiguous calendar mutation targets', () => {

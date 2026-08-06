@@ -198,6 +198,13 @@ test('household directory lookups load confirmed contacts and their primary plac
   assert.match(householdDirectory, /what do you know about/)
 })
 
+test('provider-list routing recognizes "who" phrasing and inherits role/member context on bare follow-ups', () => {
+  assert.match(assistantFunction, /list\|name\|other\|what\|which\|who/)
+  assert.match(assistantFunction, /providerListFollowUp/)
+  assert.match(assistantFunction, /isDirectoryFollowUpLanguage/)
+  assert.match(householdDirectory, /isDirectoryFollowUpLanguage/)
+})
+
 test('assistant grounds provider answers in confirmed family relationships', () => {
   assert.match(assistantFunction, /family_contact_relationships/)
   assert.match(assistantFunction, /CONFIRMED FAMILY RELATIONSHIPS/)

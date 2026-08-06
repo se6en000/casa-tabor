@@ -17,7 +17,7 @@ import {
 } from '../_shared/llm-model-policy.mjs'
 import { createTrackedMapsFetch, createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { classifyAssistantIntent } from '../_shared/assistant-intent-profile.mjs'
-import { isHouseholdDirectoryQuestion } from '../_shared/assistant-household-directory.mjs'
+import { isHouseholdDirectoryQuestion, isDirectoryFollowUpLanguage } from '../_shared/assistant-household-directory.mjs'
 import {
   canonicalizeFamilyReferences,
   formatFamilyIdentityAliases,
@@ -902,14 +902,29 @@ Deno.serve(async (req) => {
     thought_tokens: 0,
     total_tokens: 0,
   }
-  const providerListRoleMatch = latestUserText?.match(
-    /\b(doctors?|dentists?|orthodontists?|dermatologists?|therapists?|coaches?|providers?|counselors?|tutors?|vets?|veterinarians?)\b/i,
+  const providerRoleWordPattern =
+    /\b(doctors?|dentists?|orthodontists?|dermatologists?|therapists?|coach(?:es)?|providers?|counselors?|tutors?|vets?|veterinarians?)\b/i
+  const ownProviderListRoleMatch = latestUserText?.match(providerRoleWordPattern)
+  // Bare follow-ups ("can you guess?") carry no role word of their own — if
+  // the previous turn was a directory question with a role word, inherit its
+  // role/member context so the conversation doesn't die on a plain LLM
+  // refusal.
+  const previousProviderListRoleMatch = !ownProviderListRoleMatch && previousUserText
+    ? previousUserText.match(providerRoleWordPattern)
+    : null
+  const providerListFollowUp = Boolean(
+    !ownProviderListRoleMatch &&
+    previousProviderListRoleMatch &&
+    isDirectoryFollowUpLanguage(latestUserText ?? '') &&
+    isHouseholdDirectoryQuestion(previousUserText),
   )
-  const providerListRequest = householdDirectoryQuestion &&
-    providerListRoleMatch &&
-    /\b(?:list|name|other|what|which)\b/i.test(latestUserText ?? '')
-  if (providerListRequest && latestUserText) {
-    const normalizedQuestion = normalizeSearchText(latestUserText)
+  const providerListRoleMatch = ownProviderListRoleMatch ?? (providerListFollowUp ? previousProviderListRoleMatch : null)
+  const providerListEffectiveText = ownProviderListRoleMatch ? latestUserText : (providerListFollowUp ? previousUserText : latestUserText)
+  const providerListRequest = Boolean(providerListRoleMatch) &&
+    (householdDirectoryQuestion || providerListFollowUp) &&
+    (providerListFollowUp || /\b(?:list|name|other|what|which|who)\b/i.test(latestUserText ?? ''))
+  if (providerListRequest && providerListEffectiveText) {
+    const normalizedQuestion = normalizeSearchText(providerListEffectiveText)
     const member = (familyMembers as { id?: string; name?: string; full_name?: string | null }[])
       .filter((candidate) => candidate.id && candidate.name)
       .find((candidate) =>
