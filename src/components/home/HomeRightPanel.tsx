@@ -205,6 +205,22 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   const [revealedItemId, setRevealedItemId] = useState<string | null>(null)
   const pendingRemovalTimers = useRef<Map<string, { timer: ReturnType<typeof setTimeout>; kind: 'done' | 'downvote' }>>(new Map())
 
+  // Shared "needs you" card tap behavior: a collapsed card always expands first
+  // (revealing conflict/prep/directory actions inline). Only once a prep/action
+  // card is already expanded does tapping it open the full detail sheet — for
+  // conflict/directory cards, tapping again while expanded does nothing extra
+  // (they have no detail sheet; the chevron still collapses them).
+  function handleNeedsYouCardClick(item: PrepItem) {
+    if (revealedItemId !== item.id) {
+      setRevealedItemId(item.id)
+      return
+    }
+    if (!isReadOnlyNeedsYouItem(item)) {
+      onSelectPrepItem?.(item)
+    }
+  }
+
+
   useEffect(() => {
     const timers = pendingRemovalTimers.current
     return () => {
@@ -460,14 +476,22 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                             meta row below via PrepAssignPicker, so this slot stays a stable,
                             glanceable category cue regardless of who's assigned. */}
                         {readOnly ? (
-                          <span className={cn('shrink-0 flex size-8 items-center justify-center rounded-full', accent.bgClass, accent.textClass)}>
-                            <accent.icon size={16} strokeWidth={2.2} aria-hidden="true" />
-                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => handleNeedsYouCardClick(item)}
+                            className="shrink-0 h-auto min-h-0 rounded-full p-0 hover:bg-transparent"
+                            aria-label={isRevealed ? 'Hide more actions' : 'Show more actions'}
+                          >
+                            <span className={cn('flex size-8 items-center justify-center rounded-full', accent.bgClass, accent.textClass)}>
+                              <accent.icon size={16} strokeWidth={2.2} aria-hidden="true" />
+                            </span>
+                          </Button>
                         ) : (
                           <Button
                             type="button"
                             variant="ghost"
-                            onClick={() => onSelectPrepItem?.(item)}
+                            onClick={() => handleNeedsYouCardClick(item)}
                             className="shrink-0 h-auto min-h-0 rounded-full p-0 hover:bg-transparent"
                             aria-label={assignee ? `Open details, assigned to ${assignee.name}` : 'Open details, unassigned'}
                           >
@@ -479,15 +503,24 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
 
                         <div className="min-w-0 flex-1">
                           {readOnly ? (
-                            <p className={cn('!text-body-sm leading-snug text-casa-text', !isRevealed && 'line-clamp-2')}>
-                              {item.description}
-                            </p>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              fullWidth
+                              onClick={() => handleNeedsYouCardClick(item)}
+                              className="h-auto min-h-0 p-0 text-left hover:bg-transparent"
+                              contentClassName="w-full justify-start"
+                            >
+                              <p className={cn('!text-body-sm leading-snug text-casa-text', !isRevealed && 'line-clamp-2')}>
+                                {item.description}
+                              </p>
+                            </Button>
                           ) : (
                             <Button
                               type="button"
                               variant="ghost"
                               fullWidth
-                              onClick={() => onSelectPrepItem?.(item)}
+                              onClick={() => handleNeedsYouCardClick(item)}
                               className="h-auto min-h-0 p-0 text-left hover:bg-transparent"
                               contentClassName="w-full justify-start"
                             >
