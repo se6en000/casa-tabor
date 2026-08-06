@@ -1126,7 +1126,7 @@ function PanelHeader({
               onClick={onClose}
               icon={<X size={18} />}
               aria-label="Close event details"
-              variant="ghost"
+              variant="secondary"
               size="sm"
             />
           </div>

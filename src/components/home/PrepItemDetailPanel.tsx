@@ -311,6 +311,8 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
                   className="absolute right-3 top-3"
                   aria-label="Close prep item details"
                   icon={<X size={18} />}
+                  variant="secondary"
+                  size="sm"
                 />
                 <div className="flex items-center gap-2 pr-8 text-caption font-semibold uppercase tracking-wide text-casa-muted">
                   {(() => {
