@@ -14,6 +14,10 @@ interface GooglePlace {
   place_id: string
   name: string
   address: string
+  street?: string | null
+  city?: string | null
+  state?: string | null
+  zip?: string | null
   lat?: number | null
   lng?: number | null
 }
@@ -23,6 +27,10 @@ interface GoogleSuggestion {
   source: 'google'
   primary: string
   address: string
+  street: string | null
+  city: string | null
+  state: string | null
+  zip: string | null
   lat: number | null
   lng: number | null
 }
@@ -30,6 +38,10 @@ interface GoogleSuggestion {
 type PendingNewPlace = {
   name: string
   address: string | null
+  street: string | null
+  city: string | null
+  state: string | null
+  zip: string | null
   lat: number | null
   lng: number | null
   verified: boolean
@@ -121,6 +133,10 @@ export default function DirectoryPlaceInput({
       source: 'google' as const,
       primary: place.name,
       address: place.address,
+      street: place.street ?? null,
+      city: place.city ?? null,
+      state: place.state ?? null,
+      zip: place.zip ?? null,
       lat: place.lat ?? null,
       lng: place.lng ?? null,
     }))
@@ -134,12 +150,22 @@ export default function DirectoryPlaceInput({
   }
 
   const chooseGooglePlace = (suggestion: GoogleSuggestion) => {
-    setPendingNew({ name: suggestion.primary, address: suggestion.address, lat: suggestion.lat, lng: suggestion.lng, verified: true })
+    setPendingNew({
+      name: suggestion.primary,
+      address: suggestion.address,
+      street: suggestion.street ?? suggestion.address,
+      city: suggestion.city,
+      state: suggestion.state,
+      zip: suggestion.zip,
+      lat: suggestion.lat,
+      lng: suggestion.lng,
+      verified: true,
+    })
     setPendingName(suggestion.primary)
   }
 
   const chooseUnverified = () => {
-    setPendingNew({ name: normalizedQuery, address: null, lat: null, lng: null, verified: false })
+    setPendingNew({ name: normalizedQuery, address: null, street: null, city: null, state: null, zip: null, lat: null, lng: null, verified: false })
     setPendingName(normalizedQuery)
   }
 
@@ -147,7 +173,10 @@ export default function DirectoryPlaceInput({
     if (!pendingNew) return
     onChange({ mode: 'new', input: {
       name: pendingName.trim() || pendingNew.name,
-      address: pendingNew.address,
+      address: pendingNew.street ?? pendingNew.address,
+      city: pendingNew.city,
+      state: pendingNew.state,
+      zip: pendingNew.zip,
       lat: pendingNew.lat,
       lng: pendingNew.lng,
     } })

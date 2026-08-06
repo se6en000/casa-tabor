@@ -1,4 +1,5 @@
 import { createTrackedMapsFetch } from '../_shared/provider-call-ledger.mjs'
+import { parseGoogleAddressComponents } from '../_shared/google-address-components.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -30,7 +31,7 @@ Deno.serve(async (req) => {
     headers: {
       'content-type': 'application/json',
       'X-Goog-Api-Key': apiKey,
-      'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location,places.id,places.nationalPhoneNumber,places.primaryType',
+      'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.addressComponents,places.location,places.id,places.nationalPhoneNumber,places.primaryType',
     },
     body: JSON.stringify({ textQuery, maxResultCount: 5 }),
   })
@@ -46,18 +47,26 @@ Deno.serve(async (req) => {
     id: string
     displayName?: { text: string }
     formattedAddress?: string
+    addressComponents?: { longText?: string; shortText?: string; types?: string[] }[]
     location?: { latitude: number; longitude: number }
     nationalPhoneNumber?: string
     primaryType?: string
-  }) => ({
-    place_id: p.id,
-    name: p.displayName?.text ?? '',
-    address: p.formattedAddress ?? '',
-    lat: p.location?.latitude ?? null,
-    lng: p.location?.longitude ?? null,
-    phone: p.nationalPhoneNumber ?? null,
-    primary_type: p.primaryType ?? null,
-  }))
+  }) => {
+    const parsed = parseGoogleAddressComponents(p.addressComponents)
+    return {
+      place_id: p.id,
+      name: p.displayName?.text ?? '',
+      address: p.formattedAddress ?? '',
+      street: parsed.street,
+      city: parsed.city,
+      state: parsed.state,
+      zip: parsed.zip,
+      lat: p.location?.latitude ?? null,
+      lng: p.location?.longitude ?? null,
+      phone: p.nationalPhoneNumber ?? null,
+      primary_type: p.primaryType ?? null,
+    }
+  })
 
   return new Response(JSON.stringify({ places }), {
     headers: { ...CORS, 'content-type': 'application/json' },

@@ -191,3 +191,15 @@ test('DirectoryPlaceInput surfaces Google-verified address suggestions inline, t
 test('DirectoryPlaceInput only allows unverified manual entry as an explicit, clearly-labeled fallback', () => {
   assert.match(directoryPlaceInputSource, /without a verified address/)
 })
+
+// ── DirectoryPlaceInput: split Google-verified address into street/city/state/zip ──
+test('DirectoryPlaceInput carries Google-parsed street/city/state/zip through to the new-place selection instead of dumping the full formatted address into one field', () => {
+  assert.match(directoryPlaceInputSource, /street\?: string \| null/)
+  assert.match(directoryPlaceInputSource, /city\?: string \| null/)
+  assert.match(directoryPlaceInputSource, /state\?: string \| null/)
+  assert.match(directoryPlaceInputSource, /zip\?: string \| null/)
+  assert.match(directoryPlaceInputSource, /address: pendingNew\.street/)
+  assert.match(directoryPlaceInputSource, /city: pendingNew\.city/)
+  assert.match(directoryPlaceInputSource, /state: pendingNew\.state/)
+  assert.match(directoryPlaceInputSource, /zip: pendingNew\.zip/)
+})
