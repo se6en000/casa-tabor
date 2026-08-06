@@ -352,6 +352,172 @@ Deno.serve(async (req) => {
   appendActionTrace('server_ai_action_started', String(tool ?? 'unknown'))
 
   try {
+    if (tool === 'confirm_directory_entity') {
+      const entityType = normalizeOptionalText(args?.entity_type, 20)
+      const entityId = normalizeOptionalText(args?.entity_id, 80)
+      if (!entityId || !['contact', 'place'].includes(entityType ?? '')) {
+        throw new Error('A valid directory entity type and ID are required')
+      }
+      const table = entityType === 'contact' ? 'saved_contacts' : 'saved_places'
+      const { data: entity, error } = await sb
+        .from(table)
+        .update({ confirmed: true, source: 'manual', updated_at: new Date().toISOString() })
+        .eq('id', entityId)
+        .select('id, name')
+        .maybeSingle()
+      if (error || !entity) throw new Error(error?.message ?? 'Directory candidate not found')
+
+      appendActionTrace('server_ai_action_succeeded', 'confirm_directory_entity', {
+        entity_type: entityType,
+        entity_id: entity.id,
+      })
+      return new Response(JSON.stringify({
+        success: true,
+        entity_type: entityType,
+        entity_id: entity.id,
+        message: `Saved ${entity.name} as a confirmed ${entityType}.`,
+        correlation_id: cid,
+      }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
+    if (tool === 'associate_contact_place') {
+      const contactId = normalizeOptionalText(args?.contact_id, 80)
+      let placeId = normalizeOptionalText(args?.place_id, 80)
+      const placeName = normalizeOptionalText(args?.place_name, 220)
+      const placeAddress = normalizeOptionalText(args?.place_address, 500)
+      const relationship = normalizeOptionalText(args?.relationship, 120) ?? 'provider_location'
+      if (!contactId || (!placeId && !placeName)) throw new Error('contact_id and a place ID or name are required')
+
+      const { data: contact, error: contactError } = await sb
+        .from('saved_contacts')
+        .select('id, name')
+        .eq('id', contactId)
+        .eq('confirmed', true)
+        .maybeSingle()
+      if (contactError || !contact) throw new Error(contactError?.message ?? 'Confirmed contact not found')
+
+      let place: { id: string; name: string; confirmed: boolean } | null = null
+      if (placeId) {
+        const { data, error } = await sb.from('saved_places').select('id, name, confirmed').eq('id', placeId).maybeSingle()
+        if (error) throw new Error(error.message)
+        place = data
+      } else if (placeName) {
+        const { data: existing, error: existingError } = await sb
+          .from('saved_places')
+          .select('id, name, confirmed')
+          .eq('name', placeName)
+          .maybeSingle()
+        if (existingError) throw new Error(existingError.message)
+        if (existing) {
+          place = existing
+          placeId = existing.id
+        } else {
+          const { data: created, error: createError } = await sb
+            .from('saved_places')
+            .insert({
+              name: placeName,
+              aliases: [],
+              address: placeAddress,
+              category: 'other',
+              confirmed: true,
+              source: 'manual',
+              occurrence_count: Number.isInteger(args?.evidence_count) ? args.evidence_count : 1,
+              notes: 'Created from household-confirmed calendar evidence.',
+            })
+            .select('id, name, confirmed')
+            .single()
+          if (createError) throw new Error(createError.message)
+          place = created
+          placeId = created.id
+        }
+      }
+      if (!place || !placeId) throw new Error('Place not found')
+      if (!place.confirmed && args?.confirm_place !== true) throw new Error('The suggested place must be confirmed first')
+      if (!place.confirmed) {
+        const { error: confirmPlaceError } = await sb
+          .from('saved_places')
+          .update({ confirmed: true, source: 'manual', updated_at: new Date().toISOString() })
+          .eq('id', place.id)
+        if (confirmPlaceError) throw new Error(confirmPlaceError.message)
+      }
+
+      const { data: association, error } = await sb.rpc('set_contact_place_relationship', {
+        p_contact_id: contact.id,
+        p_place_id: place.id,
+        p_relationship: relationship,
+        p_is_default: args?.is_default !== false,
+        p_source: 'manual',
+        p_confirmed: true,
+        p_confidence: 1,
+        p_evidence_count: Number.isInteger(args?.evidence_count) ? args.evidence_count : 0,
+        p_evidence_notes: normalizeOptionalText(args?.evidence_notes, 1000),
+      })
+      if (error) throw new Error(error.message)
+
+      appendActionTrace('server_ai_action_succeeded', 'associate_contact_place', {
+        contact_id: contact.id,
+        place_id: place.id,
+        relationship,
+      })
+      return new Response(JSON.stringify({
+        success: true,
+        association_id: association?.id ?? null,
+        message: `Saved ${place.name} as ${contact.name}'s ${relationship.replaceAll('_', ' ')}.`,
+        correlation_id: cid,
+      }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
+    if (tool === 'associate_family_contact') {
+      const familyMemberId = normalizeOptionalText(args?.family_member_id, 80)
+      const contactId = normalizeOptionalText(args?.contact_id, 80)
+      const relationship = normalizeOptionalText(args?.relationship, 120)
+      if (!familyMemberId || !contactId || !relationship) {
+        throw new Error('family_member_id, contact_id, and relationship are required')
+      }
+
+      const [{ data: member, error: memberError }, { data: contact, error: contactError }] = await Promise.all([
+        sb.from('family_members').select('id, name').eq('id', familyMemberId).maybeSingle(),
+        sb.from('saved_contacts').select('id, name').eq('id', contactId).maybeSingle(),
+      ])
+      if (memberError || !member) throw new Error(memberError?.message ?? 'Family member not found')
+      if (contactError || !contact) throw new Error(contactError?.message ?? 'Contact not found')
+
+      const { data: association, error } = await sb
+        .from('family_contact_relationships')
+        .upsert({
+          family_member_id: member.id,
+          contact_id: contact.id,
+          relationship,
+          source: 'manual',
+          confirmed: true,
+          confidence: 1,
+          evidence_count: Number.isInteger(args?.evidence_count) ? args.evidence_count : 0,
+          evidence_notes: normalizeOptionalText(args?.evidence_notes, 1000),
+        }, { onConflict: 'family_member_id,contact_id,relationship' })
+        .select('id')
+        .single()
+      if (error) throw new Error(error.message)
+
+      appendActionTrace('server_ai_action_succeeded', 'associate_family_contact', {
+        family_member_id: member.id,
+        contact_id: contact.id,
+        relationship,
+        association_id: association.id,
+      })
+      return new Response(JSON.stringify({
+        success: true,
+        association_id: association.id,
+        message: `Saved ${member.name}'s ${relationship}: ${contact.name}.`,
+        correlation_id: cid,
+      }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
     if (tool === 'create_event') {
       const normalizedEventType = normalizeCreateEventType(args.event_type)
       const normalizedTitle = normalizeOptionalText(args.title, 220)

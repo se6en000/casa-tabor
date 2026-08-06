@@ -737,6 +737,10 @@ Deno.serve(async (req) => {
     homeConfigResult,
     { data: savedPlaces },
     savedContactsResult,
+    confirmedFamilyContactRelationshipsResult,
+    confirmedContactPlaceRelationshipsResult,
+    suggestedPlacesResult,
+    suggestedContactsResult,
     eventsResult,
     { data: groceryLists },
     { data: groceryItems },
@@ -763,15 +767,41 @@ Deno.serve(async (req) => {
       // Only surface confirmed entries in prompt context — unconfirmed/derived
       // candidates (auto-extracted from event history) await human review and
       // must not be presented to the model as authoritative household facts.
-      ? sb.from('saved_places').select('name, aliases, address, city, state, zip, category, notes, phone').eq('confirmed', true).order('name')
+      ? sb.from('saved_places').select('id, name, aliases, address, city, state, zip, category, notes, phone').eq('confirmed', true).order('name')
       : skippedRows,
     needsContactData
       ? sb.from('saved_contacts')
-        .select('name, aliases, phone, email, address, relationship, notes, primary_place:saved_places!saved_contacts_primary_place_id_fkey(name, address, city, state, zip, category)')
+        .select('id, name, aliases, phone, email, address, relationship, notes, primary_place:saved_places!saved_contacts_primary_place_id_fkey(name, address, city, state, zip, category)')
         .eq('confirmed', true)
         .order('name')
         .then(r => r)
         .catch(() => ({ data: null, error: null }))
+      : skippedRows,
+    needsContactData
+      ? sb.from('family_contact_relationships')
+        .select('relationship, family_member:family_members(name, full_name), contact:saved_contacts(name, phone, primary_place:saved_places!saved_contacts_primary_place_id_fkey(name, address, city, state, zip))')
+        .eq('confirmed', true)
+        .order('relationship')
+      : skippedRows,
+    needsContactData
+      ? sb.from('contact_place_relationships')
+        .select('relationship, is_default, contact:saved_contacts(id, name, aliases, phone), place:saved_places(id, name, aliases, address, city, state, zip, category, phone)')
+        .eq('confirmed', true)
+        .order('is_default', { ascending: false })
+      : skippedRows,
+    householdDirectoryQuestion
+      ? sb.from('saved_places')
+        .select('id, name, aliases, address, city, state, zip, occurrence_count')
+        .eq('confirmed', false)
+        .order('occurrence_count', { ascending: false })
+        .limit(30)
+      : skippedRows,
+    householdDirectoryQuestion
+      ? sb.from('saved_contacts')
+        .select('id, name, aliases, relationship, phone, primary_place_id, occurrence_count')
+        .eq('confirmed', false)
+        .order('occurrence_count', { ascending: false })
+        .limit(30)
       : skippedRows,
     needsEventData
       ? sb.from('events')
@@ -845,6 +875,10 @@ Deno.serve(async (req) => {
   warnIfSlow('context_load', contextLoadMs, STAGE_SLO.contextLoadMs)
 
   const savedContacts = (savedContactsResult as { data: unknown }).data
+  const confirmedFamilyContactRelationships = (confirmedFamilyContactRelationshipsResult as { data: unknown }).data
+  const confirmedContactPlaceRelationships = (confirmedContactPlaceRelationshipsResult as { data: unknown }).data
+  const suggestedPlaces = suggestedPlacesResult.data ?? []
+  const suggestedContacts = suggestedContactsResult.data ?? []
 
   const config = cfgRow?.[0]?.value ?? { provider: 'gemini', model: DEFAULT_GEMINI_MODEL, api_key: '' }
   const apiKey = config.api_key as string
@@ -867,6 +901,281 @@ Deno.serve(async (req) => {
     output_tokens: 0,
     thought_tokens: 0,
     total_tokens: 0,
+  }
+  if (householdDirectoryQuestion && latestUserText) {
+    const normalizedQuestion = normalizeSearchText(latestUserText)
+    const candidateEntities = [
+      ...(suggestedContacts as {
+        id: string
+        name: string
+        aliases?: string[]
+        relationship?: string | null
+        occurrence_count?: number
+      }[]).map((candidate) => ({ ...candidate, entity_type: 'contact' as const })),
+      ...(suggestedPlaces as {
+        id: string
+        name: string
+        aliases?: string[]
+        address?: string | null
+        city?: string | null
+        state?: string | null
+        zip?: string | null
+        occurrence_count?: number
+      }[]).map((candidate) => ({ ...candidate, entity_type: 'place' as const })),
+    ]
+    const candidate = candidateEntities
+      .filter((entity) =>
+        [entity.name, ...(entity.aliases ?? [])]
+          .map(normalizeSearchText)
+          .filter((term) => term.length >= 3)
+          .some((term) => normalizedQuestion.includes(term)),
+      )
+      .sort((a, b) => (b.occurrence_count ?? 0) - (a.occurrence_count ?? 0))[0]
+    if (candidate) {
+      const detail = candidate.entity_type === 'place'
+        ? [candidate.address, candidate.city, candidate.state, candidate.zip].filter(Boolean).join(', ')
+        : candidate.relationship ?? 'contact'
+      return {
+        status: 200,
+        payload: {
+          type: 'tool_action',
+          tool: 'confirm_directory_entity',
+          args: {
+            entity_type: candidate.entity_type,
+            entity_id: candidate.id,
+          },
+          display_text: `I found a likely ${candidate.entity_type} from ${candidate.occurrence_count ?? 1} calendar ${(candidate.occurrence_count ?? 1) === 1 ? 'entry' : 'entries'}: ${candidate.name}${detail ? ` — ${detail}` : ''}. Add it to the confirmed Household Directory?`,
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+  }
+  const relationshipLookup = latestUserText?.match(
+    /\b(?:(?<memberA>[a-z]+)'s\s+(?<relationshipA>pediatric dentist|dentist|orthodontist|dermatologist|therapist|coach)|(?<relationshipB>pediatric dentist|dentist|orthodontist|dermatologist|therapist|coach)\s+(?:for|of)\s+(?<memberB>[a-z]+))\b/i,
+  )
+  if (householdDirectoryQuestion && relationshipLookup) {
+    const memberName = relationshipLookup.groups?.memberA ?? relationshipLookup.groups?.memberB
+    const relationship = (relationshipLookup.groups?.relationshipA ?? relationshipLookup.groups?.relationshipB)?.toLowerCase()
+    const member = (familyMembers as { id?: string; name?: string }[]).find((candidate) =>
+      candidate.name?.toLowerCase() === memberName?.toLowerCase(),
+    )
+    if (member?.id && member.name && relationship) {
+      const confirmed = (confirmedFamilyContactRelationships as {
+        relationship?: string
+        family_member?: { name?: string } | null
+      }[] ?? []).some((association) =>
+        association.relationship?.toLowerCase() === relationship &&
+        association.family_member?.name?.toLowerCase() === member.name?.toLowerCase(),
+      )
+      if (!confirmed) {
+        const { data: history, error: historyError } = await sb
+          .from('events')
+          .select('title, description, start_time, event_enrichments(contact_name), event_members(family_member_id)')
+          .is('deleted_at', null)
+          .eq('status', 'confirmed')
+          .order('start_time', { ascending: false })
+          .limit(400)
+        if (historyError) throw new Error(historyError.message)
+
+        const contacts = (savedContacts as {
+          id: string
+          name: string
+          aliases?: string[]
+        }[] ?? [])
+        const contactByName = new Map<string, typeof contacts[number]>()
+        for (const contact of contacts) {
+          for (const value of [contact.name, ...(contact.aliases ?? [])]) {
+            contactByName.set(normalizeSearchText(value), contact)
+          }
+        }
+        const memberPattern = new RegExp(`\\b${member.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+        const relationshipEvidencePattern = relationship === 'dermatologist'
+          ? /\bdermatolog(?:ist|y)\b/i
+          : relationship === 'orthodontist'
+            ? /\borthodont(?:ist|ics)\b/i
+            : new RegExp(`\\b${relationship.replace(' ', '\\s+')}\\b`, 'i')
+        const candidates = new Map<string, { contact: typeof contacts[number]; count: number }>()
+        for (const event of history ?? []) {
+          const text = `${event.title ?? ''} ${event.description ?? ''}`
+          if (!memberPattern.test(text) || !relationshipEvidencePattern.test(text)) continue
+          const enrichment = Array.isArray(event.event_enrichments) ? event.event_enrichments[0] : event.event_enrichments
+          const contact = contactByName.get(normalizeSearchText(enrichment?.contact_name ?? ''))
+          if (!contact) continue
+          const current = candidates.get(contact.id) ?? { contact, count: 0 }
+          current.count += 1
+          candidates.set(contact.id, current)
+        }
+        const best = [...candidates.values()].sort((a, b) => b.count - a.count).slice(0, 2)
+        if (best.length > 0) {
+          const first = best[0]
+          const alternatives = best.slice(1).map((candidate) => candidate.contact.name)
+          const suggestion = `I found ${first.contact.name} as a likely ${relationship} for ${member.name} in ${first.count} calendar ${first.count === 1 ? 'entry' : 'entries'}${alternatives.length ? `. Another possibility is ${alternatives.join(', ')}` : ''}. Save ${first.contact.name} as ${member.name}'s ${relationship}?`
+          return {
+            status: 200,
+            payload: {
+              type: 'tool_action',
+              tool: 'associate_family_contact',
+              args: {
+                family_member_id: member.id,
+                contact_id: first.contact.id,
+                relationship,
+                evidence_count: first.count,
+                evidence_notes: 'Suggested from explicit family-member and provider calendar evidence; confirmed by household.',
+              },
+              display_text: suggestion,
+              correlation_id: cid,
+              telemetry: {
+                ...llmTelemetry,
+                request_total_ms: Date.now() - requestStartMs,
+                context_load_ms: contextLoadMs,
+              },
+            },
+          }
+        }
+      }
+    }
+  }
+  if (householdDirectoryQuestion && latestUserText) {
+    const normalizedQuestion = normalizeSearchText(latestUserText)
+    const locationQuestion = /\b(?:address|based|located|location|meet|office|usually|where|works?|lives?)\b/i.test(latestUserText)
+    const contacts = (savedContacts as {
+      id: string
+      name: string
+      aliases?: string[]
+    }[] ?? [])
+    const mentionedContact = contacts
+      .flatMap((contact) =>
+        [contact.name, ...(contact.aliases ?? [])].map((term) => ({
+          contact,
+          term: normalizeSearchText(term),
+        })),
+      )
+      .filter((candidate) => candidate.term.length >= 3 && normalizedQuestion.includes(candidate.term))
+      .sort((a, b) => b.term.length - a.term.length)[0]?.contact
+
+    if (locationQuestion && mentionedContact) {
+      const hasConfirmedPlace = (confirmedContactPlaceRelationships as {
+        contact?: { id?: string } | null
+      }[] ?? []).some((relationship) => relationship.contact?.id === mentionedContact.id)
+      if (!hasConfirmedPlace) {
+        const contactLastName = normalizeSearchText(mentionedContact.name).split(' ').at(-1) ?? ''
+        const { data: enrichmentEvidence, error: enrichmentEvidenceError } = contactLastName.length >= 3
+          ? await sb
+            .from('event_enrichments')
+            .select('event_id, contact_name')
+            .ilike('contact_name', `%${contactLastName}%`)
+            .limit(100)
+          : { data: [], error: null }
+        if (enrichmentEvidenceError) throw new Error(enrichmentEvidenceError.message)
+        const evidenceEventIds = [...new Set((enrichmentEvidence ?? []).map((row) => row.event_id))]
+        const { data: history, error: historyError } = evidenceEventIds.length > 0
+          ? await sb
+            .from('events')
+            .select('id, title, location_name, address, start_time')
+            .in('id', evidenceEventIds)
+            .is('deleted_at', null)
+            .order('start_time', { ascending: false })
+          : { data: [], error: null }
+        if (historyError) throw new Error(historyError.message)
+
+        const places = ([
+          ...(savedPlaces as unknown[] ?? []),
+          ...(suggestedPlaces as unknown[] ?? []),
+        ] as {
+          id: string
+          name: string
+          aliases?: string[]
+          address?: string | null
+          city?: string | null
+          state?: string | null
+          zip?: string | null
+        }[])
+        const genericPlaceTerms = new Set(['doctor', 'dentist', 'school', 'office', 'clinic', 'hospital'])
+        const placeTerms = places.flatMap((place) =>
+          [
+            { value: place.name, kind: 'name' },
+            ...(place.aliases ?? []).map((value) => ({ value, kind: 'name' })),
+            { value: place.address ?? '', kind: 'address' },
+          ]
+            .map(({ value, kind }) => ({ place, kind, term: normalizeSearchText(value) }))
+            .filter((candidate) =>
+              candidate.term.length >= 5 &&
+              (candidate.kind === 'address' || !genericPlaceTerms.has(candidate.term)),
+            ),
+        )
+        const contactTerms = [mentionedContact.name, ...(mentionedContact.aliases ?? [])].map(normalizeSearchText)
+        const providerByEventId = new Map((enrichmentEvidence ?? []).map((row) => [
+          row.event_id,
+          normalizeSearchText(row.contact_name ?? ''),
+        ]))
+        const candidates = new Map<string, {
+          place: typeof places[number] | null
+          placeName: string
+          address: string
+          count: number
+        }>()
+        for (const event of history ?? []) {
+          const provider = providerByEventId.get(event.id) ?? ''
+          const title = normalizeSearchText(event.title ?? '')
+          if (!contactTerms.some((term) => provider === term || title.includes(term)) &&
+              !(contactLastName.length >= 4 && (provider.includes(contactLastName) || title.includes(contactLastName)))) continue
+          const location = normalizeSearchText(`${event.location_name ?? ''} ${event.address ?? ''}`)
+          const matched = placeTerms
+            .filter((candidate) => location.includes(candidate.term))
+            .sort((a, b) => b.term.length - a.term.length)[0]?.place
+          const rawPlaceName = String(event.location_name ?? '').trim()
+          const rawAddress = String(event.address ?? '').trim()
+          if (!matched && !rawPlaceName && !rawAddress) continue
+          const candidateKey = matched?.id ?? `derived:${normalizeSearchText(rawPlaceName || rawAddress)}`
+          const current = candidates.get(candidateKey) ?? {
+            place: matched ?? null,
+            placeName: (matched?.name ?? rawPlaceName) || rawAddress,
+            address: matched
+              ? [matched.address, matched.city, matched.state, matched.zip].filter(Boolean).join(', ')
+              : rawAddress,
+            count: 0,
+          }
+          current.count += 1
+          candidates.set(candidateKey, current)
+        }
+        const ranked = [...candidates.values()].sort((a, b) => b.count - a.count).slice(0, 2)
+        if (ranked.length > 0) {
+          const first = ranked[0]
+          const alternative = ranked[1]
+          const address = first.address
+          return {
+            status: 200,
+            payload: {
+              type: 'tool_action',
+              tool: 'associate_contact_place',
+              args: {
+                contact_id: mentionedContact.id,
+                place_id: first.place?.id,
+                place_name: first.placeName,
+                place_address: first.address || undefined,
+                relationship: 'provider_location',
+                is_default: true,
+                evidence_count: first.count,
+                evidence_notes: 'Suggested from exact contact and place matches in calendar history; confirmed by household.',
+                confirm_place: true,
+              },
+              display_text: `I found ${first.placeName}${address ? ` at ${address}` : ''} as the likely location for ${mentionedContact.name} in ${first.count} calendar ${first.count === 1 ? 'entry' : 'entries'}${alternative ? `. Another possibility is ${alternative.placeName}` : ''}. Save this as the default location?`,
+              correlation_id: cid,
+              telemetry: {
+                ...llmTelemetry,
+                request_total_ms: Date.now() - requestStartMs,
+                context_load_ms: contextLoadMs,
+              },
+            },
+          }
+        }
+      }
+    }
   }
   if (memoryInsightsReadIntent || bugTrackerReadIntent) {
     const observations = (memoryObservationsResult.data ?? []) as MemoryObservationRow[]
@@ -2236,6 +2545,64 @@ Deno.serve(async (req) => {
         return `- ${c.name}${aliases}${extra ? ': ' + extra : ''}`
       }).join('\n')
     : ''
+  const familyRelationshipsText = confirmedFamilyContactRelationships &&
+    (confirmedFamilyContactRelationships as unknown[]).length > 0
+    ? (confirmedFamilyContactRelationships as {
+      relationship: string
+      family_member?: { name?: string; full_name?: string | null } | null
+      contact?: {
+        name?: string
+        phone?: string | null
+        primary_place?: {
+          name?: string
+          address?: string
+          city?: string
+          state?: string
+          zip?: string
+        } | null
+      } | null
+    }[]).flatMap((association) => {
+      const member = association.family_member?.name
+      const contact = association.contact?.name
+      if (!member || !contact) return []
+      const place = association.contact?.primary_place
+      const address = place
+        ? [place.address, place.city, place.state, place.zip].filter(Boolean).join(', ')
+        : ''
+      const destination = place
+        ? ` | usually at ${place.name}${address ? ` (${address})` : ''}`
+        : ''
+      const phone = association.contact?.phone ? ` | ${association.contact.phone}` : ''
+      return `- ${member}: ${association.relationship} is ${contact}${destination}${phone}`
+    }).join('\n')
+    : ''
+  const contactPlaceRelationshipsText = confirmedContactPlaceRelationships &&
+    (confirmedContactPlaceRelationships as unknown[]).length > 0
+    ? (confirmedContactPlaceRelationships as {
+      relationship: string
+      is_default: boolean
+      contact?: { name?: string; phone?: string | null } | null
+      place?: {
+        name?: string
+        address?: string | null
+        city?: string | null
+        state?: string | null
+        zip?: string | null
+        phone?: string | null
+      } | null
+    }[]).flatMap((connection) => {
+      const contact = connection.contact?.name
+      const place = connection.place?.name
+      if (!contact || !place) return []
+      const address = [
+        connection.place?.address,
+        connection.place?.city,
+        connection.place?.state,
+        connection.place?.zip,
+      ].filter(Boolean).join(', ')
+      return `- ${contact} ${connection.relationship.replaceAll('_', ' ')} ${place}${connection.is_default ? ' [default]' : ''}${address ? ` | ${address}` : ''}`
+    }).join('\n')
+    : ''
 
   const defaultListId = groceryLists?.[0]?.id ?? null
   const groceryText = groceryItems && groceryItems.length > 0
@@ -2685,6 +3052,8 @@ FAMILY MEMBERS: ${familyNames}
 ${familyIdentityAliases ? `FAMILY IDENTITY ALIASES: ${familyIdentityAliases}. These names refer to the same person. Use the canonical short name in tool arguments and event-member updates, but mirror the user's wording in your reply.` : ''}
 ${includePlaceContext && placesText ? `\nSAVED PLACES (use for location nicknames):\n${placesText}` : ''}
 ${includePlaceContext && contactsText ? `\nSAVED CONTACTS:\n${contactsText}` : ''}
+${includePlaceContext && familyRelationshipsText ? `\nCONFIRMED FAMILY RELATIONSHIPS (authoritative; never infer relationships from event attendees):\n${familyRelationshipsText}` : ''}
+${includePlaceContext && contactPlaceRelationshipsText ? `\nCONFIRMED PEOPLE ↔ PLACES (authoritative; Place owns the address):\n${contactPlaceRelationshipsText}` : ''}
 ${context.focusedEvent ? `
 ⭐ EVENT EDIT MODE — CRITICAL INSTRUCTIONS:
 You are EXCLUSIVELY focused on editing this one event. Do not answer general questions, discuss other events, or go off-topic. Every response must stay in the context of editing this event.

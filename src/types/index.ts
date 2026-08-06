@@ -233,6 +233,23 @@ export interface SavedContact {
   updated_at: string
 }
 
+export interface ContactPlaceRelationship {
+  id: string
+  contact_id: string
+  place_id: string
+  relationship: string
+  is_default: boolean
+  source: 'manual' | 'derived'
+  confirmed: boolean
+  confidence: number
+  evidence_count: number
+  evidence_notes: string | null
+  contact?: Pick<SavedContact, 'id' | 'name' | 'phone' | 'relationship'> | null
+  place?: Pick<SavedPlace, 'id' | 'name' | 'address' | 'city' | 'state' | 'zip' | 'category'> | null
+  created_at: string
+  updated_at: string
+}
+
 export interface PrepItem {
   id: string
   event_id: string | null

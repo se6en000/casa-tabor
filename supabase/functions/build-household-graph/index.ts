@@ -9,7 +9,7 @@ const CORS = {
 }
 
 type GraphNodeType = 'member' | 'place' | 'contact' | 'event' | 'routine'
-type EdgeType = 'attends' | 'at_place' | 'knows' | 'follows_routine' | 'instance_of_routine'
+type EdgeType = 'attends' | 'at_place' | 'knows' | 'follows_routine' | 'instance_of_routine' | 'has_provider'
 
 type GraphNode = {
   node_key: string
@@ -58,10 +58,16 @@ Deno.serve(async (req) => {
   const windowStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString()
   const windowEnd = new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString()
 
-  const [membersResult, placesResult, contactsResult, eventsResult] = await Promise.all([
+  const [membersResult, placesResult, contactsResult, contactPlacesResult, familyContactsResult, eventsResult] = await Promise.all([
     sb.from('family_members').select('id, name, role').order('sort_order'),
     sb.from('saved_places').select('id, name, aliases, address, category'),
     sb.from('saved_contacts').select('id, name, aliases, relationship, primary_place_id, primary_place_source'),
+    sb.from('contact_place_relationships')
+      .select('contact_id, place_id, relationship, is_default, source, confidence')
+      .eq('confirmed', true),
+    sb.from('family_contact_relationships')
+      .select('family_member_id, contact_id, relationship, source, confidence')
+      .eq('confirmed', true),
     sb
       .from('events')
       .select('id, title, event_type, rrule, start_time, location_name, address, source_member_id, event_members(family_member_id), event_enrichments(category)')
@@ -70,8 +76,16 @@ Deno.serve(async (req) => {
       .lte('start_time', windowEnd),
   ])
 
-  if (membersResult.error || placesResult.error || contactsResult.error || eventsResult.error) {
-    const error = membersResult.error ?? placesResult.error ?? contactsResult.error ?? eventsResult.error
+  if (
+    membersResult.error ||
+    placesResult.error ||
+    contactsResult.error ||
+    contactPlacesResult.error ||
+    familyContactsResult.error ||
+    eventsResult.error
+  ) {
+    const error = membersResult.error ?? placesResult.error ?? contactsResult.error ??
+      contactPlacesResult.error ?? familyContactsResult.error ?? eventsResult.error
     return new Response(JSON.stringify({ ok: false, error: error?.message ?? 'Graph query failed', correlation_id: correlationId }), {
       status: 500,
       headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId),
@@ -157,15 +171,33 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (c.primary_place_id) {
-      addEdge(edges, {
-        edge_type: 'at_place',
-        from_key: contactKey,
-        to_key: `place:${c.primary_place_id}`,
-        weight: 1,
-        metadata: { relationship: 'primary_place', source: c.primary_place_source ?? 'manual' },
-      })
-    }
+  }
+
+  for (const relationship of contactPlacesResult.data ?? []) {
+    addEdge(edges, {
+      edge_type: 'at_place',
+      from_key: `contact:${relationship.contact_id}`,
+      to_key: `place:${relationship.place_id}`,
+      weight: relationship.confidence ?? 1,
+      metadata: {
+        relationship: relationship.relationship,
+        is_default: relationship.is_default,
+        source: relationship.source,
+      },
+    })
+  }
+
+  for (const relationship of familyContactsResult.data ?? []) {
+    addEdge(edges, {
+      edge_type: 'has_provider',
+      from_key: `member:${relationship.family_member_id}`,
+      to_key: `contact:${relationship.contact_id}`,
+      weight: relationship.confidence ?? 1,
+      metadata: {
+        relationship: relationship.relationship,
+        source: relationship.source,
+      },
+    })
   }
 
   const memberPlaceCounts = new Map<string, number>()
@@ -346,7 +378,14 @@ Deno.serve(async (req) => {
     }
   }
 
-  const { data: nodeLookup, error: nodeLookupError } = await sb.from('household_graph_nodes').select('id, node_key')
+  const nodeLookupResults = await Promise.all(
+    Array.from({ length: Math.ceil(nodeRows.length / 75) }, (_, index) =>
+      sb
+        .from('household_graph_nodes')
+        .select('id, node_key')
+        .in('node_key', nodeRows.slice(index * 75, (index + 1) * 75).map((node) => node.node_key))),
+  )
+  const nodeLookupError = nodeLookupResults.find((result) => result.error)?.error
   if (nodeLookupError) {
     return new Response(JSON.stringify({ ok: false, error: nodeLookupError.message, correlation_id: correlationId }), {
       status: 500,
@@ -354,6 +393,7 @@ Deno.serve(async (req) => {
     })
   }
 
+  const nodeLookup = nodeLookupResults.flatMap((result) => result.data ?? [])
   const nodeKeyToId = new Map((nodeLookup ?? []).map((n) => [n.node_key, n.id]))
   const edgeRows = [...edges.values()]
     .map((edge) => ({

@@ -97,6 +97,16 @@ test('Progress uses native progress semantics without layout-fragile inline widt
   assert.doesNotMatch(source, /style=\{\{/)
 })
 
+test('Household Directory exposes canonical people-place connections', () => {
+  const source = readFileSync(resolve('src/pages/SavedPlacesSettingsPage.tsx'), 'utf8')
+  assert.match(source, /ContactPlaceRelationship/)
+  assert.match(source, /contact_place_relationships/)
+  assert.match(source, /set_contact_place_relationship/)
+  assert.match(source, /place owns the address/i)
+  assert.match(source, /<SegmentedControl/)
+  assert.doesNotMatch(source, />Custom address/)
+})
+
 test('Phase 3 composition patterns are exported from the shared UI entrypoint', () => {
   const source = readFileSync(resolve('src/components/ui/index.ts'), 'utf8')
   for (const component of [

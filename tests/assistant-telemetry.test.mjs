@@ -11,6 +11,7 @@ const assistantFunction = readFileSync(new URL('../supabase/functions/ai-assista
 const actionFunction = readFileSync(new URL('../supabase/functions/execute-ai-action/index.ts', import.meta.url), 'utf8')
 const householdDirectory = readFileSync(new URL('../supabase/functions/_shared/assistant-household-directory.mjs', import.meta.url), 'utf8')
 const familyIdentity = readFileSync(new URL('../supabase/functions/_shared/family-identity.mjs', import.meta.url), 'utf8')
+const householdGraph = readFileSync(new URL('../supabase/functions/build-household-graph/index.ts', import.meta.url), 'utf8')
 
 test('assistant requests carry complete client trace provenance', () => {
   for (const field of [
@@ -191,6 +192,37 @@ test('household directory lookups load confirmed contacts and their primary plac
   assert.match(assistantFunction, /includePlaceContext = [\s\S]{0,180}householdDirectoryQuestion/)
   assert.match(householdDirectory, /coach\|dentist\|doctor\|orthodontist/)
   assert.match(householdDirectory, /what do you know about/)
+})
+
+test('assistant grounds provider answers in confirmed family relationships', () => {
+  assert.match(assistantFunction, /family_contact_relationships/)
+  assert.match(assistantFunction, /CONFIRMED FAMILY RELATIONSHIPS/)
+  assert.match(assistantFunction, /never infer relationships from event attendees/)
+  assert.match(assistantFunction, /family_member:family_members\(name, full_name\)/)
+})
+
+test('unconfirmed provider lookups offer evidence-backed confirmation actions', () => {
+  assert.match(assistantFunction, /associate_family_contact/)
+  assert.match(assistantFunction, /Suggested from explicit family-member and provider calendar evidence/)
+  assert.match(assistantFunction, /Another possibility is/)
+  assert.match(assistantFunction, /never infer relationships from event attendees/)
+  assert.match(actionFunction, /family_member_id, contact_id, and relationship are required/)
+  assert.match(actionFunction, /family_contact_relationships/)
+  assert.match(actionFunction, /onConflict: 'family_member_id,contact_id,relationship'/)
+})
+
+test('directory fallback can confirm entities and persist contact-place associations', () => {
+  assert.match(assistantFunction, /confirm_directory_entity/)
+  assert.match(assistantFunction, /associate_contact_place/)
+  assert.match(assistantFunction, /contact_place_relationships/)
+  assert.match(assistantFunction, /CONFIRMED PEOPLE ↔ PLACES/)
+  assert.match(actionFunction, /set_contact_place_relationship/)
+  assert.match(actionFunction, /Saved .* as .*'s \$\{relationship\.replaceAll/)
+  assert.match(householdGraph, /contactPlacesResult/)
+  assert.match(householdGraph, /edge_type: 'has_provider'/)
+  assert.match(assistantFunction, /\.from\('event_enrichments'\)[\s\S]{0,180}\.ilike\('contact_name'/)
+  assert.match(assistantFunction, /genericPlaceTerms = new Set/)
+  assert.match(householdGraph, /nodeRows\.slice\(index \* 75/)
 })
 
 test('assistant preserves full family names for alias-aware identity resolution', () => {

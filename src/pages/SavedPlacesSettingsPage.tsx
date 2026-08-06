@@ -3,14 +3,14 @@ import {
   Plus, Trash2, Save, X, MapPin, Phone, Mail,
   Search, BookmarkCheck, Home, Utensils, School, Dumbbell,
   Briefcase, HeartPulse, Star, Edit2, Users, User, Copy, Check,
-  Plane, ShoppingBag, Wrench, MessageCircle, MapPinned,
+  Plane, ShoppingBag, Wrench, MessageCircle, MapPinned, Link2,
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
-import type { SavedContact, SavedPlace, SavedPlaceCategory } from '../types'
+import type { ContactPlaceRelationship, SavedContact, SavedPlace, SavedPlaceCategory } from '../types'
 import { savedPlaceAddress } from '../hooks/useSavedPlaces'
-import { Button, Combobox, IconButton } from '../components/ui'
+import { Button, Checkbox, Combobox, IconButton, SegmentedControl } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -237,7 +237,7 @@ function ContactForm({ initial, places, onSave, onCancel, saving }: ContactFormP
       relationship: form.relationship || null,
       phone: form.phone || null,
       email: form.email || null,
-      address: form.address || null,
+      address: null,
       notes: form.notes || null,
       primary_place_id: form.primary_place_id || null,
       primary_place_source: form.primary_place_id ? 'manual' : null,
@@ -287,11 +287,6 @@ function ContactForm({ initial, places, onSave, onCancel, saving }: ContactFormP
           placeholder="Search saved places"
         />
         <p className="mt-1 text-caption text-casa-muted">Where this person or provider is usually reached. Their address stays connected to the place.</p>
-      </div>
-      <div>
-        <label className="block text-caption font-semibold text-casa-muted mb-1">Custom address <span className="font-normal ml-1">(only if different)</span></label>
-        <input value={form.address ?? ''} onChange={e => set('address', e.target.value)} placeholder="123 Oak St, Jupiter FL 33477"
-          className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
       </div>
       <div>
         <label className="block text-caption font-semibold text-casa-muted mb-1">Notes <span className="font-normal ml-1">(context the AI can use)</span></label>
@@ -396,7 +391,7 @@ function SuggestedRow({ label, sublabel, occurrenceCount, onReview, onConfirm, o
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type Tab = 'places' | 'people'
+type Tab = 'places' | 'people' | 'connections'
 type PlaceMode = { type: 'list' } | { type: 'add' } | { type: 'edit'; place: SavedPlace }
 type ContactMode = { type: 'list' } | { type: 'add' } | { type: 'edit'; contact: SavedContact }
 
@@ -407,6 +402,11 @@ export default function SavedPlacesSettingsPage() {
   const [contactMode, setContactMode] = useState<ContactMode>({ type: 'list' })
   const [search, setSearch] = useState('')
   const [filterCat, setFilterCat] = useState<SavedPlaceCategory | 'all'>('all')
+  const [connectionMode, setConnectionMode] = useState<'list' | 'add'>('list')
+  const [connectionContactId, setConnectionContactId] = useState('')
+  const [connectionPlaceId, setConnectionPlaceId] = useState('')
+  const [connectionLabel, setConnectionLabel] = useState('provider_location')
+  const [connectionDefault, setConnectionDefault] = useState(true)
 
   // ── Places queries ───────────────────────────────────────────────────────────
   const { data: places = [], isLoading: placesLoading } = useQuery<SavedPlace[]>({
@@ -462,11 +462,36 @@ export default function SavedPlacesSettingsPage() {
 
   const saveContactMutation = useMutation({
     mutationFn: async (payload: { id?: string; data: SavedContactInput }) => {
+      let contactId = payload.id
       if (payload.id) {
         const { error } = await supabase.from('saved_contacts').update({ ...payload.data, updated_at: new Date().toISOString() }).eq('id', payload.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('saved_contacts').insert({ ...payload.data, aliases: payload.data.aliases ?? [] })
+        const { data, error } = await supabase
+          .from('saved_contacts')
+          .insert({ ...payload.data, aliases: payload.data.aliases ?? [] })
+          .select('id')
+          .single()
+        if (error) throw error
+        contactId = data.id
+      }
+      if (contactId && payload.data.primary_place_id) {
+        const { error } = await supabase.rpc('set_contact_place_relationship', {
+          p_contact_id: contactId,
+          p_place_id: payload.data.primary_place_id,
+          p_relationship: 'provider_location',
+          p_is_default: true,
+          p_source: 'manual',
+          p_confirmed: true,
+          p_confidence: 1,
+          p_evidence_count: 0,
+          p_evidence_notes: 'Selected as the primary place in Household Directory.',
+        })
+        if (error) throw error
+      } else if (contactId) {
+        const { error } = await supabase.rpc('clear_default_contact_place', {
+          p_contact_id: contactId,
+        })
         if (error) throw error
       }
     },
@@ -489,6 +514,60 @@ export default function SavedPlacesSettingsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['saved_contacts'] }),
   })
 
+  const { data: connections = [], isLoading: connectionsLoading } = useQuery<ContactPlaceRelationship[]>({
+    queryKey: ['contact_place_relationships'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('contact_place_relationships')
+        .select('*, contact:saved_contacts(id, name, phone, relationship), place:saved_places(id, name, address, city, state, zip, category)')
+        .eq('confirmed', true)
+        .order('is_default', { ascending: false })
+        .order('created_at')
+      if (error) throw error
+      return data as ContactPlaceRelationship[]
+    },
+  })
+
+  const saveConnectionMutation = useMutation({
+    mutationFn: async () => {
+      if (!connectionContactId || !connectionPlaceId || !connectionLabel.trim()) {
+        throw new Error('Choose a person, place, and connection type.')
+      }
+      const { error } = await supabase.rpc('set_contact_place_relationship', {
+        p_contact_id: connectionContactId,
+        p_place_id: connectionPlaceId,
+        p_relationship: connectionLabel.trim(),
+        p_is_default: connectionDefault,
+        p_source: 'manual',
+        p_confirmed: true,
+        p_confidence: 1,
+        p_evidence_count: 0,
+        p_evidence_notes: 'Created in Household Directory.',
+      })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contact_place_relationships'] })
+      qc.invalidateQueries({ queryKey: ['saved_contacts'] })
+      setConnectionMode('list')
+      setConnectionContactId('')
+      setConnectionPlaceId('')
+      setConnectionLabel('provider_location')
+      setConnectionDefault(true)
+    },
+  })
+
+  const deleteConnectionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.rpc('delete_contact_place_relationship', { p_relationship_id: id })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contact_place_relationships'] })
+      qc.invalidateQueries({ queryKey: ['saved_contacts'] })
+    },
+  })
+
   // ── Filtered lists ───────────────────────────────────────────────────────────
   const filteredPlaces = places.filter(p => {
     if (!p.confirmed) return false
@@ -506,7 +585,21 @@ export default function SavedPlacesSettingsPage() {
   })
   const suggestedContacts = contacts.filter(c => !c.confirmed).sort((a, b) => b.occurrence_count - a.occurrence_count)
 
-  const isAdding = tab === 'places' ? placeMode.type !== 'list' : contactMode.type !== 'list'
+  const filteredConnections = connections.filter(connection => {
+    const needle = search.toLowerCase()
+    return !needle || [
+      connection.contact?.name ?? '',
+      connection.place?.name ?? '',
+      connection.relationship,
+      connection.place ? savedPlaceAddress(connection.place) : '',
+    ].some(value => value.toLowerCase().includes(needle))
+  })
+
+  const isAdding = tab === 'places'
+    ? placeMode.type !== 'list'
+    : tab === 'people'
+      ? contactMode.type !== 'list'
+      : connectionMode !== 'list'
 
   return (
     <>
@@ -515,27 +608,31 @@ export default function SavedPlacesSettingsPage() {
           <SettingsPageHeader title="Household Directory" description="Places are destinations. People are contacts or providers who can be connected to a place." />
           {!isAdding && (
             <Button
-              onClick={() => tab === 'places' ? setPlaceMode({ type: 'add' }) : setContactMode({ type: 'add' })}
+              onClick={() => {
+                if (tab === 'places') setPlaceMode({ type: 'add' })
+                else if (tab === 'people') setContactMode({ type: 'add' })
+                else setConnectionMode('add')
+              }}
               leadingIcon={<Plus size={16} />}
             >
-              {tab === 'places' ? 'Add Place' : 'Add Person'}
+              {tab === 'places' ? 'Add Place' : tab === 'people' ? 'Add Person' : 'Add Connection'}
             </Button>
           )}
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-casa-divider p-1 rounded-xl mb-6">
-          <Button onClick={() => { setTab('places'); setSearch('') }}
-            className={cn('flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-body font-semibold transition-colors',
-              tab === 'places' ? 'bg-casa-surface text-casa-navy shadow-card' : 'text-casa-muted hover:text-casa-navy')}>
-            <BookmarkCheck size={15} />Places ({places.filter(p => p.confirmed).length}{suggestedPlaces.length > 0 ? ` +${suggestedPlaces.length}` : ''})
-          </Button>
-          <Button onClick={() => { setTab('people'); setSearch('') }}
-            className={cn('flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-body font-semibold transition-colors',
-              tab === 'people' ? 'bg-casa-surface text-casa-navy shadow-card' : 'text-casa-muted hover:text-casa-navy')}>
-            <Users size={15} />People ({contacts.filter(c => c.confirmed).length}{suggestedContacts.length > 0 ? ` +${suggestedContacts.length}` : ''})
-          </Button>
-        </div>
+        <SegmentedControl
+          value={tab}
+          onChange={value => { setTab(value); setSearch('') }}
+          aria-label="Household Directory view"
+          fullWidth
+          className="mb-6"
+          options={[
+            { value: 'places', label: `Places (${places.filter(p => p.confirmed).length})`, icon: <BookmarkCheck size={15} /> },
+            { value: 'people', label: `People (${contacts.filter(c => c.confirmed).length})`, icon: <Users size={15} /> },
+            { value: 'connections', label: `Connections (${connections.length})`, icon: <Link2 size={15} /> },
+          ]}
+        />
 
         {/* ── PLACES TAB ── */}
         {tab === 'places' && (
@@ -651,7 +748,117 @@ export default function SavedPlacesSettingsPage() {
                 />
               </div>
             )}
+          </>
+        )}
 
+        {tab === 'connections' && (
+              <>
+                {connectionMode === 'add' && (
+                  <div className="bg-casa-surface border border-casa-border rounded-card p-5 shadow-card mb-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h2 className="font-display text-heading text-casa-navy">Connect a person to a place</h2>
+                        <p className="text-caption text-casa-muted mt-1">The place owns the address. Alexa follows this connection instead of copying an address onto the person.</p>
+                      </div>
+                      <IconButton onClick={() => setConnectionMode('list')} variant="ghost" size="sm" icon={<X size={16} />} aria-label="Close connection editor" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Combobox
+                        label="Person or provider"
+                        value={connectionContactId}
+                        onChange={setConnectionContactId}
+                        options={contacts.filter(contact => contact.confirmed).map(contact => ({ value: contact.id, label: contact.name }))}
+                        placeholder="Choose a person"
+                      />
+                      <Combobox
+                        label="Place"
+                        value={connectionPlaceId}
+                        onChange={setConnectionPlaceId}
+                        options={places.filter(place => place.confirmed).map(place => ({ value: place.id, label: [place.name, savedPlaceAddress(place)].filter(Boolean).join(' — ') }))}
+                        placeholder="Choose a place"
+                      />
+                      <div>
+                        <label className="block text-caption font-semibold text-casa-muted mb-1">Connection type</label>
+                        <input
+                          value={connectionLabel}
+                          onChange={event => setConnectionLabel(event.target.value)}
+                          placeholder="provider_location, works_at, lives_at…"
+                          className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold"
+                        />
+                      </div>
+                      <Checkbox
+                        label="Use as the default place"
+                        description="Alexa uses this location when no office or venue is specified."
+                        checked={connectionDefault}
+                        onChange={event => setConnectionDefault(event.target.checked)}
+                      />
+                    </div>
+                    {saveConnectionMutation.error && (
+                      <p role="alert" className="text-caption text-casa-error mt-3">{saveConnectionMutation.error.message}</p>
+                    )}
+                    <div className="flex justify-end gap-2 mt-5">
+                      <Button variant="secondary" onClick={() => setConnectionMode('list')}>Cancel</Button>
+                      <Button
+                        onClick={() => saveConnectionMutation.mutate()}
+                        loading={saveConnectionMutation.isPending}
+                        disabled={!connectionContactId || !connectionPlaceId || !connectionLabel.trim()}
+                        leadingIcon={<Save size={15} />}
+                      >
+                        Save Connection
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {connectionMode === 'list' && (
+                  <>
+                    <div className="relative mb-5">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted" />
+                      <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search people, places, or connection type…"
+                        className="w-full border border-casa-border rounded-lg pl-8 pr-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+                    </div>
+                    {connectionsLoading && <p className="text-body text-casa-muted text-center py-12">Loading…</p>}
+                    {!connectionsLoading && filteredConnections.length === 0 && (
+                      <div className="flex flex-col items-center gap-3 py-16 text-casa-muted">
+                        <Link2 size={36} className="opacity-30" />
+                        <p className="text-body font-semibold">{search ? 'No matching connections' : 'No saved connections yet'}</p>
+                        <p className="text-caption text-center max-w-sm">Connect people and providers to canonical places so addresses stay consistent everywhere.</p>
+                      </div>
+                    )}
+                    <div className="space-y-3">
+                      {filteredConnections.map(connection => (
+                        <div key={connection.id} className="flex items-center gap-3 bg-casa-surface border border-casa-border rounded-card p-4 shadow-card">
+                          <div className="w-9 h-9 rounded-full bg-casa-gold/10 flex items-center justify-center text-casa-gold shrink-0">
+                            <Link2 size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-display text-heading text-casa-navy">
+                              {connection.contact?.name} <span className="text-casa-muted">→</span> {connection.place?.name}
+                            </p>
+                            <p className="text-caption text-casa-muted">
+                              {connection.relationship.replaceAll('_', ' ')}
+                              {connection.is_default ? ' · Default' : ''}
+                              {connection.place ? ` · ${savedPlaceAddress(connection.place)}` : ''}
+                            </p>
+                          </div>
+                          <IconButton
+                            onClick={() => { if (confirm('Delete this connection?')) deleteConnectionMutation.mutate(connection.id) }}
+                            variant="danger"
+                            size="sm"
+                            icon={<Trash2 size={16} />}
+                            aria-label="Delete connection"
+                            title="Delete connection"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+
+        {tab === 'people' && (
+          <>
             {contactMode.type === 'list' && (
               <>
                 {suggestedContacts.length > 0 && (
