@@ -16,10 +16,11 @@ import { rankDirectorySuggestions, resolveDirectoryPlaceSave, type DirectoryPlac
 import { Button, Checkbox, Combobox, IconButton, SegmentedControl } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 import DirectoryPlaceInput from '../components/shared/DirectoryPlaceInput'
+import GoogleAddressSearchInput from '../components/shared/GoogleAddressSearchInput'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type SavedPlaceInput = Omit<SavedPlace, 'id' | 'lat' | 'lng' | 'google_place_id' | 'last_seen_at' | 'dismissed_at' | 'created_at' | 'updated_at'>
+type SavedPlaceInput = Omit<SavedPlace, 'id' | 'google_place_id' | 'last_seen_at' | 'dismissed_at' | 'created_at' | 'updated_at'>
 type SavedContactInput = Omit<SavedContact, 'id' | 'primary_place' | 'last_seen_at' | 'dismissed_at' | 'created_at' | 'updated_at'>
 
 // ── Category metadata ─────────────────────────────────────────────────────────
@@ -45,7 +46,7 @@ function categoryMeta(cat: SavedPlaceCategory) {
 // ── Place blank form ──────────────────────────────────────────────────────────
 
 function blankPlace(): Partial<SavedPlace> & { _aliasText: string } {
-  return { name: '', aliases: [], _aliasText: '', address: '', city: '', state: '', zip: '', phone: '', notes: '', category: 'other' }
+  return { name: '', aliases: [], _aliasText: '', address: '', city: '', state: '', zip: '', lat: null, lng: null, phone: '', notes: '', category: 'other' }
 }
 
 // ── Place form ────────────────────────────────────────────────────────────────
@@ -74,7 +75,20 @@ function PlaceForm({ initial, places, onSave, onCancel, onEditExisting, saving }
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const aliases = form._aliasText.split(',').map(s => s.trim()).filter(Boolean)
-    onSave({ name: form.name ?? '', aliases, address: form.address || null, city: form.city || null, state: form.state || null, zip: form.zip || null, phone: form.phone || null, notes: form.notes || null, category: form.category ?? 'other', confirmed: true, source: 'manual', occurrence_count: form.occurrence_count ?? 1 })
+    onSave({ name: form.name ?? '', aliases, address: form.address || null, city: form.city || null, state: form.state || null, zip: form.zip || null, lat: form.lat ?? null, lng: form.lng ?? null, phone: form.phone || null, notes: form.notes || null, category: form.category ?? 'other', confirmed: true, source: 'manual', occurrence_count: form.occurrence_count ?? 1 })
+  }
+
+  function applyGoogleAddress(result: { name: string; street: string | null; city: string | null; state: string | null; zip: string | null; lat: number | null; lng: number | null }) {
+    setForm(f => ({
+      ...f,
+      name: f.name?.trim() ? f.name : result.name,
+      address: result.street ?? f.address,
+      city: result.city ?? f.city,
+      state: result.state ?? f.state,
+      zip: result.zip ?? f.zip,
+      lat: result.lat,
+      lng: result.lng,
+    }))
   }
 
   return (
@@ -126,24 +140,31 @@ function PlaceForm({ initial, places, onSave, onCancel, onEditExisting, saving }
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="sm:col-span-2">
-          <label className="block text-caption font-semibold text-casa-muted mb-1">Street Address</label>
-          <input value={form.address ?? ''} onChange={e => set('address', e.target.value)} placeholder="123 Main St"
-            className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+          <label className="block text-caption font-semibold text-casa-muted mb-1">Street Address *</label>
+          <GoogleAddressSearchInput
+            required
+            value={form.address ?? ''}
+            ariaLabel="Street address"
+            placeholder="123 Main St"
+            onChange={value => set('address', value)}
+            onSelect={applyGoogleAddress}
+          />
+          <p className="mt-1 text-caption text-casa-muted">Start typing to search verified addresses, or type your own.</p>
         </div>
         <div>
-          <label className="block text-caption font-semibold text-casa-muted mb-1">City</label>
-          <input value={form.city ?? ''} onChange={e => set('city', e.target.value)} placeholder="West Palm Beach"
+          <label className="block text-caption font-semibold text-casa-muted mb-1">City *</label>
+          <input required value={form.city ?? ''} onChange={e => set('city', e.target.value)} placeholder="West Palm Beach"
             className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="block text-caption font-semibold text-casa-muted mb-1">State</label>
-            <input value={form.state ?? ''} onChange={e => set('state', e.target.value)} placeholder="FL" maxLength={2}
+            <label className="block text-caption font-semibold text-casa-muted mb-1">State *</label>
+            <input required value={form.state ?? ''} onChange={e => set('state', e.target.value)} placeholder="FL" maxLength={2}
               className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold uppercase" />
           </div>
           <div>
-            <label className="block text-caption font-semibold text-casa-muted mb-1">ZIP</label>
-            <input value={form.zip ?? ''} onChange={e => set('zip', e.target.value)} placeholder="33401"
+            <label className="block text-caption font-semibold text-casa-muted mb-1">ZIP *</label>
+            <input required value={form.zip ?? ''} onChange={e => set('zip', e.target.value)} placeholder="33401"
               className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
           </div>
         </div>
@@ -862,8 +883,27 @@ export default function SavedPlacesSettingsPage() {
   }, [qc])
 
   const confirmPlaceMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('saved_places').update({ confirmed: true }).eq('id', id)
+    mutationFn: async (place: SavedPlace) => {
+      let update: Partial<SavedPlace> = { confirmed: true }
+      const hasFullAddress = !!(place.address?.trim() && place.city?.trim() && place.state?.trim() && place.zip?.trim())
+      if (!hasFullAddress) {
+        // Derived candidates (e.g. from discover_directory_candidates()) can
+        // only carry a raw location string — Postgres can't call Google. Give
+        // every confirm action one chance to verify/split the address so a
+        // household member confirming a suggestion never locks in a blank
+        // city/state/zip when Google can resolve it.
+        const query = [place.name, place.address].filter(Boolean).join(', ')
+        if (query) {
+          const { data, error } = await supabase.functions.invoke('place-search', { body: { query } })
+          if (!error) {
+            const match = (data as { places?: Array<{ street?: string | null; city?: string | null; state?: string | null; zip?: string | null; lat?: number | null; lng?: number | null }> } | null)?.places?.[0]
+            if (match?.street && match.city && match.state && match.zip) {
+              update = { ...update, address: match.street, city: match.city, state: match.state, zip: match.zip, lat: match.lat ?? null, lng: match.lng ?? null }
+            }
+          }
+        }
+      }
+      const { error } = await supabase.from('saved_places').update(update).eq('id', place.id)
       if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['saved_places'] }),
@@ -1384,7 +1424,7 @@ export default function SavedPlacesSettingsPage() {
                           occurrenceCount={place.occurrence_count}
                           confirming={confirmPlaceMutation.isPending}
                           onReview={() => setPlaceMode({ type: 'edit', place })}
-                          onConfirm={() => confirmPlaceMutation.mutate(place.id)}
+                          onConfirm={() => confirmPlaceMutation.mutate(place)}
                           onDismiss={() => dismissPlaceMutation.mutate(place.id)}
                         />
                       ))}
