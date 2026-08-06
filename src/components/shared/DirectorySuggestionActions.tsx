@@ -6,9 +6,10 @@
  * see needs-you-phase2-actions-TMP.html Option A).
  *
  * Unified action placement: the parent card owns the top-right expand toggle
- * (MoreHorizontal, same icon/spot prep items and conflicts use). This component
- * is only the expanded panel content — it's mounted by the parent once the
- * shared reveal state is open for this item, so it always fetches immediately.
+ * (ChevronDown, same icon/spot prep items and conflicts use). The parent now
+ * keeps this component permanently mounted (so the panel can CSS-transition
+ * open/closed instead of popping in/out) — `enabled` gates the actual Supabase
+ * fetch so collapsed cards never query, matching the prior lazy-fetch behavior.
  */
 import { Check, X } from 'lucide-react'
 import {
@@ -18,8 +19,8 @@ import {
 } from '../../hooks/useDirectorySuggestions'
 import { Button } from '../ui'
 
-export default function DirectorySuggestionActions() {
-  const { data: entries = [], isLoading } = useDirectorySuggestionEntries(true)
+export default function DirectorySuggestionActions({ enabled = true }: { enabled?: boolean }) {
+  const { data: entries = [], isLoading } = useDirectorySuggestionEntries(enabled)
   const confirmEntry = useConfirmDirectorySuggestionEntry()
   const dismissEntry = useDismissDirectorySuggestionEntry()
 

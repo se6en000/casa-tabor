@@ -5,13 +5,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { addDays, differenceInDays, format, parseISO, startOfWeek } from 'date-fns'
 import { Link, useNavigate } from 'react-router-dom'
-import { AlertTriangle, Check, ChevronRight, MoreHorizontal, Sparkles, ThumbsDown, UserPlus } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ChevronRight, ShieldCheck, Sparkles, ThumbsDown, UserPlus } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { sourceBadge } from '../../utils/prepSourceBadge'
+import { needsYouAccent } from '../../utils/needsYouAccent'
 import { isReadOnlyNeedsYouItem, mergeNeedsYouItems } from '../../utils/needsYouFeed'
 import { shouldSuppressPriorityChipIcon } from '../../utils/conflictResolution'
 import ConflictNeedsYouActions from '../shared/ConflictNeedsYouActions'
 import DirectorySuggestionActions from '../shared/DirectorySuggestionActions'
+import ExpandPanel from '../shared/ExpandPanel'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useWeekEventIndex } from '../../hooks/useCalendarEvents'
@@ -73,20 +75,6 @@ interface ActivityHealth {
 function daysUntil(eventDate: string | null): number {
   if (!eventDate) return 99
   return differenceInDays(parseISO(eventDate), new Date())
-}
-
-function urgencyLabel(days: number) {
-  if (days <= 0) return { section: 'TODAY', badge: 'today', tone: 'danger' as const }
-  if (days === 1) return { section: 'SOON', badge: 'tomorrow', tone: 'warning' as const }
-  if (days <= 4) return { section: 'SOON', badge: `in ${days}d`, tone: 'warning' as const }
-  return { section: 'LATER', badge: `in ${days}d`, tone: 'success' as const }
-}
-
-/** Maps an urgency tone to its background-color utility class for the avatar corner badge / plain leading dot. */
-function urgencyDotClass(tone: 'danger' | 'warning' | 'success'): string {
-  if (tone === 'danger') return 'bg-casa-error'
-  if (tone === 'warning') return 'bg-casa-warning'
-  return 'bg-casa-success'
 }
 
 function urgencyRank(days: number): number {
@@ -417,13 +405,6 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
               See all
             </Link>
           </div>
-          {prepItems.some(item => item.priority >= 2) && (
-            <p className="text-caption text-casa-muted mt-2 inline-flex items-center gap-1">
-              <AlertTriangle size={12} strokeWidth={2.3} className="text-casa-error" aria-hidden="true" />Critical ·{' '}
-              <AlertTriangle size={12} strokeWidth={2.3} className="text-casa-warning" aria-hidden="true" />Important
-            </p>
-          )}
-
           {gmailActivity?.gmailHealth && gmailActivity.gmailHealth.status !== 'healthy' && gmailActivity.gmailHealth.status !== 'off' && (
             <Link
               to="/settings/google"
@@ -450,48 +431,42 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
               )}
               <div className="space-y-2">
                 {visiblePrepItems.slice(0, NEEDS_YOU_HOME_RAIL_LIMIT).map(item => {
-                  const urgency = urgencyLabel(daysUntil(item.event_date))
                   const source = sourceBadge(item)
+                  const accent = needsYouAccent(item)
                   const isDownvoting = downvotingItemId === item.id
                   const priority = priorityVisual(item.priority)
                   const isRevealed = revealedItemId === item.id
                   const assignee = item.assigned_to ? familyMembers.find(m => m.id === item.assigned_to) ?? null : null
-                  const urgencyDot = urgencyDotClass(urgency.tone)
                   const readOnly = isReadOnlyNeedsYouItem(item)
 
                   return (
                     <div key={item.id} className="rounded-card border border-casa-border bg-casa-bg px-3 py-2.5">
                       <div className="flex items-start gap-2.5">
+                        {/* Left icon slot: coarse 3-icon accent (conflict / prep / directory)
+                            instead of the assignee avatar — assignment is shown inline in the
+                            meta row below via PrepAssignPicker, so this slot stays a stable,
+                            glanceable category cue regardless of who's assigned. */}
                         {readOnly ? (
-                          <span className="shrink-0 mt-0.5 flex size-7 items-center justify-center">
-                            <span className={cn('size-2.5 rounded-full', urgencyDot)} />
+                          <span className={cn('shrink-0 flex size-8 items-center justify-center rounded-full', accent.bgClass, accent.textClass)}>
+                            <accent.icon size={16} strokeWidth={2.2} aria-hidden="true" />
                           </span>
                         ) : (
                           <Button
                             type="button"
                             variant="ghost"
                             onClick={() => onSelectPrepItem?.(item)}
-                            className="shrink-0 mt-0.5 h-auto min-h-0 rounded-full p-0 hover:bg-transparent"
+                            className="shrink-0 h-auto min-h-0 rounded-full p-0 hover:bg-transparent"
                             aria-label={assignee ? `Open details, assigned to ${assignee.name}` : 'Open details, unassigned'}
                           >
-                            {assignee ? (
-                              <PersonAvatarStack
-                                people={[{ id: assignee.id, name: assignee.name, color: assignee.color_hex }]}
-                                size="sm"
-                                max={1}
-                                badgeClassName={urgencyDot}
-                              />
-                            ) : (
-                              <span className="flex size-7 items-center justify-center">
-                                <span className={cn('size-2.5 rounded-full', urgencyDot)} />
-                              </span>
-                            )}
+                            <span className={cn('flex size-8 items-center justify-center rounded-full', accent.bgClass, accent.textClass)}>
+                              <accent.icon size={16} strokeWidth={2.2} aria-hidden="true" />
+                            </span>
                           </Button>
                         )}
 
                         <div className="min-w-0 flex-1">
                           {readOnly ? (
-                            <p className="!text-body-sm leading-snug text-casa-text line-clamp-3">
+                            <p className="!text-body-sm leading-snug text-casa-text line-clamp-2">
                               {item.description}
                             </p>
                           ) : (
@@ -503,7 +478,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                               className="h-auto min-h-0 p-0 text-left hover:bg-transparent"
                               contentClassName="w-full justify-start"
                             >
-                              <p className="!text-body-sm leading-snug text-casa-text line-clamp-3">
+                              <p className="!text-body-sm leading-snug text-casa-text line-clamp-2">
                                 {item.description}
                               </p>
                             </Button>
@@ -544,18 +519,21 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
 
                         {/* Unified header icon cluster: a primary "resolve" icon (when this
                             item has one) plus a single expand/collapse toggle shared by every
-                            card type. The toggle's target content differs (prep's Snooze/
-                            Not-relevant row vs. the conflict Keep-picker vs. the directory
-                            suggestion list) but always renders in the same spot below. */}
+                            card type. ShieldCheck (conflict) is deliberately distinct from the
+                            solid navy Check (prep "mark done") so it never reads as "fixed" —
+                            the conflicting events are still both on the calendar. Directory
+                            suggestions get no primary icon at all: there's no single
+                            meaningful "confirm all" action. */}
                         <div className="flex shrink-0 items-center gap-1.5">
                           {item.source_type === 'conflict' && item.source_ref && (
                             <IconButton
                               onClick={() => resolveConflict(item.source_ref!, 'acknowledged_no_change')}
-                              variant="strong"
+                              variant="secondary"
                               size="sm"
-                              icon={<Check size={16} strokeWidth={2.5} />}
+                              icon={<ShieldCheck size={16} strokeWidth={2.3} />}
                               aria-label="Resolved, no schedule change"
                               title="Resolved, no schedule change"
+                              className="border-casa-warning/45 text-casa-warning hover:bg-casa-warning/10"
                             />
                           )}
                           {!readOnly && (
@@ -572,7 +550,12 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                             onClick={() => setRevealedItemId(isRevealed ? null : item.id)}
                             variant="secondary"
                             size="sm"
-                            icon={<MoreHorizontal size={16} />}
+                            icon={
+                              <ChevronDown
+                                size={16}
+                                className={cn('transition-transform duration-200 ease-out', isRevealed && 'rotate-180')}
+                              />
+                            }
                             aria-label={
                               isRevealed
                                 ? 'Hide more actions'
@@ -587,34 +570,41 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                         </div>
                       </div>
 
-                      {isRevealed && item.source_type === 'conflict' && (() => {
-                        const conflict = conflicts.find((c) => c.id === item.source_ref)
-                        return conflict ? <ConflictNeedsYouActions conflict={conflict} /> : null
-                      })()}
+                      {/* Expand/collapse panel: shared ExpandPanel keeps content mounted so the
+                          CSS grid-rows transition can animate open/closed instead of popping
+                          content in/out instantly. */}
+                      <ExpandPanel isOpen={isRevealed}>
+                        {item.source_type === 'conflict' && (() => {
+                          const conflict = conflicts.find((c) => c.id === item.source_ref)
+                          return conflict ? <ConflictNeedsYouActions conflict={conflict} /> : null
+                        })()}
 
-                      {isRevealed && item.source_type === 'directory_suggestion' && <DirectorySuggestionActions />}
+                        {item.source_type === 'directory_suggestion' && (
+                          <DirectorySuggestionActions enabled={isRevealed} />
+                        )}
 
-                      {!readOnly && isRevealed && item.source_type !== 'conflict' && item.source_type !== 'directory_suggestion' && (
-                        <div className="flex items-center gap-2 pt-2.5 pl-[2.375rem]">
-                          <Button
-                            onClick={() => { snoozePrepItem(item.id); setRevealedItemId(null) }}
-                            variant="secondary"
-                            size="sm"
-                            title="Snooze until tomorrow"
-                          >
-                            Snooze
-                          </Button>
-                          <IconButton
-                            onClick={() => handleDownvote(item)}
-                            variant="danger"
-                            size="sm"
-                            disabled={isDownvoting}
-                            icon={<ThumbsDown size={15} strokeWidth={2.1} />}
-                            aria-label="Mark suggestion not relevant"
-                            title="Not relevant"
-                          />
-                        </div>
-                      )}
+                        {!readOnly && item.source_type !== 'conflict' && item.source_type !== 'directory_suggestion' && (
+                          <div className="flex items-center gap-2 pt-2.5 pl-[2.375rem]">
+                            <Button
+                              onClick={() => { snoozePrepItem(item.id); setRevealedItemId(null) }}
+                              variant="secondary"
+                              size="sm"
+                              title="Snooze until tomorrow"
+                            >
+                              Snooze
+                            </Button>
+                            <IconButton
+                              onClick={() => handleDownvote(item)}
+                              variant="danger"
+                              size="sm"
+                              disabled={isDownvoting}
+                              icon={<ThumbsDown size={15} strokeWidth={2.1} />}
+                              aria-label="Mark suggestion not relevant"
+                              title="Not relevant"
+                            />
+                          </div>
+                        )}
+                      </ExpandPanel>
                     </div>
                   )
                 })}

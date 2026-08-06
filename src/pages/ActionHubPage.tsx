@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
-import { ClipboardList, Bell, ChevronLeft, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle, ExternalLink } from 'lucide-react'
+import { ClipboardList, Bell, ChevronDown, ChevronLeft, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle, ExternalLink, ShieldCheck } from 'lucide-react'
 import { sourceBadge } from '../utils/prepSourceBadge'
+import { needsYouAccent } from '../utils/needsYouAccent'
 import { isReadOnlyNeedsYouItem, mergeNeedsYouItems } from '../utils/needsYouFeed'
 import { shouldSuppressPriorityChipIcon } from '../utils/conflictResolution'
 import ConflictNeedsYouActions from '../components/shared/ConflictNeedsYouActions'
 import DirectorySuggestionActions from '../components/shared/DirectorySuggestionActions'
+import ExpandPanel from '../components/shared/ExpandPanel'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../utils/cn'
 import { buildAiDraftPrompt } from '../utils/eventTime'
@@ -26,7 +28,7 @@ import PrepItemDetailPanel from '../components/home/PrepItemDetailPanel'
 import PrepItemAssigneeChip from '../components/shared/PrepItemAssigneeChip'
 import { useLiveClock } from '../hooks/useLiveClock'
 import ConflictAlertsSection from '../components/shared/ConflictAlertsSection'
-import { Button, Chip } from '../components/ui'
+import { Button, Chip, IconButton } from '../components/ui'
 
 function dueBadge(item: PrepItem, now: Date): { label: string; tone: string } | null {
   if (!item.due_by) return null
@@ -225,11 +227,6 @@ export default function ActionHubPage() {
               {typeFilter === 'all' && sourceFilter === 'all' ? prepItems.length : `${filteredPrepItems.length}/${prepItems.length}`}
             </span>
           </div>
-          <p className="text-caption text-casa-muted mb-3 -mt-1.5">
-            Priority: <span className="inline-block w-2 h-2 rounded-full bg-casa-error align-middle mr-1" />Critical ·{' '}
-            <span className="inline-block w-2 h-2 rounded-full bg-casa-warning align-middle mr-1 ml-1" />Important ·{' '}
-            <span className="inline-block w-2 h-2 rounded-full bg-casa-border align-middle mr-1 ml-1" />Standard
-          </p>
           <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter by type">
             {PREP_FILTERS.map((f) => {
               const count = f.key === 'all' ? prepItems.length : prepItems.filter(f.match).length
@@ -285,12 +282,14 @@ export default function ActionHubPage() {
             {filteredPrepItems.map((item) => {
               const src = sourceBadge(item)
               const SourceIcon = src.icon
+              const accent = needsYouAccent(item)
               const category = getPrepCategoryConfig(item)
               const CategoryIcon = category.icon
               const busy = actingId === item.id
               const due = dueBadge(item, now)
               const priority = priorityVisual(item.priority)
               const readOnly = isReadOnlyNeedsYouItem(item)
+              const isRevealed = revealedItemId === item.id
               return (
                 <div
                   key={item.id}
@@ -299,41 +298,51 @@ export default function ActionHubPage() {
                     busy && 'opacity-60',
                   )}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    {readOnly ? (
-                      <p className="min-w-0 flex-1 text-body-sm font-semibold text-casa-text leading-snug line-clamp-2">{item.description}</p>
-                    ) : (
-                      <Button variant="ghost" className="min-w-0 flex-1 h-auto min-h-0 p-0 text-left hover:bg-transparent" contentClassName="w-full justify-start" onClick={() => setSelected(item)}>
-                        <p className="text-body-sm font-semibold text-casa-text leading-snug line-clamp-2">{item.description}</p>
-                      </Button>
-                    )}
-                    {due && (
-                      <span className={cn('text-body-sm font-semibold whitespace-nowrap shrink-0 mt-0.5', dueTextClass(due.tone))}>
-                        {due.label}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                    <span role="img" aria-label={src.label} title={src.label} className="inline-flex shrink-0 text-casa-navy">
-                      <SourceIcon size={14} strokeWidth={2.2} />
+                  <div className="flex items-start gap-2.5">
+                    {/* Left icon slot: same coarse 3-icon accent system as the Home rail
+                        (conflict / prep-action / directory), replacing the previous
+                        icon-less title-only row face. */}
+                    <span className={cn('shrink-0 mt-0.5 flex size-8 items-center justify-center rounded-full', accent.bgClass, accent.textClass)}>
+                      <accent.icon size={16} strokeWidth={2.2} aria-hidden="true" />
                     </span>
-                    {!readOnly && (
-                      <span role="img" aria-label={category.label} title={category.label} className="inline-flex shrink-0 text-casa-navy">
-                        <CategoryIcon size={14} strokeWidth={2.2} />
-                      </span>
-                    )}
-                    {priority.chip && !shouldSuppressPriorityChipIcon(item) && (
-                      <span
-                        role="img"
-                        aria-label={priority.chip.label}
-                        title={priority.chip.label}
-                        className={cn('inline-flex shrink-0', priority.chip.tone === 'danger' ? 'text-casa-error' : 'text-casa-warning')}
-                      >
-                        <AlertTriangle size={14} strokeWidth={2.2} />
-                      </span>
-                    )}
-                    {!readOnly && <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => setSelected(item)} />}
-                    <span className="text-body-sm text-casa-muted truncate">{item.event_title || 'Casa Tabor'}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        {readOnly ? (
+                          <p className="min-w-0 flex-1 text-body-sm font-semibold text-casa-text leading-snug line-clamp-2">{item.description}</p>
+                        ) : (
+                          <Button variant="ghost" className="min-w-0 flex-1 h-auto min-h-0 p-0 text-left hover:bg-transparent" contentClassName="w-full justify-start" onClick={() => setSelected(item)}>
+                            <p className="text-body-sm font-semibold text-casa-text leading-snug line-clamp-2">{item.description}</p>
+                          </Button>
+                        )}
+                        {due && (
+                          <span className={cn('text-body-sm font-semibold whitespace-nowrap shrink-0 mt-0.5', dueTextClass(due.tone))}>
+                            {due.label}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                        <span role="img" aria-label={src.label} title={src.label} className="inline-flex shrink-0 text-casa-navy">
+                          <SourceIcon size={14} strokeWidth={2.2} />
+                        </span>
+                        {!readOnly && (
+                          <span role="img" aria-label={category.label} title={category.label} className="inline-flex shrink-0 text-casa-navy">
+                            <CategoryIcon size={14} strokeWidth={2.2} />
+                          </span>
+                        )}
+                        {priority.chip && !shouldSuppressPriorityChipIcon(item) && (
+                          <span
+                            role="img"
+                            aria-label={priority.chip.label}
+                            title={priority.chip.label}
+                            className={cn('inline-flex shrink-0', priority.chip.tone === 'danger' ? 'text-casa-error' : 'text-casa-warning')}
+                          >
+                            <AlertTriangle size={14} strokeWidth={2.2} />
+                          </span>
+                        )}
+                        {!readOnly && <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => setSelected(item)} />}
+                        <span className="text-body-sm text-casa-muted truncate">{item.event_title || 'Casa Tabor'}</span>
+                      </div>
+                    </div>
                   </div>
                   {/* Conflicts/directory suggestions get their own action row here, using the
                       same primary-resolve + expand-toggle pattern as prep items — just with
@@ -365,39 +374,56 @@ export default function ActionHubPage() {
                   )}
 
                   {item.source_type === 'conflict' && item.source_ref && (() => {
-                    const isRevealed = revealedItemId === item.id
                     const conflictId = item.source_ref!
                     return (
                       <div className="mt-2.5 pt-2.5 border-t border-casa-border/70 flex items-center gap-1.5 flex-wrap">
-                        <Button variant="ghost" onClick={() => resolveConflict(conflictId, 'acknowledged_no_change')} className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition" title="Resolved, no schedule change">
-                          Resolved
+                        <Button
+                          variant="ghost"
+                          onClick={() => resolveConflict(conflictId, 'acknowledged_no_change')}
+                          className="h-9 px-3 rounded-[0.8rem] border border-casa-warning/45 bg-white text-casa-warning text-body-sm font-semibold hover:bg-casa-warning/10 transition-colors inline-flex items-center gap-1.5"
+                          title="Resolved, no schedule change"
+                        >
+                          <ShieldCheck size={14} strokeWidth={2.3} /> Resolved
                         </Button>
-                        <Button variant="ghost" onClick={() => setRevealedItemId(isRevealed ? null : item.id)} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors" title={isRevealed ? 'Hide' : 'View both events'}>
-                          {isRevealed ? 'Hide' : 'View both'}
-                        </Button>
+                        <IconButton
+                          onClick={() => setRevealedItemId(isRevealed ? null : item.id)}
+                          variant="secondary"
+                          size="sm"
+                          icon={<ChevronDown size={16} className={cn('transition-transform duration-200 ease-out', isRevealed && 'rotate-180')} />}
+                          aria-label={isRevealed ? 'Hide' : 'View both events'}
+                          title={isRevealed ? 'Hide' : 'View both events'}
+                        />
                       </div>
                     )
                   })()}
 
-                  {item.source_type === 'conflict' && revealedItemId === item.id && (() => {
-                    const conflict = conflicts.find((c) => c.id === item.source_ref)
-                    return conflict ? <ConflictNeedsYouActions conflict={conflict} /> : null
-                  })()}
+                  {item.source_type === 'conflict' && (
+                    <ExpandPanel isOpen={isRevealed}>
+                      {(() => {
+                        const conflict = conflicts.find((c) => c.id === item.source_ref)
+                        return conflict ? <ConflictNeedsYouActions conflict={conflict} /> : null
+                      })()}
+                    </ExpandPanel>
+                  )}
 
                   {item.source_type === 'directory_suggestion' && (
                     <div className="mt-2.5 pt-2.5 border-t border-casa-border/70 flex items-center gap-1.5 flex-wrap">
-                      <Button
-                        variant="ghost"
-                        onClick={() => setRevealedItemId(revealedItemId === item.id ? null : item.id)}
-                        className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors"
-                        title={revealedItemId === item.id ? 'Hide' : 'Review suggestions'}
-                      >
-                        {revealedItemId === item.id ? 'Hide' : 'Review'}
-                      </Button>
+                      <IconButton
+                        onClick={() => setRevealedItemId(isRevealed ? null : item.id)}
+                        variant="secondary"
+                        size="sm"
+                        icon={<ChevronDown size={16} className={cn('transition-transform duration-200 ease-out', isRevealed && 'rotate-180')} />}
+                        aria-label={isRevealed ? 'Hide' : 'Review suggestions'}
+                        title={isRevealed ? 'Hide' : 'Review suggestions'}
+                      />
                     </div>
                   )}
 
-                  {item.source_type === 'directory_suggestion' && revealedItemId === item.id && <DirectorySuggestionActions />}
+                  {item.source_type === 'directory_suggestion' && (
+                    <ExpandPanel isOpen={isRevealed}>
+                      <DirectorySuggestionActions enabled={isRevealed} />
+                    </ExpandPanel>
+                  )}
                 </div>
               )
             })}

@@ -7,16 +7,18 @@
  *
  * Unified action placement (matches the existing prep-item pattern instead of
  * introducing a third layout): the card header owns a top-right icon-button
- * cluster — [Resolved (Check, strong)] + [expand toggle (MoreHorizontal)] —
- * rendered by the parent card, not this component. This component is only the
- * *expanded* panel content, shown below the description when the parent's
- * shared reveal state is open for this item (same spot/toggle prep already
- * uses for its Snooze/Not-relevant row).
+ * cluster — [Resolved (ShieldCheck, amber-outlined)] + [expand toggle
+ * (ChevronDown, rotates open)] — rendered by the parent card, not this
+ * component. This component is only the *expanded* panel content, shown below
+ * the description when the parent's shared reveal state is open for this item
+ * (same spot/toggle prep already uses for its Snooze/Not-relevant row).
  *
  * Picking "Keep this one" resolves the conflict and opens the *other* event's
  * Event Details sheet so the user can reschedule/cancel it right there.
  * "Resolved" (the header's primary icon) acknowledges the conflict as-is — no
- * schedule change — and lives in the header, not here.
+ * schedule change — and lives in the header, not here. ShieldCheck (rather
+ * than the prep item's solid navy Check) is deliberate: it must never read as
+ * "done", since the conflicting events are still both on the calendar.
  */
 import { Calendar, Clock } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
