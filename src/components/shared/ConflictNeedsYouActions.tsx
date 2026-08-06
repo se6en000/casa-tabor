@@ -79,7 +79,7 @@ function EventChip({ title, startTime, onKeep }: { title: string; startTime: str
         type="button"
         variant="ghost"
         size="sm"
-        className="shrink-0 rounded-full border border-casa-gold/45 bg-casa-gold/15 !text-caption font-bold text-casa-navy hover:bg-casa-gold/25"
+        className="shrink-0 rounded-full border border-casa-navy bg-casa-surface !text-caption font-bold text-casa-navy hover:bg-casa-navy/5"
         onClick={onKeep}
       >
         Keep this one

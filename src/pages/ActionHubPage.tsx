@@ -4,6 +4,7 @@ import { format, formatDistanceToNow } from 'date-fns'
 import { ClipboardList, Bell, ChevronDown, ChevronLeft, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle, ExternalLink, ShieldCheck } from 'lucide-react'
 import { sourceBadge } from '../utils/prepSourceBadge'
 import { needsYouAccent } from '../utils/needsYouAccent'
+import { conflictMetaLine, directorySuggestionMetaLine } from '../utils/needsYouMeta'
 import { isReadOnlyNeedsYouItem, mergeNeedsYouItems } from '../utils/needsYouFeed'
 import { shouldSuppressPriorityChipIcon } from '../utils/conflictResolution'
 import ConflictNeedsYouActions from '../components/shared/ConflictNeedsYouActions'
@@ -290,6 +291,15 @@ export default function ActionHubPage() {
               const priority = priorityVisual(item.priority)
               const readOnly = isReadOnlyNeedsYouItem(item)
               const isRevealed = revealedItemId === item.id
+              const conflict = item.source_type === 'conflict' ? conflicts.find((c) => c.id === item.source_ref) : undefined
+              // Readable meta line (matches mockup) for conflict/directory cards; regular
+              // prep items keep their existing source+category icon row + event_title text.
+              const readOnlyMeta =
+                item.source_type === 'conflict'
+                  ? conflictMetaLine(conflict)
+                  : item.source_type === 'directory_suggestion'
+                    ? directorySuggestionMetaLine
+                    : null
               return (
                 <div
                   key={item.id}
@@ -321,9 +331,18 @@ export default function ActionHubPage() {
                         )}
                       </div>
                       <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                        <span role="img" aria-label={src.label} title={src.label} className="inline-flex shrink-0 text-casa-navy">
-                          <SourceIcon size={14} strokeWidth={2.2} />
-                        </span>
+                        {readOnlyMeta ? (
+                          <>
+                            <span role="img" aria-label={readOnlyMeta.label} title={readOnlyMeta.label} className="inline-flex shrink-0 text-casa-muted">
+                              <readOnlyMeta.icon size={13} strokeWidth={2.2} />
+                            </span>
+                            <span className="text-body-sm text-casa-muted truncate">{readOnlyMeta.text}</span>
+                          </>
+                        ) : (
+                          <span role="img" aria-label={src.label} title={src.label} className="inline-flex shrink-0 text-casa-navy">
+                            <SourceIcon size={14} strokeWidth={2.2} />
+                          </span>
+                        )}
                         {!readOnly && (
                           <span role="img" aria-label={category.label} title={category.label} className="inline-flex shrink-0 text-casa-navy">
                             <CategoryIcon size={14} strokeWidth={2.2} />
@@ -340,7 +359,7 @@ export default function ActionHubPage() {
                           </span>
                         )}
                         {!readOnly && <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => setSelected(item)} />}
-                        <span className="text-body-sm text-casa-muted truncate">{item.event_title || 'Casa Tabor'}</span>
+                        {!readOnlyMeta && <span className="text-body-sm text-casa-muted truncate">{item.event_title || 'Casa Tabor'}</span>}
                       </div>
                     </div>
                   </div>

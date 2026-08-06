@@ -40,9 +40,12 @@ test('sourceBadge labels merged directory suggestion items as Directory suggesti
   assert.equal(sourceBadge({ source_type: 'directory_suggestion' }).label, 'Directory suggestion')
 })
 
-test('HomeRightPanel imports the shared sourceBadge instead of defining its own copy', () => {
-  assert.match(homeRightPanel, /import \{ sourceBadge \} from '..\/..\/utils\/prepSourceBadge'/)
+test('HomeRightPanel does not define its own copy of sourceBadge', () => {
+  // HomeRightPanel consumes sourceBadge indirectly via needsYouMeta.ts's prepMetaLine()
+  // (single readable meta line: due date / "via {source}" / conflict time range /
+  // directory copy) rather than importing sourceBadge directly for a bare icon badge.
   assert.doesNotMatch(homeRightPanel, /^function sourceBadge\(/m)
+  assert.match(homeRightPanel, /from '..\/..\/utils\/needsYouMeta'/)
 })
 
 test('ActionHubPage imports the shared sourceBadge instead of defining its own copy', () => {

@@ -7,8 +7,8 @@ import { addDays, differenceInDays, format, parseISO, startOfWeek } from 'date-f
 import { Link, useNavigate } from 'react-router-dom'
 import { AlertTriangle, Check, ChevronDown, ChevronRight, ShieldCheck, Sparkles, ThumbsDown, UserPlus } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { sourceBadge } from '../../utils/prepSourceBadge'
 import { needsYouAccent } from '../../utils/needsYouAccent'
+import { conflictMetaLine, directorySuggestionMetaLine, prepMetaLine } from '../../utils/needsYouMeta'
 import { isReadOnlyNeedsYouItem, mergeNeedsYouItems } from '../../utils/needsYouFeed'
 import { shouldSuppressPriorityChipIcon } from '../../utils/conflictResolution'
 import ConflictNeedsYouActions from '../shared/ConflictNeedsYouActions'
@@ -431,13 +431,22 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
               )}
               <div className="space-y-2">
                 {visiblePrepItems.slice(0, NEEDS_YOU_HOME_RAIL_LIMIT).map(item => {
-                  const source = sourceBadge(item)
                   const accent = needsYouAccent(item)
                   const isDownvoting = downvotingItemId === item.id
                   const priority = priorityVisual(item.priority)
                   const isRevealed = revealedItemId === item.id
                   const assignee = item.assigned_to ? familyMembers.find(m => m.id === item.assigned_to) ?? null : null
                   const readOnly = isReadOnlyNeedsYouItem(item)
+                  const conflict = item.source_type === 'conflict' ? conflicts.find((c) => c.id === item.source_ref) : undefined
+                  // Readable meta line (due date / "via {source}" / conflict time range /
+                  // directory auto-detected copy) — matches the approved mockup, which
+                  // shows text on every card instead of an icon-only source badge.
+                  const meta =
+                    item.source_type === 'conflict'
+                      ? conflictMetaLine(conflict)
+                      : item.source_type === 'directory_suggestion'
+                        ? directorySuggestionMetaLine
+                        : prepMetaLine(item, assignee?.name)
 
                   return (
                     <div key={item.id} className="rounded-card border border-casa-border bg-casa-bg px-3 py-2.5">
@@ -483,15 +492,16 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                               </p>
                             </Button>
                           )}
-                          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                          <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
                             <span
                               role="img"
-                              aria-label={source.label}
-                              title={source.label}
-                              className="inline-flex shrink-0 text-casa-navy"
+                              aria-label={meta.label}
+                              title={meta.label}
+                              className="inline-flex shrink-0 text-casa-muted"
                             >
-                              <source.icon size={14} strokeWidth={2.2} />
+                              <meta.icon size={13} strokeWidth={2.2} />
                             </span>
+                            <span className="text-body-sm text-casa-muted">{meta.text}</span>
                             {priority.chip && !shouldSuppressPriorityChipIcon(item) && (
                               <span
                                 role="img"
@@ -593,15 +603,17 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                             >
                               Snooze
                             </Button>
-                            <IconButton
+                            <Button
                               onClick={() => handleDownvote(item)}
-                              variant="danger"
+                              variant="secondary"
                               size="sm"
                               disabled={isDownvoting}
-                              icon={<ThumbsDown size={15} strokeWidth={2.1} />}
-                              aria-label="Mark suggestion not relevant"
+                              leadingIcon={<ThumbsDown size={13} strokeWidth={2.1} />}
+                              className="border-transparent bg-casa-error/10 text-casa-error hover:bg-casa-error/15"
                               title="Not relevant"
-                            />
+                            >
+                              Not relevant
+                            </Button>
                           </div>
                         )}
                       </ExpandPanel>
