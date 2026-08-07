@@ -18,7 +18,7 @@ import type { FamilyMember } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
 import MarkdownContent from '../shared/MarkdownContent'
 import { Button, Card, Chip, Heading, LiveTranscript, Text } from '../ui'
-import { formatTextForMarkdown } from '../../lib/assistantMarkdown.mjs'
+import { formatTextForMarkdown, stripEvidenceCitationMarkers } from '../../lib/assistantMarkdown.mjs'
 import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId } from '../../lib/assistantTelemetry'
 import { classifyPendingConfirmation } from '../../lib/assistantConfirmation.mjs'
 import { conversationStateAfterCalendarAction } from '../../lib/assistantConversationState.mjs'
@@ -1380,7 +1380,11 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
     ? msg.conversationState.activeEventId
     : ta?.resultEventId
   const assistantContent = !isUser && !ta
-    ? formatTextForMarkdown(linkAssistantEventMentions(msg.content, events, { preferredEventId }))
+    ? formatTextForMarkdown(linkAssistantEventMentions(
+        stripEvidenceCitationMarkers(msg.content),
+        events,
+        { preferredEventId },
+      ))
     : null
   const isDestructiveAction =
     ta?.tool === 'delete_event' ||

@@ -1,6 +1,15 @@
 const BLOCK_MARKDOWN_LINE = /^\s{0,3}(?:#{1,6}\s|[-*+]\s|\d+\.\s|>\s|```|\|.+\|)/m
 const AGENDA_LINE = /^(?:all day|\d{1,2}:\d{2}\s+[ap]m)\s+—\s+/i
 const LONG_PROSE_LENGTH = 260
+const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+const EVIDENCE_CITATION_PATTERN = new RegExp(
+  `\\s*\\[(?:evidence_id:)?${UUID_PATTERN}:${UUID_PATTERN}\\]`,
+  'gi',
+)
+
+export function stripEvidenceCitationMarkers(input) {
+  return String(input ?? '').replace(EVIDENCE_CITATION_PATTERN, '')
+}
 
 function formatProseBlock(block) {
   if (BLOCK_MARKDOWN_LINE.test(block)) return block
