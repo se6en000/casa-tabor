@@ -1326,7 +1326,6 @@ function StandardPanelBody({
   const showTransportationSection = hasDestination || Boolean(transportationPlan)
   const showLocation = hasDestination || mode === 'hosted'
   const showSuggestedTravel = planKind === 'travel' && !transportationPlan
-  const hasChecklist = event.checklist?.length > 0
   const activeFields = getFieldsForCategory(enr?.category)
   const shows = (field: string) => activeFields.includes(field as ReturnType<typeof getFieldsForCategory>[number])
   const hasText = (value: unknown) => {
@@ -1512,14 +1511,12 @@ function StandardPanelBody({
       )}
 
       {/* ── Bring / Pack ── */}
-      {hasChecklist && (
-        <section>
-          <SectionLabel>{mode === 'trip' ? 'Pack' : 'Bring'}</SectionLabel>
-          <Card tone="surface" padding="sm">
-            <ChecklistEditor items={event.checklist} eventId={event.id} />
-          </Card>
-        </section>
-      )}
+      <section>
+        <SectionLabel>{mode === 'trip' ? 'Pack' : 'Bring'}</SectionLabel>
+        <Card tone="surface" padding="sm">
+          <ChecklistEditor items={event.checklist} eventId={event.id} editable />
+        </Card>
+      </section>
 
       {showMeanwhile && (
         <section>
