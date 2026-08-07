@@ -182,6 +182,7 @@ async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDet
     .gt('end_time', start.toISOString())
     .is('deleted_at', null)
     .neq('status', 'cancelled')
+    .neq('record_kind', 'series_template')
     .order('start_time')
 
   if (error) throw error
@@ -327,6 +328,7 @@ export function useWeekEventIndex(selectedDate: Date) {
         .gt('end_time', weekStart.toISOString())
         .is('deleted_at', null)
         .neq('status', 'cancelled')
+        .neq('record_kind', 'series_template')
         .order('start_time')
 
       if (error) throw error

@@ -1165,6 +1165,16 @@ function EventEditSheetContent({
   const requestDelete = useCallback(() => {
     setDeleteError(null)
     setDeleteBlocked(false)
+    if (event.record_kind === 'series_template') {
+      // Defensive shield: template rows are the internal pattern-source record for a
+      // recurring series (event_series.template_event_id references them with ON DELETE
+      // RESTRICT) and should never be independently deletable. Calendar queries exclude
+      // them, but guard here too in case a stale card/cache still points at one.
+      setDeleteError('This is the recurring pattern for this series, not a single event. Edit or delete the series from one of its dated occurrences instead.')
+      setDeleteBlocked(true)
+      setShowDeleteConfirm(true)
+      return
+    }
     if (isCanonicalOccurrence && recurringEditorEnabled) {
       if (!recurringDeleteEnabled) {
         setDeleteError('Recurring event deletion is not enabled for this series yet.')
@@ -1182,7 +1192,7 @@ function EventEditSheetContent({
       return
     }
     setShowDeleteConfirm(true)
-  }, [isCanonicalOccurrence, recurringDeleteEnabled, recurringEditorEnabled, saveError])
+  }, [event.record_kind, isCanonicalOccurrence, recurringDeleteEnabled, recurringEditorEnabled, saveError])
 
   useEffect(() => {
     if (!open || !initialDelete || initialDeleteOpenedRef.current) return
