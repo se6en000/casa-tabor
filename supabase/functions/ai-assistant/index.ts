@@ -101,6 +101,11 @@ import {
   resolveBugReportRequest,
 } from '../_shared/assistant-memory-insights.mjs'
 import {
+  formatEmailKnowledgeRead,
+  isEmailKnowledgeReadRequest,
+  relevantEmailKnowledgeClaims,
+} from '../_shared/assistant-email-knowledge-read.mjs'
+import {
   explicitReminderCreateRequestForMessages,
   explicitReminderSubject,
   explicitReminderSearchForMessages,
@@ -862,6 +867,7 @@ Deno.serve(async (req) => {
   const allEvents = eventsResult.data
   const needsEmailKnowledgeContext = /\b(?:school|class|teacher|forms?|paperwork|payment|fee|bill|delivery|package|order|insurance|utility|appointment|doctor|dentist|therapy|therapist|medical|medicine|transport|bus|pickup|drop[\s-]?off|athletic|sports?|practice|game|coordination|coordinate|heads?\s*up|remind(?:er)?)\b/i
     .test(latestUserText ?? '')
+  const emailKnowledgeReadRequest = isEmailKnowledgeReadRequest(latestUserText)
   const { data: emailKnowledgeClaims, error: emailKnowledgeError } = needsEmailKnowledgeContext
     ? await sb
       .from('family_knowledge_claims')
@@ -871,7 +877,7 @@ Deno.serve(async (req) => {
       .or(`expires_at.is.null,expires_at.gte.${now.toISOString()}`)
       .order('requiredness', { ascending: false })
       .order('expires_at', { ascending: true, nullsFirst: false })
-      .limit(6)
+      .limit(50)
     : { data: [], error: null }
   if (emailKnowledgeError) {
     return {
@@ -902,7 +908,8 @@ Deno.serve(async (req) => {
   const confirmedContactPlaceRelationships = (confirmedContactPlaceRelationshipsResult as { data: unknown }).data
   const suggestedPlaces = suggestedPlacesResult.data ?? []
   const suggestedContacts = suggestedContactsResult.data ?? []
-  const emailKnowledgeText = (emailKnowledgeClaims ?? []).map((claim: {
+  const relevantEmailKnowledge = relevantEmailKnowledgeClaims(emailKnowledgeClaims ?? [], latestUserText).slice(0, 6)
+  const emailKnowledgeText = relevantEmailKnowledge.map((claim: {
     title: string
     summary: string | null
     requiredness: 'required' | 'optional' | 'fyi'
@@ -939,6 +946,25 @@ Deno.serve(async (req) => {
     output_tokens: 0,
     thought_tokens: 0,
     total_tokens: 0,
+  }
+  if (emailKnowledgeReadRequest) {
+    return {
+      status: 200,
+      payload: {
+        type: 'text',
+        text: formatEmailKnowledgeRead(relevantEmailKnowledge),
+        correlation_id: cid,
+        authoritative_provenance: {
+          source: 'family_knowledge_claims',
+          count: relevantEmailKnowledge.length,
+        },
+        telemetry: {
+          ...llmTelemetry,
+          request_total_ms: Date.now() - requestStartMs,
+          context_load_ms: contextLoadMs,
+        },
+      },
+    }
   }
   const providerRoleWordPattern =
     /\b(doctors?|dentists?|orthodontists?|dermatologists?|therapists?|coach(?:es)?|providers?|counselors?|tutors?|vets?|veterinarians?)\b/i
