@@ -507,7 +507,7 @@ test('Home and its right rail use shared touch-first design contracts', () => {
     assert.match(rightRail, new RegExp(`<${component}`))
   }
   assert.match(home, /aria-label="Previous event"/)
-  assert.match(home, /aria-label="Snooze reminder one hour"/)
+  assert.match(home, /aria-label="Snooze reminder"/)
   assert.match(home, /<IconButton[\s\S]*aria-label=\{`Go to event \$\{i \+ 1\} of \$\{slides\.length\}`\}[\s\S]*className="rounded-full"/)
   assert.match(rightRail, /min-h-control rounded-button/)
   assert.match(leftRail, /collapsed \? 'w-20' : 'basis-1\/5'/)

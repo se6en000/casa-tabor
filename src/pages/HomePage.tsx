@@ -35,6 +35,8 @@ import { formatDurationLabel, pickActiveHeroEvent, resolveRestingIndex } from '.
 import { cleanEventTitle, isBirthdayEvent } from '../utils/eventTitle'
 import { buttonClassName } from '../design-system/variants.mjs'
 import { Button, CalendarPill, Card, Chip, EmptyState, Heading, IconButton, PersonAvatarStack, PrimaryRail, Sheet, Text } from '../components/ui'
+import SnoozeMenu from '../components/shared/SnoozeMenu'
+import type { SnoozeDuration } from '../utils/snoozeDuration'
 
 const SHARED_GOLD = 'var(--color-casa-gold)'
 
@@ -287,7 +289,7 @@ export default function HomePage() {
   const qc = useQueryClient()
   const {
     completeReminder,
-    snoozeReminderOneHour,
+    snoozeReminderByDuration,
     moveReminderToNeedsYou,
     queueMissedReminders,
   } = useReminderNeedsYouActions()
@@ -498,9 +500,9 @@ export default function HomePage() {
                   household={family ?? []}
                   onClick={() => setSelectedEventId(ev.id)}
                   onComplete={completeReminder}
-                  onSnooze={(event) => {
-                    void snoozeReminderOneHour(event).catch((error) => {
-                      console.error('HomePage: failed to snooze reminder by 1 hour', error)
+                  onSnooze={(event, duration) => {
+                    void snoozeReminderByDuration(event, duration).catch((error) => {
+                      console.error('HomePage: failed to snooze reminder', error)
                     })
                   }}
                   onSendToNeedsYou={(event) => {
@@ -540,9 +542,9 @@ export default function HomePage() {
                     household={family ?? []}
                     onClick={() => setSelectedEventId(ev.id)}
                     onComplete={completeReminder}
-                    onSnooze={(event) => {
-                      void snoozeReminderOneHour(event).catch((error) => {
-                        console.error('HomePage: failed to snooze reminder by 1 hour', error)
+                    onSnooze={(event, duration) => {
+                      void snoozeReminderByDuration(event, duration).catch((error) => {
+                        console.error('HomePage: failed to snooze reminder', error)
                       })
                     }}
                     onSendToNeedsYou={(event) => {
@@ -1162,7 +1164,7 @@ function TimelineRow({
   household: FamilyMember[]
   onClick: () => void
   onComplete?: (id: string) => void
-  onSnooze?: (event: EventWithDetails) => void | Promise<void>
+  onSnooze?: (event: EventWithDetails, duration: SnoozeDuration) => void | Promise<void>
   onSendToNeedsYou?: (event: EventWithDetails) => void | Promise<void>
 }) {
   const start = getEventStartDate(event)
@@ -1216,12 +1218,11 @@ function TimelineRow({
       await new Promise(r => setTimeout(r, 320))
       onComplete(event.id)
     }
-    async function handleSnooze(e: React.MouseEvent) {
-      e.stopPropagation()
+    async function handleSnooze(duration: SnoozeDuration) {
       if (checking || snoozing || movingToNeedsYou || !onSnooze) return
       setSnoozing(true)
       try {
-        await onSnooze(event)
+        await onSnooze(event, duration)
       } finally {
         setSnoozing(false)
       }
@@ -1257,14 +1258,19 @@ function TimelineRow({
               aria-label="Mark reminder done"
               title="Mark done"
             />
-            <IconButton
-              onClick={handleSnooze}
-              disabled={checking || snoozing || movingToNeedsYou || !onSnooze}
-              variant="secondary"
-              size="sm"
-              icon={<SnoozeOneHourIcon className={cn('size-4', snoozing && 'animate-pulse')} />}
-              aria-label="Snooze reminder one hour"
-              title="Snooze 1 hour"
+            <SnoozeMenu
+              onSnooze={(duration) => { void handleSnooze(duration) }}
+              renderTrigger={({ onClick }) => (
+                <IconButton
+                  onClick={onClick}
+                  disabled={checking || snoozing || movingToNeedsYou || !onSnooze}
+                  variant="secondary"
+                  size="sm"
+                  icon={<SnoozeOneHourIcon className={cn('size-4', snoozing && 'animate-pulse')} />}
+                  aria-label="Snooze reminder"
+                  title="Snooze"
+                />
+              )}
             />
             <IconButton
               onClick={handleMoveToNeedsYou}

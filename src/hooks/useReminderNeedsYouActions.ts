@@ -2,9 +2,11 @@ import { useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { EventWithDetails } from './useCalendarEvents'
-import { getEventEndDate, getEventStartDate } from '../utils/eventTime'
+import { getEventStartDate } from '../utils/eventTime'
 import { cleanEventTitle } from '../utils/eventTitle'
 import { buildReminderPrepDescription } from '../utils/reminderLateness'
+import { computeReminderSnoozeWindow } from '../utils/reminderSnooze'
+import type { SnoozeDuration } from '../utils/snoozeDuration'
 
 const ONE_HOUR_MS = 60 * 60 * 1000
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
@@ -68,18 +70,14 @@ export function useReminderNeedsYouActions() {
     if (insertError) throw insertError
   }, [])
 
-  const snoozeReminderOneHour = useCallback(async (event: EventWithDetails) => {
-    const start = getEventStartDate(event)
-    const end = getEventEndDate(event)
-    const durationMs = Math.max(5 * 60 * 1000, end.getTime() - start.getTime())
-    const snoozedStartMs = Math.max(Date.now(), start.getTime()) + ONE_HOUR_MS
-    const snoozedEndMs = snoozedStartMs + durationMs
+  const snoozeReminderByDuration = useCallback(async (event: EventWithDetails, duration: SnoozeDuration = '1h') => {
+    const window = computeReminderSnoozeWindow(event.start_time, event.end_time, duration, new Date())
 
     const { error } = await supabase
       .from('events')
       .update({
-        start_time: new Date(snoozedStartMs).toISOString(),
-        end_time: new Date(snoozedEndMs).toISOString(),
+        start_time: window.start,
+        end_time: window.end,
         status: 'confirmed',
       })
       .eq('id', event.id)
@@ -167,7 +165,7 @@ export function useReminderNeedsYouActions() {
 
   return {
     completeReminder,
-    snoozeReminderOneHour,
+    snoozeReminderByDuration,
     moveReminderToNeedsYou,
     queueMissedReminders,
   }

@@ -18,6 +18,8 @@ import { WeatherIcon } from '../shared/WeatherIcon'
 import { LeaveByCard } from '../shared/LeaveByCard'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import { Button, CalendarPill, IconButton } from '../ui'
+import SnoozeMenu from '../shared/SnoozeMenu'
+import type { SnoozeDuration } from '../../utils/snoozeDuration'
 import { differenceInDays } from 'date-fns'
 import { isHoliday, isReminder, isTimedReminder } from '../../utils/holidays'
 import BounceScroll from '../shared/BounceScroll'
@@ -58,7 +60,7 @@ function DayEventCard({
   household: FamilyMember[]
   onOpen: () => void
   onComplete?: (id: string) => void
-  onSnooze?: (event: EventWithDetails) => void | Promise<void>
+  onSnooze?: (event: EventWithDetails, duration: SnoozeDuration) => void | Promise<void>
   onSendToNeedsYou?: (event: EventWithDetails) => void | Promise<void>
 }) {
   const start = getEventStartDate(event)
@@ -104,12 +106,11 @@ function DayEventCard({
       await new Promise((r) => setTimeout(r, 320))
       onComplete(event.id)
     }
-    async function handleSnooze(e: React.MouseEvent) {
-      e.stopPropagation()
+    async function handleSnooze(duration: SnoozeDuration) {
       if (checking || snoozing || movingToNeedsYou || !onSnooze) return
       setSnoozing(true)
       try {
-        await onSnooze(event)
+        await onSnooze(event, duration)
       } finally {
         setSnoozing(false)
       }
@@ -151,14 +152,19 @@ function DayEventCard({
                 </svg>
               ) : <span className="size-2 rounded-full border-2 border-casa-accent-soft-border" />}
             />
-            <IconButton
-              onClick={handleSnooze}
-              disabled={checking || snoozing || movingToNeedsYou || !onSnooze}
-              variant="secondary"
-              className="border-casa-accent-soft-border bg-casa-surface/80"
-              title="Snooze 1 hour"
-              aria-label="Snooze 1 hour"
-              icon={<SnoozeOneHourIcon className={cn('w-3 h-3', snoozing && 'animate-pulse')} />}
+            <SnoozeMenu
+              onSnooze={(duration) => { void handleSnooze(duration) }}
+              renderTrigger={({ onClick }) => (
+                <IconButton
+                  onClick={onClick}
+                  disabled={checking || snoozing || movingToNeedsYou || !onSnooze}
+                  variant="secondary"
+                  className="border-casa-accent-soft-border bg-casa-surface/80"
+                  title="Snooze"
+                  aria-label="Snooze"
+                  icon={<SnoozeOneHourIcon className={cn('w-3 h-3', snoozing && 'animate-pulse')} />}
+                />
+              )}
             />
             <IconButton
               onClick={handleMoveToNeedsYou}
@@ -514,7 +520,7 @@ export default function DayView() {
   const { selectedDate, visibleMembers } = useCalendarStore()
   const now = useLiveClock(15_000)
   const { data: family } = useFamilyMembers()
-  const { completeReminder, snoozeReminderOneHour, moveReminderToNeedsYou } = useReminderNeedsYouActions()
+  const { completeReminder, snoozeReminderByDuration, moveReminderToNeedsYou } = useReminderNeedsYouActions()
 
   // Use the week that contains the selected date to get events
   const { data: weekEvents } = useWeekEvents(selectedDate)
@@ -584,9 +590,9 @@ export default function DayView() {
                     household={family ?? []}
                     onOpen={() => setSelectedEventId(event.id)}
                     onComplete={completeReminder}
-                    onSnooze={(targetEvent) => {
-                      void snoozeReminderOneHour(targetEvent).catch((error) => {
-                        console.error('DayView: failed to snooze reminder by 1 hour', error)
+                    onSnooze={(targetEvent, duration) => {
+                      void snoozeReminderByDuration(targetEvent, duration).catch((error) => {
+                        console.error('DayView: failed to snooze reminder', error)
                       })
                     }}
                     onSendToNeedsYou={(targetEvent) => {
