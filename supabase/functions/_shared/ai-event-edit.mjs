@@ -66,6 +66,31 @@ export function normalizeStringList(value) {
   return items.map((item) => String(item).trim()).filter(Boolean)
 }
 
+export function preserveChecklistStateForLegacyBringList(replacementItems, currentItems) {
+  const currentByLabel = new Map()
+  for (const item of currentItems ?? []) {
+    const key = String(item.label ?? '').trim().toLowerCase()
+    if (!key) continue
+    const matches = currentByLabel.get(key) ?? []
+    matches.push(item)
+    currentByLabel.set(key, matches)
+  }
+
+  return (replacementItems ?? []).map((item) => {
+    const key = String(item.label ?? '').trim().toLowerCase()
+    const matches = currentByLabel.get(key)
+    const current = matches?.shift()
+    if (!current) return item
+    return {
+      ...item,
+      id: current.id,
+      note: current.note ?? item.note,
+      checked: current.checked === true,
+      category: current.category ?? item.category,
+    }
+  })
+}
+
 function isBoolean(value) {
   return typeof value === 'boolean'
 }
@@ -219,7 +244,6 @@ export function buildValidatedUpdatePayload(args) {
   }
 
   const bringList = normalizeStringList(args.what_to_bring)
-  if (bringList !== undefined) enrichmentUpdates.what_to_bring = bringList
 
   for (const [argKey, targetKey] of [
     ['outfit_suggestion', 'outfit_suggestion'],
@@ -233,7 +257,14 @@ export function buildValidatedUpdatePayload(args) {
     if (args[argKey] !== undefined) enrichmentUpdates[targetKey] = normalizeOptionalText(args[argKey])
   }
 
-  const checklistItems = normalizeChecklistItems(args.checklist_items, errors)
+  const explicitChecklistItems = normalizeChecklistItems(args.checklist_items, errors)
+  const checklistItems = explicitChecklistItems ?? bringList?.map((label) => ({
+    id: undefined,
+    label,
+    note: null,
+    checked: false,
+    category: undefined,
+  }))
   const actionItems = normalizeActionItems(args.action_items, errors)
 
   const membersAdd = args.members_add === undefined
@@ -301,7 +332,6 @@ export function buildValidatedUpdatePayload(args) {
       changedEnrichmentFields: [
         ...(args.category !== undefined ? ['category'] : []),
         ...(args.notes !== undefined ? ['prep_notes'] : []),
-        ...(args.what_to_bring !== undefined ? ['what_to_bring'] : []),
         ...(args.outfit_suggestion !== undefined ? ['outfit_suggestion'] : []),
         ...(args.parking_notes !== undefined ? ['parking_notes'] : []),
         ...(args.contact_name !== undefined ? ['contact_name'] : []),

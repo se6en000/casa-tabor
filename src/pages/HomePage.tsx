@@ -962,7 +962,7 @@ function DesktopHeroCard({
   const telUrl = contactPhoneRaw ? `tel:${contactPhoneRaw.replace(/[^\d+]/g, '')}` : null
   const readinessItems = isHosted && !isBirthday
     ? [
-      ...(focusEvent.enrichment?.what_to_bring ?? []),
+      ...focusEvent.checklist.filter((item) => !item.checked).map((item) => item.label),
       focusEvent.enrichment?.prep_notes ?? null,
       focusEvent.enrichment?.dietary_notes ?? null,
     ]

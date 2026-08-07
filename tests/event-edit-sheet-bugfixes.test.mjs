@@ -35,6 +35,19 @@ test('markDirty tracks real dirty state instead of being a no-op', () => {
   assert.doesNotMatch(source, /const markDirty = \(\) => \{\}/, 'markDirty must no longer be a no-op')
 })
 
+test('all enrichment and category field edits participate in dirty tracking', () => {
+  assert.match(
+    source,
+    /const set = \(field: string, value: string\) => \{[\s\S]*?setForm\([\s\S]*?markDirty\(\)[\s\S]*?\}/,
+    'the shared enrichment-field setter must mark the form dirty',
+  )
+  assert.match(
+    source,
+    /const handleCategoryChange = \(cat: string\) => \{[\s\S]*?markDirty\(\)[\s\S]*?\n  \}/,
+    'changing category must mark the form dirty',
+  )
+})
+
 test('closing with unsaved changes shows a discard-changes confirmation instead of closing immediately', () => {
   assert.match(source, /Discard changes/i)
   assert.match(source, /isDirtyRef/)

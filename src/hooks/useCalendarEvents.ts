@@ -387,6 +387,7 @@ function useRealtimeEventInvalidation() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'event_members' }, _fireInvalidation)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'event_plan_overrides' }, _firePlanInvalidation)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'event_enrichments' }, _fireInvalidation)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'event_checklist_items' }, _fireInvalidation)
         .subscribe()
     }
 

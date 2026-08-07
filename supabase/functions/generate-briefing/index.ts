@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
   // Load today's events — use UTC boundaries computed by client for local-day accuracy
   const { data: events, error: evErr } = await sb
     .from('events')
-    .select('id, title, start_time, end_time, all_day, location_name, description, event_members(family_member_id, family_members(name, color_hex)), event_enrichments(prep_notes, category, what_to_bring, weather_at_event, outfit_suggestion, cost_estimate, dietary_notes)')
+    .select('id, title, start_time, end_time, all_day, location_name, description, event_members(family_member_id, family_members(name, color_hex)), event_enrichments(prep_notes, category, weather_at_event, outfit_suggestion, cost_estimate, dietary_notes), event_checklist_items(label, checked, sort_order)')
     .is('deleted_at', null)
     .gte('start_time', dayStartUtc)
     .lte('start_time', dayEndUtc)
@@ -90,6 +90,7 @@ Deno.serve(async (req) => {
           all_day: ev.all_day,
           location_name: ev.location_name,
           enrichment: ev.event_enrichments?.[0] ?? null,
+          checklist: ev.event_checklist_items ?? [],
         })
       }
     }
@@ -208,12 +209,16 @@ async function callLLM(
     event_members: { family_members: { name: string } }[]
     event_enrichments: {
       category?: string | null
-      what_to_bring?: string[] | null
       outfit_suggestion?: string | null
       weather_at_event?: string | null
       prep_notes?: string | null
       cost_estimate?: number | null
       dietary_notes?: string | null
+    }[] | null
+    event_checklist_items: {
+      label: string
+      checked: boolean
+      sort_order: number
     }[] | null
   }
 
@@ -224,8 +229,12 @@ async function callLLM(
       const who = ev.event_members?.map(em => em.family_members?.name).filter(Boolean).join(', ') || 'family'
       const where = ev.location_name ? ` at ${ev.location_name}` : ''
       const enr = ev.event_enrichments?.[0]
+      const bring = (ev.event_checklist_items ?? [])
+        .filter((item) => !item.checked)
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((item) => item.label)
       const extras = [
-        enr?.what_to_bring?.length ? `bring: ${(enr.what_to_bring as string[]).join(', ')}` : '',
+        bring.length ? `bring: ${bring.join(', ')}` : '',
         enr?.outfit_suggestion ? `outfit: ${enr.outfit_suggestion}` : '',
         enr?.weather_at_event ? `weather: ${enr.weather_at_event}` : '',
         enr?.prep_notes ? `notes: ${enr.prep_notes}` : '',

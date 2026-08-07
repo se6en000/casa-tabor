@@ -38,7 +38,8 @@ interface MemberEvent {
   end_time: string
   all_day: boolean
   location_name: string | null
-  enrichment: { summary: string | null; category: string | null; what_to_bring: string[] | null } | null
+  enrichment: { summary: string | null; category: string | null; what_to_bring?: string[] | null } | null
+  checklist?: { label: string; checked: boolean; sort_order: number }[]
 }
 
 interface MemberSchedule {
@@ -57,6 +58,7 @@ interface Briefing {
 interface TimelineEvent extends MemberEvent {
   memberName: string
   memberColor: string
+  bringLabels: string[]
 }
 
 interface ConflictGroup {
@@ -224,6 +226,9 @@ export default function BriefingPage() {
   const timeline = members
     .flatMap((member) => member.events.map((event) => ({
       ...event,
+      bringLabels: event.checklist !== undefined
+        ? event.checklist.filter((item) => !item.checked).map((item) => item.label)
+        : event.enrichment?.what_to_bring ?? [],
       memberName: member.name,
       memberColor: member.color_hex,
     })))
@@ -626,9 +631,9 @@ function ScheduleRail({
                 <Text role="caption" muted className="mt-0.5">
                   {event.memberName}{event.location_name ? ` · ${event.location_name}` : ''}
                 </Text>
-                {event.enrichment?.what_to_bring && event.enrichment.what_to_bring.length > 0 && (
+                {event.bringLabels.length > 0 && (
                   <Text role="caption" className="mt-1 text-action-accent">
-                    Bring: {event.enrichment.what_to_bring.slice(0, 3).join(', ')}
+                    Bring: {event.bringLabels.slice(0, 3).join(', ')}
                   </Text>
                 )}
               </div>

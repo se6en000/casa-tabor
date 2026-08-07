@@ -26,3 +26,17 @@ test('EventEditSheet keeps the extra-context text input and mic dictation reacha
 test('EventEditSheet still triggers the existing enrichment flow from the menu action', () => {
   assert.match(source, /handleReenrich/)
 })
+
+test('EventEditSheet more-actions menu supports focus, arrow keys, Escape, and safe outside dismissal', () => {
+  assert.match(source, /const moreMenuTriggerRef = useRef<HTMLButtonElement>\(null\)/)
+  assert.match(source, /const moreMenuRef = useRef<HTMLDivElement>\(null\)/)
+  assert.match(source, /event\.key !== 'Escape'/)
+  assert.match(source, /'ArrowDown'/)
+  assert.match(source, /'ArrowUp'/)
+  assert.match(source, /moreMenuTriggerRef\.current\?\.focus\(\)/)
+  assert.match(
+    source,
+    /if \(moreMenuOpen\) \{\s*setMoreMenuOpen\(false\)\s*return\s*\}\s*handleClose\(\)/,
+    'clicking outside an open menu must dismiss the menu without closing the editor',
+  )
+})

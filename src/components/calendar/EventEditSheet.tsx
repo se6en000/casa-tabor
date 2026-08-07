@@ -32,6 +32,7 @@ import {
   Textarea,
 } from '../ui'
 import { formatAllDayRangeLabel, normalizeAllDayEventRange } from '../../utils/allDayEventRange'
+import { normalizeReminderTimeRange } from '../../utils/reminderTimeRange'
 import type { EventLocationScope } from '../../lib/eventLocation'
 import type { TransportationPlace } from '../../lib/eventTransportation'
 import RecurrenceScopeDialog from './RecurrenceScopeDialog'
@@ -314,6 +315,41 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
   const [eventType, setEventType] = useState<'event' | 'reminder'>(event.event_type ?? 'event')
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const [aiToolsModalOpen, setAiToolsModalOpen] = useState(false)
+  const moreMenuTriggerRef = useRef<HTMLButtonElement>(null)
+  const moreMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!moreMenuOpen) return
+    const firstItem = moreMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')
+    const focusFrame = requestAnimationFrame(() => firstItem?.focus())
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setMoreMenuOpen(false)
+      moreMenuTriggerRef.current?.focus()
+    }
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      cancelAnimationFrame(focusFrame)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [moreMenuOpen])
+
+  const handleMoreMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+    const items = Array.from(moreMenuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])
+    if (items.length === 0) return
+    event.preventDefault()
+    const currentIndex = items.indexOf(document.activeElement as HTMLElement)
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? items.length - 1
+        : event.key === 'ArrowDown'
+          ? (currentIndex + 1) % items.length
+          : (currentIndex - 1 + items.length) % items.length
+    items[nextIndex]?.focus()
+  }
 
   const clearLocation = () => {
     setLocation('')
@@ -490,6 +526,7 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
     setCategoryLocked(true) // user manually picked — lock it
     const newFields = getFieldsForCategory(cat)
     setForm(prev => buildForm({ ...effectiveEnr, ...objectFromForm(prev, fields), category: cat } as typeof enr, newFields))
+    markDirty()
   }
 
   function objectFromForm(f: Record<string, string>, flds: EnrichmentFieldKey[]) {
@@ -502,7 +539,10 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
 
   const markDirty = () => { isDirtyRef.current = true }
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
-  const set = (field: string, value: string) => { setForm(f => ({ ...f, [field]: value })) }
+  const set = (field: string, value: string) => {
+    setForm(f => ({ ...f, [field]: value }))
+    markDirty()
+  }
 
   const handleClose = () => {
     if (isDirtyRef.current) {
@@ -686,8 +726,11 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
       return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : fallbackISO
     }
     const allDayRange = isAllDay ? normalizeAllDayEventRange(startDT, endDT) : null
-    const startTime = allDayRange?.start ?? parseDateTime(startDT, event.start_time)
-    const endTime = allDayRange?.end ?? parseDateTime(endDT, event.end_time)
+    const reminderRange = !isAllDay && eventType === 'reminder'
+      ? normalizeReminderTimeRange(startDT, event.start_time, event.end_time)
+      : null
+    const startTime = allDayRange?.start ?? reminderRange?.start ?? parseDateTime(startDT, event.start_time)
+    const endTime = allDayRange?.end ?? reminderRange?.end ?? parseDateTime(endDT, event.end_time)
     const durationMs = new Date(endTime).getTime() - new Date(startTime).getTime()
     if (!Number.isFinite(durationMs) || durationMs <= 0) throw new Error('Event end must follow event start.')
     const normalizedLocation = location.trim() || null
@@ -832,10 +875,13 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
       return isNaN(d.getTime()) ? fallbackISO : d.toISOString()
     }
     const allDayRange = isAllDay ? normalizeAllDayEventRange(startDT, endDT) : null
+    const reminderRange = !isAllDay && eventType === 'reminder'
+      ? normalizeReminderTimeRange(startDT, event.start_time, event.end_time)
+      : null
     const allDayStart = allDayRange?.start ?? null
     const allDayEnd = allDayRange?.end ?? null
-    const masterStart = allDayStart ?? parseDateTime(startDT, event.start_time)
-    const masterEnd   = allDayEnd   ?? parseDateTime(endDT, event.end_time)
+    const masterStart = allDayStart ?? reminderRange?.start ?? parseDateTime(startDT, event.start_time)
+    const masterEnd   = allDayEnd   ?? reminderRange?.end ?? parseDateTime(endDT, event.end_time)
     const rruleStr = buildRrule()
     const normalizedLocation = location.trim() || null
     const normalizedAddress = address.trim() || null
@@ -1200,7 +1246,14 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-scrim bg-black/50"
-            onClick={e => { e.stopPropagation(); handleClose(); }}
+            onClick={e => {
+              e.stopPropagation()
+              if (moreMenuOpen) {
+                setMoreMenuOpen(false)
+                return
+              }
+              handleClose()
+            }}
             onTouchStart={e => e.stopPropagation()}
             onTouchMove={e => e.stopPropagation()}
             onTouchEnd={e => e.stopPropagation()}
@@ -1239,6 +1292,7 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
               <div className="flex items-center gap-1 shrink-0">
                 <div className="relative">
                   <IconButton
+                    ref={moreMenuTriggerRef}
                     icon={<MoreVertical size={18} />}
                     aria-label="More actions"
                     aria-haspopup="menu"
@@ -1251,7 +1305,9 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
                       <>
                         <div className="fixed inset-0 z-popover" onClick={() => setMoreMenuOpen(false)} />
                         <motion.div
+                          ref={moreMenuRef}
                           role="menu"
+                          onKeyDown={handleMoreMenuKeyDown}
                           initial={{ opacity: 0, y: -4, scale: 0.96 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: -4, scale: 0.96 }}

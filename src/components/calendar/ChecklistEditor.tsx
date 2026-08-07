@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Plus, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../utils/cn'
-import { Checkbox, IconButton } from '../ui'
+import { Button, Checkbox, IconButton, Input } from '../ui'
 import type { EventChecklistItem } from '../../types'
 
 /**
@@ -29,7 +29,17 @@ export default function ChecklistEditor({
   const [saveError, setSaveError] = useState<string | null>(null)
   const qc = useQueryClient()
 
-  const visibleItems = [...items, ...addedItems].filter((item) => !removedIds[item.id])
+  const itemIds = new Set(items.map((item) => item.id))
+  const visibleItems = [
+    ...items,
+    ...addedItems.filter((item) => !itemIds.has(item.id)),
+  ].filter((item) => !removedIds[item.id])
+  const invalidateChecklistQueries = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['events'] }),
+      qc.invalidateQueries({ queryKey: ['event-details', eventId] }),
+    ])
+  }
 
   const toggle = async (item: EventChecklistItem) => {
     const previous = localChecked[item.id] ?? item.checked
@@ -42,7 +52,7 @@ export default function ChecklistEditor({
       setSaveError(`Could not update "${item.label}". ${error.message}`)
       return
     }
-    await qc.invalidateQueries({ queryKey: ['events'] })
+    await invalidateChecklistQueries()
   }
 
   const remove = async (item: EventChecklistItem) => {
@@ -59,7 +69,7 @@ export default function ChecklistEditor({
       return
     }
     setAddedItems((prev) => prev.filter((a) => a.id !== item.id))
-    await qc.invalidateQueries({ queryKey: ['events'] })
+    await invalidateChecklistQueries()
   }
 
   const addItem = async () => {
@@ -78,7 +88,7 @@ export default function ChecklistEditor({
     }
     setNewLabel('')
     setAddedItems((prev) => [...prev, data as EventChecklistItem])
-    await qc.invalidateQueries({ queryKey: ['events'] })
+    await invalidateChecklistQueries()
   }
 
   return (
@@ -118,9 +128,8 @@ export default function ChecklistEditor({
         <p className="text-body-sm text-casa-muted">Nothing added yet.</p>
       )}
       {editable && (
-        <div className="flex items-center gap-2 mt-2 bg-casa-bg rounded-xl border border-casa-border px-3 h-11 focus-within:ring-2 focus-within:ring-casa-gold/40 transition-shadow">
-          <Plus size={16} className="text-casa-muted shrink-0" />
-          <input
+        <div className="mt-2 flex items-center gap-2">
+          <Input
             type="text"
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}
@@ -130,9 +139,19 @@ export default function ChecklistEditor({
                 void addItem()
               }
             }}
+            aria-label="New checklist item"
             placeholder="Add an item…"
-            className="flex-1 min-w-0 bg-transparent text-body-sm text-casa-text placeholder:text-casa-muted outline-none"
+            className="min-w-0 flex-1"
           />
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => void addItem()}
+            disabled={!newLabel.trim()}
+          >
+            Add
+          </Button>
         </div>
       )}
     </div>

@@ -32,3 +32,12 @@ test('EventEditSheet keeps Repeat available for reminders (no reminder gate arou
 test('EventEditSheet defaults Location closed for reminders instead of auto-expanding when empty', () => {
   assert.match(source, /defaultOpen=\{eventType === 'reminder' \? false : \(!location && !address\)\}/)
 })
+
+test('EventEditSheet stores timed reminders with a valid positive internal duration in both save paths', () => {
+  assert.match(source, /import \{ normalizeReminderTimeRange \} from '\.\.\/\.\.\/utils\/reminderTimeRange'/)
+  assert.equal(
+    [...source.matchAll(/normalizeReminderTimeRange\(startDT, event\.start_time, event\.end_time\)/g)].length,
+    2,
+    'canonical and legacy save paths must both normalize reminder point times',
+  )
+})

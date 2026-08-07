@@ -2,6 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import {
   RECURRING_EDIT_ERROR,
   buildValidatedUpdatePayload,
+  preserveChecklistStateForLegacyBringList,
 } from '../_shared/ai-event-edit.mjs'
 import {
   deriveImpactedEnrichmentFields,
@@ -799,6 +800,23 @@ Deno.serve(async (req) => {
         .maybeSingle()
       if (eventLoadError || !eventRow) {
         throw new Error(eventLoadError?.message ?? 'Event not found')
+      }
+
+      if (
+        cleanArgs.what_to_bring !== undefined
+        && cleanArgs.checklist_items === undefined
+        && normalized.checklistItems !== undefined
+      ) {
+        const { data: currentChecklist, error: checklistLoadError } = await sb
+          .from('event_checklist_items')
+          .select('id, label, note, checked, category')
+          .eq('event_id', normalized.eventId)
+          .order('sort_order')
+        if (checklistLoadError) throw new Error(checklistLoadError.message)
+        normalized.checklistItems = preserveChecklistStateForLegacyBringList(
+          normalized.checklistItems,
+          currentChecklist ?? [],
+        )
       }
 
       if (isCanonicalRecurringEvent(eventRow)) {

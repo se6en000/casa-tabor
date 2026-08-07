@@ -262,6 +262,10 @@ Deno.serve(async (req) => {
   const contractFields = Object.fromEntries(
     ENRICHMENT_FIELDS.map((key) => [key, enrichmentFields[key]]),
   ) as Record<EnrichmentField, unknown>
+  const generatedBringList = Array.isArray(contractFields.what_to_bring)
+    ? contractFields.what_to_bring.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : []
+  delete contractFields.what_to_bring
 
   // Prefer an existing confirmed saved_contacts row over the LLM's raw
   // contact guess — this is the same real-world provider whether the AI
@@ -316,6 +320,19 @@ Deno.serve(async (req) => {
     titleStr.trim() || aiConcise?.trim() || aiTitleRaw?.trim() || normalizedTitleDescription || 'Calendar event',
   )
   const targetedMode = targetFields.length > 0
+
+  if (generatedBringList.length > 0) {
+    const { error: checklistSeedError } = await sb.rpc('seed_event_checklist_if_empty', {
+      p_event_id: event_id,
+      p_labels: generatedBringList,
+    })
+    if (checklistSeedError) {
+      return new Response(
+        JSON.stringify({ error: `Could not seed event checklist: ${checklistSeedError.message}` }),
+        { status: 500, headers: { ...CORS, 'content-type': 'application/json' } },
+      )
+    }
+  }
 
   const { error: upsertErr } = await sb.from('event_enrichments')
     .upsert(
@@ -464,7 +481,7 @@ Times should be in local Eastern time stored as UTC (EDT = UTC-4 in summer, EST 
 
   return new Response(JSON.stringify({
     ok: true,
-    enrichment: contractFields,
+    enrichment: { ...contractFields, what_to_bring: generatedBringList },
     targeted: targetedMode,
     target_fields: targetFields,
     locked_fields: lockedFields,
