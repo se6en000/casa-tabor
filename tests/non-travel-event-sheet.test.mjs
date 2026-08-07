@@ -16,6 +16,18 @@ test('event sheet uses a dedicated non-travel overview instead of the driver pla
   assert.match(panel, /<EventTransportationSection/)
   assert.match(panel, /Birthday at home/)
   assert.match(panel, /At-home coverage/)
+})
+
+test('family coverage is collapsed by default with its time window summarized', () => {
+  const meanwhileStart = panel.indexOf('{showMeanwhile && (')
+  const meanwhileEnd = panel.indexOf('Reference (collapsible', meanwhileStart)
+  const meanwhile = panel.slice(meanwhileStart, meanwhileEnd)
+
+  assert.match(meanwhile, /<DisclosureSection/)
+  assert.match(meanwhile, /title="Meanwhile, the rest of the family"/)
+  assert.match(meanwhile, /summary=\{`\$\{format\(new Date\(event\.start_time\)/)
+  assert.match(meanwhile, /defaultOpen=\{false\}/)
+  assert.match(meanwhile, /coverageRows\.map/)
   assert.match(panel, /Remote event/)
   assert.match(panel, /No location or transportation plan is attached/)
 })

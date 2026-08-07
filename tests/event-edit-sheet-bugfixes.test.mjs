@@ -53,8 +53,15 @@ test('closing with unsaved changes shows a discard-changes confirmation instead 
   assert.match(source, /isDirtyRef/)
 })
 
+test('late recurring data hydration cannot overwrite edits or clear dirty state', () => {
+  assert.match(source, /const initializedEventIdRef = useRef<string \| null>\(null\)/)
+  assert.match(source, /if \(!open\) \{\s*initializedEventIdRef\.current = null\s*return\s*\}/)
+  assert.match(source, /const eventChanged = initializedEventIdRef\.current !== event\.id/)
+  assert.match(source, /if \(!eventChanged && isDirtyRef\.current\) return/)
+})
+
 test('the loaded editor sheet has dialog accessibility attributes', () => {
-  const sheetBlock = source.slice(source.indexOf("key=\"edit-sheet\""), source.indexOf("key=\"edit-sheet\"") + 600)
-  assert.match(sheetBlock, /role="dialog"/)
-  assert.match(sheetBlock, /aria-modal="true"/)
+  const sheetBlock = source.slice(source.indexOf("key=\"edit-sheet\""), source.indexOf("key=\"edit-sheet\"") + 1200)
+  assert.match(sheetBlock, /role=\{inline \? 'region' : 'dialog'\}/)
+  assert.match(sheetBlock, /aria-modal=\{inline \? undefined : true\}/)
 })

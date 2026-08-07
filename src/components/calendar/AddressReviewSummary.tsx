@@ -1,5 +1,5 @@
 import { CircleAlert, House, Loader2, MapPin, Route } from 'lucide-react'
-import { Button, Chip } from '../ui'
+import { Button, Card, Chip } from '../ui'
 
 export type AddressTechnicalStatus = 'checking' | 'ready' | 'unavailable'
 
@@ -22,8 +22,6 @@ export default function AddressReviewSummary({
   saveError,
   onConfirm,
   onEdit,
-  peopleActionLabel,
-  onPeopleAction,
   onRetry,
 }: {
   locationName: string | null
@@ -34,8 +32,6 @@ export default function AddressReviewSummary({
   saveError?: string | null
   onConfirm: () => void
   onEdit: () => void
-  peopleActionLabel?: string
-  onPeopleAction?: () => void
   onRetry?: () => void
 }) {
   const normalizedName = locationName?.trim() || null
@@ -44,67 +40,59 @@ export default function AddressReviewSummary({
   const headline = normalizedName ?? (atHome ? 'Home' : 'Add event location')
   const needsReview = Boolean(normalizedAddress) && !atHome && !reviewed
   const addressMissing = !atHome && !normalizedAddress
+  const hasFooterActions = !loading && (!atHome || addressMissing || needsReview)
 
   return (
-    <div className="min-w-0 flex-1">
-      <div className="grid grid-cols-1 items-start gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,1fr)_auto]">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <Chip size="sm" className="max-w-full">
-            {atHome ? <House size={13} aria-hidden="true" /> : <MapPin size={13} aria-hidden="true" />}
-            <span className="whitespace-normal text-left leading-snug">{headline}</span>
-          </Chip>
-          {loading && (
-            <Chip tone="info" size="sm" icon={<Loader2 size={13} className="animate-spin" aria-hidden="true" />}>
-              Checking review
-            </Chip>
+    <Card padding="sm" className="min-w-0 flex-1">
+      <div className="flex min-w-0 items-start gap-3">
+        <span
+          className="flex size-11 shrink-0 items-center justify-center rounded-full border border-casa-border text-casa-muted"
+          aria-hidden="true"
+        >
+          {atHome ? <House size={20} /> : <MapPin size={20} />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-body font-bold leading-snug text-casa-navy">{headline}</p>
+          {normalizedAddress && normalizedAddress !== normalizedName && (
+            <p className="mt-1 min-w-0 text-body-sm leading-relaxed text-casa-muted">
+              {normalizedAddress}
+            </p>
           )}
         </div>
-        {!loading && !atHome && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onEdit}
-            className="justify-self-end"
-          >
-            {hasDestination ? 'Change address' : 'Add location'}
-          </Button>
+        {loading && (
+          <Chip tone="info" size="sm" icon={<Loader2 size={13} className="animate-spin" aria-hidden="true" />}>
+            Checking review
+          </Chip>
         )}
       </div>
 
-      {(normalizedAddress || addressMissing || peopleActionLabel) && (
-        <div className="mt-1 grid grid-cols-1 items-start gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-            {normalizedAddress && normalizedAddress !== normalizedName && (
-              <p className="min-w-0 flex-1 text-body-sm leading-relaxed text-casa-muted">
-                {normalizedAddress}
-              </p>
-            )}
-            {!loading && addressMissing && (
-              <Chip tone="warning" size="sm" icon={<CircleAlert size={13} aria-hidden="true" />}>
-                Address missing
-              </Chip>
-            )}
-            {!loading && needsReview && (
+      {hasFooterActions && (
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-x-3 gap-y-2 border-t border-casa-border pt-3">
+          {!atHome && (
+            <Button variant="ghost" size="sm" onClick={onEdit} className="mr-auto">
+              {hasDestination ? 'Change address' : 'Add location'}
+            </Button>
+          )}
+          {addressMissing && (
+            <Chip tone="warning" size="sm" icon={<CircleAlert size={13} aria-hidden="true" />}>
+              Address missing
+            </Chip>
+          )}
+          {needsReview && (
+            <>
+              <span className="inline-flex items-center gap-1.5 text-caption font-bold text-casa-warning">
+                <span className="size-2 shrink-0 rounded-full bg-casa-gold" aria-hidden="true" />
+                Needs review
+              </span>
               <Button
                 variant="primary"
                 size="sm"
                 aria-label="Confirm address"
-                className="shrink-0"
                 onClick={onConfirm}
               >
                 Confirm
               </Button>
-            )}
-          </div>
-          {peopleActionLabel && onPeopleAction && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onPeopleAction}
-              className="justify-self-end"
-            >
-              {peopleActionLabel}
-            </Button>
+            </>
           )}
         </div>
       )}
@@ -120,6 +108,7 @@ export default function AddressReviewSummary({
       <span className="sr-only" aria-live="polite">
         {reviewed ? 'Address confirmed' : hasDestination ? 'Address needs review' : 'Address missing'}
       </span>
-    </div>
+    </Card>
   )
 }
+

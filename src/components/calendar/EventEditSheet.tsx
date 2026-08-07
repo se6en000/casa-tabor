@@ -132,13 +132,36 @@ interface Props {
   open: boolean
   onClose: () => void
   initialDelete?: boolean
+  presentation?: 'sheet' | 'inline'
 }
 
 export default function EventEditSheet(props: Props) {
   const detailQuery = useEventDetails(props.event)
+  const inline = props.presentation === 'inline'
 
   if (!props.open || detailQuery.data) {
     return <EventEditSheetContent {...props} event={detailQuery.data ?? props.event} />
+  }
+
+  if (inline) {
+    return (
+      <div className="flex h-full min-h-0 items-center justify-center bg-casa-bg-2 p-6" role="status">
+        {detailQuery.isError ? (
+          <Alert tone="danger" title="Event details could not be loaded" className="max-w-md">
+            <div className="mt-2">
+              <Button variant="secondary" size="sm" onClick={() => void detailQuery.refetch()}>
+                Try again
+              </Button>
+            </div>
+          </Alert>
+        ) : (
+          <div className="inline-flex items-center gap-2 text-body-sm text-casa-muted">
+            <Loader2 size={18} className="animate-spin" />
+            Loading complete event details…
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -187,7 +210,14 @@ export default function EventEditSheet(props: Props) {
   )
 }
 
-function EventEditSheetContent({ event, open, onClose, initialDelete = false }: Props) {
+function EventEditSheetContent({
+  event,
+  open,
+  onClose,
+  initialDelete = false,
+  presentation = 'sheet',
+}: Props) {
+  const inline = presentation === 'inline'
   const enr = event.enrichment
   const save = useSaveEnrichmentBatch()
   const enrich = useEnrichEvent()
@@ -196,11 +226,11 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
 
   // Lock body scroll while edit sheet is open
   useEffect(() => {
-    if (!open) return
+    if (!open || inline) return
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = prev }
-  }, [open])
+  }, [inline, open])
 
   // Canonical v2 occurrences use series_id; legacy instances use recurrence_master_id.
   const isCanonicalOccurrence = Boolean(event.series_id && event.record_kind === 'occurrence')
@@ -216,6 +246,7 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
   const recurringDeleteActionIdRef = useRef<string | null>(null)
   const initialDeleteOpenedRef = useRef(false)
   const isDirtyRef = useRef(false)
+  const initializedEventIdRef = useRef<string | null>(null)
 
   // Fetch master's rrule + enrichment for instances
   useEffect(() => {
@@ -444,8 +475,8 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
     // choose either mode explicitly.
   }
 
-  // memberRoles: id → 'primary' | 'attendee' | undefined (undefined = not tagged)
-  const [memberRoles, setMemberRoles] = useState<Record<string, 'primary' | 'attendee'>>({})
+  // Selected members are attendees; transportation ownership is managed in The Plan.
+  const [memberRoles, setMemberRoles] = useState<Record<string, 'attendee'>>({})
 
   // Date/time state uses local datetime strings shared by the touch dial.
   const toLocalDT = (iso: string, allDay = false) => {
@@ -481,7 +512,13 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
 
   // Reset everything when sheet opens or when masterData loads for instances
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      initializedEventIdRef.current = null
+      return
+    }
+    const eventChanged = initializedEventIdRef.current !== event.id
+    if (!eventChanged && isDirtyRef.current) return
+    initializedEventIdRef.current = event.id
     const activeEnr = isInstance ? (masterData?.enrichment ?? enr) : enr
     const cat = activeEnr?.category ?? 'other'
     setCategory(cat)
@@ -505,9 +542,9 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
     setRecur(parseRrule(activeRrule))
     setRecurrenceTouched(false)
     // Seed memberRoles from current event.members
-    const roles: Record<string, 'primary' | 'attendee'> = {}
+    const roles: Record<string, 'attendee'> = {}
     for (const m of event.members ?? []) {
-      roles[m.family_member.id] = m.role === 'primary' ? 'primary' : 'attendee'
+      roles[m.family_member.id] = 'attendee'
     }
     setMemberRoles(roles)
     setStartDT(toLocalDT(event.start_time, event.all_day))
@@ -588,19 +625,19 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
         if (result.start_time) setStartDT(toLocalDT(result.start_time as string))
         if (result.end_time)   setEndDT(toLocalDT(result.end_time as string))
 
-        // Sync member roles if AI returned attendees
+        // AI may still return the legacy primary_attendee field; every named person is simply attending.
         if (result.attendees !== undefined || result.primary_attendee !== undefined) {
           const nameToId = Object.fromEntries(allMembers.map(m => [m.name.toLowerCase(), m.id]))
-          const newRoles: Record<string, 'primary' | 'attendee'> = {}
+          const newRoles: Record<string, 'attendee'> = {}
           const primaryName = (result.primary_attendee as string | undefined)?.toLowerCase()
           const supportingNames = (result.attendees as string[] | undefined) ?? []
           if (primaryName) {
             const id = nameToId[primaryName]
-            if (id) newRoles[id] = 'primary'
+            if (id) newRoles[id] = 'attendee'
           }
           for (const name of supportingNames) {
             const id = nameToId[name.toLowerCase()]
-            if (id && !newRoles[id]) newRoles[id] = 'attendee'
+            if (id) newRoles[id] = 'attendee'
           }
           if (Object.keys(newRoles).length > 0) setMemberRoles(newRoles)
         }
@@ -1237,45 +1274,55 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
     : undefined
 
   return (
-    <AnimatePresence>
+    <AnimatePresence initial={!inline}>
       {open && (
         <>
-          <motion.div
-            key="edit-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-scrim bg-black/50"
-            onClick={e => {
-              e.stopPropagation()
-              if (moreMenuOpen) {
-                setMoreMenuOpen(false)
-                return
-              }
-              handleClose()
-            }}
-            onTouchStart={e => e.stopPropagation()}
-            onTouchMove={e => e.stopPropagation()}
-            onTouchEnd={e => e.stopPropagation()}
-            onPointerDown={e => e.stopPropagation()}
-          />
+          {!inline && (
+            <motion.div
+              key="edit-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-scrim bg-black/50"
+              onClick={e => {
+                e.stopPropagation()
+                if (moreMenuOpen) {
+                  setMoreMenuOpen(false)
+                  return
+                }
+                handleClose()
+              }}
+              onTouchStart={e => e.stopPropagation()}
+              onTouchMove={e => e.stopPropagation()}
+              onTouchEnd={e => e.stopPropagation()}
+              onPointerDown={e => e.stopPropagation()}
+            />
+          )}
 
           <motion.div
             key="edit-sheet"
-            initial={{ y: '100%' }}
+            initial={inline ? false : { y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 32, stiffness: 260 }}
-            className="fixed bottom-0 left-0 right-0 z-modal flex h-[90vh] flex-col overflow-hidden rounded-t-modal bg-casa-bg-2 shadow-modal sm:bottom-8 sm:left-1/2 sm:h-[85vh] sm:w-full sm:max-w-2xl sm:-translate-x-1/2 sm:rounded-modal"
+            className={cn(
+              'flex min-h-0 flex-col overflow-hidden bg-casa-bg-2',
+              inline
+                ? 'h-full'
+                : 'fixed bottom-0 left-0 right-0 z-modal h-[90vh] rounded-t-modal shadow-modal sm:bottom-8 sm:left-1/2 sm:h-[85vh] sm:w-full sm:max-w-2xl sm:-translate-x-1/2 sm:rounded-modal',
+            )}
             onClick={e => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
+            role={inline ? 'region' : 'dialog'}
+            aria-modal={inline ? undefined : true}
             aria-label={`Edit ${eventType === 'reminder' ? 'reminder' : 'event'}: ${event.title}`}
+            data-inline-event-editor={inline ? '' : undefined}
           >
             {/* Drag handle */}
-            <div className="flex shrink-0 justify-center bg-casa-surface pb-1 pt-3">
-              <div className="w-10 h-1 rounded-full bg-casa-border" />
-            </div>
+            {!inline && (
+              <div className="flex shrink-0 justify-center bg-casa-surface pb-1 pt-3">
+                <div className="w-10 h-1 rounded-full bg-casa-border" />
+              </div>
+            )}
 
             {/* Header */}
             <div className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-casa-border bg-casa-surface px-6">
@@ -1472,41 +1519,30 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
                     Who's Attending
                   </label>
                   <p className="text-caption text-casa-muted mb-3">
-                    Tap once = Supporting · Tap again = Primary ★ · Tap again = Remove
+                    Select everyone attending.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {allMembers.map(member => {
-                      const role = memberRoles[member.id]
-                      const isPrimary = role === 'primary'
-                      const isSupporting = role === 'attendee'
-                      const isTagged = isPrimary || isSupporting
+                      const isAttending = memberRoles[member.id] === 'attendee'
 
                       return (
                         <Chip
                           key={member.id}
                           onClick={() => { setMemberRoles(prev => {
                             const next = { ...prev }
-                            if (!prev[member.id]) {
-                              next[member.id] = 'attendee'
-                            } else if (prev[member.id] === 'attendee') {
-                              Object.keys(next).forEach(id => { if (next[id] === 'primary') next[id] = 'attendee' })
-                              next[member.id] = 'primary'
-                            } else {
-                              delete next[member.id]
-                            }
+                            if (prev[member.id]) delete next[member.id]
+                            else next[member.id] = 'attendee'
                             return next
                           }); markDirty() }}
-                          selected={isPrimary}
-                          tone={isTagged ? 'accent' : 'neutral'}
-                          className={cn(isTagged && 'border-transparent text-white', isSupporting && 'opacity-75')}
-                          style={{
-                            ...(isTagged ? { backgroundColor: member.color_hex, borderColor: member.color_hex } : {}),
-                            ...(isPrimary ? { ringColor: member.color_hex } : {}),
-                          }}
+                          selected={isAttending}
+                          tone={isAttending ? 'accent' : 'neutral'}
+                          className={cn(isAttending && 'border-transparent text-white')}
+                          style={isAttending ? { backgroundColor: member.color_hex, borderColor: member.color_hex } : undefined}
                         >
-                          {isPrimary && <span className="text-caption leading-none">★</span>}
-                          {isSupporting && <span className="w-2 h-2 rounded-full bg-white/60 shrink-0" />}
-                          {!isTagged && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: member.color_hex }} />}
+                          <span
+                            className={cn('size-2 shrink-0 rounded-full', isAttending && 'bg-white/60')}
+                            style={isAttending ? undefined : { backgroundColor: member.color_hex }}
+                          />
                           {member.name}
                         </Chip>
                       )
@@ -1838,7 +1874,7 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
               </DisclosureSection>
 
               {/* ── Checklist (Bring / Pack) — always visible, not category-gated ── */}
-              <div>
+              <div className="border-b border-casa-divider px-6 py-5">
                 <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">
                   What to Bring
                 </label>

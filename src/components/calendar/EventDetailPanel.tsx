@@ -3,7 +3,7 @@ import { format } from 'date-fns'
 import { motion, AnimatePresence, useDragControls } from 'framer-motion'
 import {
   X, Navigation, ChevronRight, ChevronDown, CalendarDays, House, Users, Video, Bell,
-  Loader2, Crown, Plus, Check, Pencil, Share2, Phone, MessageSquare,
+  Loader2, Check, Pencil, Share2, Phone, MessageSquare,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -37,7 +37,7 @@ import { getPersistedPlanOverrides, locationSignature, overridesStorageKey } fro
 import { getEventDisplayStartDay } from '../../utils/eventTime'
 import { cleanEventTitle, isBirthdayEvent } from '../../utils/eventTitle'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
-import { Alert, Button, Card, Chip, IconButton, Switch } from '../ui'
+import { Alert, Button, Card, Chip, DisclosureSection, IconButton, Switch } from '../ui'
 import EventTransportationSection from './EventTransportationSection'
 import InlinePlaceEditor from './InlinePlaceEditor'
 import AddressReviewSummary, { AddressTechnicalStatusChip, type AddressTechnicalStatus } from './AddressReviewSummary'
@@ -392,17 +392,20 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
     return () => { document.body.style.overflow = prev }
   }, [event])
 
+  const handlePanelClose = useCallback(() => {
+    if (!showEdit) onClose()
+  }, [showEdit, onClose])
+
   useEffect(() => {
     if (!event) return
-    const handleClose = () => onClose()
-    document.addEventListener('casa:close-event-details', handleClose)
-    return () => document.removeEventListener('casa:close-event-details', handleClose)
-  }, [event, onClose])
+    document.addEventListener('casa:close-event-details', handlePanelClose)
+    return () => document.removeEventListener('casa:close-event-details', handlePanelClose)
+  }, [event, handlePanelClose])
 
   return (
     <>
       <AnimatePresence initial={false}>
-        {event && !showEdit && (
+        {event && (
           <>
             <motion.div
               key="backdrop"
@@ -414,7 +417,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
                 background: 'linear-gradient(color-mix(in srgb, var(--color-casa-navy) 8%, transparent), color-mix(in srgb, var(--color-casa-navy) 8%, transparent)), var(--casa-scrim)',
               }}
               data-panel-overlay
-              onClick={onClose}
+              onClick={handlePanelClose}
               onTouchStart={stopTouch}
               onTouchMove={stopTouch}
               onTouchEnd={stopTouch}
@@ -447,7 +450,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
               dragElastic={{ top: 0, bottom: 0.18 }}
               dragMomentum={false}
               onDragEnd={(_e, info) => {
-                if (info.velocity.y > dragDismissVelocity || info.offset.y > dragDismissOffset) onClose()
+                if (!showEdit && (info.velocity.y > dragDismissVelocity || info.offset.y > dragDismissOffset)) onClose()
               }}
               style={{
                 willChange: 'transform',
@@ -472,12 +475,15 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
               >
                 <button
                   type="button"
-                  className="absolute inset-x-0 top-0 z-10 mx-auto block h-control w-[86px] cursor-grab active:cursor-grabbing"
-                  aria-label="Drag down to dismiss panel"
+                  className="absolute inset-x-0 top-0 z-10 mx-auto block h-control w-[86px] cursor-grab disabled:cursor-default active:cursor-grabbing"
+                  aria-label={showEdit ? 'Panel dismissal disabled while editing' : 'Drag down to dismiss panel'}
+                  disabled={showEdit}
                   style={{ touchAction: 'none' }}
                   data-native-drag
                   data-ptr-ignore
-                  onPointerDown={e => panelDragControls.start(e)}
+                  onPointerDown={e => {
+                    if (!showEdit) panelDragControls.start(e)
+                  }}
                 >
                   <span
                     className="mx-auto mt-1.5 block h-[5px] w-control-sm rounded-full"
@@ -486,100 +492,113 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
                     }}
                   />
                 </button>
-              </div>
-              <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain bg-casa-bg-2" data-native-drag data-ptr-ignore>
-                {detailQuery.isError && (
-                  <Alert tone="danger" title="Some event details could not be loaded" className="mx-4 mb-3">
-                    Check the connection, then reopen this event to try again.
-                  </Alert>
-                )}
-                {!isHydrated ? (
-                  <div className="flex items-center justify-center gap-2 py-24 text-body-sm text-casa-muted">
-                    <Loader2 size={18} className="animate-spin" /> Loading event details…
+                </div>
+              {showEdit ? (
+                <div className="min-h-0 flex-1">
+                  <EventEditSheet
+                    event={event}
+                    open
+                    presentation="inline"
+                    onClose={() => setShowEdit(false)}
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain bg-casa-bg-2" data-native-drag data-ptr-ignore>
+                    {detailQuery.isError && (
+                      <Alert tone="danger" title="Some event details could not be loaded" className="mx-4 mb-3">
+                        Check the connection, then reopen this event to try again.
+                      </Alert>
+                    )}
+                    {!isHydrated ? (
+                      <div className="flex items-center justify-center gap-2 py-24 text-body-sm text-casa-muted">
+                        <Loader2 size={18} className="animate-spin" /> Loading event details…
+                      </div>
+                    ) : (
+                      <>
+                        <PanelHeader
+                          event={event}
+                          verified={addressReviewed}
+                          modeOverride={modeOverride}
+                          transportationPlan={transportationPlan}
+                          onClose={onClose}
+                          onConfirmAddress={() => void confirmAddress()}
+                          addressReviewLoading={overridesHydratedEventId !== event.id || savedPlacesPending}
+                          addressSaveError={overrideSaveError}
+                          onRetryAddressSave={() => setOverrideSaveRevision((revision) => revision + 1)}
+                          onSaveAddress={async (place, scope) => {
+                            setOverridesHydratedEventId(null)
+                            const trusted = isTrustedPlaceSelection(place)
+                            const nextPlace: TransportationPlace = {
+                              ...place,
+                              name: place.name.trim() || place.address.trim(),
+                              address: place.address.trim(),
+                              kind: 'event',
+                            }
+                            const nextPlan = transportationPlan
+                              ? updateTransportationEventPlace(transportationPlan, nextPlace)
+                              : null
+                            const handled = await executeRecurringQuickActionScope({
+                              operation: 'location',
+                              changedPaths: [
+                                'event.locationName',
+                                'event.address',
+                                'event.lat',
+                                'event.lng',
+                                ...(nextPlan ? ['transportationPlan'] : []),
+                              ],
+                              detailPatch: {
+                                event: {
+                                  location_name: place.name.trim() || null,
+                                  address: place.address.trim() || null,
+                                  lat: trusted ? (place.lat ?? null) : null,
+                                  lng: trusted ? (place.lng ?? null) : null,
+                                },
+                                ...(nextPlan ? { transportation_plan: nextPlan } : {}),
+                              },
+                            }, scope)
+                            if (handled) {
+                              const { error: projectionError } = await supabase
+                                .from('event_plan_overrides')
+                                .update({ location_projection_blocked: false })
+                                .eq('event_id', event.id)
+                              if (projectionError) {
+                                throw new Error(`Address saved, but Google projection could not be enabled: ${projectionError.message}`)
+                              }
+                              setTransportationPlan(nextPlan)
+                              setVerifiedOverride(false)
+                              setOverridesHydratedEventId(event.id)
+                              queryClient.removeQueries({ queryKey: ['travel-eta'] })
+                              return
+                            }
+                            await persistScopedEventLocation({ event, place, scope })
+                            queryClient.removeQueries({ queryKey: ['travel-eta'] })
+                            await queryClient.invalidateQueries({ queryKey: ['events'] })
+                          }}
+                          onQuickAction={requestRecurringQuickAction}
+                          onRosterChange={(names, persist = true) => {
+                            const nextPlan = transportationPlan
+                              ? syncTransportationAttendees(transportationPlan, names)
+                              : null
+                            if (nextPlan === transportationPlan) return
+                            if (persist) void persistQuickTransportationPlan(nextPlan)
+                            else setTransportationPlan(nextPlan)
+                          }}
+                        />
+                        <PanelBody
+                          event={event}
+                          modeOverride={modeOverride}
+                          transportationPlan={transportationPlan}
+                          onQuickTransportationPlanChange={persistQuickTransportationPlan}
+                          onSaveTransportationPlan={persistFullTransportationPlan}
+                        />
+                      </>
+                    )}
                   </div>
-                ) : (
-                  <>
-                    <PanelHeader
-                      event={event}
-                      verified={addressReviewed}
-                      modeOverride={modeOverride}
-                      transportationPlan={transportationPlan}
-                      onClose={onClose}
-                      onConfirmAddress={() => void confirmAddress()}
-                      addressReviewLoading={overridesHydratedEventId !== event.id || savedPlacesPending}
-                      addressSaveError={overrideSaveError}
-                      onRetryAddressSave={() => setOverrideSaveRevision((revision) => revision + 1)}
-                      onSaveAddress={async (place, scope) => {
-                        setOverridesHydratedEventId(null)
-                        const trusted = isTrustedPlaceSelection(place)
-                        const nextPlace: TransportationPlace = {
-                          ...place,
-                          name: place.name.trim() || place.address.trim(),
-                          address: place.address.trim(),
-                          kind: 'event',
-                        }
-                        const nextPlan = transportationPlan
-                          ? updateTransportationEventPlace(transportationPlan, nextPlace)
-                          : null
-                        const handled = await executeRecurringQuickActionScope({
-                          operation: 'location',
-                          changedPaths: [
-                            'event.locationName',
-                            'event.address',
-                            'event.lat',
-                            'event.lng',
-                            ...(nextPlan ? ['transportationPlan'] : []),
-                          ],
-                          detailPatch: {
-                            event: {
-                              location_name: place.name.trim() || null,
-                              address: place.address.trim() || null,
-                              lat: trusted ? (place.lat ?? null) : null,
-                              lng: trusted ? (place.lng ?? null) : null,
-                            },
-                            ...(nextPlan ? { transportation_plan: nextPlan } : {}),
-                          },
-                        }, scope)
-                        if (handled) {
-                          const { error: projectionError } = await supabase
-                            .from('event_plan_overrides')
-                            .update({ location_projection_blocked: false })
-                            .eq('event_id', event.id)
-                          if (projectionError) {
-                            throw new Error(`Address saved, but Google projection could not be enabled: ${projectionError.message}`)
-                          }
-                          setTransportationPlan(nextPlan)
-                          setVerifiedOverride(false)
-                          setOverridesHydratedEventId(event.id)
-                          queryClient.removeQueries({ queryKey: ['travel-eta'] })
-                          return
-                        }
-                        await persistScopedEventLocation({ event, place, scope })
-                        queryClient.removeQueries({ queryKey: ['travel-eta'] })
-                        await queryClient.invalidateQueries({ queryKey: ['events'] })
-                      }}
-                      onQuickAction={requestRecurringQuickAction}
-                      onRosterChange={(names, persist = true) => {
-                        const nextPlan = transportationPlan
-                          ? syncTransportationAttendees(transportationPlan, names)
-                          : null
-                        if (nextPlan === transportationPlan) return
-                        if (persist) void persistQuickTransportationPlan(nextPlan)
-                        else setTransportationPlan(nextPlan)
-                      }}
-                    />
-                    <PanelBody
-                      event={event}
-                      modeOverride={modeOverride}
-                      transportationPlan={transportationPlan}
-                      onQuickTransportationPlanChange={persistQuickTransportationPlan}
-                      onSaveTransportationPlan={persistFullTransportationPlan}
-                    />
-                  </>
-                )}
-              </div>
-              {isHydrated && (
-                <PanelFooter event={event} modeOverride={modeOverride} onEdit={() => setShowEdit(true)} />
+                  {isHydrated && (
+                    <PanelFooter event={event} modeOverride={modeOverride} onEdit={() => setShowEdit(true)} />
+                  )}
+                </>
               )}
             </motion.div>
           </>
@@ -588,9 +607,6 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
 
       <RecurrenceScopeDialog {...recurringQuickAction.dialog} />
 
-      {event && (
-        <EventEditSheet event={event} open={showEdit} onClose={() => setShowEdit(false)} />
-      )}
     </>
   )
 }
@@ -610,31 +626,15 @@ function MemberEditor({
 }) {
   const queryClient = useQueryClient()
   const { data: allMembers = [] } = useFamilyMembers()
-  const [showPicker, setShowPicker] = useState(false)
   const [saving, setSaving] = useState<string | null>(null)
   const [optimisticallyRemovedIds, setOptimisticallyRemovedIds] = useState<Set<string>>(() => new Set())
   const [mutationError, setMutationError] = useState<string | null>(null)
-  const pickerRef = useRef<HTMLDivElement>(null)
-
-  // Close picker on outside tap
-  useEffect(() => {
-    if (!showPicker) return
-    const handler = (e: MouseEvent | TouchEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setShowPicker(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    document.addEventListener('touchstart', handler)
-    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler) }
-  }, [showPicker])
 
   const visibleMembers = event.members.filter((member) => !optimisticallyRemovedIds.has(member.id))
-  const sorted = [...visibleMembers].sort((a, b) => (a.role === 'primary' ? -1 : b.role === 'primary' ? 1 : 0))
-  const assignedIds = new Set(event.members.map(m => m.family_member?.id))
+  const assignedIds = new Set(visibleMembers.map(m => m.family_member?.id))
   const assignments = event.members.map((member) => ({
     family_member_id: member.family_member.id,
-    role: member.role,
+    role: 'attendee',
   }))
 
   async function saveAssignments(
@@ -653,35 +653,6 @@ function MemberEditor({
       },
     })
     return { result, nextPlan }
-  }
-
-  async function makeOwner(memberId: string) {
-    setSaving(memberId)
-    setMutationError(null)
-    try {
-      const nextAssignments = assignments.map((assignment) => ({
-        ...assignment,
-        role: assignment.family_member_id === memberId ? 'primary' : 'attendee',
-      }))
-      const nextNames = event.members
-        .map((member) => member.family_member?.name?.trim())
-        .filter((name): name is string => Boolean(name))
-      const { result, nextPlan } = await saveAssignments(nextAssignments, nextNames)
-      if (result === 'cancelled') return
-      if (result === 'handled') {
-        if (nextPlan) onRosterChange(nextNames, false)
-      } else {
-        const { error: demoteError } = await supabase.from('event_members').update({ role: 'attendee' }).eq('event_id', event.id).eq('role', 'primary')
-        if (demoteError) throw demoteError
-        const { error: promoteError } = await supabase.from('event_members').update({ role: 'primary' }).eq('event_id', event.id).eq('family_member_id', memberId)
-        if (promoteError) throw promoteError
-        await queryClient.invalidateQueries({ queryKey: ['events'] })
-      }
-    } catch (cause) {
-      setMutationError(`Could not change the primary attendee. ${cause instanceof Error ? cause.message : ''}`)
-    } finally {
-      setSaving(null)
-    }
   }
 
   async function removeMember(eventMemberId: string, memberName: string) {
@@ -755,119 +726,41 @@ function MemberEditor({
       setMutationError(`Could not add ${addedMember?.name ?? 'that person'}. ${cause instanceof Error ? cause.message : ''}`)
     } finally {
       setSaving(null)
-      setShowPicker(false)
     }
   }
 
   return (
-    <div className={cn('relative flex flex-wrap items-center gap-2', showPicker && 'z-popover')}>
+    <div className="flex flex-wrap items-center gap-2">
       {mutationError && <p role="alert" className="w-full text-caption text-casa-error">{mutationError}</p>}
-      {sorted.map((m) => {
-        const isPrimary = m.role === 'primary'
-        const isLoading = saving === m.id || saving === m.family_member?.id
-        const color = m.family_member?.color_hex ?? 'var(--color-casa-muted)'
+      {allMembers.map((member) => {
+        const selected = assignedIds.has(member.id)
+        const eventMember = visibleMembers.find((entry) => entry.family_member?.id === member.id)
+        const isLoading = saving === eventMember?.id || saving === member.id
         return (
-          <div
-            key={m.id}
-            className="group inline-flex min-h-control-sm items-center gap-1.5 rounded-pill py-1 pl-1 pr-2 text-body-sm font-semibold transition-opacity"
-            style={{ background: S.chipFill, border: `1px solid ${S.borderSoft}`, color: S.navy, opacity: isLoading ? 0.6 : 1 }}
+          <Chip
+            key={member.id}
+            onClick={() => {
+              if (isLoading) return
+              if (selected && eventMember) {
+                void removeMember(eventMember.id, member.name)
+              } else {
+                void addMember(member.id)
+              }
+            }}
+            disabled={saving !== null}
+            selected={selected}
+            tone={selected ? 'accent' : 'neutral'}
+            className={cn(selected && 'border-transparent text-white', isLoading && 'opacity-60')}
+            style={selected ? { backgroundColor: member.color_hex, borderColor: member.color_hex } : undefined}
           >
             <span
-              className="flex size-control-sm shrink-0 items-center justify-center rounded-pill text-caption font-bold text-white"
-              style={{ backgroundColor: color }}
-            >
-              {m.family_member?.name?.[0]}
-            </span>
-            <span>{m.family_member?.name}</span>
-
-            {/* Promote primary directly from the attendee pill (touch + desktop). */}
-            {!isPrimary ? (
-              <IconButton
-                onClick={() => makeOwner(m.family_member!.id)}
-                disabled={saving !== null}
-                icon={<Crown size={14} />}
-                variant="ghost"
-                size="sm"
-                className="ml-0.5"
-                title={`Make ${m.family_member?.name ?? 'member'} primary`}
-                aria-label={`Make ${m.family_member?.name ?? 'member'} primary`}
-              />
-            ) : (
-              <span
-                className="ml-0.5 w-5 h-5 rounded-full flex items-center justify-center"
-                style={{ color: S.goldText, background: S.amberBg }}
-                title="Primary attendee"
-                aria-label="Primary attendee"
-              >
-                <Crown size={12} />
-              </span>
-            )}
-            {(event.members.length > 1 || !isPrimary) && (
-              <IconButton
-                onClick={() => removeMember(m.id, m.family_member?.name ?? 'member')}
-                disabled={saving !== null}
-                icon={<X size={14} />}
-                variant="ghost"
-                size="sm"
-                className="ml-0.5"
-                title="Remove"
-                aria-label={`Remove ${m.family_member?.name ?? 'member'}`}
-              />
-            )}
-          </div>
+              className={cn('size-2 shrink-0 rounded-full', selected && 'bg-white/60')}
+              style={selected ? undefined : { backgroundColor: member.color_hex }}
+            />
+            {member.name}
+          </Chip>
         )
       })}
-
-      {/* Add button */}
-      <div className="relative" ref={pickerRef}>
-        <Button
-          onClick={() => setShowPicker(p => !p)}
-          disabled={saving !== null}
-          variant="secondary"
-          size="sm"
-          leadingIcon={<Plus size={14} />}
-        >
-          Add
-        </Button>
-
-        <AnimatePresence>
-          {showPicker && (
-            <motion.div
-              initial={{ opacity: 0, y: -4, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -4, scale: 0.96 }}
-              transition={{ duration: 0.15 }}
-              className="absolute left-0 top-full z-popover mt-1.5 flex min-w-[180px] flex-col gap-1 rounded-card border bg-casa-surface p-2 shadow-modal"
-              style={{ borderColor: S.borderSoft }}
-            >
-              {allMembers
-                .filter(fm => !assignedIds.has(fm.id))
-                .map(fm => (
-                  <Button
-                    key={fm.id}
-                    onClick={() => addMember(fm.id)}
-                    disabled={saving === fm.id}
-                    variant="ghost"
-                    size="sm"
-                    fullWidth
-                    className="justify-start"
-                  >
-                    <span
-                      className="w-6 h-6 rounded-full text-white text-caption font-bold flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: fm.color_hex ?? 'var(--color-casa-muted)' }}
-                    >
-                      {fm.name?.[0]}
-                    </span>
-                    <span className="text-body-sm font-medium" style={{ color: S.navy }}>{fm.name}</span>
-                  </Button>
-                ))}
-              {allMembers.filter(fm => !assignedIds.has(fm.id)).length === 0 && (
-                <p className="text-caption px-2 py-1" style={{ color: S.label }}>Everyone's added</p>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
     </div>
   )
 }
@@ -1045,8 +938,8 @@ function PanelHeader({
   const avatarMembers = event.members?.slice(0, 5) ?? []
   const avatarOverflow = (event.members?.length ?? 0) - 5
   const attendeeCount = event.members?.length ?? 0
-  const hasPeople = attendeeCount > 0
   const [rosterOpen, setRosterOpen] = useState(false)
+  const rosterRegionRef = useRef<HTMLDivElement>(null)
   const [addressEditorOpen, setAddressEditorOpen] = useState(false)
   const [pendingPlace, setPendingPlace] = useState<TransportationPlace | null>(null)
   const [scopeOpen, setScopeOpen] = useState(false)
@@ -1056,8 +949,18 @@ function PanelHeader({
   const editPeopleLabel = reminder ? 'Edit people' : 'Edit attendees'
   const peopleSectionLabel = reminder ? 'Assigned people' : 'Attendees'
   const showAddressSummary = !reminder && (planKind === 'travel' || hostedAtHome || Boolean(event.location_name || event.address))
-  const showLowerSection = (hasPeople && rosterOpen) || addressEditorOpen
+  const showLowerSection = rosterOpen || addressEditorOpen
   const recurring = Boolean(event.rrule || event.recurrence_master_id || event.series_id)
+
+  useEffect(() => {
+    if (!rosterOpen) return
+    const handler = (e: MouseEvent | TouchEvent) => {
+      if (rosterRegionRef.current && !rosterRegionRef.current.contains(e.target as Node)) setRosterOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    document.addEventListener('touchstart', handler)
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler) }
+  }, [rosterOpen])
 
   const commitAddress = async (place: TransportationPlace, scope: EventLocationScope) => {
     setAddressEditError(null)
@@ -1084,14 +987,14 @@ function PanelHeader({
   }
 
   return (
-    <div className="bg-casa-bg">
+    <div className="bg-casa-bg" ref={rosterRegionRef}>
       {/* ── Light editorial header ──────────────────────────────── */}
       <div
         className="relative overflow-visible border-b border-casa-border bg-casa-bg px-6 pb-5 pt-4"
       >
         {isBirthday && <BirthdayCardDecoration className="opacity-35" />}
 
-        {/* Top row: owner + compact avatars + close */}
+        {/* Top row: owner + attendee editor trigger + close */}
         <div className="relative z-10 flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <span
@@ -1106,23 +1009,37 @@ function PanelHeader({
             )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <div className="flex items-center -space-x-1.5">
-              {avatarMembers.map((m) => (
-                <span
-                  key={m.id}
-                  title={m.family_member?.name}
-                  className="flex size-6 shrink-0 items-center justify-center rounded-full text-caption font-bold text-white ring-[2px] ring-casa-surface"
-                  style={{ backgroundColor: m.family_member?.color_hex ?? 'var(--color-casa-muted)' }}
-                >
-                  {m.family_member?.name?.[0]}
-                </span>
-              ))}
-              {avatarOverflow > 0 && (
-                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-casa-bg text-caption font-bold text-casa-navy ring-[2px] ring-casa-surface">
-                  +{avatarOverflow}
-                </span>
-              )}
-            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setRosterOpen((open) => !open)}
+              aria-expanded={rosterOpen}
+              aria-label={rosterOpen ? 'Done editing' : editPeopleLabel}
+              className="px-1.5"
+            >
+              <span className="flex items-center -space-x-1.5">
+                {avatarMembers.map((m) => (
+                  <span
+                    key={m.id}
+                    title={m.family_member?.name}
+                    className="flex size-6 shrink-0 items-center justify-center rounded-full text-caption font-bold text-white ring-[2px] ring-casa-surface"
+                    style={{ backgroundColor: m.family_member?.color_hex ?? 'var(--color-casa-muted)' }}
+                  >
+                    {m.family_member?.name?.[0]}
+                  </span>
+                ))}
+                {avatarOverflow > 0 && (
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-casa-bg text-caption font-bold text-casa-navy ring-[2px] ring-casa-surface">
+                    +{avatarOverflow}
+                  </span>
+                )}
+                {avatarMembers.length === 0 && (
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed border-casa-border text-casa-muted">
+                    <Users size={13} aria-hidden="true" />
+                  </span>
+                )}
+              </span>
+            </Button>
             <IconButton
               onClick={onClose}
               icon={<X size={18} />}
@@ -1165,8 +1082,7 @@ function PanelHeader({
           )}
         </div>
 
-        {(hasPeople || showAddressSummary) && (
-          <div className="relative mt-3">
+        <div className="relative mt-3">
             {showAddressSummary ? (
               <AddressReviewSummary
                 locationName={event.location_name}
@@ -1180,12 +1096,9 @@ function PanelHeader({
                   setAddressEditError(null)
                   setAddressEditorOpen((open) => !open)
                 }}
-                peopleActionLabel={hasPeople ? (rosterOpen ? 'Done editing' : editPeopleLabel) : undefined}
-                onPeopleAction={hasPeople ? () => setRosterOpen((open) => !open) : undefined}
                 onRetry={onRetryAddressSave}
               />
             ) : (
-              <div className="flex items-center gap-2">
               <Chip
                 size="sm"
                 className="uppercase"
@@ -1193,26 +1106,27 @@ function PanelHeader({
               >
                 {peopleCountLabel}
               </Chip>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setRosterOpen((open) => !open)}
-                >
-                  {rosterOpen ? 'Done editing' : editPeopleLabel}
-                </Button>
-              </div>
             )}
-          </div>
-        )}
+        </div>
       </div>
 
       {/* ── Header utilities: attendee editor + destination ────── */}
       {showLowerSection && (
         <div className="bg-casa-surface" style={{ borderBottom: `1px solid ${S.borderSoft}` }}>
-          {hasPeople && rosterOpen && (
+          {rosterOpen && (
             <div className="px-6 pt-3 pb-3">
-              <div className="mb-2 text-caption font-bold uppercase tracking-wide" style={{ color: S.label }}>
-                {peopleSectionLabel}
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-caption font-bold uppercase tracking-wide" style={{ color: S.label }}>
+                  {peopleSectionLabel}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setRosterOpen(false)}
+                  aria-label="Done editing attendees"
+                >
+                  <X size={16} aria-hidden="true" />
+                </Button>
               </div>
               <MemberEditor
                 event={event}
@@ -1490,10 +1404,22 @@ function StandardPanelBody({
         <DepartureRiskBanner event={event} travelEta={routeReady ? commuteQuery.data : null} />
       )}
 
+      {/* ── Bring / Pack ── */}
+      <section>
+        <SectionLabel>{mode === 'trip' ? 'Pack' : 'Bring'}</SectionLabel>
+        <Card tone="surface" padding="sm">
+          <ChecklistEditor items={event.checklist} eventId={event.id} editable />
+        </Card>
+      </section>
+
       {/* ── Where (map + weather + verify state) ── */}
       {!reminder && showLocation && (
-        <section>
-          <SectionLabel>{mode === 'trip' ? 'Destination' : 'Where'}</SectionLabel>
+        <DisclosureSection
+          title={mode === 'trip' ? 'Destination' : 'Where'}
+          summary={event.location_name || event.address || 'Location details'}
+          defaultOpen={false}
+          className="overflow-hidden rounded-card border border-casa-border bg-casa-surface"
+        >
           <LocationBlock
             eventId={event.id}
             locationName={event.location_name}
@@ -1507,20 +1433,16 @@ function StandardPanelBody({
             transportationNeeded={showTransportationSection}
             accent={eventAccentColor(event)}
           />
-        </section>
+        </DisclosureSection>
       )}
 
-      {/* ── Bring / Pack ── */}
-      <section>
-        <SectionLabel>{mode === 'trip' ? 'Pack' : 'Bring'}</SectionLabel>
-        <Card tone="surface" padding="sm">
-          <ChecklistEditor items={event.checklist} eventId={event.id} editable />
-        </Card>
-      </section>
-
       {showMeanwhile && (
-        <section>
-          <SectionLabel>Meanwhile, the rest of the family · {format(new Date(event.start_time), 'h:mm a')}–{format(new Date(event.end_time), 'h:mm a')}</SectionLabel>
+        <DisclosureSection
+          title="Meanwhile, the rest of the family"
+          summary={`${format(new Date(event.start_time), 'h:mm a')}–${format(new Date(event.end_time), 'h:mm a')} · ${coverageRows.length} people`}
+          defaultOpen={false}
+          className="overflow-hidden rounded-card border border-casa-border bg-casa-surface"
+        >
           <div className="rounded-[14px] px-4 py-1.5" style={{ background: S.coverFill }}>
             {coverageRows.map((row, i) => (
               <div key={row.id} className="flex items-center gap-3 py-2.5" style={i > 0 ? { borderTop: `1px solid ${S.hair}` } : undefined}>
@@ -1533,7 +1455,7 @@ function StandardPanelBody({
               </div>
             ))}
           </div>
-        </section>
+        </DisclosureSection>
       )}
 
       {/* ── Reference (collapsible: contact, cost, notes, dietary, outfit) ── */}
@@ -2521,13 +2443,15 @@ function PanelFooter({ event, modeOverride, onEdit }: { event: EventWithDetails;
 
   return (
     <div className="flex flex-none items-center gap-2.5 bg-casa-surface px-5 py-3.5" style={{ borderTop: `1px solid ${S.borderMed}` }}>
-      <IconButton
+      <Button
         onClick={onEdit}
         title="Edit details"
-        icon={<Pencil size={16} />}
-        aria-label="Edit event details"
         variant="secondary"
-      />
+        size="sm"
+        leadingIcon={<Pencil size={16} />}
+      >
+        Edit
+      </Button>
       {primaryHref && (
         <a
           href={primaryHref}

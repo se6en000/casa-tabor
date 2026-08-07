@@ -7,10 +7,10 @@ const panel = readFileSync(
   'utf8',
 )
 
-test('member picker escapes the header and stacks above later event sections', () => {
-  assert.match(panel, /showPicker && 'z-popover'/)
-  // The header must remain overflow-visible so category and member popovers are
-  // not clipped; BirthdayCardDecoration contains its own artwork overflow.
+test('member editor stays hidden in the existing expandable header section', () => {
+  assert.match(panel, /rosterOpen && \([\s\S]*<MemberEditor/)
+  assert.doesNotMatch(panel.slice(panel.indexOf('function MemberEditor'), panel.indexOf('Category quick-edit popover')), /showPicker/)
+  // The header remains overflow-visible for the category popover and artwork.
   assert.match(panel, /overflow-visible border-b border-casa-border bg-casa-bg px-6 pb-5 pt-4/)
   assert.doesNotMatch(panel, /overflow-hidden border-b border-casa-border bg-casa-bg px-6/)
 })

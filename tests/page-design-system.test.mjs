@@ -231,7 +231,8 @@ test('event create and edit workflows use shared design-system contracts', () =>
   assert.match(eventEdit, /<Alert /)
   assert.doesNotMatch(eventEdit, /\btext-\[(?:\d|\.)+(?:px|rem|em)\]/)
   assert.doesNotMatch(eventEdit, /z-\[\d+\]/)
-  assert.match(eventDetail, /\{event && !showEdit && \(/)
+  assert.match(eventDetail, /\{event && \(/)
+  assert.match(eventDetail, /presentation="inline"/)
 })
 
 test('inline calendar uses density-aware controls and semantic layering', () => {
@@ -413,7 +414,7 @@ test('calendar chrome uses shared controls while runtime event geometry stays in
 
   assert.match(day, /import \{ Button, CalendarPill, IconButton \} from '\.\.\/ui'/)
   assert.match(month, /import \{ Button, CalendarPill, IconButton \} from '\.\.\/ui'/)
-  assert.match(detail, /import \{ Alert, Button, Card, Chip, IconButton, Switch \} from '\.\.\/ui'/)
+  assert.match(detail, /import \{ Alert, Button, Card, Chip, DisclosureSection, IconButton, Switch \} from '\.\.\/ui'/)
   assert.match(page, /import \{ Button, IconButton, SegmentedControl \} from '\.\.\/components\/ui'/)
   assert.doesNotMatch(page, /<button\b/)
   assert.match(page, /<SegmentedControl[\s\S]*?aria-label="Calendar view"[\s\S]*?onChange=\{setActiveView\}/)

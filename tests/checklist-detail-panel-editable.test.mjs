@@ -9,7 +9,20 @@ test('EventDetailPanel renders ChecklistEditor in editable mode', () => {
 })
 
 test('EventDetailPanel always shows the checklist section so items can be added even when empty', () => {
-  const section = source.match(/\{\/\* ── Bring \/ Pack ── \*\/\}[\s\S]*?<\/section>\s*\)\}/)
-  assert.ok(section, 'expected to find the Bring/Pack section block')
-  assert.doesNotMatch(section[0], /\{hasChecklist &&/, 'checklist section should no longer be gated behind hasChecklist now that items can be added directly')
+  const bringStart = source.indexOf('/* ── Bring / Pack ── */')
+  const bringEnd = source.indexOf('/* ── Where', bringStart)
+  const section = source.slice(bringStart, bringEnd)
+  assert.ok(bringStart >= 0 && bringEnd > bringStart, 'expected to find the Bring/Pack section block')
+  assert.doesNotMatch(section, /\{hasChecklist &&/, 'checklist section should no longer be gated behind hasChecklist now that items can be added directly')
+})
+
+test('What to Bring appears before a collapsed-by-default Where section', () => {
+  const bringIndex = source.indexOf('/* ── Bring / Pack ── */')
+  const whereIndex = source.indexOf('/* ── Where (map + weather + verify state) ── */')
+  const whereBlock = source.slice(whereIndex, source.indexOf('/* ──', whereIndex + 10))
+
+  assert.ok(bringIndex >= 0 && whereIndex > bringIndex)
+  assert.match(whereBlock, /<DisclosureSection/)
+  assert.match(whereBlock, /defaultOpen=\{false\}/)
+  assert.match(whereBlock, /<LocationBlock/)
 })
