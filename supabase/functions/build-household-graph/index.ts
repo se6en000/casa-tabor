@@ -435,6 +435,15 @@ Deno.serve(async (req) => {
       console.error('discover_directory_candidates failed', discoveryError.message)
     } else {
       discovery = discoveryData as Record<string, unknown>
+      const asCount = (key: string) => (typeof discovery?.[key] === 'number' ? (discovery[key] as number) : 0)
+      const placesInserted = asCount('places_inserted')
+      const contactsInserted = asCount('contacts_inserted')
+      // Only places_inserted/contacts_inserted show up as an inline Add/Skip row in
+      // the Needs You card (family_links/connections are silent auto-links with no
+      // per-entry review UI) — the notification copy must count only what a person
+      // can actually act on, or "3 new entries" will show up with just 2 rows to
+      // review and look broken/confusing.
+      const reviewableCount = placesInserted + contactsInserted
       const totalInserted = Object.values(discovery ?? {}).reduce(
         (sum, v) => sum + (typeof v === 'number' ? v : 0),
         0,
@@ -442,10 +451,18 @@ Deno.serve(async (req) => {
       // Only notify when something actually needs review — a zero-result scan
       // (the common case once the backlog is caught up) shouldn't spam the bell.
       if (totalInserted > 0) {
+        const noun =
+          reviewableCount === 1
+            ? (placesInserted === 1 ? 'a new place' : 'a new contact')
+            : `${reviewableCount} new places or contacts`
+        const body =
+          reviewableCount > 0
+            ? `We noticed ${noun} from your calendar — save the ones you want to keep, or skip them.`
+            : 'We linked some places and contacts already in your directory, based on your calendar.'
         await sb.from('notifications').insert({
           type: 'directory_suggestions',
-          title: 'New directory suggestions ready to review',
-          body: `${totalInserted} new ${totalInserted === 1 ? 'entry' : 'entries'} detected from your calendar activity — review and confirm in Settings.`,
+          title: reviewableCount > 0 ? 'New places & contacts to review' : 'Directory updated from your calendar',
+          body,
           source: 'system',
         })
       }

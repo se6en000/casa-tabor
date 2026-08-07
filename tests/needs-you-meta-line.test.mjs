@@ -49,6 +49,9 @@ test('conflictMetaLine falls back gracefully when event data is missing', () => 
   assert.equal(line.text, 'Scheduling conflict')
 })
 
-test('directorySuggestionMetaLine is a static "Auto-detected · needs your review" line', () => {
-  assert.equal(directorySuggestionMetaLine.text, 'Auto-detected · needs your review')
+test('directorySuggestionMetaLine is a static, plain-language "Found from your calendar" line', () => {
+  // Previously "Auto-detected · needs your review" — jargon-y to a first-time
+  // viewer (what auto-detected it? review what?). Plain language states the
+  // one fact that matters: where this suggestion came from.
+  assert.equal(directorySuggestionMetaLine.text, 'Found from your calendar')
 })

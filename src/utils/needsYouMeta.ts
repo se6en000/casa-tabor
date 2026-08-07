@@ -66,6 +66,6 @@ export function conflictMetaLine(conflict: ConflictMetaInput): NeedsYouMetaLine 
 
 export const directorySuggestionMetaLine: NeedsYouMetaLine = {
   icon: Sparkles,
-  label: 'Directory suggestion',
-  text: 'Auto-detected · needs your review',
+  label: 'Found from your calendar',
+  text: 'Found from your calendar',
 }
