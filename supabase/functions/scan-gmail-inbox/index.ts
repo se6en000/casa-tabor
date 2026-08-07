@@ -57,15 +57,21 @@ async function getRecentMessages(
   accessToken: string,
   historyId: string | null,
   backfillSince?: string | null,
+  backfillBefore?: string | null,
 ): Promise<{ messages: { id: string }[]; newHistoryId: string | null }> {
   if (backfillSince) {
     const after = Math.floor(new Date(backfillSince).getTime() / 1000)
     if (!Number.isFinite(after)) throw new Error('Invalid backfill_since timestamp')
+    const before = backfillBefore ? Math.floor(new Date(backfillBefore).getTime() / 1000) : null
+    if (before !== null && (!Number.isFinite(before) || before <= after)) {
+      throw new Error('Invalid backfill_before timestamp')
+    }
     const messages: { id: string }[] = []
     let pageToken = ''
     do {
       const page = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''
-      const res = await gmailFetch(`/users/me/messages?labelIds=INBOX&q=after:${after}&maxResults=500${page}`, accessToken)
+      const beforeQuery = before !== null ? `+before:${before}` : ''
+      const res = await gmailFetch(`/users/me/messages?labelIds=INBOX&q=after:${after}${beforeQuery}&maxResults=500${page}`, accessToken)
       if (!res.ok) throw new Error(`Could not list Gmail backfill messages: ${res.status}`)
       const data = await res.json()
       messages.push(...(data.messages ?? []))
@@ -494,6 +500,7 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}))
   const targetMemberId: string | null = body.family_member_id ?? null
   const backfillSince = typeof body.backfill_since === 'string' ? body.backfill_since : null
+  const backfillBefore = typeof body.backfill_before === 'string' ? body.backfill_before : null
   const backfillActionsOnly = body.backfill_actions_only === true
   if (backfillActionsOnly && !backfillSince) {
     return new Response(JSON.stringify({ error: 'backfill_actions_only requires backfill_since' }), {
@@ -526,7 +533,7 @@ Deno.serve(async (req) => {
       }).eq('family_member_id', memberId)
     }
 
-    const { messages, newHistoryId } = await getRecentMessages(accessToken, tok.gmail_history_id, backfillSince)
+    const { messages, newHistoryId } = await getRecentMessages(accessToken, tok.gmail_history_id, backfillSince, backfillBefore)
     if (newHistoryId) {
       await sb.from('google_tokens').update({ gmail_history_id: newHistoryId }).eq('family_member_id', memberId)
     }
