@@ -12,6 +12,7 @@ import { conflictMetaLine, directorySuggestionMetaLine, prepMetaLine } from '../
 import { isReadOnlyNeedsYouItem, mergeNeedsYouItems } from '../../utils/needsYouFeed'
 import { shouldSuppressPriorityChipIcon } from '../../utils/conflictResolution'
 import { formatSnoozeHistoryLabel } from '../../utils/snoozeDuration'
+import { getPrepItemDisplayDescription } from '../../utils/reminderLateness'
 import ConflictNeedsYouActions from '../shared/ConflictNeedsYouActions'
 import DirectorySuggestionActions from '../shared/DirectorySuggestionActions'
 import ExpandPanel from '../shared/ExpandPanel'
@@ -514,7 +515,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                               contentClassName="w-full justify-start"
                             >
                               <p className={cn('!text-body-sm leading-snug text-casa-text', !isRevealed && 'line-clamp-2')}>
-                                {item.description}
+                                {getPrepItemDisplayDescription(item.description, item.source_type, item.event_date, now)}
                               </p>
                             </Button>
                           ) : (
@@ -527,7 +528,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                               contentClassName="w-full justify-start"
                             >
                               <p className={cn('!text-body-sm leading-snug text-casa-text', !isRevealed && 'line-clamp-2')}>
-                                {item.description}
+                                {getPrepItemDisplayDescription(item.description, item.source_type, item.event_date, now)}
                               </p>
                             </Button>
                           )}
