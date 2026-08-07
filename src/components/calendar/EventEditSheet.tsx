@@ -1419,8 +1419,53 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
                   />
                 </div>
 
-                {/* Date/time dials — collapse time when all-day */}
-                {isAllDay ? (
+                {/* Date/time dials — reminders get a single point-in-time picker (no end time); events keep the full dual dial */}
+                {eventType === 'reminder' ? (
+                  isAllDay ? (
+                    <div>
+                      <p className="text-caption text-casa-muted mb-1">Date</p>
+                      <Input
+                        type="date"
+                        value={startDT.slice(0, 10)}
+                        onChange={e => {
+                          const next = `${e.target.value}T00:00`
+                          setStartDT(next)
+                          setEndDT(next)
+                          markDirty()
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <p className="text-caption text-casa-muted mb-1">Date</p>
+                        <Input
+                          type="date"
+                          value={startDT.slice(0, 10)}
+                          onChange={e => {
+                            const next = `${e.target.value}T${startDT.slice(11, 16)}`
+                            setStartDT(next)
+                            setEndDT(next)
+                            markDirty()
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <p className="text-caption text-casa-muted mb-1">Time</p>
+                        <Input
+                          type="time"
+                          value={startDT.slice(11, 16)}
+                          onChange={e => {
+                            const next = `${startDT.slice(0, 10)}T${e.target.value}`
+                            setStartDT(next)
+                            setEndDT(next)
+                            markDirty()
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )
+                ) : isAllDay ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                       <p className="text-caption text-casa-muted mb-1">Start date</p>
@@ -1589,42 +1634,44 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
               </div>
 
               {/* ── Category picker ── */}
-              <div className="px-6 pt-5 pb-4 border-b border-casa-divider">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide">
-                    Event Category
-                  </label>
-                  {categoryLocked && (
-                    <span className="flex items-center gap-1 text-caption text-casa-gold font-semibold">
-                      <Lock size={11} /> Locked
-                    </span>
-                  )}
+              {eventType !== 'reminder' && (
+                <div className="px-6 pt-5 pb-4 border-b border-casa-divider">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide">
+                      Event Category
+                    </label>
+                    {categoryLocked && (
+                      <span className="flex items-center gap-1 text-caption text-casa-gold font-semibold">
+                        <Lock size={11} /> Locked
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <Select
+                      value={category}
+                      onChange={e => handleCategoryChange(e.target.value)}
+                      className={cn('appearance-none pr-10', categoryLocked && 'border-casa-gold')}
+                    >
+                      {ALL_CATEGORIES.map(cat => (
+                        <option key={cat} value={cat}>{CATEGORY_LABEL[cat]}</option>
+                      ))}
+                    </Select>
+                    <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-casa-muted pointer-events-none" />
+                  </div>
+                  <p className="text-caption text-casa-muted mt-1.5">
+                    {categoryLocked
+                      ? 'Category locked — AI will not change it. Tap again to pick a different one.'
+                      : 'Changing the category updates which fields are shown below.'}
+                  </p>
                 </div>
-                <div className="relative">
-                  <Select
-                    value={category}
-                    onChange={e => handleCategoryChange(e.target.value)}
-                    className={cn('appearance-none pr-10', categoryLocked && 'border-casa-gold')}
-                  >
-                    {ALL_CATEGORIES.map(cat => (
-                      <option key={cat} value={cat}>{CATEGORY_LABEL[cat]}</option>
-                    ))}
-                  </Select>
-                  <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-casa-muted pointer-events-none" />
-                </div>
-                <p className="text-caption text-casa-muted mt-1.5">
-                  {categoryLocked
-                    ? 'Category locked — AI will not change it. Tap again to pick a different one.'
-                    : 'Changing the category updates which fields are shown below.'}
-                </p>
-              </div>
+              )}
 
               {/* ── Location ── */}
               <DisclosureSection
                 title="Location"
                 summary={location || address || 'No location'}
                 icon={<MapPin size={18} />}
-                defaultOpen={!location && !address}
+                defaultOpen={eventType === 'reminder' ? false : (!location && !address)}
               >
                 {(location || address) && (
                   <FormSummaryCard
