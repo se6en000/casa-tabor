@@ -615,11 +615,15 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
 
 function MemberEditor({
   event,
+  members,
+  onMembersOverride,
   transportationPlan,
   onRosterChange,
   onQuickAction,
 }: {
   event: EventWithDetails
+  members: EventWithDetails['members']
+  onMembersOverride: (members: EventWithDetails['members'] | null) => void
   transportationPlan: EventTransportationPlan | null
   onRosterChange: (names: string[], persist?: boolean) => void
   onQuickAction: (request: RecurringQuickActionRequest) => Promise<RecurringQuickActionResult>
@@ -627,12 +631,10 @@ function MemberEditor({
   const queryClient = useQueryClient()
   const { data: allMembers = [] } = useFamilyMembers()
   const [saving, setSaving] = useState<string | null>(null)
-  const [optimisticallyRemovedIds, setOptimisticallyRemovedIds] = useState<Set<string>>(() => new Set())
   const [mutationError, setMutationError] = useState<string | null>(null)
 
-  const visibleMembers = event.members.filter((member) => !optimisticallyRemovedIds.has(member.id))
-  const assignedIds = new Set(visibleMembers.map(m => m.family_member?.id))
-  const assignments = event.members.map((member) => ({
+  const assignedIds = new Set(members.map(m => m.family_member?.id))
+  const assignments = members.map((member) => ({
     family_member_id: member.family_member.id,
     role: 'attendee',
   }))
@@ -656,24 +658,23 @@ function MemberEditor({
   }
 
   async function removeMember(eventMemberId: string, memberName: string) {
-    setOptimisticallyRemovedIds((removedIds) => new Set(removedIds).add(eventMemberId))
+    const previousMembers = members
+    // Reflect the change immediately everywhere the roster is shown (avatar cluster, chips),
+    // instead of waiting on the network round-trip + query refetch to complete.
+    const nextMembers = members.filter((member) => member.id !== eventMemberId)
+    onMembersOverride(nextMembers)
     setSaving(eventMemberId)
     setMutationError(null)
     try {
       const nextAssignments = assignments.filter((assignment) => (
-        assignment.family_member_id !== event.members.find((member) => member.id === eventMemberId)?.family_member.id
+        assignment.family_member_id !== members.find((member) => member.id === eventMemberId)?.family_member.id
       ))
-      const nextNames = event.members
-        .filter((member) => member.id !== eventMemberId)
+      const nextNames = nextMembers
         .map((member) => member.family_member?.name?.trim())
         .filter((name): name is string => Boolean(name))
       const { result, nextPlan } = await saveAssignments(nextAssignments, nextNames)
       if (result === 'cancelled') {
-        setOptimisticallyRemovedIds((removedIds) => {
-          const restoredIds = new Set(removedIds)
-          restoredIds.delete(eventMemberId)
-          return restoredIds
-        })
+        onMembersOverride(previousMembers)
         return
       }
       if (result === 'legacy') {
@@ -683,12 +684,13 @@ function MemberEditor({
       onRosterChange(nextNames, result === 'legacy')
       if (result === 'handled' && !nextPlan) await queryClient.invalidateQueries({ queryKey: ['events'] })
       await queryClient.invalidateQueries({ queryKey: ['events'] })
+      // The header/roster editor read from the separate `['event-details', id]` cache
+      // (see useEventDetails), so it must be invalidated too or the optimistic
+      // override above will revert back to stale data once cleared.
+      await queryClient.invalidateQueries({ queryKey: ['event-details', event.id] })
+      onMembersOverride(null)
     } catch (cause) {
-      setOptimisticallyRemovedIds((removedIds) => {
-        const restoredIds = new Set(removedIds)
-        restoredIds.delete(eventMemberId)
-        return restoredIds
-      })
+      onMembersOverride(previousMembers)
       setMutationError(`Could not remove ${memberName}. ${cause instanceof Error ? cause.message : ''}`)
     } finally {
       setSaving(null)
@@ -696,23 +698,32 @@ function MemberEditor({
   }
 
   async function addMember(familyMemberId: string) {
+    const addedMember = allMembers.find((member) => member.id === familyMemberId)
+    if (!addedMember) {
+      setMutationError('That family member is no longer available.')
+      return
+    }
+    const previousMembers = members
+    const nextMembers = [
+      ...members,
+      { id: `optimistic-${familyMemberId}`, role: 'attendee', family_member: addedMember },
+    ]
+    onMembersOverride(nextMembers)
     setSaving(familyMemberId)
     setMutationError(null)
-    const addedMember = allMembers.find((member) => member.id === familyMemberId)
     try {
-      if (!addedMember) throw new Error('That family member is no longer available.')
       const nextAssignments = [
         ...assignments,
         { family_member_id: familyMemberId, role: 'attendee' },
       ]
-      const nextNames = [
-        ...event.members
-          .map((member) => member.family_member?.name?.trim())
-          .filter((name): name is string => Boolean(name)),
-        ...(addedMember ? [addedMember.name] : []),
-      ]
+      const nextNames = nextMembers
+        .map((member) => member.family_member?.name?.trim())
+        .filter((name): name is string => Boolean(name))
       const { result } = await saveAssignments(nextAssignments, nextNames)
-      if (result === 'cancelled') return
+      if (result === 'cancelled') {
+        onMembersOverride(previousMembers)
+        return
+      }
       if (result === 'legacy') {
         const { error } = await supabase.from('event_members').upsert(
           { event_id: event.id, family_member_id: familyMemberId, role: 'attendee' },
@@ -722,7 +733,10 @@ function MemberEditor({
       }
       onRosterChange(nextNames, result === 'legacy')
       await queryClient.invalidateQueries({ queryKey: ['events'] })
+      await queryClient.invalidateQueries({ queryKey: ['event-details', event.id] })
+      onMembersOverride(null)
     } catch (cause) {
+      onMembersOverride(previousMembers)
       setMutationError(`Could not add ${addedMember?.name ?? 'that person'}. ${cause instanceof Error ? cause.message : ''}`)
     } finally {
       setSaving(null)
@@ -734,7 +748,7 @@ function MemberEditor({
       {mutationError && <p role="alert" className="w-full text-caption text-casa-error">{mutationError}</p>}
       {allMembers.map((member) => {
         const selected = assignedIds.has(member.id)
-        const eventMember = visibleMembers.find((entry) => entry.family_member?.id === member.id)
+        const eventMember = members.find((entry) => entry.family_member?.id === member.id)
         const isLoading = saving === eventMember?.id || saving === member.id
         return (
           <Chip
@@ -918,9 +932,12 @@ function PanelHeader({
   const category = event.enrichment?.category
   const isBirthday = isBirthdayEvent(event)
   const accent = eventAccentColor(event)
-  const primary = event.members?.find((m) => m.role === 'primary') ?? event.members?.[0]
+  const [membersOverride, setMembersOverride] = useState<EventWithDetails['members'] | null>(null)
+  useEffect(() => { setMembersOverride(null) }, [event.id])
+  const effectiveMembers = membersOverride ?? event.members ?? []
+  const primary = effectiveMembers.find((m) => m.role === 'primary') ?? effectiveMembers[0]
   const eyebrow = primary?.family_member?.name
-    ? `${primary.family_member.name}${event.members.length > 1 ? ` +${event.members.length - 1}` : ''}`
+    ? `${primary.family_member.name}${effectiveMembers.length > 1 ? ` +${effectiveMembers.length - 1}` : ''}`
     : null
   const isRecurring = Boolean(event.rrule || event.recurrence_master_id || event.series_id)
   const reminder = event.event_type === 'reminder'
@@ -935,9 +952,9 @@ function PanelHeader({
   const cleanedTitle = cleanEventTitle(event.title ?? '').trim()
   const rawTitle = (event.title ?? '').trim()
   const displayTitle = cleanedTitle || rawTitle || (category ? (CATEGORY_LABEL[category] ?? category) : 'Event details')
-  const avatarMembers = event.members?.slice(0, 5) ?? []
-  const avatarOverflow = (event.members?.length ?? 0) - 5
-  const attendeeCount = event.members?.length ?? 0
+  const avatarMembers = effectiveMembers.slice(0, 5)
+  const avatarOverflow = effectiveMembers.length - 5
+  const attendeeCount = effectiveMembers.length
   const [rosterOpen, setRosterOpen] = useState(false)
   const rosterRegionRef = useRef<HTMLDivElement>(null)
   const [addressEditorOpen, setAddressEditorOpen] = useState(false)
@@ -1130,6 +1147,8 @@ function PanelHeader({
               </div>
               <MemberEditor
                 event={event}
+                members={effectiveMembers}
+                onMembersOverride={setMembersOverride}
                 transportationPlan={transportationPlan}
                 onRosterChange={onRosterChange}
                 onQuickAction={onQuickAction}

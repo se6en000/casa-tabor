@@ -261,7 +261,7 @@ test('event detail shell uses semantic light header, tinted workspace, and surfa
 test('reminder details identify their type and allow assigned people editing', () => {
   assert.match(detail, /event\.event_type === 'reminder' \? 'Reminder' : 'Event'/)
   assert.match(detail, /<Bell size=\{12\} aria-hidden="true" \/>[\s\S]{0,80}Reminder/)
-  assert.match(detail, /const attendeeCount = event\.members\?\.length \?\? 0/)
+  assert.match(detail, /const attendeeCount = effectiveMembers\.length/)
   assert.match(detail, /reminder \? `\$\{attendeeCount\} assigned` : `\$\{attendeeCount\} attending`/)
   assert.match(detail, /reminder \? 'Edit people' : 'Edit attendees'/)
   assert.match(detail, /reminder \? 'Assigned people' : 'Attendees'/)

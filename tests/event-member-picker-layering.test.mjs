@@ -15,18 +15,18 @@ test('member editor stays hidden in the existing expandable header section', () 
   assert.doesNotMatch(panel, /overflow-hidden border-b border-casa-border bg-casa-bg px-6/)
 })
 
-test('removing an attendee hides its pill before persistence completes and restores it on failure', () => {
+test('removing an attendee updates the roster (avatars + chips) before persistence completes and restores it on failure', () => {
   const removeStart = panel.indexOf('async function removeMember')
   const removeEnd = panel.indexOf('async function addMember', removeStart)
   const removeMember = panel.slice(removeStart, removeEnd)
 
   assert.ok(removeStart >= 0)
-  assert.match(removeMember, /setOptimisticallyRemovedIds\(\(removedIds\) => new Set\(removedIds\)\.add\(eventMemberId\)\)/)
+  assert.match(removeMember, /onMembersOverride\(nextMembers\)/)
   assert.ok(
-    removeMember.indexOf('setOptimisticallyRemovedIds') < removeMember.indexOf('await saveAssignments'),
-    'the pill must disappear before persistence begins',
+    removeMember.indexOf('onMembersOverride(nextMembers)') < removeMember.indexOf('await saveAssignments'),
+    'the roster must update before persistence begins',
   )
-  assert.match(panel, /event\.members\.filter\(\(member\) => !optimisticallyRemovedIds\.has\(member\.id\)\)/)
-  assert.match(removeMember, /if \(result === 'cancelled'\)[\s\S]*restoredIds\.delete\(eventMemberId\)/)
-  assert.match(removeMember, /catch \(cause\)[\s\S]*restoredIds\.delete\(eventMemberId\)/)
+  assert.match(panel, /const effectiveMembers = membersOverride \?\? event\.members \?\? \[\]/)
+  assert.match(removeMember, /if \(result === 'cancelled'\)[\s\S]*onMembersOverride\(previousMembers\)/)
+  assert.match(removeMember, /catch \(cause\)[\s\S]*onMembersOverride\(previousMembers\)/)
 })
