@@ -30,9 +30,9 @@ test('assistant requests carry complete client trace provenance', () => {
   }
 })
 
-test('assistant telemetry spans deterministic, streaming, fallback, and failure outcomes', () => {
+test('assistant telemetry spans invocation, streaming, fallback, and failure outcomes', () => {
   for (const event of [
-    'assistant_fast_path_matched',
+    'assistant_invoke_started',
     'assistant_first_token',
     'assistant_result_received',
     'assistant_stream_fallback',
@@ -182,7 +182,7 @@ test('assistant narrows prompt context and tools by intent profile', () => {
   assert.match(assistantFunction, /server_ai_assistant_deterministic_mutation/)
   assert.match(assistantFunction, /server_ai_assistant_calendar_language_match/)
   assert.match(assistantFunction, /server_ai_assistant_calendar_language_unmatched/)
-  assert.match(assistantFunction, /server_ai_assistant_calendar_semantic_read/)
+  assert.match(assistantFunction, /server_ai_assistant_family_retrieval/)
 })
 
 test('household directory lookups load confirmed contacts and their primary places', () => {

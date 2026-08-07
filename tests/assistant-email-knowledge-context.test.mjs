@@ -7,17 +7,43 @@ import {
 } from '../supabase/functions/_shared/assistant-email-knowledge-read.mjs'
 
 const assistant = readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
+const assistantHook = readFileSync(new URL('../src/hooks/useAIAssistant.ts', import.meta.url), 'utf8')
+const assistantSession = readFileSync(new URL('../src/hooks/useAISession.ts', import.meta.url), 'utf8')
+const assistantDrawer = readFileSync(new URL('../src/components/shared/AIChatDrawer.tsx', import.meta.url), 'utf8')
 const briefing = readFileSync(new URL('../supabase/functions/generate-briefing/index.ts', import.meta.url), 'utf8')
 
-test('assistant loads bounded active, non-sensitive family knowledge for conversational reasoning', () => {
-  assert.match(assistant, /from\('family_knowledge_claims'\)/)
-  assert.match(assistant, /\.eq\('status', 'active'\)/)
-  assert.match(assistant, /\.eq\('privacy_class', 'standard'\)/)
-  assert.match(assistant, /\.limit\(50\)/)
-  assert.match(assistant, /FAMILY DATA CONTEXT/)
-  assert.match(assistant, /formatFamilyKnowledgeContext\(emailKnowledgeResult\.data \?\? \[\]\)/)
-  assert.doesNotMatch(assistant, /isEmailKnowledgeReadRequest/)
-  assert.doesNotMatch(assistant, /formatEmailKnowledgeRead/)
+test('assistant retrieves ranked family evidence and returns its source contract', () => {
+  assert.match(assistant, /retrieveFamilyContext/)
+  assert.match(assistant, /buildAssistantContextPacket/)
+  assert.match(assistant, /trimConversationToTokenBudget/)
+  assert.match(assistant, /FAMILY EVIDENCE PACKET/)
+  assert.match(assistant, /evidence:\s*familyRetrieval\.evidence/)
+  assert.match(assistant, /sources_considered:\s*familyRetrieval\.sources_considered/)
+  assert.match(assistant, /partial_sources:\s*familyRetrieval\.partial_sources/)
+  assert.match(assistant, /assistantContextPacket\.evidence/)
+  assert.doesNotMatch(assistant, /assistantContextPacket\.items/)
+  assert.doesNotMatch(assistant, /assistantContextPacket\??\.budget/)
+  assert.doesNotMatch(assistant, /formatFamilyKnowledgeContext\(emailKnowledgeResult\.data \?\? \[\]\)/)
+  assert.match(assistant, /Do not invent undocumented family requirements or generic advice/)
+  assert.match(assistant, /could not search your family data/i)
+  assert.match(assistant, /name === 'search_events' && needsUnifiedFamilyRetrieval/)
+})
+
+test('family-data questions cannot be finalized by calendar-only short-circuits', () => {
+  assert.doesNotMatch(assistantHook, /tryLocalScheduleAnswer/)
+  assert.doesNotMatch(assistant, /server_agent_read_adopted/)
+  assert.doesNotMatch(assistant, /text:\s*semanticRead\.text/)
+  assert.doesNotMatch(assistant, /text:\s*dayRead\.text/)
+})
+
+test('assistant messages preserve and render safe source evidence', () => {
+  assert.match(assistantSession, /evidence\?:\s*FamilyEvidence\[\]/)
+  assert.match(assistantHook, /normalizeFamilyEvidence\(data\?\.evidence\)/)
+  assert.match(assistantHook, /sourcesConsidered:.*data\?\.sources_considered/)
+  assert.match(assistantDrawer, /<Chip/)
+  assert.match(assistantDrawer, /msg\.evidence/)
+  assert.match(assistantDrawer, /onOpenEventDetails\?\.\(evidence\.sourceId\)/)
+  assert.match(assistantDrawer, /Evidence details/)
 })
 
 test('daily briefing includes only required active email commitments that are still current', () => {

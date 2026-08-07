@@ -15,6 +15,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { canonicalContentFingerprint, canonicalEmailKey, normalizeInternetMessageId } from '../_shared/gmail-canonical-email.mjs'
+import { classifyFamilyEvidenceCandidate, redactFamilyEvidenceText } from '../_shared/family-email-evidence.mjs'
 import { extractGmailMessageContent } from '../_shared/gmail-message-content.mjs'
 
 const CORS = {
@@ -184,6 +185,16 @@ async function callLLM(
 
 interface EmailIntent {
   intent: 'new_event' | 'update_event' | 'travel_detail' | 'skip'
+  family_evidence?: {
+    relevant: boolean
+    category?: 'school' | 'athletics' | 'appointment' | 'medical' | 'forms' | 'payment' | 'insurance' | 'utilities' | 'order_delivery' | 'other_family_service'
+    summary?: string
+    entity_names?: string[]
+    effective_at?: string
+    expires_at?: string
+    privacy_class?: 'standard' | 'sensitive' | 'excluded'
+    confidence?: number
+  }
   // new_event / update_event fields
   title?: string
   start_datetime?: string   // ISO8601 or 'unknown'
@@ -228,6 +239,13 @@ Classify this email into ONE intent:
 - "travel_detail": Flight confirmation, hotel booking, trip itinerary, e-ticket — travel logistics
 - "skip": Purely promotional, newsletter, shipping, no date, or already handled
 
+Separately decide whether it contains current operational family evidence worth
+remembering even when it is not an event or conventional due-date task. Eligible
+categories are school, athletics, appointment, medical logistics, forms,
+payment, insurance, utilities, order/delivery, and trusted family services.
+Exclude marketing, donations, optional opportunities, generic newsletters,
+routine receipts, credentials, identifiers, and sensitive medical details.
+
 EMAIL:
 Subject: ${subject}
 From: ${from}
@@ -247,7 +265,17 @@ Reply ONLY with JSON:
   "updates_event_title": "title of event being updated (update_event only)",
   "updates_event_date": "YYYY-MM-DD of event being updated (update_event only)",
   "change_summary": "what changed: e.g. 'time moved from 2pm to 3pm' (update_event only)",
-  "skip_reason": "why skipping (skip only)"
+  "skip_reason": "why skipping (skip only)",
+  "family_evidence": {
+    "relevant": false,
+    "category": "school|athletics|appointment|medical|forms|payment|insurance|utilities|order_delivery|other_family_service",
+    "summary": "concise source-backed operational facts only, with no credentials or sensitive details",
+    "entity_names": ["people, schools, providers, teams, or services explicitly named"],
+    "effective_at": "ISO8601 or empty",
+    "expires_at": "ISO8601 or empty",
+    "privacy_class": "standard|sensitive|excluded",
+    "confidence": 0.0
+  }
 }`
 
   try {
@@ -424,6 +452,92 @@ async function persistEmailKnowledgeClaims(
   if (error) throw error
 }
 
+async function persistFamilyEmailEvidence(
+  sb: ReturnType<typeof createClient>,
+  canonicalEmailId: string,
+  details: {
+    subject: string
+    from: string
+    body: string
+    threadId: string | null
+  },
+  receivedAt: string,
+  contentFingerprint: string,
+  evidence: EmailIntent['family_evidence'],
+  fallbackCategory: string | null,
+): Promise<boolean> {
+  const category = evidence?.category || fallbackCategory
+  const privacyClass = evidence?.privacy_class ?? 'standard'
+  if (
+    !evidence?.relevant ||
+    privacyClass !== 'standard' ||
+    !category
+  ) {
+    return false
+  }
+
+  const receivedTime = new Date(receivedAt)
+  const retentionDate = new Date(receivedTime)
+  retentionDate.setUTCMonth(retentionDate.getUTCMonth() + 4)
+  const requestedExpiry = evidence.expires_at ? new Date(evidence.expires_at) : null
+  const expiresAt = requestedExpiry && !isNaN(requestedExpiry.getTime()) && requestedExpiry < retentionDate
+    ? requestedExpiry
+    : retentionDate
+  const requestedEffective = evidence.effective_at ? new Date(evidence.effective_at) : null
+  const effectiveAt = requestedEffective && !isNaN(requestedEffective.getTime())
+    ? requestedEffective.toISOString()
+    : receivedAt
+  const safeBody = redactFamilyEvidenceText(details.body).slice(0, 12000)
+  const safeSummary = redactFamilyEvidenceText(evidence.summary || details.subject).slice(0, 1200)
+  const entityRefs = (evidence.entity_names ?? [])
+    .map((name) => redactFamilyEvidenceText(name).slice(0, 120))
+    .filter(Boolean)
+    .slice(0, 20)
+
+  const { error: documentError } = await sb
+    .from('family_data_documents')
+    .upsert({
+      source_type: 'email',
+      source_id: canonicalEmailId,
+      title: redactFamilyEvidenceText(details.subject || 'Family email').slice(0, 300),
+      redacted_text: `${safeSummary}\n\n${safeBody}`.trim(),
+      category,
+      entity_refs: entityRefs,
+      occurred_at: receivedAt,
+      effective_at: effectiveAt,
+      expires_at: expiresAt.toISOString(),
+      status: 'active',
+      confidence: Number.isFinite(Number(evidence.confidence))
+        ? Math.min(1, Math.max(0, Number(evidence.confidence)))
+        : 0.8,
+      privacy_class: 'standard',
+      content_hash: contentFingerprint,
+      metadata: {
+        sender: redactFamilyEvidenceText(details.from).slice(0, 300),
+        subject: redactFamilyEvidenceText(details.subject).slice(0, 300),
+        received_at: receivedAt,
+        gmail_thread_id: details.threadId,
+      },
+    }, { onConflict: 'source_type,source_id' })
+  if (documentError) throw documentError
+
+  const { error: queueError } = await sb
+    .from('family_data_index_queue')
+    .upsert({
+      source_type: 'email',
+      source_id: canonicalEmailId,
+      operation: 'upsert',
+      status: 'pending',
+      attempts: 0,
+      available_at: new Date().toISOString(),
+      locked_at: null,
+      locked_by: null,
+      last_error: null,
+    }, { onConflict: 'source_type,source_id' })
+  if (queueError) throw queueError
+  return true
+}
+
 // ── Fuzzy event dedup ─────────────────────────────────────────────
 // Returns existing event ID if we find a probable match; null if it looks new.
 
@@ -504,11 +618,29 @@ async function handleGmailScan(req: Request): Promise<Response> {
   const backfillSince = typeof body.backfill_since === 'string' ? body.backfill_since : null
   const backfillBefore = typeof body.backfill_before === 'string' ? body.backfill_before : null
   const backfillActionsOnly = body.backfill_actions_only === true
+  const backfillFamilyEvidenceOnly = body.backfill_family_evidence_only === true
   if (backfillActionsOnly && !backfillSince) {
     return new Response(JSON.stringify({ error: 'backfill_actions_only requires backfill_since' }), {
       status: 400,
       headers: { ...CORS, 'content-type': 'application/json' },
     })
+  }
+  if (backfillFamilyEvidenceOnly && !backfillSince) {
+    return new Response(JSON.stringify({ error: 'backfill_family_evidence_only requires backfill_since' }), {
+      status: 400,
+      headers: { ...CORS, 'content-type': 'application/json' },
+    })
+  }
+  if (backfillFamilyEvidenceOnly && backfillSince) {
+    const requestedSince = new Date(backfillSince)
+    const earliestAllowed = new Date()
+    earliestAllowed.setUTCMonth(earliestAllowed.getUTCMonth() - 4)
+    if (isNaN(requestedSince.getTime()) || requestedSince < earliestAllowed) {
+      return new Response(JSON.stringify({ error: 'Family evidence backfill is limited to the rolling four-month window' }), {
+        status: 400,
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
   }
 
   let query = sb.from('google_tokens')
@@ -517,8 +649,9 @@ async function handleGmailScan(req: Request): Promise<Response> {
   if (targetMemberId) query = query.eq('family_member_id', targetMemberId)
   const { data: tokens } = await query
 
-  const results: { member_id: string; scanned: number; created: number; updated: number; travel: number; skipped: number; conflicts: number; actions: number; error?: string }[] = []
+  const results: { member_id: string; scanned: number; created: number; updated: number; travel: number; skipped: number; conflicts: number; actions: number; evidence: number; error?: string }[] = []
   const llmUsage: UsageAccumulator = { inputTokens: 0, outputTokens: 0 }
+  let indexedEvidenceTotal = 0
 
   for (const tok of (tokens ?? [])) {
     const memberId = tok.family_member_id
@@ -527,7 +660,7 @@ async function handleGmailScan(req: Request): Promise<Response> {
     // Refresh if needed
     if (!accessToken || !tok.expires_at || new Date(tok.expires_at) < new Date(Date.now() + 60_000)) {
       const refreshed = await refreshToken(tok.refresh_token, clientId, clientSecret)
-      if (!refreshed) { results.push({ member_id: memberId, scanned: 0, created: 0, updated: 0, travel: 0, skipped: 0, conflicts: 0, actions: 0, error: 'token refresh failed' }); continue }
+      if (!refreshed) { results.push({ member_id: memberId, scanned: 0, created: 0, updated: 0, travel: 0, skipped: 0, conflicts: 0, actions: 0, evidence: 0, error: 'token refresh failed' }); continue }
       accessToken = refreshed.access_token
       await sb.from('google_tokens').update({
         access_token: refreshed.access_token,
@@ -540,7 +673,7 @@ async function handleGmailScan(req: Request): Promise<Response> {
       await sb.from('google_tokens').update({ gmail_history_id: newHistoryId }).eq('family_member_id', memberId)
     }
 
-    let scanned = 0, created = 0, updated = 0, travel = 0, skipped = 0, conflicts = 0, actions = 0
+    let scanned = 0, created = 0, updated = 0, travel = 0, skipped = 0, conflicts = 0, actions = 0, evidence = 0
 
     for (const { id: msgId } of messages) {
       // Skip already-processed
@@ -581,13 +714,27 @@ async function handleGmailScan(req: Request): Promise<Response> {
         throw new Error(`Could not canonicalize Gmail message: ${canonicalEmailError?.message ?? 'missing canonical row'}`)
       }
 
+      if (backfillFamilyEvidenceOnly) {
+        const { data: existingFamilyDocument, error: familyDocumentLookupError } = await sb
+          .from('family_data_documents')
+          .select('id')
+          .eq('source_type', 'email')
+          .eq('source_id', canonicalEmail.id)
+          .maybeSingle()
+        if (familyDocumentLookupError) throw familyDocumentLookupError
+        if (existingFamilyDocument) {
+          skipped++
+          continue
+        }
+      }
+
       const { data: existingCanonicalDelivery, error: duplicateLookupError } = await sb
         .from('gmail_processed_messages')
         .select('id')
         .eq('canonical_email_id', canonicalEmail.id)
         .limit(1)
       if (duplicateLookupError) throw duplicateLookupError
-      if (existingCanonicalDelivery && existingCanonicalDelivery.length > 0) {
+      if (existingCanonicalDelivery && existingCanonicalDelivery.length > 0 && !backfillFamilyEvidenceOnly) {
         await sb.from('gmail_processed_messages').upsert({
           family_member_id: memberId,
           gmail_message_id: msgId,
@@ -608,8 +755,13 @@ async function handleGmailScan(req: Request): Promise<Response> {
       const isTravel = TRAVEL_KEYWORDS.test(searchText) || TRAVEL_SENDER_DOMAINS.some(d => details.from.toLowerCase().includes(d))
       const isCalendar = CALENDAR_KEYWORDS.test(searchText)
       const isActionCandidate = ACTION_KEYWORDS.test(searchText)
+      const familyEvidenceCandidate = classifyFamilyEvidenceCandidate({
+        subject: details.subject,
+        from: details.from,
+        body: details.body,
+      })
 
-      if (!isTravel && !isCalendar && !isActionCandidate) {
+      if (!isTravel && !isCalendar && !isActionCandidate && !familyEvidenceCandidate.eligible) {
         await sb.from('gmail_processed_messages').upsert({
           family_member_id: memberId, gmail_message_id: msgId,
           canonical_email_id: canonicalEmail.id,
@@ -624,11 +776,51 @@ async function handleGmailScan(req: Request): Promise<Response> {
 
       // ── AI classification ──────────────────────────────────────
       const [classified, extractedActions] = await Promise.all([
-        classifyEmail(details.subject, details.from, details.date, details.body, familyMembers, llm, llmUsage),
-        isActionCandidate
+        classifyEmail(
+          details.subject,
+          details.from,
+          details.date,
+          redactFamilyEvidenceText(details.body),
+          familyMembers,
+          llm,
+          llmUsage,
+        ),
+        isActionCandidate && !backfillFamilyEvidenceOnly
           ? extractInboxActions(details.subject, details.from, details.date, details.body, familyMembers, llm, llmUsage)
           : Promise.resolve([] as InboxActionItem[]),
       ])
+      const indexedFamilyEvidence = familyEvidenceCandidate.eligible
+        ? await persistFamilyEmailEvidence(
+          sb,
+          canonicalEmail.id,
+          details,
+          emailReceivedAt,
+          contentFingerprint,
+          classified?.family_evidence,
+          familyEvidenceCandidate.category,
+        )
+        : false
+      if (indexedFamilyEvidence) {
+        evidence++
+        indexedEvidenceTotal++
+      }
+      if (backfillFamilyEvidenceOnly) {
+        await sb.from('gmail_processed_messages').upsert({
+          family_member_id: memberId,
+          gmail_message_id: msgId,
+          canonical_email_id: canonicalEmail.id,
+          subject: details.subject,
+          email_subject: details.subject,
+          from_email: details.from,
+          received_at: emailReceivedAt,
+          intent: 'skip',
+          skipped_reason: indexedFamilyEvidence
+            ? 'backfill family evidence indexed'
+            : 'backfill family evidence excluded',
+        }, { onConflict: 'family_member_id,gmail_message_id' })
+        skipped++
+        continue
+      }
       const currentActions = backfillActionsOnly
         ? filterCurrentBackfillActions(extractedActions, new Date())
         : extractedActions
@@ -902,7 +1094,25 @@ async function handleGmailScan(req: Request): Promise<Response> {
       }
     }
 
-    results.push({ member_id: memberId, scanned, created, updated, travel, skipped, conflicts, actions })
+    results.push({ member_id: memberId, scanned, created, updated, travel, skipped, conflicts, actions, evidence })
+  }
+
+  if (indexedEvidenceTotal > 0) {
+    const indexingPromise = sb.functions.invoke('index-family-data', {
+      body: { batch_size: Math.min(50, indexedEvidenceTotal) },
+    }).then(({ error }) => {
+      if (error) console.error('[scan-gmail-inbox] family evidence worker failed:', error.message)
+    }).catch((error) => {
+      console.error('[scan-gmail-inbox] family evidence worker failed:', String(error))
+    })
+    const edgeRuntime = globalThis as unknown as {
+      EdgeRuntime?: { waitUntil(promise: Promise<unknown>): void }
+    }
+    if (edgeRuntime.EdgeRuntime?.waitUntil) {
+      edgeRuntime.EdgeRuntime.waitUntil(indexingPromise)
+    } else {
+      void indexingPromise
+    }
   }
 
   if (llmUsage.inputTokens > 0 || llmUsage.outputTokens > 0) {

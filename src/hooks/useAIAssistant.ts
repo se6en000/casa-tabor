@@ -2,8 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { supabase, supabaseUrl, supabaseAnonKey } from '../lib/supabase'
 import type { EventWithDetails } from './useCalendarEvents'
 import type { FamilyMember } from '../types'
-import { useAISession, type AIMessage } from './useAISession'
-import { findSingleEventForScheduleQuery, tryLocalScheduleAnswer } from '../lib/scheduleFastPath.mjs'
+import { useAISession, type AIMessage, type FamilyEvidence } from './useAISession'
 import {
   createAssistantTraceContext,
   emitAssistantTrace,
@@ -30,6 +29,33 @@ const genId = (): string =>
   typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2) + Date.now().toString(36)
+
+function normalizeFamilyEvidence(value: unknown): FamilyEvidence[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const row = item as Record<string, unknown>
+    if (
+      typeof row.evidence_id !== 'string' ||
+      typeof row.source_type !== 'string' ||
+      typeof row.source_id !== 'string' ||
+      typeof row.title !== 'string' ||
+      typeof row.excerpt !== 'string'
+    ) return []
+    return [{
+      evidenceId: row.evidence_id,
+      sourceType: row.source_type,
+      sourceId: row.source_id,
+      title: row.title,
+      excerpt: row.excerpt,
+      occurredAt: typeof row.occurred_at === 'string' ? row.occurred_at : null,
+      effectiveAt: typeof row.effective_at === 'string' ? row.effective_at : null,
+      metadata: row.metadata && typeof row.metadata === 'object'
+        ? row.metadata as Record<string, unknown>
+        : {},
+    }]
+  })
+}
 
 const GOODBYE_PHRASES = /\b(goodbye|bye|go away|that'?s all|all done|i(?:'| a)?m done|we(?:'| a)?re done|done for now|close session|new session|start over|end session)\b/i
 const CONTEXTLESS_USER_PHRASES = /\b(yes|yeah|yep|ok|okay|no|nope|cancel|stop|do it|sounds good|correct|right|thanks|thank you|never mind|nvm)\b/i
@@ -199,41 +225,6 @@ export function useAIAssistant(ctx: AssistantContext) {
       return
     }
 
-    // Deterministic fast-path: answer common read-only schedule questions instantly
-    // from local state, skipping the LLM round-trip. Only fires on unambiguous matches.
-    if (!image) {
-      const fastAnswer = tryLocalScheduleAnswer(text, ctxRef.current.events, new Date())
-      if (fastAnswer) {
-        const selectedEvent = findSingleEventForScheduleQuery(text, ctxRef.current.events, new Date())
-        const conversationState = selectedEvent ? {
-          activeEntityType: 'event' as const,
-          activeEventId: selectedEvent.id,
-          activeEventUpdatedAt: selectedEvent.updated_at,
-          expectedFollowUp: 'event_follow_up' as const,
-          establishedAt: new Date().toISOString(),
-        } : undefined
-        const fastTrace = { ...trace, lane: 'fast_path' as const }
-        emitAssistantTrace('assistant_fast_path_matched', fastTrace, {
-          payload: { kind: 'schedule_read' },
-        })
-        let fpSession = sessionRef.current
-        if (!fpSession) fpSession = startNewSession()
-        setMessages(prev => {
-          const updated = [
-            ...prev,
-            { id: genId(), role: 'user' as const, content: text },
-            { id: genId(), role: 'assistant' as const, content: fastAnswer, conversationState },
-          ]
-          if (fpSession) saveMessages(fpSession.id, updated)
-          return updated
-        })
-        emitAssistantTrace('turn_completed', fastTrace, {
-          payload: { outcome: 'success', result_type: 'text' },
-        })
-        return
-      }
-    }
-
     const userMsg: AIMessage = { id: genId(), role: 'user', content: text, imageDataUrl: image?.dataUrl }
     setMessages(prev => [...prev, userMsg])
     setLoading(true)
@@ -270,11 +261,18 @@ export function useAIAssistant(ctx: AssistantContext) {
     // non-streaming JSON body) into an AIMessage. One code path → both flows stay
     // perfectly consistent.
     const buildAssistantMsg = (data: any, id: string): AIMessage => {
+      const evidence = normalizeFamilyEvidence(data?.evidence)
+      const sourceMetadata = {
+        evidence: evidence.length > 0 ? evidence : undefined,
+        sourcesConsidered: Array.isArray(data?.sources_considered) ? data.sources_considered : undefined,
+        partialSources: Array.isArray(data?.partial_sources) ? data.partial_sources : undefined,
+      }
       if (data?.type === 'error') {
         return {
           id,
           role: 'assistant',
           content: assistantErrorMessage(data.code, data.message),
+          ...sourceMetadata,
         }
       }
       if (data?.type === 'tool_action') {
@@ -290,6 +288,7 @@ export function useAIAssistant(ctx: AssistantContext) {
             status: 'pending',
           },
           conversationState: data.conversation_state,
+          ...sourceMetadata,
         }
       }
       return {
@@ -297,6 +296,7 @@ export function useAIAssistant(ctx: AssistantContext) {
         role: 'assistant',
         content: (data?.text ?? '') as string,
         conversationState: data?.conversation_state,
+        ...sourceMetadata,
       }
     }
 

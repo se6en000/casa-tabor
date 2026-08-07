@@ -1,11 +1,25 @@
 import { useState, useEffect, useCallback } from 'react'
 
+export interface FamilyEvidence {
+  evidenceId: string
+  sourceType: 'email' | 'event' | 'reminder' | 'prep' | 'activity' | 'person' | 'place' | 'relationship' | 'memory' | string
+  sourceId: string
+  title: string
+  excerpt: string
+  occurredAt?: string | null
+  effectiveAt?: string | null
+  metadata?: Record<string, unknown>
+}
+
 export interface AIMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
   imageDataUrl?: string
   streaming?: boolean
+  evidence?: FamilyEvidence[]
+  sourcesConsidered?: string[]
+  partialSources?: string[]
   conversationState?:
     | {
         activeEntityType: 'event'

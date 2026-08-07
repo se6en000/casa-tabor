@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { useAIAssistant, type AIMessage } from '../../hooks/useAIAssistant'
@@ -17,7 +17,7 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
 import MarkdownContent from '../shared/MarkdownContent'
-import { Button, LiveTranscript } from '../ui'
+import { Button, Card, Chip, Heading, LiveTranscript, Text } from '../ui'
 import { formatTextForMarkdown } from '../../lib/assistantMarkdown.mjs'
 import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId } from '../../lib/assistantTelemetry'
 import { classifyPendingConfirmation } from '../../lib/assistantConfirmation.mjs'
@@ -1369,6 +1369,7 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
   const isUser = msg.role === 'user'
   const ta = msg.toolAction
   const [quickSaving, setQuickSaving] = useState(false)
+  const [selectedEvidence, setSelectedEvidence] = useState<NonNullable<AIMessage['evidence']>[number] | null>(null)
   const actionTransitionRef = useRef(false)
   const hasPendingAction = !!ta && ta.status === 'pending'
   const showQuickSaveRecipe = !isUser && !ta && Boolean(onQuickSaveRecipe) && Boolean(enableQuickSaveRecipe) && looksLikeRecipeSuggestion(msg.content)
@@ -1446,6 +1447,65 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                 }}
               />
             )
+        )}
+        {!isUser && !ta && Boolean(msg.evidence?.length) && (
+          <div className="mt-3 flex flex-wrap gap-2" aria-label="Sources used">
+            {msg.evidence?.map((evidence) => {
+              const sourceLabel = evidence.sourceType === 'email'
+                ? 'Email'
+                : evidence.sourceType === 'event'
+                  ? 'Calendar'
+                  : evidence.sourceType === 'reminder'
+                    ? 'Reminder'
+                    : evidence.sourceType === 'activity'
+                      ? 'Activity'
+                      : evidence.sourceType === 'prep'
+                        ? 'Prep'
+                        : 'Family data'
+              const sourceIcon = evidence.sourceType === 'email'
+                ? <Mail size={12} />
+                : evidence.sourceType === 'event'
+                  ? <CalendarDays size={12} />
+                  : evidence.sourceType === 'reminder'
+                    ? <Bell size={12} />
+                    : evidence.sourceType === 'activity' || evidence.sourceType === 'prep'
+                      ? <Activity size={12} />
+                      : evidence.sourceType === 'place'
+                        ? <MapPin size={12} />
+                        : <UserPlus size={12} />
+              return (
+                <Chip
+                  key={evidence.evidenceId}
+                  size="sm"
+                  tone="info"
+                  icon={sourceIcon}
+                  aria-label={`Open ${sourceLabel} source: ${evidence.title}`}
+                  selected={selectedEvidence?.evidenceId === evidence.evidenceId}
+                  onClick={() => {
+                    if ((evidence.sourceType === 'event' || evidence.sourceType === 'reminder') && evidence.sourceId) {
+                      onOpenEventDetails?.(evidence.sourceId)
+                      return
+                    }
+                    setSelectedEvidence((current) => current?.evidenceId === evidence.evidenceId ? null : evidence)
+                  }}
+                >
+                  {sourceLabel}
+                </Chip>
+              )
+            })}
+          </div>
+        )}
+        {selectedEvidence && (
+          <Card tone="subtle" padding="sm" className="mt-3">
+            <Heading role="heading">Evidence details</Heading>
+            <Text role="body-sm" className="mt-1 font-semibold">{selectedEvidence.title}</Text>
+            <Text role="body-sm" muted className="mt-2 whitespace-pre-wrap">{selectedEvidence.excerpt}</Text>
+            {(selectedEvidence.effectiveAt || selectedEvidence.occurredAt) && (
+              <Text role="caption" muted className="mt-2">
+                {format(new Date(selectedEvidence.effectiveAt ?? selectedEvidence.occurredAt!), 'MMM d, yyyy')}
+              </Text>
+            )}
+          </Card>
         )}
         {msg.streaming && (
           <span className="inline-flex items-center gap-1 align-middle" aria-hidden="true">

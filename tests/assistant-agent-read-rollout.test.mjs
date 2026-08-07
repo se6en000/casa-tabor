@@ -31,11 +31,12 @@ test('mutation deferrals from the read planner fail closed', () => {
   assert.match(assistant, /'agent\.write\.blocked'/)
 })
 
-test('agent read rollout adopts only explicit supported text results', () => {
+test('agent read rollout observes supported text without bypassing unified synthesis', () => {
   assert.match(assistant, /agentReadData\?\.supported === true/)
   assert.match(assistant, /agentReadData\.type === 'text'/)
-  assert.match(assistant, /semantic_intent: 'agent\.read'/)
-  assert.match(assistant, /server_agent_read_adopted/)
+  assert.match(assistant, /server_agent_read_observed/)
+  assert.doesNotMatch(assistant, /server_agent_read_adopted/)
+  assert.doesNotMatch(assistant, /semantic_intent: 'agent\.read'/)
 })
 
 test('agent read failures retain the current authoritative fallback path', () => {
