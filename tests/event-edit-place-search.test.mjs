@@ -23,7 +23,6 @@ test('address-only clearing preserves the current location name', () => {
 })
 
 test('edit sheet keeps changes local until explicit Save and Close actions', () => {
-  assert.match(source, /const handleClose = \(\) => \{\s*onClose\(\)\s*\}/)
+  assert.match(source, /const handleClose = \(\) => \{\s*if \(isDirtyRef\.current\) \{/)
   assert.doesNotMatch(source, /autoSave/)
-  assert.doesNotMatch(source, /isDirtyRef/)
 })

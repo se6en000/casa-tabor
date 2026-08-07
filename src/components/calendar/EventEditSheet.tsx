@@ -213,6 +213,7 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
   const recurringActionIdRef = useRef<string | null>(null)
   const recurringDeleteActionIdRef = useRef<string | null>(null)
   const initialDeleteOpenedRef = useRef(false)
+  const isDirtyRef = useRef(false)
 
   // Fetch master's rrule + enrichment for instances
   useEffect(() => {
@@ -398,12 +399,10 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
 
   const switchToReminder = () => {
     setEventType('reminder')
-    // Strip time → keep date at local midnight (all-day reminder)
-    const datePart = startDT.slice(0, 10)
-    if (datePart) {
-      setStartDT(`${datePart}T00:00`)
-      setEndDT(`${datePart}T00:00`)
-    }
+    // Reminders can be all-day or a specific time, same as events — preserve
+    // whatever start/end/all-day state the event already had instead of
+    // forcing it to midnight; the all-day toggle already lets the user
+    // choose either mode explicitly.
   }
 
   // memberRoles: id → 'primary' | 'attendee' | undefined (undefined = not tagged)
@@ -459,6 +458,7 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
     setSaveError(null)
     setEventType(event.event_type ?? 'event')
     setIsAllDay(event.all_day ?? false)
+    isDirtyRef.current = false
     const activeCanonicalRrule = recurringContext?.series.recurrence_lines
       .find((line) => line.startsWith('RRULE:'))
       ?.slice('RRULE:'.length) ?? null
@@ -501,11 +501,26 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
     return out
   }
 
-  const markDirty = () => {}
+  const markDirty = () => { isDirtyRef.current = true }
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
   const set = (field: string, value: string) => { setForm(f => ({ ...f, [field]: value })) }
 
   const handleClose = () => {
+    if (isDirtyRef.current) {
+      setShowDiscardConfirm(true)
+      return
+    }
     onClose()
+  }
+
+  const confirmDiscard = () => {
+    isDirtyRef.current = false
+    setShowDiscardConfirm(false)
+    onClose()
+  }
+
+  const cancelDiscard = () => {
+    setShowDiscardConfirm(false)
   }
 
   const handleReenrich = async () => {
@@ -784,6 +799,7 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
         ? { ...current, series: { ...current.series, revision: result.result.series_revision } }
         : current)
     }
+    isDirtyRef.current = false
     onClose()
   }
 
@@ -805,8 +821,10 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
     // Determine which event ID to apply enrichment to
     const masterIdForEnrichment = isInstance ? (event.recurrence_master_id!) : event.id
     const enrichmentEventId = scope === 'this' ? event.id : masterIdForEnrichment
-    // Fire-and-forget enrichment — never block the critical save path on this
-    save.mutateAsync({ eventId: enrichmentEventId, fields: patch }).catch(() => {})
+    // Kick off enrichment save immediately in parallel with the rest of the
+    // event-level save steps below, but await it (see bottom of this
+    // function) before closing — errors must not be silently swallowed.
+    const enrichmentSavePromise = save.mutateAsync({ eventId: enrichmentEventId, fields: patch })
 
     // 2. Always save event-level fields (title, location, address, times) unconditionally
     const parseDateTime = (dtLocal: string, fallbackISO: string): string => {
@@ -1054,6 +1072,11 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
     }
     // analyze-conflicts + analyze-prep removed from save — they run on the scheduled HomePage cadence (5x/day)
 
+    // Now confirm the enrichment save (kicked off above) actually succeeded —
+    // errors propagate to doSave's catch, which keeps the sheet open and
+    // shows saveError instead of silently closing on a failed save.
+    await enrichmentSavePromise
+    isDirtyRef.current = false
     onClose()
   }
 
@@ -1178,7 +1201,7 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-scrim bg-black/50"
-            onClick={e => { e.stopPropagation(); onClose(); }}
+            onClick={e => { e.stopPropagation(); handleClose(); }}
             onTouchStart={e => e.stopPropagation()}
             onTouchMove={e => e.stopPropagation()}
             onTouchEnd={e => e.stopPropagation()}
@@ -1193,6 +1216,9 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
             transition={{ type: 'spring', damping: 32, stiffness: 260 }}
             className="fixed bottom-0 left-0 right-0 z-modal flex h-[90vh] flex-col overflow-hidden rounded-t-modal bg-casa-bg-2 shadow-modal sm:bottom-8 sm:left-1/2 sm:h-[85vh] sm:w-full sm:max-w-2xl sm:-translate-x-1/2 sm:rounded-modal"
             onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Edit ${eventType === 'reminder' ? 'reminder' : 'event'}: ${event.title}`}
           >
             {/* Drag handle */}
             <div className="flex shrink-0 justify-center bg-casa-surface pb-1 pt-3">
@@ -1771,6 +1797,20 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
               {!deleteBlocked && (
                 <Button variant="danger" loading={deleting} onClick={() => void handleDelete()}>Delete event</Button>
               )}
+            </div>
+          </Modal>
+          <Modal
+            open={showDiscardConfirm}
+            onClose={cancelDiscard}
+            title="Discard changes?"
+            size="sm"
+          >
+            <p className="text-body-sm text-casa-muted">
+              You have unsaved changes. Closing now will discard them.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="secondary" onClick={cancelDiscard}>Keep editing</Button>
+              <Button variant="danger" onClick={confirmDiscard}>Discard changes</Button>
             </div>
           </Modal>
         </>
