@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Save, Sparkles, Trash2, Loader2,
-  MapPin, ChevronDown, Users, Lock, Clock, Repeat, Mic, MicOff,
+  MapPin, ChevronDown, Users, Lock, Clock, Repeat, Mic, MicOff, MoreVertical,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useEventDetails, type EventWithDetails } from '../../hooks/useCalendarEvents'
@@ -312,6 +312,8 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleteBlocked, setDeleteBlocked] = useState(false)
   const [eventType, setEventType] = useState<'event' | 'reminder'>(event.event_type ?? 'event')
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const [aiToolsModalOpen, setAiToolsModalOpen] = useState(false)
 
   const clearLocation = () => {
     setLocation('')
@@ -1234,7 +1236,62 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
                   )}
                 </div>
               </div>
-              <IconButton icon={<X size={18} />} aria-label="Close event editor" onClick={handleClose} size="sm" />
+              <div className="flex items-center gap-1 shrink-0">
+                <div className="relative">
+                  <IconButton
+                    icon={<MoreVertical size={18} />}
+                    aria-label="More actions"
+                    aria-haspopup="menu"
+                    aria-expanded={moreMenuOpen}
+                    size="sm"
+                    onClick={() => setMoreMenuOpen(prev => !prev)}
+                  />
+                  <AnimatePresence>
+                    {moreMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-popover" onClick={() => setMoreMenuOpen(false)} />
+                        <motion.div
+                          role="menu"
+                          initial={{ opacity: 0, y: -4, scale: 0.96 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -4, scale: 0.96 }}
+                          transition={{ duration: 0.12 }}
+                          className="absolute right-0 top-full mt-2 z-popover min-w-[220px] overflow-hidden rounded-card border border-casa-border bg-casa-surface p-1.5 shadow-modal"
+                        >
+                          <Button
+                            type="button"
+                            role="menuitem"
+                            variant="ghost"
+                            size="sm"
+                            fullWidth
+                            leadingIcon={<Sparkles size={14} />}
+                            onClick={() => { setMoreMenuOpen(false); setAiToolsModalOpen(true) }}
+                            className="rounded-lg px-2 py-1.5 text-left"
+                            contentClassName="w-full justify-start"
+                          >
+                            Ask AI to fill in details
+                          </Button>
+                          <div className="my-1 h-px bg-casa-divider" />
+                          <Button
+                            type="button"
+                            role="menuitem"
+                            variant="ghost"
+                            size="sm"
+                            fullWidth
+                            leadingIcon={<Trash2 size={14} />}
+                            onClick={() => { setMoreMenuOpen(false); requestDelete() }}
+                            className="rounded-lg px-2 py-1.5 text-left text-casa-error"
+                            contentClassName="w-full justify-start"
+                          >
+                            Delete {eventType === 'reminder' ? 'Reminder' : 'Event'}
+                          </Button>
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
+                <IconButton icon={<X size={18} />} aria-label="Close event editor" onClick={handleClose} size="sm" />
+              </div>
             </div>
 
             {/* Form */}
@@ -1269,17 +1326,11 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
                 )}
               </section>
 
-              {/* ── Event Type Toggle + Delete ── */}
+              {/* ── Event Type Toggle ── */}
               <div className="px-6 pt-5 pb-4 border-b border-casa-divider">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-caption font-semibold text-casa-muted uppercase tracking-wide">
-                    Type
-                  </label>
-                  {/* Inline delete */}
-                  <Button variant="ghost" size="sm" onClick={requestDelete} leadingIcon={<Trash2 size={14} />} className="text-casa-error">
-                    Delete
-                  </Button>
-                </div>
+                <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">
+                  Type
+                </label>
                 <SegmentedControl
                   aria-label="Event type"
                   value={eventType}
@@ -1300,16 +1351,19 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
                 )}
               </div>
 
-              <DisclosureSection
-                title="AI tools"
-                summary={extraContext ? 'Context ready to apply' : 'Optional re-enrichment context'}
-                icon={<Sparkles size={18} />}
-                className="bg-casa-bg/40"
+              <Modal
+                open={aiToolsModalOpen}
+                onClose={() => setAiToolsModalOpen(false)}
+                title="Ask AI to fill in details"
+                size="sm"
               >
+                <p className="text-body-sm text-casa-muted mb-3">
+                  Optionally add context, then re-run AI enrichment for this {eventType === 'reminder' ? 'reminder' : 'event'}.
+                </p>
                 {/* Textarea + mic + enrich button inline */}
                 <div className="flex items-start gap-2">
                   <Textarea
-                    rows={2}
+                    rows={3}
                     value={extraContext}
                     onChange={e => setExtraContext(e.target.value)}
                     placeholder='Optional context — e.g. "EDS is the AC company, appointment at 3209 Washington Rd WPB"'
@@ -1327,19 +1381,20 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
                       size="sm"
                       className={cn(micActive && 'animate-pulse')}
                     />
-                    {/* Enrich button */}
-                    <IconButton
-                      icon={<Sparkles size={16} className={enrichStatus === 'loading' ? 'animate-pulse' : ''} />}
-                      aria-label="Re-enrich with AI"
-                      onClick={handleReenrich}
-                      disabled={enrichStatus === 'loading'}
-                      title="Re-enrich with AI"
-                      variant="secondary"
-                      size="sm"
-                      className={cn(enrichStatus === 'loading' && 'ai-thinking')}
-                    />
                   </div>
                 </div>
+
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="mt-3"
+                  leadingIcon={<Sparkles size={16} className={enrichStatus === 'loading' ? 'animate-pulse' : ''} />}
+                  onClick={handleReenrich}
+                  disabled={enrichStatus === 'loading'}
+                  loading={enrichStatus === 'loading'}
+                >
+                  Ask AI to fill in details
+                </Button>
 
                 {/* Status banner */}
                 <AnimatePresence>
@@ -1351,7 +1406,7 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </DisclosureSection>
+              </Modal>
 
               {/* ── Family members ── */}
               {allMembers.length > 0 && (
