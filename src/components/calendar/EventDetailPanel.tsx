@@ -9,10 +9,11 @@ import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useEventDetails, useTodayEvents, type EventWithDetails } from '../../hooks/useCalendarEvents'
-import type { EventChecklistItem, EventEnrichment, EventActionItem, EventLogistic } from '../../types'
+import type { EventEnrichment, EventActionItem, EventLogistic } from '../../types'
 import { getFieldsForCategory, CATEGORY_LABEL } from './categoryFields'
 import { useSaveEnrichmentBatch } from '../../hooks/useEnrichEvent'
 import EventEditSheet from './EventEditSheet'
+import ChecklistEditor from './ChecklistEditor'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import {
   findSavedPlace,
@@ -1515,16 +1516,7 @@ function StandardPanelBody({
         <section>
           <SectionLabel>{mode === 'trip' ? 'Pack' : 'Bring'}</SectionLabel>
           <Card tone="surface" padding="sm">
-            <ChecklistSection items={event.checklist} eventId={event.id} />
-          </Card>
-        </section>
-      )}
-
-      {!hasChecklist && enr?.what_to_bring && enr.what_to_bring.length > 0 && (
-        <section>
-          <SectionLabel>{mode === 'trip' ? 'Pack' : 'Bring'}</SectionLabel>
-          <Card tone="surface" padding="sm">
-            <FallbackBringChecklist eventId={event.id} items={enr.what_to_bring} />
+            <ChecklistEditor items={event.checklist} eventId={event.id} />
           </Card>
         </section>
       )}
@@ -2159,56 +2151,6 @@ function ReferenceBlock({
   )
 }
 
-/* ── Checklist with optimistic toggle ───────────────────────── */
-
-function ChecklistSection({ items }: { items: EventChecklistItem[]; eventId: string }) {
-  const [localChecked, setLocalChecked] = useState<Record<string, boolean>>({})
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const qc = useQueryClient()
-
-  const toggle = async (item: EventChecklistItem) => {
-    const previous = localChecked[item.id] ?? item.checked
-    const newVal = !previous
-    setSaveError(null)
-    setLocalChecked((prev) => ({ ...prev, [item.id]: newVal }))
-    const { error } = await supabase.from('event_checklist_items').update({ checked: newVal }).eq('id', item.id)
-    if (error) {
-      setLocalChecked((prev) => ({ ...prev, [item.id]: previous }))
-      setSaveError(`Could not update "${item.label}". ${error.message}`)
-      return
-    }
-    await qc.invalidateQueries({ queryKey: ['events'] })
-  }
-
-  return (
-    <div>
-      {saveError && <p role="alert" className="pb-1 text-caption text-casa-error">{saveError}</p>}
-      {items.map((item, i) => {
-        const checked = localChecked[item.id] ?? item.checked
-        return (
-          <div
-            key={item.id}
-            className="flex items-center gap-3 py-2.5 min-h-[44px] cursor-pointer"
-            style={i > 0 ? { borderTop: `1px solid ${S.hair}` } : undefined}
-            onClick={() => void toggle(item)}
-          >
-            {checked ? (
-              <span className="flex-none w-[22px] h-[22px] rounded-md flex items-center justify-center text-white" style={{ background: S.navy }}>
-                <Check size={13} />
-              </span>
-            ) : (
-              <span className="flex-none w-[22px] h-[22px] rounded-md border-2 border-casa-navy/25" />
-            )}
-            <span className="text-body-sm" style={{ color: checked ? S.label : S.navy, textDecoration: checked ? 'line-through' : 'none' }}>
-              {item.label}
-            </span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 function ActionItemsSection({ items }: { items: EventActionItem[] }) {
   const [localCompleted, setLocalCompleted] = useState<Record<string, boolean>>({})
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -2289,61 +2231,6 @@ function LogisticsSection({ items }: { items: EventLogistic[] }) {
           </div>
         </div>
       ))}
-    </div>
-  )
-}
-
-function FallbackBringChecklist({ items, eventId }: { items: string[]; eventId: string }) {
-  const storageKey = `event-command-center-bring:${eventId}`
-  const [checked, setChecked] = useState<Record<string, boolean>>(() => {
-    try {
-      const raw = localStorage.getItem(storageKey)
-      if (!raw) return {}
-      const parsed = JSON.parse(raw) as Record<string, boolean>
-      return parsed && typeof parsed === 'object' ? parsed : {}
-    } catch (error) {
-      console.warn('EventDetailPanel: failed to read fallback bring checklist state', error)
-      return {}
-    }
-  })
-
-  const toggle = (index: number) => {
-    const key = `${index}`
-    setChecked((prev) => {
-      const next = { ...prev, [key]: !prev[key] }
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(next))
-      } catch (error) {
-        console.warn('EventDetailPanel: failed to persist fallback bring checklist state', error)
-      }
-      return next
-    })
-  }
-
-  return (
-    <div>
-      {items.map((item, i) => {
-        const isChecked = Boolean(checked[`${i}`])
-        return (
-          <div
-            key={`${item}-${i}`}
-            className="flex items-center gap-3 py-2.5 min-h-[44px] cursor-pointer"
-            style={i > 0 ? { borderTop: `1px solid ${S.hair}` } : undefined}
-            onClick={() => toggle(i)}
-          >
-            {isChecked ? (
-              <span className="flex-none w-[22px] h-[22px] rounded-md flex items-center justify-center text-white" style={{ background: S.navy }}>
-                <Check size={13} />
-              </span>
-            ) : (
-              <span className="flex-none w-[22px] h-[22px] rounded-md border-2 border-casa-navy/25" />
-            )}
-            <span className="text-body-sm" style={{ color: isChecked ? S.label : S.navy, textDecoration: isChecked ? 'line-through' : 'none' }}>
-              {item}
-            </span>
-          </div>
-        )
-      })}
     </div>
   )
 }

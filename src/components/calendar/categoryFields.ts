@@ -1,7 +1,6 @@
 /** Fields relevant per event category — drives both read display and edit sheet */
 
 export type EnrichmentFieldKey =
-  | 'what_to_bring'
   | 'outfit_suggestion'
   | 'parking_notes'
   | 'contact_name'
@@ -17,7 +16,6 @@ export const FIELD_CONFIG: Record<EnrichmentFieldKey, {
   multiline?: boolean
   type?: string
 }> = {
-  what_to_bring:     { label: 'What to Bring',  placeholder: 'One item per line\ne.g. Shin guards\nWater bottle', multiline: true },
   outfit_suggestion: { label: 'What to Wear',   placeholder: 'e.g. Soccer uniform, cleats' },
   parking_notes:     { label: 'Parking',         placeholder: 'e.g. Street parking on Oak Ave' },
   contact_name:      { label: 'Contact Name',    placeholder: 'e.g. Coach Glen / AC Repair Co.' },
@@ -29,20 +27,20 @@ export const FIELD_CONFIG: Record<EnrichmentFieldKey, {
 }
 
 export const CATEGORY_FIELDS: Record<string, EnrichmentFieldKey[]> = {
-  sports:           ['what_to_bring', 'outfit_suggestion', 'parking_notes', 'contact_name', 'contact_phone', 'prep_notes'],
-  school:           ['what_to_bring', 'contact_name', 'contact_phone', 'parking_notes', 'prep_notes'],
-  medical:          ['contact_name', 'contact_phone', 'cost_estimate', 'what_to_bring', 'dietary_notes', 'prep_notes'],
+  sports:           ['outfit_suggestion', 'parking_notes', 'contact_name', 'contact_phone', 'prep_notes'],
+  school:           ['contact_name', 'contact_phone', 'parking_notes', 'prep_notes'],
+  medical:          ['contact_name', 'contact_phone', 'cost_estimate', 'dietary_notes', 'prep_notes'],
   appointment:      ['contact_name', 'contact_phone', 'cost_estimate', 'parking_notes', 'prep_notes'],
-  child_care:       ['what_to_bring', 'dietary_notes', 'contact_name', 'contact_phone', 'cost_estimate', 'prep_notes'],
+  child_care:       ['dietary_notes', 'contact_name', 'contact_phone', 'cost_estimate', 'prep_notes'],
   home_maintenance: ['contact_name', 'contact_phone', 'cost_estimate', 'prep_notes'],
   dining:           ['dietary_notes', 'cost_estimate', 'outfit_suggestion', 'contact_name', 'contact_phone', 'prep_notes'],
-  travel:           ['what_to_bring', 'cost_estimate', 'parking_notes', 'prep_notes'],
-  social:           ['outfit_suggestion', 'what_to_bring', 'dietary_notes', 'cost_estimate', 'contact_name', 'contact_phone', 'prep_notes'],
-  birthday:         ['outfit_suggestion', 'what_to_bring', 'dietary_notes', 'cost_estimate', 'contact_name', 'contact_phone', 'prep_notes'],
-  work:             ['contact_name', 'contact_phone', 'what_to_bring', 'parking_notes', 'prep_notes'],
+  travel:           ['cost_estimate', 'parking_notes', 'prep_notes'],
+  social:           ['outfit_suggestion', 'dietary_notes', 'cost_estimate', 'contact_name', 'contact_phone', 'prep_notes'],
+  birthday:         ['outfit_suggestion', 'dietary_notes', 'cost_estimate', 'contact_name', 'contact_phone', 'prep_notes'],
+  work:             ['contact_name', 'contact_phone', 'parking_notes', 'prep_notes'],
   errand:           ['contact_name', 'contact_phone', 'cost_estimate', 'prep_notes'],
-  holiday:          ['outfit_suggestion', 'what_to_bring', 'dietary_notes', 'meal_impact', 'prep_notes'],
-  other:            ['outfit_suggestion', 'what_to_bring', 'dietary_notes', 'meal_impact', 'contact_name', 'contact_phone', 'cost_estimate', 'parking_notes', 'prep_notes'],
+  holiday:          ['outfit_suggestion', 'dietary_notes', 'meal_impact', 'prep_notes'],
+  other:            ['outfit_suggestion', 'dietary_notes', 'meal_impact', 'contact_name', 'contact_phone', 'cost_estimate', 'parking_notes', 'prep_notes'],
 }
 
 export function getFieldsForCategory(category: string | null | undefined): EnrichmentFieldKey[] {

@@ -11,6 +11,7 @@ import {
   type EnrichmentFieldKey,
 } from './categoryFields'
 import { useSaveEnrichmentBatch, useEnrichEvent } from '../../hooks/useEnrichEvent'
+import ChecklistEditor from './ChecklistEditor'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
@@ -435,9 +436,7 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
     const out: Record<string, string> = {}
     for (const field of fieldList) {
       const raw = enrichment?.[field as keyof typeof enrichment]
-      out[field] = field === 'what_to_bring' && Array.isArray(raw)
-        ? (raw as string[]).join('\n')
-        : (raw != null ? String(raw) : '')
+      out[field] = raw != null ? String(raw) : ''
     }
     return out
   }
@@ -494,9 +493,7 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
   function objectFromForm(f: Record<string, string>, flds: EnrichmentFieldKey[]) {
     const out: Record<string, unknown> = {}
     for (const field of flds) {
-      out[field] = field === 'what_to_bring'
-        ? (f[field] ?? '').split('\n').map(s => s.trim()).filter(Boolean)
-        : (f[field]?.trim() || null)
+      out[field] = f[field]?.trim() || null
     }
     return out
   }
@@ -1682,6 +1679,14 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
                 </div>
               </DisclosureSection>
 
+              {/* ── Checklist (Bring / Pack) — always visible, not category-gated ── */}
+              <div>
+                <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">
+                  What to Bring
+                </label>
+                <ChecklistEditor eventId={event.id} items={event.checklist} editable />
+              </div>
+
               {/* ── Category-specific enrichment fields ── */}
               <DisclosureSection
                 title="Additional details"
@@ -1709,7 +1714,7 @@ function EventEditSheetContent({ event, open, onClose, initialDelete = false }: 
                         />
                       ) : config.multiline ? (
                         <Textarea
-                          rows={field === 'what_to_bring' ? 5 : 3}
+                          rows={3}
                           value={form[field] ?? ''}
                           onChange={e => set(field, e.target.value)}
                           placeholder={config.placeholder}

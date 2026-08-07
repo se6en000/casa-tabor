@@ -8,6 +8,6 @@ const source = readFileSync(
 )
 
 test('Child Care is available with caregiving-specific enrichment fields', () => {
-  assert.match(source, /child_care:\s+\['what_to_bring', 'dietary_notes', 'contact_name', 'contact_phone', 'cost_estimate', 'prep_notes'\]/)
+  assert.match(source, /child_care:\s+\['dietary_notes', 'contact_name', 'contact_phone', 'cost_estimate', 'prep_notes'\]/)
   assert.match(source, /child_care: 'Child Care'/)
 })

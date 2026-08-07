@@ -24,6 +24,10 @@ const eventDetail = readFileSync(
   resolve('src/components/calendar/EventDetailPanel.tsx'),
   'utf8',
 )
+const checklistEditor = readFileSync(
+  resolve('src/components/calendar/ChecklistEditor.tsx'),
+  'utf8',
+)
 const eventLocation = readFileSync(
   resolve('src/lib/eventLocation.ts'),
   'utf8',
@@ -188,7 +192,7 @@ test('recurring updates preserve one-offs by default and replace only edited pat
 })
 
 test('occurrence progress remains direct and rolls back failed optimistic state', () => {
-  assert.match(eventDetail, /event_checklist_items[\s\S]*setLocalChecked\(\(prev\) => \(\{ \.\.\.prev, \[item\.id\]: previous \}\)\)/)
+  assert.match(checklistEditor, /event_checklist_items[\s\S]*setLocalChecked\(\(prev\) => \(\{ \.\.\.prev, \[item\.id\]: previous \}\)\)/)
   assert.match(eventDetail, /event_action_items[\s\S]*setLocalCompleted\(\(prev\) => \(\{ \.\.\.prev, \[item\.id\]: previous \}\)\)/)
   assert.doesNotMatch(eventDetail, /changedPaths: \[['"]checklistDefinitions/)
   assert.doesNotMatch(eventDetail, /changedPaths: \[['"]actionDefinitions/)
