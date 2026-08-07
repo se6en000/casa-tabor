@@ -457,7 +457,7 @@ Deno.serve(async (req) => {
             : `${reviewableCount} new places or contacts`
         const body =
           reviewableCount > 0
-            ? `We noticed ${noun} from your calendar — save the ones you want to keep, or skip them.`
+            ? `Found ${noun} from your calendar. Review below.`
             : 'We linked some places and contacts already in your directory, based on your calendar.'
         await sb.from('notifications').insert({
           type: 'directory_suggestions',
