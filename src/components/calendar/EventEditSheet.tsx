@@ -132,6 +132,7 @@ interface Props {
   open: boolean
   onClose: () => void
   initialDelete?: boolean
+  initialAiTools?: boolean
   presentation?: 'sheet' | 'inline'
 }
 
@@ -215,6 +216,7 @@ function EventEditSheetContent({
   open,
   onClose,
   initialDelete = false,
+  initialAiTools = false,
   presentation = 'sheet',
 }: Props) {
   const inline = presentation === 'inline'
@@ -245,6 +247,7 @@ function EventEditSheetContent({
   const recurringActionIdRef = useRef<string | null>(null)
   const recurringDeleteActionIdRef = useRef<string | null>(null)
   const initialDeleteOpenedRef = useRef(false)
+  const initialAiToolsOpenedRef = useRef(false)
   const isDirtyRef = useRef(false)
   const initializedEventIdRef = useRef<string | null>(null)
 
@@ -1203,8 +1206,16 @@ function EventEditSheetContent({
   }, [initialDelete, isCanonicalOccurrence, open, recurringContextLoading, requestDelete])
 
   useEffect(() => {
+    if (!open || !initialAiTools || initialAiToolsOpenedRef.current) return
+    initialAiToolsOpenedRef.current = true
+    const timer = window.setTimeout(() => setAiToolsModalOpen(true), 0)
+    return () => window.clearTimeout(timer)
+  }, [initialAiTools, open])
+
+  useEffect(() => {
     if (open) return
     initialDeleteOpenedRef.current = false
+    initialAiToolsOpenedRef.current = false
   }, [open])
 
   const handleDelete = async () => {

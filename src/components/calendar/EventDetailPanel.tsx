@@ -3,7 +3,7 @@ import { format } from 'date-fns'
 import { motion, AnimatePresence, useDragControls } from 'framer-motion'
 import {
   X, Navigation, ChevronRight, ChevronDown, CalendarDays, House, Users, Video, Bell,
-  Loader2, Check, Pencil, Share2, Phone, MessageSquare,
+  Loader2, Check, Pencil, Share2, Phone, MessageSquare, MoreVertical, Sparkles, Trash2,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -123,6 +123,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
   // "Invalid Date" during that brief loading window.
   const isHydrated = Boolean(event?.start_time)
   const [showEdit, setShowEdit] = useState(false)
+  const [editIntent, setEditIntent] = useState<'ai' | 'delete' | null>(null)
   const [verifiedOverride, setVerifiedOverride] = useState<boolean | null>(null)
   const [waitsOverride, setWaitsOverride] = useState<boolean | null>(null)
   const [driverOverrides, setDriverOverrides] = useState<Record<number, string>>({})
@@ -509,7 +510,9 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
                     event={event}
                     open
                     presentation="inline"
-                    onClose={() => setShowEdit(false)}
+                    initialDelete={editIntent === 'delete'}
+                    initialAiTools={editIntent === 'ai'}
+                    onClose={() => { setShowEdit(false); setEditIntent(null) }}
                   />
                 </div>
               ) : (
@@ -532,6 +535,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
                           modeOverride={modeOverride}
                           transportationPlan={transportationPlan}
                           onClose={onClose}
+                          onOpenEdit={(intent) => { setEditIntent(intent); setShowEdit(true) }}
                           onConfirmAddress={() => void confirmAddress()}
                           addressReviewLoading={overridesHydratedEventId !== event.id || savedPlacesPending}
                           addressSaveError={overrideSaveError}
@@ -918,6 +922,7 @@ function PanelHeader({
   modeOverride,
   transportationPlan,
   onClose,
+  onOpenEdit,
   onConfirmAddress,
   addressReviewLoading,
   addressSaveError,
@@ -931,6 +936,7 @@ function PanelHeader({
   modeOverride: EventMode | null
   transportationPlan: EventTransportationPlan | null
   onClose: () => void
+  onOpenEdit: (intent: 'ai' | 'delete') => void
   onConfirmAddress: () => void
   addressReviewLoading: boolean
   addressSaveError: string | null
@@ -967,6 +973,20 @@ function PanelHeader({
   const attendeeCount = effectiveMembers.length
   const [rosterOpen, setRosterOpen] = useState(false)
   const rosterRegionRef = useRef<HTMLDivElement>(null)
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const moreMenuTriggerRef = useRef<HTMLButtonElement>(null)
+  const moreMenuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!moreMenuOpen) return
+    const handleEscape = (keyEvent: KeyboardEvent) => {
+      if (keyEvent.key !== 'Escape') return
+      keyEvent.preventDefault()
+      setMoreMenuOpen(false)
+      moreMenuTriggerRef.current?.focus()
+    }
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [moreMenuOpen])
   const [addressEditorOpen, setAddressEditorOpen] = useState(false)
   const [pendingPlace, setPendingPlace] = useState<TransportationPlace | null>(null)
   const [scopeOpen, setScopeOpen] = useState(false)
@@ -1022,8 +1042,66 @@ function PanelHeader({
         {isBirthday && <BirthdayCardDecoration className="opacity-35" />}
 
         {/* Top row: owner + attendee editor trigger + close */}
-        <div className="relative z-10 flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
+        {/* z-20 (not z-10) so this row's "More actions" popover paints above the
+            title hero below it, which also uses z-10 for its own stacking needs. */}
+        <div className="relative z-20 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <div className="relative shrink-0">
+              <IconButton
+                ref={moreMenuTriggerRef}
+                icon={<MoreVertical size={16} />}
+                aria-label="More actions"
+                aria-haspopup="menu"
+                aria-expanded={moreMenuOpen}
+                size="sm"
+                variant="ghost"
+                onClick={() => setMoreMenuOpen((prev) => !prev)}
+              />
+              <AnimatePresence>
+                {moreMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-popover" onClick={() => setMoreMenuOpen(false)} />
+                    <motion.div
+                      ref={moreMenuRef}
+                      role="menu"
+                      initial={{ opacity: 0, y: -4, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -4, scale: 0.96 }}
+                      transition={{ duration: 0.12 }}
+                      className="absolute left-0 top-full z-popover mt-2 min-w-[220px] overflow-hidden rounded-card border border-casa-border bg-casa-surface p-1.5 shadow-modal"
+                    >
+                      <Button
+                        type="button"
+                        role="menuitem"
+                        variant="ghost"
+                        size="sm"
+                        fullWidth
+                        leadingIcon={<Sparkles size={14} />}
+                        onClick={() => { setMoreMenuOpen(false); onOpenEdit('ai') }}
+                        className="rounded-lg px-2 py-1.5 text-left"
+                        contentClassName="w-full justify-start"
+                      >
+                        Ask AI to fill in details
+                      </Button>
+                      <div className="my-1 h-px bg-casa-divider" />
+                      <Button
+                        type="button"
+                        role="menuitem"
+                        variant="ghost"
+                        size="sm"
+                        fullWidth
+                        leadingIcon={<Trash2 size={14} />}
+                        onClick={() => { setMoreMenuOpen(false); onOpenEdit('delete') }}
+                        className="rounded-lg px-2 py-1.5 text-left text-casa-error"
+                        contentClassName="w-full justify-start"
+                      >
+                        Delete {reminder ? 'Reminder' : 'Event'}
+                      </Button>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
             <span
               className="event-detail-accent-marker block size-2.5 shrink-0 rounded-full"
               style={{ backgroundColor: accent }}
