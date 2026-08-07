@@ -101,9 +101,7 @@ import {
   resolveBugReportRequest,
 } from '../_shared/assistant-memory-insights.mjs'
 import {
-  formatEmailKnowledgeRead,
-  isEmailKnowledgeReadRequest,
-  relevantEmailKnowledgeClaims,
+  formatFamilyKnowledgeContext,
 } from '../_shared/assistant-email-knowledge-read.mjs'
 import {
   explicitReminderCreateRequestForMessages,
@@ -698,21 +696,27 @@ Deno.serve(async (req) => {
   const directReminderCreateFlow = explicitReminderCreate &&
     intentRouting.profile === 'event' &&
     !intentRouting.forceEventSearch
+  const needsFamilyDataContext = !requestAmbiguity && [
+    'general', 'full', 'event', 'places', 'travel', 'grocery', 'recipe',
+  ].includes(intentRouting.profile)
   const needsEventData = !requestAmbiguity &&
     ['event', 'full', 'travel', 'general'].includes(intentRouting.profile) &&
     !imageDirectEventCreateFlow &&
     !directReminderCreateFlow
   const needsPlaceData = !requestAmbiguity && (
     ['event', 'full', 'travel', 'places'].includes(intentRouting.profile) ||
-    householdDirectoryQuestion
+    householdDirectoryQuestion ||
+    needsFamilyDataContext
   )
   const needsContactData = !requestAmbiguity && (
     ['event', 'full', 'places'].includes(intentRouting.profile) ||
-    householdDirectoryQuestion
+    householdDirectoryQuestion ||
+    needsFamilyDataContext
   )
   const needsGroceryData = !requestAmbiguity && (
     context?.page === 'grocery' ||
-    ['grocery', 'full'].includes(intentRouting.profile)
+    ['grocery', 'full'].includes(intentRouting.profile) ||
+    needsFamilyDataContext
   )
   const referencesSavedRecipe = Boolean(
     incomingConversationState?.activeEntityType === 'recipe' ||
@@ -755,6 +759,7 @@ Deno.serve(async (req) => {
     availabilityExceptionsResult,
     memoryObservationsResult,
     bugReportsResult,
+    emailKnowledgeResult,
   ] = await Promise.all([
     sb.from('settings').select('value').eq('key', 'llm_config').limit(1),
     sb.from('settings').select('value').eq('key', 'agent_runtime_config').maybeSingle()
@@ -856,6 +861,16 @@ Deno.serve(async (req) => {
         .order('discovered_at', { ascending: false })
         .limit(25)
       : skippedRows,
+    needsFamilyDataContext
+      ? sb.from('family_knowledge_claims')
+        .select('title, summary, requiredness, effective_at, expires_at, confidence, family_members(name), canonical_inbox_emails(from_email, subject, received_at)')
+        .eq('status', 'active')
+        .eq('privacy_class', 'standard')
+        .or(`expires_at.is.null,expires_at.gte.${now.toISOString()}`)
+        .order('requiredness', { ascending: false })
+        .order('expires_at', { ascending: true, nullsFirst: false })
+        .limit(50)
+      : skippedRows,
   ])
   const homeConfig = homeConfigResult?.data?.value as { address?: string; city?: string; state?: string; zip?: string } | null
   const homeAddress = [homeConfig?.address, homeConfig?.city, homeConfig?.state, homeConfig?.zip].filter(Boolean).join(', ')
@@ -865,26 +880,12 @@ Deno.serve(async (req) => {
     return { status: 200, payload: { type: 'debug', error: eventsResult.error, yearStart: windowStart.toISOString(), yearEnd: yearEnd.toISOString(), correlation_id: cid } }
   }
   const allEvents = eventsResult.data
-  const needsEmailKnowledgeContext = /\b(?:school|class|teacher|forms?|paperwork|payment|fee|bill|delivery|package|order|insurance|utility|appointment|doctor|dentist|therapy|therapist|medical|medicine|transport|bus|pickup|drop[\s-]?off|athletic|sports?|practice|game|coordination|coordinate|heads?\s*up|remind(?:er)?)\b/i
-    .test(latestUserText ?? '')
-  const emailKnowledgeReadRequest = isEmailKnowledgeReadRequest(latestUserText)
-  const { data: emailKnowledgeClaims, error: emailKnowledgeError } = needsEmailKnowledgeContext
-    ? await sb
-      .from('family_knowledge_claims')
-      .select('title, summary, requiredness, effective_at, expires_at, confidence, family_members(name), canonical_inbox_emails(from_email, subject, received_at)')
-      .eq('status', 'active')
-      .eq('privacy_class', 'standard')
-      .or(`expires_at.is.null,expires_at.gte.${now.toISOString()}`)
-      .order('requiredness', { ascending: false })
-      .order('expires_at', { ascending: true, nullsFirst: false })
-      .limit(50)
-    : { data: [], error: null }
-  if (emailKnowledgeError) {
+  if (emailKnowledgeResult.error) {
     return {
       status: 500,
       payload: {
         type: 'error',
-        error: `Could not load family email knowledge: ${emailKnowledgeError.message}`,
+        error: `Could not load family email knowledge: ${emailKnowledgeResult.error.message}`,
         correlation_id: cid,
       },
     }
@@ -908,22 +909,7 @@ Deno.serve(async (req) => {
   const confirmedContactPlaceRelationships = (confirmedContactPlaceRelationshipsResult as { data: unknown }).data
   const suggestedPlaces = suggestedPlacesResult.data ?? []
   const suggestedContacts = suggestedContactsResult.data ?? []
-  const relevantEmailKnowledge = relevantEmailKnowledgeClaims(emailKnowledgeClaims ?? [], latestUserText).slice(0, 6)
-  const emailKnowledgeText = relevantEmailKnowledge.map((claim: {
-    title: string
-    summary: string | null
-    requiredness: 'required' | 'optional' | 'fyi'
-    effective_at: string | null
-    expires_at: string | null
-    confidence: number
-    family_members: { name: string } | null
-    canonical_inbox_emails: { from_email: string | null, subject: string | null, received_at: string | null } | null
-  }) => {
-    const source = claim.canonical_inbox_emails?.from_email || claim.canonical_inbox_emails?.subject || 'family email'
-    const owner = claim.family_members?.name ? ` for ${claim.family_members.name}` : ''
-    const due = claim.expires_at ? `; due ${claim.expires_at}` : ''
-    return `[${claim.requiredness}] ${claim.title}${owner}: ${claim.summary ?? 'No additional summary'}${due}. Source: ${source}.`
-  }).join('\n')
+  const familyKnowledgeText = formatFamilyKnowledgeContext(emailKnowledgeResult.data ?? [])
 
   const config = cfgRow?.[0]?.value ?? { provider: 'gemini', model: DEFAULT_GEMINI_MODEL, api_key: '' }
   const apiKey = config.api_key as string
@@ -946,25 +932,6 @@ Deno.serve(async (req) => {
     output_tokens: 0,
     thought_tokens: 0,
     total_tokens: 0,
-  }
-  if (emailKnowledgeReadRequest) {
-    return {
-      status: 200,
-      payload: {
-        type: 'text',
-        text: formatEmailKnowledgeRead(relevantEmailKnowledge),
-        correlation_id: cid,
-        authoritative_provenance: {
-          source: 'family_knowledge_claims',
-          count: relevantEmailKnowledge.length,
-        },
-        telemetry: {
-          ...llmTelemetry,
-          request_total_ms: Date.now() - requestStartMs,
-          context_load_ms: contextLoadMs,
-        },
-      },
-    }
   }
   const providerRoleWordPattern =
     /\b(doctors?|dentists?|orthodontists?|dermatologists?|therapists?|coach(?:es)?|providers?|counselors?|tutors?|vets?|veterinarians?)\b/i
@@ -3406,7 +3373,7 @@ ${includePlaceContext && placesText ? `\nSAVED PLACES (use for location nickname
 ${includePlaceContext && contactsText ? `\nSAVED CONTACTS:\n${contactsText}` : ''}
 ${includePlaceContext && familyRelationshipsText ? `\nCONFIRMED FAMILY RELATIONSHIPS (authoritative; never infer relationships from event attendees):\n${familyRelationshipsText}` : ''}
 ${includePlaceContext && contactPlaceRelationshipsText ? `\nCONFIRMED PEOPLE ↔ PLACES (authoritative; Place owns the address):\n${contactPlaceRelationshipsText}` : ''}
-${needsEmailKnowledgeContext && emailKnowledgeText ? `\nEMAIL-DERIVED FAMILY KNOWLEDGE (current, source-backed operational context):\n${emailKnowledgeText}\nOnly mention a relevant item when it directly helps answer the user. Do not expose identifiers, credentials, medical details, or raw email content.` : ''}
+${familyKnowledgeText ? `\nFAMILY DATA CONTEXT (current, source-backed operational knowledge):\n${familyKnowledgeText}\nUse this context to answer the user's actual question naturally, even when their wording does not name the source or topic. Reconcile it with calendar, people, places, and grocery context above. Treat it as evidence, not canned reply text: explain uncertainty when it does not establish an answer. Do not expose identifiers, credentials, medical details, or raw email content.` : ''}
 ${context.focusedEvent ? `
 ⭐ EVENT EDIT MODE — CRITICAL INSTRUCTIONS:
 You are EXCLUSIVELY focused on editing this one event. Do not answer general questions, discuss other events, or go off-topic. Every response must stay in the context of editing this event.
