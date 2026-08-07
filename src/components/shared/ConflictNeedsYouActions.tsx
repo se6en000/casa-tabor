@@ -20,13 +20,14 @@
  * than the prep item's solid navy Check) is deliberate: it must never read as
  * "done", since the conflicting events are still both on the calendar.
  */
-import { Calendar, Clock } from 'lucide-react'
+import { Calendar } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import type { Conflict } from '../../types'
 import { useResolveConflict, useSnoozeConflict } from '../../hooks/useConflicts'
 import { pickConflictLoserEventId } from '../../utils/conflictResolution'
 import { openEventDetails } from '../../utils/openEventDetails'
 import { Button } from '../ui'
+import SnoozeMenu from './SnoozeMenu'
 
 export default function ConflictNeedsYouActions({ conflict }: { conflict: Conflict }) {
   const resolveConflict = useResolveConflict()
@@ -54,15 +55,7 @@ export default function ConflictNeedsYouActions({ conflict }: { conflict: Confli
           onKeep={() => handleKeep(conflict.event_b!.id)}
         />
       )}
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        leadingIcon={<Clock size={14} strokeWidth={2.2} />}
-        onClick={() => snoozeConflict(conflict.id)}
-      >
-        Snooze until tomorrow
-      </Button>
+      <SnoozeMenu onSnooze={(duration) => snoozeConflict(conflict.id, duration)} />
     </div>
   )
 }

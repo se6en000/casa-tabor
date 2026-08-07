@@ -11,9 +11,11 @@ import { needsYouAccent } from '../../utils/needsYouAccent'
 import { conflictMetaLine, directorySuggestionMetaLine, prepMetaLine } from '../../utils/needsYouMeta'
 import { isReadOnlyNeedsYouItem, mergeNeedsYouItems } from '../../utils/needsYouFeed'
 import { shouldSuppressPriorityChipIcon } from '../../utils/conflictResolution'
+import { formatSnoozeHistoryLabel } from '../../utils/snoozeDuration'
 import ConflictNeedsYouActions from '../shared/ConflictNeedsYouActions'
 import DirectorySuggestionActions from '../shared/DirectorySuggestionActions'
 import ExpandPanel from '../shared/ExpandPanel'
+import SnoozeMenu from '../shared/SnoozeMenu'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useWeekEventIndex } from '../../hooks/useCalendarEvents'
@@ -541,6 +543,17 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                             {/* Truncates instead of wrapping so the assignee control at the
                                 end of the row never gets pushed onto its own line. */}
                             <span className="min-w-0 flex-1 truncate text-caption text-casa-muted">{meta.text}</span>
+                            {(() => {
+                              const historyLabel = formatSnoozeHistoryLabel(item.snooze_count, item.last_snoozed_at, now)
+                              return historyLabel ? (
+                                <span
+                                  className="shrink-0 whitespace-nowrap text-caption text-casa-muted"
+                                  title="This item has been snoozed before"
+                                >
+                                  {historyLabel}
+                                </span>
+                              ) : null
+                            })()}
                             {priority.chip && !shouldSuppressPriorityChipIcon(item) && (
                               <span
                                 role="img"
@@ -639,14 +652,9 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
 
                         {!readOnly && item.source_type !== 'conflict' && item.source_type !== 'directory_suggestion' && (
                           <div className="flex items-center gap-2 pt-2.5 pl-[2.375rem]">
-                            <Button
-                              onClick={() => { snoozePrepItem(item.id); setRevealedItemId(null) }}
-                              variant="secondary"
-                              size="sm"
-                              title="Snooze until tomorrow"
-                            >
-                              Snooze
-                            </Button>
+                            <SnoozeMenu
+                              onSnooze={(duration) => { snoozePrepItem(item.id, duration); setRevealedItemId(null) }}
+                            />
                             <Button
                               onClick={() => handleDownvote(item)}
                               variant="secondary"

@@ -4,6 +4,8 @@ import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { useWeekConflicts, useResolveConflict, useSnoozeConflict } from '../../hooks/useConflicts'
+import type { SnoozeDuration } from '../../utils/snoozeDuration'
+import SnoozeMenu from './SnoozeMenu'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { cn } from '../../utils/cn'
 import type { Conflict } from '../../types'
@@ -29,7 +31,7 @@ function ConflictGroup({
   conflicts: Conflict[]
   onDismiss: (id: string) => void
   onDismissAll: (ids: string[]) => void
-  onSnooze: (id: string) => void
+  onSnooze: (id: string, duration: SnoozeDuration) => void
 }) {
   const [open, setOpen] = useState(false)
   const cfg = TYPE_CONFIG[type] ?? DEFAULT_CONFIG
@@ -90,7 +92,7 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
   conflict: Conflict
   type: string
   onDismiss: (id: string) => void
-  onSnooze: (id: string) => void
+  onSnooze: (id: string, duration: SnoozeDuration) => void
 }) {
   const navigate = useNavigate()
   const { setSelectedDate } = useCalendarStore()
@@ -166,13 +168,11 @@ function ConflictRow({ conflict, type, onDismiss, onSnooze }: {
       <ExternalLink size={12} className="shrink-0 text-casa-muted opacity-60 group-hover:opacity-100 transition-opacity" />
 
       <div className="shrink-0 flex items-center gap-1" onClick={e => e.stopPropagation()}>
-        <Button variant="ghost"
-          onClick={() => onSnooze(conflict.id)}
-          className="text-caption font-medium px-2 py-1 rounded-md text-casa-muted transition-colors hover:text-casa-text hover:bg-casa-bg"
-          title="Snooze until tomorrow"
-        >
-          Snooze
-        </Button>
+        <SnoozeMenu
+          onSnooze={(duration) => onSnooze(conflict.id, duration)}
+          triggerVariant="ghost"
+          triggerClassName="text-caption font-medium px-2 py-1 rounded-md text-casa-muted transition-colors hover:text-casa-text hover:bg-casa-bg"
+        />
         <span className="text-casa-border text-caption">|</span>
         <Button variant="ghost"
           onClick={() => onDismiss(conflict.id)}
@@ -206,7 +206,7 @@ export default function ConflictAlertsSection({ className }: { className?: strin
 
   async function handleDismiss(id: string) { await resolve(id, 'dismissed') }
   async function handleDismissAll(ids: string[]) { await Promise.all(ids.map((id) => resolve(id, 'dismissed'))) }
-  async function handleSnooze(id: string) { await snooze(id) }
+  async function handleSnooze(id: string, duration: SnoozeDuration) { await snooze(id, duration) }
 
   return (
     <div className={cn('space-y-2', className)}>

@@ -25,8 +25,11 @@ import { humanizeNotificationSource } from '../utils/notificationSource'
 import { summarizeGmailHealth } from '../utils/gmailHealth'
 import { openEventDetails } from '../utils/openEventDetails'
 import { priorityVisual } from '../utils/prepPriority'
+import { getPrepItemDisplayDescription } from '../utils/reminderLateness'
+import { formatSnoozeHistoryLabel, type SnoozeDuration } from '../utils/snoozeDuration'
 import PrepItemDetailPanel from '../components/home/PrepItemDetailPanel'
 import PrepItemAssigneeChip from '../components/shared/PrepItemAssigneeChip'
+import SnoozeMenu from '../components/shared/SnoozeMenu'
 import { useLiveClock } from '../hooks/useLiveClock'
 import ConflictAlertsSection from '../components/shared/ConflictAlertsSection'
 import { Button, Chip, IconButton } from '../components/ui'
@@ -157,12 +160,12 @@ export default function ActionHubPage() {
     ].filter((s): s is string => s !== null)
   }, [prepItems, unreadCount, now, conflicts.length])
 
-  async function run(action: 'complete' | 'snooze' | 'downvote', id: string) {
+  async function run(action: 'complete' | 'snooze' | 'downvote', id: string, duration?: SnoozeDuration) {
     setActingId(id)
     setActionError(null)
     try {
       if (action === 'complete') await complete(id)
-      if (action === 'snooze') await snooze(id)
+      if (action === 'snooze') await snooze(id, duration)
       if (action === 'downvote') await downvote(id)
       if (selected?.id === id) setSelected(null)
     } catch (error) {
@@ -318,10 +321,10 @@ export default function ActionHubPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
                         {readOnly ? (
-                          <p className={cn('min-w-0 flex-1 text-body-sm font-semibold text-casa-text leading-snug', !isRevealed && 'line-clamp-2')}>{item.description}</p>
+                          <p className={cn('min-w-0 flex-1 text-body-sm font-semibold text-casa-text leading-snug', !isRevealed && 'line-clamp-2')}>{getPrepItemDisplayDescription(item.description, item.source_type, item.event_date, now)}</p>
                         ) : (
                           <Button variant="ghost" className="min-w-0 flex-1 h-auto min-h-0 p-0 text-left hover:bg-transparent" contentClassName="w-full justify-start" onClick={() => setSelected(item)}>
-                            <p className={cn('text-body-sm font-semibold text-casa-text leading-snug', !isRevealed && 'line-clamp-2')}>{item.description}</p>
+                            <p className={cn('text-body-sm font-semibold text-casa-text leading-snug', !isRevealed && 'line-clamp-2')}>{getPrepItemDisplayDescription(item.description, item.source_type, item.event_date, now)}</p>
                           </Button>
                         )}
                         {due && (
@@ -350,6 +353,14 @@ export default function ActionHubPage() {
                         <span className="min-w-0 flex-1 truncate text-caption text-casa-muted">
                           {readOnlyMeta ? readOnlyMeta.text : (item.event_title || 'Casa Tabor')}
                         </span>
+                        {(() => {
+                          const historyLabel = formatSnoozeHistoryLabel(item.snooze_count, item.last_snoozed_at, now)
+                          return historyLabel ? (
+                            <span className="shrink-0 whitespace-nowrap text-caption text-casa-muted" title="This item has been snoozed before">
+                              {historyLabel}
+                            </span>
+                          ) : null
+                        })()}
                         {priority.chip && !shouldSuppressPriorityChipIcon(item) && (
                           <span
                             role="img"
@@ -376,9 +387,14 @@ export default function ActionHubPage() {
                       <Button variant="ghost" onClick={() => run('complete', item.id)} className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition" title="Done">
                         Done
                       </Button>
-                      <Button variant="ghost" onClick={() => run('snooze', item.id)} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors" title="Snooze">
-                        Snooze
-                      </Button>
+                      <SnoozeMenu
+                        onSnooze={(duration) => run('snooze', item.id, duration)}
+                        renderTrigger={({ onClick }) => (
+                          <Button variant="ghost" onClick={onClick} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors" title="Snooze">
+                            Snooze
+                          </Button>
+                        )}
+                      />
                       {item.event_id ? (
                         <Button variant="ghost" onClick={() => openEventDetails(item.event_id!)} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="View the linked calendar event">
                           <ExternalLink size={14} /> View event

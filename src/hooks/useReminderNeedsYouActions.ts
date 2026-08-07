@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import type { EventWithDetails } from './useCalendarEvents'
 import { getEventEndDate, getEventStartDate } from '../utils/eventTime'
 import { cleanEventTitle } from '../utils/eventTitle'
+import { buildReminderPrepDescription } from '../utils/reminderLateness'
 
 const ONE_HOUR_MS = 60 * 60 * 1000
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
@@ -11,15 +12,6 @@ const MISSED_GRACE_MS = 10 * 60 * 1000
 
 const REMINDER_SOURCE_MANUAL = 'reminder_manual'
 const REMINDER_SOURCE_MISSED = 'reminder_missed'
-
-function buildReminderPrepDescription(event: EventWithDetails, sourceType: string, now: Date): string {
-  const title = cleanEventTitle(event.title)
-  if (sourceType === REMINDER_SOURCE_MANUAL) {
-    return `Moved from calendar reminder: ${title}`
-  }
-  const minutesLate = Math.max(0, Math.round((now.getTime() - getEventStartDate(event).getTime()) / 60000))
-  return `Missed reminder (${minutesLate}m late): ${title}`
-}
 
 type ReminderPrepSource = typeof REMINDER_SOURCE_MANUAL | typeof REMINDER_SOURCE_MISSED
 
@@ -61,7 +53,7 @@ export function useReminderNeedsYouActions() {
         type: 'reminder',
         category: 'general_todo',
         emoji: '🔔',
-        description: buildReminderPrepDescription(event, sourceType, now),
+        description: buildReminderPrepDescription(cleanEventTitle(event.title), sourceType),
         event_title: cleanEventTitle(event.title),
         event_date: event.start_time,
         due_by: dueBy.toISOString(),
@@ -155,7 +147,7 @@ export function useReminderNeedsYouActions() {
         type: 'reminder',
         category: 'general_todo',
         emoji: '🔔',
-        description: buildReminderPrepDescription(event, REMINDER_SOURCE_MISSED, now),
+        description: buildReminderPrepDescription(cleanEventTitle(event.title), REMINDER_SOURCE_MISSED),
         event_title: cleanEventTitle(event.title),
         event_date: event.start_time,
         due_by: dueBy,

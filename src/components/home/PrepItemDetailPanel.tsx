@@ -4,6 +4,9 @@ import { AnimatePresence, motion, useDragControls } from 'framer-motion'
 import { X, Mail, CalendarDays, TimerReset, Ban, CalendarPlus, BellPlus, MapPin, Pencil, UserPlus, ExternalLink } from 'lucide-react'
 import { buildAiDraftPrompt } from '../../utils/eventTime'
 import { openEventDetails } from '../../utils/openEventDetails'
+import { getPrepItemDisplayDescription } from '../../utils/reminderLateness'
+import type { SnoozeDuration } from '../../utils/snoozeDuration'
+import { useLiveClock } from '../../hooks/useLiveClock'
 import {
   useCompletePrepItem,
   useDownvotePrepItem,
@@ -18,6 +21,7 @@ import type { PrepItem } from '../../types'
 import { getPrepCategoryConfig } from '../../utils/prepCategories'
 import BounceScroll from '../shared/BounceScroll'
 import MarkdownContent from '../shared/MarkdownContent'
+import SnoozeMenu from '../shared/SnoozeMenu'
 import { Button, Chip, Heading, IconButton, PersonAvatarStack } from '../ui'
 
 const PANEL_ENTER_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1]
@@ -133,6 +137,9 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
   const setAssignee = useSetPrepItemAssignee()
   const updateDueBy = useUpdatePrepItemDueBy()
   const panelDragControls = useDragControls()
+  // Keeps a missed reminder's "(Nm/h/d late)" fallback text live rather than
+  // frozen at whatever it said when this panel first mounted.
+  const now = useLiveClock(60_000)
   const [acting, setActing] = useState<string | null>(null)
   const [editingDueBy, setEditingDueBy] = useState(false)
   const [dueByDraft, setDueByDraft] = useState({ date: '', time: '' })
@@ -157,11 +164,11 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
     setAssignPickerOpen(false)
   }, [item?.id])
 
-  async function runAction(action: 'snooze' | 'dismiss') {
+  async function runAction(action: 'snooze' | 'dismiss', duration?: SnoozeDuration) {
     if (!item || acting) return
     setActing(action)
     try {
-      if (action === 'snooze') await snooze(item.id)
+      if (action === 'snooze') await snooze(item.id, duration)
       // "Dismiss" records the same not-relevant signal used to train the
       // relevance/suppression model — matching the inline dismiss action
       // used elsewhere in the app (Home rail, Action Hub).
@@ -278,7 +285,7 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
             data-ptr-ignore
             role="dialog"
             aria-modal="true"
-            aria-label={`Prep item details: ${item.event_title ?? item.description}`}
+            aria-label={`Prep item details: ${item.event_title ?? getPrepItemDisplayDescription(item.description, item.source_type, item.event_date, now)}`}
             onClick={e => e.stopPropagation()}
             onPointerDown={stopTouch}
             onTouchStart={stopTouch}
@@ -322,7 +329,7 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
                   })()}
                 </div>
                 <Heading role="display-sm" className="pr-8 leading-tight mt-1">
-                  {item.event_title ?? item.description}
+                  {item.event_title ?? getPrepItemDisplayDescription(item.description, item.source_type, item.event_date, now)}
                 </Heading>
               </div>
 
@@ -503,13 +510,19 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
             </div>
 
             <div className="flex flex-none items-center gap-2 border-t border-casa-border bg-casa-surface px-5 py-3.5">
-              <IconButton
-                onClick={() => runAction('snooze')}
-                disabled={!!acting}
-                variant="secondary"
-                icon={<TimerReset size={16} />}
-                aria-label="Snooze until tomorrow"
-                title="Snooze until tomorrow"
+              <SnoozeMenu
+                onSnooze={(duration) => runAction('snooze', duration)}
+                menuPlacement="above"
+                renderTrigger={({ onClick }) => (
+                  <IconButton
+                    onClick={onClick}
+                    disabled={!!acting}
+                    variant="secondary"
+                    icon={<TimerReset size={16} />}
+                    aria-label="Snooze"
+                    title="Snooze"
+                  />
+                )}
               />
               <IconButton
                 onClick={() => runAction('dismiss')}

@@ -9,6 +9,8 @@ import { ClipboardList, ChevronDown, Gift, Plane, Stethoscope, CreditCard, Shopp
 import { differenceInDays, parseISO } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { usePrepItems, useCompletePrepItem, useSnoozePrepItem, useDownvotePrepItem } from '../../hooks/usePrepItems'
+import { useLiveClock } from '../../hooks/useLiveClock'
+import { getPrepItemDisplayDescription } from '../../utils/reminderLateness'
 import type { PrepItem } from '../../types'
 import { Button, CalendarPill, IconButton, Text } from '../ui'
 
@@ -93,6 +95,9 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
   const [snoozingId, setSnoozingId] = useState<string | null>(null)
   const [downvoting, setDownvoting] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  // Ticks every minute so a missed reminder's "(Nm/h/d late)" label stays
+  // live instead of freezing at whatever it said when the card first mounted.
+  const now = useLiveClock(60_000)
 
   const grouped = useMemo(() => groupItems(items), [items])
 
@@ -172,7 +177,7 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
                       )}
                     >
                       <span className="mr-1 inline-flex align-top"><PrepTypeIcon type={item.type} /></span>
-                      {item.description}
+                      {getPrepItemDisplayDescription(item.description, item.source_type, item.event_date, now)}
                     </Text>
                   </div>
 

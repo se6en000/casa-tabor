@@ -174,6 +174,9 @@ export interface Conflict {
   resolved_at: string | null
   resolved_by: string | null
   created_at: string
+  snoozed_until?: string | null
+  snooze_count?: number
+  last_snoozed_at?: string | null
   // Joined
   event_a?: { id: string; start_time: string; title: string } | null
   event_b?: { id: string; start_time: string; title: string } | null
@@ -291,6 +294,9 @@ export interface PrepItem {
   source_confidence?: number | null
   assigned_to?: string | null
   action_key?: string
+  snoozed_until?: string | null
+  snooze_count?: number
+  last_snoozed_at?: string | null
 }
 
 /**

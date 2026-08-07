@@ -1,8 +1,11 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { differenceInDays, parseISO } from 'date-fns'
 import { usePrepItems, useDismissPrepItem, useSnoozePrepItem } from '../../hooks/usePrepItems'
+import { useLiveClock } from '../../hooks/useLiveClock'
+import { getPrepItemDisplayDescription } from '../../utils/reminderLateness'
 import { cn } from '../../utils/cn'
 import { Button } from '../ui'
+import SnoozeMenu from './SnoozeMenu'
 
 function daysLabel(eventDate: string | null): string {
   if (!eventDate) return ''
@@ -16,6 +19,9 @@ export default function PrepAlertsSection({ className }: { className?: string })
   const { data: items } = usePrepItems()
   const dismiss = useDismissPrepItem()
   const snooze = useSnoozePrepItem()
+  // Keeps a missed reminder's "(Nm/h/d late)" text live instead of frozen at
+  // whatever it said when this section first mounted.
+  const now = useLiveClock(60_000)
 
   if (!items || items.length === 0) return null
 
@@ -48,7 +54,7 @@ export default function PrepAlertsSection({ className }: { className?: string })
 
               {/* Body */}
               <div className="flex-1 min-w-0">
-                <p className="text-casa-text leading-snug">{item.description}</p>
+                <p className="text-casa-text leading-snug">{getPrepItemDisplayDescription(item.description, item.source_type, item.event_date, now)}</p>
                 {item.event_title && (
                   <div className="flex items-center gap-1.5 mt-1">
                     <span className="text-caption text-casa-muted truncate">{item.event_title}</span>
@@ -70,13 +76,11 @@ export default function PrepAlertsSection({ className }: { className?: string })
 
               {/* Actions */}
               <div className="shrink-0 flex items-center gap-1">
-                <Button variant="ghost"
-                  onClick={() => snooze(item.id)}
-                  className="text-caption font-medium px-2 py-1 rounded-md text-casa-muted transition-colors hover:text-casa-text hover:bg-casa-bg"
-                  title="Snooze until tomorrow morning"
-                >
-                  Snooze
-                </Button>
+                <SnoozeMenu
+                  onSnooze={(duration) => snooze(item.id, duration)}
+                  triggerVariant="ghost"
+                  triggerClassName="text-caption font-medium px-2 py-1 rounded-md text-casa-muted transition-colors hover:text-casa-text hover:bg-casa-bg"
+                />
                 <span className="text-casa-border text-caption">|</span>
                 <Button variant="ghost"
                   onClick={() => dismiss(item.id)}

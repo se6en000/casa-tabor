@@ -2,6 +2,7 @@ import { useEffect, useId, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { PrepItem } from '../types'
+import { type SnoozeDuration, computeSnoozeUntil } from '../utils/snoozeDuration'
 
 /**
  * Returns all undismissed, un-snoozed prep items, ordered overdue-first, then priority desc,
@@ -83,18 +84,17 @@ export function useDismissPrepItem() {
   return useResolvePrepItem('dismissed')
 }
 
-/** Snoozes a prep item until tomorrow morning (6 AM) */
+/** Snoozes a prep item for the given duration (defaults to "tomorrow" 6 AM, matching prior behavior). */
 export function useSnoozePrepItem() {
   const qc = useQueryClient()
-  return async (id: string) => {
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    tomorrow.setHours(6, 0, 0, 0)
-    await supabase
-      .from('prep_items')
-      .update({ snoozed_until: tomorrow.toISOString() })
-      .eq('id', id)
-      .throwOnError()
+  return async (id: string, duration: SnoozeDuration = 'tomorrow') => {
+    const snoozedUntil = computeSnoozeUntil(duration, new Date())
+    const { data, error } = await supabase.rpc('snooze_prep_item', {
+      p_prep_item_id: id,
+      p_snoozed_until: snoozedUntil.toISOString(),
+    })
+    if (error) throw error
+    if (!data?.ok) throw new Error('Casa could not snooze this action.')
     qc.invalidateQueries({ queryKey: ['prep-items'] })
   }
 }
