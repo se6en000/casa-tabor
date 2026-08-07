@@ -469,6 +469,16 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
               onTouchStart={stopTouch}
               onTouchMove={stopTouch}
               onTouchEnd={stopTouch}
+              onScroll={e => {
+                // This outer shell is `overflow: hidden` and must never scroll itself -
+                // only the inner `.overflow-y-auto` content div should. Focusing a
+                // checkbox (e.g. checking off a checklist item) triggers the browser's
+                // native scroll-into-view behavior on every scrollable ancestor,
+                // including this one, which can silently set a nonzero scrollTop here
+                // and shift the whole header/content/footer column up, leaving a
+                // permanent blank gap at the bottom of the card. Reset it immediately.
+                if (e.currentTarget.scrollTop !== 0) e.currentTarget.scrollTop = 0
+              }}
             >
               <div
                 className="relative h-control-sm flex-shrink-0 border-b border-casa-border bg-casa-bg px-3"

@@ -1390,21 +1390,16 @@ function TimelineRow({
               </div>
 
               {responsibility.attendees.length > 0 && (
-                <div className="flex items-center gap-1 shrink-0">
-                  {responsibility.attendees.slice(0, 3).map((m) => (
-                    <CalendarPill
-                      key={m.id}
-                      color={m.family_member?.color_hex ?? SHARED_GOLD}
-                    >
-                      {m.family_member?.name}
-                    </CalendarPill>
-                  ))}
-                  {responsibility.attendees.length > 3 && (
-                    <CalendarPill>
-                      +{responsibility.attendees.length - 3}
-                    </CalendarPill>
-                  )}
-                </div>
+                <PersonAvatarStack
+                  people={responsibility.attendees.map((m) => ({
+                    id: m.id,
+                    name: m.family_member?.name ?? '?',
+                    color: m.family_member?.color_hex ?? SHARED_GOLD,
+                  }))}
+                  max={3}
+                  size="sm"
+                  className="shrink-0"
+                />
               )}
             </div>
 

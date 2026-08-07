@@ -20,6 +20,7 @@ import EventContextMenu from '../shared/EventContextMenu'
 import { WeatherIcon } from '../shared/WeatherIcon'
 import BounceScroll from '../shared/BounceScroll'
 import { eventOverlapsDay, getEventDisplayStartDay } from '../../utils/eventTime'
+import { PersonAvatarStack } from '../ui'
 import type { FamilyMember } from '../../types'
 import { deriveCalendarCardResponsibility } from '../../lib/calendarResponsibility'
 import { useCalendarQuickCreateGesture } from '../../hooks/useCalendarQuickCreateGesture'
@@ -47,10 +48,15 @@ function getSnippet(event: EventWithDetails): { icon: React.ReactNode; text: str
 }
 
 function getGoingMembers(event: EventWithDetails): FamilyMember[] {
+  // Every member row in event.members represents someone attending the event -
+  // there's no separate "not going" role, and the attendee editor always saves
+  // new/edited members with role 'attendee' (there's no "primary" distinction
+  // for attendees anymore). Keep 'assignee'/'primary' for older/legacy rows so
+  // nothing regresses for events written before this change.
   const selected = event.members
     .filter((member) => {
       const role = member.role.toLowerCase()
-      return role === 'assignee' || role === 'primary'
+      return role === 'attendee' || role === 'assignee' || role === 'primary'
     })
     .map((member) => member.family_member)
     .filter((member): member is FamilyMember => Boolean(member))
@@ -302,8 +308,6 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
   const isAllDayEvent = event.all_day
   const displayStartDay = isAllDayEvent ? getEventDisplayStartDay(event) : null
   const goingMembers = getGoingMembers(event)
-  const visibleGoingMembers = goingMembers.slice(0, 2)
-  const goingOverflowCount = Math.max(0, goingMembers.length - visibleGoingMembers.length)
 
   // Re-derive driver/attendee responsibility whenever the event detail panel writes a new
   // driver override or transportation plan, so stacked-view cards update immediately
@@ -398,7 +402,7 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
         {/* Title — wraps freely (up to 2 lines); role/going info moves to footer below */}
         {(() => {
           const cleanTitle = cleanEventTitle(event.title)
-          const showGoingRow = visibleGoingMembers.length > 0
+          const showGoingRow = goingMembers.length > 0
           const showResponsibilityRow = Boolean(responsibilityChip)
           const showFooter = showGoingRow || showResponsibilityRow
           return (
@@ -431,25 +435,16 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
                       </span>
                     )
                   })()}
-                  {visibleGoingMembers.map((member) => (
-                    <span
-                      key={member.id}
-                      className="flex min-w-0 max-w-full items-center gap-1 text-caption font-bold leading-none text-casa-muted"
-                      title={`${member.name} going`}
-                    >
-                      <span
-                        className="flex size-5 shrink-0 items-center justify-center rounded-full text-caption font-extrabold leading-none text-white"
-                        style={{ backgroundColor: member.color_hex ?? 'var(--color-casa-muted)' }}
-                      >
-                        {member.name[0]?.toUpperCase() || '?'}
-                      </span>
-                      <span className="truncate">Going</span>
-                    </span>
-                  ))}
-                  {goingOverflowCount > 0 && (
-                    <span className="text-caption font-bold leading-none text-casa-muted">
-                      +{goingOverflowCount}
-                    </span>
+                  {goingMembers.length > 0 && (
+                    <PersonAvatarStack
+                      people={goingMembers.map((member) => ({
+                        id: member.id,
+                        name: member.name,
+                        color: member.color_hex,
+                      }))}
+                      max={3}
+                      size="sm"
+                    />
                   )}
                 </div>
               )}

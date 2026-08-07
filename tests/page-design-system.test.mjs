@@ -412,7 +412,7 @@ test('calendar chrome uses shared controls while runtime event geometry stays in
   const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
   const transportation = readFileSync(resolve('src/components/calendar/EventTransportationSection.tsx'), 'utf8')
 
-  assert.match(day, /import \{ Button, CalendarPill, IconButton \} from '\.\.\/ui'/)
+  assert.match(day, /import \{ Button, CalendarPill, IconButton, PersonAvatarStack \} from '\.\.\/ui'/)
   assert.match(month, /import \{ Button, CalendarPill, IconButton \} from '\.\.\/ui'/)
   assert.match(detail, /import \{ Alert, Button, Card, Chip, DisclosureSection, IconButton, Switch \} from '\.\.\/ui'/)
   assert.match(page, /import \{ Button, IconButton, SegmentedControl \} from '\.\.\/components\/ui'/)
