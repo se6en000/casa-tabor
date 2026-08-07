@@ -14,6 +14,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
+import { canonicalContentFingerprint, canonicalEmailKey, normalizeInternetMessageId } from '../_shared/gmail-canonical-email.mjs'
+import { extractGmailMessageContent } from '../_shared/gmail-message-content.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -41,7 +43,7 @@ const CALENDAR_KEYWORDS = /appointment|appt|booking|reservation|confirm|invite|i
 // Keywords that suggest a family todo/action worth surfacing — deliberately broad so real
 // bills, forms, renewals, and deliveries don't fall through a "no keywords" gap. Extractable
 // action types are: forms | payment | rsvp | deadline | delivery | renewal | general.
-const ACTION_KEYWORDS = /permission slip|consent form|waiver|due date|deadline|invoice|payment due|payment reminder|pay by|pay \$|please pay|amount due|balance due|account balance|autopay|auto-pay|auto pay|past due|overdue|final notice|bill is ready|your bill|billing statement|statement is ready|statement (is )?ready|tuition|fee is due|late fee|rsvp|respond by|register by|registration deadline|submit by|application|renew by|renewal|membership expir|subscription|expires (on|soon)|expiring soon|card expiring|order confirmation|shipping confirmation|shipped|out for delivery|delivered|track(ing)? (your |this )?(package|order|shipment)|delivery confirmation|return by|return window|refund|please complete|complete (the )?attached|complete this form|fill out|sign and return|signature required|action required|response required|please sign|approval needed|verify your|update your payment|please review and (sign|complete|submit)/i
+const ACTION_KEYWORDS = /permission slip|consent form|waiver|paperwork|due date|deadline|invoice|payment due|payment reminder|pay by|pay \$|please pay|amount due|balance due|account balance|schoolcash|school cash|agenda sale|purchase an agenda|autopay|auto-pay|auto pay|past due|overdue|final notice|bill is ready|your bill|billing statement|statement is ready|statement (is )?ready|tuition|fee is due|late fee|rsvp|respond by|register by|register your ride|registration deadline|submit by|application|summer assignments|renew by|renewal|membership expir|subscription|expires (on|soon)|expiring soon|card expiring|order confirmation|shipping confirmation|shipped|out for delivery|delivered|track(ing)? (your |this )?(package|order|shipment)|delivery confirmation|return by|return window|refund|please complete|complete (the )?attached|complete this form|complete any forms|fill out|yellow folder|sign and return|signature required|action required|response required|please sign|approval needed|verify your|update your payment|please review and (sign|complete|submit)/i
 
 // ── Gmail helpers ─────────────────────────────────────────────────
 
@@ -75,29 +77,22 @@ async function getRecentMessages(accessToken: string, historyId: string | null):
   }
 }
 
-function extractBodyText(payload: { mimeType?: string; body?: { data?: string }; parts?: unknown[] }): string {
-  let text = ''
-  function walk(part: typeof payload) {
-    if (part.mimeType === 'text/plain' && part.body?.data) {
-      text += atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'))
-    }
-    for (const sub of (part.parts ?? [])) walk(sub as typeof part)
-  }
-  walk(payload)
-  return text
-}
-
 async function getMessageDetails(msgId: string, accessToken: string) {
   const res = await gmailFetch(`/users/me/messages/${msgId}?format=full`, accessToken)
   if (!res.ok) return null
   const msg = await res.json()
   const headers: { name: string; value: string }[] = msg.payload?.headers ?? []
+  const content = extractGmailMessageContent(msg.payload ?? {})
   return {
     subject: headers.find(h => h.name.toLowerCase() === 'subject')?.value ?? '',
     from:    headers.find(h => h.name.toLowerCase() === 'from')?.value ?? '',
     date:    headers.find(h => h.name.toLowerCase() === 'date')?.value ?? '',
+    internetMessageId: normalizeInternetMessageId(headers.find(h => h.name.toLowerCase() === 'message-id')?.value),
+    threadId: typeof msg.threadId === 'string' ? msg.threadId : null,
     snippet: msg.snippet ?? '',
-    body:    extractBodyText(msg.payload ?? {}),
+    body:    content.text,
+    contentFormat: content.format,
+    attachments: content.attachments,
   }
 }
 
@@ -351,6 +346,48 @@ async function persistInboxActions(
   return data?.length ?? 0
 }
 
+async function persistEmailKnowledgeClaims(
+  sb: ReturnType<typeof createClient>,
+  canonicalEmailId: string,
+  familyMemberId: string,
+  messageId: string,
+  receivedAt: string,
+  eventId: string | null = null,
+): Promise<void> {
+  const sourceRef = `gmail:${familyMemberId}:${messageId}`
+  const { data: prepItems, error: prepItemsError } = await sb
+    .from('prep_items')
+    .select('id, type, description, event_title, due_by, priority')
+    .eq('source_ref', sourceRef)
+  if (prepItemsError) throw prepItemsError
+  if (!prepItems || prepItems.length === 0) return
+
+  const rows = prepItems.map((item) => ({
+    claim_key: `gmail:${canonicalEmailId}:prep:${item.id}`,
+    claim_type: 'commitment',
+    status: 'active',
+    requiredness: item.priority >= 2 ? 'required' : 'optional',
+    privacy_class: 'standard',
+    title: item.event_title || 'Family email action',
+    summary: item.description,
+    family_member_id: familyMemberId,
+    event_id: eventId,
+    prep_item_id: item.id,
+    canonical_email_id: canonicalEmailId,
+    effective_at: receivedAt,
+    expires_at: item.due_by,
+    confidence: 0.9,
+    metadata: {
+      source_type: 'gmail',
+      action_type: item.type,
+    },
+  }))
+  const { error } = await sb
+    .from('family_knowledge_claims')
+    .upsert(rows, { onConflict: 'claim_key' })
+  if (error) throw error
+}
+
 // ── Fuzzy event dedup ─────────────────────────────────────────────
 // Returns existing event ID if we find a probable match; null if it looks new.
 
@@ -470,7 +507,59 @@ Deno.serve(async (req) => {
       if (!details) continue
       scanned++
 
-      const searchText = `${details.subject} ${details.snippet}`
+      const emailReceivedAt = details.date ? new Date(details.date).toISOString() : new Date().toISOString()
+      const canonicalKey = await canonicalEmailKey({
+        messageId: details.internetMessageId,
+        from: details.from,
+        subject: details.subject,
+        receivedAt: emailReceivedAt,
+        normalizedBody: details.body,
+      })
+      const contentFingerprint = await canonicalContentFingerprint(details.body)
+      const { data: canonicalEmail, error: canonicalEmailError } = await sb
+        .from('canonical_inbox_emails')
+        .upsert({
+          canonical_key: canonicalKey,
+          gmail_thread_id: details.threadId,
+          internet_message_id: details.internetMessageId,
+          from_email: details.from,
+          subject: details.subject,
+          received_at: emailReceivedAt,
+          content_fingerprint: contentFingerprint,
+          content_format: details.contentFormat,
+          attachment_count: details.attachments.length,
+          last_seen_at: new Date().toISOString(),
+        }, { onConflict: 'canonical_key' })
+        .select('id')
+        .single()
+      if (canonicalEmailError || !canonicalEmail) {
+        throw new Error(`Could not canonicalize Gmail message: ${canonicalEmailError?.message ?? 'missing canonical row'}`)
+      }
+
+      const { data: existingCanonicalDelivery, error: duplicateLookupError } = await sb
+        .from('gmail_processed_messages')
+        .select('id')
+        .eq('canonical_email_id', canonicalEmail.id)
+        .limit(1)
+      if (duplicateLookupError) throw duplicateLookupError
+      if (existingCanonicalDelivery && existingCanonicalDelivery.length > 0) {
+        await sb.from('gmail_processed_messages').upsert({
+          family_member_id: memberId,
+          gmail_message_id: msgId,
+          canonical_email_id: canonicalEmail.id,
+          subject: details.subject,
+          email_subject: details.subject,
+          from_email: details.from,
+          received_at: emailReceivedAt,
+          intent: 'skip',
+          skipped_reason: 'duplicate delivery of canonical inbox email',
+          email_body: details.body.slice(0, 8000),
+        }, { onConflict: 'family_member_id,gmail_message_id' })
+        skipped++
+        continue
+      }
+
+      const searchText = `${details.subject}\n${details.snippet}\n${details.body}`
       const isTravel = TRAVEL_KEYWORDS.test(searchText) || TRAVEL_SENDER_DOMAINS.some(d => details.from.toLowerCase().includes(d))
       const isCalendar = CALENDAR_KEYWORDS.test(searchText)
       const isActionCandidate = ACTION_KEYWORDS.test(searchText)
@@ -478,6 +567,7 @@ Deno.serve(async (req) => {
       if (!isTravel && !isCalendar && !isActionCandidate) {
         await sb.from('gmail_processed_messages').upsert({
           family_member_id: memberId, gmail_message_id: msgId,
+          canonical_email_id: canonicalEmail.id,
           subject: details.subject, email_subject: details.subject,
           from_email: details.from,
           received_at: details.date ? new Date(details.date).toISOString() : null,
@@ -495,7 +585,6 @@ Deno.serve(async (req) => {
           : Promise.resolve([] as InboxActionItem[]),
       ])
 
-      const emailReceivedAt = details.date ? new Date(details.date).toISOString() : new Date().toISOString()
       const actionsFromEmail = await persistInboxActions(
         sb,
         memberId,
@@ -509,10 +598,20 @@ Deno.serve(async (req) => {
         familyMembers,
       )
       actions += actionsFromEmail
+      if (actionsFromEmail > 0) {
+        await persistEmailKnowledgeClaims(
+          sb,
+          canonicalEmail.id,
+          memberId,
+          msgId,
+          emailReceivedAt,
+        )
+      }
 
       if (!classified || classified.intent === 'skip') {
         await sb.from('gmail_processed_messages').upsert({
           family_member_id: memberId, gmail_message_id: msgId,
+          canonical_email_id: canonicalEmail.id,
           subject: details.subject, email_subject: details.subject,
           from_email: details.from,
           received_at: details.date ? new Date(details.date).toISOString() : null,
@@ -538,6 +637,7 @@ Deno.serve(async (req) => {
           if (existingTrip.source_email_received_at && new Date(emailReceivedAt) <= new Date(existingTrip.source_email_received_at)) {
             await sb.from('gmail_processed_messages').upsert({
               family_member_id: memberId, gmail_message_id: msgId,
+              canonical_email_id: canonicalEmail.id,
               subject: details.subject, email_subject: details.subject,
               from_email: details.from, received_at: emailReceivedAt,
               intent: 'travel_detail', skipped_reason: 'older than existing trip record',
@@ -589,6 +689,7 @@ Deno.serve(async (req) => {
 
         await sb.from('gmail_processed_messages').upsert({
           family_member_id: memberId, gmail_message_id: msgId,
+          canonical_email_id: canonicalEmail.id,
           subject: details.subject, email_subject: details.subject,
           from_email: details.from, received_at: emailReceivedAt,
           intent: 'travel_detail',
@@ -647,6 +748,7 @@ Deno.serve(async (req) => {
 
           await sb.from('gmail_processed_messages').upsert({
             family_member_id: memberId, gmail_message_id: msgId,
+            canonical_email_id: canonicalEmail.id,
             subject: details.subject, email_subject: details.subject,
             from_email: details.from, received_at: emailReceivedAt,
             intent: 'update_event', updated_event_id: matchedEvent.id,
@@ -665,6 +767,7 @@ Deno.serve(async (req) => {
       if (!startTime) {
         await sb.from('gmail_processed_messages').upsert({
           family_member_id: memberId, gmail_message_id: msgId,
+          canonical_email_id: canonicalEmail.id,
           subject: details.subject, email_subject: details.subject,
           from_email: details.from, received_at: emailReceivedAt,
           intent: 'skip', skipped_reason: 'no parseable start time',
@@ -678,6 +781,7 @@ Deno.serve(async (req) => {
       if (existingMatch) {
         await sb.from('gmail_processed_messages').upsert({
           family_member_id: memberId, gmail_message_id: msgId,
+          canonical_email_id: canonicalEmail.id,
           subject: details.subject, email_subject: details.subject,
           from_email: details.from, received_at: emailReceivedAt,
           intent: 'skip', skipped_reason: `duplicate of event: ${existingMatch.title}`,
@@ -699,6 +803,16 @@ Deno.serve(async (req) => {
 
       if (newEvent) {
         await sb.from('event_members').insert({ event_id: newEvent.id, family_member_id: assignedMember.id, role: 'primary' })
+        if (actionsFromEmail > 0) {
+          await persistEmailKnowledgeClaims(
+            sb,
+            canonicalEmail.id,
+            memberId,
+            msgId,
+            emailReceivedAt,
+            newEvent.id,
+          )
+        }
 
         // Use canonical create flow so DB + Google linkage stays consistent.
         await sb.functions.invoke('create-google-event', {
@@ -712,6 +826,7 @@ Deno.serve(async (req) => {
 
         await sb.from('gmail_processed_messages').upsert({
           family_member_id: memberId, gmail_message_id: msgId,
+          canonical_email_id: canonicalEmail.id,
           subject: details.subject, email_subject: details.subject,
           from_email: details.from, received_at: emailReceivedAt,
           intent: 'new_event', created_event_id: newEvent.id,

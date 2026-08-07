@@ -58,6 +58,21 @@ test('CALENDAR_KEYWORDS includes common school/logistics phrasing', () => {
   }
 })
 
+test('ACTION_KEYWORDS catches actionable school preparation that may be buried in the body', () => {
+  const ACTION_KEYWORDS = extractRegex(scanGmail, 'ACTION_KEYWORDS')
+  const examples = [
+    'Please fill out and return all paperwork by next Friday',
+    'Complete any forms and return the yellow folder by Monday',
+    'SchoolCash Online fees are now available for purchase',
+    'Register Your Ride even if your child is a car rider',
+    'Please purchase an agenda in the cafeteria',
+    'Ensure all summer assignments are complete before the first day',
+  ]
+  for (const text of examples) {
+    assert.match(text, ACTION_KEYWORDS, `expected ACTION_KEYWORDS to match: "${text}"`)
+  }
+})
+
 test('InboxActionItem type union and extraction prompt include delivery and renewal', () => {
   assert.match(scanGmail, /type: 'forms' \| 'payment' \| 'rsvp' \| 'deadline' \| 'delivery' \| 'renewal' \| 'general'/)
   assert.match(scanGmail, /"type": "forms\|payment\|rsvp\|deadline\|delivery\|renewal\|general"/)
@@ -84,4 +99,3 @@ test('Action Hub renders category and source filter chips for the Prep & Action 
   assert.match(prepCategoriesModule, /Bills & Payments/)
   assert.match(prepCategoriesModule, /Household & Errands/)
 })
-

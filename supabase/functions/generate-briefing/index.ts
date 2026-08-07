@@ -124,6 +124,22 @@ Deno.serve(async (req) => {
     event_id: string | null
   }[] | undefined) ?? []
 
+  const knowledgeHorizon = new Date(new Date(dayStartUtc).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+  const { data: emailCommitments, error: emailCommitmentsError } = await sb
+    .from('family_knowledge_claims')
+    .select('title, summary, expires_at, family_members(name), canonical_inbox_emails(from_email, subject)')
+    .eq('status', 'active')
+    .eq('requiredness', 'required')
+    .eq('privacy_class', 'standard')
+    .or(`expires_at.is.null,expires_at.lte.${knowledgeHorizon}`)
+    .or(`expires_at.is.null,expires_at.gte.${dayStartUtc}`)
+    .order('expires_at', { ascending: true, nullsFirst: false })
+    .limit(6)
+  if (emailCommitmentsError) return new Response(
+    JSON.stringify({ error: emailCommitmentsError.message, correlation_id: correlationId }),
+    { status: 500, headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+  )
+
   const conflicts = (orchestrationData?.conflicts as {
     id: string
     conflict_type: string
@@ -143,6 +159,7 @@ Deno.serve(async (req) => {
         weatherCity,
         prepItems,
         actionQueue,
+        emailCommitments ?? [],
       )
     } catch (err) {
       console.error(`[generate-briefing][${correlationId}] LLM error:`, err)
@@ -158,6 +175,7 @@ Deno.serve(async (req) => {
       member_schedules: memberSchedules,
       events_count: (events ?? []).length,
       action_queue: actionQueue,
+      email_commitments: emailCommitments ?? [],
       orchestration_runs: orchestrationData?.runs ?? null,
     },
     member_schedules: memberSchedules,
@@ -195,6 +213,13 @@ async function callLLM(
   weatherCity: string,
   prepItems: { description: string; type: string; emoji: string; event_title: string; event_date: string; priority: number }[],
   actionQueue: { type: string; priority: number; title: string; description: string; due_at: string; event_id: string | null }[],
+  emailCommitments: {
+    title: string
+    summary: string | null
+    expires_at: string | null
+    family_members: { name: string } | null
+    canonical_inbox_emails: { from_email: string | null, subject: string | null } | null
+  }[],
 ): Promise<string> {
   const dateLabel = new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
   const memberNames = members.map(m => m.name).join(', ')
@@ -251,6 +276,13 @@ async function callLLM(
   const actionLines = actionQueue.length > 0
     ? actionQueue.slice(0, 6).map((a) => `  [P${a.priority}] ${a.title} — ${a.description}`).join('\n')
     : ''
+  const emailCommitmentLines = emailCommitments.length > 0
+    ? emailCommitments.map((claim) => {
+      const owner = claim.family_members?.name ? ` for ${claim.family_members.name}` : ''
+      const due = claim.expires_at ? ` (due ${claim.expires_at})` : ''
+      return `  ${claim.title}${owner}${due} — ${claim.summary ?? 'No additional summary'}`
+    }).join('\n')
+    : ''
 
   const prompt = `You are the Casa Tabor family command center. Write a warm, smart morning briefing for ${dateLabel} for the ${memberNames} family.${weatherCity ? ` They live in ${weatherCity}.` : ''}
 
@@ -260,6 +292,8 @@ ${prepLines ? `\nACTIVE PREP REMINDERS (things that need attention soon):
 ${prepLines}` : ''}
 ${actionLines ? `\nACTION QUEUE (highest-priority items from conflict + prep + weather orchestration):
 ${actionLines}` : ''}
+${emailCommitmentLines ? `\nEMAIL COMMITMENTS (source-backed; mention only when due or materially helpful):
+${emailCommitmentLines}` : ''}
 
 Write a single flowing paragraph (4–6 sentences) that covers:
 1. A quick read of the day's energy — busy or calm?
