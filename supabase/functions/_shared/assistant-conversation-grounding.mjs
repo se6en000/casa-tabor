@@ -38,6 +38,20 @@ export function normalizeConversationState(value, now = Date.now()) {
       establishedAt: new Date(establishedAt).toISOString(),
     }
   }
+  if (value.activeEntityType === 'calendar_range') {
+    const range = normalizeCalendarRange(value.range)
+    if (!range) return null
+    const eventIds = Array.isArray(value.eventIds)
+      ? [...new Set(value.eventIds.flatMap((id) => typeof id === 'string' && id.trim() ? [id.trim()] : []))].slice(0, 50)
+      : []
+    return {
+      activeEntityType: 'calendar_range',
+      range,
+      eventIds,
+      expectedFollowUp: 'calendar_range_follow_up',
+      establishedAt: new Date(establishedAt).toISOString(),
+    }
+  }
   if (value.activeEntityType === 'calendar_clarification') {
     const candidates = Array.isArray(value.candidateEvents)
       ? value.candidateEvents.slice(0, 6).flatMap((candidate) => {
@@ -200,6 +214,20 @@ export function eventConversationState(event, now = new Date()) {
   }
 }
 
+export function calendarRangeConversationState(range, events, now = new Date()) {
+  const normalizedRange = normalizeCalendarRange(range)
+  if (!normalizedRange) throw new TypeError('A valid calendar range is required')
+  return {
+    activeEntityType: 'calendar_range',
+    range: normalizedRange,
+    eventIds: [...new Set((Array.isArray(events) ? events : []).flatMap((event) =>
+      typeof event?.id === 'string' && event.id.trim() ? [event.id.trim()] : []
+    ))].slice(0, 50),
+    expectedFollowUp: 'calendar_range_follow_up',
+    establishedAt: now.toISOString(),
+  }
+}
+
 export function calendarClarificationConversationState(candidates, pendingMutation, now = new Date()) {
   return {
     activeEntityType: 'calendar_clarification',
@@ -222,6 +250,25 @@ export function calendarClarificationConversationState(candidates, pendingMutati
     expectedFollowUp: 'calendar_clarification',
     establishedAt: now.toISOString(),
   }
+}
+
+function normalizeCalendarRange(value) {
+  if (!value || typeof value !== 'object') return null
+  const start = typeof value.start === 'string' ? value.start : ''
+  const end = typeof value.end === 'string' ? value.end : ''
+  const startMs = Date.parse(start)
+  const endMs = Date.parse(end)
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return null
+  const contextStart = typeof value.contextStart === 'string' && Number.isFinite(Date.parse(value.contextStart))
+    ? value.contextStart
+    : start
+  const contextEnd = typeof value.contextEnd === 'string' && Number.isFinite(Date.parse(value.contextEnd))
+    ? value.contextEnd
+    : end
+  const label = typeof value.label === 'string' && value.label.trim()
+    ? value.label.trim().slice(0, 120)
+    : 'that time'
+  return { start, end, contextStart, contextEnd, label }
 }
 
 export function resolveCalendarClarificationSelection(text, state, events, options = {}) {

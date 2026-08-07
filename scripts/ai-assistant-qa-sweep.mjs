@@ -7,6 +7,7 @@ import {
   groceryConversationState,
 } from '../supabase/functions/_shared/assistant-conversation-grounding.mjs'
 import { formatTextForMarkdown } from '../src/lib/assistantMarkdown.mjs'
+import { buildCalendarScoreScenarioGroups } from './assistant-calendar-score-scenarios.mjs'
 
 const env = Object.fromEntries(
   fs.readFileSync(new URL('../.env.local', import.meta.url), 'utf8')
@@ -31,7 +32,7 @@ const traceBase = crypto.randomUUID()
 const DEFAULT_LIMIT = Number(process.argv.find((arg) => arg.startsWith('--count='))?.split('=')[1] ?? '0')
 const MODE = process.argv.find((arg) => arg.startsWith('--mode='))?.split('=')[1] ?? 'full'
 const MODEL = process.argv.find((arg) => arg.startsWith('--model='))?.split('=')[1] ?? 'gemini-2.5-flash'
-const SUPPORTED_MODES = new Set(['smoke', 'full', 'showcase', 'calendar-edge'])
+const SUPPORTED_MODES = new Set(['smoke', 'full', 'showcase', 'calendar-edge', 'calendar-score'])
 const SUPPORTED_MODELS = new Set(['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.5-flash'])
 if (!SUPPORTED_MODES.has(MODE)) throw new Error(`Unsupported QA mode: ${MODE}`)
 if (!SUPPORTED_MODELS.has(MODEL)) throw new Error(`Unsupported QA model: ${MODEL}`)
@@ -148,6 +149,8 @@ async function seedCalendarFixtures(created = []) {
       locationName: 'Sunrise Community Center',
       address: '123 Sunrise Way, West Palm Beach, FL 33401',
     },
+    { title: '[QA] Vet appointment', daysFromNow: 2, hour: 10, minutes: 0, durationMins: 45 },
+    { title: '[QA] School open house', daysFromNow: 2, hour: 14, minutes: 0, durationMins: 60 },
     { title: '[QA] Dentist appointment', daysFromNow: 3, hour: 10, minutes: 0, durationMins: 60 },
     { title: '[QA] Birthday dinner', daysFromNow: 4, hour: 18, minutes: 0, durationMins: 120 },
     {
@@ -164,7 +167,7 @@ async function seedCalendarFixtures(created = []) {
     { title: '[QA] Piano recital', daysFromNow: 8, hour: 16, minutes: 0, durationMins: 90 },
     { title: '[QA] PTA meeting', daysFromNow: 9, hour: 19, minutes: 0, durationMins: 60 },
   ]
-  if (MODE === 'calendar-edge') {
+  if (MODE === 'calendar-edge' || MODE === 'calendar-score') {
     items.push(
       { title: '[QA] Edge dentist appointment', daysFromNow: 3, hour: 10, minutes: 0, durationMins: 60 },
       { title: '[QA] Edge dentist appointment', daysFromNow: 3, hour: 15, minutes: 0, durationMins: 60 },
@@ -367,8 +370,13 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames, recipeFixture) {
       steps: [
         { text: "what's on my calendar tomorrow?", expect: { type: 'text' } },
         {
-          text: "what's going on on Thursday?",
-          expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 0 },
+          text: "what's going on the day after tomorrow?",
+          expect: {
+            type: 'text',
+            semanticIntent: 'calendar.list',
+            maxLlmCalls: 1,
+            containsAll: ['soccer practice', 'vet appointment', 'school open house'],
+          },
         },
         { text: 'how many appointments do i have next week?', expect: { type: 'text' } },
         { text: 'where do i need to go on Thursday?', expect: { type: 'text' } },
@@ -518,10 +526,10 @@ function scenarioGroups(fixtures, grocerySeeds, familyNames, recipeFixture) {
       page: 'calendar',
       assistantMode: 'general',
       steps: [
-        { text: 'how does tomorrow afternoon look?', expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 0 } },
-        { text: 'anything planned for the next 3 days?', expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 0 } },
-        { text: 'walk me through next week.', expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 0 } },
-        { text: 'alexa whats on my calender tomoro?', expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 0 } },
+        { text: 'how does tomorrow afternoon look?', expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 1 } },
+        { text: 'anything planned for the next 3 days?', expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 1 } },
+        { text: 'walk me through next week.', expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 1 } },
+        { text: 'alexa whats on my calender tomoro?', expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 1 } },
       ],
     },
     {
@@ -691,7 +699,7 @@ function showcaseScenarioGroups() {
       page: 'calendar',
       assistantMode: 'general',
       steps: [
-        { text: "What's going on Thursday?", expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 0, readable: true } },
+        { text: "What's going on Thursday?", expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 1, readable: true } },
         { text: 'Which one is first?', expect: { type: 'text', containsAny: ['first', 'am', 'pm', 'all day'] } },
       ],
     },
@@ -718,7 +726,7 @@ function showcaseScenarioGroups() {
       page: 'calendar',
       assistantMode: 'general',
       steps: [
-        { text: 'Whats happening tomoro afternoon', expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 0 } },
+        { text: 'Whats happening tomoro afternoon', expect: { type: 'text', semanticIntent: 'calendar.list', maxLlmCalls: 1 } },
         { text: 'Any conflicts?', expect: { type: 'text', containsAll: ['tomorrow', 'afternoon'] } },
       ],
     },
@@ -953,10 +961,13 @@ async function run() {
       ? showcaseScenarioGroups()
       : MODE === 'calendar-edge'
         ? calendarEdgeScenarioGroups(calendarFixtures)
+        : MODE === 'calendar-score'
+          ? buildCalendarScoreScenarioGroups(calendarFixtures, familyNames, now)
         : scenarioGroups(calendarFixtures, groceryFixtures, familyNames, recipeFixture)
     const flatSteps = groups.flatMap((group) => group.steps.map((step, index) => ({
       ...step,
       groupKey: group.key,
+      scoreCategory: step.scoreCategory ?? group.scoreCategory ?? null,
       page: group.page,
       assistantMode: group.assistantMode,
       initialConversationState: index === 0 ? group.conversationState ?? null : undefined,
@@ -1000,6 +1011,7 @@ async function run() {
         semantic_intent: null,
         llm_calls: null,
         action_result: null,
+        score_category: step.scoreCategory,
         note: null,
       }
 
@@ -1219,6 +1231,20 @@ async function run() {
         return acc
       }, {})
     const boundarySteps = results.filter((result) => result.expected?.type === 'clarify')
+    const scoreCategories = [...new Set(results.map((result) => result.score_category).filter(Boolean))]
+    const categoryScores = Object.fromEntries(scoreCategories.map((category) => {
+      const categoryResults = results.filter((result) => result.score_category === category)
+      const passed = categoryResults.filter((result) => result.ok).length
+      const score = categoryResults.length > 0 ? Math.round((passed / categoryResults.length) * 100) : 0
+      return [category, {
+        total: categoryResults.length,
+        passed,
+        failed: categoryResults.length - passed,
+        score,
+        grade: scoreGrade(score),
+      }]
+    }))
+    const overallScore = totals.total > 0 ? Math.round((totals.passed / totals.total) * 100) : 0
     console.log(JSON.stringify({
       run_id: runId,
       mode: MODE,
@@ -1232,6 +1258,10 @@ async function run() {
         assistant_text: result.assistant_text,
       })),
       cleanup,
+      score: MODE === 'calendar-score'
+        ? { percent: overallScore, grade: scoreGrade(overallScore) }
+        : undefined,
+      category_scores: MODE === 'calendar-score' ? categoryScores : undefined,
       showcase: MODE === 'showcase'
         ? results.map((result) => ({
           conversation: result.group,
@@ -1255,6 +1285,20 @@ async function run() {
     }, null, 2))
     if (totals.failed > 0 || !cleanup.verified) process.exitCode = 1
   }
+}
+
+function scoreGrade(score) {
+  if (score >= 97) return 'A+'
+  if (score >= 93) return 'A'
+  if (score >= 90) return 'A-'
+  if (score >= 87) return 'B+'
+  if (score >= 83) return 'B'
+  if (score >= 80) return 'B-'
+  if (score >= 77) return 'C+'
+  if (score >= 73) return 'C'
+  if (score >= 70) return 'C-'
+  if (score >= 60) return 'D'
+  return 'F'
 }
 
 run().catch(async (error) => {

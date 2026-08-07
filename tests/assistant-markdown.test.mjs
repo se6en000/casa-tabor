@@ -19,3 +19,8 @@ test('leaves ordinary markdown links and bracketed prose unchanged', () => {
   const text = 'Review [the appointment](casa://event/evt-1) and bring [both forms].'
   assert.equal(stripEvidenceCitationMarkers(text), text)
 })
+
+test('strips legacy internal event ID markers from visible answers', () => {
+  const text = 'Dry Clean Jakes Tux [ID:d25f46fb-1104-42d9-89b4-a3a5cca50930] is at 9 PM.'
+  assert.equal(stripEvidenceCitationMarkers(text), 'Dry Clean Jakes Tux is at 9 PM.')
+})

@@ -5,6 +5,7 @@ import {
   answerGroundedEventFollowUp,
   answerGroundedEventSemanticFrame,
   calendarClarificationConversationState,
+  calendarRangeConversationState,
   eventConversationState,
   groceryClarificationConversationState,
   groceryConversationState,
@@ -27,6 +28,31 @@ const event = {
   event_members: [{ family_members: { name: 'Owen' } }],
   event_enrichments: [{ prep_notes: null, what_to_bring: [] }],
 }
+
+test('calendar range conversation state preserves authoritative scope and result IDs', () => {
+  const now = new Date('2026-08-07T23:00:00.000Z')
+  const state = calendarRangeConversationState({
+    start: '2026-08-08T04:00:00.000Z',
+    end: '2026-08-09T04:00:00.000Z',
+    contextStart: '2026-08-08T04:00:00.000Z',
+    contextEnd: '2026-08-09T04:00:00.000Z',
+    label: 'Saturday',
+  }, [{ id: 'event-a' }, { id: 'event-b' }], now)
+
+  assert.deepEqual(normalizeConversationState(state, now.getTime()), {
+    activeEntityType: 'calendar_range',
+    range: {
+      start: '2026-08-08T04:00:00.000Z',
+      end: '2026-08-09T04:00:00.000Z',
+      contextStart: '2026-08-08T04:00:00.000Z',
+      contextEnd: '2026-08-09T04:00:00.000Z',
+      label: 'Saturday',
+    },
+    eventIds: ['event-a', 'event-b'],
+    expectedFollowUp: 'calendar_range_follow_up',
+    establishedAt: now.toISOString(),
+  })
+})
 
 test('conversation state retains an authoritative event identity and expires', () => {
   const now = new Date('2026-07-11T13:00:00Z')

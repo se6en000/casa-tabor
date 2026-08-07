@@ -6,9 +6,12 @@ const EVIDENCE_CITATION_PATTERN = new RegExp(
   `\\s*\\[(?:evidence_id:)?${UUID_PATTERN}:${UUID_PATTERN}\\]`,
   'gi',
 )
+const LEGACY_EVENT_ID_PATTERN = new RegExp(`\\s*\\[ID:${UUID_PATTERN}\\]`, 'gi')
 
 export function stripEvidenceCitationMarkers(input) {
-  return String(input ?? '').replace(EVIDENCE_CITATION_PATTERN, '')
+  return String(input ?? '')
+    .replace(EVIDENCE_CITATION_PATTERN, '')
+    .replace(LEGACY_EVENT_ID_PATTERN, '')
 }
 
 function formatProseBlock(block) {

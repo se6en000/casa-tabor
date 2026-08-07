@@ -63,6 +63,19 @@ export interface AIMessage {
         establishedAt: string
       }
     | {
+        activeEntityType: 'calendar_range'
+        range: {
+          start: string
+          end: string
+          contextStart: string
+          contextEnd: string
+          label: string
+        }
+        eventIds: string[]
+        expectedFollowUp: 'calendar_range_follow_up'
+        establishedAt: string
+      }
+    | {
         activeEntityType: 'none'
         expectedFollowUp: 'none'
         establishedAt: string

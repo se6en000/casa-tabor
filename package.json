@@ -18,6 +18,7 @@
     "qa:ai-assistant:core": "node scripts/ai-assistant-qa-sweep.mjs --mode=full --count=41 --model=gemini-2.5-flash",
     "qa:ai-assistant:full": "node scripts/ai-assistant-qa-sweep.mjs --mode=full --model=gemini-2.5-flash",
     "qa:ai-assistant:calendar-edge": "node scripts/ai-assistant-qa-sweep.mjs --mode=calendar-edge --model=gemini-2.5-flash",
+    "qa:ai-assistant:calendar-score": "node scripts/ai-assistant-qa-sweep.mjs --mode=calendar-score --model=gemini-2.5-flash",
     "qa:ai-agent:shadow": "node scripts/ai-agent-shadow-qa.mjs --model=gemini-2.5-flash",
     "qa:ai-agent:benchmark": "node scripts/ai-agent-model-benchmark.mjs",
     "qa:ai-agent:benchmark:core": "node scripts/ai-agent-model-benchmark.mjs --scope=core --models=gemini-2.5-flash --trials=3",

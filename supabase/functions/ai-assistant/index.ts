@@ -44,6 +44,7 @@ import {
   answerGroundedEventFollowUp,
   answerGroundedEventSemanticFrame,
   calendarClarificationConversationState,
+  calendarRangeConversationState,
   eventConversationState,
   groceryClarificationConversationState,
   groceryConversationState,
@@ -66,6 +67,12 @@ import {
   parseCalendarLanguage,
 } from '../_shared/assistant-calendar-language.mjs'
 import { calendarRangeForScope } from '../_shared/assistant-calendar-semantic-read.mjs'
+import {
+  buildAuthoritativeCalendarRead,
+  calendarReadFallbackText,
+  calendarReadSynthesisPrompt,
+  isCalendarReadAnswerComplete,
+} from '../_shared/assistant-authoritative-calendar-read.mjs'
 import {
   cookingFrameGuidance,
   isCookingRetryLanguage,
@@ -348,13 +355,18 @@ Deno.serve(async (req) => {
     })
     : null
   const calendarFrame = inheritCalendarReadScope(parsedCalendarFrame, previousCalendarFrame)
-  const calendarReadContext = calendarFrame?.intent === 'calendar.list' &&
+  const parsedCalendarReadContext = calendarFrame?.intent === 'calendar.list' &&
       calendarFrame.slots?.temporalScope
     ? calendarRangeForScope(calendarFrame.slots.temporalScope, {
         now: new Date(),
         utcOffset: context?.utcOffset,
       })
     : null
+  const calendarReadContext = parsedCalendarReadContext ??
+    (calendarFrame?.intent === 'calendar.list' &&
+      incomingConversationState?.activeEntityType === 'calendar_range'
+      ? incomingConversationState.range
+      : null)
   const householdDirectoryQuestion = isHouseholdDirectoryQuestion(latestUserText)
   const groceryFrame = householdDirectoryQuestion || isExplicitReminderCompletion(latestUserText) || reminderCompletionFollowUp
     ? null
@@ -413,10 +425,10 @@ Deno.serve(async (req) => {
   )
   const calendarFrameNeedsSearch = Boolean(
     calendarFrame &&
-    !incomingConversationState &&
     !context?.focusedEvent &&
     calendarFrame.intent !== 'event.create' &&
-    !calendarFrame.requiresActiveEvent
+    !calendarFrame.requiresActiveEvent &&
+    (calendarFrame.intent === 'calendar.list' || !incomingConversationState)
   )
   const imageEventCreateHint = Boolean(
     image &&
@@ -4010,6 +4022,81 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       : intentRouting.profile === 'recipe'
         ? RECIPE_PRIMARY_HARD_TIMEOUT_MS
         : PRIMARY_HARD_TIMEOUT_MS
+    if (
+      calendarFrame?.intent === 'calendar.list' &&
+      calendarReadContext &&
+      !userLikelyRequestedWrite
+    ) {
+      const authoritativeRead = buildAuthoritativeCalendarRead(
+        calendarReadContext,
+        allEvents ?? [],
+        utcOffset,
+      )
+      responseConversationState = calendarRangeConversationState(
+        calendarReadContext,
+        authoritativeRead.events,
+        now,
+      )
+      const synthesisPrompt = calendarReadSynthesisPrompt(latestUserText, authoritativeRead)
+      appendServerTrace(
+        'server_ai_assistant_authoritative_calendar_read',
+        `scope=${calendarReadContext.label} count=${authoritativeRead.count}`,
+        {
+          scope: calendarReadContext.label,
+          result_count: authoritativeRead.count,
+          context_count: authoritativeRead.sameDayContext.length,
+          synthesis_input_chars: synthesisPrompt.length,
+          model_calls_planned: 1,
+        },
+      )
+      const synthesisStartMs = Date.now()
+      const synthesisResponse = await callModel({
+        system_instruction: {
+          parts: [{
+            text: 'You are Casa, a concise family assistant. Answer only from the authoritative calendar packet. Preserve every listed item and never expose internal identifiers.',
+          }],
+        },
+        contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }],
+        generation_config: {
+          temperature: 0.3,
+          max_output_tokens: Math.min(4096, Math.max(384, authoritativeRead.count * 80)),
+          thinking_config: { thinking_budget: 0 },
+        },
+      }, {
+        stream: wantStream,
+        timeoutMs: primaryHardTimeoutMs,
+      })
+      const synthesisElapsedMs = Date.now() - synthesisStartMs
+      if (!synthesisResponse.ok) {
+        recordLlmCall('llm_authoritative_calendar', synthesisElapsedMs, synthesisResponse.status)
+        return { type: 'text', text: calendarReadFallbackText(authoritativeRead) }
+      }
+      recordLlmCall(
+        'llm_authoritative_calendar',
+        synthesisElapsedMs,
+        synthesisResponse.status,
+        synthesisResponse.data,
+      )
+      const text = synthesisResponse.data?.candidates?.[0]?.content?.parts
+        ?.flatMap((part: { text?: unknown }) => typeof part.text === 'string' ? [part.text.trim()] : [])
+        .filter(Boolean)
+        .join('\n')
+      if (!isCalendarReadAnswerComplete(text, authoritativeRead)) {
+        appendServerTrace(
+          'server_ai_assistant_authoritative_calendar_incomplete',
+          `scope=${calendarReadContext.label} expected=${authoritativeRead.count}`,
+          {
+            scope: calendarReadContext.label,
+            expected_count: authoritativeRead.count,
+          },
+        )
+        return { type: 'text', text: calendarReadFallbackText(authoritativeRead) }
+      }
+      return {
+        type: 'text',
+        text,
+      }
+    }
     const primaryWriteToolNames = primaryToolDeclarations
       .filter((tool) => ['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'create_recipe', 'add_grocery_items'].includes(tool.name))
       .map((tool) => tool.name)
@@ -5331,6 +5418,12 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             source: 'cooking_language_contract',
             semantic_intent: cookingFrame.intent,
           }
+        : calendarFrame
+          ? {
+              source: 'calendar_language_contract',
+              semantic_intent: calendarFrame.intent,
+              ...(calendarReadContext ? { range: calendarReadContext } : {}),
+            }
         : undefined,
       correlation_id: cid,
       telemetry: {

@@ -78,6 +78,28 @@ test('calendar parser supports ordinary flexible read language', () => {
   assert.equal(parseCalendarLanguage("Is that the only thing that's happening Thursday afternoon?")?.intent, 'calendar.list')
 })
 
+test('explicit range reads override stale single-event conversation focus', () => {
+  const active = { activeEntityType: 'event' }
+  for (const text of [
+    "What's going on Saturday?",
+    'What is happening tomorrow?',
+    'Anything going on next week?',
+  ]) {
+    const frame = parseCalendarLanguage(text, active)
+    assert.equal(frame?.intent, 'calendar.list', text)
+    assert.equal(frame?.requiresActiveEvent, false, text)
+    assert.ok(frame?.slots.temporalScope, text)
+  }
+})
+
+test('short completeness challenges remain calendar list follow-ups', () => {
+  for (const text of ["That's it?", 'Is that all?', 'Nothing else?']) {
+    const frame = parseCalendarLanguage(text, { activeEntityType: 'calendar_range' })
+    assert.equal(frame?.intent, 'calendar.list', text)
+    assert.equal(frame?.requiresActiveEvent, false, text)
+  }
+})
+
 test('rest-of-day language maps after lunch to an afternoon agenda', () => {
   const frame = parseCalendarLanguage("Okay, so what's the rest of Thursday looking like after lunch?")
   assert.equal(frame?.intent, 'calendar.list')
