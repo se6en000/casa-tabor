@@ -279,6 +279,8 @@ Return ONLY tasks that require action to avoid problems:
 - general (anything else actionable that doesn't fit the above)
 
 Do NOT invent an action from routine marketing, newsletters, or receipts that need no follow-up.
+Do NOT return conditional opportunities (such as optional benefits applications, donations, volunteering, or general maintenance notices) as tasks.
+When a task must be completed before a stated event or first day, use that event's exact date as due_datetime.
 Resolve relative dates (for example "Monday" or "next Friday") from the email's received date, not from today.
 
 EMAIL:
@@ -317,19 +319,19 @@ function parseDueDateOrFallback(due: string | undefined, receivedAtIso: string, 
     const parsed = new Date(due)
     if (!isNaN(parsed.getTime())) return parsed.toISOString()
   }
-
-  function filterCurrentBackfillActions(actions: InboxActionItem[], now: Date): InboxActionItem[] {
-    return actions.filter((action) => {
-      if (!action.due_datetime) return false
-      const due = new Date(action.due_datetime)
-      return !isNaN(due.getTime()) && due.getTime() >= now.getTime()
-    })
-  }
   if (eventStartIso) {
     const parsedEvent = new Date(eventStartIso)
     if (!isNaN(parsedEvent.getTime())) return parsedEvent.toISOString()
   }
   return new Date(new Date(receivedAtIso).getTime() + 72 * 60 * 60 * 1000).toISOString()
+}
+
+function filterCurrentBackfillActions(actions: InboxActionItem[], now: Date): InboxActionItem[] {
+  return actions.filter((action) => {
+    if (!action.due_datetime) return false
+    const due = new Date(action.due_datetime)
+    return !isNaN(due.getTime()) && due.getTime() >= now.getTime()
+  })
 }
 
 async function persistInboxActions(
@@ -476,7 +478,7 @@ function minutesDiff(a: string, b: string): number {
 
 // ── Main handler ──────────────────────────────────────────────────
 
-Deno.serve(async (req) => {
+async function handleGmailScan(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
@@ -904,9 +906,7 @@ Deno.serve(async (req) => {
   }
 
   if (llmUsage.inputTokens > 0 || llmUsage.outputTokens > 0) {
-    const usageModel = (llm.provider ?? 'gemini') === 'gemini'
-      ? resolveGeminiModel(llm.model)
-      : (llm.model ?? 'unknown')
+    const usageModel = llm.model ?? 'unknown'
     await sb.from('ai_usage_log').insert({
       function_name: 'scan-gmail-inbox',
       provider: llm.provider ?? 'gemini',
@@ -918,4 +918,17 @@ Deno.serve(async (req) => {
   }
 
   return new Response(JSON.stringify({ ok: true, results }), { headers: { ...CORS, 'content-type': 'application/json' } })
+}
+
+Deno.serve(async (req) => {
+  try {
+    return await handleGmailScan(req)
+  } catch (cause) {
+    const error = cause instanceof Error ? cause : new Error(String(cause))
+    console.error('[scan-gmail-inbox] failed:', error.message)
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...CORS, 'content-type': 'application/json' },
+    })
+  }
 })
