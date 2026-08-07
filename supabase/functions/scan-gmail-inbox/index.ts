@@ -53,7 +53,26 @@ async function gmailFetch(path: string, token: string) {
   })
 }
 
-async function getRecentMessages(accessToken: string, historyId: string | null): Promise<{ messages: { id: string }[]; newHistoryId: string | null }> {
+async function getRecentMessages(
+  accessToken: string,
+  historyId: string | null,
+  backfillSince?: string | null,
+): Promise<{ messages: { id: string }[]; newHistoryId: string | null }> {
+  if (backfillSince) {
+    const after = Math.floor(new Date(backfillSince).getTime() / 1000)
+    if (!Number.isFinite(after)) throw new Error('Invalid backfill_since timestamp')
+    const messages: { id: string }[] = []
+    let pageToken = ''
+    do {
+      const page = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''
+      const res = await gmailFetch(`/users/me/messages?labelIds=INBOX&q=after:${after}&maxResults=500${page}`, accessToken)
+      if (!res.ok) throw new Error(`Could not list Gmail backfill messages: ${res.status}`)
+      const data = await res.json()
+      messages.push(...(data.messages ?? []))
+      pageToken = data.nextPageToken ?? ''
+    } while (pageToken)
+    return { messages, newHistoryId: null }
+  }
   if (historyId) {
     const res = await gmailFetch(`/users/me/history?startHistoryId=${historyId}&historyTypes=messageAdded&labelId=INBOX&maxResults=50`, accessToken)
     if (res.status === 404) return getRecentMessages(accessToken, null)
@@ -254,6 +273,7 @@ Return ONLY tasks that require action to avoid problems:
 - general (anything else actionable that doesn't fit the above)
 
 Do NOT invent an action from routine marketing, newsletters, or receipts that need no follow-up.
+Resolve relative dates (for example "Monday" or "next Friday") from the email's received date, not from today.
 
 EMAIL:
 Subject: ${subject}
@@ -290,6 +310,14 @@ function parseDueDateOrFallback(due: string | undefined, receivedAtIso: string, 
   if (due) {
     const parsed = new Date(due)
     if (!isNaN(parsed.getTime())) return parsed.toISOString()
+  }
+
+  function filterCurrentBackfillActions(actions: InboxActionItem[], now: Date): InboxActionItem[] {
+    return actions.filter((action) => {
+      if (!action.due_datetime) return false
+      const due = new Date(action.due_datetime)
+      return !isNaN(due.getTime()) && due.getTime() >= now.getTime()
+    })
   }
   if (eventStartIso) {
     const parsedEvent = new Date(eventStartIso)
@@ -465,6 +493,14 @@ Deno.serve(async (req) => {
 
   const body = await req.json().catch(() => ({}))
   const targetMemberId: string | null = body.family_member_id ?? null
+  const backfillSince = typeof body.backfill_since === 'string' ? body.backfill_since : null
+  const backfillActionsOnly = body.backfill_actions_only === true
+  if (backfillActionsOnly && !backfillSince) {
+    return new Response(JSON.stringify({ error: 'backfill_actions_only requires backfill_since' }), {
+      status: 400,
+      headers: { ...CORS, 'content-type': 'application/json' },
+    })
+  }
 
   let query = sb.from('google_tokens')
     .select('family_member_id, refresh_token, access_token, expires_at, gmail_history_id')
@@ -490,7 +526,7 @@ Deno.serve(async (req) => {
       }).eq('family_member_id', memberId)
     }
 
-    const { messages, newHistoryId } = await getRecentMessages(accessToken, tok.gmail_history_id)
+    const { messages, newHistoryId } = await getRecentMessages(accessToken, tok.gmail_history_id, backfillSince)
     if (newHistoryId) {
       await sb.from('google_tokens').update({ gmail_history_id: newHistoryId }).eq('family_member_id', memberId)
     }
@@ -501,7 +537,7 @@ Deno.serve(async (req) => {
       // Skip already-processed
       const { data: alreadyDone } = await sb.from('gmail_processed_messages')
         .select('id').eq('family_member_id', memberId).eq('gmail_message_id', msgId).maybeSingle()
-      if (alreadyDone) continue
+      if (!backfillSince && alreadyDone) continue
 
       const details = await getMessageDetails(msgId, accessToken)
       if (!details) continue
@@ -584,6 +620,9 @@ Deno.serve(async (req) => {
           ? extractInboxActions(details.subject, details.from, details.date, details.body, familyMembers, llm, llmUsage)
           : Promise.resolve([] as InboxActionItem[]),
       ])
+      const currentActions = backfillActionsOnly
+        ? filterCurrentBackfillActions(extractedActions, new Date())
+        : extractedActions
 
       const actionsFromEmail = await persistInboxActions(
         sb,
@@ -594,7 +633,7 @@ Deno.serve(async (req) => {
         details.subject.slice(0, 80),
         null,
         emailReceivedAt,
-        extractedActions,
+        currentActions,
         familyMembers,
       )
       actions += actionsFromEmail
@@ -606,6 +645,24 @@ Deno.serve(async (req) => {
           msgId,
           emailReceivedAt,
         )
+      }
+      if (backfillActionsOnly) {
+        await sb.from('gmail_processed_messages').upsert({
+          family_member_id: memberId,
+          gmail_message_id: msgId,
+          canonical_email_id: canonicalEmail.id,
+          subject: details.subject,
+          email_subject: details.subject,
+          from_email: details.from,
+          received_at: emailReceivedAt,
+          intent: 'skip',
+          skipped_reason: actionsFromEmail > 0
+            ? 'backfill action-only import'
+            : 'backfill action-only import: no current explicit-due action',
+          email_body: details.body.slice(0, 8000),
+        }, { onConflict: 'family_member_id,gmail_message_id' })
+        skipped++
+        continue
       }
 
       if (!classified || classified.intent === 'skip') {

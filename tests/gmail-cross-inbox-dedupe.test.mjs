@@ -38,3 +38,11 @@ test('actionable email outcomes create source-backed expiring knowledge claims',
   assert.match(scanner, /claim_type: 'commitment'/)
   assert.match(scanner, /source_type: 'gmail'/)
 })
+
+test('backfill mode reprocesses historical mail only into current actions, never retrospective events', () => {
+  assert.match(scanner, /backfill_since/)
+  assert.match(scanner, /backfill_actions_only/)
+  assert.match(scanner, /if \(!backfillSince && alreadyDone\) continue/)
+  assert.match(scanner, /filterCurrentBackfillActions/)
+  assert.match(scanner, /backfill action-only import/)
+})
