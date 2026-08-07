@@ -38,123 +38,6 @@
     ],
     "inlineStyleBlocks": [
       {
-        "path": "src/components/ui/PersonAvatarStack.tsx",
-        "reason": "Avatar colors are runtime family-member values supplied by calendar data.",
-        "snippets": [
-          "style={{ backgroundColor: person.color"
-        ]
-      },
-      {
-        "path": "src/pages/HomePage.tsx",
-        "reason": "Pull distance, Framer Motion position, and family-member colors are runtime-derived.",
-        "snippets": [
-          "style={{ height: refreshing ? 40 : pullDistance }}",
-          "style={{ x, gap: HERO_SLIDE_GAP }}",
-          "style={{ backgroundColor: color }}",
-          "style={{ backgroundColor: responsibility.responsible?.color"
-        ]
-      },
-      {
-        "path": "src/pages/GroceryPage.tsx",
-        "reason": "The drag preview position follows the active pointer at runtime.",
-        "snippets": [
-          "style={{ left: dragState.x + 14, top: dragState.y + 14 }}"
-        ]
-      },
-      {
-        "path": "src/pages/CookPage.tsx",
-        "reason": "Recipe image focal points are user-selected runtime values; modal footer padding follows the device safe-area inset.",
-        "snippets": [
-          "style={{ objectPosition: `${focalX}% ${focalY}%` }}",
-          "style={{ objectPosition: `${photoEditorFocalX}% ${photoEditorFocalY}%` }}",
-          "style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}"
-        ]
-      },
-      {
-        "path": "src/components/shared/ArtScreensaver.tsx",
-        "reason": "Artwork frame dimensions and image positioning are runtime-derived."
-      },
-      {
-        "path": "src/components/shared/TouchKeyboard.tsx",
-        "reason": "Virtual-keyboard geometry is runtime-derived from the viewport."
-      },
-      {
-        "path": "src/pages/DisplaySettingsPage.tsx",
-        "reason": "Live theme previews bind runtime color values."
-      },
-      {
-        "path": "src/pages/CalendarsSettingsPage.tsx",
-        "reason": "Calendar connection avatars bind persisted household member colors."
-      },
-      {
-        "path": "src/pages/FamilySettingsPage.tsx",
-        "reason": "Family profile previews and the color picker bind persisted or user-selected member colors."
-      },
-      {
-        "path": "src/pages/GmailScanPage.tsx",
-        "reason": "Gmail member avatars bind persisted household member colors."
-      },
-      {
-        "path": "src/pages/GoogleServicesPage.tsx",
-        "reason": "Google service member avatars bind persisted household member colors."
-      },
-      {
-        "path": "src/pages/StatusDashboardPage.tsx",
-        "reason": "Usage chart bar heights are derived from the current seven-day call volume."
-      },
-      {
-        "path": "src/pages/DesignSystemGalleryPage.tsx",
-        "reason": "Theme swatches bind the live user-selected design-system palette."
-      },
-      {
-        "path": "src/components/layout/TabletSidebar.tsx",
-        "reason": "Household avatars bind persisted member colors."
-      },
-      {
-        "path": "src/components/shared/AIChatDrawer.tsx",
-        "reason": "The responsive assistant panel is anchored to its trigger and sized to the active viewport and safe area."
-      },
-      {
-        "path": "src/components/shared/BounceScroll.tsx",
-        "reason": "Framer Motion binds the live overscroll spring transform."
-      },
-      {
-        "path": "src/components/shared/EventContextMenu.tsx",
-        "reason": "The context menu position is clamped from the pointer origin and current viewport."
-      },
-      {
-        "path": "src/components/shared/NavBar.tsx",
-        "reason": "The draggable mobile sheet binds motion hints and device safe-area padding."
-      },
-      {
-        "path": "src/components/shared/SwipeableReminderPill.tsx",
-        "reason": "Swipe transforms and persisted household member colors are runtime-derived."
-      },
-      {
-        "path": "src/components/shared/TopBar.tsx",
-        "reason": "Current-event indicators bind runtime family-member colors."
-      },
-      {
-        "path": "src/components/ui/CalendarPill.tsx",
-        "reason": "The shared calendar pill accepts runtime event and member colors as part of its public contract."
-      },
-      {
-        "path": "src/components/ui/DateTimeDial.tsx",
-        "reason": "Wheel height, padding, and active scroll position are derived from dial geometry."
-      },
-      {
-        "path": "src/components/ui/SegmentedControl.tsx",
-        "reason": "The shared segmented-control thumb binds segment count and pointer drag position through CSS variables."
-      },
-      {
-        "path": "src/pages/BriefingPage.tsx",
-        "reason": "Briefing schedule markers bind persisted household member colors."
-      },
-      {
-        "path": "src/pages/TabletPrototypePage.tsx",
-        "reason": "The prototype previews live event and household member colors."
-      },
-      {
         "path": "src/components/calendar/DayView.tsx",
         "reason": "Family-member avatar colors are selected from runtime household data."
       },
@@ -167,16 +50,16 @@
         "reason": "Motion geometry, member/event colors, derived plan tones, map snapshots, and conditional decoration are runtime-derived or composed from semantic theme variables."
       },
       {
+        "path": "src/components/calendar/EventEditSheet.tsx",
+        "reason": "Family-member color previews are selected from runtime household data."
+      },
+      {
         "path": "src/components/calendar/EventTransportationSection.tsx",
         "reason": "Driver avatars bind persisted household profile colors.",
         "snippets": [
           "style={{ backgroundColor: activeDriver?.color_hex",
           "style={{ backgroundColor: driver.color_hex"
         ]
-      },
-      {
-        "path": "src/components/calendar/EventEditSheet.tsx",
-        "reason": "Family-member color previews are selected from runtime household data."
       },
       {
         "path": "src/components/calendar/LargeEventCard.tsx",
@@ -204,6 +87,127 @@
       {
         "path": "src/components/home/PrepItemDetailPanel.tsx",
         "reason": "Motion geometry (drag shell shadow/backdrop gradients, drag-handle touch-action) mirrors EventDetailPanel and is runtime-derived or composed from semantic theme variables."
+      },
+      {
+        "path": "src/components/layout/TabletSidebar.tsx",
+        "reason": "Household avatars bind persisted member colors."
+      },
+      {
+        "path": "src/components/shared/AIChatDrawer.tsx",
+        "reason": "The responsive assistant panel is anchored to its trigger and sized to the active viewport and safe area."
+      },
+      {
+        "path": "src/components/shared/ArtScreensaver.tsx",
+        "reason": "Artwork frame dimensions and image positioning are runtime-derived."
+      },
+      {
+        "path": "src/components/shared/BounceScroll.tsx",
+        "reason": "Framer Motion binds the live overscroll spring transform."
+      },
+      {
+        "path": "src/components/shared/EventContextMenu.tsx",
+        "reason": "The context menu position is clamped from the pointer origin and current viewport."
+      },
+      {
+        "path": "src/components/shared/NavBar.tsx",
+        "reason": "The draggable mobile sheet binds motion hints and device safe-area padding."
+      },
+      {
+        "path": "src/components/shared/SnoozeMenu.tsx",
+        "reason": "The portaled dropdown position is computed from the trigger's live getBoundingClientRect() so it floats above ancestor overflow-hidden containers."
+      },
+      {
+        "path": "src/components/shared/SwipeableReminderPill.tsx",
+        "reason": "Swipe transforms and persisted household member colors are runtime-derived."
+      },
+      {
+        "path": "src/components/shared/TopBar.tsx",
+        "reason": "Current-event indicators bind runtime family-member colors."
+      },
+      {
+        "path": "src/components/shared/TouchKeyboard.tsx",
+        "reason": "Virtual-keyboard geometry is runtime-derived from the viewport."
+      },
+      {
+        "path": "src/components/ui/CalendarPill.tsx",
+        "reason": "The shared calendar pill accepts runtime event and member colors as part of its public contract."
+      },
+      {
+        "path": "src/components/ui/DateTimeDial.tsx",
+        "reason": "Wheel height, padding, and active scroll position are derived from dial geometry."
+      },
+      {
+        "path": "src/components/ui/PersonAvatarStack.tsx",
+        "reason": "Avatar colors are runtime family-member values supplied by calendar data.",
+        "snippets": [
+          "style={{ backgroundColor: person.color"
+        ]
+      },
+      {
+        "path": "src/components/ui/SegmentedControl.tsx",
+        "reason": "The shared segmented-control thumb binds segment count and pointer drag position through CSS variables."
+      },
+      {
+        "path": "src/pages/BriefingPage.tsx",
+        "reason": "Briefing schedule markers bind persisted household member colors."
+      },
+      {
+        "path": "src/pages/CalendarsSettingsPage.tsx",
+        "reason": "Calendar connection avatars bind persisted household member colors."
+      },
+      {
+        "path": "src/pages/CookPage.tsx",
+        "reason": "Recipe image focal points are user-selected runtime values; modal footer padding follows the device safe-area inset.",
+        "snippets": [
+          "style={{ objectPosition: `${focalX}% ${focalY}%` }}",
+          "style={{ objectPosition: `${photoEditorFocalX}% ${photoEditorFocalY}%` }}",
+          "style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}"
+        ]
+      },
+      {
+        "path": "src/pages/DesignSystemGalleryPage.tsx",
+        "reason": "Theme swatches bind the live user-selected design-system palette."
+      },
+      {
+        "path": "src/pages/DisplaySettingsPage.tsx",
+        "reason": "Live theme previews bind runtime color values."
+      },
+      {
+        "path": "src/pages/FamilySettingsPage.tsx",
+        "reason": "Family profile previews and the color picker bind persisted or user-selected member colors."
+      },
+      {
+        "path": "src/pages/GmailScanPage.tsx",
+        "reason": "Gmail member avatars bind persisted household member colors."
+      },
+      {
+        "path": "src/pages/GoogleServicesPage.tsx",
+        "reason": "Google service member avatars bind persisted household member colors."
+      },
+      {
+        "path": "src/pages/GroceryPage.tsx",
+        "reason": "The drag preview position follows the active pointer at runtime.",
+        "snippets": [
+          "style={{ left: dragState.x + 14, top: dragState.y + 14 }}"
+        ]
+      },
+      {
+        "path": "src/pages/HomePage.tsx",
+        "reason": "Pull distance, Framer Motion position, and family-member colors are runtime-derived.",
+        "snippets": [
+          "style={{ height: refreshing ? 40 : pullDistance }}",
+          "style={{ x, gap: HERO_SLIDE_GAP }}",
+          "style={{ backgroundColor: color }}",
+          "style={{ backgroundColor: responsibility.responsible?.color"
+        ]
+      },
+      {
+        "path": "src/pages/StatusDashboardPage.tsx",
+        "reason": "Usage chart bar heights are derived from the current seven-day call volume."
+      },
+      {
+        "path": "src/pages/TabletPrototypePage.tsx",
+        "reason": "The prototype previews live event and household member colors."
       }
     ],
     "nativeControlRecreations": [

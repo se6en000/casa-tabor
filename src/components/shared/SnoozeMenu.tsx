@@ -6,11 +6,19 @@
  * this replaces that with a small anchored menu offering 15m / 1h / 3h /
  * Tomorrow morning, following the same click-outside-to-close popover
  * pattern already established by PrepAssignPicker in HomeRightPanel.
+ *
+ * The dropdown itself is rendered through a portal into document.body and
+ * positioned with `position: fixed` computed from the trigger's real screen
+ * coordinates. Several trigger sites (the Home timeline row's rounded Card,
+ * HomeRightPanel's ExpandPanel) wrap their content in `overflow-hidden` for
+ * unrelated reasons (the accent bar radius, the grid-rows expand animation);
+ * an absolutely-positioned dropdown nested inside those ancestors would be
+ * clipped or invisible instead of floating above the page.
  */
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Moon } from 'lucide-react'
-import { cn } from '../../utils/cn'
 import { SNOOZE_DURATIONS, snoozeDurationLabel, type SnoozeDuration } from '../../utils/snoozeDuration'
 import { Button } from '../ui'
 
@@ -34,12 +42,16 @@ export default function SnoozeMenu({
   menuPlacement?: 'below' | 'above'
 }) {
   const [open, setOpen] = useState(false)
+  const [menuPosition, setMenuPosition] = useState<{ left: number; top?: number; bottom?: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
     const handlePointerDown = (evt: MouseEvent | TouchEvent) => {
-      if (!containerRef.current || containerRef.current.contains(evt.target as Node)) return
+      const target = evt.target as Node
+      if (containerRef.current?.contains(target)) return
+      if (menuRef.current?.contains(target)) return
       setOpen(false)
     }
     document.addEventListener('mousedown', handlePointerDown)
@@ -50,10 +62,33 @@ export default function SnoozeMenu({
     }
   }, [open])
 
+  useEffect(() => {
+    if (!open || !containerRef.current) {
+      setMenuPosition(null)
+      return
+    }
+    const updatePosition = () => {
+      if (!containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      setMenuPosition(
+        menuPlacement === 'above'
+          ? { left: rect.left, bottom: window.innerHeight - rect.top + 6 }
+          : { left: rect.left, top: rect.bottom + 6 },
+      )
+    }
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [open, menuPlacement])
+
   const toggle = (evt: React.MouseEvent) => { evt.stopPropagation(); setOpen((prev) => !prev) }
 
   return (
-    <div className={cn('relative inline-flex', open && 'z-popover')} ref={containerRef}>
+    <div className="relative inline-flex" ref={containerRef}>
       {renderTrigger ? (
         renderTrigger({ open, onClick: toggle })
       ) : (
@@ -71,37 +106,39 @@ export default function SnoozeMenu({
           {triggerLabel}
         </Button>
       )}
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            role="menu"
-            initial={{ opacity: 0, y: menuPlacement === 'above' ? 4 : -4, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: menuPlacement === 'above' ? 4 : -4, scale: 0.96 }}
-            transition={{ duration: 0.12 }}
-            className={cn(
-              'absolute left-0 z-popover min-w-[168px] overflow-hidden rounded-card border border-casa-border bg-casa-surface p-1.5 shadow-modal',
-              menuPlacement === 'above' ? 'bottom-[calc(100%+6px)]' : 'top-[calc(100%+6px)]',
-            )}
-          >
-            {SNOOZE_DURATIONS.map((duration) => (
-              <Button
-                key={duration}
-                type="button"
-                role="menuitem"
-                variant="ghost"
-                size="sm"
-                fullWidth
-                onClick={(evt) => { evt.stopPropagation(); onSnooze(duration); setOpen(false) }}
-                className="rounded-lg px-2 py-1.5 text-left"
-                contentClassName="w-full justify-start"
-              >
-                {snoozeDurationLabel(duration)}
-              </Button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {createPortal(
+        <AnimatePresence>
+          {open && menuPosition && (
+            <motion.div
+              ref={menuRef}
+              role="menu"
+              initial={{ opacity: 0, y: menuPlacement === 'above' ? 4 : -4, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: menuPlacement === 'above' ? 4 : -4, scale: 0.96 }}
+              transition={{ duration: 0.12 }}
+              className="fixed z-popover min-w-[168px] overflow-hidden rounded-card border border-casa-border bg-casa-surface p-1.5 shadow-modal"
+              style={{ left: menuPosition.left, top: menuPosition.top, bottom: menuPosition.bottom, position: 'fixed' }}
+            >
+              {SNOOZE_DURATIONS.map((duration) => (
+                <Button
+                  key={duration}
+                  type="button"
+                  role="menuitem"
+                  variant="ghost"
+                  size="sm"
+                  fullWidth
+                  onClick={(evt) => { evt.stopPropagation(); onSnooze(duration); setOpen(false) }}
+                  className="rounded-lg px-2 py-1.5 text-left"
+                  contentClassName="w-full justify-start"
+                >
+                  {snoozeDurationLabel(duration)}
+                </Button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   )
 }
