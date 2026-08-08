@@ -17,7 +17,7 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
 import MarkdownContent from '../shared/MarkdownContent'
-import { Button, Card, Heading, LiveTranscript, Text } from '../ui'
+import { Button, Card, Heading, IconButton, LiveTranscript, Text } from '../ui'
 import { formatTextForMarkdown, stripEvidenceCitationMarkers } from '../../lib/assistantMarkdown.mjs'
 import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId } from '../../lib/assistantTelemetry'
 import { classifyPendingConfirmation } from '../../lib/assistantConfirmation.mjs'
@@ -1457,28 +1457,29 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
             )
         )}
         {!isUser && !ta && Boolean(msg.evidence?.length) && (
-          <div className="mt-2 border-t border-casa-divider pt-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              align="start"
-              aria-expanded={sourcesExpanded}
-              aria-controls={`assistant-sources-${msg.id}`}
-              onClick={() => {
-                setSourcesExpanded((expanded) => {
-                  if (expanded) {
-                    setShowAllSources(false)
-                    setSelectedEvidence(null)
-                  }
-                  return !expanded
-                })
-              }}
-              className="px-0 text-casa-muted"
-            >
-              Sources checked · {msg.evidence?.length}
-            </Button>
+          <div className="mt-1">
+            <div className="flex justify-end">
+              <IconButton
+                icon={<Activity size={14} strokeWidth={2} />}
+                aria-label={`Sources checked (${msg.evidence?.length})`}
+                title={`Sources checked · ${msg.evidence?.length}`}
+                size="sm"
+                className="text-casa-muted hover:text-casa-navy"
+                aria-expanded={sourcesExpanded}
+                aria-controls={`assistant-sources-${msg.id}`}
+                onClick={() => {
+                  setSourcesExpanded((expanded) => {
+                    if (expanded) {
+                      setShowAllSources(false)
+                      setSelectedEvidence(null)
+                    }
+                    return !expanded
+                  })
+                }}
+              />
+            </div>
             {sourcesExpanded && (
-              <div id={`assistant-sources-${msg.id}`} className="space-y-1 pb-1" aria-label="Sources checked">
+              <div id={`assistant-sources-${msg.id}`} className="mt-1 space-y-1 pb-1" aria-label="Sources checked">
                 {msg.evidence
                   ?.slice(0, showAllSources ? msg.evidence.length : MAX_VISIBLE_SOURCES)
                   .map((evidence) => {

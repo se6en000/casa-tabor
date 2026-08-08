@@ -3,15 +3,20 @@ const AGENDA_LINE = /^(?:all day|\d{1,2}:\d{2}\s+[ap]m)\s+—\s+/i
 const LONG_PROSE_LENGTH = 260
 const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 const EVIDENCE_CITATION_PATTERN = new RegExp(
-  `\\s*\\[(?:evidence_id:)?${UUID_PATTERN}:${UUID_PATTERN}\\]`,
+  `\\s*\\[\\s*(?:evidence_id\\s*:\\s*)?${UUID_PATTERN}\\s*:\\s*${UUID_PATTERN}\\s*\\]`,
   'gi',
 )
+const EVIDENCE_CITATION_LIST_PATTERN = /\s*\[\s*evidence_id\s*:[^\]]+\]/gi
 const LEGACY_EVENT_ID_PATTERN = new RegExp(`\\s*\\[ID:${UUID_PATTERN}\\]`, 'gi')
+const RAW_CASA_EVENT_LINK_PATTERN = /(?<!\]\()casa:\/\/event\/[^\s)\]]+/gi
 
 export function stripEvidenceCitationMarkers(input) {
   return String(input ?? '')
     .replace(EVIDENCE_CITATION_PATTERN, '')
+    .replace(EVIDENCE_CITATION_LIST_PATTERN, '')
     .replace(LEGACY_EVENT_ID_PATTERN, '')
+    .replace(RAW_CASA_EVENT_LINK_PATTERN, '')
+    .replace(/[ \t]{2,}/g, ' ')
 }
 
 function formatProseBlock(block) {
