@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   isQuantifiedCalendarDelete,
+  preferredAssistantLanguageDomain,
   shouldPreferCalendarOverGrocery,
 } from '../supabase/functions/_shared/assistant-domain-arbitration.mjs'
 
@@ -33,4 +34,17 @@ test('quantified calendar deletes are separated from single-target planning', ()
   assert.equal(isQuantifiedCalendarDelete('Remove each meeting from the calendar.'), true)
   assert.equal(isQuantifiedCalendarDelete('Remove the dentist appointment.'), false)
   assert.equal(isQuantifiedCalendarDelete('Remove every checked grocery item.'), false)
+})
+
+test('an authoritative calendar frame outranks an accidental cooking parse', () => {
+  assert.equal(preferredAssistantLanguageDomain({
+    calendarFrame: { intent: 'calendar.list' },
+    cookingFrame: { intent: 'cooking.recipe' },
+    preferCalendarDomain: true,
+  }), 'calendar')
+  assert.equal(preferredAssistantLanguageDomain({
+    calendarFrame: null,
+    cookingFrame: { intent: 'cooking.recipe' },
+    preferCalendarDomain: false,
+  }), 'cooking')
 })

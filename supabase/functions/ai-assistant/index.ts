@@ -68,6 +68,7 @@ import {
 } from '../_shared/assistant-calendar-language.mjs'
 import {
   isQuantifiedCalendarDelete,
+  preferredAssistantLanguageDomain,
   shouldPreferCalendarOverGrocery,
 } from '../_shared/assistant-domain-arbitration.mjs'
 import { calendarRangeForScope } from '../_shared/assistant-calendar-semantic-read.mjs'
@@ -408,6 +409,11 @@ Deno.serve(async (req) => {
     ? parseCookingLanguage(previousUserText, cookingLanguageOptions)
     : null
   const cookingFrame = latestCookingFrame ?? inheritedCookingFrame
+  const preferredLanguageDomain = preferredAssistantLanguageDomain({
+    calendarFrame,
+    cookingFrame,
+    preferCalendarDomain,
+  })
   const cookingRequestText = inheritedCookingFrame ? previousUserText : latestUserText
   const cookingSurfaceContext = Boolean(
     context?.assistant_mode === 'chef' ||
@@ -1895,7 +1901,6 @@ Deno.serve(async (req) => {
     }
   }
   if (
-    (!shouldRunAgentWrite || isCanonicalRecurringEvent(activeConversationEvent)) &&
     intentRouting.profile === 'event' &&
     latestUserText &&
     activeConversationEvent
@@ -5437,18 +5442,18 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       sources_considered: familyRetrieval.sources_considered,
       partial_sources: familyRetrieval.partial_sources,
       conversation_state: responseConversationState,
-      authoritative_provenance: cookingFrame
-        ? {
-            source: 'cooking_language_contract',
-            semantic_intent: cookingFrame.intent,
-          }
-        : calendarFrame
+      authoritative_provenance: preferredLanguageDomain === 'calendar' && calendarFrame
           ? {
               source: 'calendar_language_contract',
               semantic_intent: calendarFrame.intent,
               ...(calendarReadContext ? { range: calendarReadContext } : {}),
             }
-        : undefined,
+          : preferredLanguageDomain === 'cooking' && cookingFrame
+            ? {
+                source: 'cooking_language_contract',
+                semantic_intent: cookingFrame.intent,
+              }
+            : undefined,
       correlation_id: cid,
       telemetry: {
         ...llmTelemetry,

@@ -16,3 +16,12 @@ export function isQuantifiedCalendarDelete(text) {
     /\b(?:all|both|each|every)\b/i.test(value) &&
     isCalendarLikeLanguage(value)
 }
+
+export function preferredAssistantLanguageDomain(options = {}) {
+  if (options.calendarFrame && (options.preferCalendarDomain || !options.cookingFrame)) {
+    return 'calendar'
+  }
+  if (options.cookingFrame) return 'cooking'
+  if (options.calendarFrame) return 'calendar'
+  return null
+}

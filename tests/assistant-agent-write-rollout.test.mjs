@@ -101,3 +101,10 @@ test('agent write planner defers quantified multi-event deletes to the bulk-capa
     sample: 0,
   }), false)
 })
+
+test('exact active-event mutations use the deterministic resolver before semantic planning', () => {
+  assert.doesNotMatch(
+    assistant,
+    /\(!shouldRunAgentWrite \|\| isCanonicalRecurringEvent\(activeConversationEvent\)\)/,
+  )
+})

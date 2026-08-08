@@ -9,6 +9,31 @@ import {
   shouldRetryAgentShadowPlan,
 } from '../supabase/functions/_shared/assistant-agent-shadow.mjs'
 
+test('semantic date ranges become all-day when no clock time is present', () => {
+  const result = parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'calendar_interpret_turn',
+            args: {
+              action: 'create',
+              patch: {
+                title: 'Family getaway',
+                date_reference: { kind: 'absolute', month: 9, day: 4 },
+                end_date_reference: { kind: 'absolute', month: 9, day: 7 },
+              },
+            },
+          },
+        }],
+      },
+    }],
+  })
+
+  assert.equal(result.kind, 'calendar_semantic')
+  assert.equal(result.turn.patch.all_day, true)
+})
+
 test('shadow planner request exposes capability tools without phrase routing', () => {
   const request = buildAgentShadowRequest({
     messages: [{ role: 'user', content: 'Actually, Saturday morning instead.' }],
