@@ -81,6 +81,7 @@ export function shouldUseAgentWritePlanner(options = {}) {
     options.pageEligible === true &&
     options.chefMode !== true &&
     options.hasImage !== true &&
+    options.unsupportedBulkMutation !== true &&
     Number(options.sample) < Number(options.agentWriteRate)
 }
 

@@ -271,9 +271,12 @@ export function parseCalendarLanguage(text, options = {}) {
     /\b(event|appointment|meeting|reminder|practice|party|dinner|trip|vacation)\b/.test(input)
   )
   const attendeeUpdate = /\badd\s+[\w'-]+(?:\s+too|\s+to\s+(?:the\s+)?(?:calendar\s+)?(?:event|appointment|meeting|dinner|party|practice))\b/.test(input)
+  const activeEditLanguage = activeEvent &&
+    /\b(set|put|adjust|make|rename|call|include|exclude|extend|shorten)\b/.test(input)
   const mutationLanguage = /\b(add|create|book|move|reschedule|shift|push|change|update|edit|delete|remove|cancel)\b/.test(input) ||
     /\bschedule\s+(?:an?\s+)?(?:event|appointment|meeting|reminder)\b/.test(input) ||
-    naturalScheduleCreate
+    naturalScheduleCreate ||
+    activeEditLanguage
   const namedTemporalMove = Boolean(
     scope && /\b(move|reschedule|shift|push)\b/.test(input)
   )
@@ -288,7 +291,7 @@ export function parseCalendarLanguage(text, options = {}) {
     }
     if (attendeeUpdate) return frame('event.edit', 0.99, { temporalScope: scope })
     if (/\b(add|create|book|schedule)\b/.test(input)) return frame('event.create', 0.96, { temporalScope: scope })
-    if (activeEvent && /\b(change|update|edit)\b/.test(input)) {
+    if (activeEvent && (/\b(change|update|edit)\b/.test(input) || activeEditLanguage)) {
       return frame('event.edit', 0.94, { temporalScope: scope }, true)
     }
   }

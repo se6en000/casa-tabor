@@ -142,6 +142,17 @@ test('natural scheduling, attendee edits, and STT weekdays route to calendar int
   assert.equal(sttRead?.slots.temporalScope?.weekday, 'friday')
 })
 
+test('active-event mutation verbs cannot be mistaken for grounded read follow-ups', () => {
+  const active = { activeEntityType: 'event' }
+  for (const text of [
+    'Set Sunrise Center as the venue for this event.',
+    'Rename this appointment to Annual physical.',
+    'Include Owen on this meeting.',
+  ]) {
+    assert.equal(parseCalendarLanguage(text, active)?.intent, 'event.edit', text)
+  }
+})
+
 test('household afternoon agenda scope includes early-evening activities', () => {
   const range = calendarRangeForScope({
     kind: 'weekday',

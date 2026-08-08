@@ -49,6 +49,17 @@ test('natural reminder requests cover common typed and spoken phrasing', () => {
   }
 })
 
+test('reminder completion language includes natural checked-off phrasing', () => {
+  assert.equal(isExplicitReminderCompletion('Cross the library reminder off.'), true)
+  assert.equal(
+    isReminderCompletionFollowUp('Cross that one off.', {
+      activeEntityType: 'event',
+      eventType: 'reminder',
+    }),
+    true,
+  )
+})
+
 test('reminder vocabulary is recognized as a dedicated domain boundary', () => {
   for (const phrase of [
     'remind me tomorrow',
@@ -103,6 +114,10 @@ test('underspecified reminder creates ask for missing details instead of inventi
   assert.equal(
     explicitReminderSubject('I need a reminder for the prescription'),
     'The prescription',
+  )
+  assert.equal(
+    explicitReminderSubject('Set a reminder tomorrow at 6 PM for sending the permission slip.'),
+    'Sending the permission slip',
   )
 })
 

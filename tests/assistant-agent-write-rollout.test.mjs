@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
+import { shouldUseAgentWritePlanner } from '../supabase/functions/_shared/assistant-agent-write.mjs'
+
 const assistant = readFileSync(
   new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url),
   'utf8',
@@ -81,4 +83,21 @@ test('write rollout falls through to authoritative reads after non-write plans',
 
 test('write planner budget accommodates nested cold starts within the request budget', () => {
   assert.match(assistant, /agent_write_timeout[\s\S]{0,100}6500/)
+})
+
+test('agent write planner defers quantified multi-event deletes to the bulk-capable lane', () => {
+  assert.equal(shouldUseAgentWritePlanner({
+    agentRuntimeEnabled: true,
+    agentWriteEnabled: true,
+    agentWriteRate: 1,
+    isCalendarSemanticRead: false,
+    reminderDomainLanguage: false,
+    explicitReminderCreate: false,
+    hasGroceryFrame: false,
+    pageEligible: true,
+    chefMode: false,
+    hasImage: false,
+    unsupportedBulkMutation: true,
+    sample: 0,
+  }), false)
 })

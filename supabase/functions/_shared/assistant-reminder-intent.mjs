@@ -120,9 +120,22 @@ export function explicitReminderSubject(text) {
   const subject = clauses
     .map((match) => stripTrailingReminderTiming(match[1]))
     .findLast((candidate) =>
-      candidate.length >= 2 && !/^(?:be\s+)?reminded\b|^remember\b/i.test(candidate)
+      candidate.length >= 2 &&
+      !/^(?:(?:be\s+)?reminded|remember|me|us|him|her|them)\b/i.test(candidate) &&
+      !reminderHasTiming(candidate)
     )
   if (subject) return capitalizeReminderSubject(subject)
+
+  const forSubject = value
+    .split(/\bfor\s+/i)
+    .slice(1)
+    .map((candidate) => stripTrailingReminderTiming(candidate).replace(/[.!?]+$/, '').trim())
+    .findLast((candidate) =>
+      candidate.length >= 2 &&
+      !/^(?:me|us|him|her|them)\b/i.test(candidate) &&
+      !reminderHasTiming(candidate)
+    )
+  if (forSubject) return capitalizeReminderSubject(forSubject)
 
   const reminderFor = value.match(/\breminder\s+for\s+([^.!?]+?)(?=$|[.!?])/i)?.[1]?.trim() ?? ''
   if (reminderFor.length >= 2 && !reminderHasTiming(reminderFor)) {
@@ -290,7 +303,7 @@ export function fallbackExplicitRelativeReminderTurn(text) {
 
 export function isExplicitReminderCompletion(text) {
   const value = String(text ?? '')
-  return /\b(?:mark|check)\b.*\breminder\b.*\b(?:done|complete|off)\b|\bcomplete\b.*\breminder\b/i.test(value)
+  return /\b(?:mark|check|cross)\b.*\breminder\b.*\b(?:done|complete|off)\b|\bcomplete\b.*\breminder\b/i.test(value)
 }
 
 export function isReminderCompletionFollowUp(text, conversationState) {
@@ -356,7 +369,7 @@ const isExplicitReminder = isExplicitReminderRequest
 
 function isCompletionLanguage(text) {
   const value = String(text ?? '')
-  return /\b(?:mark|check)\b.*\b(?:done|complete|completed|off)\b|\b(?:complete|finish)\b.*|\b(?:is|are)\s+(?:done|complete|completed)\b/i.test(value)
+  return /\b(?:mark|check|cross)\b.*\b(?:done|complete|completed|off)\b|\b(?:complete|finish)\b.*|\b(?:is|are)\s+(?:done|complete|completed)\b/i.test(value)
 }
 
 function reminderHasTiming(text) {

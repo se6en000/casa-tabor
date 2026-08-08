@@ -66,6 +66,10 @@ import {
   isCalendarLikeLanguage,
   parseCalendarLanguage,
 } from '../_shared/assistant-calendar-language.mjs'
+import {
+  isQuantifiedCalendarDelete,
+  shouldPreferCalendarOverGrocery,
+} from '../_shared/assistant-domain-arbitration.mjs'
 import { calendarRangeForScope } from '../_shared/assistant-calendar-semantic-read.mjs'
 import {
   buildAuthoritativeCalendarRead,
@@ -372,7 +376,15 @@ Deno.serve(async (req) => {
       ? incomingConversationState.range
       : null)
   const householdDirectoryQuestion = isHouseholdDirectoryQuestion(latestUserText)
-  const groceryFrame = householdDirectoryQuestion || isExplicitReminderCompletion(latestUserText) || reminderCompletionFollowUp
+  const preferCalendarDomain = shouldPreferCalendarOverGrocery(latestUserText, {
+    page: context?.page,
+    activeEntityType: incomingConversationState?.activeEntityType,
+    calendarFrame,
+  })
+  const groceryFrame = householdDirectoryQuestion ||
+      isExplicitReminderCompletion(latestUserText) ||
+      reminderCompletionFollowUp ||
+      preferCalendarDomain
     ? null
     : parseGroceryLanguage(latestUserText, {
     activeEntityType: incomingConversationState?.activeEntityType,
@@ -1721,6 +1733,7 @@ Deno.serve(async (req) => {
     pageEligible: AGENT_GENERAL_PAGES.has(String(context?.page ?? '')),
     chefMode: context?.assistant_mode === 'chef',
     hasImage: Boolean(image),
+    unsupportedBulkMutation: isQuantifiedCalendarDelete(latestUserText),
     sample: Math.random(),
   })
   if (!shouldRunAgentWrite && latestUserText && context?.pendingAction) {
