@@ -70,6 +70,42 @@ export function normalizeAgentGroceryAddArgs(args) {
   }
 }
 
+export function shouldUseAgentWritePlanner(options = {}) {
+  return options.agentRuntimeEnabled === true &&
+    options.agentWriteEnabled === true &&
+    Number(options.agentWriteRate) > 0 &&
+    options.isCalendarSemanticRead !== true &&
+    options.reminderDomainLanguage !== true &&
+    options.explicitReminderCreate !== true &&
+    options.hasGroceryFrame !== true &&
+    options.pageEligible === true &&
+    options.chefMode !== true &&
+    options.hasImage !== true &&
+    Number(options.sample) < Number(options.agentWriteRate)
+}
+
+export function normalizeLegacyCalendarActionArgs(tool, args) {
+  if (
+    !['create_event', 'update_event', 'bulk_update_events'].includes(tool) ||
+    !args ||
+    typeof args !== 'object' ||
+    Array.isArray(args)
+  ) {
+    return args
+  }
+
+  const normalized = { ...args }
+  if (normalized.start === undefined && typeof normalized.start_time === 'string') {
+    normalized.start = normalized.start_time
+  }
+  if (normalized.end === undefined && typeof normalized.end_time === 'string') {
+    normalized.end = normalized.end_time
+  }
+  delete normalized.start_time
+  delete normalized.end_time
+  return normalized
+}
+
 function isExactTargetUnambiguous(entities, args, activeEntity, type, labelKey) {
   if (!Array.isArray(entities) || !args || typeof args !== 'object') return false
   const target = entities.find((entity) => entity?.type === type && entity?.id === args.id)

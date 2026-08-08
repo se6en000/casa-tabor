@@ -19,6 +19,7 @@ import {
   buildRecurringSeriesPatch,
   isCanonicalRecurringEvent,
 } from '../_shared/assistant-recurring-mutation.mjs'
+import { normalizeLegacyCalendarActionArgs } from '../_shared/assistant-agent-write.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -308,7 +309,7 @@ Deno.serve(async (req) => {
   const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
   const {
     tool,
-    args,
+    args: rawArgs,
     action_id: actionId,
     session_id: sessionId,
     correlation_id: correlationId,
@@ -320,6 +321,7 @@ Deno.serve(async (req) => {
     client_build: clientBuildRaw,
     client_trace_source: clientTraceSourceRaw,
   } = await req.json()
+  const args = normalizeLegacyCalendarActionArgs(tool, rawArgs) as Record<string, unknown>
   const cid = correlationId ?? `${sessionId ?? 'no-session'}:${actionId ?? 'no-action'}`
   const traceId = normalizeOptionalText(traceIdRaw, 160) ?? normalizeOptionalText(sessionId, 160)
   const turnId = normalizeOptionalText(turnIdRaw, 160)
@@ -544,7 +546,11 @@ Deno.serve(async (req) => {
       const normalizedEventType = normalizeCreateEventType(args.event_type)
       const normalizedTitle = normalizeOptionalText(args.title, 220)
       const normalizedLocation = normalizeOptionalText(args.location, 220)
+      const normalizedStart = normalizeOptionalText(args.start, 160)
+      const normalizedEnd = normalizeOptionalText(args.end, 160)
       if (!normalizedTitle) throw new Error('title is required for create_event')
+      if (!normalizedStart) throw new Error('start is required for create_event')
+      if (!normalizedEnd) throw new Error('end is required for create_event')
 
       // ── Duplicate guard ──
       // AI chat/voice has no memory of what it already created, so the same
@@ -553,12 +559,12 @@ Deno.serve(async (req) => {
       // then spawns its own prep item and notification stream forever. Treat
       // "same normalized title + same exact start time, not deleted" as the
       // same real-world thing and hand back the existing event instead.
-      if (args.start) {
+      if (normalizedStart) {
         const { data: possibleDupes } = await sb
           .from('events')
           .select('id, title, start_time, event_type, updated_at')
           .is('deleted_at', null)
-          .eq('start_time', args.start)
+          .eq('start_time', normalizedStart)
         const existing = (possibleDupes ?? []).find(
           (e: { title: string }) => e.title.trim().toLowerCase() === normalizedTitle.toLowerCase()
         )
@@ -605,8 +611,8 @@ Deno.serve(async (req) => {
 
       const { data: event, error } = await sb.from('events').insert({
         title: normalizedTitle,
-        start_time: args.start,
-        end_time: args.end,
+        start_time: normalizedStart,
+        end_time: normalizedEnd,
         location_name: resolvedLocationName ?? null,
         address: resolvedAddress,
         lat: resolvedLat,

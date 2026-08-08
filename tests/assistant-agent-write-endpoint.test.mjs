@@ -6,6 +6,14 @@ const endpoint = readFileSync(
   new URL('../supabase/functions/ai-agent-write/index.ts', import.meta.url),
   'utf8',
 )
+const assistantEndpoint = readFileSync(
+  new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url),
+  'utf8',
+)
+const actionEndpoint = readFileSync(
+  new URL('../supabase/functions/execute-ai-action/index.ts', import.meta.url),
+  'utf8',
+)
 
 test('agent write endpoint proposes additive, exact update, and destructive confirmations through policy', () => {
   assert.match(endpoint, /planner_mode: 'additive_write'/)
@@ -77,4 +85,16 @@ test('planner clarification and ambiguity remain in the bounded lane', () => {
   assert.match(endpoint, /I found more than one possible match/)
   assert.match(endpoint, /candidateEntityIds/)
   assert.match(endpoint, /ambiguityClarification/)
+})
+
+test('dry-run QA and production writes share the bounded planner', () => {
+  assert.match(assistantEndpoint, /shouldUseAgentWritePlanner\(\{/)
+  assert.doesNotMatch(assistantEndpoint, /const shouldRunAgentWrite = !dryRun/)
+})
+
+test('assistant proposals and action execution share canonical calendar arguments', () => {
+  assert.match(assistantEndpoint, /normalizeLegacyCalendarActionArgs\(/)
+  assert.match(actionEndpoint, /normalizeLegacyCalendarActionArgs\(tool, rawArgs\)/)
+  assert.match(actionEndpoint, /start is required for create_event/)
+  assert.match(actionEndpoint, /end is required for create_event/)
 })

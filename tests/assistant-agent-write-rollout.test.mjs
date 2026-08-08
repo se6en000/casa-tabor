@@ -6,19 +6,23 @@ const assistant = readFileSync(
   new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url),
   'utf8',
 )
+const agentWrite = readFileSync(
+  new URL('../supabase/functions/_shared/assistant-agent-write.mjs', import.meta.url),
+  'utf8',
+)
 
 test('additive agent writes are feature flagged and sampled', () => {
   assert.match(assistant, /agent_write_config/)
   assert.match(assistant, /agentWriteConfig\?\.enabled === true/)
-  assert.match(assistant, /Math\.random\(\) < agentWriteRate/)
+  assert.match(assistant, /sample: Math\.random\(\)/)
+  assert.match(agentWrite, /Number\(options\.sample\) < Number\(options\.agentWriteRate\)/)
   assert.match(assistant, /AGENT_GENERAL_PAGES\.has/)
-  assert.match(assistant, /context\?\.assistant_mode !== 'chef'/)
+  assert.match(assistant, /chefMode: context\?\.assistant_mode === 'chef'/)
 })
 
 test('reminder vocabulary cannot enter the generic agent write lane', () => {
-  const writeGate = assistant.match(/const shouldRunAgentWrite[\s\S]*?if \(!shouldRunAgentWrite/)?.[0] ?? ''
-  assert.match(writeGate, /!reminderDomainLanguage/)
-  assert.match(writeGate, /!explicitReminderCreate/)
+  assert.match(agentWrite, /options\.reminderDomainLanguage !== true/)
+  assert.match(agentWrite, /options\.explicitReminderCreate !== true/)
 })
 
 test('write rollout supports global drawer pages and pending-action corrections', () => {
@@ -69,7 +73,7 @@ test('write rollout falls through to authoritative reads after non-write plans',
   assert.match(assistant, /server_agent_write_fallback/)
   assert.match(assistant, /agentWriteData\?\.code/)
   assert.match(assistant, /agent_write_timeout/)
-  assert.match(assistant, /!isCalendarSemanticRead/)
+  assert.match(agentWrite, /options\.isCalendarSemanticRead !== true/)
   assert.match(assistant, /isCalendarSemanticRead \|\| Math\.random\(\) < agentReadRate/)
   assert.match(assistant, /shouldRunAgentRead = !dryRun/)
   assert.match(assistant, /shouldRunAgentShadow = !shouldRunAgentWrite && !shouldRunAgentRead/)

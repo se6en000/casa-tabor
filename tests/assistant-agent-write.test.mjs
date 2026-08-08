@@ -6,7 +6,9 @@ import {
   findAgentCalendarDuplicates,
   isAgentCalendarUpdateTargetUnambiguous,
   isAgentGroceryUpdateTargetUnambiguous,
+  normalizeLegacyCalendarActionArgs,
   normalizeAgentGroceryAddArgs,
+  shouldUseAgentWritePlanner,
 } from '../supabase/functions/_shared/assistant-agent-write.mjs'
 
 test('calendar duplicate matching ignores model-derived duration differences', () => {
@@ -146,4 +148,47 @@ test('grocery updates adapt to trusted legacy quantity and check actions', () =>
     checked: true,
     quantity: '2',
   }), null)
+})
+
+test('dry-run scoring uses the same bounded write planner as production', () => {
+  const common = {
+    agentRuntimeEnabled: true,
+    agentWriteEnabled: true,
+    agentWriteRate: 1,
+    isCalendarSemanticRead: false,
+    reminderDomainLanguage: false,
+    explicitReminderCreate: false,
+    hasGroceryFrame: false,
+    pageEligible: true,
+    chefMode: false,
+    hasImage: false,
+    sample: 0.5,
+  }
+
+  assert.equal(shouldUseAgentWritePlanner({ ...common, dryRun: true }), true)
+  assert.equal(shouldUseAgentWritePlanner({ ...common, dryRun: false }), true)
+  assert.equal(shouldUseAgentWritePlanner({ ...common, isCalendarSemanticRead: true }), false)
+})
+
+test('legacy calendar action arguments normalize equivalent timestamp field names', () => {
+  assert.deepEqual(normalizeLegacyCalendarActionArgs('create_event', {
+    title: 'Coffee with Mom',
+    start_time: '2026-08-14T09:00:00-04:00',
+    end_time: '2026-08-14T10:00:00-04:00',
+  }), {
+    title: 'Coffee with Mom',
+    start: '2026-08-14T09:00:00-04:00',
+    end: '2026-08-14T10:00:00-04:00',
+  })
+
+  assert.deepEqual(normalizeLegacyCalendarActionArgs('update_event', {
+    id: 'event-1',
+    start: '2026-08-14T11:00:00-04:00',
+    start_time: '2026-08-14T09:00:00-04:00',
+    end_time: '2026-08-14T12:00:00-04:00',
+  }), {
+    id: 'event-1',
+    start: '2026-08-14T11:00:00-04:00',
+    end: '2026-08-14T12:00:00-04:00',
+  })
 })

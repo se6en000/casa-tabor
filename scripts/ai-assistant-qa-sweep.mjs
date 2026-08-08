@@ -7,6 +7,7 @@ import {
   groceryConversationState,
 } from '../supabase/functions/_shared/assistant-conversation-grounding.mjs'
 import { formatTextForMarkdown } from '../src/lib/assistantMarkdown.mjs'
+import { buildCalendarHoldoutScoreScenarioGroups } from './assistant-calendar-holdout-score-scenarios.mjs'
 import { buildCalendarScoreScenarioGroups } from './assistant-calendar-score-scenarios.mjs'
 
 const env = Object.fromEntries(
@@ -32,13 +33,14 @@ const traceBase = crypto.randomUUID()
 const DEFAULT_LIMIT = Number(process.argv.find((arg) => arg.startsWith('--count='))?.split('=')[1] ?? '0')
 const MODE = process.argv.find((arg) => arg.startsWith('--mode='))?.split('=')[1] ?? 'full'
 const MODEL = process.argv.find((arg) => arg.startsWith('--model='))?.split('=')[1] ?? 'gemini-2.5-flash'
-const SUPPORTED_MODES = new Set(['smoke', 'full', 'showcase', 'calendar-edge', 'calendar-score'])
+const SUPPORTED_MODES = new Set(['smoke', 'full', 'showcase', 'calendar-edge', 'calendar-score', 'calendar-score-holdout'])
 const SUPPORTED_MODELS = new Set(['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.5-flash'])
 if (!SUPPORTED_MODES.has(MODE)) throw new Error(`Unsupported QA mode: ${MODE}`)
 if (!SUPPORTED_MODELS.has(MODEL)) throw new Error(`Unsupported QA model: ${MODEL}`)
 const STEP_LIMIT = Number.isFinite(DEFAULT_LIMIT) && DEFAULT_LIMIT > 0
   ? DEFAULT_LIMIT
   : MODE === 'smoke' ? 12 : null
+const IS_CALENDAR_SCORE_MODE = MODE === 'calendar-score' || MODE === 'calendar-score-holdout'
 
 const headers = {
   'content-type': 'application/json',
@@ -167,7 +169,7 @@ async function seedCalendarFixtures(created = []) {
     { title: '[QA] Piano recital', daysFromNow: 8, hour: 16, minutes: 0, durationMins: 90 },
     { title: '[QA] PTA meeting', daysFromNow: 9, hour: 19, minutes: 0, durationMins: 60 },
   ]
-  if (MODE === 'calendar-edge' || MODE === 'calendar-score') {
+  if (MODE === 'calendar-edge' || IS_CALENDAR_SCORE_MODE) {
     items.push(
       { title: '[QA] Edge dentist appointment', daysFromNow: 3, hour: 10, minutes: 0, durationMins: 60 },
       { title: '[QA] Edge dentist appointment', daysFromNow: 3, hour: 15, minutes: 0, durationMins: 60 },
@@ -961,8 +963,10 @@ async function run() {
       ? showcaseScenarioGroups()
       : MODE === 'calendar-edge'
         ? calendarEdgeScenarioGroups(calendarFixtures)
-        : MODE === 'calendar-score'
-          ? buildCalendarScoreScenarioGroups(calendarFixtures, familyNames, now)
+        : IS_CALENDAR_SCORE_MODE
+          ? MODE === 'calendar-score-holdout'
+            ? buildCalendarHoldoutScoreScenarioGroups(calendarFixtures, familyNames, now)
+            : buildCalendarScoreScenarioGroups(calendarFixtures, familyNames, now)
         : scenarioGroups(calendarFixtures, groceryFixtures, familyNames, recipeFixture)
     const flatSteps = groups.flatMap((group) => group.steps.map((step, index) => ({
       ...step,
@@ -1275,10 +1279,10 @@ async function run() {
         assistant_text: result.assistant_text,
       })),
       cleanup,
-      score: MODE === 'calendar-score'
+      score: IS_CALENDAR_SCORE_MODE
         ? { percent: overallScore, grade: scoreGrade(overallScore) }
         : undefined,
-      category_scores: MODE === 'calendar-score' ? categoryScores : undefined,
+      category_scores: IS_CALENDAR_SCORE_MODE ? categoryScores : undefined,
       showcase: MODE === 'showcase'
         ? results.map((result) => ({
           conversation: result.group,

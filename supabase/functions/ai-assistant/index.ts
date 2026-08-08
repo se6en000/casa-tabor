@@ -97,6 +97,10 @@ import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
 import { getAgentToolByLegacyName } from '../_shared/assistant-agent-tools.mjs'
 import { isAgentWriteCompatible } from '../_shared/assistant-agent-write-compatibility.mjs'
 import {
+  normalizeLegacyCalendarActionArgs,
+  shouldUseAgentWritePlanner,
+} from '../_shared/assistant-agent-write.mjs'
+import {
   formatBugTrackerSummary,
   formatMemoryInsightsSummary,
   isBugTrackerReadRequest,
@@ -1706,18 +1710,19 @@ Deno.serve(async (req) => {
       },
     }
   }
-  const shouldRunAgentWrite = !dryRun &&
-    agentRuntimeEnabled &&
-    agentWriteConfig?.enabled === true &&
-    agentWriteRate > 0 &&
-    !isCalendarSemanticRead &&
-    !reminderDomainLanguage &&
-    !explicitReminderCreate &&
-    !groceryFrame &&
-    AGENT_GENERAL_PAGES.has(String(context?.page ?? '')) &&
-    context?.assistant_mode !== 'chef' &&
-    !image &&
-    Math.random() < agentWriteRate
+  const shouldRunAgentWrite = shouldUseAgentWritePlanner({
+    agentRuntimeEnabled,
+    agentWriteEnabled: agentWriteConfig?.enabled === true,
+    agentWriteRate,
+    isCalendarSemanticRead,
+    reminderDomainLanguage,
+    explicitReminderCreate,
+    hasGroceryFrame: Boolean(groceryFrame),
+    pageEligible: AGENT_GENERAL_PAGES.has(String(context?.page ?? '')),
+    chefMode: context?.assistant_mode === 'chef',
+    hasImage: Boolean(image),
+    sample: Math.random(),
+  })
   if (!shouldRunAgentWrite && latestUserText && context?.pendingAction) {
     const pendingCalendarCorrection = resolvePendingCalendarCorrection(
       latestUserText,
@@ -2016,6 +2021,10 @@ Deno.serve(async (req) => {
         }
       }
     } | null
+    const normalizedAgentWriteArgs = normalizeLegacyCalendarActionArgs(
+      agentWriteData?.tool,
+      agentWriteData?.args,
+    ) as Record<string, unknown> | undefined
     if (
       !agentWriteResult.error &&
       agentWriteData?.supported === true &&
@@ -2034,10 +2043,10 @@ Deno.serve(async (req) => {
         calendarIntent: calendarFrame?.intent,
         groceryIntent: groceryFrame?.intent,
         explicitReminderCreate,
-        args: agentWriteData.args,
+        args: normalizedAgentWriteArgs,
       }) &&
-      agentWriteData.args &&
-      typeof agentWriteData.args === 'object'
+      normalizedAgentWriteArgs &&
+      typeof normalizedAgentWriteArgs === 'object'
     ) {
       appendServerTrace('server_agent_write_adopted', `tool=${agentWriteData.plan?.toolName ?? agentWriteData.tool}`, {
         tool_name: agentWriteData.plan?.toolName ?? null,
@@ -2051,8 +2060,8 @@ Deno.serve(async (req) => {
         payload: {
           type: 'tool_action',
           tool: agentWriteData.tool,
-          args: agentWriteData.args,
-          display_text: buildDisplayText(agentWriteData.tool, agentWriteData.args),
+          args: normalizedAgentWriteArgs,
+          display_text: buildDisplayText(agentWriteData.tool, normalizedAgentWriteArgs),
           action_id: agentWriteData.action_id,
           conversation_state: responseConversationState,
           semantic_intent: [
@@ -4501,7 +4510,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
         if (!funcCallPart) return null
 
-        const { name, args } = (funcCallPart as { functionCall: { name: string; args: Record<string, unknown> } }).functionCall
+        const functionCall = (funcCallPart as { functionCall: { name: string; args: Record<string, unknown> } }).functionCall
+        const name = functionCall.name
+        const args = normalizeLegacyCalendarActionArgs(name, functionCall.args) as Record<string, unknown>
 
         // Read-only tools: execute server-side. Only escalate to a second LLM call when the user likely wants a write.
         if (name === 'search_events' || name === 'search_places' || name === 'search_web' || name === 'get_weather_forecast' || name === 'get_travel_eta') {

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { buildCalendarScoreScenarioGroups } from '../scripts/assistant-calendar-score-scenarios.mjs'
+import { buildCalendarHoldoutScoreScenarioGroups } from '../scripts/assistant-calendar-holdout-score-scenarios.mjs'
 
 const qaRunner = readFileSync(new URL('../scripts/ai-assistant-qa-sweep.mjs', import.meta.url), 'utf8')
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
@@ -72,5 +73,46 @@ test('calendar scorecard is wired into the safe QA runner with category scoring'
   assert.equal(
     packageJson.scripts['qa:ai-assistant:calendar-score'],
     'node scripts/ai-assistant-qa-sweep.mjs --mode=calendar-score --model=gemini-2.5-flash',
+  )
+})
+
+test('calendar holdout scorecard uses 50 different requests with the same capability distribution', () => {
+  const baseline = buildCalendarScoreScenarioGroups(fixtures, ['Jake', 'Owen'], base)
+    .flatMap((group) => group.steps.map((step) => step.text.toLowerCase()))
+  const groups = buildCalendarHoldoutScoreScenarioGroups(fixtures, ['Jake', 'Owen'], base)
+  const steps = groups.flatMap((group) => group.steps.map((step) => ({
+    ...step,
+    category: step.scoreCategory ?? group.scoreCategory,
+  })))
+
+  assert.equal(steps.length, 50)
+  assert.equal(new Set(steps.map((step) => step.text.toLowerCase())).size, 50)
+  assert.deepEqual(
+    steps.filter((step) => baseline.includes(step.text.toLowerCase())),
+    [],
+  )
+  assert.deepEqual(
+    Object.fromEntries(
+      [...new Set(steps.map((step) => step.category))]
+        .sort()
+        .map((category) => [category, steps.filter((step) => step.category === category).length]),
+    ),
+    {
+      cancellation: 6,
+      create: 10,
+      edit: 10,
+      follow_up: 6,
+      read: 12,
+      reminder: 6,
+    },
+  )
+})
+
+test('calendar holdout scorecard is wired as a separate QA command', () => {
+  assert.match(qaRunner, /'calendar-score-holdout'/)
+  assert.match(qaRunner, /buildCalendarHoldoutScoreScenarioGroups\(calendarFixtures, familyNames, now\)/)
+  assert.equal(
+    packageJson.scripts['qa:ai-assistant:calendar-score-holdout'],
+    'node scripts/ai-assistant-qa-sweep.mjs --mode=calendar-score-holdout --model=gemini-2.5-flash',
   )
 })
