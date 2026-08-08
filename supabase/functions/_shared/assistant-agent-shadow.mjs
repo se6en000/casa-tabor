@@ -283,7 +283,7 @@ function normalizeCalendarSemanticPatch(value) {
     }
 
   }
-  if (patch.end_date_reference && !patch.time && patch.all_day === undefined) {
+  if ((patch.end_date_reference || patch.duration_days) && !patch.time && patch.all_day === undefined) {
     patch.all_day = true
   }
   return patch

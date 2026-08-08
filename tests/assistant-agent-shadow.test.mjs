@@ -32,6 +32,27 @@ test('semantic date ranges become all-day when no clock time is present', () => 
 
   assert.equal(result.kind, 'calendar_semantic')
   assert.equal(result.turn.patch.all_day, true)
+
+  const durationRange = parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'calendar_interpret_turn',
+            args: {
+              action: 'create',
+              patch: {
+                title: 'School break',
+                date_reference: { kind: 'absolute', month: 10, day: 12 },
+                duration_days: 5,
+              },
+            },
+          },
+        }],
+      },
+    }],
+  })
+  assert.equal(durationRange.turn.patch.all_day, true)
 })
 
 test('shadow planner request exposes capability tools without phrase routing', () => {
