@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { FlaskConical, CheckCircle, AlertCircle, Home, Mic, Activity, RefreshCw, Gauge, BarChart3, Minus, Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
@@ -27,6 +27,15 @@ interface AIMemoryCaptureConfig {
   enabled: boolean
   passiveSignalsEnabled: boolean
   autoCaptureBugs: boolean
+}
+
+interface CaptureDevice {
+  id: string
+  label: string
+  token_prefix: string
+  created_at: string
+  last_used_at: string | null
+  revoked_at: string | null
 }
 
 type ModelOption = {
@@ -213,6 +222,7 @@ const REGRESSION_CASES: RegressionCase[] = [
 ]
 
 export default function AISettingsPage() {
+  const location = useLocation()
   const [config, setConfig] = useState<LLMConfig>({ provider: 'gemini', model: 'gemini-2.0-flash', background_model: 'gemini-2.5-flash-lite', api_key: '' })
   const [customInstructions, setCustomInstructions] = useState('')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -235,6 +245,12 @@ export default function AISettingsPage() {
   const [memoryError, setMemoryError] = useState<string | null>(null)
   const [newObservationTitle, setNewObservationTitle] = useState('')
   const [newObservationDetails, setNewObservationDetails] = useState('')
+  const [captureDevices, setCaptureDevices] = useState<CaptureDevice[]>([])
+  const [captureLoading, setCaptureLoading] = useState(false)
+  const [captureError, setCaptureError] = useState<string | null>(null)
+  const [newCaptureLabel, setNewCaptureLabel] = useState('Jake iPhone Action Button')
+  const [generatedCaptureToken, setGeneratedCaptureToken] = useState('')
+  const [captureCopyStatus, setCaptureCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle')
   const [localLatencyRollup] = useState<{ p95?: number; p99?: number; sampleCount?: number } | null>(() => {
     try {
       const raw = localStorage.getItem(AI_LATENCY_METRICS_KEY)
@@ -251,6 +267,7 @@ export default function AISettingsPage() {
     }
   })
   const hydratedRef = useRef(false)
+  const shortcutSectionRef = useRef<HTMLDivElement | null>(null)
   const { settings: screensaverSettings, update: updateScreensaver } = useScreensaverSettings()
 
   const loadRegressionHistory = useCallback(() => {
@@ -280,6 +297,18 @@ export default function AISettingsPage() {
     setMemoryLoading(false)
   }, [])
 
+  const loadCaptureDevices = useCallback(async () => {
+    setCaptureLoading(true)
+    setCaptureError(null)
+    const { data, error } = await supabase
+      .from('capture_devices')
+      .select('id,label,token_prefix,created_at,last_used_at,revoked_at')
+      .order('created_at', { ascending: false })
+    if (error) setCaptureError(error.message)
+    else setCaptureDevices((data ?? []) as CaptureDevice[])
+    setCaptureLoading(false)
+  }, [])
+
   useEffect(() => {
     Promise.all([
       supabase.from('settings').select('value').eq('key', 'llm_config').maybeSingle(),
@@ -306,8 +335,9 @@ export default function AISettingsPage() {
       }
       setIsLoading(false)
       void loadMemoryObservations()
+      void loadCaptureDevices()
     })
-  }, [loadMemoryObservations])
+  }, [loadCaptureDevices, loadMemoryObservations])
 
   const loadForensics = useCallback(async () => {
     setForensicsLoading(true)
@@ -426,6 +456,83 @@ export default function AISettingsPage() {
     }, 0)
     return () => clearTimeout(timer)
   }, [loadForensics])
+
+  useEffect(() => {
+    if (location.pathname === '/settings/ai/shortcuts') {
+      shortcutSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [location.pathname])
+
+  async function sha256Hex(value: string): Promise<string> {
+    if (!globalThis.crypto?.subtle) {
+      throw new Error('This browser cannot generate a secure shortcut token here. Try Chrome or Safari.')
+    }
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  }
+
+  function normalizeCaptureTokenError(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error ?? '').trim()
+    if (/Auth session missing!/i.test(message)) {
+      return 'You must be signed in to generate a shortcut token.'
+    }
+    return message || 'Could not generate shortcut token'
+  }
+
+  async function generateCaptureToken() {
+    const label = newCaptureLabel.trim()
+    if (!label) {
+      setCaptureError('Give this shortcut token a label first.')
+      return
+    }
+    setCaptureError(null)
+    setCaptureLoading(true)
+    try {
+      const { data: userResult, error: userError } = await supabase.auth.getUser()
+      if (userError) throw userError
+      if (!userResult.user) throw new Error('You must be signed in to generate a shortcut token.')
+
+      const rawToken = `casa_capture_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`
+      const tokenHash = await sha256Hex(rawToken)
+      const tokenPrefix = rawToken.slice(0, 18)
+      const { error } = await supabase.from('capture_devices').insert({
+        label,
+        token_hash: tokenHash,
+        token_prefix: tokenPrefix,
+        created_by: userResult.user.id,
+      })
+      if (error) throw error
+      setGeneratedCaptureToken(rawToken)
+      setCaptureCopyStatus('idle')
+      await loadCaptureDevices()
+    } catch (error) {
+      setCaptureError(normalizeCaptureTokenError(error))
+    } finally {
+      setCaptureLoading(false)
+    }
+  }
+
+  async function copyCaptureToken() {
+    try {
+      await navigator.clipboard.writeText(generatedCaptureToken)
+      setCaptureCopyStatus('copied')
+    } catch {
+      setCaptureCopyStatus('error')
+    }
+  }
+
+  async function revokeCaptureDevice(deviceId: string) {
+    setCaptureError(null)
+    const { error } = await supabase
+      .from('capture_devices')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('id', deviceId)
+    if (error) {
+      setCaptureError(error.message)
+      return
+    }
+    await loadCaptureDevices()
+  }
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -827,6 +934,92 @@ export default function AISettingsPage() {
             placeholder="One rule per line, in your own words. Saved instantly to every conversation."
             className="w-full rounded-button border border-casa-border bg-white px-3 py-2 text-body-sm text-casa-navy focus:outline-none focus:border-casa-gold resize-y font-mono"
           />
+        </div>
+
+        <div
+          id="ai-shortcuts"
+          ref={shortcutSectionRef}
+          className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-4 scroll-mt-6"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-body-sm font-semibold text-casa-navy">Shortcut / Action Button</p>
+              <p className="text-caption text-casa-muted">
+                Generate a device token for Apple Shortcut voice capture. The token is shown once, then only its prefix remains visible here.
+              </p>
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => void loadCaptureDevices()} leadingIcon={<RefreshCw size={14} />}>
+              Refresh
+            </Button>
+          </div>
+          <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3 space-y-3">
+            <label className="block text-caption font-semibold uppercase tracking-wide text-casa-muted">
+              Shortcut token label
+            </label>
+            <input
+              value={newCaptureLabel}
+              onChange={(e) => setNewCaptureLabel(e.target.value)}
+              placeholder="Jake iPhone Action Button"
+              className="w-full px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-navy bg-white focus:outline-none focus:ring-2 focus:ring-casa-navy/20"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="strong" size="sm" disabled={captureLoading || !newCaptureLabel.trim()} onClick={() => void generateCaptureToken()}>
+                Generate token
+              </Button>
+              {generatedCaptureToken && (
+                <Button variant="secondary" size="sm" onClick={() => void copyCaptureToken()}>
+                  Copy token
+                </Button>
+              )}
+              {captureCopyStatus === 'copied' && <Chip size="sm" tone="success">Copied</Chip>}
+              {captureCopyStatus === 'error' && <Chip size="sm" tone="danger">Copy failed</Chip>}
+            </div>
+            {generatedCaptureToken && (
+              <div className="rounded-card border border-casa-gold/30 bg-casa-gold/10 p-3 space-y-2">
+                <p className="text-caption font-semibold text-casa-navy">Save this token in your Apple Shortcut now.</p>
+                <p className="break-all font-mono text-caption text-casa-navy">{generatedCaptureToken}</p>
+                <ol className="list-decimal space-y-1 pl-5 text-caption text-casa-muted">
+                  <li>Action Button → run Shortcut</li>
+                  <li>Shortcut step 1: Dictate Text</li>
+                  <li>Shortcut step 2: POST to <span className="font-mono">/functions/v1/capture-command</span> with header <span className="font-mono">x-casa-capture-token</span></li>
+                  <li>Shortcut step 3: Speak or show <span className="font-mono">response_text</span></li>
+                </ol>
+              </div>
+            )}
+          </div>
+          <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">Active shortcut tokens</p>
+              {captureLoading && <Chip size="sm" tone="info">Loading…</Chip>}
+            </div>
+            {captureDevices.length === 0 ? (
+              <p className="text-caption text-casa-muted">No shortcut tokens yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {captureDevices.map((device) => (
+                  <div key={device.id} className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-casa-border/70 bg-white p-3">
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-body-sm font-medium text-casa-navy">{device.label}</p>
+                      <p className="font-mono text-caption text-casa-muted">{device.token_prefix}…</p>
+                      <p className="text-caption text-casa-muted">
+                        {device.revoked_at
+                          ? `Revoked ${new Date(device.revoked_at).toLocaleString()}`
+                          : device.last_used_at
+                            ? `Last used ${new Date(device.last_used_at).toLocaleString()}`
+                            : `Created ${new Date(device.created_at).toLocaleString()}`}
+                      </p>
+                    </div>
+                    {!device.revoked_at && (
+                      <Button variant="ghost" size="sm" onClick={() => void revokeCaptureDevice(device.id)}>
+                        Revoke
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {captureError && <p className="text-caption text-casa-error">{captureError}</p>}
+          </div>
         </div>
 
         <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-4">

@@ -41,6 +41,7 @@ const NAV_GROUPS = [
       { to: '/settings/grocery-intelligence', icon: ShoppingCart, label: 'Grocery Intelligence', desc: 'Smart aisle ordering and scan preferences' },
       { to: '/settings/music',   icon: Music2,        label: 'Spotify / Music',     desc: 'Connect music playback' },
       { to: '/settings/ai',      icon: Bot,           label: 'AI Provider',         desc: 'Vendor, model, API key' },
+      { to: '/settings/ai/shortcuts', icon: Bot,      label: 'AI Shortcuts',        desc: 'Action Button and Apple Shortcut setup' },
       { to: '/settings/bug-tracker', icon: Bug,       label: 'Bug Tracker',         desc: 'Capture and triage defects' },
       { to: '/settings/sms',     icon: MessageSquare, label: 'Notifications',       desc: 'SMS briefings & alerts' },
     ],

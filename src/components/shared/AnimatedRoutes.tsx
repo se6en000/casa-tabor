@@ -56,6 +56,7 @@ export default function AnimatedRoutes() {
           <Route path="calendars"  element={<Navigate to="/settings/google" replace />} />
           <Route path="gmail-scan" element={<Navigate to="/settings/google" replace />} />
           <Route path="ai"         element={<AISettingsPage />} />
+          <Route path="ai/shortcuts" element={<AISettingsPage />} />
           <Route path="bug-tracker" element={<BugTrackerSettingsPage />} />
           <Route path="sms"        element={<SmsSettingsPage />} />
           <Route path="music"      element={<MusicPage />} />
