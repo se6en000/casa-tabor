@@ -17,7 +17,7 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
 import MarkdownContent from '../shared/MarkdownContent'
-import { Button, Card, Chip, Heading, LiveTranscript, Text } from '../ui'
+import { Button, Card, Heading, LiveTranscript, Text } from '../ui'
 import { formatTextForMarkdown, stripEvidenceCitationMarkers } from '../../lib/assistantMarkdown.mjs'
 import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId } from '../../lib/assistantTelemetry'
 import { classifyPendingConfirmation } from '../../lib/assistantConfirmation.mjs'
@@ -1348,6 +1348,8 @@ export default function AIChatDrawer({
 
 /* ── Message Bubble ─────────────────────────────────────────── */
 
+const MAX_VISIBLE_SOURCES = 3
+
 function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, events, onOpenEventDetails, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onEditMessage }: {
   msg: AIMessage
   isActivePending: boolean
@@ -1370,6 +1372,8 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
   const ta = msg.toolAction
   const [quickSaving, setQuickSaving] = useState(false)
   const [selectedEvidence, setSelectedEvidence] = useState<NonNullable<AIMessage['evidence']>[number] | null>(null)
+  const [sourcesExpanded, setSourcesExpanded] = useState(false)
+  const [showAllSources, setShowAllSources] = useState(false)
   const actionTransitionRef = useRef(false)
   const hasPendingAction = !!ta && ta.status === 'pending'
   const showQuickSaveRecipe = !isUser && !ta && Boolean(onQuickSaveRecipe) && Boolean(enableQuickSaveRecipe) && looksLikeRecipeSuggestion(msg.content)
@@ -1453,53 +1457,93 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
             )
         )}
         {!isUser && !ta && Boolean(msg.evidence?.length) && (
-          <div className="mt-3 flex flex-wrap gap-2" aria-label="Sources used">
-            {msg.evidence?.map((evidence) => {
-              const sourceLabel = evidence.sourceType === 'email'
-                ? 'Email'
-                : evidence.sourceType === 'event'
-                  ? 'Calendar'
-                  : evidence.sourceType === 'reminder'
-                    ? 'Reminder'
-                    : evidence.sourceType === 'activity'
-                      ? 'Activity'
-                      : evidence.sourceType === 'prep'
-                        ? 'Prep'
-                        : 'Family data'
-              const sourceIcon = evidence.sourceType === 'email'
-                ? <Mail size={12} />
-                : evidence.sourceType === 'event'
-                  ? <CalendarDays size={12} />
-                  : evidence.sourceType === 'reminder'
-                    ? <Bell size={12} />
-                    : evidence.sourceType === 'activity' || evidence.sourceType === 'prep'
-                      ? <Activity size={12} />
-                      : evidence.sourceType === 'place'
-                        ? <MapPin size={12} />
-                        : <UserPlus size={12} />
-              return (
-                <Chip
-                  key={evidence.evidenceId}
-                  size="sm"
-                  tone="info"
-                  icon={sourceIcon}
-                  aria-label={`Open ${sourceLabel} source: ${evidence.title}`}
-                  selected={selectedEvidence?.evidenceId === evidence.evidenceId}
-                  onClick={() => {
-                    if ((evidence.sourceType === 'event' || evidence.sourceType === 'reminder') && evidence.sourceId) {
-                      onOpenEventDetails?.(evidence.sourceId)
-                      return
-                    }
-                    setSelectedEvidence((current) => current?.evidenceId === evidence.evidenceId ? null : evidence)
-                  }}
-                >
-                  {sourceLabel}
-                </Chip>
-              )
-            })}
+          <div className="mt-2 border-t border-casa-divider pt-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              align="start"
+              aria-expanded={sourcesExpanded}
+              aria-controls={`assistant-sources-${msg.id}`}
+              onClick={() => {
+                setSourcesExpanded((expanded) => {
+                  if (expanded) {
+                    setShowAllSources(false)
+                    setSelectedEvidence(null)
+                  }
+                  return !expanded
+                })
+              }}
+              className="px-0 text-casa-muted"
+            >
+              Sources checked · {msg.evidence?.length}
+            </Button>
+            {sourcesExpanded && (
+              <div id={`assistant-sources-${msg.id}`} className="space-y-1 pb-1" aria-label="Sources checked">
+                {msg.evidence
+                  ?.slice(0, showAllSources ? msg.evidence.length : MAX_VISIBLE_SOURCES)
+                  .map((evidence) => {
+                    const sourceLabel = evidence.sourceType === 'email'
+                      ? 'Email'
+                      : evidence.sourceType === 'event'
+                        ? 'Calendar'
+                        : evidence.sourceType === 'reminder'
+                          ? 'Reminder'
+                          : evidence.sourceType === 'activity'
+                            ? 'Activity'
+                            : evidence.sourceType === 'prep'
+                              ? 'Prep'
+                              : 'Family data'
+                    const sourceIcon = evidence.sourceType === 'email'
+                      ? <Mail size={14} />
+                      : evidence.sourceType === 'event'
+                        ? <CalendarDays size={14} />
+                        : evidence.sourceType === 'reminder'
+                          ? <Bell size={14} />
+                          : evidence.sourceType === 'activity' || evidence.sourceType === 'prep'
+                            ? <Activity size={14} />
+                            : evidence.sourceType === 'place'
+                              ? <MapPin size={14} />
+                              : <UserPlus size={14} />
+                    return (
+                      <Button
+                        key={evidence.evidenceId}
+                        variant="subtle"
+                        size="sm"
+                        fullWidth
+                        align="start"
+                        leadingIcon={sourceIcon}
+                        aria-label={`Open ${sourceLabel} source: ${evidence.title}`}
+                        onClick={() => {
+                          if ((evidence.sourceType === 'event' || evidence.sourceType === 'reminder') && evidence.sourceId) {
+                            onOpenEventDetails?.(evidence.sourceId)
+                            return
+                          }
+                          setSelectedEvidence((current) => current?.evidenceId === evidence.evidenceId ? null : evidence)
+                        }}
+                        className="text-casa-navy"
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-caption text-casa-muted">{sourceLabel}</span>
+                          <span className="block truncate text-body-sm font-semibold">{evidence.title}</span>
+                        </span>
+                      </Button>
+                    )
+                  })}
+                {!showAllSources && msg.evidence && msg.evidence.length > MAX_VISIBLE_SOURCES && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAllSources(true)}
+                    className="text-casa-gold"
+                  >
+                    {`Show ${msg.evidence.length - MAX_VISIBLE_SOURCES} more`}
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         )}
-        {selectedEvidence && (
+        {sourcesExpanded && selectedEvidence && (
           <Card tone="subtle" padding="sm" className="mt-3">
             <Heading role="heading">Evidence details</Heading>
             <Text role="body-sm" className="mt-1 font-semibold">{selectedEvidence.title}</Text>

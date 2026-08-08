@@ -40,10 +40,18 @@ test('assistant messages preserve and render safe source evidence', () => {
   assert.match(assistantSession, /evidence\?:\s*FamilyEvidence\[\]/)
   assert.match(assistantHook, /normalizeFamilyEvidence\(data\?\.evidence\)/)
   assert.match(assistantHook, /sourcesConsidered:.*data\?\.sources_considered/)
-  assert.match(assistantDrawer, /<Chip/)
   assert.match(assistantDrawer, /msg\.evidence/)
+  assert.match(assistantDrawer, /Sources checked/)
+  assert.match(assistantDrawer, /aria-expanded=\{sourcesExpanded\}/)
+  assert.match(assistantDrawer, /MAX_VISIBLE_SOURCES = 3/)
+  assert.match(assistantDrawer, /Show \$\{msg\.evidence\.length - MAX_VISIBLE_SOURCES\} more/)
   assert.match(assistantDrawer, /onOpenEventDetails\?\.\(evidence\.sourceId\)/)
   assert.match(assistantDrawer, /Evidence details/)
+  const evidenceBlock = assistantDrawer.slice(
+    assistantDrawer.indexOf('Boolean(msg.evidence?.length)'),
+    assistantDrawer.indexOf('{sourcesExpanded && selectedEvidence &&'),
+  )
+  assert.doesNotMatch(evidenceBlock, /<Chip/)
 })
 
 test('daily briefing includes only required active email commitments that are still current', () => {
