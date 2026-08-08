@@ -1015,16 +1015,33 @@ async function run() {
         note: null,
       }
 
-      const response = await callAssistant({
-        messages: history,
-        family,
-        page: step.page,
-        assistantMode: step.assistantMode,
-        conversationState: currentState,
-        pendingAction: pendingActions.get(step.groupKey) ?? null,
-        conversationId,
-        turnId,
-      })
+      let response
+      try {
+        response = await callAssistant({
+          messages: history,
+          family,
+          page: step.page,
+          assistantMode: step.assistantMode,
+          conversationState: currentState,
+          pendingAction: pendingActions.get(step.groupKey) ?? null,
+          conversationId,
+          turnId,
+        })
+      } catch (error) {
+        output.ok = false
+        output.note = `assistant_request_failed:${String(error instanceof Error ? error.message : error).slice(0, 500)}`
+        results.push(output)
+        console.log(JSON.stringify({
+          heartbeat: true,
+          phase: 'done',
+          step: index + 1,
+          total: steps.length,
+          group: step.groupKey,
+          ok: false,
+          summary: output.note,
+        }))
+        continue
+      }
 
       output.assistant_type = response?.type ?? 'unknown'
       output.assistant_text = response?.text ?? response?.display_text ?? null

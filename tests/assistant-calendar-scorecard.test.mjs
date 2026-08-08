@@ -68,6 +68,7 @@ test('calendar scorecard is wired into the safe QA runner with category scoring'
   assert.match(qaRunner, /'calendar-score'/)
   assert.match(qaRunner, /buildCalendarScoreScenarioGroups\(calendarFixtures, familyNames, now\)/)
   assert.match(qaRunner, /category_scores/)
+  assert.match(qaRunner, /assistant_request_failed/)
   assert.equal(
     packageJson.scripts['qa:ai-assistant:calendar-score'],
     'node scripts/ai-assistant-qa-sweep.mjs --mode=calendar-score --model=gemini-2.5-flash',
