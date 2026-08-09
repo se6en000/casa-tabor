@@ -1185,14 +1185,24 @@ function TimelineRow({
 
   // Re-derive responsibility whenever the event panel writes new driver overrides.
   useEffect(() => {
+    function handleEventUpdated(e: Event) {
+      const detail = (e as CustomEvent<{ eventId?: string }>).detail
+      if (!detail?.eventId || detail.eventId === event.id) {
+        setOverrideVersion((v) => v + 1)
+      }
+    }
     function handleOverridesUpdated(e: Event) {
       const detail = (e as CustomEvent<{ eventId?: string }>).detail
       if (!detail?.eventId || detail.eventId === event.id) {
         setOverrideVersion((v) => v + 1)
       }
     }
+    window.addEventListener('casa:event-updated', handleEventUpdated)
     window.addEventListener('casa:overrides-updated', handleOverridesUpdated)
-    return () => window.removeEventListener('casa:overrides-updated', handleOverridesUpdated)
+    return () => {
+      window.removeEventListener('casa:event-updated', handleEventUpdated)
+      window.removeEventListener('casa:overrides-updated', handleOverridesUpdated)
+    }
   }, [event.id])
 
   const responsibility = useMemo(

@@ -139,3 +139,9 @@ test('homepage and shared leave-by UI consume authoritative projection contracts
   assert.match(avatars, /role="img"/)
   assert.match(avatars, /aria-label=\{label\}/)
 })
+
+test('homepage hero cards listen to both override and event update broadcasts', () => {
+  const home = readFileSync(new URL('../src/pages/HomePage.tsx', import.meta.url), 'utf8')
+  assert.match(home, /window\.addEventListener\('casa:event-updated', handleEventUpdated\)/)
+  assert.match(home, /window\.addEventListener\('casa:overrides-updated', handleOverridesUpdated\)/)
+})

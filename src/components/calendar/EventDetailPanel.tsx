@@ -114,6 +114,18 @@ function useIsMobile() {
 
 const stopTouch = (e: React.TouchEvent | React.PointerEvent) => e.stopPropagation()
 
+function broadcastEventChange(eventId: string, patch?: Partial<EventWithDetails>) {
+  window.dispatchEvent(new CustomEvent('casa:event-updated', { detail: { eventId, patch } }))
+  window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId } }))
+}
+
+function nextPlanOverride(event: EventWithDetails, transportationPlan: EventTransportationPlan | null) {
+  return {
+    ...(event.plan_override ?? {}),
+    transportation_plan: transportationPlan,
+  } as EventWithDetails['plan_override']
+}
+
 export default function EventDetailPanel({ event: eventSummary, onClose }: EventDetailPanelProps) {
   const detailQuery = useEventDetails(eventSummary)
   const [displayEvent, setDisplayEvent] = useState<EventWithDetails | null>(eventSummary)
@@ -191,7 +203,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
     // Needs You, stacked calendar) reflects it right away instead of waiting on the
     // Supabase round trip below. On failure we roll this back and surface an error.
     setTransportationPlan(durablePlan)
-    window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+    broadcastEventChange(event.id, { plan_override: nextPlanOverride(event, durablePlan) })
 
     try {
       if (eventPlace && !transportationPlaceMatchesEvent(eventPlace, event)) {
@@ -207,7 +219,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
       if (error) throw error
     } catch (cause) {
       setTransportationPlan(previousPlan)
-      window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+      broadcastEventChange(event.id, { plan_override: nextPlanOverride(event, previousPlan) })
       const message = `Could not save this driving plan: ${cause instanceof Error ? cause.message : 'Unknown error'}`
       setOverrideSaveError(message)
       throw new Error(message)
@@ -258,12 +270,12 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
       // Optimistic: show the new driver/plan immediately; the recurring-scope write
       // happens in the background and rolls back on failure.
       setTransportationPlan(durablePlan)
-      window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+      broadcastEventChange(event.id, { plan_override: { ...event.plan_override, transportation_plan: durablePlan } as EventWithDetails['plan_override'] })
       try {
         await executeRecurringQuickActionScope(request, 'this')
       } catch (cause) {
         setTransportationPlan(previousPlan)
-        window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+        broadcastEventChange(event.id, { plan_override: { ...event.plan_override, transportation_plan: previousPlan } as EventWithDetails['plan_override'] })
         throw cause
       }
       if (eventPlace) queryClient.removeQueries({ queryKey: ['travel-eta'] })
@@ -285,7 +297,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
     if (result === 'cancelled') return result
     if (result === 'handled') {
       setTransportationPlan(durablePlan)
-      window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+      broadcastEventChange(event.id, { plan_override: { ...event.plan_override, transportation_plan: durablePlan } as EventWithDetails['plan_override'] })
       if (eventPlace) queryClient.removeQueries({ queryKey: ['travel-eta'] })
       return result
     }

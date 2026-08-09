@@ -77,5 +77,6 @@ test('successful saves refresh the event caches immediately before the sheet clo
   assert.match(source, /qc\.setQueriesData\(\{ queryKey: \['events'\] \},/)
   assert.match(source, /qc\.setQueryData\(\['event-details', event\.id\]/)
   assert.match(source, /casa:event-updated/)
+  assert.match(source, /casa:overrides-updated/)
   assert.match(source, /qc\.invalidateQueries\(\{ queryKey: \['event-transportation-plans'\] \}\)/)
 })

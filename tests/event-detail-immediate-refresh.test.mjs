@@ -9,4 +9,6 @@ test('EventDetailPanel listens for immediate event update broadcasts', () => {
   assert.match(source, /window\.addEventListener\('casa:event-updated', handleEventUpdated\)/)
   assert.match(source, /setDisplayEvent\(current => current \? \{ \.\.\.current, \.\.\.detail\.patch \} : current\)/)
   assert.match(source, /fetchedUpdatedAt >= currentUpdatedAt/)
+  assert.match(source, /window\.dispatchEvent\(new CustomEvent\('casa:event-updated'/)
+  assert.match(source, /window\.dispatchEvent\(new CustomEvent\('casa:overrides-updated'/)
 })
