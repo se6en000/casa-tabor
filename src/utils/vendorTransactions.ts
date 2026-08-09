@@ -29,6 +29,14 @@ function orderId(item: PrepItem) {
   return text.match(/\border\s*(?:number|no\.?)?\s*#?\s*([a-z0-9][a-z0-9-]{5,})\b/i)?.[1] ?? null
 }
 
+function transactionDescriptor(item: PrepItem) {
+  const text = `${item.event_title ?? ''} ${item.description}`
+  const descriptor = text.match(
+    /(?:delivered:\s*|delivery of\s+)([a-z0-9][a-z0-9™+ .'-]{2,100}?\+\s*\d+\s*items?)/i,
+  )?.[1]
+  return descriptor ? normalizeKeyPart(descriptor) : null
+}
+
 function transactionStage(item: PrepItem) {
   if (item.attention_stage) return item.attention_stage
   if (item.type === 'payment') return 'payment'
@@ -50,13 +58,17 @@ export function vendorTransactionIdentity(item: PrepItem): VendorTransactionIden
   if (!vendor) return null
 
   const explicitKey = item.attention_thread_key?.trim()
+  const explicitMessageFallback = explicitKey?.includes(':message:') ? explicitKey : null
   const extractedOrderId = orderId(item)
-  const key = explicitKey
+  const descriptor = transactionDescriptor(item)
+  const key = (explicitKey && !explicitMessageFallback ? explicitKey : null)
     || (extractedOrderId
       ? `transaction:${normalizeKeyPart(vendor)}:${normalizeKeyPart(extractedOrderId)}`
-      : item.source_ref
-        ? `transaction:${normalizeKeyPart(vendor)}:message:${item.source_ref}`
-        : null)
+      : descriptor
+        ? `transaction:${normalizeKeyPart(vendor)}:items:${descriptor}`
+        : explicitMessageFallback || item.source_ref
+          ? explicitMessageFallback ?? `transaction:${normalizeKeyPart(vendor)}:message:${item.source_ref}`
+          : null)
 
   return key ? { key, vendor, stage: transactionStage(item) } : null
 }

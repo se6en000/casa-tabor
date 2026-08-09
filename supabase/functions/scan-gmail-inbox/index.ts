@@ -363,14 +363,25 @@ function parseDueDateOrFallback(due: string | undefined, receivedAtIso: string, 
     return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
   }
 
+  function transactionDescriptor(action: InboxActionItem): string | null {
+    const text = `${action.title ?? ''} ${action.description}`
+    const descriptor = text.match(
+      /(?:delivered:\s*|delivery of\s+)([a-z0-9][a-z0-9™+ .'-]{2,100}?\+\s*\d+\s*items?)/i,
+    )?.[1]
+    return descriptor ? normalizeTransactionKeyPart(descriptor) : null
+  }
+
   function transactionIdentity(action: InboxActionItem, sourceRef: string) {
     const vendor = action.vendor?.trim()
     if (!vendor) return { threadKey: null, vendor: null, stage: null }
     const transactionId = action.transaction_id?.trim()
+    const descriptor = transactionDescriptor(action)
     const vendorKey = normalizeTransactionKeyPart(vendor)
     const transactionKey = transactionId
       ? normalizeTransactionKeyPart(transactionId)
-      : `message:${sourceRef}`
+      : descriptor
+        ? `items:${descriptor}`
+        : `message:${sourceRef}`
     return {
       threadKey: `transaction:${vendorKey}:${transactionKey}`,
       vendor,

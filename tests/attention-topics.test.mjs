@@ -150,6 +150,57 @@ test('buildAttentionTopics never merges simultaneous orders from the same vendor
   assert.equal(topics.length, 2)
 })
 
+test('buildAttentionTopics links no-id updates by a shared item summary across messages', () => {
+  const topics = buildAttentionTopics([
+    prep({
+      id: 'signature',
+      event_id: null,
+      type: 'delivery',
+      event_title: 'Your InHome delivery should arrive by 2:29pm',
+      description: 'Signature required for delivery of Cavit Pinot Grigio 1.5... +8 items.',
+      source_type: 'gmail',
+      source_ref: 'gmail:member:message-1',
+      created_at: '2026-08-09T18:15:00.000Z',
+    }),
+    prep({
+      id: 'payment',
+      event_id: null,
+      type: 'payment',
+      event_title: 'Delivered: Cavit Pinot Grigio 1.5... +8 items',
+      description: 'Your payment method has been charged for the Walmart order.',
+      source_type: 'gmail',
+      source_ref: 'gmail:member:message-2',
+      created_at: '2026-08-09T19:00:00.000Z',
+    }),
+  ])
+
+  assert.equal(topics.length, 1)
+  assert.equal(topics[0].item.id, 'payment')
+})
+
+test('buildAttentionTopics keeps no-id orders with different item summaries separate', () => {
+  const topics = buildAttentionTopics([
+    prep({
+      id: 'wine-order',
+      event_id: null,
+      type: 'delivery',
+      description: 'Delivery of Cavit Pinot Grigio 1.5... +8 items.',
+      source_type: 'gmail',
+      source_ref: 'gmail:member:message-1',
+    }),
+    prep({
+      id: 'grocery-order',
+      event_id: null,
+      type: 'delivery',
+      description: 'Delivery of Great Value Frozen Raw... +17 items.',
+      source_type: 'gmail',
+      source_ref: 'gmail:member:message-2',
+    }),
+  ])
+
+  assert.equal(topics.length, 2)
+})
+
 test('buildAttentionTopics honors structured transaction keys for any vendor', () => {
   const topics = buildAttentionTopics([
     prep({
