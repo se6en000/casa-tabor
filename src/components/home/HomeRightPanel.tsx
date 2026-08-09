@@ -33,7 +33,8 @@ import { eventOverlapsDay } from '../../utils/eventTime'
 import { summarizeGmailHealth, type GmailHealthSummary } from '../../utils/gmailHealth'
 import { priorityVisual } from '../../utils/prepPriority'
 import { usePageVisibility } from '../../hooks/usePageVisibility'
-import { clusterPrepItems } from '../../utils/prepItemClusters'
+import { buildAttentionTopics } from '../../utils/attentionTopics'
+import { sourceBadge } from '../../utils/prepSourceBadge'
 import { Button, Chip, EmptyState, Heading, IconButton, PersonAvatarStack, SecondaryRail, Toast } from '../ui'
 
 /** Undo window (ms) between tapping an action (mark done / not relevant) and it
@@ -43,7 +44,7 @@ const UNDO_WINDOW_MS = 4000
 /** Home rail shows only the top-N Needs You cards (already sorted by urgency); the
  * rest are one tap away via the "More…" link so the rail stays glanceable and fits
  * the kiosk screen without scrolling. */
-const NEEDS_YOU_HOME_RAIL_LIMIT = 5
+const NEEDS_YOU_HOME_RAIL_LIMIT = 3
 
 interface Props {
   now: Date
@@ -207,11 +208,9 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   // Undo toast appears; the actual server action only commits after the undo window
   // elapses, so a mis-tap is fully recoverable.
   const [pendingRemovalIds, setPendingRemovalIds] = useState<Set<string>>(new Set())
-  const [actionToast, setActionToast] = useState<{ id: string; description: string; kind: 'done' | 'downvote' } | null>(null)
+  const [actionToast, setActionToast] = useState<{ id: string; ids: string[]; description: string; kind: 'done' | 'downvote' } | null>(null)
   const [revealedItemId, setRevealedItemId] = useState<string | null>(null)
-  const pendingRemovalTimers = useRef<Map<string, { timer: ReturnType<typeof setTimeout>; kind: 'done' | 'downvote' }>>(new Map())
-  const prepClusters = useMemo(() => clusterPrepItems(rawPrepItems), [rawPrepItems])
-
+  const pendingRemovalTimers = useRef<Map<string, { timer: ReturnType<typeof setTimeout>; kind: 'done' | 'downvote'; ids: string[] }>>(new Map())
   // Shared "needs you" card tap behavior: a collapsed card always expands first
   // (revealing conflict/prep/directory actions inline). Only once a prep/action
   // card is already expanded does tapping it open the full detail sheet — for
@@ -232,10 +231,10 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
     const timers = pendingRemovalTimers.current
     return () => {
       // Unmounting mid-undo-window shouldn't silently drop the action -- commit immediately.
-      timers.forEach(({ timer, kind }, id) => {
+      timers.forEach(({ timer, kind, ids }) => {
         clearTimeout(timer)
         const commit = kind === 'done' ? completePrepItem : downvotePrepItem
-        commit(id).catch(() => {})
+        ids.forEach((itemId) => commit(itemId).catch(() => {}))
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -248,17 +247,15 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
     () => notifications.filter(n => n.type === 'directory_suggestions'),
     [notifications],
   )
-  const prepItems = useMemo(
-    () => mergeNeedsYouItems(prepClusters.map((cluster) => cluster.item), conflicts, directorySuggestionNotifications),
-    [conflicts, directorySuggestionNotifications, prepClusters],
-  )
-  const prepClusterByItemId = useMemo(
-    () => new Map(prepClusters.map((cluster) => [cluster.item.id, cluster])),
-    [prepClusters],
+  const attentionTopics = useMemo(
+    () => buildAttentionTopics(mergeNeedsYouItems(rawPrepItems, conflicts, directorySuggestionNotifications)),
+    [conflicts, directorySuggestionNotifications, rawPrepItems],
   )
 
-  const prioritizedPrepItems = useMemo(() => {
-    return [...prepItems].sort((a, b) => {
+  const prioritizedTopics = useMemo(() => {
+    return [...attentionTopics].sort((aTopic, bTopic) => {
+      const a = aTopic.item
+      const b = bTopic.item
       const aDays = daysUntil(a.event_date)
       const bDays = daysUntil(b.event_date)
       const aUrgency = urgencyRank(aDays)
@@ -277,12 +274,12 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
       const bCreatedAt = b.created_at ? parseISO(b.created_at).getTime() : Number.POSITIVE_INFINITY
       return aCreatedAt - bCreatedAt
     })
-  }, [prepItems])
+  }, [attentionTopics])
 
   // Hides items whose "mark done" / "not relevant" undo window is still counting down.
-  const visiblePrepItems = useMemo(
-    () => prioritizedPrepItems.filter(item => !pendingRemovalIds.has(item.id)),
-    [prioritizedPrepItems, pendingRemovalIds],
+  const visibleAttentionTopics = useMemo(
+    () => prioritizedTopics.filter(topic => !topic.itemIds.every(id => pendingRemovalIds.has(id))),
+    [prioritizedTopics, pendingRemovalIds],
   )
 
   const weekStart = startOfWeek(now, { weekStartsOn: 0 })
@@ -354,23 +351,23 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
       ids.forEach((itemId) => next.add(itemId))
       return next
     })
-    setActionToast({ id: item.id, description: item.description, kind })
+    setActionToast({ id: item.id, ids, description: item.description, kind })
     setRevealedItemId(current => (current === item.id ? null : current))
     const timer = setTimeout(() => commitRemoval(item.id, kind, ids), UNDO_WINDOW_MS)
-    pendingRemovalTimers.current.set(item.id, { timer, kind })
+    pendingRemovalTimers.current.set(item.id, { timer, kind, ids })
   }
 
   function handleDone(item: PrepItem, ids: string[] = [item.id]) {
     scheduleRemoval(item, 'done', ids)
   }
 
-  function undoRemoval(id: string) {
+  function undoRemoval(id: string, ids: string[]) {
     const existing = pendingRemovalTimers.current.get(id)
     if (existing) clearTimeout(existing.timer)
     pendingRemovalTimers.current.delete(id)
     setPendingRemovalIds(prev => {
       const next = new Set(prev)
-      next.delete(id)
+      ids.forEach((itemId) => next.delete(itemId))
       return next
     })
     setActionToast(null)
@@ -456,19 +453,24 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
             </Link>
           )}
 
-          {prepItems.length === 0 ? (
+          {attentionTopics.length === 0 ? (
             <EmptyState className="mt-3" title="All clear" description="No urgent prep actions right now." />
           ) : (
             <div className="mt-3">
+              {attentionTopics.some((topic) => topic.items.length > 1) && (
+                <p className="mb-2 rounded-card bg-casa-success-soft px-3 py-2 text-caption font-semibold text-casa-success">
+                  Casa grouped {attentionTopics.reduce((count, topic) => count + topic.items.length, 0)} signals into {attentionTopics.length} topics
+                </p>
+              )}
               {actionError && (
                 <p role="alert" className="text-caption text-casa-error mb-2">
                   {actionError} The action is still active.
                 </p>
               )}
               <div className="space-y-2">
-                {visiblePrepItems.slice(0, NEEDS_YOU_HOME_RAIL_LIMIT).map(item => {
-                  const cluster = prepClusterByItemId.get(item.id)
-                  const clusterIds = cluster?.itemIds ?? [item.id]
+                {visibleAttentionTopics.slice(0, NEEDS_YOU_HOME_RAIL_LIMIT).map(topic => {
+                  const item = topic.item
+                  const topicPrepItemIds = topic.prepItemIds
                   const accent = needsYouAccent(item)
                   const priority = priorityVisual(item.priority)
                   const isRevealed = revealedItemId === item.id
@@ -546,8 +548,15 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                               </p>
                             </Button>
                           )}
-                          {cluster && cluster.relatedCount > 0 && (
-                            <p className="mt-1 text-caption text-casa-muted">{cluster.relatedCount + 1} related items merged</p>
+                          {topic.sourceTypes.length > 1 && (
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                              {topic.sourceTypes.map((sourceType) => (
+                                <Chip key={sourceType} size="sm" tone="neutral">
+                                  {sourceBadge({ source_type: sourceType }).label}
+                                </Chip>
+                              ))}
+                              <span className="text-caption font-semibold text-casa-muted">{topic.items.length} signals</span>
+                            </div>
                           )}
                           <div className="mt-1.5 flex items-center gap-1.5">
                             <span
@@ -591,7 +600,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                                   assignee={assignee}
                                   familyMembers={familyMembers}
                                   onAssign={(familyMemberId) => {
-                                    void Promise.all(clusterIds.map((id) => setPrepItemAssignee(id, assignee?.id === familyMemberId ? null : familyMemberId)))
+                                    void Promise.all(topicPrepItemIds.map((id) => setPrepItemAssignee(id, assignee?.id === familyMemberId ? null : familyMemberId)))
                                   }}
                                 />
                               </div>
@@ -620,7 +629,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                           )}
                           {!readOnly && (
                             <IconButton
-                              onClick={() => handleDone(item, clusterIds)}
+                              onClick={() => handleDone(item, topicPrepItemIds)}
                               variant="strong"
                               size="sm"
                               icon={<Check size={16} strokeWidth={2.5} />}
@@ -672,13 +681,14 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                           <div className="flex items-center gap-2 pt-2.5 pl-[2.375rem]">
                             <SnoozeMenu
                             onSnooze={(duration) => {
-                              void Promise.all(clusterIds.map((id) => snoozePrepItem(id, duration, item.event_date)))
+                              const targetDate = item.due_by ?? item.event_date
+                              void Promise.all(topicPrepItemIds.map((id) => snoozePrepItem(id, duration, targetDate)))
                               setRevealedItemId(null)
                             }}
-                            eventDateIso={item.event_date}
+                            dueDateIso={item.due_by ?? item.event_date}
                             />
                             <Button
-                            onClick={() => handleDownvote(item, clusterIds)}
+                            onClick={() => handleDownvote(item, topicPrepItemIds)}
                             variant="secondary"
                             size="sm"
                               leadingIcon={<ThumbsDown size={13} strokeWidth={2.1} />}
@@ -695,12 +705,12 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                 })}
               </div>
 
-              {visiblePrepItems.length > NEEDS_YOU_HOME_RAIL_LIMIT && (
+              {visibleAttentionTopics.length > NEEDS_YOU_HOME_RAIL_LIMIT && (
                 <Link
                   to="/actions"
                   className="mt-2 flex items-center justify-center gap-1 rounded-card border border-casa-border py-2 text-caption font-semibold text-casa-muted hover:bg-casa-bg hover:text-casa-text transition-colors"
                 >
-                  More ({visiblePrepItems.length - NEEDS_YOU_HOME_RAIL_LIMIT}) <ChevronRight size={12} />
+                  More ({visibleAttentionTopics.length - NEEDS_YOU_HOME_RAIL_LIMIT}) <ChevronRight size={12} />
                 </Link>
               )}
 
@@ -719,7 +729,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                       <p className="text-body-sm font-semibold text-white/70 mt-1">scanned</p>
                     </div>
                     <div className="rounded-3xl border border-casa-gold/65 bg-white/12 px-3 py-4 text-center">
-                      <p className="text-display-sm leading-none font-semibold text-casa-gold">{prepItems.length}</p>
+                      <p className="text-display-sm leading-none font-semibold text-casa-gold">{attentionTopics.length}</p>
                       <p className="text-body-sm font-semibold text-white/80 mt-1">need you</p>
                     </div>
                     <div className="rounded-3xl bg-white/10 px-3 py-4 text-center">
@@ -749,7 +759,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
         tone={actionToast?.kind === 'downvote' ? 'info' : 'success'}
         onClose={() => setActionToast(null)}
         actionLabel="Undo"
-        onAction={() => { if (actionToast) undoRemoval(actionToast.id) }}
+        onAction={() => { if (actionToast) undoRemoval(actionToast.id, actionToast.ids) }}
       />
     </SecondaryRail>
   )

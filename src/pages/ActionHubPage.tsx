@@ -31,10 +31,9 @@ import PrepItemDetailPanel from '../components/home/PrepItemDetailPanel'
 import PrepItemAssigneeChip from '../components/shared/PrepItemAssigneeChip'
 import SnoozeMenu from '../components/shared/SnoozeMenu'
 import { useLiveClock } from '../hooks/useLiveClock'
-import ConflictAlertsSection from '../components/shared/ConflictAlertsSection'
 import { usePageVisibility } from '../hooks/usePageVisibility'
-import { clusterPrepItems } from '../utils/prepItemClusters'
-import { Button, Chip, IconButton } from '../components/ui'
+import { buildAttentionTopics } from '../utils/attentionTopics'
+import { Button, Chip, IconButton, SegmentedControl } from '../components/ui'
 
 function dueBadge(item: PrepItem, now: Date): { label: string; tone: string } | null {
   if (!item.due_by) return null
@@ -94,7 +93,7 @@ export default function ActionHubPage() {
   const complete = useCompletePrepItem()
   const snooze = useSnoozePrepItem()
   const downvote = useDownvotePrepItem()
-  const { notifications, unreadCount, markRead, clearAll } = useNotifications()
+  const { notifications, markRead, clearAll } = useNotifications()
   const { data: conflicts = [] } = useWeekConflicts()
   const resolveConflict = useResolveConflict()
   const [revealedItemId, setRevealedItemId] = useState<string | null>(null)
@@ -103,6 +102,7 @@ export default function ActionHubPage() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<PrepFilterKey>('all')
   const [sourceFilter, setSourceFilter] = useState<PrepSourceKey>('all')
+  const [activePanel, setActivePanel] = useState<'attention' | 'activity'>('attention')
 
   // Merged Needs You feed: prep items plus unresolved conflicts and unseen directory
   // suggestions, normalized into the same PrepItem shape (Phase 1 of feed unification).
@@ -134,16 +134,10 @@ export default function ActionHubPage() {
     return prepItems.filter(item => typeMatch(item) && sourceMatch(item))
   }, [prepItems, typeFilter, sourceFilter])
 
-  const clusteredPrepItems = useMemo(() => clusterPrepItems(filteredPrepItems), [filteredPrepItems])
+  const attentionTopics = useMemo(() => buildAttentionTopics(filteredPrepItems), [filteredPrepItems])
 
-  // Conflicts/policy_conflict rows reference a decision that still needs to be made elsewhere
-  // (Heads Up section) — everything else in `notifications` is inherently FYI/audit history.
-  const needsAttentionNotifications = useMemo(
-    () => notifications.filter(n => !n.read && (n.type === 'conflict' || n.type === 'policy_conflict')),
-    [notifications],
-  )
   const activityLogNotifications = useMemo(
-    () => notifications.filter(n => !(!n.read && (n.type === 'conflict' || n.type === 'policy_conflict'))),
+    () => notifications.filter(n => !['conflict', 'policy_conflict', 'policy_prep', 'directory_suggestions'].includes(n.type)),
     [notifications],
   )
 
@@ -161,16 +155,21 @@ export default function ActionHubPage() {
       `${dueSoon} due soon`,
       `${billingQueue} billing items`,
       `${conflicts.length} heads up`,
-      `${unreadCount} unread activity`,
+      `${attentionTopics.length} need you`,
     ].filter((s): s is string => s !== null)
-  }, [prepItems, unreadCount, now, conflicts.length])
+  }, [attentionTopics.length, prepItems, now, conflicts.length])
 
-  async function run(action: 'complete' | 'snooze' | 'downvote', id: string, duration?: SnoozeDuration) {
+  async function run(
+    action: 'complete' | 'snooze' | 'downvote',
+    id: string,
+    duration?: SnoozeDuration,
+    targetDateIso?: string | null,
+  ) {
     setActingId(id)
     setActionError(null)
     try {
       if (action === 'complete') await complete(id)
-      if (action === 'snooze') await snooze(id, duration)
+      if (action === 'snooze') await snooze(id, duration, targetDateIso)
       if (action === 'downvote') await downvote(id)
       if (selected?.id === id) setSelected(null)
     } catch (error) {
@@ -197,8 +196,8 @@ export default function ActionHubPage() {
       </Link>
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="rounded-[1.2rem] border border-casa-border bg-casa-surface px-4 py-3.5 shadow-card flex-1 min-w-[320px]">
-          <h1 className="font-display text-display-sm text-casa-navy">Action &amp; Activity Hub</h1>
-          <p className="text-body-sm text-casa-muted mt-1">Process prep quickly, keep context visible, and stay ahead of what automation is doing.</p>
+          <h1 className="font-display text-display-sm text-casa-navy">Action Center</h1>
+          <p className="text-body-sm text-casa-muted mt-1">Decisions are separate from Casa&apos;s background activity.</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {suggestions.map((text) => (
               <span key={text} className="text-caption font-semibold rounded-full bg-casa-gold/15 text-casa-navy px-2 py-0.5 border border-casa-gold/25">{text}</span>
@@ -228,12 +227,24 @@ export default function ActionHubPage() {
         </Link>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 xl:grid-cols-2 gap-5">
+      <SegmentedControl
+        aria-label="Action Center section"
+        value={activePanel}
+        onChange={(value) => setActivePanel(value as 'attention' | 'activity')}
+        options={[
+          { value: 'attention', label: `Needs you · ${attentionTopics.length}` },
+          { value: 'activity', label: `Routine activity · ${activityLogNotifications.length}` },
+        ]}
+        className="mt-5"
+      />
+
+      <div className="mt-5 grid grid-cols-1 gap-5">
+        {activePanel === 'attention' && (
         <section id="recent-activity" className="rounded-[1.2rem] border border-casa-border bg-casa-surface p-4 scroll-mt-6 shadow-card">
           <div className="flex items-center justify-between mb-3.5">
             <h2 className="font-display text-heading text-casa-navy flex items-center gap-2"><ClipboardList size={16} className="text-casa-gold" /> Prep &amp; Action</h2>
             <span className="text-caption font-semibold rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">
-              {typeFilter === 'all' && sourceFilter === 'all' ? clusteredPrepItems.length : `${clusteredPrepItems.length}/${prepItems.length}`}
+              {typeFilter === 'all' && sourceFilter === 'all' ? attentionTopics.length : `${attentionTopics.length}/${prepItems.length}`}
             </span>
           </div>
           <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter by type">
@@ -288,10 +299,10 @@ export default function ActionHubPage() {
             </p>
           )}
           <div className="space-y-2.5 pr-1 xl:max-h-[70vh] xl:overflow-y-auto">
-            {clusteredPrepItems.map((cluster) => {
-              const item = cluster.item
-              const clusterIds = cluster.itemIds
-              const clusterCount = clusterIds.length
+            {attentionTopics.map((topic) => {
+              const item = topic.item
+              const topicPrepItemIds = topic.prepItemIds
+              const signalCount = topic.items.length
               const src = sourceBadge(item)
               const SourceIcon = src.icon
               const accent = needsYouAccent(item)
@@ -341,8 +352,15 @@ export default function ActionHubPage() {
                           </span>
                         )}
                       </div>
-                      {clusterCount > 1 && (
-                        <p className="mt-1 text-caption text-casa-muted">{clusterCount} related items merged</p>
+                      {signalCount > 1 && (
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          {topic.sourceTypes.map((sourceType) => (
+                            <Chip key={sourceType} size="sm" tone="neutral">
+                              {sourceBadge({ source_type: sourceType }).label}
+                            </Chip>
+                          ))}
+                          <span className="text-caption font-semibold text-casa-muted">{signalCount} signals</span>
+                        </div>
                       )}
                       <div className="mt-1.5 flex items-center gap-2">
                         {readOnlyMeta ? (
@@ -399,7 +417,7 @@ export default function ActionHubPage() {
                         variant="ghost"
                         onClick={() => {
                           void (async () => {
-                            for (const id of clusterIds) await run('complete', id)
+                            for (const id of topicPrepItemIds) await run('complete', id)
                           })()
                         }}
                         className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition"
@@ -410,9 +428,10 @@ export default function ActionHubPage() {
                       <SnoozeMenu
                         onSnooze={(duration) => {
                           void (async () => {
-                            for (const id of clusterIds) await run('snooze', id, duration)
+                            for (const id of topicPrepItemIds) await run('snooze', id, duration, item.due_by ?? item.event_date)
                           })()
                         }}
+                        dueDateIso={item.due_by ?? item.event_date}
                         renderTrigger={({ onClick }) => (
                           <Button variant="ghost" onClick={onClick} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors" title="Snooze">
                             Snooze
@@ -428,14 +447,16 @@ export default function ActionHubPage() {
                           <CalendarPlus size={14} /> Event
                         </Button>
                       )}
-                      <Button variant="ghost" onClick={() => launchCreate(item, 'reminder')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create reminder draft">
-                        <BellPlus size={14} /> Reminder
-                      </Button>
+                      {item.source_type !== 'reminder_manual' && item.source_type !== 'reminder_missed' && (
+                        <Button variant="ghost" onClick={() => launchCreate(item, 'reminder')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create reminder draft">
+                          <BellPlus size={14} /> Reminder
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         onClick={() => {
                           void (async () => {
-                            for (const id of clusterIds) await run('downvote', id)
+                            for (const id of topicPrepItemIds) await run('downvote', id)
                           })()
                         }}
                         className="ml-auto size-control rounded-button border border-casa-border bg-white text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold"
@@ -510,57 +531,23 @@ export default function ActionHubPage() {
             )}
           </div>
         </section>
+        )}
 
+        {activePanel === 'activity' && (
         <section className="rounded-[1.2rem] border border-casa-border bg-casa-surface p-4 shadow-card">
           <div className="flex items-center justify-between mb-3.5">
-            <h2 className="font-display text-heading text-casa-navy flex items-center gap-2"><Bell size={16} className="text-casa-gold" /> Recent Activity</h2>
+            <div>
+              <h2 className="font-display text-heading text-casa-navy flex items-center gap-2"><Bell size={16} className="text-casa-gold" /> Routine activity</h2>
+              <p className="mt-1 text-caption text-casa-muted">Audit history only. It does not affect the Needs You count.</p>
+            </div>
             <div className="flex items-center gap-2">
-              <span className="text-caption font-semibold rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">{unreadCount}</span>
               {activityLogNotifications.length > 0 && (
-                <Button variant="ghost" onClick={() => clearAll.mutate()} className="h-8 px-2.5 rounded-button border border-casa-border text-caption text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors">Clear all</Button>
+                <Button variant="ghost" onClick={() => clearAll.mutate()} className="h-8 px-2.5 rounded-button border border-casa-border text-caption text-casa-muted hover:text-casa-error hover:bg-casa-error/5 transition-colors">Clear history</Button>
               )}
             </div>
           </div>
           <div className="space-y-4 pr-1 xl:max-h-[70vh] xl:overflow-y-auto">
-            {needsAttentionNotifications.length > 0 && (
-              <div>
-                <p className="text-caption font-semibold text-casa-error mb-2 flex items-center gap-1.5">
-                  <AlertTriangle size={12} /> Needs Your Attention
-                </p>
-                <div className="space-y-2.5">
-                  {needsAttentionNotifications.map((n) => {
-                    const badge = eventDateBadge(n, now)
-                    return (
-                      <div key={n.id} className="border border-casa-error/45 bg-casa-error/5 rounded-[1rem] p-3.5">
-                        <p className="text-body-sm leading-relaxed text-casa-text font-semibold">{n.body ?? n.title}</p>
-                        <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                          <span className="text-body-sm text-casa-muted">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}</span>
-                          <span className="text-body-sm text-casa-muted">•</span>
-                          <span className="text-body-sm font-semibold px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border text-casa-muted leading-none">{humanizeNotificationSource(n.source)}</span>
-                          {badge && (
-                            <span className={cn('text-body-sm font-semibold px-1.5 py-0.5 rounded-full border leading-none', badge.tone)}>
-                              {badge.label}
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-2 flex items-center gap-3">
-                          <Link to="#heads-up" className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold">
-                            View in Heads Up
-                          </Link>
-                          <Button variant="ghost" onClick={() => markRead.mutate(n.id)} className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold">
-                            Acknowledge
-                          </Button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
             <div>
-              {needsAttentionNotifications.length > 0 && (
-                <p className="text-caption font-semibold text-casa-muted mb-2">Activity Log</p>
-              )}
               <div className="space-y-2.5">
                 {activityLogNotifications.map((n) => {
                   const badge = eventDateBadge(n, now)
@@ -577,11 +564,6 @@ export default function ActionHubPage() {
                         </span>
                       )}
                     </div>
-                    {!n.read && (
-                      <Button variant="ghost" onClick={() => markRead.mutate(n.id)} className="mt-2 text-body-sm font-semibold text-casa-navy hover:text-casa-gold">
-                        Mark read
-                      </Button>
-                    )}
                   </div>
                   )
                 })}
@@ -590,24 +572,8 @@ export default function ActionHubPage() {
             </div>
           </div>
         </section>
-      </div>
-
-      <section id="heads-up" className="mt-5 rounded-[1.2rem] border border-casa-border bg-casa-surface p-4 shadow-card scroll-mt-6">
-        <div className="flex items-center justify-between mb-3.5">
-          <h2 className="font-display text-heading text-casa-navy flex items-center gap-2">
-            <AlertTriangle size={16} className="text-amber-500" />
-            Heads Up
-          </h2>
-          <span className="text-caption font-semibold rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">
-            {conflicts.length}
-          </span>
-        </div>
-        {conflicts.length > 0 ? (
-          <ConflictAlertsSection />
-        ) : (
-          <p className="text-body-sm text-casa-muted">No active heads up right now.</p>
         )}
-      </section>
+      </div>
 
       <PrepItemDetailPanel item={selected} onClose={() => setSelected(null)} />
     </div>

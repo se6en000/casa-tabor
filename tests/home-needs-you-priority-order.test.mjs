@@ -9,10 +9,9 @@ test('Needs you cards sort by urgency before lower-priority future items', () =>
   assert.match(source, /if \(days <= 0\) return 0/)
   assert.match(source, /if \(days <= 1\) return 1/)
   assert.match(source, /if \(days <= 4\) return 2/)
-  assert.match(source, /const prioritizedPrepItems = useMemo\(/)
+  assert.match(source, /const prioritizedTopics = useMemo\(/)
   assert.match(source, /if \(aUrgency !== bUrgency\) return aUrgency - bUrgency/)
-  // Rendered list is `visiblePrepItems` (prioritizedPrepItems minus items in their post-tap
-  // "mark done" undo window), sourced directly from the same urgency-sorted array.
-  assert.match(source, /const visiblePrepItems = useMemo\(\s*\(\) => prioritizedPrepItems\.filter/)
-  assert.match(source, /visiblePrepItems\.slice\(0, NEEDS_YOU_HOME_RAIL_LIMIT\)\.map/)
+  // Rendered topics preserve the same urgency order after topic-wide pending removals.
+  assert.match(source, /const visibleAttentionTopics = useMemo\(\s*\(\) => prioritizedTopics\.filter/)
+  assert.match(source, /visibleAttentionTopics\.slice\(0, NEEDS_YOU_HOME_RAIL_LIMIT\)\.map/)
 })

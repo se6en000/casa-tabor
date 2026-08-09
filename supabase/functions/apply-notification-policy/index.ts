@@ -172,12 +172,10 @@ Deno.serve(async (req) => {
   // Conflicts: notify immediately; SMS based on policy.
   for (const c of conflicts) {
     const eventTitle = c.event_a_title ?? 'Upcoming event'
-    const dedupeFrom = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString()
+    const dedupeKey = `policy_conflict:${c.id}`
     const { data: existing } = await sb.from('notifications')
       .select('id')
-      .eq('type', 'policy_conflict')
-      .eq('event_id', c.event_a_id)
-      .gte('created_at', dedupeFrom)
+      .eq('dedupe_key', dedupeKey)
       .limit(1)
     if ((existing?.length ?? 0) > 0) continue
 
@@ -187,6 +185,7 @@ Deno.serve(async (req) => {
       body: c.description,
       event_id: c.event_a_id,
       source: 'policy',
+      dedupe_key: dedupeKey,
     })
     createdNotifications++
     await maybeSendPush(`⚠️ Conflict: ${eventTitle}`, c.description, `policy-conflict-${c.id}`, '/', c.event_a_id)

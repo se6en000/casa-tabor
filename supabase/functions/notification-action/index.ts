@@ -15,8 +15,14 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    const { action, event_id, prep_item_id } = await req.json() as { action?: string; event_id?: string; prep_item_id?: string }
+    const { action, event_id, prep_item_id, snooze_minutes } = await req.json() as {
+      action?: string
+      event_id?: string
+      prep_item_id?: string
+      snooze_minutes?: number
+    }
     if (!action || (!event_id && !prep_item_id)) return json({ ok: false, error: 'Missing action or target id' }, 400)
+    const snoozeMinutes = [15, 60, 1440].includes(snooze_minutes ?? 15) ? (snooze_minutes ?? 15) : 15
 
     if (prep_item_id) {
       if (action === 'done' || action === 'complete') {
@@ -56,12 +62,22 @@ Deno.serve(async (req) => {
         return json({ ok: true, action: 'thumbs_down', prep_item_id, resolution })
       }
 
+      if (action === 'snooze') {
+        const snoozedUntil = new Date(Date.now() + snoozeMinutes * 60 * 1000).toISOString()
+        const { data: snoozeResult, error: snoozeError } = await sb.rpc('snooze_prep_item', {
+          p_prep_item_id: prep_item_id,
+          p_snoozed_until: snoozedUntil,
+        })
+        if (snoozeError) return json({ ok: false, error: snoozeError.message }, 500)
+        return json({ ok: true, action: 'snooze', prep_item_id, snoozed_until: snoozedUntil, result: snoozeResult })
+      }
+
       return json({ ok: false, error: 'Unsupported action for prep item' }, 400)
     }
 
     const { data: eventRow } = await sb
       .from('events')
-      .select('id, title, event_type')
+      .select('id, title, event_type, start_time, end_time')
       .eq('id', event_id)
       .single()
 
@@ -85,28 +101,30 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'snooze') {
-      const now = new Date()
-      const start = new Date(now.getTime() + 10 * 60 * 1000)
-      const end = new Date(now.getTime() + 15 * 60 * 1000)
-      const title = eventRow?.title ? `Reminder: ${eventRow.title}` : 'Reminder'
-
-      const { error: insertErr } = await sb.from('events').insert({
-        title,
-        start_time: start.toISOString(),
-        end_time: end.toISOString(),
-        event_type: 'reminder',
-      })
-
-      if (insertErr) return json({ ok: false, error: insertErr.message }, 500)
+      if (eventRow?.event_type !== 'reminder') {
+        return json({ ok: false, error: 'Only reminder notifications can be snoozed.' }, 400)
+      }
+      const previousStart = Date.parse(eventRow.start_time)
+      const previousEnd = Date.parse(eventRow.end_time)
+      const durationMs = Number.isFinite(previousStart) && Number.isFinite(previousEnd)
+        ? Math.max(5 * 60 * 1000, previousEnd - previousStart)
+        : 5 * 60 * 1000
+      const start = new Date(Date.now() + snoozeMinutes * 60 * 1000)
+      const end = new Date(start.getTime() + durationMs)
+      const { error: updateError } = await sb
+        .from('events')
+        .update({ start_time: start.toISOString(), end_time: end.toISOString() })
+        .eq('id', event_id)
+      if (updateError) return json({ ok: false, error: updateError.message }, 500)
 
       await sb.from('notifications').insert({
         type: 'push_action_snooze',
-        title: 'Snoozed 10 minutes',
-        body: title,
+        title: `Snoozed ${snoozeMinutes} minutes`,
+        body: eventRow.title,
         event_id,
         source: 'system',
       })
-      return json({ ok: true, action: 'snooze' })
+      return json({ ok: true, action: 'snooze', event_id, start_time: start.toISOString() })
     }
 
     if (action === 'thumbs_down' || action === 'downvote') {

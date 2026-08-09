@@ -6,9 +6,9 @@
  * snooze surface the same set of choices and the same underlying math.
  */
 
-export type SnoozeDuration = '15m' | '1h' | '3h' | 'tomorrow' | '2d-before'
+export type SnoozeDuration = '15m' | '1h' | '3h' | '1d' | 'tomorrow' | '2d-before'
 
-export const SNOOZE_DURATIONS: SnoozeDuration[] = ['15m', '1h', '3h', 'tomorrow']
+export const SNOOZE_DURATIONS: SnoozeDuration[] = ['15m', '1h', '1d']
 
 const MINUTE_MS = 60 * 1000
 const HOUR_MS = 60 * MINUTE_MS
@@ -22,6 +22,8 @@ export function computeSnoozeUntil(duration: SnoozeDuration, now: Date, eventDat
       return new Date(now.getTime() + HOUR_MS)
     case '3h':
       return new Date(now.getTime() + 3 * HOUR_MS)
+    case '1d':
+      return new Date(now.getTime() + 24 * HOUR_MS)
     case 'tomorrow': {
       const next = new Date(now)
       next.setDate(next.getDate() + 1)
@@ -40,8 +42,9 @@ const LABELS: Record<SnoozeDuration, string> = {
   '15m': '15 minutes',
   '1h': '1 hour',
   '3h': '3 hours',
+  '1d': '1 day',
   tomorrow: 'Tomorrow morning',
-  '2d-before': '2 days before event',
+  '2d-before': '2 days before due date',
 }
 
 export function snoozeDurationLabel(duration: SnoozeDuration): string {

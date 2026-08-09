@@ -101,10 +101,11 @@ test('clearAll excludes unread conflict/policy_conflict rows from the bulk delet
   assert.match(useNotifications, /\.or\('read\.eq\.true,type\.not\.in\.\(conflict,policy_conflict\)'\)/)
 })
 
-test('ActionHubPage splits Recent Activity into Needs Your Attention and Activity Log', () => {
-  assert.match(actionHubPage, /needsAttentionNotifications/)
+test('ActionHubPage separates actionable topics from routine activity', () => {
+  assert.match(actionHubPage, /buildAttentionTopics\(filteredPrepItems\)/)
   assert.match(actionHubPage, /activityLogNotifications/)
-  assert.match(actionHubPage, /Needs Your Attention/)
-  assert.match(actionHubPage, /Activity Log/)
-  assert.match(actionHubPage, /Acknowledge/)
+  assert.match(actionHubPage, /Needs you · \$\{attentionTopics\.length\}/)
+  assert.match(actionHubPage, /Routine activity · \$\{activityLogNotifications\.length\}/)
+  assert.doesNotMatch(actionHubPage, /Needs Your Attention/)
+  assert.doesNotMatch(actionHubPage, /Heads Up/)
 })

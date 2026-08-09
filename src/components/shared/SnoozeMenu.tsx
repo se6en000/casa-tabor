@@ -29,6 +29,7 @@ export default function SnoozeMenu({
   triggerClassName,
   renderTrigger,
   menuPlacement = 'below',
+  dueDateIso,
   eventDateIso,
 }: {
   onSnooze: (duration: SnoozeDuration) => void
@@ -41,6 +42,7 @@ export default function SnoozeMenu({
   /** 'above' for triggers anchored to a bottom footer, so the menu opens upward
    * instead of getting clipped by the sheet's edge. */
   menuPlacement?: 'below' | 'above'
+  dueDateIso?: string | null
   eventDateIso?: string | null
 }) {
   const [open, setOpen] = useState(false)
@@ -88,8 +90,9 @@ export default function SnoozeMenu({
   }, [open, menuPlacement])
 
   const toggle = (evt: React.MouseEvent) => { evt.stopPropagation(); setOpen((prev) => !prev) }
-  const showEventAlignedSnooze = Boolean(
-    eventDateIso && new Date(eventDateIso).getTime() - Date.now() >= 48 * 60 * 60 * 1000,
+  const targetDateIso = dueDateIso ?? eventDateIso
+  const showDueDateAlignedSnooze = Boolean(
+    targetDateIso && new Date(targetDateIso).getTime() - Date.now() >= 48 * 60 * 60 * 1000,
   )
 
   return (
@@ -139,7 +142,7 @@ export default function SnoozeMenu({
                   {snoozeDurationLabel(duration)}
                 </Button>
               ))}
-              {showEventAlignedSnooze && (
+              {showDueDateAlignedSnooze && (
                 <Button
                   type="button"
                   role="menuitem"
