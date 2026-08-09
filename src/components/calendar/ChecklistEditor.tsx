@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { cn } from '../../utils/cn'
 import { Button, Checkbox, IconButton, Input } from '../ui'
 import type { EventChecklistItem } from '../../types'
+import { publishEventAggregatePatch } from '../../lib/eventAggregateCache'
 
 /**
  * Shared checklist UI backed by the `event_checklist_items` table — the
@@ -34,6 +35,10 @@ export default function ChecklistEditor({
     ...items,
     ...addedItems.filter((item) => !itemIds.has(item.id)),
   ].filter((item) => !removedIds[item.id])
+  const aggregateItems = () => visibleItems.map((item) => ({
+    ...item,
+    checked: localChecked[item.id] ?? item.checked,
+  }))
   const invalidateChecklistQueries = async () => {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['events'] }),
@@ -44,11 +49,17 @@ export default function ChecklistEditor({
   const toggle = async (item: EventChecklistItem) => {
     const previous = localChecked[item.id] ?? item.checked
     const newVal = !previous
+    const previousItems = aggregateItems()
+    const nextItems = previousItems.map((entry) => (
+      entry.id === item.id ? { ...entry, checked: newVal } : entry
+    ))
     setSaveError(null)
     setLocalChecked((prev) => ({ ...prev, [item.id]: newVal }))
+    publishEventAggregatePatch(qc, eventId, { checklist: nextItems })
     const { error } = await supabase.from('event_checklist_items').update({ checked: newVal }).eq('id', item.id)
     if (error) {
       setLocalChecked((prev) => ({ ...prev, [item.id]: previous }))
+      publishEventAggregatePatch(qc, eventId, { checklist: previousItems })
       setSaveError(`Could not update "${item.label}". ${error.message}`)
       return
     }
@@ -56,8 +67,12 @@ export default function ChecklistEditor({
   }
 
   const remove = async (item: EventChecklistItem) => {
+    const previousItems = aggregateItems()
     setSaveError(null)
     setRemovedIds((prev) => ({ ...prev, [item.id]: true }))
+    publishEventAggregatePatch(qc, eventId, {
+      checklist: previousItems.filter((entry) => entry.id !== item.id),
+    })
     const { error } = await supabase.from('event_checklist_items').delete().eq('id', item.id)
     if (error) {
       setRemovedIds((prev) => {
@@ -65,6 +80,7 @@ export default function ChecklistEditor({
         delete next[item.id]
         return next
       })
+      publishEventAggregatePatch(qc, eventId, { checklist: previousItems })
       setSaveError(`Could not remove "${item.label}". ${error.message}`)
       return
     }
@@ -87,7 +103,11 @@ export default function ChecklistEditor({
       return
     }
     setNewLabel('')
-    setAddedItems((prev) => [...prev, data as EventChecklistItem])
+    const addedItem = data as EventChecklistItem
+    setAddedItems((prev) => [...prev, addedItem])
+    publishEventAggregatePatch(qc, eventId, {
+      checklist: [...aggregateItems(), addedItem],
+    })
     await invalidateChecklistQueries()
   }
 

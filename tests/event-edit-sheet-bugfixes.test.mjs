@@ -74,9 +74,7 @@ test('date/time wheel commits schedule an autosave without requiring the Done bu
 })
 
 test('successful saves refresh the event caches immediately before the sheet closes', () => {
-  assert.match(source, /qc\.setQueriesData\(\{ queryKey: \['events'\] \},/)
-  assert.match(source, /qc\.setQueryData\(\['event-details', event\.id\]/)
-  assert.match(source, /casa:event-updated/)
-  assert.match(source, /casa:overrides-updated/)
+  assert.match(source, /publishEventAggregatePatch\(qc, event\.id, optimisticPatch\)/)
+  assert.match(source, /members: buildOptimisticMembers\(\)/)
   assert.match(source, /qc\.invalidateQueries\(\{ queryKey: \['event-transportation-plans'\] \}\)/)
 })

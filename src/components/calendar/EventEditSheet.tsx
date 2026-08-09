@@ -47,6 +47,7 @@ import {
   truncateRecurrenceLinesForFuture,
   type RecurringEditorContext,
 } from '../../lib/recurringEventEditor'
+import { publishEventAggregatePatch } from '../../lib/eventAggregateCache'
 
 const ALL_CATEGORIES = Object.keys(CATEGORY_LABEL) as string[]
 
@@ -905,6 +906,19 @@ function EventEditSheetContent({
       affected_occurrences: result.result?.affected_occurrences ?? 0,
       google_sync_status: result.result?.google_sync_status ?? 'not_enabled',
     })
+    publishEventAggregatePatch(qc, event.id, {
+      title: titleToSave,
+      start_time: startTime,
+      end_time: endTime,
+      all_day: isAllDay,
+      event_type: eventType,
+      location_name: normalizedLocation,
+      address: normalizedAddress,
+      lat,
+      lng,
+      members: buildOptimisticMembers(),
+      updated_at: new Date().toISOString(),
+    })
     await qc.invalidateQueries({ queryKey: ['events'] })
     await qc.refetchQueries({ queryKey: ['events'], type: 'active' })
     if (result.result?.series_revision) {
@@ -1155,27 +1169,10 @@ function EventEditSheetContent({
       address: normalizedAddress,
       lat: latForSave,
       lng: lngForSave,
+      members: buildOptimisticMembers(),
       updated_at: new Date().toISOString(),
     }
-    const patchEventRecord = (record: Record<string, unknown> | null | undefined) => (
-      record && record.id === event.id ? { ...record, ...optimisticPatch } : record
-    )
-    qc.setQueriesData({ queryKey: ['events'] }, (old: unknown) => {
-      if (Array.isArray(old)) return old.map((record) => patchEventRecord(record as Record<string, unknown>))
-      if (old && typeof old === 'object' && Array.isArray((old as { events?: unknown[] }).events)) {
-        return {
-          ...(old as Record<string, unknown>),
-          events: (old as { events: Record<string, unknown>[] }).events.map((record) => patchEventRecord(record)),
-        }
-      }
-      return old
-    })
-    qc.setQueryData(['event-details', event.id], (old: EventWithDetails | undefined) => {
-      if (!old) return old
-      return { ...old, ...optimisticPatch }
-    })
-    window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
-    window.dispatchEvent(new CustomEvent('casa:event-updated', { detail: { eventId: event.id, patch: optimisticPatch } }))
+    publishEventAggregatePatch(qc, event.id, optimisticPatch)
     void qc.invalidateQueries({ queryKey: ['events'] })
     void qc.invalidateQueries({ queryKey: ['event-details', event.id] })
     void qc.invalidateQueries({ queryKey: ['event-transportation-plans'] })
@@ -1227,6 +1224,21 @@ function EventEditSheetContent({
     await enrichmentSavePromise
     isDirtyRef.current = false
     onClose()
+  }
+
+  function buildOptimisticMembers(): EventWithDetails['members'] {
+    const nextMembers: EventWithDetails['members'] = []
+    for (const [familyMemberId, role] of Object.entries(memberRoles)) {
+      const existing = event.members.find((member) => member.family_member.id === familyMemberId)
+      const familyMember = existing?.family_member ?? allMembers.find((member) => member.id === familyMemberId)
+      if (!familyMember) continue
+      nextMembers.push({
+        id: existing?.id ?? `optimistic-${familyMemberId}`,
+        role,
+        family_member: familyMember,
+      })
+    }
+    return nextMembers
   }
 
   const requestDelete = useCallback(() => {

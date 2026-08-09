@@ -61,6 +61,7 @@ import {
   type RecurringQuickActionRequest,
   type RecurringQuickActionResult,
 } from '../../hooks/useRecurringQuickAction'
+import { publishEventAggregatePatch } from '../../lib/eventAggregateCache'
 
 // Calendar-specific aliases compose the shared theme contract without creating a parallel palette.
 const S = {
@@ -113,11 +114,6 @@ function useIsMobile() {
 }
 
 const stopTouch = (e: React.TouchEvent | React.PointerEvent) => e.stopPropagation()
-
-function broadcastEventChange(eventId: string, patch?: Partial<EventWithDetails>) {
-  window.dispatchEvent(new CustomEvent('casa:event-updated', { detail: { eventId, patch } }))
-  window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId } }))
-}
 
 function nextPlanOverride(event: EventWithDetails, transportationPlan: EventTransportationPlan | null) {
   return {
@@ -203,7 +199,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
     // Needs You, stacked calendar) reflects it right away instead of waiting on the
     // Supabase round trip below. On failure we roll this back and surface an error.
     setTransportationPlan(durablePlan)
-    broadcastEventChange(event.id, { plan_override: nextPlanOverride(event, durablePlan) })
+    publishEventAggregatePatch(queryClient, event.id, { plan_override: nextPlanOverride(event, durablePlan) })
 
     try {
       if (eventPlace && !transportationPlaceMatchesEvent(eventPlace, event)) {
@@ -219,12 +215,16 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
       if (error) throw error
     } catch (cause) {
       setTransportationPlan(previousPlan)
-      broadcastEventChange(event.id, { plan_override: nextPlanOverride(event, previousPlan) })
+      publishEventAggregatePatch(queryClient, event.id, { plan_override: nextPlanOverride(event, previousPlan) })
       const message = `Could not save this driving plan: ${cause instanceof Error ? cause.message : 'Unknown error'}`
       setOverrideSaveError(message)
       throw new Error(message)
     }
-    await queryClient.invalidateQueries({ queryKey: ['events'] })
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['events'] }),
+      queryClient.invalidateQueries({ queryKey: ['event-details', event.id] }),
+      queryClient.invalidateQueries({ queryKey: ['event-transportation-plans'] }),
+    ])
     return durablePlan
   }, [event, queryClient, transportationPlan])
 
@@ -270,12 +270,12 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
       // Optimistic: show the new driver/plan immediately; the recurring-scope write
       // happens in the background and rolls back on failure.
       setTransportationPlan(durablePlan)
-      broadcastEventChange(event.id, { plan_override: { ...event.plan_override, transportation_plan: durablePlan } as EventWithDetails['plan_override'] })
+      publishEventAggregatePatch(queryClient, event.id, { plan_override: nextPlanOverride(event, durablePlan) })
       try {
         await executeRecurringQuickActionScope(request, 'this')
       } catch (cause) {
         setTransportationPlan(previousPlan)
-        broadcastEventChange(event.id, { plan_override: { ...event.plan_override, transportation_plan: previousPlan } as EventWithDetails['plan_override'] })
+        publishEventAggregatePatch(queryClient, event.id, { plan_override: nextPlanOverride(event, previousPlan) })
         throw cause
       }
       if (eventPlace) queryClient.removeQueries({ queryKey: ['travel-eta'] })
@@ -297,7 +297,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
     if (result === 'cancelled') return result
     if (result === 'handled') {
       setTransportationPlan(durablePlan)
-      broadcastEventChange(event.id, { plan_override: { ...event.plan_override, transportation_plan: durablePlan } as EventWithDetails['plan_override'] })
+      publishEventAggregatePatch(queryClient, event.id, { plan_override: nextPlanOverride(event, durablePlan) })
       if (eventPlace) queryClient.removeQueries({ queryKey: ['travel-eta'] })
       return result
     }
@@ -375,7 +375,9 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
         // Broadcast immediately: localStorage already reflects the cleared state, so every
         // card/panel reading getPersistedPlanOverrides() can re-render now instead of waiting
         // on the Supabase round trip below (this was the source of the 1-2s chip-update lag).
-        window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+        publishEventAggregatePatch(queryClient, event.id, {
+          plan_override: nextPlanOverride(event, null),
+        })
         const { error } = await supabase
           .from('event_plan_overrides')
           .delete()
@@ -408,7 +410,21 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
       // Same optimistic-broadcast rule as above: fire the event the instant local state is
       // durable, then sync to Supabase in the background so cross-device consistency still
       // happens without blocking what the person in front of the screen sees.
-      window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+      publishEventAggregatePatch(queryClient, event.id, {
+        plan_override: {
+          ...(event.plan_override ?? {}),
+          event_id: event.id,
+          verified: verifiedOverride,
+          waits: waitsOverride,
+          driver_overrides: driverOverrides,
+          mode_override: modeOverride,
+          two_driver_confirmed: twoDriverConfirmed,
+          transportation_plan: transportationPlan,
+          location_signature: locationSignature(event),
+          location_projection_blocked: event.plan_override?.location_projection_blocked ?? false,
+          updated_at: new Date().toISOString(),
+        },
+      })
 
       const { error } = await supabase
         .from('event_plan_overrides')
@@ -427,7 +443,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
       }
     }
     void persist()
-  }, [event?.id, overridesHydratedEventId, verifiedOverride, waitsOverride, driverOverrides, modeOverride, twoDriverConfirmed, transportationPlan, overrideSaveRevision])
+  }, [event?.id, overridesHydratedEventId, verifiedOverride, waitsOverride, driverOverrides, modeOverride, twoDriverConfirmed, transportationPlan, overrideSaveRevision, queryClient])
 
 
   // Lock body scroll while panel is open so the calendar can't scroll behind it
@@ -722,6 +738,7 @@ function MemberEditor({
     // instead of waiting on the network round-trip + query refetch to complete.
     const nextMembers = members.filter((member) => member.id !== eventMemberId)
     onMembersOverride(nextMembers)
+    publishEventAggregatePatch(queryClient, event.id, { members: nextMembers })
     setSaving(eventMemberId)
     setMutationError(null)
     try {
@@ -734,6 +751,7 @@ function MemberEditor({
       const { result, nextPlan } = await saveAssignments(nextAssignments, nextNames)
       if (result === 'cancelled') {
         onMembersOverride(previousMembers)
+        publishEventAggregatePatch(queryClient, event.id, { members: previousMembers })
         return
       }
       if (result === 'legacy') {
@@ -750,6 +768,7 @@ function MemberEditor({
       onMembersOverride(null)
     } catch (cause) {
       onMembersOverride(previousMembers)
+      publishEventAggregatePatch(queryClient, event.id, { members: previousMembers })
       setMutationError(`Could not remove ${memberName}. ${cause instanceof Error ? cause.message : ''}`)
     } finally {
       setSaving(null)
@@ -768,6 +787,7 @@ function MemberEditor({
       { id: `optimistic-${familyMemberId}`, role: 'attendee', family_member: addedMember },
     ]
     onMembersOverride(nextMembers)
+    publishEventAggregatePatch(queryClient, event.id, { members: nextMembers })
     setSaving(familyMemberId)
     setMutationError(null)
     try {
@@ -781,6 +801,7 @@ function MemberEditor({
       const { result } = await saveAssignments(nextAssignments, nextNames)
       if (result === 'cancelled') {
         onMembersOverride(previousMembers)
+        publishEventAggregatePatch(queryClient, event.id, { members: previousMembers })
         return
       }
       if (result === 'legacy') {
@@ -796,6 +817,7 @@ function MemberEditor({
       onMembersOverride(null)
     } catch (cause) {
       onMembersOverride(previousMembers)
+      publishEventAggregatePatch(queryClient, event.id, { members: previousMembers })
       setMutationError(`Could not add ${addedMember?.name ?? 'that person'}. ${cause instanceof Error ? cause.message : ''}`)
     } finally {
       setSaving(null)

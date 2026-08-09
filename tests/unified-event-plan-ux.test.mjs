@@ -89,6 +89,7 @@ test('The Plan supports quick driver reassignment including external drivers and
 })
 
 test('transportation mutations separate quick one-off saves from scoped full-plan saves', () => {
+  const legacyOverrideUpsert = detail.slice(detail.lastIndexOf('driver_overrides: driverOverrides'), detail.lastIndexOf('driver_overrides: driverOverrides') + 500)
   assert.match(detail, /const persistQuickTransportationPlan = useCallback\(async/)
   assert.match(detail, /executeRecurringQuickActionScope\(request, 'this'\)/)
   assert.match(detail, /const persistFullTransportationPlan = useCallback\(async/)
@@ -96,7 +97,7 @@ test('transportation mutations separate quick one-off saves from scoped full-pla
   assert.match(detail, /transportation_plan: durablePlan/)
   assert.match(detail, /onQuickTransportationPlanChange=\{persistQuickTransportationPlan\}/)
   assert.match(detail, /onSaveTransportationPlan=\{persistFullTransportationPlan\}/)
-  assert.doesNotMatch(detail, /two_driver_confirmed: twoDriverConfirmed,\s+transportation_plan: transportationPlan,/)
+  assert.doesNotMatch(legacyOverrideUpsert, /transportation_plan: transportationPlan/)
   assert.match(transportation, /await onQuickChange\([\s\S]*nextPlan/)
   assert.match(transportation, /await onSave\(/)
   assert.match(transportation, /onSave\(null\)/)
