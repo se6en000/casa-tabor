@@ -32,6 +32,8 @@ import PrepItemAssigneeChip from '../components/shared/PrepItemAssigneeChip'
 import SnoozeMenu from '../components/shared/SnoozeMenu'
 import { useLiveClock } from '../hooks/useLiveClock'
 import ConflictAlertsSection from '../components/shared/ConflictAlertsSection'
+import { usePageVisibility } from '../hooks/usePageVisibility'
+import { clusterPrepItems } from '../utils/prepItemClusters'
 import { Button, Chip, IconButton } from '../components/ui'
 
 function dueBadge(item: PrepItem, now: Date): { label: string; tone: string } | null {
@@ -85,6 +87,7 @@ const PREP_SOURCE_FILTERS: { key: PrepSourceKey; label: string; match: (item: Pr
 ]
 
 export default function ActionHubPage() {
+  const isPageVisible = usePageVisibility()
   const now = useLiveClock(60_000)
   const { data: rawPrepItems = [] } = usePrepItems()
   const { data: familyMembers = [] } = useFamilyMembers()
@@ -122,7 +125,7 @@ export default function ActionHubPage() {
       return summarizeGmailHealth(status ?? [])
     },
     staleTime: 60_000,
-    refetchInterval: 60_000,
+    refetchInterval: isPageVisible ? 5 * 60_000 : false,
   })
 
   const filteredPrepItems = useMemo(() => {
@@ -130,6 +133,8 @@ export default function ActionHubPage() {
     const sourceMatch = PREP_SOURCE_FILTERS.find(f => f.key === sourceFilter)?.match ?? (() => true)
     return prepItems.filter(item => typeMatch(item) && sourceMatch(item))
   }, [prepItems, typeFilter, sourceFilter])
+
+  const clusteredPrepItems = useMemo(() => clusterPrepItems(filteredPrepItems), [filteredPrepItems])
 
   // Conflicts/policy_conflict rows reference a decision that still needs to be made elsewhere
   // (Heads Up section) — everything else in `notifications` is inherently FYI/audit history.
@@ -228,7 +233,7 @@ export default function ActionHubPage() {
           <div className="flex items-center justify-between mb-3.5">
             <h2 className="font-display text-heading text-casa-navy flex items-center gap-2"><ClipboardList size={16} className="text-casa-gold" /> Prep &amp; Action</h2>
             <span className="text-caption font-semibold rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">
-              {typeFilter === 'all' && sourceFilter === 'all' ? prepItems.length : `${filteredPrepItems.length}/${prepItems.length}`}
+              {typeFilter === 'all' && sourceFilter === 'all' ? clusteredPrepItems.length : `${clusteredPrepItems.length}/${prepItems.length}`}
             </span>
           </div>
           <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter by type">
@@ -283,7 +288,10 @@ export default function ActionHubPage() {
             </p>
           )}
           <div className="space-y-2.5 pr-1 xl:max-h-[70vh] xl:overflow-y-auto">
-            {filteredPrepItems.map((item) => {
+            {clusteredPrepItems.map((cluster) => {
+              const item = cluster.item
+              const clusterIds = cluster.itemIds
+              const clusterCount = clusterIds.length
               const src = sourceBadge(item)
               const SourceIcon = src.icon
               const accent = needsYouAccent(item)
@@ -333,6 +341,9 @@ export default function ActionHubPage() {
                           </span>
                         )}
                       </div>
+                      {clusterCount > 1 && (
+                        <p className="mt-1 text-caption text-casa-muted">{clusterCount} related items merged</p>
+                      )}
                       <div className="mt-1.5 flex items-center gap-2">
                         {readOnlyMeta ? (
                           <span role="img" aria-label={readOnlyMeta.label} title={readOnlyMeta.label} className="inline-flex shrink-0 text-casa-muted">
@@ -384,11 +395,24 @@ export default function ActionHubPage() {
                       full-word buttons to match this page's established denser style. */}
                   {!readOnly && (
                     <div className="mt-2.5 pt-2.5 border-t border-casa-border/70 flex items-center gap-1.5 flex-wrap">
-                      <Button variant="ghost" onClick={() => run('complete', item.id)} className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition" title="Done">
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          void (async () => {
+                            for (const id of clusterIds) await run('complete', id)
+                          })()
+                        }}
+                        className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition"
+                        title="Done"
+                      >
                         Done
                       </Button>
                       <SnoozeMenu
-                        onSnooze={(duration) => run('snooze', item.id, duration)}
+                        onSnooze={(duration) => {
+                          void (async () => {
+                            for (const id of clusterIds) await run('snooze', id, duration)
+                          })()
+                        }}
                         renderTrigger={({ onClick }) => (
                           <Button variant="ghost" onClick={onClick} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors" title="Snooze">
                             Snooze
@@ -407,7 +431,17 @@ export default function ActionHubPage() {
                       <Button variant="ghost" onClick={() => launchCreate(item, 'reminder')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create reminder draft">
                         <BellPlus size={14} /> Reminder
                       </Button>
-                      <Button variant="ghost" onClick={() => run('downvote', item.id)} className="ml-auto size-control rounded-button border border-casa-border bg-white text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold" title="Downvote" aria-label="Downvote">
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          void (async () => {
+                            for (const id of clusterIds) await run('downvote', id)
+                          })()
+                        }}
+                        className="ml-auto size-control rounded-button border border-casa-border bg-white text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold"
+                        title="Downvote"
+                        aria-label="Downvote"
+                      >
                         <ThumbsDown size={15} />
                       </Button>
                     </div>

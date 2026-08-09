@@ -12,6 +12,7 @@ import { usePrepItems, useCompletePrepItem, useSnoozePrepItem, useDownvotePrepIt
 import { useLiveClock } from '../../hooks/useLiveClock'
 import { getPrepItemDisplayDescription } from '../../utils/reminderLateness'
 import type { PrepItem } from '../../types'
+import { clusterPrepItems } from '../../utils/prepItemClusters'
 import { Button, CalendarPill, IconButton, Text } from '../ui'
 
 const PREP_SECTION_KEY = 'casa-home-prep-section-open-v1'
@@ -99,15 +100,16 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
   // live instead of freezing at whatever it said when the card first mounted.
   const now = useLiveClock(60_000)
 
-  const grouped = useMemo(() => groupItems(items), [items])
+  const clusteredItems = useMemo(() => clusterPrepItems(items), [items])
+  const grouped = useMemo(() => groupItems(clusteredItems.map((cluster) => cluster.item)), [clusteredItems])
 
-  if (items.length === 0) return null
+  if (clusteredItems.length === 0) return null
 
-  async function handleCheck(id: string) {
-    setChecking(id)
+  async function handleCheck(ids: string[]) {
+    setChecking(ids[0])
     setActionError(null)
     try {
-      await complete(id)
+      await Promise.all(ids.map((id) => complete(id)))
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Casa could not complete this action.')
     } finally {
@@ -115,17 +117,17 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
     }
   }
 
-  async function handleSnooze(id: string) {
-    setSnoozingId(id)
+  async function handleSnooze(ids: string[], eventDateIso?: string | null) {
+    setSnoozingId(ids[0])
     await new Promise(r => setTimeout(r, 300))
-    await snooze(id)
+    await Promise.all(ids.map((id) => snooze(id, undefined, eventDateIso)))
     await new Promise(r => setTimeout(r, 180))
     setSnoozingId(null)
   }
 
-  async function handleDownvote(id: string) {
-    setDownvoting(id)
-    await downvote(id)
+  async function handleDownvote(ids: string[]) {
+    setDownvoting(ids[0])
+    await Promise.all(ids.map((id) => downvote(id)))
     setDownvoting(null)
   }
 
@@ -136,6 +138,8 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
       <div key={label} className="space-y-1">
         <Text role="caption" muted className="px-0.5 font-bold uppercase tracking-wide">{label}</Text>
         {groupItems.map((item) => {
+          const cluster = clusteredItems.find((entry) => entry.item.id === item.id)
+          const clusterIds = cluster?.itemIds ?? [item.id]
           const days = daysUntil(item.event_date)
           const urg = urgencyConfig(days)
           const src = sourceBadge(item)
@@ -180,6 +184,11 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
                       {getPrepItemDisplayDescription(item.description, item.source_type, item.event_date, now)}
                     </Text>
                   </div>
+                  {cluster && cluster.relatedCount > 0 && (
+                    <div className="mt-1 pl-4">
+                      <span className="text-caption text-casa-muted">{cluster.relatedCount + 1} related items merged</span>
+                    </div>
+                  )}
 
                   <div className="mt-2 flex items-center gap-1.5 flex-wrap pl-4">
                     <CalendarPill className={cn('gap-1', src.tone)}>
@@ -200,7 +209,7 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
                   <IconButton
                     onClick={(e) => {
                       e.stopPropagation()
-                      handleCheck(item.id)
+                      handleCheck(clusterIds)
                     }}
                     variant="secondary"
                     className={isDone ? 'border-casa-success text-casa-success' : undefined}
@@ -211,17 +220,17 @@ export default function PrepActionSection({ onSelectItem, seeAllHref = '/actions
                   <IconButton
                     onClick={(e) => {
                       e.stopPropagation()
-                      handleSnooze(item.id)
+                      handleSnooze(clusterIds, item.event_date)
                     }}
                     variant="secondary"
-                    title="Snooze until tomorrow"
-                    aria-label="Snooze until tomorrow"
+                    title={cluster && cluster.relatedCount > 0 ? 'Snooze merged items' : 'Snooze until tomorrow'}
+                    aria-label={cluster && cluster.relatedCount > 0 ? 'Snooze merged items' : 'Snooze until tomorrow'}
                     icon={<Moon size={15} strokeWidth={2.1} />}
                   />
                   <IconButton
                     onClick={(e) => {
                       e.stopPropagation()
-                      handleDownvote(item.id)
+                      handleDownvote(clusterIds)
                     }}
                     variant="danger"
                     className={isDownvoting ? 'border border-casa-error/40' : undefined}

@@ -26,7 +26,7 @@ export function computeReminderSnoozeWindow(
   // so a reminder that's already hours/days overdue snoozes forward from the
   // present instead of computing a new time that's still in the past.
   const referenceMs = Math.max(now.getTime(), startMs)
-  const newStart = computeSnoozeUntil(duration, new Date(referenceMs))
+  const newStart = computeSnoozeUntil(duration, new Date(referenceMs), startTime)
   const newEnd = new Date(newStart.getTime() + durationMs)
 
   return { start: newStart.toISOString(), end: newEnd.toISOString() }

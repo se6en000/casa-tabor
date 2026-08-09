@@ -29,6 +29,7 @@ export default function SnoozeMenu({
   triggerClassName,
   renderTrigger,
   menuPlacement = 'below',
+  eventDateIso,
 }: {
   onSnooze: (duration: SnoozeDuration) => void
   triggerLabel?: string
@@ -40,6 +41,7 @@ export default function SnoozeMenu({
   /** 'above' for triggers anchored to a bottom footer, so the menu opens upward
    * instead of getting clipped by the sheet's edge. */
   menuPlacement?: 'below' | 'above'
+  eventDateIso?: string | null
 }) {
   const [open, setOpen] = useState(false)
   const [menuPosition, setMenuPosition] = useState<{ left: number; top?: number; bottom?: number } | null>(null)
@@ -86,6 +88,9 @@ export default function SnoozeMenu({
   }, [open, menuPlacement])
 
   const toggle = (evt: React.MouseEvent) => { evt.stopPropagation(); setOpen((prev) => !prev) }
+  const showEventAlignedSnooze = Boolean(
+    eventDateIso && new Date(eventDateIso).getTime() - Date.now() >= 48 * 60 * 60 * 1000,
+  )
 
   return (
     <div className="relative inline-flex" ref={containerRef}>
@@ -134,6 +139,20 @@ export default function SnoozeMenu({
                   {snoozeDurationLabel(duration)}
                 </Button>
               ))}
+              {showEventAlignedSnooze && (
+                <Button
+                  type="button"
+                  role="menuitem"
+                  variant="ghost"
+                  size="sm"
+                  fullWidth
+                  onClick={(evt) => { evt.stopPropagation(); onSnooze('2d-before'); setOpen(false) }}
+                  className="rounded-lg px-2 py-1.5 text-left"
+                  contentClassName="w-full justify-start"
+                >
+                  {snoozeDurationLabel('2d-before')}
+                </Button>
+              )}
             </motion.div>
           )}
         </AnimatePresence>,

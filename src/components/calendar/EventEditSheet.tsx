@@ -586,6 +586,7 @@ function EventEditSheetContent({
 
   const handleClose = () => {
     if (isDirtyRef.current) {
+      clearTimeAutosaveTimer()
       setShowDiscardConfirm(true)
       return
     }
@@ -593,6 +594,7 @@ function EventEditSheetContent({
   }
 
   const confirmDiscard = () => {
+    clearTimeAutosaveTimer()
     isDirtyRef.current = false
     setShowDiscardConfirm(false)
     onClose()
@@ -600,6 +602,7 @@ function EventEditSheetContent({
 
   const cancelDiscard = () => {
     setShowDiscardConfirm(false)
+    scheduleTimeAutosave()
   }
 
   const handleReenrich = async () => {
@@ -668,6 +671,18 @@ function EventEditSheetContent({
   }
 
   const pendingTitleRef = useRef<string | null>(null)
+  const timeAutosaveTimerRef = useRef<number | null>(null)
+
+  const clearTimeAutosaveTimer = useCallback(() => {
+    if (timeAutosaveTimerRef.current !== null) {
+      window.clearTimeout(timeAutosaveTimerRef.current)
+      timeAutosaveTimerRef.current = null
+    }
+  }, [])
+
+  useEffect(() => () => {
+    clearTimeAutosaveTimer()
+  }, [clearTimeAutosaveTimer])
 
   const handleSave = async () => {
     // Flush DOM value — fixes iOS/Safari composition lag where the last
@@ -693,6 +708,21 @@ function EventEditSheetContent({
     await doSave('all')
   }
 
+  const scheduleTimeAutosave = useCallback(() => {
+    if (isSaving || isInstance || recurringEditorEnabled || isCanonicalOccurrence || recur.freq !== 'none') return
+    clearTimeAutosaveTimer()
+    timeAutosaveTimerRef.current = window.setTimeout(() => {
+      timeAutosaveTimerRef.current = null
+      if (!isDirtyRef.current || isSaving) return
+      void handleSave()
+    }, 300)
+  }, [clearTimeAutosaveTimer, handleSave, isCanonicalOccurrence, isInstance, isSaving, recur.freq, recurringEditorEnabled])
+
+  const handleDateTimeInteraction = useCallback(() => {
+    markDirty()
+    scheduleTimeAutosave()
+  }, [scheduleTimeAutosave])
+
   const handleScopeChoice = async (
     scope: RecurScope,
     { preserveExceptions }: { preserveExceptions: boolean },
@@ -713,6 +743,7 @@ function EventEditSheetContent({
     setIsSaving(true)
     setSaveStatus('saving')
     setSaveError(null)
+    clearTimeAutosaveTimer()
 
     // Supabase free tier cold-starts can take 15-20s — allow 35s before giving up
     const saveTimeout = new Promise<never>((_, reject) =>
@@ -1114,7 +1145,40 @@ function EventEditSheetContent({
       }
     }
 
-    qc.invalidateQueries({ queryKey: ['events'] })
+    const optimisticPatch = {
+      title: titleToSave,
+      start_time: masterStart,
+      end_time: masterEnd,
+      all_day: isAllDay,
+      event_type: eventType,
+      location_name: normalizedLocation,
+      address: normalizedAddress,
+      lat: latForSave,
+      lng: lngForSave,
+      updated_at: new Date().toISOString(),
+    }
+    const patchEventRecord = (record: Record<string, unknown> | null | undefined) => (
+      record && record.id === event.id ? { ...record, ...optimisticPatch } : record
+    )
+    qc.setQueriesData({ queryKey: ['events'] }, (old: unknown) => {
+      if (Array.isArray(old)) return old.map((record) => patchEventRecord(record as Record<string, unknown>))
+      if (old && typeof old === 'object' && Array.isArray((old as { events?: unknown[] }).events)) {
+        return {
+          ...(old as Record<string, unknown>),
+          events: (old as { events: Record<string, unknown>[] }).events.map((record) => patchEventRecord(record)),
+        }
+      }
+      return old
+    })
+    qc.setQueryData(['event-details', event.id], (old: EventWithDetails | undefined) => {
+      if (!old) return old
+      return { ...old, ...optimisticPatch }
+    })
+    window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+    window.dispatchEvent(new CustomEvent('casa:event-updated', { detail: { eventId: event.id, patch: optimisticPatch } }))
+    void qc.invalidateQueries({ queryKey: ['events'] })
+    void qc.invalidateQueries({ queryKey: ['event-details', event.id] })
+    void qc.invalidateQueries({ queryKey: ['event-transportation-plans'] })
 
     // Google Calendar sync — strategy depends on scope
     if (scope === 'this') {
@@ -1668,7 +1732,7 @@ function EventEditSheetContent({
                     endValue={endDT}
                     onStartChange={setStartDT}
                     onEndChange={setEndDT}
-                    onInteraction={markDirty}
+                    onInteraction={handleDateTimeInteraction}
                   />
                 )}
 

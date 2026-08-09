@@ -17,6 +17,11 @@ import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { canonicalContentFingerprint, canonicalEmailKey, normalizeInternetMessageId } from '../_shared/gmail-canonical-email.mjs'
 import { classifyFamilyEvidenceCandidate, redactFamilyEvidenceText } from '../_shared/family-email-evidence.mjs'
 import { extractGmailMessageContent } from '../_shared/gmail-message-content.mjs'
+import {
+  filterImmediateFamilyMembers,
+  isSharedFamilyInbox,
+  resolveImmediateFamilyMember,
+} from '../_shared/immediate-family-scope.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -364,7 +369,7 @@ function filterCurrentBackfillActions(actions: InboxActionItem[], now: Date): In
 
 async function persistInboxActions(
   sb: ReturnType<typeof createClient>,
-  memberId: string,
+  sourceOwnerMemberId: string | null,
   messageId: string,
   subject: string,
   eventId: string | null,
@@ -395,12 +400,12 @@ async function persistInboxActions(
       type: a.type,
       emoji,
       description,
-      event_title: eventTitle ?? `${owner?.name ?? familyMembers.find(f => f.id === memberId)?.name ?? 'Family'} · ${title}`,
+      event_title: eventTitle ?? `${owner?.name ?? familyMembers.find((f) => f.id === sourceOwnerMemberId)?.name ?? 'Family'} · ${title}`,
       event_date: eventDate ?? dueBy,
       due_by: dueBy,
       priority: normalizedPriority,
       source_type: 'gmail',
-      source_ref: `gmail:${memberId}:${messageId}`,
+      source_ref: `gmail:${sourceOwnerMemberId ?? 'household'}:${messageId}`,
       source_pattern_key: `action:${a.type}`,
       source_confidence: 1,
     }
@@ -611,7 +616,13 @@ async function handleGmailScan(req: Request): Promise<Response> {
   if (!llm?.api_key) {
     return new Response(JSON.stringify({ error: 'AI not configured' }), { status: 400, headers: { ...CORS, 'content-type': 'application/json' } })
   }
-  const familyMembers = (familyRes.data ?? []) as { id: string; name: string; role: string }[]
+  const familyMembers = filterImmediateFamilyMembers((familyRes.data ?? []) as { id: string; name: string; role: string }[])
+  if (familyMembers.length === 0) {
+    return new Response(JSON.stringify({ error: 'No immediate family members configured for Gmail scan scope' }), {
+      status: 400,
+      headers: { ...CORS, 'content-type': 'application/json' },
+    })
+  }
 
   const body = await req.json().catch(() => ({}))
   const targetMemberId: string | null = body.family_member_id ?? null
@@ -644,7 +655,7 @@ async function handleGmailScan(req: Request): Promise<Response> {
   }
 
   let query = sb.from('google_tokens')
-    .select('family_member_id, refresh_token, access_token, expires_at, gmail_history_id')
+    .select('family_member_id, google_email, refresh_token, access_token, expires_at, gmail_history_id')
     .eq('gmail_scan_enabled', true)
   if (targetMemberId) query = query.eq('family_member_id', targetMemberId)
   const { data: tokens } = await query
@@ -655,6 +666,9 @@ async function handleGmailScan(req: Request): Promise<Response> {
 
   for (const tok of (tokens ?? [])) {
     const memberId = tok.family_member_id
+    const tokenBelongsToImmediateFamily = familyMembers.some((member) => member.id === memberId)
+    const sharedInboxToken = isSharedFamilyInbox(tok.google_email)
+    if (!tokenBelongsToImmediateFamily && !sharedInboxToken) continue
     let accessToken = tok.access_token
 
     // Refresh if needed
@@ -789,6 +803,16 @@ async function handleGmailScan(req: Request): Promise<Response> {
           ? extractInboxActions(details.subject, details.from, details.date, details.body, familyMembers, llm, llmUsage)
           : Promise.resolve([] as InboxActionItem[]),
       ])
+      const resolvedTargetMember = resolveImmediateFamilyMember({
+        members: familyMembers,
+        preferredName: classified?.assigned_member ?? null,
+        entityNames: extractedActions
+          .map((action) => action.assigned_member)
+          .filter((name): name is string => typeof name === 'string' && name.trim().length > 0),
+        fallbackMemberId: tokenBelongsToImmediateFamily ? memberId : null,
+      })
+      const sourceOwnerMemberId = resolvedTargetMember?.id ?? null
+
       const indexedFamilyEvidence = familyEvidenceCandidate.eligible
         ? await persistFamilyEmailEvidence(
           sb,
@@ -827,7 +851,7 @@ async function handleGmailScan(req: Request): Promise<Response> {
 
       const actionsFromEmail = await persistInboxActions(
         sb,
-        memberId,
+        sourceOwnerMemberId,
         msgId,
         details.subject,
         null,
@@ -883,10 +907,21 @@ async function handleGmailScan(req: Request): Promise<Response> {
 
       // ── INTENT: travel_detail ──────────────────────────────────
       if (classified.intent === 'travel_detail' || isTravel) {
+        const travelMemberId = sourceOwnerMemberId
+        if (!travelMemberId) {
+          await sb.from('gmail_processed_messages').upsert({
+            family_member_id: memberId, gmail_message_id: msgId,
+            subject: details.subject, email_subject: details.subject,
+            from_email: details.from, received_at: emailReceivedAt,
+            intent: 'skip', skipped_reason: 'shared inbox travel email with no clear immediate family attribution',
+          }, { onConflict: 'family_member_id,gmail_message_id' })
+          skipped++
+          continue
+        }
         // Check if a trip from this email already exists with newer data
         const { data: existingTrip } = await sb.from('trips')
           .select('id, source_email_received_at, gmail_message_ids')
-          .eq('family_member_id', memberId)
+          .eq('family_member_id', travelMemberId)
           .contains('gmail_message_ids', [msgId])
           .maybeSingle()
 
@@ -910,7 +945,7 @@ async function handleGmailScan(req: Request): Promise<Response> {
         const { data: matchEvt } = await sb
           .from('event_members')
           .select('events!inner(id, start_time)')
-          .eq('family_member_id', memberId)
+          .eq('family_member_id', travelMemberId)
           .limit(10)
 
         // Find the closest upcoming travel event
@@ -930,7 +965,7 @@ async function handleGmailScan(req: Request): Promise<Response> {
           body: JSON.stringify({
             raw_text: details.body.slice(0, 20000),
             source_subject: details.subject,
-            family_member_id: memberId,
+            family_member_id: travelMemberId,
             event_id: travelEventId,
             existing_trip_id: existingTrip?.id,
           }),
@@ -941,7 +976,7 @@ async function handleGmailScan(req: Request): Promise<Response> {
         if (travelResult?.ok) {
           await sb.from('trips')
             .update({ source_email_received_at: emailReceivedAt })
-            .eq('family_member_id', memberId)
+            .eq('family_member_id', travelMemberId)
             .contains('gmail_message_ids', [msgId])
         }
 
@@ -964,9 +999,12 @@ async function handleGmailScan(req: Request): Promise<Response> {
       const endTime   = endIso   ? new Date(endIso)   : startTime ? new Date(startTime.getTime() + 3600_000) : null
 
       // Resolve which family member this is for
-      const assignedMember = familyMembers.find(m =>
-        classified.assigned_member && m.name.toLowerCase().includes(classified.assigned_member.toLowerCase())
-      ) ?? familyMembers.find(m => m.id === memberId) ?? familyMembers[0]
+      const assignedMember = resolveImmediateFamilyMember({
+        members: familyMembers,
+        preferredName: classified.assigned_member ?? null,
+        entityNames: [classified.title, classified.location].filter((value): value is string => typeof value === 'string' && value.trim().length > 0),
+        fallbackMemberId: sourceOwnerMemberId ?? (tokenBelongsToImmediateFamily ? memberId : null),
+      }) ?? familyMembers[0]
 
       // ── INTENT: update_event ───────────────────────────────────
       if (classified.intent === 'update_event') {

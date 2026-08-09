@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { PrepItem } from '../types'
 import { type SnoozeDuration, computeSnoozeUntil } from '../utils/snoozeDuration'
+import { usePageVisibility } from './usePageVisibility'
 
 /**
  * Returns all undismissed, un-snoozed prep items, ordered overdue-first, then priority desc,
@@ -13,6 +14,7 @@ import { type SnoozeDuration, computeSnoozeUntil } from '../utils/snoozeDuration
  */
 export function usePrepItems() {
   const qc = useQueryClient()
+  const isPageVisible = usePageVisibility()
   const channelId = useId()
   // Use a unique channel name per hook instance to avoid "already subscribed" errors
   // when multiple components using this hook are mounted simultaneously (e.g. during swipe)
@@ -20,6 +22,7 @@ export function usePrepItems() {
 
   // Realtime subscription — any INSERT/UPDATE/DELETE on prep_items invalidates immediately
   useEffect(() => {
+    if (!isPageVisible) return
     const channel = supabase
       .channel(channelRef.current)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'prep_items' }, () => {
@@ -27,7 +30,7 @@ export function usePrepItems() {
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [qc])
+  }, [isPageVisible, qc])
 
   return useQuery({
     queryKey: ['prep-items'],
@@ -54,7 +57,7 @@ export function usePrepItems() {
     },
     staleTime: 30_000,
     refetchOnMount: false,
-    refetchInterval: 120_000, // re-check every 2min so snoozes auto-expire
+    refetchInterval: isPageVisible ? 120_000 : false, // stop background polling when hidden
   })
 }
 
@@ -87,8 +90,8 @@ export function useDismissPrepItem() {
 /** Snoozes a prep item for the given duration (defaults to "tomorrow" 6 AM, matching prior behavior). */
 export function useSnoozePrepItem() {
   const qc = useQueryClient()
-  return async (id: string, duration: SnoozeDuration = 'tomorrow') => {
-    const snoozedUntil = computeSnoozeUntil(duration, new Date())
+  return async (id: string, duration: SnoozeDuration = 'tomorrow', eventDateIso?: string | null) => {
+    const snoozedUntil = computeSnoozeUntil(duration, new Date(), eventDateIso)
     const { data, error } = await supabase.rpc('snooze_prep_item', {
       p_prep_item_id: id,
       p_snoozed_until: snoozedUntil.toISOString(),

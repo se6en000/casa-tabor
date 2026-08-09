@@ -17,6 +17,7 @@ import {
 import { normalizeRecipeIngredientFields } from '../utils/recipeIngredientParsing'
 import { supabase } from '../lib/supabase'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
+import { usePageVisibility } from '../hooks/usePageVisibility'
 import { Alert, Button, Checkbox, IconButton, Card, Chip, Input, Heading, Modal, Progress, SegmentedControl, Sheet, Text, Toast } from '../components/ui'
 import {
   appendPantryInventoryAudit,
@@ -537,6 +538,7 @@ function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging =
 }
 
 export default function GroceryPage() {
+  const isPageVisible = usePageVisibility()
   const location = useLocation()
   const navigate = useNavigate()
   const {
@@ -566,7 +568,7 @@ export default function GroceryPage() {
       return (data ?? []) as HistoricalGroceryEvent[]
     },
     staleTime: 5 * 60_000,
-    refetchInterval: 10 * 60_000,
+    refetchInterval: isPageVisible ? 10 * 60_000 : false,
   })
 
   const { data: predictionDeferrals = {}, refetch: refetchPredictionDeferrals } = useQuery({
@@ -581,7 +583,7 @@ export default function GroceryPage() {
       return sanitizeGroceryPredictionDeferrals(data?.value, Date.now())
     },
     staleTime: 60_000,
-    refetchInterval: 2 * 60_000,
+    refetchInterval: isPageVisible ? 2 * 60_000 : false,
   })
 
   const { data: hiddenWeeklyPicks = {}, refetch: refetchHiddenWeeklyPicks } = useQuery({
@@ -596,7 +598,7 @@ export default function GroceryPage() {
       return sanitizeGroceryWeeklyHiddenPicks(data?.value)
     },
     staleTime: 60_000,
-    refetchInterval: 2 * 60_000,
+    refetchInterval: isPageVisible ? 2 * 60_000 : false,
   })
 
   const { data: recipeLibrary = [], refetch: refetchRecipeLibrary } = useQuery({
@@ -711,7 +713,7 @@ export default function GroceryPage() {
       }))
     },
     staleTime: 60_000,
-    refetchInterval: 2 * 60_000,
+    refetchInterval: isPageVisible ? 2 * 60_000 : false,
   })
 
   const { data: recipeMealPlans = [], refetch: refetchMealPlans } = useQuery({
@@ -725,7 +727,7 @@ export default function GroceryPage() {
       return (data ?? []) as RecipeMealPlan[]
     },
     staleTime: 60_000,
-    refetchInterval: 2 * 60_000,
+    refetchInterval: isPageVisible ? 2 * 60_000 : false,
   })
 
   const [inputValue, setInputValue] = useState('')

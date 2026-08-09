@@ -3,13 +3,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { Conflict } from '../types'
 import { type SnoozeDuration, computeSnoozeUntil } from '../utils/snoozeDuration'
+import { usePageVisibility } from './usePageVisibility'
 
 export function useWeekConflicts() {
   const qc = useQueryClient()
+  const isPageVisible = usePageVisibility()
   const channelId = useId()
 
   // Realtime — any change to conflicts table pushes instantly to all views
   useEffect(() => {
+    if (!isPageVisible) return
     const channel = supabase
       .channel(`conflicts_realtime_${channelId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conflicts' }, () => {
@@ -17,7 +20,7 @@ export function useWeekConflicts() {
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [channelId, qc])
+  }, [channelId, isPageVisible, qc])
 
   return useQuery({
     queryKey: ['conflicts', 'week'],
@@ -42,7 +45,7 @@ export function useWeekConflicts() {
     },
     staleTime: 30_000,
     refetchOnMount: true,
-    refetchInterval: 120_000,
+    refetchInterval: isPageVisible ? 120_000 : false,
   })
 }
 

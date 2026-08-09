@@ -6,6 +6,7 @@ import { getPrepItemDisplayDescription } from '../../utils/reminderLateness'
 import { cn } from '../../utils/cn'
 import { Button } from '../ui'
 import SnoozeMenu from './SnoozeMenu'
+import { clusterPrepItems } from '../../utils/prepItemClusters'
 
 function daysLabel(eventDate: string | null): string {
   if (!eventDate) return ''
@@ -23,7 +24,9 @@ export default function PrepAlertsSection({ className }: { className?: string })
   // whatever it said when this section first mounted.
   const now = useLiveClock(60_000)
 
-  if (!items || items.length === 0) return null
+  const clusteredItems = clusterPrepItems(items ?? [])
+
+  if (clusteredItems.length === 0) return null
 
   return (
     <div className={cn('space-y-2', className)}>
@@ -31,7 +34,8 @@ export default function PrepAlertsSection({ className }: { className?: string })
         📋 Prep Needed
       </h3>
       <AnimatePresence initial={false}>
-        {items.map((item) => {
+        {clusteredItems.map((cluster) => {
+          const item = cluster.item
           const days = daysLabel(item.event_date)
           const accent = item.priority === 3 ? 'border-l-casa-error' : item.priority === 2 ? 'border-l-casa-warning' : 'border-l-casa-info'
           return (
@@ -77,13 +81,14 @@ export default function PrepAlertsSection({ className }: { className?: string })
               {/* Actions */}
               <div className="shrink-0 flex items-center gap-1">
                 <SnoozeMenu
-                  onSnooze={(duration) => snooze(item.id, duration)}
+                  onSnooze={(duration) => Promise.all(cluster.itemIds.map((id) => snooze(id, duration, item.event_date)))}
+                  eventDateIso={item.event_date}
                   triggerVariant="ghost"
                   triggerClassName="text-caption font-medium px-2 py-1 rounded-md text-casa-muted transition-colors hover:text-casa-text hover:bg-casa-bg"
                 />
                 <span className="text-casa-border text-caption">|</span>
                 <Button variant="ghost"
-                  onClick={() => dismiss(item.id)}
+                  onClick={() => Promise.all(cluster.itemIds.map((id) => dismiss(id)))}
                   className="text-caption font-medium px-2 py-1 rounded-md text-casa-muted transition-colors hover:text-red-500 hover:bg-casa-bg"
                   title="Permanently dismiss"
                 >

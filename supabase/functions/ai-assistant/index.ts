@@ -61,6 +61,7 @@ import {
   eventTravelDestination,
   formatEventTravelAnswer,
 } from '../_shared/assistant-event-travel.mjs'
+import { filterImmediateFamilyMembers } from '../_shared/immediate-family-scope.mjs'
 import {
   inheritCalendarReadScope,
   isCalendarLikeLanguage,
@@ -315,7 +316,7 @@ Deno.serve(async (req) => {
         : []
     ).filter((text): text is string => Boolean(text))
     : []
-  const familyMembers = Array.isArray(context?.family) ? context.family : []
+  const familyMembers = filterImmediateFamilyMembers(Array.isArray(context?.family) ? context.family : [])
   const rawLatestUserText = userMessageTexts.at(-1) ?? null
   const latestUserText = rawLatestUserText
     ? canonicalizeFamilyReferences(rawLatestUserText, familyMembers)
@@ -1697,11 +1698,9 @@ Deno.serve(async (req) => {
       !['event.create', 'event.move', 'event.delete', 'event.edit'].includes(calendarFrame.intent)
     )
   )
-  const authorizedFamilyNames = Array.isArray(context?.family)
-    ? context.family.flatMap((member: { name?: unknown }) =>
-        typeof member?.name === 'string' ? [member.name] : []
-      )
-    : []
+  const authorizedFamilyNames = familyMembers.flatMap((member: { name?: unknown }) =>
+    typeof member?.name === 'string' ? [member.name] : []
+  )
   const defaultCalendarCreate = calendarFrame?.intent === 'event.create'
     ? resolveDefaultCalendarCreate(latestUserText, { now, utcOffset: context?.utcOffset })
     : null
@@ -2768,7 +2767,7 @@ Deno.serve(async (req) => {
 
   // ── Member availability (recurring rules + upcoming exceptions) ──
   const memberNameById = new Map<string, string>()
-  for (const f of (context.family as { id?: string; name: string }[])) {
+  for (const f of (familyMembers as { id?: string; name: string }[])) {
     if (f.id) memberNameById.set(f.id, f.name)
   }
   const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -5317,7 +5316,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         {
           now,
           utcOffset,
-          familyNames: (context.family as { name: string }[]).map((member) => member.name),
+          familyNames: (familyMembers as { name: string }[]).map((member) => member.name),
         },
       )
       const deterministicMutation = rawDeterministicMutation?.event

@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { usePageVisibility } from './usePageVisibility'
 
 export interface Notification {
   id: string
@@ -16,6 +17,7 @@ export interface Notification {
 
 export function useNotifications() {
   const qc = useQueryClient()
+  const isPageVisible = usePageVisibility()
 
   const { data: notifications = [], isLoading } = useQuery<Notification[]>({
     queryKey: ['notifications'],
@@ -28,7 +30,7 @@ export function useNotifications() {
       if (error) throw error
       return data as unknown as Notification[]
     },
-    refetchInterval: 60_000, // poll every 60s — avoids realtime StrictMode issues
+    refetchInterval: isPageVisible ? 60_000 : false, // stop background polling when the page is hidden
     staleTime: 30_000,
   })
 
@@ -69,4 +71,3 @@ export function useNotifications() {
 
   return { notifications, unreadCount, isLoading, markRead, markAllRead, clearAll, addNotification }
 }
-

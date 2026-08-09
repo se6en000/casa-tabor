@@ -6,7 +6,7 @@
  * snooze surface the same set of choices and the same underlying math.
  */
 
-export type SnoozeDuration = '15m' | '1h' | '3h' | 'tomorrow'
+export type SnoozeDuration = '15m' | '1h' | '3h' | 'tomorrow' | '2d-before'
 
 export const SNOOZE_DURATIONS: SnoozeDuration[] = ['15m', '1h', '3h', 'tomorrow']
 
@@ -14,7 +14,7 @@ const MINUTE_MS = 60 * 1000
 const HOUR_MS = 60 * MINUTE_MS
 
 /** Computes the `snoozed_until` timestamp for a given duration, relative to `now`. */
-export function computeSnoozeUntil(duration: SnoozeDuration, now: Date): Date {
+export function computeSnoozeUntil(duration: SnoozeDuration, now: Date, eventDateIso?: string | null): Date {
   switch (duration) {
     case '15m':
       return new Date(now.getTime() + 15 * MINUTE_MS)
@@ -28,6 +28,11 @@ export function computeSnoozeUntil(duration: SnoozeDuration, now: Date): Date {
       next.setHours(6, 0, 0, 0)
       return next
     }
+    case '2d-before': {
+      if (!eventDateIso) return new Date(now.getTime() + 2 * HOUR_MS)
+      const eventDate = new Date(eventDateIso)
+      return new Date(eventDate.getTime() - 2 * 24 * HOUR_MS)
+    }
   }
 }
 
@@ -36,6 +41,7 @@ const LABELS: Record<SnoozeDuration, string> = {
   '1h': '1 hour',
   '3h': '3 hours',
   tomorrow: 'Tomorrow morning',
+  '2d-before': '2 days before event',
 }
 
 export function snoozeDurationLabel(duration: SnoozeDuration): string {

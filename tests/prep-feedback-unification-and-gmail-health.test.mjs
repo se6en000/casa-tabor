@@ -42,6 +42,15 @@ test('HomeRightPanel surfaces an actionable Gmail health warning independent of 
   assert.match(homeRightPanel, /to="\/settings\/google"/)
 })
 
+test('HomeRightPanel and ActionHubPage collapse prep duplicates into merged clusters before rendering action controls', () => {
+  assert.match(homeRightPanel, /clusterPrepItems\(rawPrepItems\)/)
+  assert.match(homeRightPanel, /related items merged/)
+  assert.match(homeRightPanel, /eventDateIso=\{item\.event_date\}/)
+  assert.match(actionHubPage, /clusterPrepItems\(filteredPrepItems\)/)
+  assert.match(actionHubPage, /related items merged/)
+  assert.match(actionHubPage, /clusterIds/)
+})
+
 test('ActionHubPage replaces the raw scanner-health ops metric with the shared Gmail health chip', () => {
   assert.match(actionHubPage, /summarizeGmailHealth/)
   assert.doesNotMatch(actionHubPage, /Scanner health/)

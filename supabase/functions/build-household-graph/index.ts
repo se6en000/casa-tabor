@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { getCorrelationId, withCorrelationHeaders } from '../_shared/correlation.ts'
 import { requireEnv } from '../_shared/env.ts'
+import { filterImmediateFamilyMembers } from '../_shared/immediate-family-scope.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -104,7 +105,10 @@ Deno.serve(async (req) => {
   const placeCandidates: PlaceCandidate[] = []
   const placeTermsToKey = new Map<string, string>()
 
-  for (const m of membersResult.data ?? []) {
+  const immediateMembers = filterImmediateFamilyMembers(membersResult.data ?? [])
+  const immediateMemberIds = new Set(immediateMembers.map((member: { id: string }) => member.id))
+
+  for (const m of immediateMembers) {
     addNode(nodes, {
       node_key: `member:${m.id}`,
       node_type: 'member',
@@ -157,7 +161,7 @@ Deno.serve(async (req) => {
     })
 
     const contactTerms = [normalize(c.name), ...(c.aliases ?? []).map((a) => normalize(a))].filter(Boolean)
-    for (const member of membersResult.data ?? []) {
+    for (const member of immediateMembers) {
       const memberNameNorm = normalize(member.name)
       if (!memberNameNorm) continue
       if (contactTerms.some((term) => term.includes(memberNameNorm) || memberNameNorm.includes(term))) {
@@ -188,6 +192,7 @@ Deno.serve(async (req) => {
   }
 
   for (const relationship of familyContactsResult.data ?? []) {
+    if (!immediateMemberIds.has(relationship.family_member_id)) continue
     addEdge(edges, {
       edge_type: 'has_provider',
       from_key: `member:${relationship.family_member_id}`,
@@ -206,7 +211,7 @@ Deno.serve(async (req) => {
   // re-deriving this from raw events on every request.
   const placeVisitorCounts = new Map<string, Map<string, number>>()
   const placeActivityCounts = new Map<string, Map<string, number>>()
-  const memberIdToName = new Map((membersResult.data ?? []).map((m) => [m.id, m.name]))
+  const memberIdToName = new Map(immediateMembers.map((m: { id: string; name: string }) => [m.id, m.name]))
 
   function bumpCount(map: Map<string, Map<string, number>>, placeKey: string, subKey: string) {
     const inner = map.get(placeKey) ?? new Map<string, number>()
@@ -236,6 +241,13 @@ Deno.serve(async (req) => {
   }
 
   for (const ev of (eventsResult.data ?? []) as EventRow[]) {
+    const attendeeIds = new Set(
+      (ev.event_members ?? [])
+        .map((em) => em.family_member_id)
+        .filter((memberId) => immediateMemberIds.has(memberId)),
+    )
+    if (ev.source_member_id && immediateMemberIds.has(ev.source_member_id)) attendeeIds.add(ev.source_member_id)
+    if (attendeeIds.size === 0) continue
     const eventKey = `event:${ev.id}`
     addNode(nodes, {
       node_key: eventKey,
@@ -248,9 +260,6 @@ Deno.serve(async (req) => {
         source_member_id: ev.source_member_id,
       },
     })
-
-    const attendeeIds = new Set((ev.event_members ?? []).map((em) => em.family_member_id))
-    if (ev.source_member_id) attendeeIds.add(ev.source_member_id)
 
     for (const memberId of attendeeIds) {
       addEdge(edges, {

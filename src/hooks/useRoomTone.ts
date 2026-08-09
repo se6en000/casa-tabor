@@ -19,6 +19,7 @@ import { useEffect, useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { ROOM_TONE_COLORS } from '../design-system/tokens.mjs'
+import { usePageVisibility } from './usePageVisibility'
 
 export type RoomToneZone = 'day' | 'afternoon' | 'evening' | 'night' | 'late-night' | 'manual'
 
@@ -125,13 +126,14 @@ const SENSOR_POLL_MS    = 5_000
 const SENSOR_ROW_ID     = '00000000-0000-0000-0000-000000000001'
 
 export function useRoomTone() {
+  const isPageVisible = usePageVisibility()
   const { data } = useQuery<DisplayConfig | null>({
     queryKey: ['settings', 'display_config'],
     queryFn: async () => {
       const { data } = await supabase.from('settings').select('value').eq('key', 'display_config').single()
       return data?.value as DisplayConfig | null
     },
-    refetchInterval: 60_000,
+    refetchInterval: isPageVisible ? 60_000 : false,
   })
 
   const cfg: DisplayConfig = useMemo(
@@ -161,7 +163,7 @@ export function useRoomTone() {
         return null
       }
     },
-    refetchInterval: SENSOR_POLL_MS,
+    refetchInterval: isPageVisible ? SENSOR_POLL_MS : false,
     staleTime: SENSOR_POLL_MS,
   })
 
@@ -189,9 +191,9 @@ export function useRoomTone() {
 
   useEffect(() => {
     tick()
-    const interval = setInterval(tick, 60_000)
+    const interval = setInterval(tick, isPageVisible ? 60_000 : 5 * 60_000)
     return () => clearInterval(interval)
-  }, [tick])
+  }, [isPageVisible, tick])
 
   const currentHour = new Date().getHours()
   const currentZone: RoomToneZone = cfg.manual_override

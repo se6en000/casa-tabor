@@ -65,3 +65,17 @@ test('the loaded editor sheet has dialog accessibility attributes', () => {
   assert.match(sheetBlock, /role=\{inline \? 'region' : 'dialog'\}/)
   assert.match(sheetBlock, /aria-modal=\{inline \? undefined : true\}/)
 })
+
+test('date/time wheel commits schedule an autosave without requiring the Done button', () => {
+  assert.match(source, /const scheduleTimeAutosave = useCallback\(\(\) => \{/)
+  assert.match(source, /const handleDateTimeInteraction = useCallback\(\(\) => \{/)
+  assert.match(source, /onInteraction=\{handleDateTimeInteraction\}/)
+  assert.match(source, /scheduleTimeAutosave\(\)/)
+})
+
+test('successful saves refresh the event caches immediately before the sheet closes', () => {
+  assert.match(source, /qc\.setQueriesData\(\{ queryKey: \['events'\] \},/)
+  assert.match(source, /qc\.setQueryData\(\['event-details', event\.id\]/)
+  assert.match(source, /casa:event-updated/)
+  assert.match(source, /qc\.invalidateQueries\(\{ queryKey: \['event-transportation-plans'\] \}\)/)
+})

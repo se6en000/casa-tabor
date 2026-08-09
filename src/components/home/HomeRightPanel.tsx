@@ -32,6 +32,8 @@ import type { PrepItem } from '../../types'
 import { eventOverlapsDay } from '../../utils/eventTime'
 import { summarizeGmailHealth, type GmailHealthSummary } from '../../utils/gmailHealth'
 import { priorityVisual } from '../../utils/prepPriority'
+import { usePageVisibility } from '../../hooks/usePageVisibility'
+import { clusterPrepItems } from '../../utils/prepItemClusters'
 import { Button, Chip, EmptyState, Heading, IconButton, PersonAvatarStack, SecondaryRail, Toast } from '../ui'
 
 /** Undo window (ms) between tapping an action (mark done / not relevant) and it
@@ -187,6 +189,7 @@ function PrepAssignPicker({
 
 export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }: Props) {
   const navigate = useNavigate()
+  const isPageVisible = usePageVisibility()
   const { data: rawPrepItems = [] } = usePrepItems()
   const { data: familyMembers = [] } = useFamilyMembers()
   const { notifications, markRead } = useNotifications()
@@ -207,6 +210,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   const [actionToast, setActionToast] = useState<{ id: string; description: string; kind: 'done' | 'downvote' } | null>(null)
   const [revealedItemId, setRevealedItemId] = useState<string | null>(null)
   const pendingRemovalTimers = useRef<Map<string, { timer: ReturnType<typeof setTimeout>; kind: 'done' | 'downvote' }>>(new Map())
+  const prepClusters = useMemo(() => clusterPrepItems(rawPrepItems), [rawPrepItems])
 
   // Shared "needs you" card tap behavior: a collapsed card always expands first
   // (revealing conflict/prep/directory actions inline). Only once a prep/action
@@ -245,8 +249,12 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
     [notifications],
   )
   const prepItems = useMemo(
-    () => mergeNeedsYouItems(rawPrepItems, conflicts, directorySuggestionNotifications),
-    [rawPrepItems, conflicts, directorySuggestionNotifications],
+    () => mergeNeedsYouItems(prepClusters.map((cluster) => cluster.item), conflicts, directorySuggestionNotifications),
+    [conflicts, directorySuggestionNotifications, prepClusters],
+  )
+  const prepClusterByItemId = useMemo(
+    () => new Map(prepClusters.map((cluster) => [cluster.item.id, cluster])),
+    [prepClusters],
   )
 
   const prioritizedPrepItems = useMemo(() => {
@@ -314,17 +322,17 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
         gmailHealth: summarizeGmailHealth(statusRows),
       }
     },
-    refetchInterval: 60_000,
+    refetchInterval: isPageVisible ? 5 * 60_000 : false,
     staleTime: 30_000,
   })
 
   const nextEvent = allTodayEvents.find(event => new Date(event.end_time) >= now) ?? null
 
-  function commitRemoval(id: string, kind: 'done' | 'downvote') {
+  function commitRemoval(id: string, kind: 'done' | 'downvote', ids: string[] = [id]) {
     pendingRemovalTimers.current.delete(id)
     setPendingRemovalIds(prev => {
       const next = new Set(prev)
-      next.delete(id)
+      ids.forEach((itemId) => next.delete(itemId))
       return next
     })
     // Only clear the toast if it's still showing for this item -- avoids clobbering
@@ -332,24 +340,28 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
     setActionToast(current => (current?.id === id ? null : current))
     setActionError(null)
     const commit = kind === 'done' ? completePrepItem : downvotePrepItem
-    commit(id).catch(error => {
+    Promise.all(ids.map((itemId) => commit(itemId))).catch(error => {
       setActionError(error instanceof Error ? error.message : 'Casa could not complete this action.')
     })
   }
 
-  function scheduleRemoval(item: PrepItem, kind: 'done' | 'downvote') {
+  function scheduleRemoval(item: PrepItem, kind: 'done' | 'downvote', ids: string[]) {
     // Clear any prior pending timer for this id (defensive; shouldn't normally recur).
     const existing = pendingRemovalTimers.current.get(item.id)
     if (existing) clearTimeout(existing.timer)
-    setPendingRemovalIds(prev => new Set(prev).add(item.id))
+    setPendingRemovalIds(prev => {
+      const next = new Set(prev)
+      ids.forEach((itemId) => next.add(itemId))
+      return next
+    })
     setActionToast({ id: item.id, description: item.description, kind })
     setRevealedItemId(current => (current === item.id ? null : current))
-    const timer = setTimeout(() => commitRemoval(item.id, kind), UNDO_WINDOW_MS)
+    const timer = setTimeout(() => commitRemoval(item.id, kind, ids), UNDO_WINDOW_MS)
     pendingRemovalTimers.current.set(item.id, { timer, kind })
   }
 
-  function handleDone(item: PrepItem) {
-    scheduleRemoval(item, 'done')
+  function handleDone(item: PrepItem, ids: string[] = [item.id]) {
+    scheduleRemoval(item, 'done', ids)
   }
 
   function undoRemoval(id: string) {
@@ -364,8 +376,8 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
     setActionToast(null)
   }
 
-  function handleDownvote(item: PrepItem) {
-    scheduleRemoval(item, 'downvote')
+  function handleDownvote(item: PrepItem, ids: string[] = [item.id]) {
+    scheduleRemoval(item, 'downvote', ids)
   }
 
   function handleWeekDayClick(day: Date) {
@@ -455,6 +467,8 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
               )}
               <div className="space-y-2">
                 {visiblePrepItems.slice(0, NEEDS_YOU_HOME_RAIL_LIMIT).map(item => {
+                  const cluster = prepClusterByItemId.get(item.id)
+                  const clusterIds = cluster?.itemIds ?? [item.id]
                   const accent = needsYouAccent(item)
                   const priority = priorityVisual(item.priority)
                   const isRevealed = revealedItemId === item.id
@@ -532,6 +546,9 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                               </p>
                             </Button>
                           )}
+                          {cluster && cluster.relatedCount > 0 && (
+                            <p className="mt-1 text-caption text-casa-muted">{cluster.relatedCount + 1} related items merged</p>
+                          )}
                           <div className="mt-1.5 flex items-center gap-1.5">
                             <span
                               role="img"
@@ -574,7 +591,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                                   assignee={assignee}
                                   familyMembers={familyMembers}
                                   onAssign={(familyMemberId) => {
-                                    void setPrepItemAssignee(item.id, assignee?.id === familyMemberId ? null : familyMemberId)
+                                    void Promise.all(clusterIds.map((id) => setPrepItemAssignee(id, assignee?.id === familyMemberId ? null : familyMemberId)))
                                   }}
                                 />
                               </div>
@@ -603,7 +620,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                           )}
                           {!readOnly && (
                             <IconButton
-                              onClick={() => handleDone(item)}
+                              onClick={() => handleDone(item, clusterIds)}
                               variant="strong"
                               size="sm"
                               icon={<Check size={16} strokeWidth={2.5} />}
@@ -654,12 +671,16 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                         {!readOnly && item.source_type !== 'conflict' && item.source_type !== 'directory_suggestion' && (
                           <div className="flex items-center gap-2 pt-2.5 pl-[2.375rem]">
                             <SnoozeMenu
-                              onSnooze={(duration) => { snoozePrepItem(item.id, duration); setRevealedItemId(null) }}
+                            onSnooze={(duration) => {
+                              void Promise.all(clusterIds.map((id) => snoozePrepItem(id, duration, item.event_date)))
+                              setRevealedItemId(null)
+                            }}
+                            eventDateIso={item.event_date}
                             />
                             <Button
-                              onClick={() => handleDownvote(item)}
-                              variant="secondary"
-                              size="sm"
+                            onClick={() => handleDownvote(item, clusterIds)}
+                            variant="secondary"
+                            size="sm"
                               leadingIcon={<ThumbsDown size={13} strokeWidth={2.1} />}
                               className="border-transparent bg-casa-error/10 text-casa-error hover:bg-casa-error/15"
                               title="Not relevant"

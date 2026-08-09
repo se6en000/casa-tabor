@@ -31,6 +31,12 @@ test('computeSnoozeUntil jumps to 6am the next day for the "tomorrow" duration',
   assert.equal(result.getMinutes(), 0)
 })
 
+test('computeSnoozeUntil can place a snooze two days before the event', () => {
+  const now = new Date('2026-08-07T09:00:00.000Z')
+  const eventDate = '2026-08-11T15:30:00.000Z'
+  assert.equal(computeSnoozeUntil('2d-before', now, eventDate).toISOString(), '2026-08-09T15:30:00.000Z')
+})
+
 test('SNOOZE_DURATIONS lists every duration option in display order', () => {
   assert.deepEqual(SNOOZE_DURATIONS, ['15m', '1h', '3h', 'tomorrow'])
 })
@@ -40,6 +46,7 @@ test('snoozeDurationLabel gives a plain-language label for each duration', () =>
   assert.equal(snoozeDurationLabel('1h'), '1 hour')
   assert.equal(snoozeDurationLabel('3h'), '3 hours')
   assert.equal(snoozeDurationLabel('tomorrow'), 'Tomorrow morning')
+  assert.equal(snoozeDurationLabel('2d-before'), '2 days before event')
 })
 
 test('formatSnoozeHistoryLabel returns null when an item has never been snoozed', () => {

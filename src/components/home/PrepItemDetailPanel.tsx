@@ -11,6 +11,7 @@ import {
   useCompletePrepItem,
   useDownvotePrepItem,
   usePrepItemDetails,
+  usePrepItems,
   useSetPrepItemAssignee,
   useSnoozePrepItem,
   useUpdatePrepItemDueBy,
@@ -19,6 +20,7 @@ import {
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import type { PrepItem } from '../../types'
 import { getPrepCategoryConfig } from '../../utils/prepCategories'
+import { clusterPrepItems } from '../../utils/prepItemClusters'
 import BounceScroll from '../shared/BounceScroll'
 import MarkdownContent from '../shared/MarkdownContent'
 import SnoozeMenu from '../shared/SnoozeMenu'
@@ -130,6 +132,7 @@ function fromDisplayName(value: string | null | undefined): string {
 
 export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPanelProps) {
   const { data } = usePrepItemDetails(item)
+  const { data: prepItems = [] } = usePrepItems()
   const { data: familyMembers = [] } = useFamilyMembers()
   const snooze = useSnoozePrepItem()
   const downvote = useDownvotePrepItem()
@@ -149,6 +152,11 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
   const confidence = useMemo(() => prepItemConfidenceLabel(data?.source_confidence ?? item?.source_confidence), [data?.source_confidence, item?.source_confidence])
   const suggestedAssigneeId = data?.suggestedAssignees?.[0]?.id ?? null
   const selectedAssigneeId = item?.assigned_to ?? suggestedAssigneeId
+  const clusterIds = useMemo(() => {
+    if (!item) return []
+    const cluster = clusterPrepItems(prepItems).find((entry) => entry.item.id === item.id)
+    return cluster?.itemIds ?? [item.id]
+  }, [item, prepItems])
 
   useEffect(() => {
     if (!item) return
@@ -168,11 +176,11 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
     if (!item || acting) return
     setActing(action)
     try {
-      if (action === 'snooze') await snooze(item.id, duration)
+      if (action === 'snooze') await Promise.all(clusterIds.map((id) => snooze(id, duration, item.event_date)))
       // "Dismiss" records the same not-relevant signal used to train the
       // relevance/suppression model — matching the inline dismiss action
       // used elsewhere in the app (Home rail, Action Hub).
-      if (action === 'dismiss') await downvote(item.id)
+      if (action === 'dismiss') await Promise.all(clusterIds.map((id) => downvote(id)))
       onClose()
     } finally {
       setActing(null)
@@ -181,7 +189,7 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
 
   async function handleAssign(memberId: string) {
     if (!item) return
-    await setAssignee(item.id, selectedAssigneeId === memberId ? null : memberId)
+    await Promise.all(clusterIds.map((id) => setAssignee(id, selectedAssigneeId === memberId ? null : memberId)))
   }
 
   function openDueByEditor() {
@@ -196,7 +204,7 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
     if (!iso) return
     setSavingDueBy(true)
     try {
-      await updateDueBy(item.id, iso)
+      await Promise.all(clusterIds.map((id) => updateDueBy(id, iso)))
       setEditingDueBy(false)
     } finally {
       setSavingDueBy(false)
@@ -216,7 +224,7 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
       bodyContext: bodyContext || 'No email body available',
     })
     try {
-      await complete(item.id)
+      await Promise.all(clusterIds.map((id) => complete(id)))
       document.dispatchEvent(new CustomEvent('open-ai-chat', { detail: { prompt, autoSend: true } }))
       onClose()
     } finally {
@@ -512,6 +520,7 @@ export default function PrepItemDetailPanel({ item, onClose }: PrepItemDetailPan
             <div className="flex flex-none items-center gap-2 border-t border-casa-border bg-casa-surface px-5 py-3.5">
               <SnoozeMenu
                 onSnooze={(duration) => runAction('snooze', duration)}
+                eventDateIso={item.event_date}
                 menuPlacement="above"
                 renderTrigger={({ onClick }) => (
                   <IconButton

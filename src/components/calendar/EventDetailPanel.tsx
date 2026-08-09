@@ -116,7 +116,8 @@ const stopTouch = (e: React.TouchEvent | React.PointerEvent) => e.stopPropagatio
 
 export default function EventDetailPanel({ event: eventSummary, onClose }: EventDetailPanelProps) {
   const detailQuery = useEventDetails(eventSummary)
-  const event = detailQuery.data ?? eventSummary
+  const [displayEvent, setDisplayEvent] = useState<EventWithDetails | null>(eventSummary)
+  const event = displayEvent ?? detailQuery.data ?? eventSummary
   // Opening by id alone (e.g. from an AI-chat or Prep & Action link) passes a minimal
   // { id } stub before the full row loads. Every date field below assumes a real event,
   // so gate the header/body/footer on start_time being present to avoid formatting
@@ -144,6 +145,38 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
   const recurringQuickAction = useRecurringQuickAction(event)
   const requestRecurringQuickAction = recurringQuickAction.request
   const executeRecurringQuickActionScope = recurringQuickAction.executeScope
+
+  useEffect(() => {
+    if (!eventSummary) {
+      setDisplayEvent(null)
+      return
+    }
+    if (!displayEvent || displayEvent.id !== eventSummary.id) {
+      setDisplayEvent(detailQuery.data ?? eventSummary)
+      return
+    }
+    if (!detailQuery.data) return
+    const currentUpdatedAt = Number.isFinite(Date.parse(displayEvent.updated_at ?? ''))
+      ? Date.parse(displayEvent.updated_at)
+      : Number.NEGATIVE_INFINITY
+    const fetchedUpdatedAt = Number.isFinite(Date.parse(detailQuery.data.updated_at ?? ''))
+      ? Date.parse(detailQuery.data.updated_at)
+      : Number.NEGATIVE_INFINITY
+    if (fetchedUpdatedAt >= currentUpdatedAt) {
+      setDisplayEvent(detailQuery.data)
+    }
+  }, [detailQuery.data, displayEvent, eventSummary])
+
+  useEffect(() => {
+    if (!eventSummary) return
+    const handleEventUpdated = (e: Event) => {
+      const detail = (e as CustomEvent<{ eventId?: string; patch?: Partial<EventWithDetails> }>).detail
+      if (detail?.eventId !== eventSummary.id || !detail.patch) return
+      setDisplayEvent(current => current ? { ...current, ...detail.patch } : current)
+    }
+    window.addEventListener('casa:event-updated', handleEventUpdated)
+    return () => window.removeEventListener('casa:event-updated', handleEventUpdated)
+  }, [eventSummary?.id])
 
   const persistDirectTransportationPlan = useCallback(async (
     nextPlan: EventTransportationPlan | null,
