@@ -294,6 +294,9 @@ export interface PrepItem {
   source_confidence?: number | null
   assigned_to?: string | null
   action_key?: string
+  attention_thread_key?: string | null
+  attention_vendor?: string | null
+  attention_stage?: string | null
   snoozed_until?: string | null
   snooze_count?: number
   last_snoozed_at?: string | null

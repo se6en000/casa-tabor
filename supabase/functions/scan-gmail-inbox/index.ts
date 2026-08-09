@@ -223,6 +223,9 @@ interface InboxActionItem {
   due_datetime?: string // ISO8601 or empty
   assigned_member?: string
   priority?: 1 | 2 | 3
+  vendor?: string
+  transaction_id?: string
+  transaction_status?: string
 }
 
 async function classifyEmail(
@@ -331,7 +334,10 @@ Respond ONLY JSON:
       "description": "what needs to be done and why",
       "due_datetime": "ISO8601 with timezone offset or empty",
       "assigned_member": "family member name or empty",
-      "priority": 1
+      "priority": 1,
+      "vendor": "merchant or service name, or empty",
+      "transaction_id": "exact order/booking/account transaction identifier, or empty",
+      "transaction_status": "confirmed|payment|shipped|out_for_delivery|delivered|problem, or empty"
     }
   ]
 }
@@ -351,6 +357,25 @@ function parseDueDateOrFallback(due: string | undefined, receivedAtIso: string, 
   if (due) {
     const parsed = new Date(due)
     if (!isNaN(parsed.getTime())) return parsed.toISOString()
+  }
+
+  function normalizeTransactionKeyPart(value: string): string {
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  }
+
+  function transactionIdentity(action: InboxActionItem, sourceRef: string) {
+    const vendor = action.vendor?.trim()
+    if (!vendor) return { threadKey: null, vendor: null, stage: null }
+    const transactionId = action.transaction_id?.trim()
+    const vendorKey = normalizeTransactionKeyPart(vendor)
+    const transactionKey = transactionId
+      ? normalizeTransactionKeyPart(transactionId)
+      : `message:${sourceRef}`
+    return {
+      threadKey: `transaction:${vendorKey}:${transactionKey}`,
+      vendor,
+      stage: action.transaction_status?.trim() || null,
+    }
   }
   if (eventStartIso) {
     const parsedEvent = new Date(eventStartIso)
@@ -395,6 +420,8 @@ async function persistInboxActions(
       : a.type === 'renewal' ? '🔄'
       : '📌'
     const normalizedPriority: 1 | 2 | 3 = a.priority === 3 ? 3 : a.priority === 1 ? 1 : 2
+    const sourceRef = `gmail:${sourceOwnerMemberId ?? 'household'}:${messageId}`
+    const transaction = transactionIdentity(a, sourceRef)
     return {
       event_id: eventId,
       type: a.type,
@@ -405,9 +432,12 @@ async function persistInboxActions(
       due_by: dueBy,
       priority: normalizedPriority,
       source_type: 'gmail',
-      source_ref: `gmail:${sourceOwnerMemberId ?? 'household'}:${messageId}`,
+      source_ref: sourceRef,
       source_pattern_key: `action:${a.type}`,
       source_confidence: 1,
+      attention_thread_key: transaction.threadKey,
+      attention_vendor: transaction.vendor,
+      attention_stage: transaction.stage,
     }
   })
   const { data, error } = await sb.from('prep_items').insert(rows).select('id')

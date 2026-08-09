@@ -548,14 +548,20 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                               </p>
                             </Button>
                           )}
-                          {topic.sourceTypes.length > 1 && (
+                          {topic.items.length > 1 && (
                             <div className="mt-1 flex flex-wrap items-center gap-1">
-                              {topic.sourceTypes.map((sourceType) => (
+                              {topic.transactionVendor ? (
+                                <Chip size="sm" tone="neutral">
+                                  {topic.transactionVendor} order
+                                </Chip>
+                              ) : topic.sourceTypes.map((sourceType) => (
                                 <Chip key={sourceType} size="sm" tone="neutral">
                                   {sourceBadge({ source_type: sourceType }).label}
                                 </Chip>
                               ))}
-                              <span className="text-caption font-semibold text-casa-muted">{topic.items.length} signals</span>
+                              <span className="text-caption font-semibold text-casa-muted">
+                                {topic.items.length} {topic.transactionVendor ? 'updates' : 'signals'}
+                              </span>
                             </div>
                           )}
                           <div className="mt-1.5 flex items-center gap-1.5">

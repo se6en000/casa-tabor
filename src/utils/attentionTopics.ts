@@ -1,4 +1,5 @@
 import type { PrepItem } from '../types'
+import { isNewerTransactionUpdate, vendorTransactionIdentity } from './vendorTransactions.ts'
 
 export interface AttentionTopic {
   key: string
@@ -7,6 +8,8 @@ export interface AttentionTopic {
   itemIds: string[]
   prepItemIds: string[]
   sourceTypes: string[]
+  transactionVendor: string | null
+  transactionStage: string | null
 }
 
 function attentionKind(item: PrepItem) {
@@ -50,6 +53,8 @@ function isRecreatedReminderMatch(item: PrepItem, topic: AttentionTopic) {
 }
 
 export function attentionTopicKey(item: PrepItem) {
+  const transaction = vendorTransactionIdentity(item)
+  if (transaction) return transaction.key
   const kind = attentionKind(item)
   if (item.event_id) return `event:${item.event_id}:${kind}`
   if (item.source_ref) return `source:${item.source_type ?? 'unknown'}:${item.source_ref}:${kind}`
@@ -59,10 +64,11 @@ export function attentionTopicKey(item: PrepItem) {
 export function buildAttentionTopics(items: PrepItem[]): AttentionTopic[] {
   const topics = new Map<string, AttentionTopic>()
   for (const item of items) {
+    const transaction = vendorTransactionIdentity(item)
     const reminderTopic = isReminderItem(item)
       ? [...topics.values()].find((topic) => isRecreatedReminderMatch(item, topic))
       : undefined
-    const key = reminderTopic?.key ?? attentionTopicKey(item)
+    const key = transaction?.key ?? reminderTopic?.key ?? attentionTopicKey(item)
     const topic = topics.get(key)
     if (topic) {
       topic.items.push(item)
@@ -71,7 +77,12 @@ export function buildAttentionTopics(items: PrepItem[]): AttentionTopic[] {
       if (item.source_type && !topic.sourceTypes.includes(item.source_type)) {
         topic.sourceTypes.push(item.source_type)
       }
-      if (isHigherPriority(item, topic.item)) topic.item = item
+      if (transaction
+        ? isNewerTransactionUpdate(item, topic.item, transaction.stage, topic.transactionStage)
+        : isHigherPriority(item, topic.item)) {
+        topic.item = item
+        topic.transactionStage = transaction?.stage ?? null
+      }
     } else {
       topics.set(key, {
         key,
@@ -80,6 +91,8 @@ export function buildAttentionTopics(items: PrepItem[]): AttentionTopic[] {
         itemIds: [item.id],
         prepItemIds: isPrepItem(item) ? [item.id] : [],
         sourceTypes: item.source_type ? [item.source_type] : [],
+        transactionVendor: transaction?.vendor ?? null,
+        transactionStage: transaction?.stage ?? null,
       })
     }
   }

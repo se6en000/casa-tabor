@@ -47,7 +47,7 @@ test('HomeRightPanel and ActionHubPage project source rows into canonical attent
   assert.match(homeRightPanel, /Casa grouped \{attentionTopics\.reduce/)
   assert.match(homeRightPanel, /dueDateIso=\{item\.due_by \?\? item\.event_date\}/)
   assert.match(actionHubPage, /buildAttentionTopics\(filteredPrepItems\)/)
-  assert.match(actionHubPage, /\{signalCount\} signals/)
+  assert.match(actionHubPage, /topic\.transactionVendor \? 'updates' : 'signals'/)
   assert.match(actionHubPage, /topicPrepItemIds/)
 })
 

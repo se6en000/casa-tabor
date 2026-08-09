@@ -69,3 +69,114 @@ test('buildAttentionTopics selects the urgent representative and exposes unique 
   assert.deepEqual(topics[0].sourceTypes, ['calendar_ai', 'gmail'])
   assert.deepEqual(topics[0].prepItemIds, ['calendar', 'email'])
 })
+
+test('buildAttentionTopics groups delivery and payment updates from one vendor message', () => {
+  const topics = buildAttentionTopics([
+    prep({
+      id: 'payment',
+      event_id: null,
+      type: 'payment',
+      category: null,
+      description: 'Your payment method has been charged for the Walmart order.',
+      event_title: 'Delivered: groceries +8 items',
+      source_type: 'gmail',
+      source_ref: 'gmail:member:message-1',
+    }),
+    prep({
+      id: 'delivery',
+      event_id: null,
+      type: 'delivery',
+      category: null,
+      description: 'Your Walmart order has been delivered.',
+      event_title: 'Delivered: groceries +8 items',
+      source_type: 'gmail',
+      source_ref: 'gmail:member:message-1',
+    }),
+  ])
+
+  assert.equal(topics.length, 1)
+  assert.equal(topics[0].transactionVendor, 'Walmart')
+  assert.equal(topics[0].item.id, 'delivery')
+  assert.deepEqual(topics[0].itemIds, ['payment', 'delivery'])
+})
+
+test('buildAttentionTopics keeps one order thread across messages and shows its latest update', () => {
+  const topics = buildAttentionTopics([
+    prep({
+      id: 'confirmed',
+      event_id: null,
+      type: 'delivery',
+      description: 'Walmart order #2000151-91693117 is confirmed.',
+      source_type: 'gmail',
+      source_ref: 'gmail:member:message-1',
+      created_at: '2026-08-09T12:00:00.000Z',
+    }),
+    prep({
+      id: 'delivered',
+      event_id: null,
+      type: 'delivery',
+      description: 'Your Walmart order #2000151-91693117 was delivered.',
+      source_type: 'gmail',
+      source_ref: 'gmail:member:message-2',
+      created_at: '2026-08-09T18:45:00.000Z',
+    }),
+  ])
+
+  assert.equal(topics.length, 1)
+  assert.equal(topics[0].item.id, 'delivered')
+  assert.equal(topics[0].transactionVendor, 'Walmart')
+})
+
+test('buildAttentionTopics never merges simultaneous orders from the same vendor', () => {
+  const topics = buildAttentionTopics([
+    prep({
+      id: 'order-a',
+      event_id: null,
+      type: 'delivery',
+      description: 'Walmart order #2000151-91693117 was delivered.',
+      source_type: 'gmail',
+      source_ref: 'gmail:member:message-a',
+    }),
+    prep({
+      id: 'order-b',
+      event_id: null,
+      type: 'delivery',
+      description: 'Walmart order #2000151-13974456 is out for delivery.',
+      source_type: 'gmail',
+      source_ref: 'gmail:member:message-b',
+    }),
+  ])
+
+  assert.equal(topics.length, 2)
+})
+
+test('buildAttentionTopics honors structured transaction keys for any vendor', () => {
+  const topics = buildAttentionTopics([
+    prep({
+      id: 'target-shipped',
+      event_id: null,
+      type: 'delivery',
+      description: 'Your order shipped.',
+      source_type: 'gmail',
+      source_ref: 'gmail:member:message-1',
+      attention_thread_key: 'transaction:target:12345',
+      attention_vendor: 'Target',
+      created_at: '2026-08-09T12:00:00.000Z',
+    }),
+    prep({
+      id: 'target-delivered',
+      event_id: null,
+      type: 'delivery',
+      description: 'Your order was delivered.',
+      source_type: 'gmail',
+      source_ref: 'gmail:member:message-2',
+      attention_thread_key: 'transaction:target:12345',
+      attention_vendor: 'Target',
+      created_at: '2026-08-09T15:00:00.000Z',
+    }),
+  ])
+
+  assert.equal(topics.length, 1)
+  assert.equal(topics[0].transactionVendor, 'Target')
+  assert.equal(topics[0].item.id, 'target-delivered')
+})
